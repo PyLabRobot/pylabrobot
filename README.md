@@ -1,14 +1,20 @@
 # pyhamilton
+
 **Python for Hamilton liquid handling robots**
+
 Hamilton software only works on Windows, so the same goes for pyhamilton.
 
+Developed for Hamilton STARlet on Windows XP or Windows 7. Other robot models not supported yet.
+
 ## Installation
+
 Base install:
+
 ```
 pip install git+git://github.com/dgretton/pyhamilton.git#egg=pyhamilton
 ```
-Pyhamilton currently includes some code that is not in the public domain, so it is distributed separately.
-You will need to copy in a STAR-OEM directory in the main package directory (C:...\python3\...\site-packages\pyhamilton\STAR-OEM)
+
+the pyhamilton source currently includes some code that might not be in the public domain, so it is distributed separately. You will need a copy of the STAR-OEM directory in the main package (C:...\python3\...\site-packages\pyhamilton\STAR-OEM) to run the background application that interfaces with the Hamilton robot.
 
 ## Example usage
 ```python
