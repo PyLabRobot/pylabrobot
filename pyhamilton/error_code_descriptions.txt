@@ -1,0 +1,225 @@
+Main Error Enumeration
+ID
+ Error
+ Description
+ 
+ 0
+ No error
+ -
+ 
+ 1
+ Syntax Error
+ There is a wrong set of parameters or parameter ranges.
+ 
+ 2
+ Hardware Error
+ Steps lost on one or more hardware components, or component not initialized or not functioning.
+ 
+ 3
+ Not Executed Error
+ There was an error in previous part command.
+ 
+ 4
+ Clot Error
+ Blood clot detected.
+ 
+ 5
+ Barcode Error
+ Barcode could not be read or is missing.
+ 
+ 6
+ Insufficient Liquid Error
+ Not enough liquid available.
+ 
+ 7
+ Tip Present Error
+ A tip has already been picked up.
+ 
+ 8
+ No Tip Error
+ Tip is missing or not picked up.
+ 
+ 9
+ No Carrier Error
+ No carrier present for loading.
+ 
+ 10
+ Execution Error
+ A step or a part of a step could not be processed.
+ 
+ 11
+ Pressure LLD Error
+ A dispense with pressure liquid level detection is not allowed.
+ 
+ 12
+ Calibrate Error
+ No capacitive signal detected during carrier calibration procedure.
+ 
+ 13
+ Unload Error
+ Not possible to unload the carrier due to occupied loading tray position.
+ 
+ 14
+ Pressure LLD Error
+ Pressure liquid level detection in a consecutive aspiration is not allowed.
+ 
+ 15
+ Parameter Error
+ Dispense in jet mode with pressure liquid level detection is not allowed.
+ 
+ 16
+ Cover Open Error
+ Cover not closed or can not be locked.
+ 
+ 17
+ Improper Aspiration Error
+
+Improper Dispense Error
+ The pressure-based aspiration / dispensation control reported an error ( not enough liquid ).
+ 
+ 18
+ Wash Liquid Error
+ Waste full or no more wash liquid available.
+ 
+ 19
+ Temperature Error
+ Incubator temperature out of range.
+ 
+ 20
+ TADM overshot
+ Overshot of limits during aspirate or dispense.
+
+Note:
+
+On aspirate this error is returned as main error 17.
+
+On dispense this error is returned as main error 4.
+ 
+ 21
+ Labware Error
+ Labware not available.
+ 
+ 22
+ Labware Gripped Error
+ Labware already gripped.
+ 
+ 23
+ Labware Lost Error
+ Labware lost during transport.
+ 
+ 24
+ Illegal target plate position
+ Cannot place plate, plate was gripped in a wrong direction.
+ 
+ 25
+ Illegal Intervention Error
+ Cover was opened or a carrier was removed manually.
+ 
+ 26
+ TADM undershot
+ Undershot of limits during aspirate or dispense.
+
+Note:
+
+On aspirate this error is returned as main error 4.
+
+On dispense this error is returned as main error 17.
+ 
+ 27
+ Position Error
+ The position is out of range.
+ 
+28
+ Unexpected cLLD Error
+ The cLLD detected a liquid level above start height of liquid level search.
+ 
+29
+ Area already occupied
+ Instrument region already reserved.
+ 
+30
+ Impossible to occupy area
+ A region on the instrument cannot be reserved.
+ 
+31
+ Anti drop control error
+ Anti drop controlling out of tolerance.
+ 
+32
+ Decapper error
+ Decapper lock error while screw / unscrew a cap by twister channels.
+ 
+33
+ Decapper handling error
+ Decapper station error while lock / unlock a cap.
+ 
+99
+ Slave Error
+ Slave error.
+ 
+ 100
+ Wrong Carrier Error
+ Wrong carrier barcode detected.
+ 
+ 101
+ No Carrier Barcode Error
+ Carrier barcode could not be read or is missing.
+ 
+ 102
+ Liquid Level Error
+ Liquid surface not detected.
+
+This error is created from main / slave error 06/70, 06/73 and 06/87.
+ 
+ 103
+ Not Detected Error
+ Carrier not detected at deck end position.
+ 
+ 104
+ Not Aspirated Error
+ Dispense volume exceeds the aspirated volume.
+
+This error is created from main / slave error 02/54.
+ 
+105
+ Improper Dispensation Error
+ The dispensed volume is out of tolerance (may only occur for Nano Pipettor Dispense steps). 
+
+This error is created from main / slave error 02/52 and 02/54.
+ 
+106
+ No Labware Error
+ The labware to be loaded was not detected by autoload module.
+
+Note:
+
+May only occur on a Reload Carrier step if the labware property 'MlStarCarPosAreRecognizable' is set to 1.
+ 
+107
+ Unexpected Labware Error
+ The labware contains unexpected barcode ( may only occur on a Reload Carrier step ).
+ 
+108
+ Wrong Labware Error
+ The labware to be reloaded contains wrong barcode ( may only occur on a Reload Carrier step ).
+ 
+109
+ Barcode Mask Error
+ The barcode read doesn't match the barcode mask defined.
+ 
+110
+ Barcode Not Unique Error
+ The barcode read is not unique. Previously loaded labware with same barcode was loaded without unique barcode check.
+ 
+111
+ Barcode Already Used Error
+ The barcode read is already loaded as unique barcode ( it's not possible to load the same barcode twice ).
+ 
+112
+ Kit Lot Expired Error
+ Kit Lot expired.
+ 
+113
+ Delimiter Error
+ Barcode contains character which is used as delimiter in result string.
+ 

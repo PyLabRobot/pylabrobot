@@ -1,0 +1,16 @@
+* text eol=lf
+
+*.lay binary
+*.dll binary
+*.pdb binary
+*.hsl binary
+*.hsi binary
+*.hs_ binary
+*.sub binary
+*.smt binary
+*.stp binary
+*.chm binary
+*.chw binary
+*.ico binary
+
+

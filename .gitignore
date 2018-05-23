@@ -1,0 +1,7 @@
+*.pyc
+*__pycache__
+*.res
+*.DS_store
+LAY-BACKUP
+STAR-OEM
+

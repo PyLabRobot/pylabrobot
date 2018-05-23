@@ -1,0 +1,12 @@
+Metadata-Version: 1.0
+Name: pyhamilton
+Version: 1.0
+Summary: Python for Hamilton liquid handling robots
+Home-page: https://github.com/dgretton/pyhamilton.git
+Author: Dana Gretton
+Author-email: dgretton@mit.edu
+License: MIT
+Description: # pyhamilton
+        Python for Hamilton liquid handling robots
+        
+Platform: UNKNOWN

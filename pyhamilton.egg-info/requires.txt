@@ -1,0 +1,5 @@
+signal
+requests
+win32gui
+win32con
+pythonnet
