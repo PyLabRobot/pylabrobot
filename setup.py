@@ -7,7 +7,7 @@ setup(
     license='MIT',
     description='Python for Hamilton liquid handling robots',
     long_description=open('README.md').read(),
-    install_requires=['signal', 'requests', 'win32gui', 'win32con', 'pythonnet'],
+    install_requires=['requests', 'win32gui', 'pywin32', 'pythonnet'],
     url='https://github.com/dgretton/pyhamilton.git',
     author='Dana Gretton',
     author_email='dgretton@mit.edu'

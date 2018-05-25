@@ -1,5 +1,4 @@
-signal
 requests
 win32gui
-win32con
+pywin32
 pythonnet
