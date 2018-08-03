@@ -8,10 +8,12 @@ class ResourceType:
 
     def __init__(self, resource_class, *args):
         self.resource_class = resource_class
+        self.err_msg = None
         try:
             specific_name, = args
             self.test = lambda line: specific_name in re.split(r'\W', line)
             self.extract_name = lambda line: specific_name
+            self.err_msg = 'No exact match for name "' + specific_name + '" to assign a resource of type ' + resource_class.__name__
         except ValueError:
             self.test, self.extract_name = args
 
@@ -99,7 +101,8 @@ class LayoutManager:
                 self.resources[new_name] = r
                 return r
         else:
-            raise ResourceUnavailableError('No unassigned resource of type ' + restype.resource_class.__name__ + ' available')
+            msg = restype.err_msg or 'No unassigned resource of type ' + restype.resource_class.__name__ + ' available'
+            raise ResourceUnavailableError(msg)
 
             
 class ResourceIterItem:

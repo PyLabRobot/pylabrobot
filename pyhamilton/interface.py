@@ -3,7 +3,7 @@ from http import server
 from threading import Thread
 from multiprocessing import Process
 from pyhamilton import OEM_RUN_EXE_PATH, OEM_HSL_PATH
-from .oemerr import *#HamiltonTimeoutError, HamiltonError, HAMILTON_ERROR_MAP
+from .oemerr import * #TODO: specify
 from .defaultcmds import defaults_by_cmd
     
 class HamiltonCmdTemplate:
@@ -312,6 +312,9 @@ class HamiltonInterface:
                         self.log('Raising first exception.', 'warn')
                         raise decoded_exception
                     err_map[blocknum] = decoded_exception
+            
+            #else:
+            #    raise HamiltonStepError('Hamilton step did not execute correctly; no error code given.')
         return blocks, err_map
 
     def _block_until_sq_clear(self):
@@ -400,7 +403,7 @@ class HamiltonInterface:
             if block_contents[_block_mainerrfield] != 0:
                 any_error_code = True
             blocks_by_blocknum[block_contents.pop(_block_numfield)] = block_contents
-        if errflag != any_error_code:
+        if blocks and errflag != any_error_code:
             raise_parse_error()
 
         return errflag, blocks_by_blocknum

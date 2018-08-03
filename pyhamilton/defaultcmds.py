@@ -20,7 +20,7 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'labwarePositions':'', # (string) leave empty if you are going to provide a sequence name above.'LabwareId1, positionId1; LabwareId2,positionId2; ....'
         'channelVariable':_channel_patt_16, # (string) channel pattern e.g. "11110000"
         'sequenceCounting':0, # (integer) 0=don´t autoincrement,  1=Autoincrement.  Value omitted if ejecting to default waste
-        'channelUse':1, # (integer) 1= use all sequence positions (no empty wells), 2= keep channel pattern
+        'channelUse':1, # (integer) 1=use all sequence positions (no empty wells), 2=keep channel pattern
         'useDefaultWaste':0 # (integer) 0=eject to custom waste sequence,  1=Use default waste
     }),
 
@@ -43,7 +43,7 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'mixPosition':0.0, # (float) additional immersion mm below aspiration position to start mixing
         'mixVolume':0.0, # (float) mix volume
         'airTransportRetractDist':10.0, # (float) mm to move up in Z after finishing the aspiration at a fixed height before aspirating 'transport air'
-        'touchOff':0, # (integer) 0= Off , 1= On
+        'touchOff':0, # (integer) 0=Off , 1=On
         'aspPosAboveTouch':0.0 # (float)  mm to move up in Z after touch off detects the bottom before aspirating liquid
     }),
 
@@ -75,7 +75,7 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'labwarePositions':'', # (string) leave empty if you are going to provide a sequence name above. 'LabwareId1, positionId1; LabwareId2,positionId2; ....' Must contain 96 values
         'channelVariable':_channel_patt_96, # (string) channel Variable e.g. "11110000...." . Must contain 96 values
         'sequenceCounting':0, # (integer) 0=don´t autoincrement,  1=Autoincrement
-        'reducedPatternMode':0 # (integer) 0 = All (not reduced), 1 = One channel, 2 = One row  3 = One column
+        'reducedPatternMode':0 # (integer) 0=All (not reduced), 1=One channel, 2=One row  3=One column
     }),
 
     'mph96TipEject':('EJECT96', {
@@ -83,7 +83,7 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'labwarePositions':'', # (string) leave empty if you are going to provide a sequence name above. 'LabwareId1, positionId1; LabwareId2,positionId2; ....'
         'channelVariable':_channel_patt_96, # (string) channel Variable e.g. "11110000...." . Must contain 96 values
         'sequenceCounting':0, # (integer)  0=don´t autoincrement,  1=Autoincrement.  Value omitted if ejecting to default waste
-        'tipEjectToKnownPosition':0 # (integer) 0=Eject to specified sequence position,  1 = Eject on tip pick up position, 2 = Eject on default waste
+        'tipEjectToKnownPosition':0 # (integer) 0=Eject to specified sequence position,  1=Eject on tip pick up position, 2=Eject on default waste
     }),
 
     'mph96Aspirate':('ASPIRATE96', {
@@ -93,9 +93,9 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'channelVariable':_channel_patt_96, # (string) channel Variable e.g. "11110000...." . Must contain 96 values
         'liquidClass':None, # (string)
         'sequenceCounting':0, # (integer)  0=don´t autoincrement,  1=Autoincrement
-        'aspirateMode':0, # (integer) 0=Normal Aspiration, 1=Consecutive (don´t aspirate blowout), 2 = Aspirate all 
-        'capacitiveLLD':0, # (integer) 0=Off,1=Max; 2=High; 3=Mid, 4=Low, 5=From labware definition
-        'liquidFollowing':0, # (integer) 0= Off , 1= On
+        'aspirateMode':0, # (integer) 0=Normal Aspiration, 1=Consecutive (don´t aspirate blowout), 2=Aspirate all 
+        'capacitiveLLD':0, # (integer) 0=Off, 1=Max, 2=High, 3=Mid, 4=Low, 5=From labware definition
+        'liquidFollowing':0, # (integer) 0=Off , 1=On
         'submergeDepth':2.0, # (float) mm of immersion below liquid´s surface to start aspiration when using LLD
         'liquidHeight':1.0, # (float) mm above container´s bottom to start aspiration when not using LLD
         'mixCycles':0, # (integer) number of mixing cycles (1 cycle = 1 asp + 1 disp)
@@ -111,17 +111,17 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'channelVariable':_channel_patt_96, # (string) channel Variable e.g. "11110000...." . Must contain 96 values
         'liquidClass':None, # (string) 
         'sequenceCounting':0, # (integer)  0=don´t autoincrement,  1=Autoincrement
-        'dispenseMode':8, # (integer) 0= Jet Part, 1=Jet Empty, 2=Surface Part, 3=Surface Empty,4=Jet Drain tip, 8=From liquid class, 9=Blowout tip
-        'capacitiveLLD':0, # (integer) 0=Off,1=Max; 2=High; 3=Mid, 4=Low, 5=From labware definition
-        'liquidFollowing':0, # (integer)  0= Off , 1= On
+        'dispenseMode':8, # (integer) 0=Jet Part, 1=Jet Empty, 2=Surface Part, 3=Surface Empty,4=Jet Drain tip, 8=From liquid class, 9=Blowout tip
+        'capacitiveLLD':0, # (integer) 0=Off, 1=Max, 2=High, 3=Mid, 4=Low, 5=From labware definition
+        'liquidFollowing':0, # (integer)  0=Off , 1=On
         'submergeDepth':2.0, # (float) mm of immersion below liquid´s surface to start dispense when using LLD
         'liquidHeight':1.0, # (float) mm above container´s bottom to start dispense when not using LLD
         'mixCycles':0, # (integer)  number of mixing cycles (1 cycle = 1 asp + 1 disp)
         'mixPosition':0.0, # (float)  additional immersion mm below dispense position to start mixing
         'mixVolume':0.0, # (float)  mix volume
         'airTransportRetractDist':10.0, # (float) mm to move up in Z after finishing the dispense at a fixed height before aspirating 'transport air'
-        'zMoveAfterStep':0, # (integer) 0 = normal, 1 = Minimized (Attention!!! this depends on labware clearance height, can crash). 
-        'sideTouch':0 # (integer) 0= Off , 1= On
+        'zMoveAfterStep':0, # (integer) 0=normal, 1=Minimized (Attention!!! this depends on labware clearance height, can crash). 
+        'sideTouch':0 # (integer) 0=Off , 1=On
     }),
 
     'iSwapGet':('ISWAP_GET', {
@@ -164,5 +164,13 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'persistant':1, # (integer) 0=don´t keep fan running after method exits, 1=keep settings after method exits
         'fanSpeed':None, # (float) set percent of maximum fan speed
         'simulate':0 #(integer) 0=normal mode, 1=use HxFan simulation mode
+    }),
+
+    'CORE96WashEmpty':('WASH96_EMPTY', {
+        'refillAfterEmpty':0, # (integer) 0=Don't refill, 1=Refill both chambers, 2=Refill chamber 1 only, 3=Refill chamber 2 only
+        'chamber1WashLiquid':0, # (integer) 0=Liquid 1 (red container), 1=liquid 2 (blue container)
+        'chamber1LiquidChange':0, # (integer) 0=No, 1=Yes TODO: What does this mean?
+        'chamber2WashLiquid':0, # (integer) 0=Liquid 1 (red container), 1=liquid 2 (blue container)
+        'chamber2LiquidChange':0, # (integer) 0=No, 1=Yes TODO: What does this mean?
     })
 }
