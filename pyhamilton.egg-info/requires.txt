@@ -1,4 +1,4 @@
 requests
-win32gui
-pywin32
 pythonnet
+pywin32
+win32gui
