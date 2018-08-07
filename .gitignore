@@ -2,6 +2,5 @@
 *__pycache__
 *.res
 *.DS_store
-LAY-BACKUP
-STAR-OEM
-
+pyhamilton/LAY-BACKUP
+pyhamilton/STAR-OEM
