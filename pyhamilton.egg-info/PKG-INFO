@@ -6,7 +6,6 @@ Home-page: https://github.com/dgretton/pyhamilton.git
 Author: Dana Gretton
 Author-email: dgretton@mit.edu
 License: MIT
-Description-Content-Type: UNKNOWN
 Description: # pyhamilton
         
         **Python for Hamilton liquid handling robots**
