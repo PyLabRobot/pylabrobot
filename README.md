@@ -33,3 +33,5 @@ The pyhamilton source currently includes some code that might not be in the publ
 7. **Run.** If you have other Python versions installed, always run pyhamilton with `py yourmethod.py` (the bundled Python launcher, which interprets shebangs) or `python3 yourmethod.py`
 
 _Contact: dgretton@media.mit.edu_
+
+_Developed for the Sculpting Evolution Group at the MIT Media Lab_
