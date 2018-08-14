@@ -1,6 +1,16 @@
 _channel_patt_16 = '1'*8 + '0'*8
 _channel_patt_96 = '1'*96
 
+_fan_port = 6
+try:
+    import serial.tools.list_ports
+    for port in serial.tools.list_ports.comports():
+        port_parse = str(port).split(' ')
+        if 'Isolated' in port_parse and 'RS-485' in port_parse:
+            _fan_port = int(port_parse[0][-1])
+except Exception:
+    pass
+        
 defaults_by_cmd = { # 'field':None indicates field is required when assembling command
 
     'initialize':('INITIALIZE', {
@@ -160,7 +170,7 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
     }),
 
     'HxFanSet':('HEPA', {
-        'deviceNumber':6, # (integer) COM port number of fan
+        'deviceNumber':_fan_port, # (integer) COM port number of fan
         'persistant':1, # (integer) 0=don´t keep fan running after method exits, 1=keep settings after method exits
         'fanSpeed':None, # (float) set percent of maximum fan speed
         'simulate':0 #(integer) 0=normal mode, 1=use HxFan simulation mode
