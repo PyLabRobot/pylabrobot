@@ -79,7 +79,7 @@ def _make_new_hamilton_serv_handler(resp_indexing_fn):
             if idx not in ir:
                 raise KeyError('No response received with index ' + str(idx))
             return ir.pop(idx).decode()
-        
+
         def _set_headers(self):
             self.send_response(200)
             self.send_header('Content-type', 'text/HTML')
@@ -93,7 +93,7 @@ def _make_new_hamilton_serv_handler(resp_indexing_fn):
 
         def do_HEAD(self):
             self._set_headers()
-            
+
         def do_POST(self):
             content_len = int(self.headers.get('content-length', 0))
             post_body = self.rfile.read(content_len)
@@ -104,6 +104,9 @@ def _make_new_hamilton_serv_handler(resp_indexing_fn):
             if index is None:
                 return
             ir[index] = post_body
+
+        def log_message(self, *args, **kwargs):
+            pass
 
     return HamiltonServerHandler
 
