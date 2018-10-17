@@ -42,8 +42,27 @@ class HamiltonCmdTemplate:
         needs.update(self.params_list)
         givens = set(cmd_dict.keys())
         if givens != needs:
-            raise ValueError(prefix + 'template parameter keys ' + str(sorted(list(needs))) +
-                    ' do not match given keys ' + str(sorted(list(givens))))
+            prints = [prefix + 'template parameter keys (left) do not match given keys (right)\n']
+            q_mark = ' (?)  '
+            l_col_space = 4
+            r_col_space = max((len(key) for key in needs)) + len(q_mark) + 1
+            needs_l = sorted(list(needs))
+            givens_l = sorted(list(givens))
+            while needs_l or givens_l:
+                if needs_l:
+                    lval = needs_l.pop(0)
+                    if lval not in givens:
+                        lval = q_mark + lval
+                else:
+                    lval = ''
+                if givens_l:
+                    rval = givens_l.pop(0)
+                    if rval not in needs:
+                        rval = q_mark + rval
+                else:
+                    rval = ''
+                prints.append(' '*l_col_space + lval + ' '*(r_col_space - len(lval)) + rval)
+            raise ValueError('\n'.join(prints))
 
 _builtin_templates_by_cmd = {}
 
