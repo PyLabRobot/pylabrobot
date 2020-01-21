@@ -298,13 +298,15 @@ class HamiltonInterface:
         else:
             start_time = float('inf')
 
+        response_tup = None
         while time.time() - start_time < timeout:
             try:
                 response_tup = self.pop_response(id, raise_first_exception)
             except KeyError:
-                time.sleep(.1)
-                continue
-            return response_tup
+                pass
+            if response_tup is not None:
+                return response_tup
+            time.sleep(.1)
         self.log_and_raise(HamiltonTimeoutError('Timed out after ' + str(timeout) + ' sec while waiting for response id ' + str(id)))
 
     def pop_response(self, id, raise_first_exception=False):
@@ -312,7 +314,7 @@ class HamiltonInterface:
         Raise KeyError if id has no matching response. If there is a response, remove it and return a 2-tuple:
             [0] parsed response block dict from Hamilton as in parse_hamilton_return
             [1] Error map: dict mapping int keys (data block Num field) that had exceptions, if any,
-                to an exception that was coded in block; {} if no error
+                to an exception that was coded in block; None to any error not associated with a block; {} if no error
         """
         try:
             response = self.server_thread.server_handler_class.pop_response(id)
@@ -334,9 +336,12 @@ class HamiltonInterface:
                         self.log('Raising first exception.', 'warn')
                         raise decoded_exception
                     err_map[blocknum] = decoded_exception
-            
-            #else:
-            #    raise HamiltonStepError('Hamilton step did not execute correctly; no error code given.')
+            else:
+                unknown_exc = HamiltonStepError('Hamilton step did not execute correctly; no error code given.')
+                err_map[None] = unknown_exc
+                if raise_first_exception:
+                    self.log('Raising first exception; exception has no error code.', 'warn')
+                    raise unknown_exc
         return blocks, err_map
 
     def _block_until_sq_clear(self):
