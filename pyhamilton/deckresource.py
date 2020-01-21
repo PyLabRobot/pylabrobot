@@ -20,6 +20,11 @@ class ResourceType:
 
 class LayoutManager:
 
+    _managers = {}
+    @staticmethod
+    def get_manager(checksum):
+        return LayoutManager._managers[checksum]
+
     @staticmethod
     def initial_printable(line, start=0):
         if not line:
@@ -84,6 +89,8 @@ class LayoutManager:
     def __init__(self, layfile_path, install=True):
         self.lines = self._read_layfile_lines(layfile_path)
         self.resources = {}
+        self.checksum = self._layfile_checksum(layfile_path)
+        self._managers[self.checksum] = self
         if install and not LayoutManager.layfiles_equal(layfile_path, OEM_LAY_PATH):
                 print('BACKING UP AND INSTALLING NEW LAYFILE')
                 shutil.copy2(layfile_path, os.path.join(LAY_BACKUP_DIR, datetime.today().strftime('%Y%m%d_%H%M%S_') + os.path.basename(layfile_path)))
