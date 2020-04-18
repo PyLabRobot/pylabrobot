@@ -30,7 +30,7 @@ with HamiltonInterface() as ham_int:
     ```
 7. **Run.** If you have other Python versions installed, always run pyhamilton with `py yourmethod.py` (the bundled Python launcher, which interprets shebangs) or `python3 yourmethod.py`
 
-See applications in:
+## Applications
 
 - [A high-throughput platform for feedback-controlled directed evolution](https://www.biorxiv.org/content/10.1101/2020.04.01.021022v1), _preprint_
 
