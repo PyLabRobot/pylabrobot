@@ -1,0 +1,303 @@
+function OnAbort(  ) void ;
+function SendTextMessageToServer( variable str ) void ;
+private function ArrayToString( variable & i_array[], variable & o_str ) void ;
+private function BuildArrayOfVolumesForChannels( variable strChannels, variable & o_arrayOfVolumes[] ) void ;
+private function BuildTempSequenceFromPositions( variable strPositions, sequence & o_seq ) void ;
+private function JSON_GetFloatValue( variable i_strKeyName, variable & o_KeyFloatValue ) void ;
+private function SendHHSReturnToServer( variable stepName, variable stepReturn1, variable stepReturn2, variable stepReturn3, variable stepReturn4, variable stepId ) void ;
+private function SendStepReturnToServer( variable stepName, variable stepReturn1, variable stepReturn2, variable stepReturn3, variable stepReturn4, variable stepId ) void ;
+private function StrTokenize( variable strIn, variable strDelimiter, variable & arrTokens[], variable bAttendEmptyTokens ) void ;
+private function waitForGUItoContinue(  ) variable ;
+function OnAbort(  ) void {
+    HSLHttp::Release(objHttp);
+}
+
+function SendTextMessageToServer( variable str ) void {
+    private object objJSONObject;
+    private variable strJSON;
+    HSLJsonLib::Create(objJSONObject);
+    HSLJsonLib::SetStringProperty(objJSONObject, Translate("command"), Translate("message"));
+    HSLJsonLib::SetStringProperty(objJSONObject, Translate("text"), str);
+    HSLJsonLib::GetJson(objJSONObject, strJSON);
+    HSLJsonLib::Release(objJSONObject);
+    HSLHttp::HttpPOST(objHttp, Translate("http://localhost:3221"), strJSON, HSLHttp::ContentType_JSON, Translate(""));
+}
+
+private function waitForGUItoContinue(  ) variable {
+    private variable loopCounter1;
+    private variable serverResponse;
+    private timer timer1;
+    serverResponse = Translate("");
+    SendTextMessageToServer(Translate("Waiting for server instructions..."));
+    TrcTrace(Translate("Waiting for server instructions...."), Translate(""));
+    {
+        loopCounter1 = 0;
+        while (1 == 1)
+        {
+            loopCounter1 = loopCounter1 + 1;
+            if( 0 == timer1.SetTimer(0.1) )
+            {
+                MECC::RaiseRuntimeErrorEx(-1355939584, MECC::IDS::stepNameTimerStart, MECC::IDS::errorStepFailed, "", "HxMetEdCompCmd");
+            }
+            if( 0 == timer1.WaitTimer(hslFalse, hslFalse) )
+            {
+                MECC::RaiseRuntimeErrorEx(-1339162368, MECC::IDS::stepNameTimerWait, MECC::IDS::errorStepFailed, "", "HxMetEdCompCmd");
+            }
+            serverResponse = HSLHttp::HttpGET(objHttp, Translate("http://localhost:3221"), Translate(""));
+            if (serverResponse != "")
+            {
+                break;
+            }
+            if (loopCounter1 == 300)
+            {
+
+                break;
+            }
+            if( 0 == timer1.SetTimer(0.9) )
+            {
+                MECC::RaiseRuntimeErrorEx(-1355939584, MECC::IDS::stepNameTimerStart, MECC::IDS::errorStepFailed, "", "HxMetEdCompCmd");
+            }
+            if( 0 == timer1.WaitTimer(hslFalse, hslFalse) )
+            {
+                MECC::RaiseRuntimeErrorEx(-1339162368, MECC::IDS::stepNameTimerWait, MECC::IDS::errorStepFailed, "", "HxMetEdCompCmd");
+            }
+        }
+    }
+    return (serverResponse);
+}
+
+private function SendStepReturnToServer( variable stepName, variable stepReturn1, variable stepReturn2, variable stepReturn3, variable stepReturn4, variable stepId ) void {
+    private variable strJSON;
+    HSLJsonLib::Create(objJSONToServer);
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("command"), Translate("STAR-return"));
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("step-name"), stepName);
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("step-return1"), stepReturn1);
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("step-return2"), stepReturn2);
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("step-return3"), stepReturn3);
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("step-return4"), stepReturn4);
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("id"), stepId);
+    HSLJsonLib::GetJson(objJSONToServer, strJSON);
+    HSLJsonLib::Release(objJSONToServer);
+    HSLHttp::HttpPOST(objHttp, Translate("http://localhost:3221"), strJSON, HSLHttp::ContentType_JSON, Translate(""));
+}
+
+private function BuildTempSequenceFromPositions( variable strPositions, sequence & o_seq ) void {
+    private variable n;
+    private variable loopCounter1;
+    private variable strSinglePosition;
+    private variable arrayOfPositions[];
+    private variable arraySinglePosition[];
+    private variable labwareID;
+    private variable positionID;
+    { sequence __temp; o_seq = __temp; }
+    arrayOfPositions.SetSize(0);
+    StrTokenize(strPositions, Translate(";"), arrayOfPositions, 0);
+    n=arrayOfPositions.GetSize();
+    SeqRemoveAll(o_seq);
+    {
+        for(loopCounter1 = 0; loopCounter1 < n;)
+        {
+            loopCounter1 = loopCounter1 + 1;
+            arraySinglePosition.SetSize(0);
+            strSinglePosition=arrayOfPositions.GetAt(loopCounter1-1);
+            StrTokenize(strSinglePosition, Translate(","), arraySinglePosition, 0);
+            labwareID=arraySinglePosition.GetAt(1-1);
+            positionID=arraySinglePosition.GetAt(2-1);
+            SeqAdd(o_seq, labwareID, positionID);
+        }
+    }
+    o_seq.SetCurrentPosition(1);
+}
+
+private function StrTokenize( variable strIn, variable strDelimiter, variable & arrTokens[], variable bAttendEmptyTokens ) void {
+    private variable strEdit;
+    private variable posLast;
+    private variable strToAdd;
+    private variable posCurrent;
+    posCurrent = -1;
+    posLast = -1;
+    strToAdd = "";
+    strEdit = strIn;
+    if( StrGetLength(strEdit) == 0 || StrGetLength(strDelimiter) == 0 )
+        return;
+
+    posLast = StrGetLength(strEdit);
+    posCurrent = StrFind(strEdit, strDelimiter);
+
+    while (-1 != posCurrent && posLast > 0)
+    {
+        //get tokens before next delimiter char
+        strToAdd = StrLeft(strEdit, posCurrent);
+        StrTrimRight(strToAdd, "");
+        StrTrimLeft (strToAdd, "");
+
+        //add token to our output list
+        if( StrGetLength(strToAdd) > 0 )
+        {
+            arrTokens.AddAsLast(strToAdd);
+            // Trace(GetFunctionName(), " adding string to output list: $", strToAdd, "$", "" );
+        }
+        else
+        {
+            if( bAttendEmptyTokens )// empty string should also be added
+            {
+                arrTokens.AddAsLast(strToAdd);
+                //Trace(GetFunctionName(), " adding string to output list: $", strToAdd, "$", "" );
+            }
+        }
+
+        //prepare next loop by removing obsolete characters
+        strEdit = StrRight(strEdit, posLast - posCurrent - StrGetLength(strDelimiter) );
+        //Trace(GetFunctionName(), " next string = ", strEdit );
+
+        //find next "non-delimiter"
+        posCurrent = StrFind(strEdit, strDelimiter);
+        posLast = StrGetLength(strEdit);
+        //Trace(GetFunctionName(), " next pos = ", posCurrent );
+
+    }//end while
+
+    //no delimiter left
+    //add the last part of the string to our output list
+    if (-1 == posCurrent)// && posLast > 0
+    {
+        if( posLast == 0 && !bAttendEmptyTokens )
+            return;
+
+        StrTrimRight(strEdit, "");
+        StrTrimLeft (strEdit, "");
+
+        //Trace(GetFunctionName(), " no delimiter left - adding string to output list: $", strEdit, "$", "" );
+
+        arrTokens.AddAsLast(strEdit);
+    }
+
+}
+
+private function BuildArrayOfVolumesForChannels( variable strChannels, variable & o_arrayOfVolumes[] ) void {
+    private variable numOfVolumes;
+    private variable numOfChannelsInVariable;
+    private variable n;
+    private variable loopCounter1;
+    private variable arrSize;
+    private variable loopCounter3;
+    private variable strKeyName;
+    o_arrayOfVolumes.SetSize( 0);
+    strKeyName = Translate("volumes");
+    o_arrayOfVolumes.SetSize(0);
+    arrSize = HSLJsonLib::GetArrayLength(objJSONFromServer, strKeyName);
+    if (arrSize > 0)
+    {
+
+        {
+            for(loopCounter3 = 0; loopCounter3 < arrSize;)
+            {
+                loopCounter3 = loopCounter3 + 1;
+                HSLJsonLib::GetFloatArrayElement(objJSONFromServer, strKeyName, loopCounter3, v);
+                o_arrayOfVolumes.AddAsLast(v);
+                Trace("Volume received=", v);
+            }
+        }
+    }
+    else
+    {
+
+        JSON_GetFloatValue(strKeyName, v);
+        o_arrayOfVolumes.AddAsLast(v);
+    }
+    numOfVolumes=o_arrayOfVolumes.GetSize();
+    numOfChannelsInVariable = StrGetLength(strChannels);
+
+    if (numOfVolumes < numOfChannelsInVariable)
+    {
+        n = numOfChannelsInVariable - numOfVolumes;
+        v = o_arrayOfVolumes.ElementAt( numOfVolumes -1);
+        {
+            for(loopCounter1 = 0; loopCounter1 < n;)
+            {
+                loopCounter1 = loopCounter1 + 1;
+                o_arrayOfVolumes.AddAsLast(v);
+            }
+        }
+    }
+}
+
+private function ArrayToString( variable & i_array[], variable & o_str ) void {
+    private variable arraySize;
+    private variable loopCounter1;
+    o_str = 0;
+    arraySize=i_array.GetSize();
+    o_str = Translate("");
+    {
+        for(loopCounter1 = 0; loopCounter1 < arraySize;)
+        {
+            loopCounter1 = loopCounter1 + 1;
+            v=i_array.GetAt(loopCounter1-1);
+            o_str = StrConcat2(o_str, v);
+            if (loopCounter1 < arraySize)
+            {
+                o_str = StrConcat2(o_str, Translate(";"));
+            }
+        }
+    }
+}
+
+private function JSON_GetFloatValue( variable i_strKeyName, variable & o_KeyFloatValue ) void {
+    private variable retVal;
+    o_KeyFloatValue = 0;
+    Trace("getfloatvalue");
+    retVal = HSLJsonLib::GetFloatProperty(objJSONFromServer, i_strKeyName, o_KeyFloatValue);
+    if (retVal > 0)
+    {
+        Trace("error getting float value, try with integer");
+
+        retVal = HSLJsonLib::GetIntegerProperty(objJSONFromServer, i_strKeyName, o_KeyFloatValue);
+        Trace("error getting float value, tried with integer");
+        if (retVal > 0)
+        {
+            Trace("wtf ok i guess its zero");
+            o_KeyFloatValue = 0;
+        }
+    }
+}
+
+private function SendHHSReturnToServer( variable stepName, variable stepReturn1, variable stepReturn2, variable stepReturn3, variable stepReturn4, variable stepId ) void {
+    private variable strJSON;
+    private variable t_arrayStepReturns[];
+    private variable loopCounter1;
+    private variable keyName;
+    private variable varType;
+    HSLJsonLib::Create(objJSONToServer);
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("command"), Translate("HHS-return"));
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("step-name"), stepName);
+    t_arrayStepReturns.SetSize(0);
+    t_arrayStepReturns.AddAsLast(stepReturn1);
+    t_arrayStepReturns.AddAsLast(stepReturn2);
+    t_arrayStepReturns.AddAsLast(stepReturn3);
+    t_arrayStepReturns.AddAsLast(stepReturn4);
+    {
+        for(loopCounter1 = 0; loopCounter1 < 4;)
+        {
+            loopCounter1 = loopCounter1 + 1;
+            keyName = StrConcat2(Translate("step-return"), loopCounter1);
+            varType = StrGetType(t_arrayStepReturns.ElementAt( loopCounter1 -1));
+            if (varType == "s")
+            {
+                HSLJsonLib::SetStringProperty(objJSONToServer, keyName, t_arrayStepReturns.ElementAt( loopCounter1 -1));
+            }
+            if (varType == "f")
+            {
+                HSLJsonLib::SetFloatProperty(objJSONToServer, keyName, t_arrayStepReturns.ElementAt( loopCounter1 -1));
+            }
+            if (varType == "i")
+            {
+                HSLJsonLib::SetIntegerProperty(objJSONToServer, keyName, t_arrayStepReturns.ElementAt( loopCounter1 -1));
+            }
+        }
+    }
+    HSLJsonLib::SetStringProperty(objJSONToServer, Translate("id"), stepId);
+    HSLJsonLib::GetJson(objJSONToServer, strJSON);
+    HSLJsonLib::Release(objJSONToServer);
+    HSLHttp::HttpPOST(objHttp, Translate("http://localhost:3221"), strJSON, HSLHttp::ContentType_JSON, Translate(""));
+}
+
