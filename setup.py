@@ -8,7 +8,10 @@ setup(
     description='Python for Hamilton liquid handling robots',
     long_description=open('README.md').read(),
     install_requires=['requests', 'pythonnet', 'pywin32', 'pyserial'],
-    package_data={'pyhamilton': ['star-oem/VENUS_Method/STAR_OEM_Test.hsl']},
+    package_data={'pyhamilton': ['star-oem/HSLHttp.dll',
+                                 'star-oem/RunHSLExecutor.dll',
+                                 'star-oem/VENUS_Method/STAR_OEM_Test.lay',
+                                 'star-oem/VENUS_Method/STAR_OEM_Test.hsl']},
     url='https://github.com/dgretton/pyhamilton.git',
     author='Dana Gretton',
     author_email='dgretton@mit.edu'
