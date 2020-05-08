@@ -8,17 +8,22 @@ class ResourceType:
 
     def __init__(self, resource_class, *args):
         self.resource_class = resource_class
-        self.err_msg = None
+        self.not_found_msg = None
         try:
             specific_name, = args
             self.test = lambda line: specific_name in re.split(r'\W', line)
             self.extract_name = lambda line: specific_name
-            self.err_msg = 'No exact match for name "' + specific_name + '" to assign a resource of type ' + resource_class.__name__
+            self.not_found_msg = 'No exact match for name "' + specific_name + '" to assign a resource of type ' + resource_class.__name__
         except ValueError:
             self.test, self.extract_name = args
 
 
 class LayoutManager:
+
+    _managers = {}
+    @staticmethod
+    def get_manager(checksum):
+        return LayoutManager._managers[checksum]
 
     @staticmethod
     def initial_printable(line, start=0):
@@ -84,27 +89,34 @@ class LayoutManager:
     def __init__(self, layfile_path, install=True):
         self.lines = self._read_layfile_lines(layfile_path)
         self.resources = {}
+        self.checksum = self._layfile_checksum(layfile_path)
+        self._managers[self.checksum] = self
         if install and not LayoutManager.layfiles_equal(layfile_path, OEM_LAY_PATH):
                 print('BACKING UP AND INSTALLING NEW LAYFILE')
                 shutil.copy2(layfile_path, os.path.join(LAY_BACKUP_DIR, datetime.today().strftime('%Y%m%d_%H%M%S_') + os.path.basename(layfile_path)))
                 shutil.copy2(layfile_path, OEM_LAY_PATH)
         
-    def assign_unused_resource(self, restype):
+    def assign_unused_resource(self, restype, order_key=None, reverse=False):
+        if order_key is None:
+            order_key = lambda r: r.layout_name()
         if not isinstance(restype, ResourceType):
             raise TypeError('Must provide a ResourceType to be assigned')
+        matching_ress = []
         for line in self.lines:
             if restype.test(line):
-                new_name = restype.extract_name(line)
-                if new_name in self.resources:
+                match_name = restype.extract_name(line)
+                if match_name in self.resources:
                     continue
-                r = restype.resource_class(new_name)
-                self.resources[new_name] = r
-                return r
-        else:
-            msg = restype.err_msg or 'No unassigned resource of type ' + restype.resource_class.__name__ + ' available'
+                matching_ress.append(restype.resource_class(match_name))
+        if not matching_ress:
+            msg = restype.not_found_msg or 'No unassigned resource of type ' + restype.resource_class.__name__ + ' available'
             raise ResourceUnavailableError(msg)
+        choose = max if reverse else min
+        new_res = choose(matching_ress, key=order_key)
+        self.resources[new_res.layout_name()] = new_res
+        return new_res
 
-            
+
 class ResourceIterItem:
 
     def __init__(self, resource, index):

@@ -42,8 +42,27 @@ class HamiltonCmdTemplate:
         needs.update(self.params_list)
         givens = set(cmd_dict.keys())
         if givens != needs:
-            raise ValueError(prefix + 'template parameter keys ' + str(sorted(list(needs))) +
-                    ' do not match given keys ' + str(sorted(list(givens))))
+            prints = [prefix + 'template parameter keys (left) do not match given keys (right)\n']
+            q_mark = ' (?)  '
+            l_col_space = 4
+            r_col_space = max((len(key) for key in needs)) + len(q_mark) + 1
+            needs_l = sorted(list(needs))
+            givens_l = sorted(list(givens))
+            while needs_l or givens_l:
+                if needs_l:
+                    lval = needs_l.pop(0)
+                    if lval not in givens:
+                        lval = q_mark + lval
+                else:
+                    lval = ''
+                if givens_l:
+                    rval = givens_l.pop(0)
+                    if rval not in needs:
+                        rval = q_mark + rval
+                else:
+                    rval = ''
+                prints.append(' '*l_col_space + lval + ' '*(r_col_space - len(lval)) + rval)
+            raise ValueError('\n'.join(prints))
 
 _builtin_templates_by_cmd = {}
 
@@ -279,13 +298,15 @@ class HamiltonInterface:
         else:
             start_time = float('inf')
 
+        response_tup = None
         while time.time() - start_time < timeout:
             try:
                 response_tup = self.pop_response(id, raise_first_exception)
             except KeyError:
-                time.sleep(.1)
-                continue
-            return response_tup
+                pass
+            if response_tup is not None:
+                return response_tup
+            time.sleep(.1)
         self.log_and_raise(HamiltonTimeoutError('Timed out after ' + str(timeout) + ' sec while waiting for response id ' + str(id)))
 
     def pop_response(self, id, raise_first_exception=False):
@@ -293,7 +314,7 @@ class HamiltonInterface:
         Raise KeyError if id has no matching response. If there is a response, remove it and return a 2-tuple:
             [0] parsed response block dict from Hamilton as in parse_hamilton_return
             [1] Error map: dict mapping int keys (data block Num field) that had exceptions, if any,
-                to an exception that was coded in block; {} if no error
+                to an exception that was coded in block; None to any error not associated with a block; {} if no error
         """
         try:
             response = self.server_thread.server_handler_class.pop_response(id)
@@ -315,9 +336,12 @@ class HamiltonInterface:
                         self.log('Raising first exception.', 'warn')
                         raise decoded_exception
                     err_map[blocknum] = decoded_exception
-            
-            #else:
-            #    raise HamiltonStepError('Hamilton step did not execute correctly; no error code given.')
+            else:
+                unknown_exc = HamiltonStepError('Hamilton step did not execute correctly; no error code given.')
+                err_map[None] = unknown_exc
+                if raise_first_exception:
+                    self.log('Raising first exception; exception has no error code.', 'warn')
+                    raise unknown_exc
         return blocks, err_map
 
     def _block_until_sq_clear(self):
