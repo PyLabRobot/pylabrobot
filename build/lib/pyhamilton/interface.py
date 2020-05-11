@@ -134,7 +134,15 @@ def run_hamilton_process():
     from pyhamilton import OEM_STAR_PATH, OEM_HSL_PATH
     clr.AddReference(os.path.join(OEM_STAR_PATH, 'RunHSLExecutor'))
     clr.AddReference(os.path.join(OEM_STAR_PATH, 'HSLHttp'))
-    from RunHSLExecutor import Class1
+    try:
+        from RunHSLExecutor import Class1
+    except ModuleNotFoundError:
+        raise RuntimeError('RunHSLExecutor DLLs successfully located, but an internal '
+                           'error prevented import as a CLR module. You might be '
+                           'missing the standard Hamilton software suite HSL '
+                           'executables, their DLLs may not be registered with Windows, '
+                           'or they may not be located in the expected system '
+                           'directory.')
     C = Class1()
     C.StartMethod(OEM_HSL_PATH)
     try:
