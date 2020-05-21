@@ -1,7 +1,7 @@
 * text eol=lf
 
 *.lay binary
-*.dll binary
+*.dll* binary
 *.pdb binary
 *.hsl binary
 *.hsi binary
