@@ -12,5 +12,5 @@
 *.chm binary
 *.chw binary
 *.ico binary
-
+*.med binary
 
