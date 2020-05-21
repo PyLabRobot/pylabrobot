@@ -13,4 +13,5 @@
 *.chw binary
 *.ico binary
 *.med binary
+*.res binary
 

@@ -1,6 +1,5 @@
 *.pyc
 *__pycache__
-*.res
 *.DS_store
 *.swp
 pyhamilton/LAY-BACKUP
