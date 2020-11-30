@@ -1,0 +1,4 @@
+requests
+pythonnet
+pywin32
+pyserial
