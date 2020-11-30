@@ -1,3 +1,5 @@
+"""`pyhamilton`-specific exception definitions.
+"""
 class HamiltonError(Exception):
     """
     Exceptions raised in package pyhamilton
@@ -419,4 +421,7 @@ HAMILTON_ERROR_MAP = {
     112: KitLotExpiredError,
     113: DelimiterError
 }
+"""
+Maps integer error codes from Hamilton step return data to the appropriate `pyhamilton` errors
+"""
 

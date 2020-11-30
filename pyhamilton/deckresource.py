@@ -1,3 +1,8 @@
+"""
+Couplings to Hamilton deck layouts.
+
+Module `pyhamilton.deckresource` provides convenience classes and methods for interacting safely with Hamilton's Layout (`.lay`) files. It also implements transformations between well indexes and coordinates for a variety of labware, such as plates and tips.
+"""
 import string, shutil, os, string, re
 from datetime import datetime
 from pyhamilton import OEM_LAY_PATH, LAY_BACKUP_DIR
@@ -5,24 +10,77 @@ from .oemerr import ResourceUnavailableError
 
 
 class ResourceType:
+    """
+    Specifies a type of labware to extract using LayoutManager, and how.
 
-    def __init__(self, resource_class, *args):
+    This class associates a resource class, such as `Plate96`, with either a literal labware identifier (`str`) that appears in the Hamilton Layout (`.lay`) file, or a pair of functions: one that identifies when a text line in a layout file could be assigned this resource, called `test`, and one that parses such a name out of the line, called `extract_name`.
+
+    Typical usage:
+
+    ```
+    plate_type = ResourceType(Plate96, 'Cos_96_Rd_0001')
+    lmgr = LayoutManager('layout.lay')
+    plate = lmgr.assign_unused_resource(plate_type)
+    ```
+
+    Or:
+
+    ```
+    plate_type = ResourceType(Plate96,
+            LayoutManager.line_has_prefixed_name('Cos_96_Rd_'),
+            LayoutManager.name_from_line)
+    lmgr = LayoutManager('layout.lay')
+    plate1 = lmgr.assign_unused_resource(plate_type)
+    plate2 = lmgr.assign_unused_resource(plate_type)
+    ```
+
+    Args:
+      resource_class (class): a class that inherits from `DeckResource`. Instances of this class will be returned from `LayoutManager` when assigning resources, factory-style.
+      *name_specifiers (list): This argument is unpacked with the "splat" operator (`*`) to enable polymorphism. One or the other of:
+      - (two-argument form) an exact name (`str`) of a labware item that appears in the target layout file, or
+      - (three-argument form) `test` and `extract_name` (see usage above):
+          * `test`: a function [(`str`) -> `bool`] that identifies Layout file lines (`str`) that could be used to assign resources of this type
+          * `extract_name`: a function [(`str`) -> `str`] that gets the desired name out of a line identified with `test`.
+
+    """
+
+    def __init__(self, resource_class, *name_specifiers):
         self.resource_class = resource_class
         self.not_found_msg = None
         try:
-            specific_name, = args
+            specific_name, = name_specifiers
             self.test = lambda line: specific_name in re.split(r'\W', line)
             self.extract_name = lambda line: specific_name
             self.not_found_msg = 'No exact match for name "' + specific_name + '" to assign a resource of type ' + resource_class.__name__
         except ValueError:
-            self.test, self.extract_name = args
+            self.test, self.extract_name = name_specifiers
 
 
 class LayoutManager:
+    """Optionally activates a Hamilton layout and helps access its contents.
+
+    A `LayoutManager` manages the consistent assignment of `DeckResource` objects to items in a Hamilton Layout file (`.lay`). A `LayoutManager` must be used to set the active pyhamilton layout file, but use of this class is strictly optional when sending `pyhamilton` commands using `send_command`; names may be passed as string literals in commands instead if they are known in advance. The advantage to specifying all labware using `ResourceManager` is that resource names are verified to be present in the active layout file at runtime, and guaranteed never used more than once, both of which are necessary to avoid silent Hamilton errors.
+    
+    Example usage:
+    
+    ```
+    lmgr = LayoutManager('layout.lay')
+    plate = lmgr.assign_unused_resource(ResourceType(Plate24, 'plate_0'))
+    culture_reservoir = lmgr.assign_unused_resource(ResourceType(Plate96, 'culture'))
+    inducer_tips = lmgr.assign_unused_resource(ResourceType(Tip96, 'inducer_tips'))
+    ```
+    """
 
     _managers = {}
     @staticmethod
     def get_manager(checksum):
+        """Return a `LayoutManager` previously instantiated for a layout file that has the specified checksum.
+        
+        Typically used when accessing the same layout file from multiple "threads" in the same process (using the `threading` module) to prevent name double-counting.
+        
+        Args:
+          checksum (str): a checksum found at the end of a Hamilton Layout (`.lay`) file.
+        """
         return LayoutManager._managers[checksum]
 
     @staticmethod
@@ -58,6 +116,19 @@ class LayoutManager:
             return field.index(prefix) == 0
         except ValueError:
             return False
+
+    @staticmethod
+    def name_from_line(line):
+        field = LayoutManager.layline_objid(line)
+        if field:
+            return field
+        return LayoutManager.layline_first_field(line)
+
+    @staticmethod
+    def line_has_prefixed_name(prefix):
+        def has_prefix(line):
+            return LayoutManager.field_starts_with(LayoutManager.name_from_line(line), prefix)
+        return has_prefix
 
     @staticmethod
     def _read_layfile_lines(layfile_path):
@@ -97,6 +168,22 @@ class LayoutManager:
                 shutil.copy2(layfile_path, OEM_LAY_PATH)
         
     def assign_unused_resource(self, restype, order_key=None, reverse=False):
+        """Create a new deck resource after finding and assigning an unused name that matches the resource type.
+        
+        This method searches through the layout file for one new layout name that matches the given resource type. It reserves this layout name permanently so that no later calls to `assign_unused_resource` can create a deck resource with the same layout name. Returns a `DeckResource`.
+        
+        Args:
+          restype (ResourceType): The resource type, which consists of a resource class (descendent of `DeckResource`) and some string pattern matching functions to identify the desired layout names.
+          order_key (Callable[[DeckResource], Comparable]): Optional; when multiple layout names match, specifies a function of one argument that is used to extract a comparison key from each candidate `DeckResource` object. The arg-min or arg-max of `order_key` will be returned, depending on `reverse`. By default, lexicographic order by layout name is used, which is suitable for most use cases, e.g. plates with layout names "pcr-plate-a", "pcr-plate-b", "pcr-plate-c", ... will be returned in the expected order.
+          reverse (bool): Optional; use reverse-lexicographic order for layout names, useful for e.g. plate stacking applications, or reverse the order imposed by `order_key` if it is given.
+          
+        Returns:
+          A new instance of the resource class (descendent of `DeckResource`) from the given `ResourceType` `restype`.
+          
+        Raises:
+          ResourceUnavailableError: no names in the layout file that have not already been assigned match the resource type
+        
+        """
         if order_key is None:
             order_key = lambda r: r.layout_name()
         if not isinstance(restype, ResourceType):
@@ -172,10 +259,33 @@ class DeckResource:
             raise ValueError('Index ' + str(idx) + ' not in range for resource')
     
     def layout_name(self):
-        return self._layout_name # default; override if needed. (str) The name of this specific deck resource in the .lay file
+        """The layout name of this specific deck resource.
+        
+        Returns:
+          The name (`str`) associated with this specific deck resource in the Hamilton Layout (`.lay`) file it came from.
+        """
+        return self._layout_name # default; override if needed. (str) 
 
     def position_id(self, idx):
-        raise NotImplementedError() # (str) The position id according to the .lay definition associated with the (zero-indexed) idx
+        """The identifier used for one of a sequence of positions inside this labware.
+        
+        For labware with multiple positions, each position has a different identity, usually represented as a short string that will match the identifier scheme for this resource in the Hamilton Layout file it came from. The identifiers will usually be familiar from a laboratory setting.
+        
+        Examples
+        
+        - 96-well plates have 96 positions, each identified with a letter and a number like `'D4'`. For a `Plate96` instance named `plate`, `plate.position_id(0)` is `'A1'`, `plate.position_id(1)` is `'B1'`, and `plate.position_id(95)` is `'H12'`.
+        - Hamilton racks of 96 tips have 96 positions, identified with integer strings like `'87'` that start with `'1'` at the top left tip and increase down columns (8 positions each) first. For a `Tip96` instance named `tips`, `tips.position_id(0)` is `'1'`, `tips.position_id(1)` is `'2'`, and `tips.position_id(95)` is `'96'`.
+
+        Args:
+          idx (int): the index into the sequence of positions. Note: `idx` is zero-indexed across all labware according to python convention, while most real-world labware positions are 1-indexed.
+
+        Returns:
+          The identifier (`str`) associated with the position `idx` specific deck resource in the Hamilton Layout (`.lay`) file it came from.
+          
+        Raises:
+          NotImplementedError: The deck resource does not have positions.
+        """
+        raise NotImplementedError()
 
     def alignment_delta(self, start, end):
         args = {'start':start, 'end':end}
@@ -199,6 +309,8 @@ class DeckResource:
 
 
 class Standard96(DeckResource):
+    """Labware types with 96 positions that use a letter-number id scheme like `'A1'`.
+    """
 
     def well_coords(self, idx):
         self._assert_idx_in_range(idx)
