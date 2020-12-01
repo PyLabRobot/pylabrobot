@@ -13,6 +13,10 @@ with HamiltonInterface() as ham_int:
     ham_int.wait_on_response(ham_int.send_command(INITIALIZE))
 ```
 
+## Documentation
+
+[Available online](https://dgretton.github.io/pyhamilton-docs/).
+
 ## Installation
 
 1. **Install and test the standard Hamilton software suite for your system.**
