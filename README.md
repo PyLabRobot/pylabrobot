@@ -6,7 +6,7 @@ Hamilton software only works on Windows, so the same goes for pyhamilton.
 
 Developed for Hamilton STAR and STARlet on Windows XP and Windows 7. VANTAGE series supported with plugin. Other robot models and operating systems not supported yet.
 
-_Contact: contactpyhamilton@gmail.com_ for questions, ideas, or help with installation.
+_Contact: contactpyhamilton@gmail.com for questions, ideas, or help with installation._
 
 ## Example usage
 ```python
