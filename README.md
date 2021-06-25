@@ -6,6 +6,8 @@ Hamilton software only works on Windows, so the same goes for pyhamilton.
 
 Developed for Hamilton STAR and STARlet on Windows XP and Windows 7. VANTAGE series supported with plugin. Other robot models and operating systems not supported yet.
 
+_Contact: contactpyhamilton@gmail.com_ for questions, ideas, or help with installation.
+
 ## Example usage
 ```python
 from pyhamilton import HamiltonInterface, INITIALIZE
@@ -40,6 +42,5 @@ with HamiltonInterface() as ham_int:
 
 - [Flexible open-source automation for robotic bioengineering](https://www.biorxiv.org/content/10.1101/2020.04.14.041368v1), _preprint_
 
-_Contact: dgretton@mit.edu_
 
 _Developed for the Sculpting Evolution Group at the MIT Media Lab_
