@@ -25,7 +25,8 @@ with HamiltonInterface() as ham_int:
 2. **Install 32-bit python 3.6.3**, preferably using the executable installer at https://www.python.org/downloads/release/python-363/. Python 3.7+ is known to cause an installation issue with some required pythonnet/pywin32 modules.
 3. **Make sure git is installed.** https://git-scm.com/download/win
 4. **Make sure you have .NET framework 4.0 or higher installed.** https://www.microsoft.com/en-us/download/details.aspx?id=17851
-5. **Update your pip and setuptools.**
+5. **Install Hamilton library dependencies** HSLJson and HSLHttp by running executable installers *"HSLJson Library v1.6 Installer.exe"* and *"Hamilton HSLHttp Library Installer Version 2.7.exe"* located in *./bin*.
+6. **Update your pip and setuptools.**
     ```
     > python -m pip install --upgrade pip
     > pip install --upgrade setuptools
