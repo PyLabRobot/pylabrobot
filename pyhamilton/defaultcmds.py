@@ -152,7 +152,8 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'gripWidth':123.7, # (float) grip width when closed [mm]
         'tolerance':2.0, # (float) tolerance [mm]
         'gripHeight':3.0, # (float) height to grip above bottom of labware [mm]
-        'widthBefore':130.0 # (float) grip width when opened before grip [mm]
+        'widthBefore':130.0, # (float) grip width when opened before grip [mm]
+        'labwareOrientation':1
     }),
 
     'iSwapPlace':('ISWAP_PLACE', {
@@ -166,9 +167,64 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'transportMode':0, # (integer) 0=Plate only, 1=Lid only ,2=Plate with lid
         'collisionControl':0, # (integer) 0=Off, 1=On
         'retractDistance':0.0, # (float) retract distance [mm] (only used if 'movement type' is set to 'complex movement')
-        'liftUpHeight':20.0 # (float) lift-up distance [mm] (only used if 'movement type' is set to 'complex movement')
+        'liftUpHeight':20.0, # (float) lift-up distance [mm] (only used if 'movement type' is set to 'complex movement')
+        'labwareOrientation':1
+    }),
+    'iSwapMove':('ISWAP_MOVE',{
+        'plateSequence':'',
+        'plateLabwarePositions':'',
+        'collisionControl':0,
+        'gripMode':1
+    }),
+    
+    'gripGet':('GRIP_GET', {
+        'plateSequence':'', # leave empty if you are going to provide specific plate labware-position below
+        'plateLabwarePositions':'', # leave empty if you are going to provide a plate sequence name above. LabwareId1, positionId1; 
+        'lidSequence':'', # leave empty if you don´t use lid or if you are going to provide specific plate labware-positions below or ejecting to default waste
+        'lidLabwarePositions':'', # leave empty if you are going to provide a plate sequence name above. LabwareId1, positionId1; 
+        'toolSequence':'COREGripTool', # sequence name of the CO-RE Gripper
+        'gripForce':3, # (integer) 0-9, from lowest to highest
+        'gripperToolChannel':8, # specifies the higher of two consecutive integers representing the CO-RE gripper channels.
+        'sequenceCounting':0, # (integer) 0=don´t autoincrement plate sequence,  1=Autoincrement
+        'gripWidth':75, # (float) mm
+        'gripHeight':3.0, # (float) mm
+        'widthBefore':90, # (float) mm width before gripping
+        'gripSpeed':5.0, # (float) mm/s. Must be supplied
+        'zSpeed':50.0, # (float) mm/s. Must be supplied
+        'transportMode':0, # (integer) 0=Plate only, 1=Lid only ,2=Plate with lid
+        'checkPlate':0 # (integer) 
+    }),
+    
+    'gripMove':('GRIP_MOVE', {
+        'plateSequence':'', # leave empty if you are going to provide specific plate labware-position below
+        'xAcceleration':4, # (integer) 1-5 from slowest to fastest, where 4 is default
+        'plateLabwarePositions':'', # leave empty if you don´t use lid or if you are going to provide specific plate labware-positions below or ejecting to default waste
+        
+    }),
+    
+    'gripPlace':('GRIP_PLACE', {
+        'plateSequence':'', # leave empty if you are going to provide specific plate labware-position below
+        'plateLabwarePositions':'', # leave empty if you are going to provide a plate sequence name above. LabwareId1, positionId1; 
+        'lidSequence':'', # leave empty if you don´t use lid or if you are going to provide specific plate labware-positions below or ejecting to default waste
+        'lidLabwarePositions':'', # leave empty if you are going to provide a plate sequence name above. LabwareId1, positionId1; 
+        'toolSequence':'COREGripTool', # sequence name of the iSWAP. leave empty if you are going to provide a plate sequence name above. LabwareId1, positionId1;
+        'sequenceCounting':0, # (integer) 0=don´t autoincrement plate sequence,  1=Autoincrement
+        'movementType':0, # (integer) 0=To carrier, 1=Complex movement
+        'transportMode':0, # (integer) 0=Plate only, 1=Lid only ,2=Plate with lid
+        'ejectToolWhenFinish':0, # (integer) 0=Off, 1=On
+        'zSpeed':25.0, # (float) mm/s
+        'platePressOnDistance':0.0, # (float) lift-up distance [mm] (only used if 'movement type' is set to 'complex movement'),
+        'xAcceleration':4  # (integer) 1-5 from slowest to fastest, where 4 is default
+    }),
+    
+    'moveSequence':('MOVE_SEQ',{
+        'inputSequence':'',
+        'xDisplacement':'',
+        'yDisplacement':'',
+        'zDisplacement':'',
     }),
 
+    
     'HxFanSet':('HEPA', {
         'deviceNumber':_fan_port, # (integer) COM port number of fan
         'persistant':1, # (integer) 0=don´t keep fan running after method exits, 1=keep settings after method exits

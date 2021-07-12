@@ -1,3 +1,8 @@
+"""
+TODO: REVERT WITH GIT CHECKOUT AND THEN COPY IN NEW EDITS WHICH ARE ON DANA'S MACHINE
+Classes and utilities for automatic connection to a Hamilton robot
+"""
+
 import time, json, signal, os, requests, string, logging, subprocess, win32gui, win32con
 from http import server
 from threading import Thread
@@ -7,12 +12,31 @@ from .oemerr import * #TODO: specify
 from .defaultcmds import defaults_by_cmd
     
 class HamiltonCmdTemplate:
+    """
+    Formatter object to create valid pyhamilton command dicts.
+
+    Use of this class to assemble JSON pyhamilton commands enables keyword access to command attributes, which cuts down on string literals. It also helps to fail malformed commands early, before they are sent.
+    """
         
     @staticmethod
     def unique_id():
+        """Return a "uniqe" hexadecimal string ('0x...') based on time of call"""
         return hex(int((time.time()%3600e4)*1e6))
 
     def __init__(self, cmd_name, params_list):
+        """
+        Creates a `HamiltonCmdTemplate` with a command name and required parameters.
+
+        The command name must be one of the command names accepted by the
+        pyhamilton interpreter and a list of expected parameters for this command.
+
+        Args:
+          cmd_name (str): One of the set of string literals recognized as command names
+            by the pyhamilton interpreter, e.g. 'DISPENSE96'. See `defaultcmds`.
+          params_list (list): exact list of string parameters that must have associated
+            values for the command to be valid, other than those that are always present
+            ('command' and 'id')
+        """
         self.cmd_name = cmd_name
         self.params_list = params_list
         if cmd_name in defaults_by_cmd:
@@ -22,6 +46,13 @@ class HamiltonCmdTemplate:
             self.defaults = {}
 
     def assemble_cmd(self, *args, **kwargs):
+        """
+        Use keyword args to assemble this command. Default values auto-filled.
+
+        Args:
+          kwargs (dict): map of any parameters (str) to values that should be different
+            from the defaults supplied for this command in `defaultcmds`
+        """
         if args:
             raise ValueError('assemble_cmd can only take keyword arguments.')
         assembled_cmd = {'command':self.cmd_name, 'id':HamiltonCmdTemplate.unique_id()}
@@ -31,6 +62,19 @@ class HamiltonCmdTemplate:
         return assembled_cmd
 
     def assert_valid_cmd(self, cmd_dict):
+        """Validate a finished command. Do nothing if it is valid.
+
+        ValueError will be raised if the supplied command did not have all required
+        parameters for this command, as well as values for keys 'id' and 'command', which
+        are always required.
+
+        Args:
+          cmd_dict (dict): A fully assembled pyhamilton command
+
+        Raises:
+          ValueError: The command dict is not ready to send. Specifics of mismatch
+            summarized in exception description.
+        """
         prefix = 'Assert valid command "' + self.cmd_name + '" failed: '
         if 'id' not in cmd_dict:
             raise ValueError(prefix + 'no key "id"')
@@ -73,11 +117,27 @@ for cmd in defaults_by_cmd:
     _builtin_templates_by_cmd[cmd] = const_template
 
 def _make_new_hamilton_serv_handler(resp_indexing_fn):
+    """Make HTTP request handler to aggregate responses according to an index function.
+
+    A new class is defined each time, bound to a specific indexing function, to keep it
+    agnostic to any particular indexing scheme. In practice, the current implementation
+    uses the value of the key 'id'; that is the scheme for the pyhamilton interpreter.
+
+    Attributes:
+      indexed_responses (dict): aggregated responses received by this handler, keyed by
+        the values returned by `resp_indexing_fn`.
+
+    Args:
+      resp_indexing_fn (Callable[[str], Hashable]): Called on every response body (str)
+        to extract a hashable index. Later, the response can be retrieved by this index
+        from `indexed_responses`.
+
+    """
+
     class HamiltonServerHandler(server.BaseHTTPRequestHandler):
         _send_queue = []
         indexed_responses = {}
         indexing_fn = resp_indexing_fn
-        MAX_QUEUED_RESPONSES = 1000
 
         @staticmethod
         def send_str(cmd_str):
@@ -130,6 +190,12 @@ def _make_new_hamilton_serv_handler(resp_indexing_fn):
     return HamiltonServerHandler
 
 def run_hamilton_process():
+    """Start the interpreter in a separate python process.
+
+    Starts the pyhamilton interpreter, which is an HSL file to be passed to the
+    RunHSLExecutor.exe executable from Hamilton. This should always be done in a
+    separate python process using the subprocess module, not a Thread.
+    """
     import clr
     from pyhamilton import OEM_STAR_PATH, OEM_HSL_PATH
     clr.AddReference(os.path.join(OEM_STAR_PATH, 'RunHSLExecutor'))
@@ -157,12 +223,30 @@ BLOCK_FIELDS = _block_numfield, _block_mainerrfield, 'SlaveErr', 'RecoveryBtnId'
 _block_field_types = int, int, int, int, str, str, str
 
 class HamiltonInterface:
+    """Main class to automatically set up and tear down an interface to a Hamilton robot.
+
+    HamiltonInterface is the primary class offered by this module. It creates a Hamilton
+    HSL background process running the pyhamilton interpreter, along with a localhost
+    connection to act as a bridge. It is recommended to create a HamiltonInterface using
+    a with: block to ensure proper startup and shutdown of its async components, even if
+    exceptions are raised. It may be used with explicit start() and stop() calls.
+
+      Typical usage:
+      
+      with HamiltonInterface() as ham_int:
+          cmd_id = ham_int.send_command(INITIALIZE)
+          ...
+          ham_int.wait_on_response(cmd_id)
+          ...
+
+    """
 
     known_templates = _builtin_templates_by_cmd
     default_port = 3221
     default_address = '127.0.0.1' # localhost
 
     class HamiltonServerThread(Thread):
+        """Private threaded HTTP localhost server with graceful shutdown."""
 
         def __init__(self, address, port):
             Thread.__init__(self)
@@ -204,6 +288,13 @@ class HamiltonInterface:
         self.log_queue = []
 
     def start(self):
+        """Starts the extra processes, threads, and servers for the Hamilton connection.
+
+        Launches:
+          1) a Hamilton Run Control executable, either in the background for normal use,
+            or in the foreground with a GUI
+        """
+
         if self.active:
             return
         self.log('starting a Hamilton interface')
