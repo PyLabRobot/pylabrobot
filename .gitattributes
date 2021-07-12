@@ -1,5 +1,4 @@
 * text eol=lf
-
 *.lay binary
 *.dll* binary
 *.pdb binary
@@ -14,4 +13,4 @@
 *.ico binary
 *.med binary
 *.res binary
-
+*.exe filter=lfs diff=lfs merge=lfs -text

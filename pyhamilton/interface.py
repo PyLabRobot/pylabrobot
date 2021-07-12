@@ -1,6 +1,10 @@
 """
+<<<<<<< HEAD
 TODO: REVERT WITH GIT CHECKOUT AND THEN COPY IN NEW EDITS WHICH ARE ON DANA'S MACHINE
 Classes and utilities for automatic connection to a Hamilton robot
+=======
+Classes and utilities for automatic connection to a Hamilton robot.
+>>>>>>> cf2973fd32f028a6bd6ecd888977eff36e17452a
 """
 
 import time, json, signal, os, requests, string, logging, subprocess, win32gui, win32con
@@ -13,14 +17,20 @@ from .defaultcmds import defaults_by_cmd
     
 class HamiltonCmdTemplate:
     """
-    Formatter object to create valid pyhamilton command dicts.
+    Formatter object to create valid `pyhamilton` command dicts.
 
     Use of this class to assemble JSON pyhamilton commands enables keyword access to command attributes, which cuts down on string literals. It also helps to fail malformed commands early, before they are sent.
+    
+    Several default `HamiltonCmdTemplate`s are defined in `pyhamilton.defaultcmds`, such as `INITIALIZE`, `ASPIRATE`, and `DISPENSE`. Casual users will most likely never need to manually instantiate a HamiltonCmdTemplate.
     """
         
     @staticmethod
     def unique_id():
+<<<<<<< HEAD
         """Return a "uniqe" hexadecimal string ('0x...') based on time of call"""
+=======
+        """Return a "uniqe" hexadecimal string (`'0x...'`) based on time of call."""
+>>>>>>> cf2973fd32f028a6bd6ecd888977eff36e17452a
         return hex(int((time.time()%3600e4)*1e6))
 
     def __init__(self, cmd_name, params_list):
@@ -28,14 +38,14 @@ class HamiltonCmdTemplate:
         Creates a `HamiltonCmdTemplate` with a command name and required parameters.
 
         The command name must be one of the command names accepted by the
-        pyhamilton interpreter and a list of expected parameters for this command.
+        `pyhamilton` interpreter and a list of expected parameters for this command.
 
         Args:
           cmd_name (str): One of the set of string literals recognized as command names
-            by the pyhamilton interpreter, e.g. 'DISPENSE96'. See `defaultcmds`.
+            by the `pyhamilton` interpreter, e.g. `'mph96Dispense'`. See `pyhamilton.defaultcmds` for examples.
           params_list (list): exact list of string parameters that must have associated
             values for the command to be valid, other than those that are always present
-            ('command' and 'id')
+            (`'command'` and `'id'`)
         """
         self.cmd_name = cmd_name
         self.params_list = params_list
@@ -51,7 +61,7 @@ class HamiltonCmdTemplate:
 
         Args:
           kwargs (dict): map of any parameters (str) to values that should be different
-            from the defaults supplied for this command in `defaultcmds`
+            from the defaults supplied for this command in `pyhamilton.defaultcmds`
         """
         if args:
             raise ValueError('assemble_cmd can only take keyword arguments.')
@@ -64,12 +74,12 @@ class HamiltonCmdTemplate:
     def assert_valid_cmd(self, cmd_dict):
         """Validate a finished command. Do nothing if it is valid.
 
-        ValueError will be raised if the supplied command did not have all required
-        parameters for this command, as well as values for keys 'id' and 'command', which
+        `ValueError` will be raised if the supplied command did not have all required
+        parameters for this command, as well as values for keys `'id'` and `'command'`, which
         are always required.
 
         Args:
-          cmd_dict (dict): A fully assembled pyhamilton command
+          cmd_dict (dict): A fully assembled `pyhamilton` command
 
         Raises:
           ValueError: The command dict is not ready to send. Specifics of mismatch
@@ -121,7 +131,7 @@ def _make_new_hamilton_serv_handler(resp_indexing_fn):
 
     A new class is defined each time, bound to a specific indexing function, to keep it
     agnostic to any particular indexing scheme. In practice, the current implementation
-    uses the value of the key 'id'; that is the scheme for the pyhamilton interpreter.
+    uses the value of the key 'id'; that is the scheme for the `pyhamilton` interpreter.
 
     Attributes:
       indexed_responses (dict): aggregated responses received by this handler, keyed by
@@ -226,19 +236,20 @@ class HamiltonInterface:
     """Main class to automatically set up and tear down an interface to a Hamilton robot.
 
     HamiltonInterface is the primary class offered by this module. It creates a Hamilton
-    HSL background process running the pyhamilton interpreter, along with a localhost
-    connection to act as a bridge. It is recommended to create a HamiltonInterface using
-    a with: block to ensure proper startup and shutdown of its async components, even if
-    exceptions are raised. It may be used with explicit start() and stop() calls.
+    HSL background process running the `pyhamilton` interpreter, along with a `localhost`
+    connection to act as a bridge. It is recommended to create a `HamiltonInterface` using
+    a `with:` block to ensure proper startup and shutdown of its async components, even if
+    exceptions are raised. It may be used with explicit `start()` and `stop()` calls.
 
       Typical usage:
       
+      ```
       with HamiltonInterface() as ham_int:
           cmd_id = ham_int.send_command(INITIALIZE)
           ...
           ham_int.wait_on_response(cmd_id)
           ...
-
+      ```
     """
 
     known_templates = _builtin_templates_by_cmd
@@ -246,7 +257,7 @@ class HamiltonInterface:
     default_address = '127.0.0.1' # localhost
 
     class HamiltonServerThread(Thread):
-        """Private threaded HTTP localhost server with graceful shutdown."""
+        """Private threaded local HTTP server with graceful shutdown flag."""
 
         def __init__(self, address, port):
             Thread.__init__(self)
@@ -290,9 +301,12 @@ class HamiltonInterface:
     def start(self):
         """Starts the extra processes, threads, and servers for the Hamilton connection.
 
-        Launches:
-          1) a Hamilton Run Control executable, either in the background for normal use,
-            or in the foreground with a GUI
+        Launches: 1) the pyhamilton interpreter using the Hamilton Run Control
+        executable, either in the background for normal use, or in the foreground with a
+        GUI for simulation; 2) a local HTTP server to ferry messages between the python
+        module and the interpreter.
+
+        When used with a `with:` block, called automatically upon entering the block.
         """
 
         if self.active:
@@ -323,6 +337,14 @@ class HamiltonInterface:
         self.active = True
 
     def stop(self):
+        """Stop this HamiltonInterface and clean up associated async processes.
+
+        Kills the pyhamilton interpreter subprocess and executable and stops the local
+        web server thread.
+
+        When used with a `with` block, called automatically on exiting the block.
+        """
+        
         if not self.active:
             return
         try:
@@ -368,9 +390,28 @@ class HamiltonInterface:
         self.stop()
 
     def is_open(self):
+        """Return `True` if the HamiltonInterface has been started and not stopped."""
         return self.active
 
     def send_command(self, template=None, block_until_sent=False, *args, **cmd_dict): # returns unique id of command
+        """Add a command templated after HamiltonCmdTemplate to the server send queue.
+
+        Args:
+          template (HamiltonCmdTemplate): Optional; a template to provide default
+            arguments not specified in `cmd_dict`. 
+          block_until_sent (bool): Optional; if `True`, wait for all queued messages,
+            including this one, to get picked up by the local server and sent across
+            the HTTP connection, before returning. Default is False.
+          cmd_dict (dict): keyword arguments to be forwarded to `template` when building
+            the command, overriding its defaults. If `template` not given, cmd_dict must
+            either have a 'command' key with value matching one of the command names in
+            `defaultcmds` and might be missing an 'id' key, or itself be a fully formed
+            and correct pyhamilton command with its own 'id' key.
+
+        Returns:
+          unique id (str) of the command that can be used to index it later, either
+            newly generated or same as originally present in cmd_dict.
+        """
         if not self.is_open():
             self.log_and_raise(RuntimeError('Cannot send a command from a closed HamiltonInterface'))
         if template is None:
@@ -392,6 +433,31 @@ class HamiltonInterface:
         return send_cmd_dict['id']
 
     def wait_on_response(self, id, timeout=0, raise_first_exception=False):
+        """Wait and do not return until the response for the specified id comes back.
+
+        When the command corresponding to `id` regards multiple distinct pipette channels
+        or devices, responses may contain encoded errors that might be different for
+        different channels or devices. For this reason, the default behavior of
+        `wait_on_response` is to not raise exceptions, but to delegate handling
+        exceptions to the caller. For convenience, this method can optionally raise the
+        first exception it encounters, often a useful behavior for succinct scripted
+        commands that regard only one device, when raise_first_exception is `True`.
+
+        Args:
+          id (str): The unique id of a previously sent command
+          timeout (float): Optional; maximum time in seconds to wait before raising
+            `HamiltonTimeoutError`. Default is no timeout (forever).
+          raise_first_exception: Optional; if True, may raise if there is an error
+            encoded in the response. Default is False.
+
+        Returns:
+          The response dict from the hamilton interpreter.
+
+        Raises:
+          `HamiltonTimeoutError`: after `timeout` seconds elapse with no response, if
+          `timeout` was specified.
+        """
+
         if timeout:
             start_time = time.time()
         else:
@@ -409,12 +475,29 @@ class HamiltonInterface:
         self.log_and_raise(HamiltonTimeoutError('Timed out after ' + str(timeout) + ' sec while waiting for response id ' + str(id)))
 
     def pop_response(self, id, raise_first_exception=False):
+        """Remove and return the response with the specified id from the response queue.
+
+        If there is a response, remove it and return the Hamilton-formatted response
+        dict, like that returned from `HamiltonInterface.parse_hamilton_return`. Otherwise, raise
+        `KeyError`.
+
+        Args:
+          id (str): Unique id of the command that initiated the response
+          raise_first_exception (bool): Optional; forwarded to `wait_on_response`.
+            Default is `False`.
+
+        Returns:
+          A 2-tuple:
+
+            1. parsed response block dict from Hamilton as in `parse_hamilton_return`
+            2. Error map, a dict mapping int keys (data block Num field) that had
+                exceptions, if any, to an exception that was coded in block;
+                `None` to any error not associated with a block. `{}` if no error
+
+        Raises:
+          KeyError: if `id` has no matching response in the queue.
         """
-        Raise KeyError if id has no matching response. If there is a response, remove it and return a 2-tuple:
-            [0] parsed response block dict from Hamilton as in parse_hamilton_return
-            [1] Error map: dict mapping int keys (data block Num field) that had exceptions, if any,
-                to an exception that was coded in block; None to any error not associated with a block; {} if no error
-        """
+
         try:
             response = self.server_thread.server_handler_class.pop_response(id)
         except KeyError:
@@ -450,55 +533,57 @@ class HamiltonInterface:
     def parse_hamilton_return(self, return_str):
         """
         Return a 2-tuple:
-            [0] errflag: any error code present in response
-            [1] Block map: dict mapping int keys to:
-                    dicts with str keys (MainErr, SlaveErr, RecoveryBtnId, StepData, LabwareName, LabwarePos)
+        
+        - [0] errflag: any error code present in response
+        
+        - [1] Block map: dict mapping int keys to dicts with str keys (MainErr, SlaveErr, RecoveryBtnId, StepData, LabwareName, LabwarePos)
 
         Result value 3 is the field that is returned by the OEM interface.
+        
         "Result value 3 contains one error flag (ErrFlag) and the block data package."
         
-        Data Block Format Rules
+        ### Data Block Format Rules
 
-            The error flag is set once only at the beginning of result value 3. The error flag
-            does not belong to the block data but may be used for a simpler error recovery.
-            If this flag is set, an error code has been set in any of the block data entries.
+        - The error flag is set once only at the beginning of result value 3. The error flag
+        does not belong to the block data but may be used for a simpler error recovery.
+        If this flag is set, an error code has been set in any of the block data entries.
 
-            Each block data package starts with the opening square bracket character '['
+        - Each block data package starts with the opening square bracket character '['
 
-            The information within the block data package is separated by the comma delimiter ','
+        - The information within the block data package is separated by the comma delimiter ','
 
-            Block data information may be empty; anyway a comma delimiter is set.
+        - Block data information may be empty; anyway a comma delimiter is set.
 
-            The result value may contain more than one block data package.
+        - The result value may contain more than one block data package.
 
-            Block data packages are returned independent of Num value ( unsorted ).
+        - Block data packages are returned independent of Num value ( unsorted ).
 
-        Block data information
+        ### Block data information
 
-            Num 
-                Step depended information (e.g. the channel number, a loading position etc.).
-            
-                Note: The meaning and data type for this information is described in the corresponding help of single step.
+        - Num 
+            - Step depended information (e.g. the channel number, a loading position etc.).
+        
+            - Note: The meaning and data type for this information is described in the corresponding help of single step.
 
-            MainErr
-                Main error code which occurred on instrument.
+        - MainErr
+            - Main error code which occurred on instrument.
 
-            SlaveErr
-                Detailed error code of depended slave (e.g. auto load, washer etc.).
+        - SlaveErr
+            - Detailed error code of depended slave (e.g. auto load, washer etc.).
 
-            RecoveryBtnId
-                Recovery which has been used to handle this error.
+        - RecoveryBtnId
+            - Recovery which has been used to handle this error.
 
-            StepData
-                Step depended information, e.g. the barcode read, the volume aspirated etc.
+        - StepData
+            - Step depended information, e.g. the barcode read, the volume aspirated etc.
 
-                Note: The meaning and data type for this information is described in the corresponding help of single step.
+            - Note: The meaning and data type for this information is described in the corresponding help of single step.
 
-            LabwareName
-                Labware name of used labware.
+        - LabwareName
+            - Labware name of used labware.
 
-            LabwarePos
-                Used labware position.
+        - LabwarePos
+            - Used labware position.
         """
 
         def raise_parse_error():
