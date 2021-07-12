@@ -26,11 +26,7 @@ class HamiltonCmdTemplate:
         
     @staticmethod
     def unique_id():
-<<<<<<< HEAD
-        """Return a "uniqe" hexadecimal string ('0x...') based on time of call"""
-=======
         """Return a "uniqe" hexadecimal string (`'0x...'`) based on time of call."""
->>>>>>> cf2973fd32f028a6bd6ecd888977eff36e17452a
         return hex(int((time.time()%3600e4)*1e6))
 
     def __init__(self, cmd_name, params_list):
