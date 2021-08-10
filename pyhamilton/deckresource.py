@@ -48,12 +48,12 @@ class ResourceType:
         self.resource_class = resource_class
         self.not_found_msg = None
         try:
-            specific_name, = name_specifiers
+            specific_name, = args
             self.test = lambda line: specific_name in re.split(r'\W', line)
             self.extract_name = lambda line: specific_name
             self.not_found_msg = 'No exact match for name "' + specific_name + '" to assign a resource of type ' + resource_class.__name__
         except ValueError:
-            self.test, self.extract_name = name_specifiers
+            self.test, self.extract_name = args
 
 
 class LayoutManager:
@@ -394,3 +394,26 @@ class Plate12(DeckResource):
     def position_id(self, idx):
         x, y = self.well_coords(idx)
         return 'ABC'[y] + str(x + 1)
+
+class Plate6(DeckResource):
+
+    def __init__(self, layout_name):
+        self._layout_name = layout_name
+        self._num_items = 6
+        self.resource_type = DeckResource.types.VESSEL
+        self._items = [Vessel(self, i) for i in range(self._num_items)]
+
+    def well_coords(self, idx):
+        self._assert_idx_in_range(idx)
+        return int(idx)//2, int(idx)%2
+
+    def _alignment_delta(self, start, end):
+        [self._assert_idx_in_range(p) for p in (start, end)]
+        xs, ys = self.well_coords(start)
+        xe, ye = self.well_coords(end)
+        return (xe - xs, ye - ys, [DeckResource.align.VERTICAL] if xs == xe and ys != ye else [])
+
+    def position_id(self, idx):
+        x, y = self.well_coords(idx)
+        return 'AB'[y] + str(x + 1)
+

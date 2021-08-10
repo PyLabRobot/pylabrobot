@@ -1,12 +1,3 @@
-"""
-<<<<<<< HEAD
-TODO: REVERT WITH GIT CHECKOUT AND THEN COPY IN NEW EDITS WHICH ARE ON DANA'S MACHINE
-Classes and utilities for automatic connection to a Hamilton robot
-=======
-Classes and utilities for automatic connection to a Hamilton robot.
->>>>>>> cf2973fd32f028a6bd6ecd888977eff36e17452a
-"""
-
 import time, json, signal, os, requests, string, logging, subprocess, win32gui, win32con
 from http import server
 from threading import Thread
@@ -144,6 +135,7 @@ def _make_new_hamilton_serv_handler(resp_indexing_fn):
         _send_queue = []
         indexed_responses = {}
         indexing_fn = resp_indexing_fn
+        MAX_QUEUED_RESPONSES = 1000
 
         @staticmethod
         def send_str(cmd_str):
@@ -462,7 +454,7 @@ class HamiltonInterface:
         response_tup = None
         while time.time() - start_time < timeout:
             try:
-                response_tup = self.pop_response(id, raise_first_exception)
+                response_tup = self.pop_response(id, raise_first_exception, return_data)
             except KeyError:
                 pass
             if response_tup is not None:
@@ -498,6 +490,12 @@ class HamiltonInterface:
             response = self.server_thread.server_handler_class.pop_response(id)
         except KeyError:
             raise KeyError('No Hamilton interface response indexed for id ' + str(id))
+        if return_data:
+            print(type(response))
+            print(response)
+            response = json.loads(response)
+            response_data=response['step-return1']
+            return response_data
         errflag, blocks = self.parse_hamilton_return(response)
         err_map = {}
         if errflag:
