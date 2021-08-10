@@ -44,7 +44,7 @@ class ResourceType:
 
     """
 
-    def __init__(self, resource_class, *name_specifiers):
+    def __init__(self, resource_class, *args):
         self.resource_class = resource_class
         self.not_found_msg = None
         try:
@@ -60,9 +60,9 @@ class LayoutManager:
     """Optionally activates a Hamilton layout and helps access its contents.
 
     A `LayoutManager` manages the consistent assignment of `DeckResource` objects to items in a Hamilton Layout file (`.lay`). A `LayoutManager` must be used to set the active pyhamilton layout file, but use of this class is strictly optional when sending `pyhamilton` commands using `send_command`; names may be passed as string literals in commands instead if they are known in advance. The advantage to specifying all labware using `ResourceManager` is that resource names are verified to be present in the active layout file at runtime, and guaranteed never used more than once, both of which are necessary to avoid silent Hamilton errors.
-    
+
     Example usage:
-    
+
     ```
     lmgr = LayoutManager('layout.lay')
     plate = lmgr.assign_unused_resource(ResourceType(Plate24, 'plate_0'))
@@ -75,9 +75,9 @@ class LayoutManager:
     @staticmethod
     def get_manager(checksum):
         """Return a `LayoutManager` previously instantiated for a layout file that has the specified checksum.
-        
+
         Typically used when accessing the same layout file from multiple "threads" in the same process (using the `threading` module) to prevent name double-counting.
-        
+
         Args:
           checksum (str): a checksum found at the end of a Hamilton Layout (`.lay`) file.
         """
@@ -166,23 +166,23 @@ class LayoutManager:
                 print('BACKING UP AND INSTALLING NEW LAYFILE')
                 shutil.copy2(layfile_path, os.path.join(LAY_BACKUP_DIR, datetime.today().strftime('%Y%m%d_%H%M%S_') + os.path.basename(layfile_path)))
                 shutil.copy2(layfile_path, OEM_LAY_PATH)
-        
+
     def assign_unused_resource(self, restype, order_key=None, reverse=False):
         """Create a new deck resource after finding and assigning an unused name that matches the resource type.
-        
+
         This method searches through the layout file for one new layout name that matches the given resource type. It reserves this layout name permanently so that no later calls to `assign_unused_resource` can create a deck resource with the same layout name. Returns a `DeckResource`.
-        
+
         Args:
           restype (ResourceType): The resource type, which consists of a resource class (descendent of `DeckResource`) and some string pattern matching functions to identify the desired layout names.
           order_key (Callable[[DeckResource], Comparable]): Optional; when multiple layout names match, specifies a function of one argument that is used to extract a comparison key from each candidate `DeckResource` object. The arg-min or arg-max of `order_key` will be returned, depending on `reverse`. By default, lexicographic order by layout name is used, which is suitable for most use cases, e.g. plates with layout names "pcr-plate-a", "pcr-plate-b", "pcr-plate-c", ... will be returned in the expected order.
           reverse (bool): Optional; use reverse-lexicographic order for layout names, useful for e.g. plate stacking applications, or reverse the order imposed by `order_key` if it is given.
-          
         Returns:
+
           A new instance of the resource class (descendent of `DeckResource`) from the given `ResourceType` `restype`.
-          
+
         Raises:
           ResourceUnavailableError: no names in the layout file that have not already been assigned match the resource type
-        
+
         """
         if order_key is None:
             order_key = lambda r: r.layout_name()
@@ -243,7 +243,7 @@ class DeckResource:
 
     class types:
         TIP, VESSEL = range(2)
-        
+
     def __init__(self, layout_name):
         raise NotImplementedError()
 
@@ -257,10 +257,10 @@ class DeckResource:
             idx = idx_or_vessel
         if not 0 <= idx < self._num_items:
             raise ValueError('Index ' + str(idx) + ' not in range for resource')
-    
+
     def layout_name(self):
         """The layout name of this specific deck resource.
-        
+
         Returns:
           The name (`str`) associated with this specific deck resource in the Hamilton Layout (`.lay`) file it came from.
         """
@@ -268,11 +268,11 @@ class DeckResource:
 
     def position_id(self, idx):
         """The identifier used for one of a sequence of positions inside this labware.
-        
+
         For labware with multiple positions, each position has a different identity, usually represented as a short string that will match the identifier scheme for this resource in the Hamilton Layout file it came from. The identifiers will usually be familiar from a laboratory setting.
-        
+
         Examples
-        
+
         - 96-well plates have 96 positions, each identified with a letter and a number like `'D4'`. For a `Plate96` instance named `plate`, `plate.position_id(0)` is `'A1'`, `plate.position_id(1)` is `'B1'`, and `plate.position_id(95)` is `'H12'`.
         - Hamilton racks of 96 tips have 96 positions, identified with integer strings like `'87'` that start with `'1'` at the top left tip and increase down columns (8 positions each) first. For a `Tip96` instance named `tips`, `tips.position_id(0)` is `'1'`, `tips.position_id(1)` is `'2'`, and `tips.position_id(95)` is `'96'`.
 
@@ -281,7 +281,7 @@ class DeckResource:
 
         Returns:
           The identifier (`str`) associated with the position `idx` specific deck resource in the Hamilton Layout (`.lay`) file it came from.
-          
+
         Raises:
           NotImplementedError: The deck resource does not have positions.
         """
@@ -302,7 +302,7 @@ class DeckResource:
                     raise ValueError('Positions provided for delta must be integers or vessels')
             self._assert_idx_in_range(args[pos])
         return self._alignment_delta(args['start'], args['end'])
-    
+
     def __iter__(self):
         for i in self._items:
             yield i
@@ -335,7 +335,7 @@ class Tip96(Standard96):
         self._num_items = 96
         self.resource_type = DeckResource.types.TIP
         self._items = [Tip(self, i) for i in range(self._num_items)]
-    
+
     def position_id(self, idx): # tips use 1-indexed int ids descending columns first
         self._assert_idx_in_range(idx)
         return str(idx + 1) # switch to standard advance through row first

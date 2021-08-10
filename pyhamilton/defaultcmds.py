@@ -15,7 +15,7 @@ try:
             _fan_port = int(port_parse[0][-1])
 except Exception:
     pass
-        
+
 defaults_by_cmd = { # 'field':None indicates field is required when assembling command
 
     'initialize':('INITIALIZE', {
@@ -195,7 +195,7 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'chamber2WashLiquid':0, # (integer) 0=Liquid 1 (red container), 1=liquid 2 (blue container)
         'chamber2LiquidChange':0, # (integer) 0=No, 1=Yes TODO: What does this mean?
     }),
-    
+
     'gripGet':('GRIP_GET', {
         'plateSequence':'', # leave empty if you are going to provide specific plate labware-position below
         'plateLabwarePositions':'', # leave empty if you are going to provide a plate sequence name above. LabwareId1, positionId1; 
@@ -213,14 +213,14 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'transportMode':0, # (integer) 0=Plate only, 1=Lid only ,2=Plate with lid
         'checkPlate':0 # (integer) 
     }),
-    
+
     'gripMove':('GRIP_MOVE', {
         'plateSequence':'', # leave empty if you are going to provide specific plate labware-position below
         'xAcceleration':4, # (integer) 1-5 from slowest to fastest, where 4 is default
         'plateLabwarePositions':'', # leave empty if you don´t use lid or if you are going to provide specific plate labware-positions below or ejecting to default waste
-        
+
     }),
-    
+
     'gripPlace':('GRIP_PLACE', {
         'plateSequence':'', # leave empty if you are going to provide specific plate labware-position below
         'plateLabwarePositions':'', # leave empty if you are going to provide a plate sequence name above. LabwareId1, positionId1; 
@@ -235,64 +235,63 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'platePressOnDistance':0.0, # (float) lift-up distance [mm] (only used if 'movement type' is set to 'complex movement'),
         'xAcceleration':4  # (integer) 1-5 from slowest to fastest, where 4 is default
     }),
-    
     'moveSequence':('MOVE_SEQ',{
+
         'inputSequence':'',
         'xDisplacement':'',
         'yDisplacement':'',
         'zDisplacement':'',
     }),
-    
     'TEC_Initialize':('TEC_INIT', {
+
         'ControllerID':'', # (integer)
         'SimulationMode':False, # 0=False, 1=True; 
     }),
-    
     'TEC_StartTempControl':('TEC_START', {
+
         'ControllerID':'', # (integer)
         'DeviceID':'', # (integer); 
     }),
-    
-    
+
     'TEC_SetTarget':('TEC_SET_TARGET', {
         'ControllerID':'', # (integer)
         'DeviceID':'', # (integer); 
         'TargetTemperature':'', # (float); 
     }),
-    
     'TEC_StopTemperatureControl':('TEC_STOP', {
+
         'ControllerID':'', # (integer)
         'DeviceID':'', # (integer); 
     }),
-    
     'TEC_Terminate':('TEC_TERMINATE', {
+
         'StopAllDevices':1, # 0=False, 1=True
     }),
-    
     'TiltModule_Initialize':('TILT_INIT', {
+
         'ModuleName':'', # (string)
         'Comport':'', # (integer)
         'TraceLevel':'', # (integer)
         'Simulate': '' # 0=False, 1=True
     }),
-    
     'TiltModule_MoveToPosition':('TILT_MOVE', {
+
         'ModuleName':'', # (string)
         'Angle':'' # (integer)
     }),
-    
     'FirmwareCommand':('FIRMWARECOMMAND', {
+
         'FirmwareCommandList':[], # list elements as {FirmwareCommand:'', FirmwareParameter:''} 
     }),
-    
     'BarcodeReader_Initialize':('BC_INITIALIZE',{
+
         'ComPort':'' # (string)
     }),
-    
     'BarcodeReader_Read':('BC_READ',{
+
     }),
-    
 }
+
 """All of the command names supported out of the box, mapped to their default params.
 
 On module load, defaults_by_cmd is parsed into `HamiltonCmdTemplate`s, which are injected into the global package namespace under the first element of the values of this dict (strings in all caps). This is so that they can be imported directly from `pyhamilton` as module-level variables, while avoiding circular imports.

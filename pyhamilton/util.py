@@ -55,10 +55,10 @@ class HamiltonAction:
     # execute() is responsible for doing its own error handling.
     # Base-level actions like aspirate and dispense interpret the responses and errors from the robot device
     # A possible() method is implemented to facilitate search over HamiltonActions.
-        
+
     def possible(self):
         return True
-    
+
     def execute(self):
         raise NotImplementedError()
 
@@ -68,10 +68,10 @@ class GroupableAction(HamiltonAction):
 
 
 class TipPickup(GroupableAction):
-    
+
     def __init__(self, tip):
         self.tip = tip
-    
+
     def execute(self):
         id = hammy.send_command(PICKUP, {'labwarePositions':str(tip.parent_resource.layout_name()) + ', ' + str(tip.index) + ';'})
         response = hammy.wait_on_response(id)
