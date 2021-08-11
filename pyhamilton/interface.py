@@ -1,12 +1,3 @@
-"""
-<<<<<<< HEAD
-TODO: REVERT WITH GIT CHECKOUT AND THEN COPY IN NEW EDITS WHICH ARE ON DANA'S MACHINE
-Classes and utilities for automatic connection to a Hamilton robot
-=======
-Classes and utilities for automatic connection to a Hamilton robot.
->>>>>>> cf2973fd32f028a6bd6ecd888977eff36e17452a
-"""
-
 import time, json, signal, os, requests, string, logging, subprocess, win32gui, win32con
 from http import server
 from threading import Thread
@@ -14,16 +5,16 @@ from multiprocessing import Process
 from pyhamilton import OEM_RUN_EXE_PATH, OEM_HSL_PATH
 from .oemerr import * #TODO: specify
 from .defaultcmds import defaults_by_cmd
-    
+
 class HamiltonCmdTemplate:
     """
     Formatter object to create valid `pyhamilton` command dicts.
 
     Use of this class to assemble JSON pyhamilton commands enables keyword access to command attributes, which cuts down on string literals. It also helps to fail malformed commands early, before they are sent.
-    
+
     Several default `HamiltonCmdTemplate`s are defined in `pyhamilton.defaultcmds`, such as `INITIALIZE`, `ASPIRATE`, and `DISPENSE`. Casual users will most likely never need to manually instantiate a HamiltonCmdTemplate.
     """
-        
+
     @staticmethod
     def unique_id():
         """Return a "uniqe" hexadecimal string (`'0x...'`) based on time of call."""
@@ -144,6 +135,7 @@ def _make_new_hamilton_serv_handler(resp_indexing_fn):
         _send_queue = []
         indexed_responses = {}
         indexing_fn = resp_indexing_fn
+        MAX_QUEUED_RESPONSES = 1000
 
         @staticmethod
         def send_str(cmd_str):
@@ -238,7 +230,7 @@ class HamiltonInterface:
     exceptions are raised. It may be used with explicit `start()` and `stop()` calls.
 
       Typical usage:
-      
+
       ```
       with HamiltonInterface() as ham_int:
           cmd_id = ham_int.send_command(INITIALIZE)
@@ -340,7 +332,7 @@ class HamiltonInterface:
 
         When used with a `with` block, called automatically on exiting the block.
         """
-        
+
         if not self.active:
             return
         try:
@@ -363,7 +355,7 @@ class HamiltonInterface:
                         time.sleep(2)
                 else:
                     self.log('Could not kill oem process, moving on with shutdown', 'warn')
-        finally:                
+        finally:
             self.active = False
             self.server_thread.disconnect()
             self.log('disconnected from server')
@@ -428,7 +420,7 @@ class HamiltonInterface:
             self._block_until_sq_clear()
         return send_cmd_dict['id']
 
-    def wait_on_response(self, id, timeout=0, raise_first_exception=False):
+    def wait_on_response(self, id, timeout=0, raise_first_exception=False, return_data=False):
         """Wait and do not return until the response for the specified id comes back.
 
         When the command corresponding to `id` regards multiple distinct pipette channels
@@ -462,7 +454,7 @@ class HamiltonInterface:
         response_tup = None
         while time.time() - start_time < timeout:
             try:
-                response_tup = self.pop_response(id, raise_first_exception)
+                response_tup = self.pop_response(id, raise_first_exception, return_data)
             except KeyError:
                 pass
             if response_tup is not None:
@@ -470,7 +462,7 @@ class HamiltonInterface:
             time.sleep(.1)
         self.log_and_raise(HamiltonTimeoutError('Timed out after ' + str(timeout) + ' sec while waiting for response id ' + str(id)))
 
-    def pop_response(self, id, raise_first_exception=False):
+    def pop_response(self, id, raise_first_exception=False, return_data=False):
         """Remove and return the response with the specified id from the response queue.
 
         If there is a response, remove it and return the Hamilton-formatted response
@@ -498,6 +490,12 @@ class HamiltonInterface:
             response = self.server_thread.server_handler_class.pop_response(id)
         except KeyError:
             raise KeyError('No Hamilton interface response indexed for id ' + str(id))
+        if return_data:
+            print(type(response))
+            print(response)
+            response = json.loads(response)
+            response_data=response['step-return1']
+            return response_data
         errflag, blocks = self.parse_hamilton_return(response)
         err_map = {}
         if errflag:
@@ -529,15 +527,15 @@ class HamiltonInterface:
     def parse_hamilton_return(self, return_str):
         """
         Return a 2-tuple:
-        
+
         - [0] errflag: any error code present in response
-        
+
         - [1] Block map: dict mapping int keys to dicts with str keys (MainErr, SlaveErr, RecoveryBtnId, StepData, LabwareName, LabwarePos)
 
         Result value 3 is the field that is returned by the OEM interface.
-        
+
         "Result value 3 contains one error flag (ErrFlag) and the block data package."
-        
+
         ### Data Block Format Rules
 
         - The error flag is set once only at the beginning of result value 3. The error flag
@@ -558,7 +556,7 @@ class HamiltonInterface:
 
         - Num 
             - Step depended information (e.g. the channel number, a loading position etc.).
-        
+
             - Note: The meaning and data type for this information is described in the corresponding help of single step.
 
         - MainErr
@@ -623,7 +621,7 @@ class HamiltonInterface:
         hdlr.setFormatter(formatter)
         self.logger.addHandler(hdlr)
         self._dump_log_queue()
-    
+
     def log(self, msg, msg_type='info'):
         self.log_queue.append((msg, msg_type))
         self._dump_log_queue()

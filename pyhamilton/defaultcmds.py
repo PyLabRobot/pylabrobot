@@ -15,7 +15,7 @@ try:
             _fan_port = int(port_parse[0][-1])
 except Exception:
     pass
-        
+
 defaults_by_cmd = { # 'field':None indicates field is required when assembling command
 
     'initialize':('INITIALIZE', {
@@ -57,6 +57,9 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'mixCycles':0, # (integer) number of mixing cycles (1 cycle = 1 asp + 1 disp)
         'mixPosition':0.0, # (float) additional immersion mm below aspiration position to start mixing
         'mixVolume':0.0, # (float) mix volume
+        'xDisplacement':0.0,
+        'yDisplacement':0.0,
+        'zDisplacement':0.0,
         'airTransportRetractDist':10.0, # (float) mm to move up in Z after finishing the aspiration at a fixed height before aspirating 'transport air'
         'touchOff':0, # (integer) 0=Off , 1=On
         'aspPosAboveTouch':0.0 # (float)  mm to move up in Z after touch off detects the bottom before aspirating liquid
@@ -78,6 +81,9 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'mixCycles':0, # (integer) number of mixing cycles (1 cycle = 1 asp + 1 disp)
         'mixPosition':0.0, # (float) additional immersion mm below dispense position to start mixing
         'mixVolume':0.0, # (float) mix volume
+        'xDisplacement':0.0,
+        'yDisplacement':0.0,
+        'zDisplacement':0.0,
         'airTransportRetractDist':10.0, # (float) mm to move up in Z after finishing the dispense at a fixed height before aspirating 'transport air'
         'touchOff':0, # (integer) 0=Off , 1=On
         'dispPositionAboveTouch':0.0, # (float) mm to move up in Z after touch off detects the bottom, before dispense
@@ -172,16 +178,24 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'transportMode':0, # (integer) 0=Plate only, 1=Lid only ,2=Plate with lid
         'collisionControl':0, # (integer) 0=Off, 1=On
         'retractDistance':0.0, # (float) retract distance [mm] (only used if 'movement type' is set to 'complex movement')
-        'liftUpHeight':20.0, # (float) lift-up distance [mm] (only used if 'movement type' is set to 'complex movement')
-        'labwareOrientation':1
+        'liftUpHeight':20.0 # (float) lift-up distance [mm] (only used if 'movement type' is set to 'complex movement')
     }),
-    'iSwapMove':('ISWAP_MOVE',{
-        'plateSequence':'',
-        'plateLabwarePositions':'',
-        'collisionControl':0,
-        'gripMode':1
+
+    'HxFanSet':('HEPA', {
+        'deviceNumber':_fan_port, # (integer) COM port number of fan
+        'persistant':1, # (integer) 0=don´t keep fan running after method exits, 1=keep settings after method exits
+        'fanSpeed':None, # (float) set percent of maximum fan speed
+        'simulate':0 #(integer) 0=normal mode, 1=use HxFan simulation mode
     }),
-    
+
+    'CORE96WashEmpty':('WASH96_EMPTY', {
+        'refillAfterEmpty':0, # (integer) 0=Don't refill, 1=Refill both chambers, 2=Refill chamber 1 only, 3=Refill chamber 2 only
+        'chamber1WashLiquid':0, # (integer) 0=Liquid 1 (red container), 1=liquid 2 (blue container)
+        'chamber1LiquidChange':0, # (integer) 0=No, 1=Yes TODO: What does this mean?
+        'chamber2WashLiquid':0, # (integer) 0=Liquid 1 (red container), 1=liquid 2 (blue container)
+        'chamber2LiquidChange':0, # (integer) 0=No, 1=Yes TODO: What does this mean?
+    }),
+
     'gripGet':('GRIP_GET', {
         'plateSequence':'', # leave empty if you are going to provide specific plate labware-position below
         'plateLabwarePositions':'', # leave empty if you are going to provide a plate sequence name above. LabwareId1, positionId1; 
@@ -199,14 +213,14 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'transportMode':0, # (integer) 0=Plate only, 1=Lid only ,2=Plate with lid
         'checkPlate':0 # (integer) 
     }),
-    
+
     'gripMove':('GRIP_MOVE', {
         'plateSequence':'', # leave empty if you are going to provide specific plate labware-position below
         'xAcceleration':4, # (integer) 1-5 from slowest to fastest, where 4 is default
         'plateLabwarePositions':'', # leave empty if you don´t use lid or if you are going to provide specific plate labware-positions below or ejecting to default waste
-        
+
     }),
-    
+
     'gripPlace':('GRIP_PLACE', {
         'plateSequence':'', # leave empty if you are going to provide specific plate labware-position below
         'plateLabwarePositions':'', # leave empty if you are going to provide a plate sequence name above. LabwareId1, positionId1; 
@@ -216,35 +230,68 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'sequenceCounting':0, # (integer) 0=don´t autoincrement plate sequence,  1=Autoincrement
         'movementType':0, # (integer) 0=To carrier, 1=Complex movement
         'transportMode':0, # (integer) 0=Plate only, 1=Lid only ,2=Plate with lid
-        'ejectToolWhenFinish':0, # (integer) 0=Off, 1=On
-        'zSpeed':25.0, # (float) mm/s
+        'ejectToolWhenFinish':1, # (integer) 0=Off, 1=On
+        'zSpeed':100.0, # (float) mm/s
         'platePressOnDistance':0.0, # (float) lift-up distance [mm] (only used if 'movement type' is set to 'complex movement'),
         'xAcceleration':4  # (integer) 1-5 from slowest to fastest, where 4 is default
     }),
-    
     'moveSequence':('MOVE_SEQ',{
+
         'inputSequence':'',
         'xDisplacement':'',
         'yDisplacement':'',
         'zDisplacement':'',
     }),
+    'TEC_Initialize':('TEC_INIT', {
 
-    
-    'HxFanSet':('HEPA', {
-        'deviceNumber':_fan_port, # (integer) COM port number of fan
-        'persistant':1, # (integer) 0=don´t keep fan running after method exits, 1=keep settings after method exits
-        'fanSpeed':None, # (float) set percent of maximum fan speed
-        'simulate':0 #(integer) 0=normal mode, 1=use HxFan simulation mode
+        'ControllerID':'', # (integer)
+        'SimulationMode':False, # 0=False, 1=True; 
+    }),
+    'TEC_StartTempControl':('TEC_START', {
+
+        'ControllerID':'', # (integer)
+        'DeviceID':'', # (integer); 
     }),
 
-    'CORE96WashEmpty':('WASH96_EMPTY', {
-        'refillAfterEmpty':0, # (integer) 0=Don't refill, 1=Refill both chambers, 2=Refill chamber 1 only, 3=Refill chamber 2 only
-        'chamber1WashLiquid':0, # (integer) 0=Liquid 1 (red container), 1=liquid 2 (blue container)
-        'chamber1LiquidChange':0, # (integer) 0=No, 1=Yes TODO: What does this mean?
-        'chamber2WashLiquid':0, # (integer) 0=Liquid 1 (red container), 1=liquid 2 (blue container)
-        'chamber2LiquidChange':0, # (integer) 0=No, 1=Yes TODO: What does this mean?
-    })
+    'TEC_SetTarget':('TEC_SET_TARGET', {
+        'ControllerID':'', # (integer)
+        'DeviceID':'', # (integer); 
+        'TargetTemperature':'', # (float); 
+    }),
+    'TEC_StopTemperatureControl':('TEC_STOP', {
+
+        'ControllerID':'', # (integer)
+        'DeviceID':'', # (integer); 
+    }),
+    'TEC_Terminate':('TEC_TERMINATE', {
+
+        'StopAllDevices':1, # 0=False, 1=True
+    }),
+    'TiltModule_Initialize':('TILT_INIT', {
+
+        'ModuleName':'', # (string)
+        'Comport':'', # (integer)
+        'TraceLevel':'', # (integer)
+        'Simulate': '' # 0=False, 1=True
+    }),
+    'TiltModule_MoveToPosition':('TILT_MOVE', {
+
+        'ModuleName':'', # (string)
+        'Angle':'' # (integer)
+    }),
+    'FirmwareCommand':('FIRMWARECOMMAND', {
+
+        'FirmwareCommandList':[], # list elements as {FirmwareCommand:'', FirmwareParameter:''} 
+    }),
+    'BarcodeReader_Initialize':('BC_INITIALIZE',{
+
+        'ComPort':'' # (string)
+    }),
+    'BarcodeReader_Read':('BC_READ',{
+
+    }),
 }
+
 """All of the command names supported out of the box, mapped to their default params.
 
 On module load, defaults_by_cmd is parsed into `HamiltonCmdTemplate`s, which are injected into the global package namespace under the first element of the values of this dict (strings in all caps). This is so that they can be imported directly from `pyhamilton` as module-level variables, while avoiding circular imports.
