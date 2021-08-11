@@ -180,6 +180,12 @@ defaults_by_cmd = { # 'field':None indicates field is required when assembling c
         'retractDistance':0.0, # (float) retract distance [mm] (only used if 'movement type' is set to 'complex movement')
         'liftUpHeight':20.0 # (float) lift-up distance [mm] (only used if 'movement type' is set to 'complex movement')
     }),
+    'iSwapMove':('ISWAP_MOVE',{
+        'plateSequence':'',
+        'plateLabwarePositions':'',
+        'collisionControl':0,
+        'gripMode':1
+    }),
 
     'HxFanSet':('HEPA', {
         'deviceNumber':_fan_port, # (integer) COM port number of fan
