@@ -27,16 +27,17 @@ if __name__ == "__main__":
 3. **Make sure git is installed.** https://git-scm.com/download/win
 4. **Make sure you have .NET framework 4.0 or higher installed.** https://www.microsoft.com/en-us/download/details.aspx?id=17851
 5. **Install Hamilton library dependencies** HSLJson and HSLHttp by running executable installers *"HSLJson Library v1.6 Installer.exe"* and *"Hamilton HSLHttp Library Installer Version 2.7.exe"* located in *./bin*.
-6. **Update your pip and setuptools.**
+6. **Copy+paste the files from /library into your (path to hamilton install)/HAMILTON/Library folder** These will ensure you have all the libraries you need in addition to the aforementioned HSLJson and HSLHttp libraries which are installed with executables.
+7. **Update your pip and setuptools.**
     ```
     > python -m pip install --upgrade pip
     > pip install --upgrade setuptools
     ```
-6. **Install pyhamilton.**
+7. **Install pyhamilton.**
     ```
     > pip install git+https://github.com/dgretton/pyhamilton.git#egg=pyhamilton
     ```
-7. **Run.** If you have other Python versions installed, always run pyhamilton with `py yourmethod.py` (the bundled Python launcher, which interprets shebangs) or `python3 yourmethod.py`
+8. **Run.** If you have other Python versions installed, always run pyhamilton with `py yourmethod.py` (the bundled Python launcher, which interprets shebangs) or `python3 yourmethod.py`
 
 ## Applications
 
