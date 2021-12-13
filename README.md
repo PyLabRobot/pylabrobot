@@ -44,6 +44,8 @@ if __name__ == "__main__":
 
 2. If you would like to test your PyHamilton installation on a computer not connected to a Hamilton robot, use `HamiltonInterface(simulate=True)` to open your interface inside your robot script. 
 
+3. If your initialization hangs (such as on initial_error_example.py), try setting timeout=300 in the wait_on_response function call.
+
 ## Applications
 
 - [A high-throughput platform for feedback-controlled directed evolution](https://www.biorxiv.org/content/10.1101/2020.04.01.021022v1), _preprint_
