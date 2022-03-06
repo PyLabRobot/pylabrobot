@@ -34,12 +34,7 @@ if __name__ == "__main__":
     > pip install --upgrade setuptools
     ```
 7. **Install pyhamilton.**
-    ```
-    > pip install git+https://github.com/dgretton/pyhamilton.git#egg=pyhamilton
-    ```
-    
-    or
-    
+   
     ```
     > git clone https://github.com/dgretton/pyhamilton.git
     > cd pyhamilton
