@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pyhamilton',
-    version='1.231',
+    version='1.232',
     packages=find_packages(exclude=['tests*', 'examples*']),
     license='MIT',
     description='Python for Hamilton liquid handling robots',
