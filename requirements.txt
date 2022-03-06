@@ -1,4 +1,4 @@
 requests
 pythonnet
-pywin32
+pywin32==300
 pyserial
