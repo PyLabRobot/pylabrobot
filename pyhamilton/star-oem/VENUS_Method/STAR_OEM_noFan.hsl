@@ -149,7 +149,6 @@ variable barcode;
 variable seqFirstPosition;
 variable seqSecondPosition;
 global device ML_STAR ("STAR_OEM_Test.lay", "ML_STAR", hslTrue);
-global device HxFan ("STAR_OEM_Test.lay", "HxFan", hslTrue);
 variable fanSpeed;
 variable persistant;
 /* {{ 2 "VariableInsertLine" "" */ // }} ""
@@ -188,7 +187,7 @@ return;
 }
 // }} ""
 // {{{ 6 1 0 "ee92e29b_e94c_46cf_a67851f3be61c805" "{7C4EF7A7-39BE-406a-897F-71F3A35B4093}"
-SendTextMessageToServer(Translate("Hi, I´m a VENUS method."));
+SendTextMessageToServer(Translate("Hi, Iï¿½m a VENUS method."));
 // }} ""
 // {{ 7 1 0 "b573bcbb_6bb4_4b28_b1ca14b0d3cad22e" "{B31F3532-5D80-11d4-A5EB-0050DA737D89}"
 {
