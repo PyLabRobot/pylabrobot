@@ -36,7 +36,7 @@ if __name__ == "__main__":
 7. **Install pyhamilton.**
    
     ```
-    pip install git+https://github.com/dgretton/pyhamilton.git
+    pip install git+https://github.com/dgretton/pyhamilton.git#egg=pyhamilton
     ```
     
 8. **Run.** If you have other Python versions installed, always run pyhamilton with `py yourmethod.py` (the bundled Python launcher, which interprets shebangs) or `python3 yourmethod.py`
