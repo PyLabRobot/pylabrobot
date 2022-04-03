@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
 3. If your initialization hangs (such as on initial_error_example.py), try these steps:
     a. Make sure you don't have any other program running which is communicating with the robot e.g. Venus run control
-    b. Make sure the .dlls referenced in ```__init__.py``` are unblocked. See [this stackoverflow thread](https://stackoverflow.com/questions/28840880/pythonnet-filenotfoundexception-unable-to-find-assembly) for more details.
+    b. Make sure the .dlls referenced in ```__init__.py``` are unblocked. See [this StackOverflow thread](https://stackoverflow.com/questions/28840880/pythonnet-filenotfoundexception-unable-to-find-assembly) for more details.
 
 ## Applications
 
