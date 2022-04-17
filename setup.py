@@ -8,7 +8,6 @@ try:
 except(IOError, ImportError):
     long_description = open('README.md').read()
 
-
 setup(
     name='pyhamilton',
     version='1.235',
