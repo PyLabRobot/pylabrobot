@@ -11,8 +11,10 @@ _Contact: contactpyhamilton@gmail.com for questions, ideas, or help with install
 ## Example usage
 ```python
 if __name__ == "__main__":
+
     from pyhamilton import HamiltonInterface, INITIALIZE
     with HamiltonInterface() as ham_int:
+    
         ham_int.wait_on_response(ham_int.send_command(INITIALIZE))
 ```
 
