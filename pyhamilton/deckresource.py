@@ -417,3 +417,48 @@ class Plate6(DeckResource):
         x, y = self.well_coords(idx)
         return 'AB'[y] + str(x + 1)
 
+
+class Plate384(DeckResource):
+
+    def __init__(self, layout_name):
+        self._layout_name = layout_name
+        self._num_items = 384
+        self.resource_type = DeckResource.types.VESSEL
+        self._items = [Vessel(self, i) for i in range(self._num_items)]
+
+    def well_coords(self, idx):
+        self._assert_idx_in_range(idx)
+        return int(idx)//16, int(idx)%16
+
+    def _alignment_delta(self, start, end):
+        [self._assert_idx_in_range(p) for p in (start, end)]
+        xs, ys = self.well_coords(start)
+        xe, ye = self.well_coords(end)
+        return (xe - xs, ye - ys, [DeckResource.align.VERTICAL] if xs == xe and ys != ye else [])
+
+    def position_id(self, idx):
+        x, y = self.well_coords(idx)
+        return 'ABCDEFGHIJKLMNOP'[y] + str(x + 1)
+
+class Plate1536(DeckResource):
+
+    def __init__(self, layout_name):
+        self._layout_name = layout_name
+        self._num_items = 1536
+        self.resource_type = DeckResource.types.VESSEL
+        self._items = [Vessel(self, i) for i in range(self._num_items)]
+
+    def well_coords(self, idx):
+        self._assert_idx_in_range(idx)
+        return int(idx)//32, int(idx)%32
+
+    def _alignment_delta(self, start, end):
+        [self._assert_idx_in_range(p) for p in (start, end)]
+        xs, ys = self.well_coords(start)
+        xe, ye = self.well_coords(end)
+        return (xe - xs, ye - ys, [DeckResource.align.VERTICAL] if xs == xe and ys != ye else [])
+
+    def position_id(self, idx):
+        x, y = self.well_coords(idx)
+        row_letters = list('ABCDEFGHIJKLMNOPQRSTUVWXYZ') + ['AA', 'AB', 'AC', 'AD', 'AE', 'AF']
+        return row_letters[y] + str(x + 1)
