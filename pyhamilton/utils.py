@@ -11,7 +11,7 @@ from threading import Thread
 from .interface import HamiltonInterface
 from .deckresource import LayoutManager, ResourceType, Plate24, Plate96, Tip96
 from .oemerr import PositionError
-from .defaultcmds import (INITIALIZE, PICKUP, EJECT, ASPIRATE, DISPENSE, ISWAP_GET, ISWAP_PLACE, HEPA,
+from .interface import (INITIALIZE, PICKUP, EJECT, ASPIRATE, DISPENSE, ISWAP_GET, ISWAP_PLACE, HEPA,
 WASH96_EMPTY, PICKUP96, EJECT96, ASPIRATE96, DISPENSE96, ISWAP_MOVE, MOVE_SEQ)
 
 
