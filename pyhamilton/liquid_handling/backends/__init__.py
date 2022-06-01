@@ -1,0 +1,2 @@
+from .hamilton import STAR
+
