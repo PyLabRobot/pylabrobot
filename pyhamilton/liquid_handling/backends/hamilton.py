@@ -113,7 +113,7 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
         "#": 'int',
         "*": 'hex',
         "&": 'str'
-      }[param[2]]
+      }[data[0]]
       len_ = len(data)
 
       # Build a regex to match this parameter.
@@ -135,15 +135,11 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
         info[name] = int(m, base=16)
 
     param = ''
-    reading = True
     for char in fmt:
       if char.islower():
-        if reading and len(param) > 2:
-          reading = False
-        if not reading:
+        if len(param) > 2:
           find_param(param)
           param = ''
-          reading = True
       param += char
     find_param(param) # last parameter is not closed by loop.
 
