@@ -100,9 +100,7 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     """
 
     # Verify format and resp match.
-    resp = resp[2:] # remove device identifier from response.
-    assert resp[:2] == fmt[:2], "cmds in resp and fmt do not match"
-    resp = resp[2:]; fmt = fmt[2:] # remove command identifier from both.
+    resp = resp[4:] # remove device and cmd identifier from response.
 
     # Parse the parameters in the fmt string.
     info = {}
@@ -118,14 +116,20 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
 
       # Build a regex to match this parameter.
       exp = {
-        'int': '[0-9]',
+        'int': '-?[0-9]',
         'hex': '[0-9a-fA-F]',
         'str': '.',
       }[type_]
       regex = f"{name}({exp}{ {len_} })"
 
       # Match response against regex, save results in right datatype.
-      m = re.search(regex, resp).groups()[0]
+      r = re.search(regex, resp)
+      if r is None:
+        raise ValueError(f"could not find matches for parameter {name}")
+      g = r.groups()
+      if len(g) == 0:
+        raise ValueError(f"could not find value for parameter {name}")
+      m = g[0]
 
       if type_ == 'str':
         info[name] = m
@@ -141,7 +145,10 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
           find_param(param)
           param = ''
       param += char
-    find_param(param) # last parameter is not closed by loop.
+    if param != '':
+      find_param(param) # last parameter is not closed by loop.
+    if 'id' not in info: # auto add id if we don't have it yet.
+      find_param("id####")
 
     return info
 
