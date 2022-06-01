@@ -66,88 +66,88 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
       time.sleep(self.read_poll_interval)
     return res
   
-    def parse_response(resp: str, fmt: str):
-      """ Parse a machine response according to a format string.
+  def parse_response(resp: str, fmt: str):
+    """ Parse a machine response according to a format string.
 
-      The format contains names of parameters (always length 2),
-      followed by an arbitrary number of the following, but always
-      the same:
-      - '&': char
-      - '#': decimal
-      - '*': hex
+    The format contains names of parameters (always length 2),
+    followed by an arbitrary number of the following, but always
+    the same:
+    - '&': char
+    - '#': decimal
+    - '*': hex
 
-      Example:
-      - fmt : "aa####bb&&cc***
-      - resp: "aa1111bbrwccB0B"
+    Example:
+    - fmt : "aa####bb&&cc***
+    - resp: "aa1111bbrwccB0B"
 
-      This order of parameters in the format and response string do not
-      have to (and often do not) match.
+    This order of parameters in the format and response string do not
+    have to (and often do not) match.
 
-      TODO: string parsing
-      The firmware docs mention strings in the following format: '...'
-      However, the length of these is always known (except when reading
-      barcodes), so it is easier to convert strings to the right number
-      of '&'. With barcode reading the length of the barcode is included
-      with the response string. We'll probably do a custom implementation
-      for that.
+    TODO: string parsing
+    The firmware docs mention strings in the following format: '...'
+    However, the length of these is always known (except when reading
+    barcodes), so it is easier to convert strings to the right number
+    of '&'. With barcode reading the length of the barcode is included
+    with the response string. We'll probably do a custom implementation
+    for that.
 
-      TODO: block parsing
-      When a parameter is built up of several identical blocks, the
-      redundant blocks are not shown; that is to say, only the first
-      Block and the number of blocks are given. It is always the case
-      that the first value refers to channel 1, and so on. The 
-      individual blocks are separated by ' ' (Space).
-      """
+    TODO: block parsing
+    When a parameter is built up of several identical blocks, the
+    redundant blocks are not shown; that is to say, only the first
+    Block and the number of blocks are given. It is always the case
+    that the first value refers to channel 1, and so on. The 
+    individual blocks are separated by ' ' (Space).
+    """
 
-      # Verify format and resp match.
-      resp = resp[2:] # remove device identifier from response.
-      assert resp[:2] == fmt[:2], "cmds in resp and fmt do not match"
-      resp = resp[2:]; fmt = fmt[2:] # remove command identifier from both.
+    # Verify format and resp match.
+    resp = resp[2:] # remove device identifier from response.
+    assert resp[:2] == fmt[:2], "cmds in resp and fmt do not match"
+    resp = resp[2:]; fmt = fmt[2:] # remove command identifier from both.
 
-      # Parse the parameters in the fmt string.
-      info = {}
+    # Parse the parameters in the fmt string.
+    info = {}
 
-      def find_param(param):
-        name, data = param[0:2], param[2:]
-        type_ = {
-          "#": 'int',
-          "*": 'hex',
-          "&": 'str'
-        }[param[2]]
-        len_ = len(data)
+    def find_param(param):
+      name, data = param[0:2], param[2:]
+      type_ = {
+        "#": 'int',
+        "*": 'hex',
+        "&": 'str'
+      }[param[2]]
+      len_ = len(data)
 
-        # Build a regex to match this parameter.
-        exp = {
-          'int': '[0-9]',
-          'hex': '[0-9a-fA-F]',
-          'str': '.',
-        }[type_]
-        regex = f"{name}({exp}{ {len_} })"
+      # Build a regex to match this parameter.
+      exp = {
+        'int': '[0-9]',
+        'hex': '[0-9a-fA-F]',
+        'str': '.',
+      }[type_]
+      regex = f"{name}({exp}{ {len_} })"
 
-        # Match response against regex, save results in right datatype.
-        m = re.search(regex, resp).groups()[0]
+      # Match response against regex, save results in right datatype.
+      m = re.search(regex, resp).groups()[0]
 
-        if type_ == 'str':
-          info[name] = m
-        elif type_ == 'int':
-          info[name] = int(m)
-        elif type_ == 'hex':
-          info[name] = int(m, base=16)
+      if type_ == 'str':
+        info[name] = m
+      elif type_ == 'int':
+        info[name] = int(m)
+      elif type_ == 'hex':
+        info[name] = int(m, base=16)
 
-      param = ''
-      reading = True
-      for char in fmt:
-        if char.islower():
-          if reading and len(param) > 2:
-            reading = False
-          if not reading:
-            find_param(param)
-            param = ''
-            reading = True
-        param += char
-      find_param(param) # last parameter is not closed by loop.
+    param = ''
+    reading = True
+    for char in fmt:
+      if char.islower():
+        if reading and len(param) > 2:
+          reading = False
+        if not reading:
+          find_param(param)
+          param = ''
+          reading = True
+      param += char
+    find_param(param) # last parameter is not closed by loop.
 
-      return info
+    return info
 
 
 class STAR(HamiltonLiquidHandler):
