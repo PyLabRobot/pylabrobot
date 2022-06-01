@@ -788,8 +788,176 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(device="C0", command="VD")
 
   # -------------- 3.4 X-Axis control --------------
+
   # -------------- 3.4.1 Movements --------------
 
+  def position_left_x_arm_(
+    self,
+    x_position: int = 0
+  ):
+    """ Position left X-Arm 
+
+    Collision risk!
+
+    Args:
+      x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
+    """
+
+    _assert_clamp(x_position, 0, 30000, "x-position_[0.1mm]")
+
+    return self.send_command(
+      module="C0",
+      command="JX",
+      xs=x_position,
+    )
+  
+  def position_right_x_arm_(
+    self,
+    x_position: int = 0
+  ):
+    """ Position right X-Arm 
+
+    Collision risk!
+
+    Args:
+      x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
+    """
+
+    _assert_clamp(x_position, 0, 30000, "x-position_[0.1mm]")
+
+    return self.send_command(
+      module="C0",
+      command="JX",
+      xs=x_position,
+    )
+  
+  def move_left_x_arm_to_position_with_all_attached_components_in_z_safety_position(
+    self,
+    x_position: int = 0
+  ):
+    """ Move left X-arm to position with all attached components in Z-safety position
+
+    Args:
+      x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
+    """
+
+    _assert_clamp(x-position, 0, 30000, "x-position")
+
+    return self.send_command(
+      module="C0",
+      command="KX",
+      xs=x_position,
+    ) 
+  
+  def move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position(
+    self,
+    x_position: int = 0
+  ):
+    """ Move right X-arm to position with all attached components in Z-safety position
+
+    Args:
+      x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
+    """
+
+    _assert_clamp(x-position, 0, 30000, "x-position")
+
+    return self.send_command(
+      module="C0",
+      command="KR",
+      xs=x_position,
+    ) 
+
+  # -------------- 3.4.2 X-Area reservation for external access --------------
+
+  def occupy_and_provide_area_for_external_access(
+    self,
+    taken_area_identification_number: int = 0,
+    taken_area_left_margin: int = 0,
+    taken_area_left_margin_direction: int = 0,
+    taken_area_size: int = 0,
+    arm_preposition_mode_related_to_taken_areas: int = 0
+  ):
+    """ Occupy and provide area for external access
+
+    Args:
+      taken_area_identification_number: taken area identification number. Must be between 0 and 9999. Default 0.
+    taken_area_left_margin: taken area left margin. Must be between 0 and 99. Default 0.
+    taken_area_left_margin_direction: taken area left margin direction. 1 = negative. Must be between 0 and 1. Default 0.
+    taken_area_size: taken area size. Must be between 0 and 50000. Default 0.
+    arm_preposition_mode_related_to_taken_areas: 0) left arm to left & right arm to right. 1) all arms left.
+                                                 2) all arms right.
+    """
+
+    _assert_clamp(taken_area_identification_number, 0, 9999, "taken_area_identification_number")
+    _assert_clamp(taken_area_left_margin, 0, 99, "taken_area_left_margin")
+    _assert_clamp(taken_area_left_margin_direction, 0, 1, "taken_area_left_margin_direction")
+    _assert_clamp(taken_area_size, 0, 50000, "taken_area_size")
+    _assert_clamp(arm_preposition_mode_related_to_taken_areas, 0, 2, "arm_preposition_mode_(related_to_taken_area)s")
+
+    return self.send_command(
+      module="C0",
+      command="BA",
+      aq=taken_area_identification_number,
+      al=taken_area_left_margin,
+      ad=taken_area_left_margin_direction,
+      ar=taken_area_size,
+      ap=arm_preposition_mode_related_to_taken_areas,
+    )
+  
+  def release_occupied_area(
+    self,
+    taken_area_identification_number: int = 0
+  ):
+    """ Release occupied area
+
+    Args:
+      taken_area_identification_number: taken area identification number. Must be between 0 and 9999. Default 0.
+    """
+
+    _assert_clamp(taken_area_identification_number, 0, 9999, "taken_area_identification_number")
+
+    return self.send_command(
+      module="C0",
+      command="BB",
+      aq=taken_area_identification_number,
+    )
+  
+  def release_all_occupied_areas(self):
+    """ Release all occupied areas """
+
+    return self.send_command(device="C0", command="BC")
+
+  # -------------- 3.4.3 X-query --------------
+
+  def request_left_x_arm_position(self):
+    """ Request left X-Arm position """
+
+    return self.send_command(device="C0", command="RX")
+  
+  def request_right_x_arm_position(self):
+    """ Request right X-Arm position """
+
+    return self.send_command(device="C0", command="QX")
+
+  def request_maximal_ranges_of_x_drives(self):
+    """ Request maximal ranges of X drives """
+
+    return self.send_command(device="C0", command="RU")
+  
+  def request_present_wrap_size_of_installed_arms(self):
+    """ Request present wrap size of installed arms """
+
+    return self.send_command(device="C0", command="RU")
+  
+  def request_left_x_arm_last_collision_type(self):
+    """ Request left X-Arm last collision type (after error 27) """
+
+    return self.send_command(device="C0", command="XX")
+  
+  def request_right_x_arm_last_collision_type(self):
+    """ Request right X-Arm last collision type (after error 27) """
+
+    return self.send_command(device="C0", command="XR")
 
 # TODO: temp test
 if __name__ == "__main__":
