@@ -6,6 +6,7 @@ from abc import ABCMeta, abstractmethod
 import datetime
 import enum
 import re
+import time
 
 import usb.core
 
@@ -13,9 +14,8 @@ import usb.core
 
 
 # TODO: move to util.
-def _assert_clamp(v, min, max, name):
-  assert min <= v <= max, "{name} must be between {min} and {max}, but is {v}" \
-                          .format(name=name, min=min, max=max, v=v)
+def _assert_clamp(v, min_, max_, name):
+  assert min_ <= v <= max_, f"{name} must be between {min} and {max}, but is {v}"
 
 
 class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHanderBackend
@@ -32,30 +32,40 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     """
 
     self.read_poll_interval = read_poll_interval # ms
-    self.setup()
 
-  @staticmethod
-  def generate_id():
+  def generate_id(self):
     """ continuously generate unique ids 0 <= x < 10000. """
-    id = 0
+    id_ = 0
     while True:
-      yield id % 10000
-      id += 1
- 
-  def send_command(module, command, **kwargs):
+      yield id_ % 10000
+      id_ += 1
+
+  def send_command(self, module, command, **kwargs):
+    """ Send a firmware command to the Hamilton machine.
+
+    Args:
+      module: 2 character module identifier (C0 for master, ...)
+      command: 2 character command identifier (QM for request status)
+      kwargs: any named parameters. the parameter name should also be
+              2 characters long. The value can be any size.
+    """
+
+    # pylint: disable=redefined-builtin
+
     # assemble command
     cmd = module + command
-    id = generate_id()
-    cmd += 'id{}'.format(id) # has to be first param
+    id = self.generate_id()
+    cmd += f"id{id}" # has to be first param
 
-    for k, v in kwoargs.items():
+    for k, v in kwargs.items(): # pylint: disable=unused-variable
       if type(v) is datetime.datetime:
-        v = v.strftime('%Y-%m-%d %h:%M')
-      cmd += '{}{}'.format(k, v)
+        v = v.strftime("%Y-%m-%d %h:%M")
+      cmd += "{k}{v}"
 
     # write command to endpoint
     self.dev.write(self.write_endpoint)
 
+    # TODO: this code should be somewhere else.
     # block by default
     res = None
     while res is None:
@@ -65,8 +75,8 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
       )
       time.sleep(self.read_poll_interval)
     return res
-  
-  def parse_response(resp: str, fmt: str):
+
+  def parse_response(self, resp: str, fmt: str):
     """ Parse a machine response according to a format string.
 
     The format contains names of parameters (always length 2),
@@ -80,8 +90,10 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     - fmt : "aa####bb&&cc***
     - resp: "aa1111bbrwccB0B"
 
-    This order of parameters in the format and response string do not
+    The order of parameters in the format and response string do not
     have to (and often do not) match.
+
+    The identifier parameter (id####) is added automatically.
 
     TODO: string parsing
     The firmware docs mention strings in the following format: '...'
@@ -95,8 +107,12 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     When a parameter is built up of several identical blocks, the
     redundant blocks are not shown; that is to say, only the first
     Block and the number of blocks are given. It is always the case
-    that the first value refers to channel 1, and so on. The 
+    that the first value refers to channel 1, and so on. The
     individual blocks are separated by ' ' (Space).
+
+    # TODO: spaces
+    We should also parse responses where integers are separated by spaces,
+    like this: ua#### #### ###### ###### ###### ######
     """
 
     # Verify format and resp match.
@@ -108,17 +124,17 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     def find_param(param):
       name, data = param[0:2], param[2:]
       type_ = {
-        "#": 'int',
-        "*": 'hex',
-        "&": 'str'
+        "#": "int",
+        "*": "hex",
+        "&": "str"
       }[data[0]]
       len_ = len(data)
 
       # Build a regex to match this parameter.
       exp = {
-        'int': '-?[0-9]',
-        'hex': '[0-9a-fA-F]',
-        'str': '.',
+        "int": "-?[0-9]",
+        "hex": "[0-9a-fA-F]",
+        "str": ".",
       }[type_]
       regex = f"{name}({exp}{ {len_} })"
 
@@ -131,23 +147,23 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
         raise ValueError(f"could not find value for parameter {name}")
       m = g[0]
 
-      if type_ == 'str':
+      if type_ == "str":
         info[name] = m
-      elif type_ == 'int':
+      elif type_ == "int":
         info[name] = int(m)
-      elif type_ == 'hex':
+      elif type_ == "hex":
         info[name] = int(m, base=16)
 
-    param = ''
+    param = ""
     for char in fmt:
       if char.islower():
         if len(param) > 2:
           find_param(param)
-          param = ''
+          param = ""
       param += char
-    if param != '':
+    if param != "":
       find_param(param) # last parameter is not closed by loop.
-    if 'id' not in info: # auto add id if we don't have it yet.
+    if "id" not in info: # auto add id if we don't have it yet.
       find_param("id####")
 
     return info
@@ -166,7 +182,7 @@ class STAR(HamiltonLiquidHandler):
     """
 
     super().__init__(**kwargs)
-  
+
   def setup(self):
     """ setup
 
@@ -181,23 +197,23 @@ class STAR(HamiltonLiquidHandler):
     self.write_endpoint = 0x3
     self.read_endpoint = 0x83
 
-  def _read():
+  def _read(self):
     """
     continuously read data sent by Hamilton device and store each entry
     with an id in the responses cache.
     """
 
     while True:
-      time.sleep(self.read_poll_interval) 
+      time.sleep(self.read_poll_interval)
       self.dev.read(self.read_endpoint, 100) # TODO: instead of 100 we want to read until new line.
       # TODO: what happens when we write 2 commands without reading in between?
- 
+
   # -------------- 3.2 System general commands --------------
 
   def pre_initialize_instrument(self):
     """ Pre-initialize instrument """
-    return self.send_command(module="0", command="VI")
- 
+    return self.send_command(module="C0", command="VI")
+
   class TipType(enum.Enum):
     """ Tip type """
     UNDEFINED=0
@@ -226,7 +242,7 @@ class STAR(HamiltonLiquidHandler):
     TODO: Define default values for type/application/filter.
 
     Args:
-      tip_type_table_index: tip_table_index 
+      tip_type_table_index: tip_table_index
       filter: with(out) filter
       tip_length: Tip length [0.1mm]
       maximum_tip_volume: Maximum volume of tip [0.1ul]
@@ -237,7 +253,9 @@ class STAR(HamiltonLiquidHandler):
                       power OFF or RESET. After power ON the default val- ues apply. (see Table 3)
     """
 
-    _assert_clamp(tip_needle_index, 0, 99, "tip_needle_index")
+    # pylint: disable=redefined-builtin
+
+    _assert_clamp(tip_type_table_index, 0, 99, "tip_type_table_index")
     filter = 1 if filter else 0
     _assert_clamp(tip_length, 1, 1999, "tip_length")
     _assert_clamp(maximum_tip_volume, 1, 56000, "maximum_tip_volume")
@@ -273,36 +291,38 @@ class STAR(HamiltonLiquidHandler):
 
   def request_firmware_version(self):
     """ Request firmware version
-    
+
     Returns: TODO: Rfid0001rf1.0S 2009-06-24 A
     """
     return self.send_command(module="C0", command="RF")
 
   def request_parameter_value(self):
     """ Request parameter value
-    
+
     Returns: TODO: Raid1111er00/00yg1200
     """
 
     return self.send_command(module="C0", command="RA")
- 
+
   class BoardType(enum.Enum):
     C167CR_SINGLE_PROCESSOR_BOARD = 0
     C167CR_DUAL_PROCESSOR_BOARD = 1
     LPC2468_XE167_DUAL_PROCESSOR_BOARD = 2
     LPC2468_SINGLE_PROCESSOR_BOARD = 5
     UNKNOWN = -1
-  
+
   def request_electronic_board_type(self):
     """ Request electronic board type
-    
+
     Returns:
       The board type.
     """
 
+    # pylint: disable=undefined-variable
+
     resp = self.send_command(module="C0", command="QB")
     try:
-      return BoardType(resp['qb'])
+      return BoardType(resp["qb"])
     except ValueError:
       return BoardType.UNKNOWN
 
@@ -314,16 +334,16 @@ class STAR(HamiltonLiquidHandler):
     """
 
     return self.send_command(module="C0", command="MU")
- 
+
   def request_instrument_initialization_status(self):
     """ Request instrument initialization status """
 
     resp = self.send_command(module="C0", command="QW")
-    return resp['qw'] == 1
+    return resp["qw"] == 1
 
   def request_name_of_last_faulty_parameter(self):
     """ Request name of last faulty parameter
-    
+
     Returns: TODO:
       Name of last parameter with syntax error
       (optional) received value separated with blank
@@ -333,32 +353,32 @@ class STAR(HamiltonLiquidHandler):
     """
 
     return self.send_command(module="C0", command="VP")
-  
+
   def request_master_status(self):
     """ Request master status
-    
+
     Returns: TODO: see page 19 (SFCO.0036)
     """
 
     return self.send_command(module="C0", command="RQ")
-  
+
   def request_number_of_presence_sensors_installed(self):
     """ Request number of presence sensors installed
-    
+
     Returns:
       number of sensors installed (1...103)
     """
 
-    return self.send_command(module="C0", command="SR")['sr']
-  
+    return self.send_command(module="C0", command="SR")["sr"]
+
   def request_eeprom_data_correctness(self):
     """ Request EEPROM data correctness
-    
+
     Returns: TODO: (SFCO.0149)
     """
 
     return self.send_command(module="C0", command="QV")
-  
+
   # -------------- 3.3 Settings --------------
 
   # -------------- 3.3.1 Volatile Settings --------------
@@ -379,23 +399,23 @@ class STAR(HamiltonLiquidHandler):
       command="AM",
       am=single_step_mode,
     )
-  
+
   def trigger_next_step(self):
     """ Trigger next step (Single step mode) """
 
     # TODO: this command has no reply!!!!
     return self.send_command(module="C0", command="NS")
-  
+
   def halt(self):
     """ Halt
-    
+
     Intermediate sequences not yet carried out and the commands in
     the command stack are discarded. Sequence already in process is
     completed.
     """
 
     return self.send_command(module="C0", command="HD")
-  
+
   def save_all_cycle_counters(self):
     """ Save all cycle counters
 
@@ -403,10 +423,10 @@ class STAR(HamiltonLiquidHandler):
     """
 
     return self.send_command(module="C0", command="AZ")
-  
+
   def set_not_stop(self, non_stop):
     """ Set not stop mode
-    
+
     Args:
       non_stop: True if non stop mode should be turned on after command is sent.
     """
@@ -422,7 +442,7 @@ class STAR(HamiltonLiquidHandler):
   def store_installation_data(
     self,
     date: datetime.datetime = datetime.datetime.now(),
-    serial_number: str = '0000'
+    serial_number: str = "0000"
   ):
     """ Store installation data
 
@@ -462,51 +482,51 @@ class STAR(HamiltonLiquidHandler):
       vd=date,
       vs=verification_status,
     )
-  
+
   def additional_time_stamp(self):
     """ Additional time stamp """
 
-    return self.send_command(device="C0", command="AT")
-  
+    return self.send_command(module="C0", command="AT")
+
   def set_x_offset_x_axis_iswap(self, x_offset: int):
     """ Set X-offset X-axis <-> iSWAP
-    
+
     Args:
       x_offset: X-offset [0.1mm]
     """
 
     return self.send_command(
-      device="C0",
+      module="C0",
       command="AG",
-      x_offset=kf 
+      x_offset=x_offset
     )
-  
+
   def set_x_offset_x_axis_core_96_head(self, x_offset: int):
     """ Set X-offset X-axis <-> CoRe 96 head
-    
+
     Args:
       x_offset: X-offset [0.1mm]
     """
 
     return self.send_command(
-      device="C0",
+      module="C0",
       command="AF",
-      x_offset=kd 
+      x_offset=x_offset
     )
-  
+
   def set_x_offset_x_axis_core_nano_pipettor_head(self, x_offset: int):
     """ Set X-offset X-axis <-> CoRe 96 head
-    
+
     Args:
       x_offset: X-offset [0.1mm]
     """
 
     return self.send_command(
-      device="C0",
+      module="C0",
       command="AF",
-      x_offset=kn 
+      x_offset=x_offset
     )
-  
+
   def save_download_date(
     self,
     date: datetime.datetime = datetime.datetime.now()
@@ -538,7 +558,7 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="BT",
-      qt=processor_board + ' ' + power_supply,
+      qt=processor_board + " " + power_supply,
     )
 
   def set_instrument_configuration(
@@ -575,7 +595,7 @@ class STAR(HamiltonLiquidHandler):
                                           Must be between 10 and 99. Default 54.
       auto_load_size_in_slots: auto load size in slots. Must be between 10
                                 and 54. Default 54.
-      tip_waste_x-position: tip waste X-position. Must be between 1000 and
+      tip_waste_x_position: tip waste X-position. Must be between 1000 and
                             25000. Default 13400.
       right_x_drive_configuration_byte_1: right X drive configuration byte 1 (see
                                           xl parameter bits). Must be between 0 and 1.
@@ -588,7 +608,7 @@ class STAR(HamiltonLiquidHandler):
                                             see Fig. 4. Must be between 0 and 30000. Default 3500.
       maximal_iswap_collision_free_position: maximal iSWAP collision free position for
                                               direct X access. For explanation of calculation
-                                              see Fig. 4. Must be between 0 and 30000. Default 11400.
+                                              see Fig. 4. Must be between 0 and 30000. Default 11400
       left_x_arm_width: width of left X arm [0.1 mm]. Must be between 0 and 9999. Default 3700.
       right_x_arm_width: width of right X arm [0.1 mm]. Must be between 0 and 9999. Default 3700.
       num_pip_channels: number of PIP channels. Must be between 0 and 16. Default 0.
@@ -600,28 +620,34 @@ class STAR(HamiltonLiquidHandler):
                                             between 0 and 999. Default 360.
       minimal_raster_pitch_of_robotic_channels: minimal raster pitch of Robotic channels [0.1 mm].
                                                 Must be between 0 and 999. Default 360.
-      pip_maximal_y_position: PIP maximal Y position [0.1 mm]. Must be between 0 and 9999. Default 6065.
+      pip_maximal_y_position: PIP maximal Y position [0.1 mm]. Must be between 0 and 9999.
+                              Default 6065.
       left_arm_minimal_y_position: left arm minimal Y position [0.1 mm]. Must be between 0 and 9999.
                                     Default 60.
-      right_arm_minimal_y_position: right arm minimal Y position [0.1 mm]. Must be between 0 and 9999.
-                                    Default 60.
+      right_arm_minimal_y_position: right arm minimal Y position [0.1 mm]. Must be between 0
+                                    and 9999. Default 60.
     """
 
-    _assert_clamp(instrument_size_in_slots_(x_range), 10, 99, "instrument_size_in_slots_(x_range)")
+    _assert_clamp(instrument_size_in_slots_x_range, 10, 99, "instrument_size_in_slots_(x_range)")
     _assert_clamp(auto_load_size_in_slots, 10, 54, "auto_load_size_in_slots")
-    _assert_clamp(tip_waste_x-position, 1000, 25000, "tip_waste_x-position")
+    _assert_clamp(tip_waste_x_position, 1000, 25000, "tip_waste_x_position")
     _assert_clamp(right_x_drive_configuration_byte_1, 0, 1, "right_x_drive_configuration_byte_1")
     _assert_clamp(right_x_drive_configuration_byte_2, 0, 1, "right_x_drive_configuration_byte_2")
-    _assert_clamp(minimal_iswap_collision_free_position, 0, 30000, "minimal_iswap_collision_free_position")
-    _assert_clamp(maximal_iswap_collision_free_position, 0, 30000, "maximal_iswap_collision_free_position")
+    _assert_clamp(minimal_iswap_collision_free_position, 0, 30000, \
+                  "minimal_iswap_collision_free_position")
+    _assert_clamp(maximal_iswap_collision_free_position, 0, 30000, \
+                  "maximal_iswap_collision_free_position")
     _assert_clamp(left_x_arm_width, 0, 9999, "left_x_arm_width")
     _assert_clamp(right_x_arm_width, 0, 9999, "right_x_arm_width")
     _assert_clamp(num_pip_channels, 0, 16, "num_pip_channels")
     _assert_clamp(num_xl_channels, 0, 8, "num_xl_channels")
     _assert_clamp(num_robotic_channels, 0, 8, "num_robotic_channels")
-    _assert_clamp(minimal_raster_pitch_of_pip_channels, 0, 999, "minimal_raster_pitch_of_pip_channels")
-    _assert_clamp(minimal_raster_pitch_of_xl_channels, 0, 999, "minimal_raster_pitch_of_xl_channels")
-    _assert_clamp(minimal_raster_pitch_of_robotic_channels, 0, 999, "minimal_raster_pitch_of_robotic_channels")
+    _assert_clamp(minimal_raster_pitch_of_pip_channels, 0, 999, \
+                  "minimal_raster_pitch_of_pip_channels")
+    _assert_clamp(minimal_raster_pitch_of_xl_channels, 0, 999, \
+                  "minimal_raster_pitch_of_xl_channels")
+    _assert_clamp(minimal_raster_pitch_of_robotic_channels, 0, 999, \
+                  "minimal_raster_pitch_of_robotic_channels")
     _assert_clamp(pip_maximal_y_position, 0, 9999, "pip_maximal_y_position")
     _assert_clamp(left_arm_minimal_y_position, 0, 9999, "left_arm_minimal_y_position")
     _assert_clamp(right_arm_minimal_y_position, 0, 9999, "right_arm_minimal_y_position")
@@ -634,7 +660,7 @@ class STAR(HamiltonLiquidHandler):
         ke=configuration_data_3,
         xt=instrument_size_in_slots_x_range,
         xa=auto_load_size_in_slots,
-        xw=tip_waste_x-position,
+        xw=tip_waste_x_position,
         xr=right_x_drive_configuration_byte_1,
         xo=right_x_drive_configuration_byte_2,
         xm=minimal_iswap_collision_free_position,
@@ -650,7 +676,7 @@ class STAR(HamiltonLiquidHandler):
         ym=pip_maximal_y_position,
         yu=left_arm_minimal_y_position,
         yx=right_arm_minimal_y_position,
-      ) 
+      )
 
   def save_pip_channel_validation_status(
     self,
@@ -667,7 +693,7 @@ class STAR(HamiltonLiquidHandler):
       command="AJ",
       tq=validation_status,
     )
- 
+
   def save_xl_channel_validation_status(
     self,
     validation_status: bool = False
@@ -683,17 +709,17 @@ class STAR(HamiltonLiquidHandler):
       command="AE",
       tx=validation_status,
     )
- 
+
   # TODO: response
   def configure_node_names(self):
     """ Configure node names """
 
-    return self.send_command(device="C0", command="AJ")
-  
+    return self.send_command(module="C0", command="AJ")
+
   def set_deck_data(
     self,
     data_index: int = 0,
-    data_stream: str = '0'
+    data_stream: str = "0"
   ):
     """ set deck data
 
@@ -702,7 +728,7 @@ class STAR(HamiltonLiquidHandler):
       data_stream: data stream (12 characters). Default <class 'str'>.
     """
 
-    assert_clamp(data_index, 0, 9, "data_index")
+    _assert_clamp(data_index, 0, 9, "data_index")
     assert len(data_stream) == 12, "data_stream must be 12 chars"
 
     return self.send_command(
@@ -718,26 +744,26 @@ class STAR(HamiltonLiquidHandler):
     """ Request Technical status of assemblies """
 
     # TODO: parse res
-    return self.send_command(device="C0", command="QT")
+    return self.send_command(module="C0", command="QT")
 
   def request_installation_data(self):
     """ Request installation data """
 
     # TODO: parse res
-    return self.send_command(device="C0", command="RI")
+    return self.send_command(module="C0", command="RI")
 
   def request_download_date(self):
     """ Request download date """
 
     # TODO: parse res
-    return self.send_command(device="C0", command="RO")
-  
+    return self.send_command(module="C0", command="RO")
+
   def request_verification_data(
     self,
     verification_subject: int = 0
   ):
     """ Request download date
-    
+
     Args:
       verification_subject: verification subject. Must be between 0 and 24. Default 0.
     """
@@ -746,7 +772,7 @@ class STAR(HamiltonLiquidHandler):
 
     # TODO: parse results.
     return self.send_command(
-      device="C0",
+      module="C0",
       command="RO",
       vo = verification_subject
     )
@@ -755,30 +781,30 @@ class STAR(HamiltonLiquidHandler):
     """ Request additional timestamp data """
 
     # TODO: parse res
-    return self.send_command(device="C0", command="RS")
+    return self.send_command(module="C0", command="RS")
 
   def request_pip_channel_validation_status(self):
     """ Request PIP channel validation status """
 
     # TODO: parse res
-    return self.send_command(device="C0", command="RJ")
+    return self.send_command(module="C0", command="RJ")
 
   def request_xl_channel_validation_status(self):
     """ Request XL channel validation status """
 
     # TODO: parse res
-    return self.send_command(device="C0", command="UJ")
+    return self.send_command(module="C0", command="UJ")
 
   def request_machine_configuration(self):
     """ Request machine configuration """
 
     # TODO: parse res
-    return self.send_command(device="C0", command="RM")
+    return self.send_command(module="C0", command="RM")
 
   def request_extended_configuration(self):
     """ Request extended configuration """
 
-    resp = self.send_command(device="C0", command="QM")
+    resp = self.send_command(module="C0", command="QM")
     return self.parse_response(resp, fmt="QMid####ka******ke********xt##xa##xw#####xl**" + \
             "xn**xr**xo**xm#####xx#####xu####xv####kc#kr#ys###kl###km###ym####yu####yx####")
 
@@ -786,13 +812,13 @@ class STAR(HamiltonLiquidHandler):
     """ Request node names """
 
     # TODO: parse res
-    return self.send_command(device="C0", command="RK")
+    return self.send_command(module="C0", command="RK")
 
   def request_deck_data(self):
     """ Request deck data """
 
     # TODO: parse res
-    return self.send_command(device="C0", command="VD")
+    return self.send_command(module="C0", command="VD")
 
   # -------------- 3.4 X-Axis control --------------
 
@@ -802,7 +828,7 @@ class STAR(HamiltonLiquidHandler):
     self,
     x_position: int = 0
   ):
-    """ Position left X-Arm 
+    """ Position left X-Arm
 
     Collision risk!
 
@@ -810,19 +836,20 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x-position_[0.1mm]")
+    _assert_clamp(x_position, 0, 30000, "x_position_[0.1mm]")
 
-    return self.send_command(
+    resp = self.send_command(
       module="C0",
       command="JX",
       xs=x_position,
     )
-  
+    return self.parse_response(resp, "")
+
   def position_right_x_arm_(
     self,
     x_position: int = 0
   ):
-    """ Position right X-Arm 
+    """ Position right X-Arm
 
     Collision risk!
 
@@ -830,14 +857,15 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x-position_[0.1mm]")
+    _assert_clamp(x_position, 0, 30000, "x_position_[0.1mm]")
 
-    return self.send_command(
+    resp = self.send_command(
       module="C0",
       command="JX",
       xs=x_position,
     )
-  
+    return self.parse_response(resp, "")
+
   def move_left_x_arm_to_position_with_all_attached_components_in_z_safety_position(
     self,
     x_position: int = 0
@@ -848,14 +876,15 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    _assert_clamp(x-position, 0, 30000, "x-position")
+    _assert_clamp(x_position, 0, 30000, "x_position")
 
-    return self.send_command(
+    resp = self.send_command(
       module="C0",
       command="KX",
       xs=x_position,
-    ) 
-  
+    )
+    return self.parse_response(resp, "")
+
   def move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position(
     self,
     x_position: int = 0
@@ -866,13 +895,14 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    _assert_clamp(x-position, 0, 30000, "x-position")
+    _assert_clamp(x_position, 0, 30000, "x_position")
 
-    return self.send_command(
+    resp = self.send_command(
       module="C0",
       command="KR",
       xs=x_position,
-    ) 
+    )
+    return self.parse_response(resp, "")
 
   # -------------- 3.4.2 X-Area reservation for external access --------------
 
@@ -887,21 +917,26 @@ class STAR(HamiltonLiquidHandler):
     """ Occupy and provide area for external access
 
     Args:
-      taken_area_identification_number: taken area identification number. Must be between 0 and 9999. Default 0.
+      taken_area_identification_number: taken area identification number. Must be between 0 and
+                                        9999. Default 0.
     taken_area_left_margin: taken area left margin. Must be between 0 and 99. Default 0.
-    taken_area_left_margin_direction: taken area left margin direction. 1 = negative. Must be between 0 and 1. Default 0.
+    taken_area_left_margin_direction: taken area left margin direction. 1 = negative. Must be
+                                      between 0 and 1. Default 0.
     taken_area_size: taken area size. Must be between 0 and 50000. Default 0.
-    arm_preposition_mode_related_to_taken_areas: 0) left arm to left & right arm to right. 1) all arms left.
+    arm_preposition_mode_related_to_taken_areas: 0) left arm to left & right arm to right.
+                                                 1) all arms left.
                                                  2) all arms right.
     """
 
-    _assert_clamp(taken_area_identification_number, 0, 9999, "taken_area_identification_number")
+    _assert_clamp(taken_area_identification_number, 0, 9999, \
+                  "taken_area_identification_number")
     _assert_clamp(taken_area_left_margin, 0, 99, "taken_area_left_margin")
     _assert_clamp(taken_area_left_margin_direction, 0, 1, "taken_area_left_margin_direction")
     _assert_clamp(taken_area_size, 0, 50000, "taken_area_size")
-    _assert_clamp(arm_preposition_mode_related_to_taken_areas, 0, 2, "arm_preposition_mode_(related_to_taken_area)s")
+    _assert_clamp(arm_preposition_mode_related_to_taken_areas, 0, 2, \
+                  "arm_preposition_mode_(related_to_taken_area)s")
 
-    return self.send_command(
+    resp = self.send_command(
       module="C0",
       command="BA",
       aq=taken_area_identification_number,
@@ -910,7 +945,8 @@ class STAR(HamiltonLiquidHandler):
       ar=taken_area_size,
       ap=arm_preposition_mode_related_to_taken_areas,
     )
-  
+    return self.parse_response(resp, "")
+
   def release_occupied_area(
     self,
     taken_area_identification_number: int = 0
@@ -918,55 +954,82 @@ class STAR(HamiltonLiquidHandler):
     """ Release occupied area
 
     Args:
-      taken_area_identification_number: taken area identification number. Must be between 0 and 9999. Default 0.
+      taken_area_identification_number: taken area identification number.
+                                        Must be between 0 and 9999. Default 0.
     """
 
     _assert_clamp(taken_area_identification_number, 0, 9999, "taken_area_identification_number")
 
-    return self.send_command(
+    resp = self.send_command(
       module="C0",
       command="BB",
       aq=taken_area_identification_number,
     )
-  
+    return self.parse_response(resp, "")
+
   def release_all_occupied_areas(self):
     """ Release all occupied areas """
 
-    return self.send_command(device="C0", command="BC")
+    resp = self.send_command(module="C0", command="BC")
+    return resp
 
   # -------------- 3.4.3 X-query --------------
 
   def request_left_x_arm_position(self):
     """ Request left X-Arm position """
 
-    return self.send_command(device="C0", command="RX")
-  
+    resp = self.send_command(module="C0", command="RX")
+    return self.parse_response(resp, "rx#####")
+
   def request_right_x_arm_position(self):
     """ Request right X-Arm position """
 
-    return self.send_command(device="C0", command="QX")
+    resp = self.send_command(module="C0", command="QX")
+    return self.parse_response(resp, "rx#####")
 
   def request_maximal_ranges_of_x_drives(self):
     """ Request maximal ranges of X drives """
 
-    return self.send_command(device="C0", command="RU")
-  
+    resp = self.send_command(module="C0", command="RU")
+    return self.parse_response(resp, "")
+
   def request_present_wrap_size_of_installed_arms(self):
     """ Request present wrap size of installed arms """
 
-    return self.send_command(device="C0", command="RU")
-  
+    resp = self.send_command(module="C0", command="UA")
+    return self.parse_response(resp, "")
+
   def request_left_x_arm_last_collision_type(self):
-    """ Request left X-Arm last collision type (after error 27) """
+    """ Request left X-Arm last collision type (after error 27)
 
-    return self.send_command(device="C0", command="XX")
-  
-  def request_right_x_arm_last_collision_type(self):
-    """ Request right X-Arm last collision type (after error 27) """
+    Returns:
+      False if present positions collide (not reachable),
+      True if position is never reachable.
+    """
 
-    return self.send_command(device="C0", command="XR")
+    resp = self.send_command(module="C0", command="XX")
+    parsed = self.parse_response(resp, "xq#")
+    return parsed["xq"] == 1
+
+  def request_right_x_arm_last_collision_type(self) -> bool:
+    """ Request right X-Arm last collision type (after error 27)
+
+    Returns:
+      False if present positions collide (not reachable),
+      True if position is never reachable.
+    """
+
+    resp = self.send_command(module="C0", command="XR")
+    parsed = self.parse_response(resp, "xq#")
+    return parsed["xq"] == 1
+
+  # -------------- 3.5 Pipetting channel commands --------------
+
+  # -------------- 3.5.1 Initialization --------------
+
+
 
 # TODO: temp test
 if __name__ == "__main__":
-  v = STAR()
-  print(v.request_master_status())
+  dev = STAR()
+  print(dev.request_master_status())
