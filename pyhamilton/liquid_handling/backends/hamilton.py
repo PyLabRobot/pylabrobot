@@ -5,6 +5,7 @@ This file defines interfaces for all supported Hamilton liquid handling robots.
 from abc import ABCMeta, abstractmethod
 import datetime
 import enum
+import logging
 import re
 import time
 import typing
@@ -70,6 +71,8 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
         k = k[:-1]
       cmd += "{k}{v}"
 
+    logging.info("Sent command: %s", cmd)
+
     # write command to endpoint
     self.dev.write(self.write_endpoint)
 
@@ -82,6 +85,9 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
         self.read_endpoint.wMaxPacketSize
       )
       time.sleep(self.read_poll_interval)
+
+    logging.info("Received response: %s", res)
+
     return res
 
   def parse_response(self, resp: str, fmt: str):
@@ -197,13 +203,19 @@ class STAR(HamiltonLiquidHandler):
     Creates a USB connection and finds read/write interfaces.
     """
 
+    logging.info("Finding Hamilton USB device...")
+
     self.dev = usb.core.find(idVendor=0x08af)
     if self.dev is None:
       raise ValueError("Hamilton STAR device not found.")
 
+    logging.info("Found Hamilton USB device.")
+
     # TODO: can we find endpoints dynamically?
     self.write_endpoint = 0x3
     self.read_endpoint = 0x83
+
+    logging.info("Found endpoints. Write: %x Read %x", self.write_endpoint, self.read_endpoint)
 
   def _read(self):
     """
@@ -3345,18 +3357,18 @@ class STAR(HamiltonLiquidHandler):
     )
 
   def get_logic_iswap_position(
-  self,
-  x_position: int = 0,
-  x_direction: int = 0,
-  y_position: int = 0,
-  y_direction: int = 0,
-  z_position: int = 0,
-  z_direction: int = 0,
-  location: int = 0,
-  hotel_depth: int = 1300,
-  grip_direction: int = 1,
-  collision_control_level: int = 1
-):
+    self,
+    x_position: int = 0,
+    x_direction: int = 0,
+    y_position: int = 0,
+    y_direction: int = 0,
+    z_position: int = 0,
+    z_direction: int = 0,
+    location: int = 0,
+    hotel_depth: int = 1300,
+    grip_direction: int = 1,
+    collision_control_level: int = 1
+  ):
     """ Get logic iSWAP position
 
     Args:
