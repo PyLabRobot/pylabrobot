@@ -11,6 +11,7 @@ import time
 import typing
 
 import usb.core
+import usb.util
 
 # TODO: from .backend import LiquidHanderBackend
 
@@ -211,9 +212,26 @@ class STAR(HamiltonLiquidHandler):
 
     logging.info("Found Hamilton USB device.")
 
-    # TODO: can we find endpoints dynamically?
-    self.write_endpoint = 0x3
-    self.read_endpoint = 0x83
+    # set the active configuration. With no arguments, the first
+    # configuration will be the active one
+    self.dev.set_configuration()
+
+    cfg = self.dev.get_active_configuration()
+    intf = cfg[(0,0)]
+
+    self.write_endpoint = usb.util.find_descriptor(
+      intf,
+      custom_match = \
+      lambda e: \
+          usb.util.endpoint_direction(e.bEndpointAddress) == \
+          usb.util.ENDPOINT_OUT) # 0x3?
+
+    self.read_endpoint = usb.util.find_descriptor(
+      intf,
+      custom_match = \
+      lambda e: \
+          usb.util.endpoint_direction(e.bEndpointAddress) == \
+          usb.util.ENDPOINT_IN) # 0x83?
 
     logging.info("Found endpoints. Write: %x Read %x", self.write_endpoint, self.read_endpoint)
 
