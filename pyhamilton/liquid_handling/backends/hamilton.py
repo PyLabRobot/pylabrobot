@@ -14,7 +14,7 @@ import usb.core
 import usb.util
 
 # TODO: from .backend import LiquidHanderBackend
-
+logger = logging.getLogger(__name__)
 
 # TODO: move to util.
 def _assert_clamp(v, min_, max_, name):
@@ -27,21 +27,20 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
   """
 
   @abstractmethod
-  def __init__(self, read_poll_interval=10):
+  def __init__(self, read_poll_interval=0.005):
     """
 
     Args:
-      read_poll_interval: The sleep after each check for device responses, in ms.
+      read_poll_interval: The sleep after each check for device responses, in seconds.
     """
 
-    self.read_poll_interval = read_poll_interval # ms
+    self.read_poll_interval = read_poll_interval
+    self.id_ = 0
 
-  def generate_id(self):
+  def _generate_id(self):
     """ continuously generate unique ids 0 <= x < 10000. """
-    id_ = 0
-    while True:
-      yield id_ % 10000
-      id_ += 1
+    self.id_ += 1
+    return f'{self.id_ % 10000:04}'
 
   # TODO: add response format param, and parse response here.
   # If None, return raw response.
@@ -60,7 +59,7 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
 
     # assemble command
     cmd = module + command
-    id = self.generate_id()
+    id = self._generate_id()
     cmd += f"id{id}" # has to be first param
 
     for k, v in kwargs.items(): # pylint: disable=unused-variable
@@ -70,24 +69,25 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
         v = 1 if v else 0
       if k.endswith("_"): # workaround for kwargs named in, as, ...
         k = k[:-1]
-      cmd += "{k}{v}"
+      cmd += f"{k}{v}"
 
-    logging.info("Sent command: %s", cmd)
+    logger.info("Sent command: %s", cmd)
 
     # write command to endpoint
-    self.dev.write(self.write_endpoint)
+    self.dev.write(self.write_endpoint, cmd)
 
-    # TODO: this code should be somewhere else.
-    # block by default
     res = None
-    while res is None:
+    while True:
       res = self.dev.read(
         self.read_endpoint,
         self.read_endpoint.wMaxPacketSize
       )
+      if res is not None:
+        break
       time.sleep(self.read_poll_interval)
+    res = bytearray(res).decode('utf-8') # convert res into text
 
-    logging.info("Received response: %s", res)
+    logger.info("Received response: %s", res)
 
     return res
 
@@ -204,13 +204,13 @@ class STAR(HamiltonLiquidHandler):
     Creates a USB connection and finds read/write interfaces.
     """
 
-    logging.info("Finding Hamilton USB device...")
+    logger.info("Finding Hamilton USB device...")
 
     self.dev = usb.core.find(idVendor=0x08af)
     if self.dev is None:
       raise ValueError("Hamilton STAR device not found.")
 
-    logging.info("Found Hamilton USB device.")
+    logger.info("Found Hamilton USB device.")
 
     # set the active configuration. With no arguments, the first
     # configuration will be the active one
@@ -233,7 +233,7 @@ class STAR(HamiltonLiquidHandler):
           usb.util.endpoint_direction(e.bEndpointAddress) == \
           usb.util.ENDPOINT_IN) # 0x83?
 
-    logging.info("Found endpoints. Write: %x Read %x", self.write_endpoint, self.read_endpoint)
+    logger.info("Found endpoints. Write: %x Read %x", self.write_endpoint, self.read_endpoint)
 
   def _read(self):
     """
@@ -3451,7 +3451,7 @@ class STAR(HamiltonLiquidHandler):
       1 = plate holding
     """
 
-    resp = self.send_command(module="C0", command="RG")
+    resp = self.send_command(module="C0", command="QP")
     return self.parse_response(resp, "rg#")
 
   def request_iswap_position(self):
@@ -3466,7 +3466,7 @@ class STAR(HamiltonLiquidHandler):
       zd: Z direction 0 = positive 1 = negative
     """
 
-    resp = self.send_command(module="C0", command="RG")
+    resp = self.send_command(module="C0", command="QG")
     return self.parse_response(resp, "xs#####xd#yj####yd#zj####zd#")
 
 
