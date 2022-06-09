@@ -40,7 +40,7 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
   def _generate_id(self):
     """ continuously generate unique ids 0 <= x < 10000. """
     self.id_ += 1
-    return f'{self.id_ % 10000:04}'
+    return f"{self.id_ % 10000:04}"
 
   # TODO: add response format param, and parse response here.
   # If None, return raw response.
@@ -62,11 +62,13 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     id = self._generate_id()
     cmd += f"id{id}" # has to be first param
 
-    for k, v in kwargs.items(): # pylint: disable=unused-variable
+    for k, v in kwargs.items():
       if type(v) is datetime.datetime:
         v = v.strftime("%Y-%m-%d %h:%M")
       elif type(v) is bool:
         v = 1 if v else 0
+      elif type(v) is list:
+        v = " ".join([str(e) for e in v]) + "&"
       if k.endswith("_"): # workaround for kwargs named in, as, ...
         k = k[:-1]
       cmd += f"{k}{v}"
@@ -85,7 +87,7 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
       if res is not None:
         break
       time.sleep(self.read_poll_interval)
-    res = bytearray(res).decode('utf-8') # convert res into text
+    res = bytearray(res).decode("utf-8") # convert res into text
 
     logger.info("Received response: %s", res)
 
