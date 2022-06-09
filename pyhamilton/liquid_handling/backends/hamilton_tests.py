@@ -8,32 +8,43 @@ class TestSTAR(unittest.TestCase):
     super().setUp()
     self.star = STAR()
 
-  def test_parse_response(self):
-    parsed = self.star.parse_response("C0QMid1111", "")
+  def test_parse_response_params(self):
+    parsed = self.star.parse_response("C0QMid1111", "")[0]
     self.assertEqual(parsed, {'id': 1111})
 
-    parsed = self.star.parse_response("C0QMid1111", "id####")
+    parsed = self.star.parse_response("C0QMid1111", "id####")[0]
     self.assertEqual(parsed, {'id': 1111})
 
-    parsed = self.star.parse_response("C0QMid1112aaabc", "aa&&&")
+    parsed = self.star.parse_response("C0QMid1112aaabc", "aa&&&")[0]
     self.assertEqual(parsed, {'id': 1112, 'aa': 'abc'})
 
-    parsed = self.star.parse_response("C0QMid1112aa-21", "aa##")
+    parsed = self.star.parse_response("C0QMid1112aa-21", "aa##")[0]
     self.assertEqual(parsed, {'id': 1112, 'aa': -21})
 
-    parsed = self.star.parse_response("C0QMid1113pqABC", "pq***")
+    parsed = self.star.parse_response("C0QMid1113pqABC", "pq***")[0]
     self.assertEqual(parsed, {'id': 1113, 'pq': int('ABC', base=16)})
 
     with self.assertRaises(ValueError) as ctx:
       # should fail with auto-added id.
-      parsed = self.star.parse_response("C0QMaaabc", "")
+      parsed = self.star.parse_response("C0QMaaabc", "")[0]
       self.assertEqual(parsed, '')
 
     with self.assertRaises(ValueError) as ctx:
-      self.star.parse_response("C0QM", "id####")
+      self.star.parse_response("C0QM", "id####")[0]
 
     with self.assertRaises(ValueError) as ctx:
-      self.star.parse_response("C0RV", "")
+      self.star.parse_response("C0RV", "")[0]
+
+  def test_parse_response_errors(self):
+    parsed = self.star.parse_response("C0QMid1111", "")[1]
+    self.assertIsNone(parsed)
+
+    parsed = self.star.parse_response("C0QMid1111 er00/00", "")[1]
+    self.assertEqual(parsed, {'error': '00/00'})
+
+    parsed = self.star.parse_response("C0QMid1111 er99/00 P103/00 P203/00 P402/50 P603/00", "")[1]
+    self.assertEqual(parsed, {'error': '99/00', 'P1': '03/00', 'P2': '03/00', 'P4': '02/50',
+                              'P6': '03/00'})
 
 
 if __name__ == "__main__":

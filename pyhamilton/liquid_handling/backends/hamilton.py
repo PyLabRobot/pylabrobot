@@ -93,7 +93,7 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
 
     return res
 
-  def parse_response(self, resp: str, fmt: str):
+  def parse_response(self, resp: str, fmt: str) -> typing.Tuple[dict, dict]:
     """ Parse a machine response according to a format string.
 
     The format contains names of parameters (always length 2),
@@ -132,8 +132,8 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     like this: ua#### #### ###### ###### ###### ######
     """
 
-    # Verify format and resp match.
-    resp = resp[4:] # remove device and cmd identifier from response.
+    # Remove device and cmd identifier from response.
+    resp = resp[4:]
 
     # Parse the parameters in the fmt string.
     info = {}
@@ -171,6 +171,7 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
       elif type_ == "hex":
         info[name] = int(m, base=16)
 
+    # Find params in string. All params are identified by 2 lowercase chars.
     param = ""
     for char in fmt:
       if char.islower():
@@ -183,7 +184,23 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     if "id" not in info: # auto add id if we don't have it yet.
       find_param("id####")
 
-    return info
+    # Parse errors.
+    # The default error is er##/## where the first group is the error code, and the second
+    # group is the trace information.
+    # Beyond that, specific errors may be added for individual channels and modules. These
+    # are formatted as P1##/##, H0##/##, etc. These items are added programmatically as
+    # named capturing groups to the regex.
+    exp = 'er(?P<error>[0-9]{2}\/[0-9]{2})'
+    for module in ['C0', 'X0', 'I0', 'W1', 'W2', 'T1', 'T2', 'R0', 'P1', 'P2', 'P3', 'P4', 'P5',
+                   'P6', 'P7', 'P8', 'P9', 'PA', 'PB', 'PC', 'PD', 'PE', 'PF', 'PG', 'H0', 'HW',
+                   'HU', 'HV', 'N0', 'D0', 'NP', 'M1']:
+      exp += f' ?(?:{module}(?P<{module}>[0-9]{{2}}\/[0-9]{{2}}))?'
+    errors = re.search(exp, resp)
+    if errors is not None:
+      errors = errors.groupdict()
+      errors = {k:v for k,v in errors.items() if v is not None} # filter None elements
+
+    return (info, errors)
 
 
 class STAR(HamiltonLiquidHandler):
