@@ -190,11 +190,11 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     # Beyond that, specific errors may be added for individual channels and modules. These
     # are formatted as P1##/##, H0##/##, etc. These items are added programmatically as
     # named capturing groups to the regex.
-    exp = 'er(?P<error>[0-9]{2}\/[0-9]{2})'
-    for module in ['C0', 'X0', 'I0', 'W1', 'W2', 'T1', 'T2', 'R0', 'P1', 'P2', 'P3', 'P4', 'P5',
-                   'P6', 'P7', 'P8', 'P9', 'PA', 'PB', 'PC', 'PD', 'PE', 'PF', 'PG', 'H0', 'HW',
-                   'HU', 'HV', 'N0', 'D0', 'NP', 'M1']:
-      exp += f' ?(?:{module}(?P<{module}>[0-9]{{2}}\/[0-9]{{2}}))?'
+    exp = r"er(?P<error>[0-9]{2}/[0-9]{2})"
+    for module in ["C0", "X0", "I0", "W1", "W2", "T1", "T2", "R0", "P1", "P2", "P3", "P4", "P5",
+                   "P6", "P7", "P8", "P9", "PA", "PB", "PC", "PD", "PE", "PF", "PG", "H0", "HW",
+                   "HU", "HV", "N0", "D0", "NP", "M1"]:
+      exp += f" ?(?:{module}(?P<{module}>[0-9]{{2}}/[0-9]{{2}}))?"
     errors = re.search(exp, resp)
     if errors is not None:
       errors = errors.groupdict()
@@ -1107,7 +1107,7 @@ class STAR(HamiltonLiquidHandler):
       tip_pattern: Tip pattern (channels involved).
       tip_type: Tip type.
       begin_tip_pick_up_process: Begin of tip picking up process (Z- range) [0.1mm]. Must be
-          between 0 and 2. Default 0.
+          between 0 and 3600. Default 0.
       end_tip_pick_up_process: End of tip picking up process (Z- range) [0.1mm]. Must be
           between 0 and 3600. Default 0.
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning
