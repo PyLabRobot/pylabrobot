@@ -57,6 +57,18 @@ class Carrier(Resource, metaclass=ABCMeta):
   def __delitem__(self, key: int):
     self._sites[key]["item"] = None
 
+  def serialize(self):
+    return dict(
+      **super().serialize(),
+      sites=[
+        dict(
+          site_id=site_id,
+          location=subresource["loc"].serialize(),
+          # use __getitem__ to update location.
+          resource=(self[site_id].serialize() if subresource["item"] is not None else None)
+        ) for site_id, subresource in self._sites.items()]
+    )
+
 
 class PlateCarrier(Carrier, metaclass=ABCMeta):
   pass

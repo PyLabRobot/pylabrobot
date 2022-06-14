@@ -2,13 +2,26 @@
 # pylint: disable=missing-class-docstring
 
 import io
+import os
+import tempfile
 import textwrap
 import unittest
 import unittest.mock
 
 from . import backends
 from .liquid_handler import LiquidHandler
-from .resources import Coordinate, TIP_CAR_480_A00, PLT_CAR_L5AC_A00, Cos_96_DW_1mL, Cos_96_DW_500ul
+from .resources import (
+  Coordinate,
+  Carrier,
+  PlateCarrier,
+  Plate,
+  TipCarrier,
+  Tips,
+  TIP_CAR_480_A00,
+  PLT_CAR_L5AC_A00,
+  Cos_96_DW_1mL,
+  Cos_96_DW_500ul
+)
 from .resources.ml_star import STF_L, HTF_L
 
 
@@ -208,12 +221,63 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[3].name, "Cos_96_PCR_0001")
     self.assertIsNone(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[4])
 
-  def test_parse_json_file(self):
-    pass
+  def assert_same(self, lh1, lh2):
+    # pylint: disable=protected-access
+    self.assertEqual(len(lh1._resources), len(lh2._resources))
 
-  def test_serialize_json(self):
-    pass
+    for r_name in lh1._resources:
+      resource_1 = lh1.get_resource(r_name)
+      resource_2 = lh2.get_resource(r_name)
 
+      self.assertEqual(resource_1.location, resource_2.location)
+      self.assertEqual(type(resource_1), type(resource_2))
+
+      if isinstance(resource_1, Carrier):
+        self.assertEqual(len(resource_1._sites), len(resource_2._sites))
+
+        for key in range(resource_1.capacity):
+          subresource_1 = resource_1[key]
+          subresource_2        = resource_2[key]
+          self.assertEqual(type(subresource_1), type(subresource_2))
+          if subresource_2 is None:
+            self.assertIsNone(subresource_1)
+          else:
+            self.assertEqual(subresource_1.name, subresource_2.name)
+
+  def test_json_serialization(self):
+    # test with standard resource classes
+    self.build_layout()
+    tmp_dir = tempfile.gettempdir()
+    fn = os.path.join(tmp_dir, "layout.json")
+    self.lh.save(fn)
+
+    star = backends.STAR()
+    recovered = LiquidHandler(star)
+    recovered.load_from_json(fn)
+
+    self.assert_same(self.lh, recovered)
+
+    # test with custom classes
+    custom_1 = LiquidHandler(star)
+    tc = TipCarrier("tc", 200, 200, 200, [
+      Coordinate(10, 20, 30)
+    ])
+    tc[0] = Tips("tips", 10, 20, 30, "tip_type", -1, -1, -1)
+    pc = PlateCarrier("pc", 100, 100, 100, [
+      Coordinate(40, 50, 60)
+    ])
+    pc[0] = Plate("plate", 10, 20, 30, -1, -1, -1)
+
+    fn = os.path.join(tmp_dir, "layout.json")
+    custom_1.save(fn)
+    custom_recover = LiquidHandler(star)
+    custom_recover.load(fn)
+
+    self.assert_same(custom_1, custom_recover)
+
+    # unsupported format
+    with self.assertRaises(ValueError):
+      custom_recover.load(fn + ".unsupported")
 
 if __name__ == "__main__":
   unittest.main()

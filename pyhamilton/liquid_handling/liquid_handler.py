@@ -1,5 +1,6 @@
 import copy
 import inspect
+import json
 import typing
 
 import pyhamilton.utils.file_parsing as file_parser
@@ -135,12 +136,6 @@ class LiquidHandler:
     """
 
     del self._resources[name]
-
-  def read_layout_from_json(self, name: str):
-    pass # TODO: this
-
-  def save_layout_to_json(self):
-    pass # TODO: this
 
   def get_resource(self, name: str) -> typing.Optional[Resource]:
     """ Find a resource in self or contained in a carrier in self.
@@ -283,3 +278,89 @@ class LiquidHandler:
     # Assign all resources to self.
     for cont in containers.values():
       self.assign_resource(cont, location=cont.location)
+
+  def save(self, fn: str, indent: typing.Optional[int] = None):
+    """ Save a deck layout to a JSON file.
+
+    Args:
+      fn: File name. Caution: file will be overwritten.
+      indent: Same as `json.dump`'s `indent` argument (for json pretty printing).
+    """
+
+    serialized_resources = []
+
+    for resource in self._resources.values():
+      print(resource.serialize())
+      serialized_resources.append(resource.serialize())
+
+    deck = dict(resources=serialized_resources)
+
+    with open(fn, "w", encoding="utf-8") as f:
+      json.dump(deck, f, indent=indent)
+
+  def load_from_json(self, fn: str):
+    """ Load deck layout serialized in a layout file.
+
+    Args:
+      fn: File name.
+    """
+
+    with open(fn, "r", encoding="utf-8") as f:
+      content = json.load(f)
+    dict_resources = content["resources"]
+
+    # Get class names of all defined resources.
+    resource_classes = [c[0] for c in inspect.getmembers(resources)]
+
+    for resource_dict in dict_resources:
+      klass_type = resource_dict["type"]
+      location = Coordinate.deserialize(resource_dict.pop("location"))
+      if klass_type in resource_classes: # properties pre-defined
+        klass = getattr(resources, resource_dict["type"])
+        resource = klass(name=resource_dict["name"])
+      else: # read properties explicitly
+        args = dict(
+          name=resource_dict["name"],
+          size_x=resource_dict["size_x"],
+          size_y=resource_dict["size_y"],
+          size_z=resource_dict["size_z"]
+        )
+        if "type" in resource_dict:
+          args["type"] = resource_dict["type"]
+        subresource = subresource_klass(**args)
+
+      if "sites" in resource_dict:
+        for subresource_dict in resource_dict["sites"]:
+          if subresource_dict["resource"] is None:
+            continue
+          sublocation = Coordinate.deserialize(subresource_dict["resource"]["location"])
+          subtype = subresource_dict["resource"]["type"]
+          if subtype in resource_classes: # properties pre-defined
+            subresource_klass = getattr(resources, subtype)
+            subresource = subresource_klass(name=subresource_dict["resource"]["name"])
+          else: # read properties explicitly
+            subresource = subresource_klass(
+              name=subresource_dict["resource"]["name"],
+              size_x=subresource_dict["resource"]["size_x"],
+              size_y=subresource_dict["resource"]["size_y"],
+              size_z=subresource_dict["resource"]["size_z"]
+            )
+          resource[subresource_dict["site_id"]] = subresource
+
+      self.assign_resource(resource, location=location)
+
+  def load(self, fn: str, format: typing.Optional[str] = None):
+    """ Load deck layout serialized in a file, either from a .lay or .json file.
+
+    Args:
+      fn: Filename for serialized model file.
+      format: file format (`json` or `lay`). If None, file format will be inferred from file name.
+    """
+
+    extension = '.' + (format or fn.split(".")[-1])
+    if extension == ".json":
+      self.load_from_json(fn)
+    elif extension == ".lay":
+      self.load_from_lay_file(fn)
+    else:
+      raise ValueError(f"Unsupported file extension: {extension}")

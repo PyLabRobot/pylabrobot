@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class Coordinate:
   """ Represents coordinates, often relative to either a liquid handler or container """
 
@@ -7,10 +10,18 @@ class Coordinate:
     self.z = z
 
   def __add__(self, other):
-    return Coordinate(self.x + other.x, self.y + other.y, self.z + other.z)
+    return Coordinate(
+      x=(self.x or 0) + (other.x or 0),
+      y=(self.y or 0) + (other.y or 0),
+      z=(self.z or 0) + (other.z or 0)
+    )
 
   def __sub__(self, other):
-    return Coordinate(self.x + other.x, self.y + other.y, self.z + other.z)
+    return Coordinate(
+      x=(self.x or 0) - (other.x or 0),
+      y=(self.y or 0) - (other.y or 0),
+      z=(self.z or 0) - (other.z or 0)
+    )
 
   def __eq__(self, other):
     return self.x == other.x and self.y == other.y and self.z == other.z
@@ -22,3 +33,10 @@ class Coordinate:
 
   def __repr__(self):
     return f"Coordinate({self.x}, {self.y}, {self.z})"
+
+  def serialize(self) -> dict:
+    return dict(x=self.x, y=self.y, z=self.z)
+
+  @staticmethod
+  def deserialize(d: dict) -> Coordinate:
+    return Coordinate(x=d["x"], y=d["y"], z=d["z"])

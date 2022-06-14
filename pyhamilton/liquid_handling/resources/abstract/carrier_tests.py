@@ -88,6 +88,92 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.tip_car[1] = self.B
     self.assertEqual(self.tip_car[1].location, Coordinate(19, 52, 28))
 
+  def test_serialization(self):
+    self.maxDiff = None
+    self.assertEqual(self.tip_car.serialize(), {
+      "location": {"x": None, "y": None, "z": None},
+      "name": "tip_car",
+      "sites": [
+        {
+          "location": {"x": 10, "y": 20, "z": 30},
+          "resource": None,
+          "site_id": 0
+        },
+        {
+          "location": {"x": 10, "y": 50, "z": 30},
+          "resource": None,
+          "site_id": 1
+        },
+        {
+          "location": {"x": 10, "y": 80, "z": 30},
+          "resource": None,
+          "site_id": 2
+        },
+        {
+          "location": {"x": 10, "y": 130, "z": 30},
+          "resource": None,
+          "site_id": 3
+        },
+        {
+          "location": {"x": 10, "y": 160, "z": 30},
+          "resource": None,
+          "site_id": 4
+        }
+      ],
+      "size_x": 135.0,
+      "size_y": 497.0,
+      "size_z": 13.0,
+      "type": "TipCarrier"
+    })
+
+    self.tip_car[1] = self.B
+    self.assertEqual(self.tip_car.serialize(), {
+      "location": {"x": None, "y": None, "z": None},
+      "name": "tip_car",
+      "sites": [
+        {
+          "location": {"x": 10, "y": 20, "z": 30},
+          "resource": None,
+          "site_id": 0
+        },
+        {
+          "location": {"x": 10, "y": 50, "z": 30},
+          "resource": {
+            "dx": 9,
+            "dy": 2,
+            "dz": -2,
+            "location": {"x": 19, "y": 52, "z": 28},
+            "name": "B",
+            "size_x": 5,
+            "size_y": 5,
+            "size_z": 5,
+            "tip_type": "tip_type",
+            "type": "Tips"
+          },
+          "site_id": 1
+        },
+        {
+          "location": {"x": 10, "y": 80, "z": 30},
+          "resource": None,
+          "site_id": 2
+        },
+        {
+          "location": {"x": 10, "y": 130, "z": 30},
+          "resource": None,
+          "site_id": 3
+        },
+        {
+          "location": {"x": 10, "y": 160, "z": 30},
+          "resource": None,
+          "site_id": 4
+        }
+      ],
+      "size_x": 135.0,
+      "size_y": 497.0,
+      "size_z": 13.0,
+      "type": "TipCarrier"
+    })
+
 
 if __name__ == "__main__":
   unittest.main()
