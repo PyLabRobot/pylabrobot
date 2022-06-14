@@ -85,6 +85,9 @@ class LiquidHandler:
                will be raised.
     """
 
+    if not 1 <= rails <= 30:
+      raise ValueError("Rails must be between 1 and 30.")
+
     # Check if resource exists.
     if resource.name in self._resources:
       if replace:
@@ -95,6 +98,8 @@ class LiquidHandler:
 
     # Set resource location.
     resource.location = Coordinate(x=LiquidHandler._x_coordinate_for_rails(rails), y=63, z=100)
+    if resource.location.x + resource.size_x > LiquidHandler._x_coordinate_for_rails(30):
+      raise ValueError(f"Resource with width {resource.size_x} does not fit at rails {rails}.")
 
     # Check if there is space for this new resource.
     for og_resource in self._resources.values():

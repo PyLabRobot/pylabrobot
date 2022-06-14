@@ -58,6 +58,14 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     with self.assertRaises(KeyError):
       self.lh.unassign_resource("this resource is completely new.")
 
+    # Test invalid rails.
+    with self.assertRaises(ValueError):
+      self.lh.assign_resource(plt_car, rails=-1)
+    with self.assertRaises(ValueError):
+      self.lh.assign_resource(plt_car, rails=42)
+    with self.assertRaises(ValueError):
+      self.lh.assign_resource(plt_car, rails=27)
+
   def test_get_resource(self):
     tip_car = TIP_CAR_480_A00(name="tip carrier")
     tip_car[0] = STF_L(name="tips_01")
