@@ -1,7 +1,11 @@
 import copy
+import inspect
 import typing
 
+import pyhamilton.utils.file_parsing as file_parser
+
 from .backends import LiquidHandlerBackend
+from . import resources
 from .errors import (
   NoTipsException
 )
@@ -61,7 +65,8 @@ class LiquidHandler:
   def assign_resource(
     self,
     resource: Resource,
-    rails: int, # board location, 1..52
+    rails: typing.Optional[int] = None, # board location, 1..52
+    location: typing.Optional[Coordinate] = None,
     # y: int, # board location, x..y?
     replace: bool = False
   ):
@@ -79,13 +84,18 @@ class LiquidHandler:
     Args:
       resource: A Resource to assign to this liquid handler.
       rails: The left most real (inclusive) of the deck resource (between and 1-30 for STARLet,
-             max 54 for STAR.)
+             max 54 for STAR.) Either rails or location must be None, but not both.
+      location: The location of the resource relative to the liquid handler. Either rails or
+                location must be None, but not both.
       replace: Replace the resource with the same name that was previously assigned, if it exists.
                If a resource is assigned with the same name and replace is False, a ValueError
                will be raised.
     """
 
-    if not 1 <= rails <= 30:
+    if (rails is not None) == (location is not None):
+      raise ValueError("Rails or location must be None.")
+
+    if rails is not None and not 1 <= rails <= 30:
       raise ValueError("Rails must be between 1 and 30.")
 
     # Check if resource exists.
@@ -97,7 +107,11 @@ class LiquidHandler:
         raise ValueError(f"Resource with name '{resource.name}' already defined.")
 
     # Set resource location.
-    resource.location = Coordinate(x=LiquidHandler._x_coordinate_for_rails(rails), y=63, z=100)
+    if rails is not None:
+      resource.location = Coordinate(x=LiquidHandler._x_coordinate_for_rails(rails), y=63, z=100)
+    else:
+      resource.location = location
+
     if resource.location.x + resource.size_x > LiquidHandler._x_coordinate_for_rails(30):
       raise ValueError(f"Resource with width {resource.size_x} does not fit at rails {rails}.")
 
@@ -121,9 +135,6 @@ class LiquidHandler:
     """
 
     del self._resources[name]
-
-  def read_layout_from_layfile(self, name: str):
-    pass # TODO: this
 
   def read_layout_from_json(self, name: str):
     pass # TODO: this
@@ -160,10 +171,10 @@ class LiquidHandler:
 
     Example output:
 
-    Rail     Resource             Type                Coordinates (mm)
-    ==========================================================================================
-     (1) ├── tip_car               TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
-         │   ├── tips_01           STF_L               (x: 117.900, y: 240.000, z: 100.000)
+    Rail     Resource                   Type                Coordinates (mm)
+    ===============================================================================================
+     (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
+         │   ├── tips_01                STF_L               (x: 117.900, y: 240.000, z: 100.000)
     """
 
     if len(self._resources) == 0:
@@ -174,14 +185,14 @@ class LiquidHandler:
       )
 
     # Print header.
-    print(_pad_string("Rail", 9) + _pad_string("Resource", 22) + \
+    print(_pad_string("Rail", 9) + _pad_string("Resource", 27) + \
           _pad_string("Type", 20) + "Coordinates (mm)")
-    print("=" * 85)
+    print("=" * 95)
 
     def print_resource(resource):
       rails = LiquidHandler._rails_for_x_coordinate(resource.location.x)
       rail_label = _pad_string(f"({rails})", 4)
-      print(f"{rail_label} ├── {_pad_string(resource.name, 22)}"
+      print(f"{rail_label} ├── {_pad_string(resource.name, 27)}"
             f"{_pad_string(resource.__class__.__name__, 20)}"
             f"{resource.location}")
 
@@ -192,7 +203,7 @@ class LiquidHandler:
           else:
             # Get subresource using `self.get_resource` to update it with the new location.
             subresource = self.get_resource(subresource.name)
-            print(f"     │   ├── {_pad_string(subresource.name, 22-4)}"
+            print(f"     │   ├── {_pad_string(subresource.name, 27-4)}"
                   f"{_pad_string(subresource.__class__.__name__, 20)}"
                   f"{subresource.location}")
 
@@ -204,3 +215,71 @@ class LiquidHandler:
     for resource in sorted_resources[1:]:
       print("     │")
       print_resource(resource)
+
+  def load_from_lay_file(self, fn: str):
+    """ Parse a .lay file (legacy layout definition) and build the layout on this liquid handler.
+
+    Args:
+      fn: Filename of .lay file.
+    """
+
+    c = None
+    with open(fn, "r", encoding="ISO-8859-1") as f:
+      c = f.read()
+
+    # Get class names of all defined resources.
+    resource_classes = [c[0] for c in inspect.getmembers(resources)]
+
+    # Get number of items on deck.
+    num_items = file_parser.find_int("Labware.Cnt", c)
+
+    # Collect all items on deck.
+
+    containers = {}
+    children = {}
+
+    for i in range(1, num_items+1):
+      name = file_parser.find_string(f"Labware.{i}.Id", c)
+
+      # get class name (generated from file name)
+      file_name = file_parser.find_string(f"Labware.{i}.File", c).split("\\")[-1]
+      class_name = None
+      if ".rck" in file_name:
+        class_name = file_name.split(".rck")[0]
+      elif ".tml" in file_name:
+        class_name = file_name.split(".tml")[0]
+
+      if class_name in resource_classes:
+        klass = getattr(resources, class_name)
+        resource = klass(name=name)
+      else:
+        # TODO: replace with real template.
+        # logger.warning(
+          # "Resource with classname %s not found. Please file an issue at "
+          # "https://github.com/pyhamilton/pyhamilton/issues/new?assignees=&"
+          # "labels=&template=bug_report.md&title=Class\%20%s\%20not\%20found", class_name)
+        continue
+
+      # get location props
+      # 'default' template means resource are placed directly on the deck, otherwise it
+      # contains the name of the containing resource.
+      if file_parser.find_string(f"Labware.{i}.Template", c) == "default":
+        x = file_parser.find_float(f"Labware.{i}.TForm.3.X", c)
+        y = file_parser.find_float(f"Labware.{i}.TForm.3.Y", c)
+        z = file_parser.find_float(f"Labware.{i}.ZTrans", c)
+        resource.location = Coordinate(x=x, y=y, z=z)
+        containers[name] = resource
+      else:
+        children[name] = {
+          "container": file_parser.find_string(f"Labware.{i}.Template", c),
+          "site": file_parser.find_int(f"Labware.{i}.SiteId", c),
+          "resource": resource}
+
+    # Assign child resources to their parents.
+    for child in children.values():
+      cont = containers[child["container"]]
+      cont[5 - child["site"]] = child["resource"]
+
+    # Assign all resources to self.
+    for cont in containers.values():
+      self.assign_resource(cont, location=cont.location)

@@ -138,19 +138,19 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.build_layout()
     self.maxDiff = None # pylint: disable=invalid-name
     expected_out = textwrap.dedent("""
-    Rail     Resource              Type                Coordinates (mm)
-    =====================================================================================
-    (1)  ├── tip carrier           TIP_CAR_480_A00     (100.000, 063.000, 100.000)
-         │   ├── tips_01           STF_L               (117.900, 145.800, 164.450)
-         │   ├── tips_02           STF_L               (117.900, 241.800, 164.450)
+    Rail     Resource                   Type                Coordinates (mm)
+    ===============================================================================================
+    (1)  ├── tip carrier                TIP_CAR_480_A00     (100.000, 063.000, 100.000)
+         │   ├── tips_01                STF_L               (117.900, 145.800, 164.450)
+         │   ├── tips_02                STF_L               (117.900, 241.800, 164.450)
          │   ├── <empty>
-         │   ├── tips_04           HTF_L               (117.900, 433.800, 131.450)
+         │   ├── tips_04                HTF_L               (117.900, 433.800, 131.450)
          │   ├── <empty>
          │
-    (21) ├── plate carrier         PLT_CAR_L5AC_A00    (550.000, 063.000, 100.000)
-         │   ├── aspiration plate  Cos_96_DW_1mL       (568.000, 146.000, 187.150)
+    (21) ├── plate carrier              PLT_CAR_L5AC_A00    (550.000, 063.000, 100.000)
+         │   ├── aspiration plate       Cos_96_DW_1mL       (568.000, 146.000, 187.150)
          │   ├── <empty>
-         │   ├── dispense plate    Cos_96_DW_500ul     (568.000, 338.000, 188.150)
+         │   ├── dispense plate         Cos_96_DW_500ul     (568.000, 338.000, 188.150)
          │   ├── <empty>
          │   ├── <empty>
     """[1:])
@@ -158,7 +158,55 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertEqual(out.getvalue(), expected_out)
 
   def test_parse_lay_file(self):
-    pass
+    fn = "./pyhamilton/testing/test_data/test_deck.lay"
+    self.lh.load_from_lay_file(fn)
+
+    self.assertEqual(self.lh.get_resource("TIP_CAR_480_A00_0001").location, \
+                     Coordinate(122.500, 63.000, 100.000))
+    self.assertEqual(self.lh.get_resource("tips_01").location, \
+                     Coordinate(140.400, 145.800, 164.450))
+    self.assertEqual(self.lh.get_resource("STF_L_0001").location, \
+                     Coordinate(140.400, 241.800, 164.450))
+    self.assertEqual(self.lh.get_resource("tips_04").location, \
+                     Coordinate(140.400, 433.800, 131.450))
+
+    self.assertEqual(self.lh.get_resource("TIP_CAR_480_A00_0001")[0].name, "tips_01")
+    self.assertEqual(self.lh.get_resource("TIP_CAR_480_A00_0001")[1].name, "STF_L_0001")
+    self.assertIsNone(self.lh.get_resource("TIP_CAR_480_A00_0001")[2])
+    self.assertEqual(self.lh.get_resource("TIP_CAR_480_A00_0001")[3].name, "tips_04")
+    self.assertIsNone(self.lh.get_resource("TIP_CAR_480_A00_0001")[4])
+
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001").location, \
+                     Coordinate(302.500, 63.000, 100.000))
+    self.assertEqual(self.lh.get_resource("Cos_96_DW_1mL_0001").location, \
+                     Coordinate(320.500, 146.000, 187.150))
+    self.assertEqual(self.lh.get_resource("Cos_96_DW_500ul_0001").location, \
+                     Coordinate(320.500, 338.000, 188.150))
+    self.assertEqual(self.lh.get_resource("Cos_96_DW_1mL_0002").location, \
+                     Coordinate(320.500, 434.000, 187.150))
+    self.assertEqual(self.lh.get_resource("Cos_96_DW_2mL_0001").location, \
+                     Coordinate(320.500, 530.000, 187.150))
+
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[0].name, "Cos_96_DW_1mL_0001")
+    self.assertIsNone(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[1])
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[2].name, "Cos_96_DW_500ul_0001")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[3].name, "Cos_96_DW_1mL_0002")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[4].name, "Cos_96_DW_2mL_0001")
+
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002").location, \
+                     Coordinate(482.500, 63.000, 100.000))
+    self.assertEqual(self.lh.get_resource("Cos_96_DW_1mL_0003").location, \
+                     Coordinate(500.500, 146.000, 187.150))
+    self.assertEqual(self.lh.get_resource("Cos_96_DW_500ul_0003").location, \
+                     Coordinate(500.500, 242.000, 188.150))
+    self.assertEqual(self.lh.get_resource("Cos_96_PCR_0001").location, \
+                     Coordinate(500.500, 434.000, 186.650))
+
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[0].name, "Cos_96_DW_1mL_0003")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[1].name, "Cos_96_DW_500ul_0003")
+    self.assertIsNone(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[2])
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[3].name, "Cos_96_PCR_0001")
+    self.assertIsNone(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[4])
 
   def test_parse_json_file(self):
     pass
