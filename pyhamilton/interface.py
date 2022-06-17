@@ -1,4 +1,8 @@
-import time, json, signal, os, requests, string, logging, subprocess, win32gui, win32con
+# pylint: skip-file
+
+try:
+  import time, json, signal, os, requests, string, logging, subprocess, win32gui, win32con
+except: pass
 from http import server
 from threading import Thread
 from multiprocessing import Process

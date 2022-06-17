@@ -1,23 +1,23 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
-try:
-    print("here")
-    import pypandoc
-    long_description = pypandoc.convert_file('README.md', 'rst')
-    print(long_description)
-except(IOError, ImportError):
-    long_description = open('README.md').read()
+long_description = open('README.md', encoding='utf-8').read()
 
 setup(
     name='pyhamilton',
     version='1.235',
-    packages=find_packages(exclude=['tests*', 'examples*']),
+    packages=['pyhamilton'],
     license='MIT',
     description='Python for Hamilton liquid handling robots',
-    long_description='Forthcoming due to markdown incompatibility',
-    install_requires=['requests', 'pythonnet', 'pywin32', 'pyserial'],
+    long_description=long_description,
+    long_description_content_type='text/markdown',
+    install_requires=['pyusb'],
     package_data={'pyhamilton': ['star-oem/*', 'star-oem/VENUS_Method/*']},
     url='https://github.com/dgretton/pyhamilton.git',
     author='Dana Gretton',
-    author_email='dgretton@mit.edu'
+    author_email='dgretton@mit.edu',
+    extras_require={
+        'testing': [
+            'pytest'
+        ]
+    }
 )
