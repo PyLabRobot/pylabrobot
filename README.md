@@ -1,4 +1,4 @@
-# pyhamilton
+# PyHamilton
 
 **Python for Hamilton liquid handling robots**
 
