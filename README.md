@@ -52,7 +52,7 @@ if __name__ == "__main__":
     </br>a. Make sure you don't have any other program running which is communicating with the robot e.g. Venus run control
     </br>b. Make sure the .dlls referenced in ```__init__.py``` are unblocked. See [this StackOverflow thread](https://stackoverflow.com/questions/28840880/pythonnet-filenotfoundexception-unable-to-find-assembly) for more details.
 
-4. 
+Please see the list of **Ongoing Projects** for information on other issues with PyHamilton
 
 ## Ongoing Projects
 PyHamilton is an open-source project, and we have a ton of work to do! If you'd like to contribute to the PyHamilton project, please consider these following areas of ongoing work and don't hesitate to reach out if you want to discuss collaborating with the team.
