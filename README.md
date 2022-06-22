@@ -2,9 +2,9 @@
 
 **Python for Hamilton liquid handling robots**
 
-Hamilton software only works on Windows, so the same goes for pyhamilton.
+Hamilton software only works on Windows, so the same goes for PyHamilton.
 
-Developed for Hamilton STAR and STARlet on Windows XP and Windows 7. VANTAGE series supported with plugin. Other robot models and operating systems not supported yet.
+Developed for Hamilton STAR and STARlet on Windows XP, Windows 7, and Windows 10. VANTAGE series supported with plugin. Other robot models and operating systems not supported yet.
 
 _Contact: contactpyhamilton@gmail.com for questions, ideas, or help with installation._
 
@@ -51,6 +51,16 @@ if __name__ == "__main__":
 3. If your initialization hangs (such as on initial_error_example.py), try these steps:
     </br>a. Make sure you don't have any other program running which is communicating with the robot e.g. Venus run control
     </br>b. Make sure the .dlls referenced in ```__init__.py``` are unblocked. See [this StackOverflow thread](https://stackoverflow.com/questions/28840880/pythonnet-filenotfoundexception-unable-to-find-assembly) for more details.
+
+4. 
+
+## Ongoing Projects
+PyHamilton is an open-source project, and we have a ton of work to do! If you'd like to contribute to the PyHamilton project, please consider these following areas of ongoing work and don't hesitate to reach out if you want to discuss collaborating with the team.
+
+- **PyHamilton for Nimbus:** Right now PyHamilton only works on the STAR line of liquid-handling robots, but we have recently received the appropriate libraries for expanding the framework to Hamilton Nimbus, a much more affordable and low-footprint robot. This project is in its very early stages so collaborators will have the opportunity to influence crucial design decisions.
+- **PyHamilton for Linux:** One of the biggest limitations for PyHamilton, Hamilton robots, and much of lab automation in general is their exclusive dependence on Windows as an operating system. We are working to recreate the Venus application (which runs on Windows and which PyHamilton depends on in turn) as a Python library, so that PyHamilton will effectively become OS-agnostic. This is a truly massive undertaking but we have made considerable progress due to incredibly talented team member Rick Wierenga.
+- **Host on a package management repository:** PyHamilton is not available on any package managers such as PyPI or Conda except by installing from this repo. This has been a nightmare for distributing updates to the user community, who must delete and reclone the package anytime they wish to update.
+- **Make PyHamilton compatible with recent releases of Python:** PyHamilton is currently restricted to Python 3.6 due to its dependency tree including older versions of some packages. We'd massively appreciate any help in bringing us up to date with more recent versions of Python.
 
 ## Applications
 
