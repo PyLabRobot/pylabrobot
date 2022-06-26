@@ -82,10 +82,11 @@ class LiquidClass:
     Args:
       device: list of supported devices
       tip_type: supported tip type
-      dispense_mode: 0 = jet empty tip,
-                     1 = jet part volume,
-                     2 = surface empty tip,
-                     4 = surface part volume
+      dispense_mode: 0 = jet partial volume,
+                     1 = jet empty tip (blow out),
+                     2 = surface partial volume
+                     3 = surface empty tip (blow out),
+                     4 = Empty tip at fix position
       pressure_lld: 0 = low, 1 = medium, 2 = high, 3 = very high
       max_height_difference: unknown
       flow_rate: ul/s
@@ -160,11 +161,31 @@ class LiquidClass:
         return (self.correction_curve[t]-self.correction_curve[pt])/(t-pt) * \
                (target_volume - t) + self.correction_curve[t] # (y = slope * (x-x1) + y1)
 
+  @property
+  def aspirate_kwargs(self):
+    """ Return kwargs for aspiration. """
+    return {
+      "transport_air_volume": [self.air_transport_volume[0] * 10],
+      "blow_out_air_volume": [self.blowout_volume[0] * 10],
+      "settling_time": [self.settling_time[0] * 10],
+      "clot_detection_height": [self.clot_retract_height]
+    }
+
+  @property
+  def dispense_kwargs(self):
+    """ Return kwargs for dispensing. """
+    return {
+      "transport_air_volume": [self.air_transport_volume[1] * 10],
+      "blow_out_air_volume": [self.blowout_volume[1] * 10],
+      "settling_time": [self.settling_time[1] * 10],
+      "dispensing_mode": [self.dispense_mode],
+    }
+
 
 HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol = LiquidClass(
   device=[LiquidDevice.CHANNELS_1000uL],
   tip_type=TipType.HIGH_VOLUME_TIP_WITH_FILTER_1000uL,
-  dispense_mode=2,
+  dispense_mode=1, # jet empty tip
   pressure_lld=0,
   max_height_difference=0,
   flow_rate=(250, 400),
@@ -192,7 +213,7 @@ HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol = LiquidClass(
 HighVolumeFilter_Water_DispenseSurface_Empty = LiquidClass(
   device=[LiquidDevice.CHANNELS_1000uL],
   tip_type=TipType.HIGH_VOLUME_TIP_WITH_FILTER_1000uL,
-  dispense_mode=2,
+  dispense_mode=3, # surface empty tip
   pressure_lld=0,
   max_height_difference=0,
   flow_rate=(250, 120),
@@ -220,7 +241,7 @@ HighVolumeFilter_Water_DispenseSurface_Empty = LiquidClass(
 HighVolumeFilter_Water_DispenseJet_Empty_no_transport_vol = LiquidClass(
   device=[LiquidDevice.CHANNELS_1000uL],
   tip_type=TipType.HIGH_VOLUME_TIP_WITH_FILTER_1000uL,
-  dispense_mode=2,
+  dispense_mode=1, # jet empty tip
   pressure_lld=0,
   max_height_difference=0,
   flow_rate=(150, 150),
@@ -241,5 +262,59 @@ HighVolumeFilter_Water_DispenseJet_Empty_no_transport_vol = LiquidClass(
     200: 212.9,
     500: 521.7,
     1000: 1034.0
+  }
+)
+
+StandardVolume_Water_DispenseSurface_Part_no_transport_vol = LiquidClass(
+  device=[LiquidDevice.CHANNELS_1000uL],
+  tip_type=TipType.STANDARD_VOLUME_TIP_300uL,
+  dispense_mode=2, # surface partial
+  pressure_lld=0,
+  max_height_difference=0,
+  flow_rate=(100, 120),
+  mix_flow_rate=(100, 1),
+  air_transport_volume=(0, 0),
+  blowout_volume=(0, 0),
+  swap_speed=(2, 2),
+  settling_time=(1, 0),
+  over_aspirate_volume=0,
+  clot_retract_height=0,
+  stop_flow_rate=5,
+  stop_back_volume=0,
+  correction_curve={
+    5: 6.5,
+    10: 11.9,
+    20: 23.2,
+    50: 55.1,
+    100: 107.2,
+    200: 211.0,
+    300: 313.5
+  }
+)
+
+StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol = LiquidClass(
+  device=[LiquidDevice.CHANNELS_1000uL],
+  tip_type=TipType.STANDARD_VOLUME_TIP_300uL,
+  dispense_mode=2, # surface partial
+  pressure_lld=0,
+  max_height_difference=0,
+  flow_rate=(100, 120),
+  mix_flow_rate=(100, 1),
+  air_transport_volume=(0, 0),
+  blowout_volume=(0, 0),
+  swap_speed=(2, 2),
+  settling_time=(1, 0),
+  over_aspirate_volume=0,
+  clot_retract_height=0,
+  stop_flow_rate=5,
+  stop_back_volume=0,
+  correction_curve={
+    5: 6.5,
+    10: 11.9,
+    20: 23.2,
+    50: 55.1,
+    100: 107.2,
+    200: 211.0,
+    300: 313.5
   }
 )
