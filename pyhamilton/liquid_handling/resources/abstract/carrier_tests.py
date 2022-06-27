@@ -4,30 +4,39 @@
 import unittest
 
 from .tips import Tips
+from .tip_type import TipType, TIP_TYPE_STANDARD_VOLUME
 from .carrier import TipCarrier
 from .coordinate import Coordinate
 
 
 class TestLiquidHandlerLayout(unittest.TestCase):
   def setUp(self):
+    tip_type = TipType(
+      has_filter=False,
+      total_tip_length=100,
+      maximal_volume=400,
+      tip_type_id=TIP_TYPE_STANDARD_VOLUME,
+      pick_up_method=0
+    )
+
     self.A = Tips( # pylint: disable=invalid-name
       name="A",
       size_x=5, size_y=5, size_z=5,
-      tip_type="tip_type",
+      tip_type=tip_type,
       dx=1, dy=1, dz=1
     )
 
     self.B = Tips( # pylint: disable=invalid-name
       name="B",
       size_x=5, size_y=5, size_z=5,
-      tip_type="tip_type",
+      tip_type=tip_type,
       dx=9, dy=2, dz=-2
     )
 
     self.alsoB = Tips( # pylint: disable=invalid-name
       name="B",
       size_x=100, size_y=100, size_z=100,
-      tip_type="tip_type",
+      tip_type=tip_type,
       dx=0, dy=0, dz=0
     )
 
@@ -89,7 +98,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertEqual(self.tip_car[1].location, Coordinate(19, 52, 28))
 
   def test_serialization(self):
-    self.maxDiff = None
+    self.maxDiff = None # pylint: disable=invalid-name
     self.assertEqual(self.tip_car.serialize(), {
       "location": {"x": None, "y": None, "z": None},
       "name": "tip_car",
@@ -147,7 +156,13 @@ class TestLiquidHandlerLayout(unittest.TestCase):
             "size_x": 5,
             "size_y": 5,
             "size_z": 5,
-            "tip_type": "tip_type",
+            "tip_type": {
+              "has_filter": False,
+              "maximal_volume": 400,
+              "pick_up_method": 0,
+              "tip_type_id": 2,
+              "total_tip_length": 100
+            },
             "type": "Tips"
           },
           "site_id": 1

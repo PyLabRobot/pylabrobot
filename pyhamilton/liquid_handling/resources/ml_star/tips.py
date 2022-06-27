@@ -1,10 +1,23 @@
 # pylint: skip-file
 
 from pyhamilton.liquid_handling.resources.abstract import Tips
+from .tip_types import (
+  low_volume_tip_no_filter,
+  low_volume_tip_with_filter,
+  standard_volume_tip_no_filter,
+  standard_volume_tip_with_filter,
+  high_volume_tip_no_filter,
+  high_volume_tip_with_filter,
+  four_ml_tip_with_filter,
+  five_ml_tip_with_filter
+)
 
 
 class FourmlTF_L(Tips):
-  """ Tip Rack 24x 4ml Tip with Filter landscape oriented """
+  """ Tip Rack 24x 4ml Tip with Filter landscape oriented
+
+  TODO: add tip_type
+  """
 
   def __init__(self, name: str):
     super().__init__(
@@ -12,7 +25,7 @@ class FourmlTF_L(Tips):
       size_x=122.4,
       size_y=82.6,
       size_z=7.0,
-      tip_type="MlStar4mlTipWithFilter",
+      tip_type=four_ml_tip_with_filter,
       dx=16.3,
       dy=14.2,
       dz=-93.2,
@@ -20,7 +33,10 @@ class FourmlTF_L(Tips):
 
 
 class LT_L(Tips):
-  """ Rack with 96 10ul Low Volume Tip """
+  """ Rack with 96 10ul Low Volume Tip
+
+  TODO: add tip_type
+  """
 
   def __init__(self, name: str):
     super().__init__(
@@ -28,7 +44,7 @@ class LT_L(Tips):
       size_x=122.4,
       size_y=82.6,
       size_z=20.0,
-      tip_type="MlStar10ulLowVolumeTip",
+      tip_type=low_volume_tip_no_filter,
       dx=11.7,
       dy=9.8,
       dz=-22.5,
@@ -36,7 +52,10 @@ class LT_L(Tips):
 
 
 class HTF_L(Tips):
-  """ Rack with 96 1000ul High Volume Tip with filter """
+  """ Rack with 96 1000ul High Volume Tip with filter
+
+  TODO: add tip_type
+  """
 
   def __init__(self, name: str):
     super().__init__(
@@ -44,7 +63,7 @@ class HTF_L(Tips):
       size_x=122.4,
       size_y=82.6,
       size_z=20.0,
-      tip_type="MlStar1000ulHighVolumeTipWithFilter",
+      tip_type=high_volume_tip_with_filter,
       dx=11.7,
       dy=9.8,
       dz=-83.5,
@@ -60,7 +79,7 @@ class HT_L(Tips):
       size_x=122.4,
       size_y=82.6,
       size_z=20.0,
-      tip_type="MlStar1000ulHighVolumeTip",
+      tip_type=high_volume_tip_no_filter,
       dx=11.7,
       dy=9.8,
       dz=-83.5,
@@ -76,7 +95,7 @@ class LTF_L(Tips):
       size_x=122.4,
       size_y=82.6,
       size_z=20.0,
-      tip_type="MlStar10ulLowVolumeTipWithFilter",
+      tip_type=low_volume_tip_with_filter,
       dx=11.7,
       dy=9.8,
       dz=-22.5,
@@ -92,7 +111,7 @@ class FivemlT_L(Tips):
       size_x=122.4,
       size_y=82.6,
       size_z=7.0,
-      tip_type="MlStar5mlTip",
+      tip_type=five_ml_tip_with_filter,
       dx=16.3,
       dy=14.2,
       dz=-93.2,
@@ -108,7 +127,7 @@ class STF_L(Tips):
       size_x=122.4,
       size_y=82.6,
       size_z=20.0,
-      tip_type="MlStar300ulStandardVolumeTipWithFilter",
+      tip_type=standard_volume_tip_with_filter,
       dx=11.7,
       dy=9.8,
       dz=-50.5,
@@ -124,7 +143,7 @@ class ST_L(Tips):
       size_x=122.4,
       size_y=82.6,
       size_z=20.0,
-      tip_type="MlStar300ulStandardVolumeTip",
+      tip_type=standard_volume_tip_no_filter,
       dx=11.7,
       dy=9.8,
       dz=-50.5,

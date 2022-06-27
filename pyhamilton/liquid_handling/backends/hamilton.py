@@ -1,6 +1,7 @@
 """
 This file defines interfaces for all supported Hamilton liquid handling robots.
 """
+# pylint: disable=invalid-sequence-index
 
 from abc import ABCMeta, abstractmethod
 import datetime
@@ -13,15 +14,25 @@ import typing
 import usb.core
 import usb.util
 
-# TODO: from .backend import LiquidHanderBackend
+from .backend import LiquidHandlerBackend
+from .errors import (
+  HamiltonError
+)
+
 logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(logging.INFO)
+
 
 # TODO: move to util.
 def _assert_clamp(v, min_, max_, name):
-  assert min_ <= v <= max_, f"{name} must be between {min} and {max}, but is {v}"
+  if type(v) is not list:
+    v = [v]
+  for w in v:
+    assert min_ <= w <= max_, f"{name} must be between {min_} and {max_}, but is {w}"
 
 
-class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHanderBackend
+class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
   """
@@ -34,6 +45,8 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
       read_poll_interval: The sleep after each check for device responses, in seconds.
     """
 
+    super().__init__()
+
     self.read_poll_interval = read_poll_interval
     self.id_ = 0
 
@@ -42,22 +55,21 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     self.id_ += 1
     return f"{self.id_ % 10000:04}"
 
-  # TODO: add response format param, and parse response here.
-  # If None, return raw response.
-
-  def send_command(self, module, command, **kwargs):
-    """ Send a firmware command to the Hamilton machine.
+  def _assemble_command(self, module, command, **kwargs) -> str:
+    """ Assemble a firmware command to the Hamilton machine.
 
     Args:
       module: 2 character module identifier (C0 for master, ...)
-      command: 2 character command identifier (QM for request status)
+      command: 2 character command identifier (QM for request status, ...)
       kwargs: any named parameters. the parameter name should also be
               2 characters long. The value can be any size.
+
+    Returns:
+      A string containing the assembled command.
     """
 
     # pylint: disable=redefined-builtin
 
-    # assemble command
     cmd = module + command
     id = self._generate_id()
     cmd += f"id{id}" # has to be first param
@@ -68,33 +80,36 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
       elif type(v) is bool:
         v = 1 if v else 0
       elif type(v) is list:
-        v = " ".join([str(e) for e in v]) + "&"
+        # TODO: "&" is only required when list is not maximum length.
+        v = " ".join([str(e) for e in v]) + ("&" if len(v) < 8 else "")
       if k.endswith("_"): # workaround for kwargs named in, as, ...
         k = k[:-1]
       cmd += f"{k}{v}"
 
-    logger.info("Sent command: %s", cmd)
+    return cmd, id
 
-    # write command to endpoint
-    self.dev.write(self.write_endpoint, cmd)
+  def _read_packet(self) -> typing.Optional[str]:
+    """ Read a packet from the Hamilton machine.
 
-    res = None
-    while True:
+    Returns:
+      A string containing the decoded packet, or None if no packet was received.
+    """
+
+    try:
       res = self.dev.read(
         self.read_endpoint,
         self.read_endpoint.wMaxPacketSize
       )
-      if res is not None:
-        break
-      time.sleep(self.read_poll_interval)
-    res = bytearray(res).decode("utf-8") # convert res into text
+    except usb.core.USBError:
+      # No data available (yet), this will give a timeout error. Don't reraise.
+      return None
+    if res is not None:
+      res = bytearray(res).decode("utf-8") # convert res into text
+      return res
+    return None
 
-    logger.info("Received response: %s", res)
-
-    return res
-
-  def parse_response(self, resp: str, fmt: str) -> typing.Tuple[dict, dict]:
-    """ Parse a machine response according to a format string.
+  def parse_fw_string(self, resp: str, fmt: str = "") -> typing.Optional[dict]:
+    """ Parse a machine command or response string according to a format string.
 
     The format contains names of parameters (always length 2),
     followed by an arbitrary number of the following, but always
@@ -102,10 +117,6 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     - '&': char
     - '#': decimal
     - '*': hex
-
-    Example:
-    - fmt : "aa####bb&&cc***
-    - resp: "aa1111bbrwccB0B"
 
     The order of parameters in the format and response string do not
     have to (and often do not) match.
@@ -120,16 +131,23 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
     with the response string. We'll probably do a custom implementation
     for that.
 
-    TODO: block parsing
-    When a parameter is built up of several identical blocks, the
-    redundant blocks are not shown; that is to say, only the first
-    Block and the number of blocks are given. It is always the case
-    that the first value refers to channel 1, and so on. The
-    individual blocks are separated by ' ' (Space).
-
     # TODO: spaces
     We should also parse responses where integers are separated by spaces,
     like this: ua#### #### ###### ###### ###### ######
+
+    Example:
+      >>> parse_fw_string("aa1111bbrwccB0B", "aa####bb&&cc***")
+      {'aa': 1111, 'bb': 'rw', 'cc': 2827}
+
+    Args:
+      resp: The response string to parse.
+      fmt: The format string.
+
+    Raises:
+      ValueError: if the format string is incompatible with the response.
+
+    Returns:
+      A dictionary containing the parsed values.
     """
 
     # Remove device and cmd identifier from response.
@@ -145,62 +163,194 @@ class HamiltonLiquidHandler(object, metaclass=ABCMeta): # TODO: object->LiquidHa
         "*": "hex",
         "&": "str"
       }[data[0]]
-      len_ = len(data)
 
       # Build a regex to match this parameter.
       exp = {
-        "int": "-?[0-9]",
-        "hex": "[0-9a-fA-F]",
+        "int": r"[-+]?[\d ]",
+        "hex": r"[\da-fA-F ]",
         "str": ".",
       }[type_]
-      regex = f"{name}({exp}{ {len_} })"
+      len_ = len(data.split(" ")[0]) # Get length of first block.
+      regex = f"{name}((?:{exp}{ {len_} }"
+
+      if param.endswith(" (n)"):
+        regex += " ?)+)"
+        is_list = True
+      else:
+        regex += "))"
+        is_list = False
 
       # Match response against regex, save results in right datatype.
       r = re.search(regex, resp)
       if r is None:
+        # Don't raise an error if we are looking for the id parameter.
+        # if name == "id":
+          # return None
         raise ValueError(f"could not find matches for parameter {name}")
+
       g = r.groups()
       if len(g) == 0:
         raise ValueError(f"could not find value for parameter {name}")
       m = g[0]
 
-      if type_ == "str":
-        info[name] = m
-      elif type_ == "int":
-        info[name] = int(m)
-      elif type_ == "hex":
-        info[name] = int(m, base=16)
+      if is_list:
+        m = m.split(" ")
+
+        if type_ == "str":
+          info[name] = m
+        elif type_ == "int":
+          info[name] = [int(m_) for m_ in m if m_ != '']
+        elif type_ == "hex":
+          info[name] = [int(m_, base=16) for m_ in m if m_ != '']
+      else:
+        if type_ == "str":
+          info[name] = m
+        elif type_ == "int":
+          info[name] = int(m)
+        elif type_ == "hex":
+          info[name] = int(m, base=16)
 
     # Find params in string. All params are identified by 2 lowercase chars.
     param = ""
+    prevchar = None
     for char in fmt:
-      if char.islower():
+      if char.islower() and prevchar != "(":
         if len(param) > 2:
           find_param(param)
           param = ""
       param += char
+      prevchar = char
     if param != "":
       find_param(param) # last parameter is not closed by loop.
     if "id" not in info: # auto add id if we don't have it yet.
       find_param("id####")
 
+    return info
+
+  # TODO: raise errors
+  def parse_response(self, resp: str, fmt: str) -> typing.Tuple[dict, dict]:
+    """ Parse a response from the Hamilton machine.
+
+    This method uses the `parse_fw_string` method to get the info from the response string.
+    Additionally, it finds any errors in the response.
+
+    Args:
+      response: A string containing the response from the Hamilton machine.
+      fmt: A string containing the format of the response.
+
+    Raises:
+      ValueError: if the format string is incompatible with the response.
+      HamiltonException: if the response contains an error.
+
+    Returns:
+      A dictionary containing the parsed response.
+    """
+
     # Parse errors.
-    # The default error is er##/## where the first group is the error code, and the second
-    # group is the trace information.
-    # Beyond that, specific errors may be added for individual channels and modules. These
-    # are formatted as P1##/##, H0##/##, etc. These items are added programmatically as
-    # named capturing groups to the regex.
-    exp = r"er(?P<error>[0-9]{2}/[0-9]{2})"
-    for module in ["C0", "X0", "I0", "W1", "W2", "T1", "T2", "R0", "P1", "P2", "P3", "P4", "P5",
-                   "P6", "P7", "P8", "P9", "PA", "PB", "PC", "PD", "PE", "PF", "PG", "H0", "HW",
-                   "HU", "HV", "N0", "D0", "NP", "M1"]:
-      exp += f" ?(?:{module}(?P<{module}>[0-9]{{2}}/[0-9]{{2}}))?"
-    errors = re.search(exp, resp)
+    module = resp[:2]
+    if module == "C0":
+      # C0 sends errors as er##/##. P1 raises errors as er## where the first group is the error
+      # code, and the second group is the trace information.
+      # Beyond that, specific errors may be added for individual channels and modules. These
+      # are formatted as P1##/## H0##/##, etc. These items are added programmatically as
+      # named capturing groups to the regex.
+
+      exp = r"er(?P<C0>[0-9]{2}/[0-9]{2})"
+      for module in ["X0", "I0", "W1", "W2", "T1", "T2", "R0", "P1", "P2", "P3", "P4", "P5", "P6",
+                    "P7", "P8", "P9", "PA", "PB", "PC", "PD", "PE", "PF", "PG", "H0", "HW", "HU",
+                    "HV", "N0", "D0", "NP", "M1"]:
+        exp += f" ?(?:{module}(?P<{module}>[0-9]{{2}}/[0-9]{{2}}))?"
+      errors = re.search(exp, resp)
+    else:
+      # Other modules send errors as er##, and do not contain slave errors.
+      exp = f"er(?P<{module}>[0-9]{{2}})"
+      errors = re.search(exp, resp)
+
     if errors is not None:
       errors = errors.groupdict()
       errors = {k:v for k,v in errors.items() if v is not None} # filter None elements
+      # filter 00 and 00/00 elements, which mean no error.
+      errors = {k:v for k,v in errors.items() if v not in ["00", "00/00"]}
 
-    return (info, errors)
+    has_error = not (errors is None or len(errors) == 0)
+    if has_error:
+      he = HamiltonError(errors, raw_response=resp)
+
+      # If there is a faulty parameter error, request which parameter that is.
+      for module_name, error in he.items():
+        if error.message == "Unknown parameter":
+          vp = self.send_command(module=error.raw_module, command="VP", fmt="vp&&")
+          module[module_name] += f" ({vp})"
+
+      raise he
+
+    info = self.parse_fw_string(resp, fmt)
+
+    return info
+
+  def send_command(
+    self,
+    module: str,
+    command: str,
+    timeout: int = 16,
+    fmt: typing.Optional[str]=None,
+    **kwargs
+  ):
+    """ Send a firmware command to the Hamilton machine.
+
+    Args:
+      module: 2 character module identifier (C0 for master, ...)
+      command: 2 character command identifier (QM for request status)
+      timeout: timeout in seconds.
+      fmt: A string containing the format of the response. If None, the raw response is returned.
+      kwargs: any named parameters. the parameter name should also be
+              2 characters long. The value can be any size.
+
+    Raises:
+      HamiltonError: if an error response is received.
+
+    Returns:
+      A dictionary containing the parsed response, or None if no response was read within `timeout`.
+    """
+
+    cmd, id_ = self._assemble_command(module, command, **kwargs)
+
+    # write command to endpoint
+    self.dev.write(self.write_endpoint, cmd)
+    logger.info("Sent command: %s", cmd)
+
+    # Read packets until timeout, or when we identify the right id.
+    attempts = 0
+    while attempts < (timeout / self.read_poll_interval):
+      res = self.read_packet()
+      if res is None:
+        continue
+
+      print("got res", res)
+
+      # Parse preliminary response, there may be more data to read, but the first packet of the
+      # response will definitely contain the id of the command we sent. If we find it, we read
+      # the rest of the response, if it is not contained in a single packet.
+      parsed_response = self.parse_fw_string(res)
+      if "id" in parsed_response and f"{parsed_response['id']:04}" == id_:
+        # While length of response is the maximum length, there may be more data to read.
+        last_packet = res
+        while last_packet is not None and len(last_packet) == self.read_endpoint.wMaxPacketSize:
+          last_packet = self.read_packet()
+          if last_packet is not None:
+            res += last_packet
+
+        logger.info("Received response: %s", res)
+
+        # If `fmt` is None, return the raw response.
+        if fmt is None:
+          return res
+        return self.parse_response(res, fmt)
+
+      time.sleep(self.read_poll_interval)
+      attempts += 1
+
+    return None
 
 
 class STAR(HamiltonLiquidHandler):
@@ -216,12 +366,17 @@ class STAR(HamiltonLiquidHandler):
     """
 
     super().__init__(**kwargs)
+    self.dev = None
 
   def setup(self):
     """ setup
 
     Creates a USB connection and finds read/write interfaces.
     """
+
+    if self.dev is not None:
+      logging.warning("Already initialized. Please call stop() first.")
+      return
 
     logger.info("Finding Hamilton USB device...")
 
@@ -252,7 +407,14 @@ class STAR(HamiltonLiquidHandler):
           usb.util.endpoint_direction(e.bEndpointAddress) == \
           usb.util.ENDPOINT_IN) # 0x83?
 
-    logger.info("Found endpoints. Write: %x Read %x", self.write_endpoint, self.read_endpoint)
+    logger.info("Found endpoints. \nWrite:\n %s \nRead:\n %s", self.write_endpoint, self.read_endpoint)
+
+  def stop(self):
+    if self.dev is None:
+      raise ValueError("USB device was not connected.")
+    logging.warning("Closing connection to USB device.")
+    usb.util.dispose_resources(self.dev)
+    self.dev = None
 
   def _read(self):
     """
@@ -269,7 +431,8 @@ class STAR(HamiltonLiquidHandler):
 
   def pre_initialize_instrument(self):
     """ Pre-initialize instrument """
-    return self.send_command(module="C0", command="VI")
+    resp = self.send_command(module="C0", command="VI")
+    return self.parse_response(resp, "")
 
   class TipType(enum.Enum):
     """ Tip type """
@@ -320,10 +483,10 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="TT",
-      tt=tip_type_table_index,
+      tt=f"{tip_type_table_index:02}",
       tf=filter,
-      tl=tip_length,
-      tv=maximum_tip_volume,
+      tl=f"{tip_length:04}",
+      tv=f"{maximum_tip_volume:05}",
       tg=tip_type,
       tu=pick_up_method
     )
@@ -379,9 +542,9 @@ class STAR(HamiltonLiquidHandler):
 
     resp = self.send_command(module="C0", command="QB")
     try:
-      return BoardType(resp["qb"])
+      return STAR.BoardType(resp["qb"])
     except ValueError:
-      return BoardType.UNKNOWN
+      return STAR.BoardType.UNKNOWN
 
   # TODO: parse response.
   def request_supply_voltage(self):
@@ -395,8 +558,7 @@ class STAR(HamiltonLiquidHandler):
   def request_instrument_initialization_status(self):
     """ Request instrument initialization status """
 
-    resp = self.send_command(module="C0", command="QW")
-    return resp["qw"] == 1
+    return self.send_command(module="C0", command="QW", fmt="qw#")["qw"] == 1
 
   def request_name_of_last_faulty_parameter(self):
     """ Request name of last faulty parameter
@@ -1084,7 +1246,57 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.1 Initialization --------------
 
-  # TODO:(command) Initialize pipetting channels (discard tips)
+  def initialize_pipetting_channels(
+    self,
+    x_positions: typing.List[int] = [0],
+    y_positions: typing.List[int] = [0],
+    begin_of_tip_deposit_process: int = 0,
+    end_of_tip_deposit_process: int = 0,
+    z_position_at_end_of_a_command: int = 3600,
+    tip_pattern: typing.List[bool] = [True],
+    tip_type: int = 16,
+    discarding_method: int = 1
+  ):
+    """ Initialize pipetting channels
+
+    Initialize pipetting channels (discard tips)
+
+    Args:
+      x_positions: X-Position [0.1mm] (discard position). Must be between 0 and 25000. Default 0.
+      y_positions: y-Position [0.1mm] (discard position). Must be between 0 and 6500. Default 0.
+      begin_of_tip_deposit_process: Begin of tip deposit process (Z-discard range) [0.1mm]. Must be
+        between 0 and 3600. Default 0.
+      end_of_tip_deposit_process: End of tip deposit process (Z-discard range) [0.1mm]. Must be
+        between 0 and 3600. Default 0.
+      z-position_at_end_of_a_command: Z-Position at end of a command [0.1mm]. Must be between 0 and
+        3600. Default 3600.
+      tip_pattern: Tip pattern ( channels involved). Default True.
+      tip_type: Tip type (recommended is index of longest tip see command 'TT') [0.1mm]. Must be
+        between 0 and 99. Default 16.
+      discarding_method: discarding method. 0 = place & shift (tp/ tz = tip cone end height), 1 =
+        drop (no shift) (tp/ tz = stop disk height). Must be between 0 and 1. Default 1.
+    """
+
+    _assert_clamp(x_positions, 0, 25000, "x_positions")
+    _assert_clamp(y_positions, 0, 6500, "y_positions")
+    _assert_clamp(begin_of_tip_deposit_process, 0, 3600, "begin_of_tip_deposit_process")
+    _assert_clamp(end_of_tip_deposit_process, 0, 3600, "end_of_tip_deposit_process")
+    _assert_clamp(z_position_at_end_of_a_command, 0, 3600, "z_position_at_end_of_a_command")
+    _assert_clamp(tip_type, 0, 99, "tip_type")
+    _assert_clamp(discarding_method, 0, 1, "discarding_method")
+
+    return self.send_command(
+      module="C0",
+      command="DI",
+      xp=[f"{xp:05}" for xp in x_positions],
+      yp=[f"{yp:04}" for yp in y_positions],
+      tp=f"{begin_of_tip_deposit_process:04}",
+      tz=f"{end_of_tip_deposit_process:04}",
+      te=f"{z_position_at_end_of_a_command:04}",
+      tm=[f"{tm:01}" for tm in tip_pattern],
+      tt=f'{tip_type:02}',
+      ti=discarding_method,
+    )
 
   # -------------- 3.5.2 Tip handling commands using PIP --------------
 
@@ -1097,7 +1309,7 @@ class STAR(HamiltonLiquidHandler):
     begin_tip_pick_up_process: int = 0,
     end_tip_pick_up_process: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
-    pick_up_method: PickUpMethod = PickUpMethod.OUT_OF_RACK
+    pick_up_method: int=0 #PickUpMethod = PickUpMethod.OUT_OF_RACK
   ):
     """ Tip Pick-up
 
@@ -1126,13 +1338,14 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="TP",
-      xp=x_positions,
-      yp=y_positions,
+      timeout=60,
+      xp=[f"{x:05}" for x in x_positions],
+      yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
-      tt=tip_type, # .rawValue?
-      tp=begin_tip_pick_up_process,
-      tz=end_tip_pick_up_process,
-      th=minimum_traverse_height_at_beginning_of_a_command,
+      tt=f"{tip_type:02}",
+      tp=f"{begin_tip_pick_up_process:04}",
+      tz=f"{end_tip_pick_up_process:04}",
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
       td=pick_up_method,
     )
 
@@ -1184,10 +1397,10 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="TR",
-      xp=x_positions,
-      yp=y_positions,
+      xp=[f"{x:05}" for x in x_positions],
+      yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
-      tt=tip_type,
+      tt=f"{tip_type:02}",
       tp=begin_tip_deposit_process,
       tz=end_tip_deposit_process,
       th=minimum_traverse_height_at_beginning_of_a_command,
@@ -1202,52 +1415,52 @@ class STAR(HamiltonLiquidHandler):
 
   def aspirate_pip(
     self,
-    aspiration_type: int = 0,
-    tip_pattern: bool = True,
-    x_positions: int = 0,
-    y_positions: int = 0,
+    aspiration_type: typing.List[int] = [0],
+    tip_pattern: typing.List[bool] = [True],
+    x_positions: typing.List[int] = [0],
+    y_positions: typing.List[int] = [0],
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
     min_z_endpos: int = 3600,
-    lld_search_height: int = 0,
-    clot_detection_height: int = 4,
-    liquid_surface_no_lld: int = 3600,
-    pull_out_distance_transport_air: int = 50,
-    second_section_height: int = 0,
-    second_section_ratio: int = 0,
-    minimum_height: int = 3600,
-    immersion_depth: int = 0,
-    immersion_depth_direction: int = 0,
-    surface_following_distance: int = 0,
-    aspiration_volume: int = 0,
-    aspiration_speed: int = 500,
-    transport_air_volume: int = 0,
-    blow_out_air_volume: int = 200,
-    pre_wetting_volume: int = 0,
-    lld_mode: int = 1,
-    gamma_lld_sensitivity: int = 1,
-    dp_lld_sensitivity: int = 1,
-    aspirate_position_above_z_touch_off: int = 5,
-    detection_height_difference_for_dual_lld: int = 0,
-    swap_speed: int = 100,
-    settling_time: int = 5,
-    homogenization_volume: int = 0,
-    homogenization_cycles: int = 0,
-    homogenization_position_from_liquid_surface: int = 250,
-    homogenization_speed: int = 500,
-    homogenization_surface_following_distance: int = 0,
-    limit_curve_index: int = 0,
+    lld_search_height: typing.List[int] = [0],
+    clot_detection_height: typing.List[int] = [60],
+    liquid_surface_no_lld: typing.List[int] = [3600],
+    pull_out_distance_transport_air: typing.List[int] = [50],
+    second_section_height: typing.List[int] = [0],
+    second_section_ratio: typing.List[int] = [0],
+    minimum_height: typing.List[int] = [3600],
+    immersion_depth: typing.List[int] = [0],
+    immersion_depth_direction: typing.List[int] = [0],
+    surface_following_distance: typing.List[int] = [0],
+    aspiration_volumes: typing.List[int] = [0],
+    aspiration_speed: typing.List[int] = [500],
+    transport_air_volume: typing.List[int] = [0],
+    blow_out_air_volume: typing.List[int] = [200],
+    pre_wetting_volume: typing.List[int] = [0],
+    lld_mode: typing.List[int] = [1],
+    gamma_lld_sensitivity: typing.List[int] = [1],
+    dp_lld_sensitivity: typing.List[int] = [1],
+    aspirate_position_above_z_touch_off: typing.List[int] = [5],
+    detection_height_difference_for_dual_lld: typing.List[int] = [0],
+    swap_speed: typing.List[int] = [100],
+    settling_time: typing.List[int] = [5],
+    homogenization_volume: typing.List[int] = [0],
+    homogenization_cycles: typing.List[int] = [0],
+    homogenization_position_from_liquid_surface: typing.List[int] = [250],
+    homogenization_speed: typing.List[int] = [500],
+    homogenization_surface_following_distance: typing.List[int] = [0],
+    limit_curve_index: typing.List[int] = [0],
     tadm_algorithm: bool = False,
     recording_mode: int = 0,
 
     # For second section aspiration only
-    use_2nd_section_aspiration: bool = False,
-    retract_height_over_2nd_section_to_empty_tip: int = 60,
-    dispensation_speed_during_emptying_tip: int = 468,
-    dosing_drive_speed_during_2nd_section_search: int = 468,
-    z_drive_speed_during_2nd_section_search: int = 215,
-    cup_upper_edge: int = 3600,
-    ratio_liquid_rise_to_tip_deep_in: int = 16246,
-    immersion_depth_2nd_section: int = 30
+    use_2nd_section_aspiration: typing.List[bool] = [False],
+    retract_height_over_2nd_section_to_empty_tip: typing.List[int] = [60],
+    dispensation_speed_during_emptying_tip: typing.List[int] = [468],
+    dosing_drive_speed_during_2nd_section_search: typing.List[int] = [468],
+    z_drive_speed_during_2nd_section_search: typing.List[int] = [215],
+    cup_upper_edge: typing.List[int] = [3600],
+    ratio_liquid_rise_to_tip_deep_in: typing.List[int] = [16246],
+    immersion_depth_2nd_section: typing.List[int] = [30]
   ):
     """ aspirate pip
 
@@ -1274,7 +1487,7 @@ class STAR(HamiltonLiquidHandler):
           independent of tip pattern parameter 'tm'). Must be between 0 and 3600. Default 3600.
       lld_search_height: LLD search height [0.1 mm]. Must be between 0 and 3600. Default 0.
       clot_detection_height: Check height of clot detection above current surface (as computed)
-          of the liquid [0.1mm]. Must be between 60 and 500. Default 4.
+          of the liquid [0.1mm]. Must be between 0 and 500. Default 60.
       liquid_surface_no_lld: Liquid surface at function without LLD [0.1mm]. Must be between 0
           and 3600. Default 3600.
       pull_out_distance_transport_air: pull out distance to take transport air in function
@@ -1290,7 +1503,7 @@ class STAR(HamiltonLiquidHandler):
           of liquid). Must be between 0 and 1. Default 0.
       surface_following_distance: Surface following distance during aspiration [0.1mm]. Must
           be between 0 and 3600. Default 0.
-      aspiration_volume: Aspiration volume [0.1ul]. Must be between 0 and 12500. Default 0.
+      aspiration_volumes: Aspiration volume [0.1ul]. Must be between 0 and 12500. Default 0.
       aspiration_speed: Aspiration speed [0.1ul/s]. Must be between 4 and 5000. Default 500.
       transport_air_volume: Transport air volume [0.1ul]. Must be between 0 and 500. Default 0.
       blow_out_air_volume: Blow-out air volume [0.1ul]. Must be between 0 and 9999. Default 200.
@@ -1315,7 +1528,7 @@ class STAR(HamiltonLiquidHandler):
       homogenization_speed: Speed of homogenization [0.1ul/s]. Must be between 4 and 5000.
           Default 500.
       homogenization_surface_following_distance: Surface following distance during
-          homogenization [0.1mm]. Must be between 4 and 3600. Default 0.
+          homogenization [0.1mm]. Must be between 0 and 3600. Default 0.
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
       tadm_algorithm: TADM algorithm. Default False.
       recording_mode: Recording mode 0 : no 1 : TADM errors only 2 : all TADM measurement. Must
@@ -1343,7 +1556,7 @@ class STAR(HamiltonLiquidHandler):
                   "minimum_traverse_height_at_beginning_of_a_command")
     _assert_clamp(min_z_endpos, 0, 3600, "min_z_endpos")
     _assert_clamp(lld_search_height, 0, 3600, "lld_search_height")
-    _assert_clamp(clot_detection_height, 60, 500, "clot_detection_height")
+    _assert_clamp(clot_detection_height, 0, 500, "clot_detection_height")
     _assert_clamp(liquid_surface_no_lld, 0, 3600, "liquid_surface_no_lld")
     _assert_clamp(pull_out_distance_transport_air, 0, 3600, "pull_out_distance_transport_air")
     _assert_clamp(second_section_height, 0, 3600, "second_section_height")
@@ -1352,7 +1565,7 @@ class STAR(HamiltonLiquidHandler):
     _assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
     _assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
     _assert_clamp(surface_following_distance, 0, 3600, "surface_following_distance")
-    _assert_clamp(aspiration_volume, 0, 12500, "aspiration_volume")
+    _assert_clamp(aspiration_volumes, 0, 12500, "aspiration_volumes")
     _assert_clamp(aspiration_speed, 4, 5000, "aspiration_speed")
     _assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
     _assert_clamp(blow_out_air_volume, 0, 9999, "blow_out_air_volume")
@@ -1371,7 +1584,7 @@ class STAR(HamiltonLiquidHandler):
     _assert_clamp(homogenization_position_from_liquid_surface, 0, 900, \
                   "homogenization_position_from_liquid_surface")
     _assert_clamp(homogenization_speed, 4, 5000, "homogenization_speed")
-    _assert_clamp(homogenization_surface_following_distance, 4, 3600, \
+    _assert_clamp(homogenization_surface_following_distance, 0, 3600, \
                   "homogenization_surface_following_distance")
     _assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
     _assert_clamp(recording_mode, 0, 2, "recording_mode")
@@ -1390,90 +1603,91 @@ class STAR(HamiltonLiquidHandler):
     resp = self.send_command(
       module="C0",
       command="AS",
-      at=aspiration_type,
+      timeout=60,
+      at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
-      xp=x_positions,
-      yp=y_positions,
-      th=minimum_traverse_height_at_beginning_of_a_command,
-      te=min_z_endpos,
-      lp=lld_search_height,
-      ch=clot_detection_height,
-      zl=liquid_surface_no_lld,
-      po=pull_out_distance_transport_air,
-      zu=second_section_height,
-      zr=second_section_ratio,
-      zx=minimum_height,
-      ip=immersion_depth,
-      it=immersion_depth_direction,
-      fp=surface_following_distance,
-      av=aspiration_volume,
-      as_=aspiration_speed,
-      ta=transport_air_volume,
-      ba=blow_out_air_volume,
-      oa=pre_wetting_volume,
-      lm=lld_mode,
-      ll=gamma_lld_sensitivity,
-      lv=dp_lld_sensitivity,
-      zo=aspirate_position_above_z_touch_off,
-      ld=detection_height_difference_for_dual_lld,
-      de=swap_speed,
-      wt=settling_time,
-      mv=homogenization_volume,
-      mc=homogenization_cycles,
-      mp=homogenization_position_from_liquid_surface,
-      ms=homogenization_speed,
-      mh=homogenization_surface_following_distance,
-      gi=limit_curve_index,
+      xp=[f"{xp:05}" for xp in x_positions],
+      yp=[f"{yp:04}" for yp in y_positions],
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      te=f"{min_z_endpos:04}",
+      lp=[f"{lp:04}" for lp in lld_search_height],
+      ch=[f"{ch:03}" for ch in clot_detection_height],
+      zl=[f"{zl:04}" for zl in liquid_surface_no_lld],
+      po=[f"{po:04}" for po in pull_out_distance_transport_air],
+      zu=[f"{zu:04}" for zu in second_section_height],
+      zr=[f"{zr:05}" for zr in second_section_ratio],
+      zx=[f"{zx:04}" for zx in minimum_height],
+      ip=[f"{ip:04}" for ip in immersion_depth],
+      it=[f"{it}"    for it in immersion_depth_direction],
+      fp=[f"{fp:04}" for fp in surface_following_distance],
+      av=[f"{av:05}" for av in aspiration_volumes],
+      as_=[f"{as_:04}" for as_ in aspiration_speed],
+      ta=[f"{ta:03}" for ta in transport_air_volume],
+      ba=[f"{ba:04}" for ba in blow_out_air_volume],
+      oa=[f"{oa:03}" for oa in pre_wetting_volume],
+      lm=[f"{lm}"    for lm in lld_mode],
+      ll=[f"{ll}"    for ll in gamma_lld_sensitivity],
+      lv=[f"{lv}"    for lv in dp_lld_sensitivity],
+      zo=[f"{zo:03}" for zo in aspirate_position_above_z_touch_off],
+      ld=[f"{ld:02}" for ld in detection_height_difference_for_dual_lld],
+      de=[f"{de:04}" for de in swap_speed],
+      wt=[f"{wt:02}" for wt in settling_time],
+      mv=[f"{mv:05}" for mv in homogenization_volume],
+      mc=[f"{mc:02}" for mc in homogenization_cycles],
+      mp=[f"{mp:03}" for mp in homogenization_position_from_liquid_surface],
+      ms=[f"{ms:04}" for ms in homogenization_speed],
+      mh=[f"{mh:04}" for mh in homogenization_surface_following_distance],
+      gi=[f"{gi:03}" for gi in limit_curve_index],
       gj=tadm_algorithm,
       gk=recording_mode,
-      lk=use_2nd_section_aspiration,
-      ik=retract_height_over_2nd_section_to_empty_tip,
-      sd=dispensation_speed_during_emptying_tip,
-      se=dosing_drive_speed_during_2nd_section_search,
-      sz=z_drive_speed_during_2nd_section_search,
-      io=cup_upper_edge,
-      il=ratio_liquid_rise_to_tip_deep_in,
-      in_=immersion_depth_2nd_section,
+
+      lk=[1 if lk else 0 for lk in use_2nd_section_aspiration],
+      ik=[f"{ik:04}" for ik in retract_height_over_2nd_section_to_empty_tip],
+      sd=[f"{sd:04}" for sd in dispensation_speed_during_emptying_tip],
+      se=[f"{se:04}" for se in dosing_drive_speed_during_2nd_section_search],
+      sz=[f"{sz:04}" for sz in z_drive_speed_during_2nd_section_search],
+      io=[f"{io:04}" for io in cup_upper_edge],
+      il=[f"{il:05}" for il in ratio_liquid_rise_to_tip_deep_in],
+      in_=[f"{in_:04}" for in_ in immersion_depth_2nd_section],
     )
     return resp
 
-  # TODO: a lot of these probably need to be lists.
   def dispense_pip(
     self,
-    dispensing_mode: int = 0,
-    tip_pattern: bool = True,
-    x_positions: int = 0,
-    y_positions: int = 0,
-    minimum_height: int = 3600,
-    lld_search_height: int = 0,
-    liquid_surface_no_lld: int = 3600,
-    pull_out_distance_transport_air: int = 50,
-    immersion_depth: int = 0,
-    immersion_depth_direction: int = 0,
-    surface_following_distance: int = 0,
-    second_section_height: int = 0,
-    second_section_ratio: int = 0,
+    dispensing_mode: typing.List[int] = [0],
+    tip_pattern: typing.List[bool] = True,
+    x_positions: typing.List[int] = [0],
+    y_positions: typing.List[int] = [0],
+    minimum_height: typing.List[int] = [3600],
+    lld_search_height: typing.List[int] = [0],
+    liquid_surface_no_lld: typing.List[int] = [3600],
+    pull_out_distance_transport_air: typing.List[int] = [50],
+    immersion_depth: typing.List[int] = [0],
+    immersion_depth_direction: typing.List[int] = [0],
+    surface_following_distance: typing.List[int] = [0],
+    second_section_height: typing.List[int] = [0],
+    second_section_ratio: typing.List[int] = [0],
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
-    min_z_endpos: int = 3600,
-    dispense_volume: int = 0,
-    dispense_speed: int = 500,
-    cut_off_speed: int = 250,
-    stop_back_volume: int = 0,
-    transport_air_volume: int = 0,
-    blow_out_air_volume: int = 200,
-    lld_mode: int = 1,
+    min_z_endpos: typing.List[int] = [3600], #
+    dispense_volumes: typing.List[int] = [0],
+    dispense_speed: typing.List[int] = [500],
+    cut_off_speed: typing.List[int] = [250],
+    stop_back_volume: typing.List[int] = [0],
+    transport_air_volume: typing.List[int] = [0],
+    blow_out_air_volume: typing.List[int] = [200],
+    lld_mode: typing.List[int] = [1],
     side_touch_off_distance: int = 1,
-    dispense_position_above_z_touch_off: int = 5,
-    gamma_lld_sensitivity: int = 1,
-    dp_lld_sensitivity: int = 1,
-    swap_speed: int = 100,
-    settling_time: int = 5,
-    mix_volume: int = 0,
-    mix_cycles: int = 0,
-    mix_position_from_liquid_surface: int = 250,
-    mix_speed: int = 500,
-    mix_surface_following_distance: int = 0,
-    limit_curve_index: int = 0,
+    dispense_position_above_z_touch_off: typing.List[int] = [5],
+    gamma_lld_sensitivity: typing.List[int] = [1],
+    dp_lld_sensitivity: typing.List[int] = [1],
+    swap_speed: typing.List[int] = [100],
+    settling_time: typing.List[int] = [5],
+    mix_volume: typing.List[int] = [0],
+    mix_cycles: typing.List[int] = [0],
+    mix_position_from_liquid_surface: typing.List[int] = [250],
+    mix_speed: typing.List[int] = [500],
+    mix_surface_following_distance: typing.List[int] = [0],
+    limit_curve_index: typing.List[int] = [0],
     tadm_algorithm: bool = False,
     recording_mode: int = 0
   ):
@@ -1516,7 +1730,7 @@ class STAR(HamiltonLiquidHandler):
       min_z_endpos: Minimum z-Position at end of a command [0.1 mm] (refers to all channels
                     independent of tip pattern parameter 'tm'). Must be between 0 and 3600.
                     Default 3600.
-      dispense_volume: Dispense volume [0.1ul]. Must be between 0 and 12500. Default 0.
+      dispense_volumes: Dispense volume [0.1ul]. Must be between 0 and 12500. Default 0.
       dispense_speed: Dispense speed [0.1ul/s]. Must be between 4 and 5000. Default 500.
       cut_off_speed: Cut-off speed [0.1ul/s]. Must be between 4 and 5000. Default 250.
       stop_back_volume: Stop back volume [0.1ul]. Must be between 0 and 180. Default 0.
@@ -1543,7 +1757,7 @@ class STAR(HamiltonLiquidHandler):
                                         Default 250.
       mix_speed: Speed of mixing [0.1ul/s]. Must be between 4 and 5000. Default 500.
       mix_surface_following_distance: Surface following distance during mixing [0.1mm]. Must be
-                                      between 4 and 3600. Default 0.
+                                      between 0 and 3600. Default 0.
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
       tadm_algorithm: TADM algorithm. Default False.
       recording_mode: Recording mode 0 : no 1 : TADM errors only 2 : all TADM measurement. Must
@@ -1565,7 +1779,7 @@ class STAR(HamiltonLiquidHandler):
     _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
     _assert_clamp(min_z_endpos, 0, 3600, "min_z_endpos")
-    _assert_clamp(dispense_volume, 0, 12500, "dispense_volume")
+    _assert_clamp(dispense_volumes, 0, 12500, "dispense_volume")
     _assert_clamp(dispense_speed, 4, 5000, "dispense_speed")
     _assert_clamp(cut_off_speed, 4, 5000, "cut_off_speed")
     _assert_clamp(stop_back_volume, 0, 180, "stop_back_volume")
@@ -1583,49 +1797,50 @@ class STAR(HamiltonLiquidHandler):
     _assert_clamp(mix_cycles, 0, 99, "mix_cycles")
     _assert_clamp(mix_position_from_liquid_surface, 0, 900, "mix_position_from_liquid_surface")
     _assert_clamp(mix_speed, 4, 5000, "mix_speed")
-    _assert_clamp(mix_surface_following_distance, 4, 3600, "mix_surface_following_distance")
+    _assert_clamp(mix_surface_following_distance, 0, 3600, "mix_surface_following_distance")
     _assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
     _assert_clamp(recording_mode, 0, 2, "recording_mode")
 
     return self.send_command(
       module="C0",
       command="DS",
-      dm=dispensing_mode,
-      tm=tip_pattern,
-      xp=x_positions,
-      yp=y_positions,
-      zx=minimum_height,
-      lp=lld_search_height,
-      zl=liquid_surface_no_lld,
-      po=pull_out_distance_transport_air,
-      ip=immersion_depth,
-      it=immersion_depth_direction,
-      fp=surface_following_distance,
-      zu=second_section_height,
-      zr=second_section_ratio,
-      th=minimum_traverse_height_at_beginning_of_a_command,
-      te=min_z_endpos,
-      av=dispense_volume,
-      as_=dispense_speed,
-      ss=cut_off_speed,
-      rv=stop_back_volume,
-      ta=transport_air_volume,
-      ba=blow_out_air_volume,
-      lm=lld_mode,
-      dj=side_touch_off_distance,
-      zo=dispense_position_above_z_touch_off,
-      ll=gamma_lld_sensitivity,
-      lv=dp_lld_sensitivity,
-      de=swap_speed,
-      wt=settling_time,
-      mv=mix_volume,
-      mc=mix_cycles,
-      mp=mix_position_from_liquid_surface,
-      ms=mix_speed,
-      mh=mix_surface_following_distance,
-      gi=limit_curve_index,
-      gj=tadm_algorithm,
-      gk=recording_mode,
+      timeout=60,
+      dm=[f"{dm:01}" for dm in dispensing_mode],
+      tm=[f"{tm:01}" for tm in tip_pattern],
+      xp=[f"{xp:05}" for xp in x_positions],
+      yp=[f"{yp:04}" for yp in y_positions],
+      zx=[f"{zx:04}" for zx in minimum_height],
+      lp=[f"{lp:04}" for lp in lld_search_height],
+      zl=[f"{zl:04}" for zl in liquid_surface_no_lld],
+      po=[f"{po:04}" for po in pull_out_distance_transport_air],
+      ip=[f"{ip:04}" for ip in immersion_depth],
+      it=[f"{it:01}" for it in immersion_depth_direction],
+      fp=[f"{fp:04}" for fp in surface_following_distance],
+      zu=[f"{zu:04}" for zu in second_section_height],
+      zr=[f"{zr:05}" for zr in second_section_ratio],
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      te=f"{min_z_endpos:04}",
+      dv=[f"{dv:05}" for dv in dispense_volumes],
+      ds=[f"{ds:04}" for ds in dispense_speed],
+      ss=[f"{ss:04}" for ss in cut_off_speed],
+      rv=[f"{rv:03}" for rv in stop_back_volume],
+      ta=[f"{ta:03}" for ta in transport_air_volume],
+      ba=[f"{ba:04}" for ba in blow_out_air_volume],
+      lm=[f"{lm:01}" for lm in lld_mode],
+      dj=f"{side_touch_off_distance:02}", #
+      zo=[f"{zo:03}" for zo in dispense_position_above_z_touch_off],
+      ll=[f"{ll:01}" for ll in gamma_lld_sensitivity],
+      lv=[f"{lv:01}" for lv in dp_lld_sensitivity],
+      de=[f"{de:04}" for de in swap_speed],
+      wt=[f"{wt:02}" for wt in settling_time],
+      mv=[f"{mv:05}" for mv in mix_volume],
+      mc=[f"{mc:02}" for mc in mix_cycles],
+      mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
+      ms=[f"{ms:04}" for ms in mix_speed],
+      mh=[f"{mh:04}" for mh in mix_surface_following_distance],
+      gi=[f"{gi:03}" for gi in limit_curve_index],
+      gj=tadm_algorithm, #
+      gk=recording_mode, #
     )
 
   # TODO:(command:DA) Simultaneous aspiration & dispensation of liquid
@@ -1814,7 +2029,7 @@ class STAR(HamiltonLiquidHandler):
     )
     return self.parse_response(resp, "rd####")
 
-  def request_query_tip_presence(self):
+  def request_tip_presence(self):
     """ Request query tip presence on each channel
 
     Returns:
@@ -1832,7 +2047,7 @@ class STAR(HamiltonLiquidHandler):
     """
 
     resp = self.send_command(module="C0", command="RL")
-    return self.parse_response(resp, "lh# (n)")
+    return self.parse_response(resp, "lh#### (n)")
 
   def request_tadm_status(self):
     """ Request PIP height of last LLD
@@ -2133,7 +2348,7 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth: int = 0,
     immersion_depth_direction: int = 0,
     liquid_surface_sink_distance_at_the_end_of_aspiration: int = 0,
-    aspiration_volume: int = 0,
+    aspiration_volumes: int = 0,
     aspiration_speed: int = 1000,
     transport_air_volume: int = 0,
     blow_out_air_volume: int = 200,
@@ -2183,7 +2398,7 @@ class STAR(HamiltonLiquidHandler):
           liquid). Must be between 0 and 1. Default 0.
       liquid_surface_sink_distance_at_the_end_of_aspiration: Liquid surface sink distance at
           the end of aspiration [0.1mm]. Must be between 0 and 990. Default 0.
-      aspiration_volume: Aspiration volume [0.1ul]. Must be between 0 and 11500. Default 0.
+      aspiration_volumes: Aspiration volume [0.1ul]. Must be between 0 and 11500. Default 0.
       aspiration_speed: Aspiration speed [0.1ul/s]. Must be between 3 and 5000. Default 1000.
       transport_air_volume: Transport air volume [0.1ul]. Must be between 0 and 500. Default 0.
       blow_out_air_volume: Blow-out air volume [0.1ul]. Must be between 0 and 11500. Default 200.
@@ -2229,7 +2444,7 @@ class STAR(HamiltonLiquidHandler):
     _assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
     _assert_clamp(liquid_surface_sink_distance_at_the_end_of_aspiration, 0, 990, \
                   "liquid_surface_sink_distance_at_the_end_of_aspiration")
-    _assert_clamp(aspiration_volume, 0, 11500, "aspiration_volume")
+    _assert_clamp(aspiration_volumes, 0, 11500, "aspiration_volumes")
     _assert_clamp(aspiration_speed, 3, 5000, "aspiration_speed")
     _assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
     _assert_clamp(blow_out_air_volume, 0, 11500, "blow_out_air_volume")
@@ -2268,7 +2483,7 @@ class STAR(HamiltonLiquidHandler):
       iw=immersion_depth,
       ix=immersion_depth_direction,
       fh=liquid_surface_sink_distance_at_the_end_of_aspiration,
-      af=aspiration_volume,
+      af=aspiration_volumes,
       ag=aspiration_speed,
       vt=transport_air_volume,
       bv=blow_out_air_volume,
@@ -3487,9 +3702,3 @@ class STAR(HamiltonLiquidHandler):
 
     resp = self.send_command(module="C0", command="QG")
     return self.parse_response(resp, "xs#####xd#yj####yd#zj####zd#")
-
-
-# TODO: temp test
-if __name__ == "__main__":
-  dev = STAR()
-  print(dev.request_master_status())
