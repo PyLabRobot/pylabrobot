@@ -3,6 +3,7 @@ import inspect
 import json
 import logging
 import typing
+from pyhamilton.liquid_handling.resources.abstract.carrier import TipCarrier
 from pyhamilton.liquid_handling.resources.ml_star import tip_types
 
 import pyhamilton.utils.file_parsing as file_parser
@@ -443,8 +444,7 @@ class LiquidHandler:
     """ Define a new tip type.
 
     Sends a command to the robot to define a new tip type and save the tip type table index for
-    future reference. If a tip with the same properties already exists, the index of the existing
-    tip will be returned.
+    future reference.
 
     Args:
       tip_type: Tip type name.
@@ -486,6 +486,21 @@ class LiquidHandler:
     """
 
     return self._tip_types[tip_type]
+
+  def get_or_assign_tip_type_index(self, tip_type: TipType) -> int:
+    """ Get a tip type table index for the tip_type if it is defined, otherwise define it and then
+    return it.
+
+    Args:
+      tip_type: Tip type.
+
+    Returns:
+      Tip type ID.
+    """
+
+    if tip_type not in self._tip_types:
+      self.define_tip_type(tip_type)
+    return self.get_tip_type_table_index(tip_type)
 
   def pickup_tips(
     self,
@@ -529,9 +544,7 @@ class LiquidHandler:
     if len(y_positions) < 8:
       y_positions.append(0)
 
-    # TODO: Remove this.
-    self.define_tip_type(resource.tip_type)
-    ttti = self.get_tip_type_table_index(resource.tip_type)
+    ttti = self.get_or_assign_tip_type_index(resource.tip_type)
 
     return self.backend.pick_up_tip(
       x_positions=x_positions,
@@ -582,9 +595,7 @@ class LiquidHandler:
       x_positions.append(0)
     tip_pattern = [(1 if x != 0 else 0) for x in x_positions]
 
-    # TODO: Remove this.
-    self.define_tip_type(resource.tip_type)
-    ttti = self.get_tip_type_table_index(resource.tip_type)
+    ttti = self.get_or_assign_tip_type_index(resource.tip_type)
 
     return self.backend.discard_tip(
       x_positions=x_positions,
@@ -777,9 +788,7 @@ class LiquidHandler:
     corrected_volumes = []
     for i, vol in enumerate(volumes):
       if vol > 0:
-        # TODO: Remove this when we have the new liquid class.
-        # corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
-        corrected_volumes.append(int(vol * 1.072 * 10))
+        corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
     # TODO: Must have leading zero if len != 8?
     # if len(corrected_volumes) < 8:
       # corrected_volumes.append(0)

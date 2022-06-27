@@ -29,7 +29,7 @@ class Tips(Resource, metaclass=ABCMeta):
   def serialize(self):
     return dict(
       **super().serialize(),
-      tip_type=self.tip_type,
+      tip_type=self.tip_type.serialize(),
       dx=self.dx,
       dy=self.dy,
       dz=self.dz

@@ -21,7 +21,8 @@ from .resources import (
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
   Cos_96_DW_1mL,
-  Cos_96_DW_500ul
+  Cos_96_DW_500ul,
+  standard_volume_tip_with_filter
 )
 from .resources.ml_star import STF_L, HTF_L
 
@@ -263,7 +264,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     tc = TipCarrier("tc", 200, 200, 200, [
       Coordinate(10, 20, 30)
     ])
-    tc[0] = Tips("tips", 10, 20, 30, "tip_type", -1, -1, -1)
+    tc[0] = Tips("tips", 10, 20, 30, standard_volume_tip_with_filter, -1, -1, -1)
     pc = PlateCarrier("pc", 100, 100, 100, [
       Coordinate(40, 50, 60)
     ])
