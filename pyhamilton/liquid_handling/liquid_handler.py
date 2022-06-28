@@ -853,3 +853,31 @@ class LiquidHandler:
       dispense_volumes=corrected_volumes,
       **cmd_kwargs
     )
+
+  def move(
+    self,
+    from_resource: typing.Union[str, Resource],
+    to_resource: typing.Union[str, Resource],
+    from_volumes: typing.List[typing.List[bool]],
+    to_volumes: typing.Optional[typing.List[typing.List[bool]]] = None,
+    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
+  ):
+    """ Move a resource from one location to another.
+
+    Convenience method to aspirate and dispense to move a liquid.
+
+    Args:
+      from_resource: Resource name or resource object.
+      from_volume: List of lists of volumes to aspirate. The outer list is for rows, the inner list
+        is for columns.
+      to_resource: Resource name or resource object.
+      to_volume: List of lists of volumes to dispense. The outer list is for rows, the inner list
+        is for columns. If not specified, the same volumes and locations used for aspiration are
+        used for the dispense.
+    """
+
+    if to_volumes is None:
+      to_volumes = from_volumes
+
+    self.aspirate(from_resource, from_volumes, liquid_class)
+    self.dispense(to_resource, to_volumes, liquid_class)
