@@ -131,13 +131,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     with the response string. We'll probably do a custom implementation
     for that.
 
-    # TODO: spaces
+    TODO: spaces
     We should also parse responses where integers are separated by spaces,
-    like this: ua#### #### ###### ###### ###### ######
-
-    Example:
-      >>> parse_fw_string("aa1111bbrwccB0B", "aa####bb&&cc***")
-      {'aa': 1111, 'bb': 'rw', 'cc': 2827}
+    like this: `ua#### #### ###### ###### ###### ######`
 
     Args:
       resp: The response string to parse.
@@ -148,6 +144,14 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     Returns:
       A dictionary containing the parsed values.
+
+    Examples:
+      Parsing a string containing decimals (`1111`), hex (`0xB0B`) and chars (`'rw'`):
+
+      ```
+      >>> parse_fw_string("aa1111bbrwccB0B", "aa####bb&&cc***")
+      {'aa': 1111, 'bb': 'rw', 'cc': 2827}
+      ```
     """
 
     # Remove device and cmd identifier from response.
@@ -1404,7 +1408,7 @@ class STAR(HamiltonLiquidHandler):
       tp=begin_tip_deposit_process,
       tz=end_tip_deposit_process,
       th=minimum_traverse_height_at_beginning_of_a_command,
-      td=discarding_method,
+      ti=discarding_method,
     )
 
   # TODO:(command:TW) Tip Pick-up for DC wash procedure
@@ -2202,15 +2206,15 @@ class STAR(HamiltonLiquidHandler):
     Initialize CoRe 96 Head. Dependent to configuration initialization change.
 
     Args:
-      x_position: X-Position [0.1mm] (discard position of tip A1 ). Must be between 0 and 30000.
-                  Default 0.
+      x_position: X-Position [0.1mm] (discard position of tip A1). Must be between 0 and 30000.
+        Default 0.
       x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
       y_position: Y-Position [0.1mm] (discard position of tip A1 ). Must be between 1054 and 5743.
-                  Default 5743.
-      z-_deposit_position_[0.1mm]: Z- deposit position [0.1mm] (collar bearing position). Must be
-                                   between 0 and 3425. Default 3425.
+        Default 5743.
+      z_deposit_position_[0.1mm]: Z- deposit position [0.1mm] (collar bearing position). Must be
+        between 0 and 3425. Default 3425.
       z_position_at_the_command_end: Z-Position at the command end [0.1mm]. Must be between 0 and
-                                     3425. Default 3425.
+        3425. Default 3425.
     """
 
     _assert_clamp(x_position, 0, 30000, "x_position")

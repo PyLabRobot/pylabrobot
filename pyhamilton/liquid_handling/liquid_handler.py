@@ -3,8 +3,6 @@ import inspect
 import json
 import logging
 import typing
-from pyhamilton.liquid_handling.resources.abstract.carrier import TipCarrier
-from pyhamilton.liquid_handling.resources.ml_star import tip_types
 
 import pyhamilton.utils.file_parsing as file_parser
 
@@ -167,6 +165,9 @@ class LiquidHandler:
       replace: Replace the resource with the same name that was previously assigned, if it exists.
                If a resource is assigned with the same name and replace is False, a ValueError
                will be raised.
+
+    Raises:
+      ValueError: If a resource is assigned with the same name and replace is `False`.
     """
 
     if (rails is not None) == (location is not None):
@@ -240,12 +241,16 @@ class LiquidHandler:
   def summary(self):
     """ Prints a string summary of the deck layout.
 
-    Example output:
+    Example:
+      Printing a summary of the deck layout:
 
-    Rail     Resource                   Type                Coordinates (mm)
-    ===============================================================================================
-     (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
-         │   ├── tips_01                STF_L               (x: 117.900, y: 240.000, z: 100.000)
+      ```
+      >>> lh.summary()
+      Rail     Resource                   Type                Coordinates (mm)
+      ===============================================================================================
+      (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
+          │   ├── tips_01                STF_L               (x: 117.900, y: 240.000, z: 100.000)
+      ```
     """
 
     if len(self._resources) == 0:

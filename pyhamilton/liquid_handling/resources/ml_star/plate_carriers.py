@@ -1,3 +1,5 @@
+""" ML Star plate carriers """
+
 # pylint: skip-file
 
 from pyhamilton.liquid_handling.resources.abstract import PlateCarrier, Coordinate

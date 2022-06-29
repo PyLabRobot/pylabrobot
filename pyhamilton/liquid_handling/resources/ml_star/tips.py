@@ -1,3 +1,5 @@
+""" ML Star tips """
+
 # pylint: skip-file
 
 from pyhamilton.liquid_handling.resources.abstract import Tips
@@ -14,10 +16,7 @@ from .tip_types import (
 
 
 class FourmlTF_L(Tips):
-  """ Tip Rack 24x 4ml Tip with Filter landscape oriented
-
-  TODO: add tip_type
-  """
+  """ Tip Rack 24x 4ml Tip with Filter landscape oriented """
 
   def __init__(self, name: str):
     super().__init__(
@@ -33,10 +32,7 @@ class FourmlTF_L(Tips):
 
 
 class LT_L(Tips):
-  """ Rack with 96 10ul Low Volume Tip
-
-  TODO: add tip_type
-  """
+  """ Rack with 96 10ul Low Volume Tip """
 
   def __init__(self, name: str):
     super().__init__(
@@ -52,10 +48,7 @@ class LT_L(Tips):
 
 
 class HTF_L(Tips):
-  """ Rack with 96 1000ul High Volume Tip with filter
-
-  TODO: add tip_type
-  """
+  """ Rack with 96 1000ul High Volume Tip with filter """
 
   def __init__(self, name: str):
     super().__init__(

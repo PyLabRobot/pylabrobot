@@ -1,3 +1,5 @@
+""" Corning Costar plates """
+
 # pylint: skip-file
 
 from pyhamilton.liquid_handling.resources.abstract import Plate
