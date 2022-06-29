@@ -7,7 +7,7 @@ extras_testing = [
 ]
 
 extras_docs = [
-    'sphinx_rtd_theme',
+    'sphinx_book_theme',
     'myst_nb',
     'sphinx_copybutton',
     'commonmark',
