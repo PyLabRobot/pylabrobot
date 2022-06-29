@@ -505,13 +505,14 @@ class LiquidHandler:
   def pickup_tips(
     self,
     resource: typing.Union[str, Tips],
-    pattern: typing.List[bool]
+    pattern: typing.List[typing.Optional[bool]]
   ):
     """ Pick up tips from a resource.
 
     Args:
       resource: Resource name or resource object.
-      pattern: List of boolean values indicating which sites to pick up.
+      pattern: List of boolean values indicating which sites to pick up. Where no tips should be
+        picked up, use `False` or `None`.
     """
 
     # Get resource using `get_resource` to adjust location.
@@ -521,28 +522,22 @@ class LiquidHandler:
 
     assert 0 < len(pattern) <= 8, "Must have 0 < len(pattern) <= 8."
 
-    # yp5298 5208 5118 5028 4938 4848 4758 4668 ( 20210715.trc),
-    # matches 210701_menny_on_deck_turb_general_300uLtips_0002/discrete-turb/assets/deck.lay
-
-    # TODO: what does ' C0TPid0205xp06579 06579 06579 06579 00000&yp2418 2328 2238 2148 0000&tm1 1 1 1 0&tt05tp2264tz2164th2450td1' do?
-
-    # Get x positions.
-    tip_pattern = [1, 0] # 1 where x_pos is relevant., probably want to use 2D array and set to 1 where child list is >0
-    x_positions = []
-    # TODO: loop over lists to get x positions.
-    i = 1
-    x_positions.append(int(resource.location.x * 10) + 90*i)
-
-    # Get y positions of tips.
+    # Get positions of tips.
     y_positions = []
-    for i, p in enumerate(pattern):
-      if p:
-        # TODO: what is -90?
-        y_positions.append(int(resource.location.y * 10) - i*90)
+    x_positions = []
+
+    for i, y_pattern in enumerate(pattern):
+      for j, y, in enumerate(y_pattern):
+        if y:
+          # TODO: what is -90?
+          x_positions.append(int(resource.location.x * 10) - i*90)
+          y_positions.append(int(resource.location.y * 10) - j*90)
 
     # TODO: Must have leading zero if len != 8?
     if len(y_positions) < 8:
+      x_positions.append(0)
       y_positions.append(0)
+    tip_pattern = [1 if x != 0 else 0 for x in x_positions]
 
     ttti = self.get_or_assign_tip_type_index(resource.tip_type)
 
@@ -560,13 +555,14 @@ class LiquidHandler:
   def discard_tips(
     self,
     resource: typing.Union[str, Tips],
-    pattern: typing.List[bool]
+    pattern: typing.List[typing.Optional[bool]]
   ):
     """ Discard tips from a resource.
 
     Args:
       resource: Resource name or resource object.
-      pattern: List of boolean values indicating which sites to drop.
+      pattern: List of boolean values indicating which sites to drop. Where no tips should be
+        picked up, use `False` or `None`.
     """
 
     # Get resource using `get_resource` to adjust location.
@@ -576,24 +572,22 @@ class LiquidHandler:
 
     assert 0 < len(pattern) <= 8, "Must have 0 < len(pattern) <= 8."
 
-    # Get x positions.
-    x_positions = []
-    i = 1
-    x_positions.append(int(resource.location.x * 10) + 90*i)
-    # TODO: loop over lists to get x positions.
-
-    # Get y positions of tips.
+    # Get positions of tips.
     y_positions = []
-    for i, p in enumerate(pattern):
-      if p:
-        # TODO: what is -90?
-        y_positions.append(int(resource.location.y * 10) - i*90)
+    x_positions = []
+
+    for i, y_pattern in enumerate(pattern):
+      for j, y, in enumerate(y_pattern):
+        if y:
+          # TODO: what is -90?
+          x_positions.append(int(resource.location.x * 10) - i*90)
+          y_positions.append(int(resource.location.y * 10) - j*90)
 
     # TODO: Must have leading zero if len != 8?
     if len(y_positions) < 8:
-      y_positions.append(0)
       x_positions.append(0)
-    tip_pattern = [(1 if x != 0 else 0) for x in x_positions]
+      y_positions.append(0)
+    tip_pattern = [1 if x != 0 else 0 for x in x_positions]
 
     ttti = self.get_or_assign_tip_type_index(resource.tip_type)
 
@@ -611,7 +605,7 @@ class LiquidHandler:
   def aspirate(
     self,
     resource: typing.Union[str, Plate],
-    volumes: typing.List[typing.List[float]],
+    volumes: typing.List[typing.List[typing.Optional[float]]],
     liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     **kwargs
   ):
@@ -620,7 +614,7 @@ class LiquidHandler:
     Args:
       resource: Resource name or resource object.
       volumes: List of lists of volumes to aspirate. The outer list is for rows, the inner list is
-        for columns.
+        for columns. Where no liquid should be aspirated, use `None` or `0`.
       liquid_class: Liquid class of aspirated liquid. This is used to correct the volumes and to
         update default parameters for aspiration where those are not overwritten by `kwargs`.
       kwargs: Keyword arguments for `LiquidHandler.aspirate_pip`. Where there is no value for a
@@ -641,11 +635,12 @@ class LiquidHandler:
     x_positions = []
     y_positions = []
 
-    for i, vol in enumerate(volumes):
-      if vol > 0:
-        # TODO: what is -90?
-        y_positions.append(int(resource.location.y * 10) - i*90)
-        x_positions.append(int(resource.location.x * 10))
+    for i, col in enumerate(volumes):
+      for j, vol in enumerate(col):
+        if vol is not None and vol > 0:
+          # TODO: what is -90?
+          x_positions.append(int(resource.location.x * 10) - i*90)
+          y_positions.append(int(resource.location.y * 10) - j*90)
 
     # TODO: Must have leading zero if len != 8?
     if len(y_positions) < 8:
@@ -656,7 +651,7 @@ class LiquidHandler:
     # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL.
     corrected_volumes = []
     for i, vol in enumerate(volumes):
-      if vol > 0:
+      if vol is not None and vol > 0:
         # TODO: Remove this when we have the new liquid class.
         # corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
         corrected_volumes.append(int(vol * 1.072 * 10))
@@ -742,7 +737,7 @@ class LiquidHandler:
   def dispense(
     self,
     resource: typing.Union[str, Plate],
-    volumes: typing.List[typing.List[float]],
+    volumes: typing.List[typing.List[typing.Optional[float]]],
     liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     **kwargs
   ):
@@ -751,7 +746,7 @@ class LiquidHandler:
     Args:
       resource: Resource name or resource object.
       volumes: List of lists of volumes to dispense. The outer list is for rows, the inner list is
-        for columns.
+        for columns. Where no liquid should be dispensed, use `None` or `0`.
       liquid_class: Liquid class of dispensed liquid. This is used to correct the volumes and to
         update default parameters for dispension where those are not overwritten by `kwargs`.
       kwargs: Keyword arguments for `LiquidHandler.dispense_pip`. Where there is no value for a
@@ -772,11 +767,12 @@ class LiquidHandler:
     x_positions = []
     y_positions = []
 
-    for i, vol in enumerate(volumes):
-      if vol > 0:
-        # TODO: what is -90?
-        y_positions.append(int(resource.location.y * 10) - i*90)
-        x_positions.append(int(resource.location.x * 10))
+    for i, col in enumerate(volumes):
+      for j, vol in enumerate(col):
+        if vol is not None and vol > 0:
+          # TODO: what is -90?
+          x_positions.append(int(resource.location.x * 10) - i*90)
+          y_positions.append(int(resource.location.y * 10) - j*90)
 
     # TODO: Must have leading zero if len != 8?
     if len(y_positions) < 8:
@@ -787,7 +783,7 @@ class LiquidHandler:
     # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL.
     corrected_volumes = []
     for i, vol in enumerate(volumes):
-      if vol > 0:
+      if vol is not None and vol > 0:
         corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
     # TODO: Must have leading zero if len != 8?
     # if len(corrected_volumes) < 8:
@@ -858,8 +854,8 @@ class LiquidHandler:
     self,
     from_resource: typing.Union[str, Resource],
     to_resource: typing.Union[str, Resource],
-    from_volumes: typing.List[typing.List[bool]],
-    to_volumes: typing.Optional[typing.List[typing.List[bool]]] = None,
+    from_volumes: typing.List[typing.List[typing.Optional[float]]],
+    to_volumes: typing.Optional[typing.List[typing.List[typing.Optional[bool]]]] = None,
     liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
   ):
     """ Move a resource from one location to another.
@@ -868,12 +864,13 @@ class LiquidHandler:
 
     Args:
       from_resource: Resource name or resource object.
-      from_volume: List of lists of volumes to aspirate. The outer list is for rows, the inner list
-        is for columns.
       to_resource: Resource name or resource object.
-      to_volume: List of lists of volumes to dispense. The outer list is for rows, the inner list
+      from_volumes: List of lists of volumes to aspirate. The outer list is for rows, the inner list
+        is for columns. Where no liquid should be aspirated, use `None` or `0`.
+      to_volumes: List of lists of volumes to dispense. The outer list is for rows, the inner list
         is for columns. If not specified, the same volumes and locations used for aspiration are
-        used for the dispense.
+        used for the dispense. Where no liquid should be dispensed, use `None` or `0`.
+      liquid_class: Liquid class to use for aspiration and dispense.
     """
 
     if to_volumes is None:
