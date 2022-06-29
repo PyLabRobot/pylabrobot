@@ -364,29 +364,29 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     pass
 
   def test_tip_pickup_01(self):
-    self.lh.pickup_tips("tips_01", [True, True, False, False, False, False, False, False])
-    self._assert_command_sent_once("C0TPid0000xp01269&yp2418 2328 0000&tm1 0&tt01tp2244tz2164th2450td0",
+    self.lh.pickup_tips("tips_01", [[True, True, False, False, False, False, False, False]])
+    self._assert_command_sent_once("C0TPid0000xp01179 01179 00000&yp2418 2328 0000&tm1 1 0&tt01tp2244tz2164th2450td0",
                            "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_45(self):
-    self.lh.pickup_tips("tips_01", [False, False, False, False, True, True, False, False])
-    self._assert_command_sent_once("C0TPid0000xp01269&yp2058 1968 0000&tm1 0&tt01tp2244tz2164th2450td0",
+    self.lh.pickup_tips("tips_01", [[False, False, False, False, True, True, False, False]])
+    self._assert_command_sent_once("C0TPid0000xp01179 01179 00000&yp2058 1968 0000&tm1 1 0&tt01tp2244tz2164th2450td0",
                            "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_15(self):
-    self.lh.pickup_tips("tips_01", [True, False, False, False, False, True, False, False])
-    self._assert_command_sent_once("C0TPid0000xp01269&yp2418 1968 0000&tm1 0&tt01tp2244tz2164th2450td0",
+    self.lh.pickup_tips("tips_01", [[True, False, False, False, False, True, False, False]])
+    self._assert_command_sent_once("C0TPid0000xp01179 01179 00000&yp2418 1968 0000&tm1 1 0&tt01tp2244tz2164th2450td0",
                            "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_discard_45(self):
     self.test_tip_pickup_45() # pick up tips first
-    self.lh.discard_tips("tips_01", [False, False, False, False, True, True, False, False])
-    self._assert_command_sent_once("C0TRid0000xp01269 00000&yp2058 1968 0000&tm1 0&tt01tp2244tz2164th2450td0",
-                           "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
+    self.lh.discard_tips("tips_01", [[False, False, False, False, True, True, False, False]])
+    self._assert_command_sent_once("C0TRid0000xp01179 01179 00000&yp2058 1968 0000&tm1 1 0&tt01tp2244tz2164th2450ti0",
+                           "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####ti#")
 
   def test_single_channel_aspiration(self):
     self.test_tip_pickup_45() # pick up tips first
-    self.lh.aspirate("plate_01", [100])
+    self.lh.aspirate("plate_01", [[100]])
 
     # Real command, but with extra parameters. `lp`, `zl`, `zx`, `av`, `zu`, `zr` changed
     # TODO: Do we need these parameters with the real robot?
@@ -415,7 +415,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_multi_channel_aspiration(self):
     self.test_tip_pickup_45() # pick up tips first
-    self.lh.aspirate("plate_01", [100, 100])
+    self.lh.aspirate("plate_01", [[100, 100]])
 
     # Real command
     # self._assert_command_sent_once(
@@ -447,7 +447,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_single_channel_dispense(self):
     self.test_tip_pickup_45()
-    self.lh.dispense("plate_01", [100])
+    self.lh.dispense("plate_01", [[100]])
     self._assert_command_sent_once(
       "C0DSid0000dm2&tm1 0&xp02980 00000&yp1460 0000&zx1871&lp2321&zl1881&"
       "ip0000&it0&fp0000&th2450te2450dv01072&ds1200&ss0050&rv000&ta000&ba0000&lm0&zo000&ll1&"
@@ -460,7 +460,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_multi_channel_dispense(self):
     self.test_tip_pickup_45() # pick up tips first
-    self.lh.dispense("plate_01", [100, 100])
+    self.lh.dispense("plate_01", [[100, 100]])
     # self._assert_command_sent_once(
     #   "C0DSid0317dm2 2&tm1 1 0&dv01072 01072 00000&xp02980 02980 00000&yp1460 1370 0000&"
     #   "zx1871 1871 0000&lp2321 2321 2450&zl1881 1881 2450&ip0000 0000&it0 0&fp0000 0000&th2450"
@@ -485,7 +485,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_move(self):
     self.test_tip_pickup_45() # pick up tips first
-    self.lh.move("plate_01", "plate_01", [100, 100])
+    self.lh.move("plate_01", "plate_01", [[100, 100]])
 
     self._assert_command_sent_once(
       "C0ASid0000at0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp2321 2321&"

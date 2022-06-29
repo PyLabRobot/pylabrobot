@@ -655,11 +655,10 @@ class LiquidHandler:
 
     # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL.
     corrected_volumes = []
-    for i, vol in enumerate(volumes):
-      if vol is not None and vol > 0:
-        # TODO: Remove this when we have the new liquid class.
-        # corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
-        corrected_volumes.append(int(vol * 1.072 * 10))
+    for i, col in enumerate(volumes):
+      for j, vol in enumerate(col):
+        if vol is not None and vol > 0:
+          corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
     # TODO: Must have leading zero if len != 8?
     # if len(corrected_volumes) < 8:
       # corrected_volumes.append(0)
@@ -787,9 +786,10 @@ class LiquidHandler:
 
     # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL.
     corrected_volumes = []
-    for i, vol in enumerate(volumes):
-      if vol is not None and vol > 0:
-        corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
+    for i, col in enumerate(volumes):
+      for j, vol in enumerate(col):
+        if vol is not None and vol > 0:
+          corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
     # TODO: Must have leading zero if len != 8?
     # if len(corrected_volumes) < 8:
       # corrected_volumes.append(0)
