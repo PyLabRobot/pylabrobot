@@ -89,7 +89,7 @@ class LiquidHandler:
     TODO: probably after the layout is defined.
     """
 
-    assert len(self._resources) > 0, "no resources found"
+    # assert len(self._resources) > 0, "no resources found"
 
     self.backend.setup()
     initialized = self.backend.request_instrument_initialization_status()
