@@ -2,9 +2,11 @@ import enum
 import typing
 
 __all__ = [
-  "HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol",
-  "HighVolumeFilter_Water_DispenseSurface_Empty",
-  "HighVolumeFilter_Water_DispenseJet_Empty_no_transport_vol"
+ "HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol",
+ "HighVolumeFilter_Water_DispenseSurface_Empty",
+ "HighVolumeFilter_Water_DispenseJet_Empty_no_transport_vol",
+ "StandardVolume_Water_DispenseSurface_Part_no_transport_vol",
+ "StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol",
 ]
 
 
@@ -82,11 +84,8 @@ class LiquidClass:
     Args:
       device: list of supported devices
       tip_type: supported tip type
-      dispense_mode: 0 = jet partial volume,
-                     1 = jet empty tip (blow out),
-                     2 = surface partial volume
-                     3 = surface empty tip (blow out),
-                     4 = Empty tip at fix position
+      dispense_mode: 0 = jet partial volume, 1 = jet empty tip (blow out), 2 = surface partial
+        volume 3 = surface empty tip (blow out), 4 = Empty tip at fix position
       pressure_lld: 0 = low, 1 = medium, 2 = high, 3 = very high
       max_height_difference: unknown
       flow_rate: ul/s
@@ -100,9 +99,8 @@ class LiquidClass:
       stop_flow_rate: ul/s, dispense only
       stop_back_volume: ul, dispense only
       correction_curve: series of data points matching target values (keys) to
-                        corrected values (values), which are actually used for
-                        dispensation/aspiration commands. If length > 0, (0, 0)
-                        will automatically be added (possibly overriding).
+        corrected values (values), which are actually used for dispensation/aspiration commands. If
+        length > 0, (0, 0) will automatically be added (possibly overriding).
     """
 
     self.device = device
@@ -182,6 +180,7 @@ class LiquidClass:
     }
 
 
+#: HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol
 HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol = LiquidClass(
   device=[LiquidDevice.CHANNELS_1000uL],
   tip_type=TipType.HIGH_VOLUME_TIP_WITH_FILTER_1000uL,
@@ -210,6 +209,7 @@ HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol = LiquidClass(
 )
 
 
+#: HighVolumeFilter_Water_DispenseSurface_Empty
 HighVolumeFilter_Water_DispenseSurface_Empty = LiquidClass(
   device=[LiquidDevice.CHANNELS_1000uL],
   tip_type=TipType.HIGH_VOLUME_TIP_WITH_FILTER_1000uL,
@@ -238,6 +238,7 @@ HighVolumeFilter_Water_DispenseSurface_Empty = LiquidClass(
 )
 
 
+#: HighVolumeFilter_Water_DispenseJet_Empty_no_transport_vol
 HighVolumeFilter_Water_DispenseJet_Empty_no_transport_vol = LiquidClass(
   device=[LiquidDevice.CHANNELS_1000uL],
   tip_type=TipType.HIGH_VOLUME_TIP_WITH_FILTER_1000uL,
@@ -265,6 +266,7 @@ HighVolumeFilter_Water_DispenseJet_Empty_no_transport_vol = LiquidClass(
   }
 )
 
+#: StandardVolume_Water_DispenseSurface_Part_no_transport_vol
 StandardVolume_Water_DispenseSurface_Part_no_transport_vol = LiquidClass(
   device=[LiquidDevice.CHANNELS_1000uL],
   tip_type=TipType.STANDARD_VOLUME_TIP_300uL,
@@ -292,6 +294,7 @@ StandardVolume_Water_DispenseSurface_Part_no_transport_vol = LiquidClass(
   }
 )
 
+#: StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
 StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol = LiquidClass(
   device=[LiquidDevice.CHANNELS_1000uL],
   tip_type=TipType.STANDARD_VOLUME_TIP_300uL,

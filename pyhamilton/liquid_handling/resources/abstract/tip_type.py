@@ -12,8 +12,8 @@ TIP_TYPE_XL_CHANNEL = 5
 class TipType(object, metaclass=ABCMeta):
   """ TipType class
 
-  Properties:
-    filter: whether the tip type has a filter
+  Attributes:
+    has_filter: whether the tip type has a filter
     total_tip_length: total length of the tip, in in mm
     maximal_volume: maximal volume of the tip, in ul
     tip_type_id: id of the tip type. 0 = undefined, 1 = low volue, 2 = standard volume,
@@ -47,7 +47,6 @@ class TipType(object, metaclass=ABCMeta):
     self.tip_length = total_tip_length - fitting_depth
 
   def __eq__(self, other):
-    print(f"{self} == {other}")
     return (
       self.has_filter == other.has_filter and
       self.total_tip_length == other.total_tip_length and

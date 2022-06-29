@@ -1,3 +1,5 @@
+""" ML Star tip carriers """
+
 # pylint: skip-file
 
 from pyhamilton.liquid_handling.resources.abstract import TipCarrier, Coordinate

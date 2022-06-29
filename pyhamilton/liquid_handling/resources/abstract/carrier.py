@@ -11,8 +11,13 @@ logger = logging.getLogger(__name__)
 
 
 class Carrier(Resource, metaclass=ABCMeta):
-  """
-  ... carriers act as containers ...
+  """ Abstract base resource for carriers.
+
+  It is recommended to always use a resource carrier to store resources, because this ensures the
+  location of the resources can be calculated precisely.
+
+  Attributes:
+    capacity: The maximum number of items that can be stored in this carrier.
   """
 
   def __init__(
@@ -71,8 +76,10 @@ class Carrier(Resource, metaclass=ABCMeta):
 
 
 class PlateCarrier(Carrier, metaclass=ABCMeta):
+  """ Abstract base class for plate carriers. """
   pass
 
 
 class TipCarrier(Carrier, metaclass=ABCMeta):
+  """ Abstract base class for tip carriers. """
   pass
