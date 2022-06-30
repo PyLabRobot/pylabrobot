@@ -100,6 +100,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
   def test_serialization(self):
     self.maxDiff = None # pylint: disable=invalid-name
     self.assertEqual(self.tip_car.serialize(), {
+      "category": "tip_carrier",
       "location": {"x": None, "y": None, "z": None},
       "name": "tip_car",
       "sites": [
@@ -137,6 +138,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
     self.tip_car[1] = self.B
     self.assertEqual(self.tip_car.serialize(), {
+      "category": "tip_carrier",
       "location": {"x": None, "y": None, "z": None},
       "name": "tip_car",
       "sites": [
@@ -148,6 +150,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
         {
           "location": {"x": 10, "y": 50, "z": 30},
           "resource": {
+            "category": "tips",
             "dx": 9,
             "dy": 2,
             "dz": -2,

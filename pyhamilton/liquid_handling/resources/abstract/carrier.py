@@ -26,9 +26,10 @@ class Carrier(Resource, metaclass=ABCMeta):
     size_x: float,
     size_y: float,
     size_z: float,
-    site_positions: typing.List[Coordinate]
+    site_positions: typing.List[Coordinate],
+    category: str = "carrier"
   ):
-    super().__init__(name, size_x, size_y, size_z)
+    super().__init__(name, size_x, size_y, size_z, category=category)
     self.capacity = len(site_positions)
 
     self._sites = {}
@@ -77,9 +78,27 @@ class Carrier(Resource, metaclass=ABCMeta):
 
 class PlateCarrier(Carrier, metaclass=ABCMeta):
   """ Abstract base class for plate carriers. """
-  pass
+
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    site_positions: typing.List[Coordinate]
+  ):
+    super().__init__(name, size_x, size_y, size_z, site_positions, category="plate_carrier")
 
 
 class TipCarrier(Carrier, metaclass=ABCMeta):
   """ Abstract base class for tip carriers. """
-  pass
+
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    site_positions: typing.List[Coordinate]
+  ):
+    super().__init__(name, size_x, size_y, size_z, site_positions, category="tip_carrier")
