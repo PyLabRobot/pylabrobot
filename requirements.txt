@@ -1,4 +1,4 @@
 requests
-pythonnet
-pywin32==227
+pythonnet --pre
+pywin32==300
 pyserial
