@@ -20,7 +20,7 @@ from .interface import *
 from .deckresource import *
 from .oemerr import *
 from .utils import *
-#from __main__ import autoconfig
+from autoconfig import pyhamiltonconfig
 
 this_file_dir = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_DIR = os.path.abspath(os.path.join(this_file_dir))
@@ -28,8 +28,6 @@ LIBRARY_DIR = os.path.join(PACKAGE_DIR, 'library')
 exe_http = os.path.join(PACKAGE_DIR, 'bin', 'Hamilton HSLHttp Library Installer Version 2.7.exe')
 exe_json = os.path.join(PACKAGE_DIR, 'bin', 'HSLJson Library v1.6 Installer.exe')
 
-def helloworld():
-    print("Hello world")
 
 def full_paths_list(directory_abs_path):
     list_files = os.listdir(directory_abs_path)

@@ -21,7 +21,7 @@ def full_paths_list(directory_abs_path):
     return list_file_paths
 
 
-def autoconfig():
+def pyhamiltonconfig():
     print("Automatically configuring your PyHamilton installation")
     os.startfile(exe_http)
     os.startfile(exe_json)

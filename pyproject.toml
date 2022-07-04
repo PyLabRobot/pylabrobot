@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyhamilton"
-version = "1.40"
+version = "1.43"
 authors = [
   { name="Dana Gretton", email="dana.gretton@gmail.com" },
   { name="Stefan Golas", email="stefanmgolas@gmail.com"}
