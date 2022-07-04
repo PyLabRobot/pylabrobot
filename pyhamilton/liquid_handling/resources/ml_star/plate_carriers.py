@@ -2,7 +2,7 @@
 
 # pylint: skip-file
 
-from pyhamilton.liquid_handling.resources.abstract import PlateCarrier, Coordinate
+from pyhamilton.liquid_handling.resources.abstract import PlateCarrier, Coordinate, CarrierSite
 
 
 class PLT_CAR_L5FLEX_MD(PlateCarrier):
@@ -14,12 +14,12 @@ class PLT_CAR_L5FLEX_MD(PlateCarrier):
       size_x=157.5,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(15.25, 8.5, 115.8),
-        Coordinate(15.25, 104.5, 115.8),
-        Coordinate(15.25, 200.5, 115.8),
-        Coordinate(15.25, 296.5, 115.8),
-        Coordinate(15.25, 392.5, 115.8)
+      sites=[
+        CarrierSite(location=Coordinate(15.25, 8.5, 115.8), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 104.5, 115.8), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 200.5, 115.8), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 296.5, 115.8), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 392.5, 115.8), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -33,10 +33,10 @@ class PLT_CAR_P3AC_A00(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(43.85, 37.5, 86.15),
-        Coordinate(43.85, 183.5, 86.15),
-        Coordinate(43.85, 329.5, 86.15)
+      sites=[
+        CarrierSite(location=Coordinate(43.85, 37.5, 86.15), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(43.85, 183.5, 86.15), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(43.85, 329.5, 86.15), width=86.0, height=127.0, resource=None)
       ]
     )
 
@@ -50,10 +50,10 @@ class PLT_CAR_P3AC_A01(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(44.1, 37.5, 85.9),
-        Coordinate(44.1, 183.5, 85.9),
-        Coordinate(44.1, 329.5, 85.9)
+      sites=[
+        CarrierSite(location=Coordinate(44.1, 37.5, 85.9), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(44.1, 183.5, 85.9), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(44.1, 329.5, 85.9), width=86.0, height=127.0, resource=None)
       ]
     )
 
@@ -67,12 +67,12 @@ class PLT_CAR_L5FLEX_AC(PlateCarrier):
       size_x=157.5,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(15.25, 8.5, 89.1),
-        Coordinate(15.25, 104.5, 89.1),
-        Coordinate(15.25, 200.5, 89.1),
-        Coordinate(15.25, 296.5, 89.1),
-        Coordinate(15.25, 392.5, 89.1)
+      sites=[
+        CarrierSite(location=Coordinate(15.25, 8.5, 89.1), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 104.5, 89.1), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 200.5, 89.1), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 296.5, 89.1), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 392.5, 89.1), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -86,12 +86,12 @@ class PLT_CAR_L5FLEX_MD_A00(PlateCarrier):
       size_x=157.5,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(15.25, 8.5, 115.8),
-        Coordinate(15.25, 104.5, 115.8),
-        Coordinate(15.25, 200.5, 115.8),
-        Coordinate(15.25, 296.5, 115.8),
-        Coordinate(15.25, 392.5, 115.8)
+      sites=[
+        CarrierSite(location=Coordinate(15.25, 8.5, 115.8), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 104.5, 115.8), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 200.5, 115.8), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 296.5, 115.8), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 392.5, 115.8), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -105,11 +105,11 @@ class PLT_CAR_L4HD(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(4.1, 36.1, 118.25),
-        Coordinate(4.1, 146.1, 118.25),
-        Coordinate(4.1, 256.1, 118.25),
-        Coordinate(4.1, 366.1, 118.25)
+      sites=[
+        CarrierSite(location=Coordinate(4.1, 36.1, 118.25), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.1, 146.1, 118.25), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.1, 256.1, 118.25), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.1, 366.1, 118.25), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -123,10 +123,10 @@ class PLT_CAR_P3HD(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(43.9, 27.05, 117.65),
-        Coordinate(43.9, 173.05, 117.65),
-        Coordinate(43.9, 319.05, 117.65)
+      sites=[
+        CarrierSite(location=Coordinate(43.9, 27.05, 117.65), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(43.9, 173.05, 117.65), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(43.9, 319.05, 117.65), width=86.0, height=127.0, resource=None)
       ]
     )
 
@@ -140,12 +140,12 @@ class PLT_CAR_L5AC_A00(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(4.0, 8.5, 86.15),
-        Coordinate(4.0, 104.5, 86.15),
-        Coordinate(4.0, 200.5, 86.15),
-        Coordinate(4.0, 296.5, 86.15),
-        Coordinate(4.0, 392.5, 86.15)
+      sites=[
+        CarrierSite(location=Coordinate(4.0, 8.5, 86.15), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 104.5, 86.15), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 200.5, 86.15), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 296.5, 86.15), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 392.5, 86.15), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -159,12 +159,12 @@ class PLT_CAR_L5MD_A00(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(4.0, 8.5, 111.75),
-        Coordinate(4.0, 104.5, 111.75),
-        Coordinate(4.0, 200.5, 111.75),
-        Coordinate(4.0, 296.5, 111.75),
-        Coordinate(4.0, 392.5, 111.75)
+      sites=[
+        CarrierSite(location=Coordinate(4.0, 8.5, 111.75), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 104.5, 111.75), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 200.5, 111.75), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 296.5, 111.75), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 392.5, 111.75), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -178,12 +178,12 @@ class PLT_CAR_L5MD(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(4.0, 8.5, 111.75),
-        Coordinate(4.0, 104.5, 111.75),
-        Coordinate(4.0, 200.5, 111.75),
-        Coordinate(4.0, 296.5, 111.75),
-        Coordinate(4.0, 392.5, 111.75)
+      sites=[
+        CarrierSite(location=Coordinate(4.0, 8.5, 111.75), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 104.5, 111.75), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 200.5, 111.75), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 296.5, 111.75), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 392.5, 111.75), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -197,12 +197,12 @@ class PLT_CAR_L5AC(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(4.0, 8.5, 86.15),
-        Coordinate(4.0, 104.5, 86.15),
-        Coordinate(4.0, 200.5, 86.15),
-        Coordinate(4.0, 296.5, 86.15),
-        Coordinate(4.0, 392.5, 86.15)
+      sites=[
+        CarrierSite(location=Coordinate(4.0, 8.5, 86.15), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 104.5, 86.15), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 200.5, 86.15), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 296.5, 86.15), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 392.5, 86.15), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -216,12 +216,12 @@ class PLT_CAR_L5FLEX_AC_A00(PlateCarrier):
       size_x=157.5,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(15.25, 8.5, 89.1),
-        Coordinate(15.25, 104.5, 89.1),
-        Coordinate(15.25, 200.5, 89.1),
-        Coordinate(15.25, 296.5, 89.1),
-        Coordinate(15.25, 392.5, 89.1)
+      sites=[
+        CarrierSite(location=Coordinate(15.25, 8.5, 89.1), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 104.5, 89.1), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 200.5, 89.1), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 296.5, 89.1), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(15.25, 392.5, 89.1), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -235,12 +235,12 @@ class PLT_CAR_L5PCR(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(4.0, 8.5, 107.5),
-        Coordinate(4.0, 104.5, 107.5),
-        Coordinate(4.0, 200.5, 107.5),
-        Coordinate(4.0, 296.5, 107.5),
-        Coordinate(4.0, 392.5, 107.5)
+      sites=[
+        CarrierSite(location=Coordinate(4.0, 8.5, 107.5), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 104.5, 107.5), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 200.5, 107.5), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 296.5, 107.5), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(4.0, 392.5, 107.5), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -254,10 +254,10 @@ class PLT_CAR_P3MD(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(44.1, 37.5, 111.5),
-        Coordinate(44.1, 183.5, 111.5),
-        Coordinate(44.1, 329.5, 111.5)
+      sites=[
+        CarrierSite(location=Coordinate(44.1, 37.5, 111.5), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(44.1, 183.5, 111.5), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(44.1, 329.5, 111.5), width=86.0, height=127.0, resource=None)
       ]
     )
 
@@ -271,12 +271,12 @@ class PLT_CAR_L5PCR_A00(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(5.0, 9.5, 109.2),
-        Coordinate(5.0, 105.5, 109.2),
-        Coordinate(5.0, 201.5, 109.2),
-        Coordinate(5.0, 297.5, 109.2),
-        Coordinate(5.0, 393.5, 109.2)
+      sites=[
+        CarrierSite(location=Coordinate(5.0, 9.5, 109.2), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(5.0, 105.5, 109.2), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(5.0, 201.5, 109.2), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(5.0, 297.5, 109.2), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(5.0, 393.5, 109.2), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -290,12 +290,12 @@ class PLT_CAR_L5PCR_A01(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(5.0, 9.5, 109.2),
-        Coordinate(5.0, 105.5, 109.2),
-        Coordinate(5.0, 201.5, 109.2),
-        Coordinate(5.0, 297.5, 109.2),
-        Coordinate(5.0, 393.5, 109.2)
+      sites=[
+        CarrierSite(location=Coordinate(5.0, 9.5, 109.2), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(5.0, 105.5, 109.2), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(5.0, 201.5, 109.2), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(5.0, 297.5, 109.2), width=127.0, height=86.0, resource=None),
+        CarrierSite(location=Coordinate(5.0, 393.5, 109.2), width=127.0, height=86.0, resource=None)
       ]
     )
 
@@ -309,10 +309,10 @@ class PLT_CAR_P3MD_A01(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(44.1, 37.5, 111.5),
-        Coordinate(44.1, 183.5, 111.5),
-        Coordinate(44.1, 329.5, 111.5)
+      sites=[
+        CarrierSite(location=Coordinate(44.1, 37.5, 111.5), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(44.1, 183.5, 111.5), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(44.1, 329.5, 111.5), width=86.0, height=127.0, resource=None)
       ]
     )
 
@@ -326,9 +326,9 @@ class PLT_CAR_P3MD_A00(PlateCarrier):
       size_x=135.0,
       size_y=497.0,
       size_z=130.0,
-      site_positions=[
-        Coordinate(44.1, 37.5, 111.5),
-        Coordinate(44.1, 183.5, 111.5),
-        Coordinate(44.1, 329.5, 111.5)
+      sites=[
+        CarrierSite(location=Coordinate(44.1, 37.5, 111.5), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(44.1, 183.5, 111.5), width=86.0, height=127.0, resource=None),
+        CarrierSite(location=Coordinate(44.1, 329.5, 111.5), width=86.0, height=127.0, resource=None)
       ]
     )

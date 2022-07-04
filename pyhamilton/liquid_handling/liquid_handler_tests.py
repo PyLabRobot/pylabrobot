@@ -13,6 +13,7 @@ from .liquid_handler import LiquidHandler
 from .resources import (
   Coordinate,
   Carrier,
+  CarrierSite,
   PlateCarrier,
   Plate,
   TipCarrier,
@@ -223,6 +224,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertIsNone(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[4])
 
   def assert_same(self, lh1, lh2):
+    """ Assert two liquid handler decks are the same. """
     # pylint: disable=protected-access
     self.assertEqual(len(lh1._resources), len(lh2._resources))
 
@@ -261,11 +263,11 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     # test with custom classes
     custom_1 = LiquidHandler(star)
     tc = TipCarrier("tc", 200, 200, 200, [
-      Coordinate(10, 20, 30)
+      CarrierSite(Coordinate(10, 20, 30), 10, 10)
     ])
     tc[0] = Tips("tips", 10, 20, 30, standard_volume_tip_with_filter, -1, -1, -1)
     pc = PlateCarrier("pc", 100, 100, 100, [
-      Coordinate(40, 50, 60)
+      CarrierSite(Coordinate(40, 50, 60), 10, 10)
     ])
     pc[0] = Plate("plate", 10, 20, 30, -1, -1, -1)
 

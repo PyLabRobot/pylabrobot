@@ -463,11 +463,39 @@ class LiquidHandler:
         resource.location = None # Revert location.
         raise ValueError(f"Rails {rails} is already occupied by resource '{og_resource.name}'.")
 
+    # If the resource is a Carrier, add callbacks to self.
+    if isinstance(resource, Carrier):
+      resource_assigned_callback = self._subresource_assigned_callback(resource, True)
+      resource.set_resource_assigned_callback(resource_assigned_callback)
+      resource_unassigned_callback = self._subresource_assigned_callback(resource, False)
+      resource.set_resource_unassigned_callback(resource_unassigned_callback)
+
     self._resources[resource.name] = resource
 
     # Only call the backend if the setup is finished.
     if self.setup_finished:
       self.backend.assigned_resource_callback(resource)
+
+  def _subresource_assigned_callback(self, resource: Resource, check_name: bool):
+    """
+    Returns a callback that can be used to call the `unassinged_resource_callback` and
+    `assigned_resource_callback` of the backend.
+
+    Raises a `ValueError` if a resource with the same name is already assigned.
+    """
+
+    def callback(subresource: Resource):
+      if check_name and self.get_resource(subresource.name) is not None:
+        raise ValueError(f"A resource with name '{subresource.name}' is already assigned to the "
+                          "liquid handler.")
+
+      if self.get_resource(resource.name) is not None:
+        # If the resource was already assigned, do a reassign in callbacks. Get resource from self
+        # to update location.
+        resource_ = self.get_resource(resource.name)
+        self.backend.unassigned_resource_callback(resource_.name)
+        self.backend.assigned_resource_callback(resource_)
+    return callback
 
   def unassign_resource(self, resource: typing.Union[str, Resource]):
     """ Unassign an assigned resource.
@@ -500,11 +528,12 @@ class LiquidHandler:
         return copy.deepcopy(resource)
 
       if isinstance(resource, Carrier):
-        for subresource in resource.get_items():
-          if subresource is not None and subresource.name == name:
-            # TODO: Why do we need `+ Coordinate(0, resource.location.y, 0)`??? (=63)
-            subresource.location += (resource.location + Coordinate(0, resource.location.y, 0))
-            return subresource
+        if resource.has_resource(name):
+          subresource = copy.deepcopy(resource.get_resource_by_name(name))
+          subresource.location += resource.location
+          # TODO: Why do we need `+ Coordinate(0, resource.location.y, 0)`??? (=63)
+          subresource.location += Coordinate(0, resource.location.y, 0)
+          return subresource
 
     return None
 
@@ -679,19 +708,14 @@ class LiquidHandler:
 
       if "sites" in resource_dict:
         for subresource_dict in resource_dict["sites"]:
-          if subresource_dict["resource"] is None:
+          if subresource_dict["site"]["resource"] is None:
             continue
-          subtype = subresource_dict["resource"]["type"]
+          subtype = subresource_dict["site"]["resource"]["type"]
           if subtype in resource_classes: # properties pre-defined
             subresource_klass = getattr(resources, subtype)
-            subresource = subresource_klass(name=subresource_dict["resource"]["name"])
-          else: # read properties explicitly
-            subresource = subresource_klass(
-              name=subresource_dict["resource"]["name"],
-              size_x=subresource_dict["resource"]["size_x"],
-              size_y=subresource_dict["resource"]["size_y"],
-              size_z=subresource_dict["resource"]["size_z"]
-            )
+            subresource = subresource_klass(name=subresource_dict["site"]["resource"]["name"])
+          else: # Custom resources should deserialize the properties they serialized.
+            subresource = subresource_klass(**subresource_dict["site"]["resource"])
           resource[subresource_dict["site_id"]] = subresource
 
       self.assign_resource(resource, location=location)
@@ -1118,8 +1142,6 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    utils.assert_shape(pattern, (8, 12))
-
     # Get resource using `get_resource` to adjust location.
     if isinstance(resource, Plate):
       resource = resource.name
@@ -1130,6 +1152,8 @@ class LiquidHandler:
     # Convert the pattern to a list of lists of booleans
     if isinstance(pattern, str):
       pattern = utils.string_to_pattern(pattern)
+
+    utils.assert_shape(pattern, (8, 12))
 
     self.backend.aspirate96(resource, pattern, volume, **backend_kwargs)
 
@@ -1163,8 +1187,6 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    utils.assert_shape(pattern, (8, 12))
-
     # Get resource using `get_resource` to adjust location.
     if isinstance(resource, Plate):
       resource = resource.name
@@ -1175,5 +1197,7 @@ class LiquidHandler:
     # Convert the pattern to a list of lists of booleans
     if isinstance(pattern, str):
       pattern = utils.string_to_pattern(pattern)
+
+    utils.assert_shape(pattern, (8, 12))
 
     self.backend.dispense96(resource, pattern, volume, **backend_kwargs)

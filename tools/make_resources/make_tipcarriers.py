@@ -7,7 +7,7 @@ from maker import make
 
 sys.path.insert(0, '..')
 
-from pyhamilton.liquid_handling.resources.abstract import Coordinate
+from pyhamilton.liquid_handling.resources.abstract import Coordinate, CarrierSite
 from pyhamilton.utils.file_parsing import find_int, find_float, find_string
 
 
@@ -21,13 +21,15 @@ def make_from_file(fn, o):
     c = f.read()
 
   site_count = int(c.split("Site.Cnt\x01")[1].split("\x08")[0])
-  cords = []
+  sites = []
   for i in range(1, site_count+1):
     x = find_float(f"Site.{i}.X", c)
     y = find_float(f"Site.{i}.Y", c)
     z = find_float(f"Site.{i}.Z", c)
-    cords.append(Coordinate(x, y, z))
-  cords = sorted(cords, key=lambda c: c.y)
+    width = find_float(f"Site.{i}.Dx", c)
+    height = find_float(f"Site.{i}.Dy", c)
+    sites.append(CarrierSite(Coordinate(x, y, z), width, height))
+  sites = sorted(sites, key=lambda c: c.location.y)
 
   size_x = find_float('Dim.Dx', c)
   size_y = find_float('Dim.Dy', c)
@@ -45,9 +47,9 @@ def make_from_file(fn, o):
   o.write(f'      size_x={size_x},\n')
   o.write(f'      size_y={size_y},\n')
   o.write(f'      size_z={size_z},\n')
-  o.write(f'      site_positions=[\n')
-  for i, cord in enumerate(cords):
-    o.write(f'        {cord.__repr__()}' + ('' if i == len(cords) - 1 else ',') + '\n')
+  o.write(f'      sites=[\n')
+  for i, site in enumerate(sites):
+    o.write(f'        {site.__repr__()}' + ('' if i == len(sites) - 1 else ',') + '\n')
   o.write(f'      ]\n')
   o.write(f'    )\n')
 
