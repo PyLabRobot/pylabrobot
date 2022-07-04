@@ -10,7 +10,6 @@ extras_docs = [
     'sphinx_book_theme',
     'myst_nb',
     'sphinx_copybutton',
-    'commonmark',
 ]
 
 extras_all = extras_testing + extras_docs

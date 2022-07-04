@@ -6,6 +6,7 @@ This file defines interfaces for all supported Hamilton liquid handling robots.
 from abc import ABCMeta, abstractmethod
 import datetime
 import enum
+import itertools
 import logging
 import re
 import time
@@ -14,7 +15,15 @@ import typing
 import usb.core
 import usb.util
 
-from .backend import LiquidHandlerBackend
+from pyhamilton.liquid_handling.resources import (
+  Resource,
+  Plate,
+  Tips,
+  TipType
+)
+from pyhamilton.liquid_handling.backends import LiquidHandlerBackend
+from pyhamilton import utils
+
 from .errors import (
   HamiltonError
 )
@@ -22,14 +31,6 @@ from .errors import (
 logger = logging.getLogger(__name__)
 logging.basicConfig()
 logger.setLevel(logging.INFO)
-
-
-# TODO: move to util.
-def _assert_clamp(v, min_, max_, name):
-  if type(v) is not list:
-    v = [v]
-  for w in v:
-    assert min_ <= w <= max_, f"{name} must be between {min_} and {max_}, but is {w}"
 
 
 class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
@@ -80,7 +81,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       elif type(v) is bool:
         v = 1 if v else 0
       elif type(v) is list:
-        # TODO: "&" is only required when list is not maximum length.
+        if type(v[0]) is bool: # convert bool list to int list
+          v = [int(x) for x in v]
         v = " ".join([str(e) for e in v]) + ("&" if len(v) < 8 else "")
       if k.endswith("_"): # workaround for kwargs named in, as, ...
         k = k[:-1]
@@ -203,9 +205,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         if type_ == "str":
           info[name] = m
         elif type_ == "int":
-          info[name] = [int(m_) for m_ in m if m_ != '']
+          info[name] = [int(m_) for m_ in m if m_ != ""]
         elif type_ == "hex":
-          info[name] = [int(m_, base=16) for m_ in m if m_ != '']
+          info[name] = [int(m_, base=16) for m_ in m if m_ != ""]
       else:
         if type_ == "str":
           info[name] = m
@@ -231,7 +233,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     return info
 
-  # TODO: raise errors
   def parse_response(self, resp: str, fmt: str) -> typing.Tuple[dict, dict]:
     """ Parse a response from the Hamilton machine.
 
@@ -479,10 +480,10 @@ class STAR(HamiltonLiquidHandler):
 
     # pylint: disable=redefined-builtin
 
-    _assert_clamp(tip_type_table_index, 0, 99, "tip_type_table_index")
+    utils.assert_clamp(tip_type_table_index, 0, 99, "tip_type_table_index")
     filter = 1 if filter else 0
-    _assert_clamp(tip_length, 1, 1999, "tip_length")
-    _assert_clamp(maximum_tip_volume, 1, 56000, "maximum_tip_volume")
+    utils.assert_clamp(tip_length, 1, 1999, "tip_length")
+    utils.assert_clamp(maximum_tip_volume, 1, 56000, "maximum_tip_volume")
 
     return self.send_command(
       module="C0",
@@ -696,7 +697,7 @@ class STAR(HamiltonLiquidHandler):
       verification_status: verification status.
     """
 
-    _assert_clamp(verification_subject, 0, 24, "verification_subject")
+    utils.assert_clamp(verification_subject, 0, 24, "verification_subject")
 
     return self.send_command(
       module="C0",
@@ -851,29 +852,29 @@ class STAR(HamiltonLiquidHandler):
                                     and 9999. Default 60.
     """
 
-    _assert_clamp(instrument_size_in_slots_x_range, 10, 99, "instrument_size_in_slots_(x_range)")
-    _assert_clamp(auto_load_size_in_slots, 10, 54, "auto_load_size_in_slots")
-    _assert_clamp(tip_waste_x_position, 1000, 25000, "tip_waste_x_position")
-    _assert_clamp(right_x_drive_configuration_byte_1, 0, 1, "right_x_drive_configuration_byte_1")
-    _assert_clamp(right_x_drive_configuration_byte_2, 0, 1, "right_x_drive_configuration_byte_2")
-    _assert_clamp(minimal_iswap_collision_free_position, 0, 30000, \
+    utils.assert_clamp(instrument_size_in_slots_x_range, 10, 99, "instrument_size_in_slots_(x_range)")
+    utils.assert_clamp(auto_load_size_in_slots, 10, 54, "auto_load_size_in_slots")
+    utils.assert_clamp(tip_waste_x_position, 1000, 25000, "tip_waste_x_position")
+    utils.assert_clamp(right_x_drive_configuration_byte_1, 0, 1, "right_x_drive_configuration_byte_1")
+    utils.assert_clamp(right_x_drive_configuration_byte_2, 0, 1, "right_x_drive_configuration_byte_2")
+    utils.assert_clamp(minimal_iswap_collision_free_position, 0, 30000, \
                   "minimal_iswap_collision_free_position")
-    _assert_clamp(maximal_iswap_collision_free_position, 0, 30000, \
+    utils.assert_clamp(maximal_iswap_collision_free_position, 0, 30000, \
                   "maximal_iswap_collision_free_position")
-    _assert_clamp(left_x_arm_width, 0, 9999, "left_x_arm_width")
-    _assert_clamp(right_x_arm_width, 0, 9999, "right_x_arm_width")
-    _assert_clamp(num_pip_channels, 0, 16, "num_pip_channels")
-    _assert_clamp(num_xl_channels, 0, 8, "num_xl_channels")
-    _assert_clamp(num_robotic_channels, 0, 8, "num_robotic_channels")
-    _assert_clamp(minimal_raster_pitch_of_pip_channels, 0, 999, \
+    utils.assert_clamp(left_x_arm_width, 0, 9999, "left_x_arm_width")
+    utils.assert_clamp(right_x_arm_width, 0, 9999, "right_x_arm_width")
+    utils.assert_clamp(num_pip_channels, 0, 16, "num_pip_channels")
+    utils.assert_clamp(num_xl_channels, 0, 8, "num_xl_channels")
+    utils.assert_clamp(num_robotic_channels, 0, 8, "num_robotic_channels")
+    utils.assert_clamp(minimal_raster_pitch_of_pip_channels, 0, 999, \
                   "minimal_raster_pitch_of_pip_channels")
-    _assert_clamp(minimal_raster_pitch_of_xl_channels, 0, 999, \
+    utils.assert_clamp(minimal_raster_pitch_of_xl_channels, 0, 999, \
                   "minimal_raster_pitch_of_xl_channels")
-    _assert_clamp(minimal_raster_pitch_of_robotic_channels, 0, 999, \
+    utils.assert_clamp(minimal_raster_pitch_of_robotic_channels, 0, 999, \
                   "minimal_raster_pitch_of_robotic_channels")
-    _assert_clamp(pip_maximal_y_position, 0, 9999, "pip_maximal_y_position")
-    _assert_clamp(left_arm_minimal_y_position, 0, 9999, "left_arm_minimal_y_position")
-    _assert_clamp(right_arm_minimal_y_position, 0, 9999, "right_arm_minimal_y_position")
+    utils.assert_clamp(pip_maximal_y_position, 0, 9999, "pip_maximal_y_position")
+    utils.assert_clamp(left_arm_minimal_y_position, 0, 9999, "left_arm_minimal_y_position")
+    utils.assert_clamp(right_arm_minimal_y_position, 0, 9999, "right_arm_minimal_y_position")
 
     return self.send_command(
         module="C0",
@@ -951,7 +952,7 @@ class STAR(HamiltonLiquidHandler):
       data_stream: data stream (12 characters). Default <class 'str'>.
     """
 
-    _assert_clamp(data_index, 0, 9, "data_index")
+    utils.assert_clamp(data_index, 0, 9, "data_index")
     assert len(data_stream) == 12, "data_stream must be 12 chars"
 
     return self.send_command(
@@ -991,7 +992,7 @@ class STAR(HamiltonLiquidHandler):
       verification_subject: verification subject. Must be between 0 and 24. Default 0.
     """
 
-    _assert_clamp(verification_subject, 0, 24, "verification_subject")
+    utils.assert_clamp(verification_subject, 0, 24, "verification_subject")
 
     # TODO: parse results.
     return self.send_command(
@@ -1059,7 +1060,7 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position_[0.1mm]")
+    utils.assert_clamp(x_position, 0, 30000, "x_position_[0.1mm]")
 
     resp = self.send_command(
       module="C0",
@@ -1080,7 +1081,7 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position_[0.1mm]")
+    utils.assert_clamp(x_position, 0, 30000, "x_position_[0.1mm]")
 
     resp = self.send_command(
       module="C0",
@@ -1099,7 +1100,7 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
 
     resp = self.send_command(
       module="C0",
@@ -1118,7 +1119,7 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
 
     resp = self.send_command(
       module="C0",
@@ -1141,22 +1142,21 @@ class STAR(HamiltonLiquidHandler):
 
     Args:
       taken_area_identification_number: taken area identification number. Must be between 0 and
-                                        9999. Default 0.
-    taken_area_left_margin: taken area left margin. Must be between 0 and 99. Default 0.
-    taken_area_left_margin_direction: taken area left margin direction. 1 = negative. Must be
-                                      between 0 and 1. Default 0.
-    taken_area_size: taken area size. Must be between 0 and 50000. Default 0.
-    arm_preposition_mode_related_to_taken_areas: 0) left arm to left & right arm to right.
-                                                 1) all arms left.
-                                                 2) all arms right.
+        9999. Default 0.
+      taken_area_left_margin: taken area left margin. Must be between 0 and 99. Default 0.
+      taken_area_left_margin_direction: taken area left margin direction. 1 = negative. Must be
+        between 0 and 1. Default 0.
+      taken_area_size: taken area size. Must be between 0 and 50000. Default 0.
+      arm_preposition_mode_related_to_taken_areas: 0) left arm to left & right arm to right.
+        1) all arms left.  2) all arms right.
     """
 
-    _assert_clamp(taken_area_identification_number, 0, 9999, \
+    utils.assert_clamp(taken_area_identification_number, 0, 9999, \
                   "taken_area_identification_number")
-    _assert_clamp(taken_area_left_margin, 0, 99, "taken_area_left_margin")
-    _assert_clamp(taken_area_left_margin_direction, 0, 1, "taken_area_left_margin_direction")
-    _assert_clamp(taken_area_size, 0, 50000, "taken_area_size")
-    _assert_clamp(arm_preposition_mode_related_to_taken_areas, 0, 2, \
+    utils.assert_clamp(taken_area_left_margin, 0, 99, "taken_area_left_margin")
+    utils.assert_clamp(taken_area_left_margin_direction, 0, 1, "taken_area_left_margin_direction")
+    utils.assert_clamp(taken_area_size, 0, 50000, "taken_area_size")
+    utils.assert_clamp(arm_preposition_mode_related_to_taken_areas, 0, 2, \
                   "arm_preposition_mode_(related_to_taken_area)s")
 
     resp = self.send_command(
@@ -1181,7 +1181,7 @@ class STAR(HamiltonLiquidHandler):
                                         Must be between 0 and 9999. Default 0.
     """
 
-    _assert_clamp(taken_area_identification_number, 0, 9999, "taken_area_identification_number")
+    utils.assert_clamp(taken_area_identification_number, 0, 9999, "taken_area_identification_number")
 
     resp = self.send_command(
       module="C0",
@@ -1281,13 +1281,13 @@ class STAR(HamiltonLiquidHandler):
         drop (no shift) (tp/ tz = stop disk height). Must be between 0 and 1. Default 1.
     """
 
-    _assert_clamp(x_positions, 0, 25000, "x_positions")
-    _assert_clamp(y_positions, 0, 6500, "y_positions")
-    _assert_clamp(begin_of_tip_deposit_process, 0, 3600, "begin_of_tip_deposit_process")
-    _assert_clamp(end_of_tip_deposit_process, 0, 3600, "end_of_tip_deposit_process")
-    _assert_clamp(z_position_at_end_of_a_command, 0, 3600, "z_position_at_end_of_a_command")
-    _assert_clamp(tip_type, 0, 99, "tip_type")
-    _assert_clamp(discarding_method, 0, 1, "discarding_method")
+    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
+    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
+    utils.assert_clamp(begin_of_tip_deposit_process, 0, 3600, "begin_of_tip_deposit_process")
+    utils.assert_clamp(end_of_tip_deposit_process, 0, 3600, "end_of_tip_deposit_process")
+    utils.assert_clamp(z_position_at_end_of_a_command, 0, 3600, "z_position_at_end_of_a_command")
+    utils.assert_clamp(tip_type, 0, 99, "tip_type")
+    utils.assert_clamp(discarding_method, 0, 1, "discarding_method")
 
     return self.send_command(
       module="C0",
@@ -1332,11 +1332,11 @@ class STAR(HamiltonLiquidHandler):
       pick_up_method: Pick up method.
     """
 
-    _assert_clamp(x_positions, 0, 25000, "x_positions")
-    _assert_clamp(y_positions, 0, 6500, "y_positions")
-    _assert_clamp(begin_tip_pick_up_process, 0, 3600, "begin_tip_pick_up_process")
-    _assert_clamp(end_tip_pick_up_process, 0, 3600, "end_tip_pick_up_process")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
+    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
+    utils.assert_clamp(begin_tip_pick_up_process, 0, 3600, "begin_tip_pick_up_process")
+    utils.assert_clamp(end_tip_pick_up_process, 0, 3600, "end_tip_pick_up_process")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
 
     return self.send_command(
@@ -1391,11 +1391,11 @@ class STAR(HamiltonLiquidHandler):
     Otherwise, tp/ tz = stop disk height.
     """
 
-    _assert_clamp(x_positions, 0, 25000, "x_positions")
-    _assert_clamp(y_positions, 0, 6500, "y_positions")
-    _assert_clamp(begin_tip_deposit_process, 0, 3600, "begin_tip_deposit_process")
-    _assert_clamp(end_tip_deposit_process, 0, 3600, "end_tip_deposit_process")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
+    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
+    utils.assert_clamp(begin_tip_deposit_process, 0, 3600, "begin_tip_deposit_process")
+    utils.assert_clamp(end_tip_deposit_process, 0, 3600, "end_tip_deposit_process")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
 
     return self.send_command(
@@ -1474,9 +1474,9 @@ class STAR(HamiltonLiquidHandler):
     very often. Probably safe to ignore it.
 
     LLD restrictions!
-    - "dP and Dual LLD" are used in aspiration only. During dispensation LLD is set to OFF.
-    - "side touch off" turns LLD & "Z touch off" to OFF , is not available for simultaneous
-      Asp/Disp. command
+      - "dP and Dual LLD" are used in aspiration only. During dispensation LLD is set to OFF.
+      - "side touch off" turns LLD & "Z touch off" to OFF , is not available for simultaneous
+        Asp/Disp. command
 
     Args:
       aspiration_type: Type of aspiration (0 = simple;1 = sequence; 2 = cup emptied).
@@ -1553,56 +1553,56 @@ class STAR(HamiltonLiquidHandler):
           3600. Default 30.
     """
 
-    _assert_clamp(aspiration_type, 0, 2, "aspiration_type")
-    _assert_clamp(x_positions, 0, 25000, "x_positions")
-    _assert_clamp(y_positions, 0, 6500, "y_positions")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(aspiration_type, 0, 2, "aspiration_type")
+    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
+    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
-    _assert_clamp(min_z_endpos, 0, 3600, "min_z_endpos")
-    _assert_clamp(lld_search_height, 0, 3600, "lld_search_height")
-    _assert_clamp(clot_detection_height, 0, 500, "clot_detection_height")
-    _assert_clamp(liquid_surface_no_lld, 0, 3600, "liquid_surface_no_lld")
-    _assert_clamp(pull_out_distance_transport_air, 0, 3600, "pull_out_distance_transport_air")
-    _assert_clamp(second_section_height, 0, 3600, "second_section_height")
-    _assert_clamp(second_section_ratio, 0, 10000, "second_section_ratio")
-    _assert_clamp(minimum_height, 0, 3600, "minimum_height")
-    _assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
-    _assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    _assert_clamp(surface_following_distance, 0, 3600, "surface_following_distance")
-    _assert_clamp(aspiration_volumes, 0, 12500, "aspiration_volumes")
-    _assert_clamp(aspiration_speed, 4, 5000, "aspiration_speed")
-    _assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
-    _assert_clamp(blow_out_air_volume, 0, 9999, "blow_out_air_volume")
-    _assert_clamp(pre_wetting_volume, 0, 999, "pre_wetting_volume")
-    _assert_clamp(lld_mode, 0, 4, "lld_mode")
-    _assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
-    _assert_clamp(dp_lld_sensitivity, 1, 4, "dp_lld_sensitivity")
-    _assert_clamp(aspirate_position_above_z_touch_off, 0, 100, \
+    utils.assert_clamp(min_z_endpos, 0, 3600, "min_z_endpos")
+    utils.assert_clamp(lld_search_height, 0, 3600, "lld_search_height")
+    utils.assert_clamp(clot_detection_height, 0, 500, "clot_detection_height")
+    utils.assert_clamp(liquid_surface_no_lld, 0, 3600, "liquid_surface_no_lld")
+    utils.assert_clamp(pull_out_distance_transport_air, 0, 3600, "pull_out_distance_transport_air")
+    utils.assert_clamp(second_section_height, 0, 3600, "second_section_height")
+    utils.assert_clamp(second_section_ratio, 0, 10000, "second_section_ratio")
+    utils.assert_clamp(minimum_height, 0, 3600, "minimum_height")
+    utils.assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
+    utils.assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
+    utils.assert_clamp(surface_following_distance, 0, 3600, "surface_following_distance")
+    utils.assert_clamp(aspiration_volumes, 0, 12500, "aspiration_volumes")
+    utils.assert_clamp(aspiration_speed, 4, 5000, "aspiration_speed")
+    utils.assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
+    utils.assert_clamp(blow_out_air_volume, 0, 9999, "blow_out_air_volume")
+    utils.assert_clamp(pre_wetting_volume, 0, 999, "pre_wetting_volume")
+    utils.assert_clamp(lld_mode, 0, 4, "lld_mode")
+    utils.assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
+    utils.assert_clamp(dp_lld_sensitivity, 1, 4, "dp_lld_sensitivity")
+    utils.assert_clamp(aspirate_position_above_z_touch_off, 0, 100, \
                   "aspirate_position_above_z_touch_off")
-    _assert_clamp(detection_height_difference_for_dual_lld, 0, 99, \
+    utils.assert_clamp(detection_height_difference_for_dual_lld, 0, 99, \
                   "detection_height_difference_for_dual_lld")
-    _assert_clamp(swap_speed, 3, 1600, "swap_speed")
-    _assert_clamp(settling_time, 0, 99, "settling_time")
-    _assert_clamp(homogenization_volume, 0, 12500, "homogenization_volume")
-    _assert_clamp(homogenization_cycles, 0, 99, "homogenization_cycles")
-    _assert_clamp(homogenization_position_from_liquid_surface, 0, 900, \
+    utils.assert_clamp(swap_speed, 3, 1600, "swap_speed")
+    utils.assert_clamp(settling_time, 0, 99, "settling_time")
+    utils.assert_clamp(homogenization_volume, 0, 12500, "homogenization_volume")
+    utils.assert_clamp(homogenization_cycles, 0, 99, "homogenization_cycles")
+    utils.assert_clamp(homogenization_position_from_liquid_surface, 0, 900, \
                   "homogenization_position_from_liquid_surface")
-    _assert_clamp(homogenization_speed, 4, 5000, "homogenization_speed")
-    _assert_clamp(homogenization_surface_following_distance, 0, 3600, \
+    utils.assert_clamp(homogenization_speed, 4, 5000, "homogenization_speed")
+    utils.assert_clamp(homogenization_surface_following_distance, 0, 3600, \
                   "homogenization_surface_following_distance")
-    _assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
-    _assert_clamp(recording_mode, 0, 2, "recording_mode")
-    _assert_clamp(retract_height_over_2nd_section_to_empty_tip, 0, 3600, \
+    utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
+    utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
+    utils.assert_clamp(retract_height_over_2nd_section_to_empty_tip, 0, 3600, \
                   "retract_height_over_2nd_section_to_empty_tip")
-    _assert_clamp(dispensation_speed_during_emptying_tip, 4, 5000, \
+    utils.assert_clamp(dispensation_speed_during_emptying_tip, 4, 5000, \
                   "dispensation_speed_during_emptying_tip")
-    _assert_clamp(dosing_drive_speed_during_2nd_section_search, 4, 5000, \
+    utils.assert_clamp(dosing_drive_speed_during_2nd_section_search, 4, 5000, \
                   "dosing_drive_speed_during_2nd_section_search")
-    _assert_clamp(z_drive_speed_during_2nd_section_search, 3, 1600, \
+    utils.assert_clamp(z_drive_speed_during_2nd_section_search, 3, 1600, \
                   "z_drive_speed_during_2nd_section_search")
-    _assert_clamp(cup_upper_edge, 0, 3600, "cup_upper_edge")
-    _assert_clamp(ratio_liquid_rise_to_tip_deep_in, 0, 50000, "ratio_liquid_rise_to_tip_deep_in")
-    _assert_clamp(immersion_depth_2nd_section, 0, 3600, "immersion_depth_2nd_section")
+    utils.assert_clamp(cup_upper_edge, 0, 3600, "cup_upper_edge")
+    utils.assert_clamp(ratio_liquid_rise_to_tip_deep_in, 0, 50000, "ratio_liquid_rise_to_tip_deep_in")
+    utils.assert_clamp(immersion_depth_2nd_section, 0, 3600, "immersion_depth_2nd_section")
 
     resp = self.send_command(
       module="C0",
@@ -1700,40 +1700,38 @@ class STAR(HamiltonLiquidHandler):
     Dispensing of liquid using PIP.
 
     LLD restrictions!
-    - "dP and Dual LLD" are used in aspiration only. During dispensation LLD is set to OFF.
-    - "side touch off" turns LLD & "Z touch off" to OFF , is not available for simultaneous
-      Asp/Disp. command
+      - "dP and Dual LLD" are used in aspiration only. During dispensation LLD is set to OFF.
+      - "side touch off" turns LLD & "Z touch off" to OFF , is not available for simultaneous
+        Asp/Disp. command
 
     Args:
       dispensing_mode: Type of dispensing mode 0 = Partial volume in jet mode
-                       1 = Blow out in jet mode 2 = Partial volume at surface
-                       3 = Blow out at surface 4 = Empty tip at fix position.
+        1 = Blow out in jet mode 2 = Partial volume at surface
+        3 = Blow out at surface 4 = Empty tip at fix position.
       tip_pattern: Tip pattern (channels involved). Default True.
       x_positions: x positions [0.1mm]. Must be between 0 and 25000. Default 0.
       y_positions: y positions [0.1mm]. Must be between 0 and 6500. Default 0.
       minimum_height: Minimum height (maximum immersion depth) [0.1 mm]. Must be between 0 and
-                      3600. Default 3600.
+        3600. Default 3600.
       lld_search_height: LLD search height [0.1 mm]. Must be between 0 and 3600. Default 0.
       liquid_surface_no_lld: Liquid surface at function without LLD [0.1mm]. Must be between 0 and
-                             3600. Default 3600.
+        3600. Default 3600.
       pull_out_distance_transport_air: pull out distance to take transport air in function without
-                                       LLD [0.1mm]. Must be between 0 and 3600. Default 50.
+        LLD [0.1mm]. Must be between 0 and 3600. Default 50.
       immersion_depth: Immersion depth [0.1mm]. Must be between 0 and 3600. Default 0.
       immersion_depth_direction: Direction of immersion depth (0 = go deeper, 1 = go up out of
-                                 liquid). Must be between 0 and 1. Default 0.
+        liquid). Must be between 0 and 1. Default 0.
       surface_following_distance: Surface following distance during aspiration [0.1mm]. Must be
-                                  between 0 and 3600. Default 0.
+        between 0 and 3600. Default 0.
       second_section_height: Tube 2nd section height measured from "zx" [0.1mm]. Must be between
-                             0 and 3600. Default 0.
+        0 and 3600. Default 0.
       second_section_ratio: Tube 2nd section ratio (see Fig. 2 in fw guide). Must be between 0 and
-                            10000. Default 0.
+        10000. Default 0.
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
-                                                         command 0.1mm] (refers to all channels
-                                                         independent of tip pattern parameter 'tm').
-                                                         Must be between 0 and 3600. Default 3600.
+        command 0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
+        between 0 and 3600. Default 3600.
       min_z_endpos: Minimum z-Position at end of a command [0.1 mm] (refers to all channels
-                    independent of tip pattern parameter 'tm'). Must be between 0 and 3600.
-                    Default 3600.
+        independent of tip pattern parameter 'tm'). Must be between 0 and 3600.  Default 3600.
       dispense_volumes: Dispense volume [0.1ul]. Must be between 0 and 12500. Default 0.
       dispense_speed: Dispense speed [0.1ul/s]. Must be between 4 and 5000. Default 500.
       cut_off_speed: Cut-off speed [0.1ul/s]. Must be between 4 and 5000. Default 250.
@@ -1741,69 +1739,67 @@ class STAR(HamiltonLiquidHandler):
       transport_air_volume: Transport air volume [0.1ul]. Must be between 0 and 500. Default 0.
       blow_out_air_volume: Blow-out air volume [0.1ul]. Must be between 0 and 9999. Default 200.
       lld_mode: LLD mode (0 = off, 1 = gamma, 2 = dP, 3 = dual, 4 = Z touch off). Must be between 0
-                and 4. Default 1.
+        and 4. Default 1.
       side_touch_off_distance: side touch off distance [0.1 mm] (0 = OFF). Must be between 0 and 45.
-                               Default 1.
+        Default 1.
       dispense_position_above_z_touch_off: dispense position above Z touch off [0.1 s] (0 = OFF)
-                                           Turns LLD & Z touch off to OFF if ON!. Must be between
-                                           0 and 100. Default 5.
+        Turns LLD & Z touch off to OFF if ON!. Must be between 0 and 100. Default 5.
       gamma_lld_sensitivity: gamma LLD sensitivity (1= high, 4=low). Must be between 1 and 4.
-                             Default 1.
+        Default 1.
       dp_lld_sensitivity: delta p LLD sensitivity (1= high, 4=low). Must be between 1 and 4.
-                          Default 1.
+        Default 1.
       swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600.
-                  Default 100.
+        Default 100.
       settling_time: Settling time [0.1s]. Must be between 0 and 99. Default 5.
       mix_volume: Mix volume [0.1ul]. Must be between 0 and 12500. Default 0.
       mix_cycles: Number of mix cycles. Must be between 0 and 99. Default 0.
       mix_position_from_liquid_surface: Mix position in Z- direction from liquid surface (LLD or
-                                        absolute terms) [0.1mm]. Must be between 0 and 900.
-                                        Default 250.
+        absolute terms) [0.1mm]. Must be between 0 and 900.  Default 250.
       mix_speed: Speed of mixing [0.1ul/s]. Must be between 4 and 5000. Default 500.
       mix_surface_following_distance: Surface following distance during mixing [0.1mm]. Must be
-                                      between 0 and 3600. Default 0.
+        between 0 and 3600. Default 0.
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
       tadm_algorithm: TADM algorithm. Default False.
       recording_mode: Recording mode 0 : no 1 : TADM errors only 2 : all TADM measurement. Must
-                      be between 0 and 2. Default 0.
+        be between 0 and 2. Default 0.
     """
 
-    _assert_clamp(dispensing_mode, 0, 4, "dispensing_mode")
-    _assert_clamp(x_positions, 0, 25000, "x_positions")
-    _assert_clamp(y_positions, 0, 6500, "y_positions")
-    _assert_clamp(minimum_height, 0, 3600, "minimum_height")
-    _assert_clamp(lld_search_height, 0, 3600, "lld_search_height")
-    _assert_clamp(liquid_surface_no_lld, 0, 3600, "liquid_surface_no_lld")
-    _assert_clamp(pull_out_distance_transport_air, 0, 3600, "pull_out_distance_transport_air")
-    _assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
-    _assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    _assert_clamp(surface_following_distance, 0, 3600, "surface_following_distance")
-    _assert_clamp(second_section_height, 0, 3600, "second_section_height")
-    _assert_clamp(second_section_ratio, 0, 10000, "second_section_ratio")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(dispensing_mode, 0, 4, "dispensing_mode")
+    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
+    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
+    utils.assert_clamp(minimum_height, 0, 3600, "minimum_height")
+    utils.assert_clamp(lld_search_height, 0, 3600, "lld_search_height")
+    utils.assert_clamp(liquid_surface_no_lld, 0, 3600, "liquid_surface_no_lld")
+    utils.assert_clamp(pull_out_distance_transport_air, 0, 3600, "pull_out_distance_transport_air")
+    utils.assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
+    utils.assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
+    utils.assert_clamp(surface_following_distance, 0, 3600, "surface_following_distance")
+    utils.assert_clamp(second_section_height, 0, 3600, "second_section_height")
+    utils.assert_clamp(second_section_ratio, 0, 10000, "second_section_ratio")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
-    _assert_clamp(min_z_endpos, 0, 3600, "min_z_endpos")
-    _assert_clamp(dispense_volumes, 0, 12500, "dispense_volume")
-    _assert_clamp(dispense_speed, 4, 5000, "dispense_speed")
-    _assert_clamp(cut_off_speed, 4, 5000, "cut_off_speed")
-    _assert_clamp(stop_back_volume, 0, 180, "stop_back_volume")
-    _assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
-    _assert_clamp(blow_out_air_volume, 0, 9999, "blow_out_air_volume")
-    _assert_clamp(lld_mode, 0, 4, "lld_mode")
-    _assert_clamp(side_touch_off_distance, 0, 45, "side_touch_off_distance")
-    _assert_clamp(dispense_position_above_z_touch_off, 0, 100, \
+    utils.assert_clamp(min_z_endpos, 0, 3600, "min_z_endpos")
+    utils.assert_clamp(dispense_volumes, 0, 12500, "dispense_volume")
+    utils.assert_clamp(dispense_speed, 4, 5000, "dispense_speed")
+    utils.assert_clamp(cut_off_speed, 4, 5000, "cut_off_speed")
+    utils.assert_clamp(stop_back_volume, 0, 180, "stop_back_volume")
+    utils.assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
+    utils.assert_clamp(blow_out_air_volume, 0, 9999, "blow_out_air_volume")
+    utils.assert_clamp(lld_mode, 0, 4, "lld_mode")
+    utils.assert_clamp(side_touch_off_distance, 0, 45, "side_touch_off_distance")
+    utils.assert_clamp(dispense_position_above_z_touch_off, 0, 100, \
                   "dispense_position_above_z_touch_off")
-    _assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
-    _assert_clamp(dp_lld_sensitivity, 1, 4, "dp_lld_sensitivity")
-    _assert_clamp(swap_speed, 3, 1600, "swap_speed")
-    _assert_clamp(settling_time, 0, 99, "settling_time")
-    _assert_clamp(mix_volume, 0, 12500, "mix_volume")
-    _assert_clamp(mix_cycles, 0, 99, "mix_cycles")
-    _assert_clamp(mix_position_from_liquid_surface, 0, 900, "mix_position_from_liquid_surface")
-    _assert_clamp(mix_speed, 4, 5000, "mix_speed")
-    _assert_clamp(mix_surface_following_distance, 0, 3600, "mix_surface_following_distance")
-    _assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
-    _assert_clamp(recording_mode, 0, 2, "recording_mode")
+    utils.assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
+    utils.assert_clamp(dp_lld_sensitivity, 1, 4, "dp_lld_sensitivity")
+    utils.assert_clamp(swap_speed, 3, 1600, "swap_speed")
+    utils.assert_clamp(settling_time, 0, 99, "settling_time")
+    utils.assert_clamp(mix_volume, 0, 12500, "mix_volume")
+    utils.assert_clamp(mix_cycles, 0, 99, "mix_cycles")
+    utils.assert_clamp(mix_position_from_liquid_surface, 0, 900, "mix_position_from_liquid_surface")
+    utils.assert_clamp(mix_speed, 4, 5000, "mix_speed")
+    utils.assert_clamp(mix_surface_following_distance, 0, 3600, "mix_surface_following_distance")
+    utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
+    utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
 
     return self.send_command(
       module="C0",
@@ -1882,8 +1878,8 @@ class STAR(HamiltonLiquidHandler):
       y_position: y position [0.1mm]. Must be between 0 and 6500. Default 0.
     """
 
-    _assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
-    _assert_clamp(y_position, 0, 6500, "y_position")
+    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
+    utils.assert_clamp(y_position, 0, 6500, "y_position")
 
     return self.send_command(
       module="C0",
@@ -1904,8 +1900,8 @@ class STAR(HamiltonLiquidHandler):
       z_position: y position [0.1mm]. Must be between 0 and 6500. Default 0.
     """
 
-    _assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
-    _assert_clamp(z_position, 0, 6500, "z_position")
+    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
+    utils.assert_clamp(z_position, 0, 6500, "z_position")
 
     return self.send_command(
       module="C0",
@@ -1944,11 +1940,11 @@ class STAR(HamiltonLiquidHandler):
                 pattern parameter 'tm'). Must be between 0 and 3600. Default 0.
     """
 
-    _assert_clamp(x_positions, 0, 25000, "x_positions")
-    _assert_clamp(y_positions, 0, 6500, "y_positions")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_command, 0, 3600, \
+    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
+    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_command")
-    _assert_clamp(z_endpos, 0, 3600, "z_endpos")
+    utils.assert_clamp(z_endpos, 0, 3600, "z_endpos")
 
     return self.send_command(
       module="C0",
@@ -1972,7 +1968,7 @@ class STAR(HamiltonLiquidHandler):
       pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
     """
 
-    _assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
+    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
 
     return self.send_command(
       module="C0",
@@ -2000,7 +1996,7 @@ class STAR(HamiltonLiquidHandler):
       pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
     """
 
-    _assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
+    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
 
     resp = self.send_command(
       module="C0",
@@ -2024,7 +2020,7 @@ class STAR(HamiltonLiquidHandler):
       Z-Position of channel n [0.1mm]. Taking into account tip presence and length.
     """
 
-    _assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
+    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
 
     resp = self.send_command(
       module="C0",
@@ -2217,11 +2213,11 @@ class STAR(HamiltonLiquidHandler):
         3425. Default 3425.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_direction, 0, 1, "x_direction")
-    _assert_clamp(y_position, 1054, 5743, "y_position")
-    _assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
-    _assert_clamp(z_position_at_the_command_end, 0, 3425, "z_position_at_the_command_end")
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 1054, 5743, "y_position")
+    utils.assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
+    utils.assert_clamp(z_position_at_the_command_end, 0, 3425, "z_position_at_the_command_end")
 
     return self.send_command(
       module="C0",
@@ -2268,13 +2264,13 @@ class STAR(HamiltonLiquidHandler):
       minimum_height_command_end: Minimal height at command end [0.1 mm] Must be between 0 and 3425.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_position, 0, 1, "x_direction")
-    _assert_clamp(y_position, 1080, 5600, "y_position")
-    _assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_position, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 1080, 5600, "y_position")
+    utils.assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
                   "minimum_traverse_height_at_beginning_of_a_command")
-    _assert_clamp(minimum_height_command_end, 0, 3425, "minimum_height_command_end")
+    utils.assert_clamp(minimum_height_command_end, 0, 3425, "minimum_height_command_end")
 
     return self.send_command(
       module="C0",
@@ -2314,13 +2310,13 @@ class STAR(HamiltonLiquidHandler):
       minimum_height_command_end: Minimal height at command end [0.1 mm] Must be between 0 and 3425
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_position, 0, 1, "x_direction")
-    _assert_clamp(y_position, 1080, 5600, "y_position")
-    _assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_position, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 1080, 5600, "y_position")
+    utils.assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
                   "minimum_traverse_height_at_beginning_of_a_command")
-    _assert_clamp(minimum_height_command_end, 0, 3425, "minimum_height_command_end")
+    utils.assert_clamp(minimum_height_command_end, 0, 3425, "minimum_height_command_end")
 
     return self.send_command(
       module="C0",
@@ -2428,46 +2424,46 @@ class STAR(HamiltonLiquidHandler):
           Must be between 0 and 2. Default 0.
     """
 
-    _assert_clamp(aspiration_type, 0, 2, "aspiration_type")
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_direction, 0, 1, "x_direction")
-    _assert_clamp(y_positions, 1080, 5600, "y_positions")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
+    utils.assert_clamp(aspiration_type, 0, 2, "aspiration_type")
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
+    utils.assert_clamp(y_positions, 1080, 5600, "y_positions")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
                   "minimum_traverse_height_at_beginning_of_a_command")
-    _assert_clamp(minimal_end_height, 0, 3425, "minimal_end_height")
-    _assert_clamp(lld_search_height, 0, 3425, "lld_search_height")
-    _assert_clamp(liquid_surface_at_function_without_lld, 0, 3425, \
+    utils.assert_clamp(minimal_end_height, 0, 3425, "minimal_end_height")
+    utils.assert_clamp(lld_search_height, 0, 3425, "lld_search_height")
+    utils.assert_clamp(liquid_surface_at_function_without_lld, 0, 3425, \
                   "liquid_surface_at_function_without_lld")
-    _assert_clamp(pull_out_distance_to_take_transport_air_in_function_without_lld, 0, 3425, \
+    utils.assert_clamp(pull_out_distance_to_take_transport_air_in_function_without_lld, 0, 3425, \
                   "pull_out_distance_to_take_transport_air_in_function_without_lld")
-    _assert_clamp(maximum_immersion_depth, 0, 3425, "maximum_immersion_depth")
-    _assert_clamp(tube_2nd_section_height_measured_from_zm, 0, 3425, \
+    utils.assert_clamp(maximum_immersion_depth, 0, 3425, "maximum_immersion_depth")
+    utils.assert_clamp(tube_2nd_section_height_measured_from_zm, 0, 3425, \
                   "tube_2nd_section_height_measured_from_zm")
-    _assert_clamp(tube_2nd_section_ratio, 0, 10000, "tube_2nd_section_ratio")
-    _assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
-    _assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    _assert_clamp(liquid_surface_sink_distance_at_the_end_of_aspiration, 0, 990, \
+    utils.assert_clamp(tube_2nd_section_ratio, 0, 10000, "tube_2nd_section_ratio")
+    utils.assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
+    utils.assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
+    utils.assert_clamp(liquid_surface_sink_distance_at_the_end_of_aspiration, 0, 990, \
                   "liquid_surface_sink_distance_at_the_end_of_aspiration")
-    _assert_clamp(aspiration_volumes, 0, 11500, "aspiration_volumes")
-    _assert_clamp(aspiration_speed, 3, 5000, "aspiration_speed")
-    _assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
-    _assert_clamp(blow_out_air_volume, 0, 11500, "blow_out_air_volume")
-    _assert_clamp(pre_wetting_volume, 0, 11500, "pre_wetting_volume")
-    _assert_clamp(lld_mode, 0, 4, "lld_mode")
-    _assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
-    _assert_clamp(swap_speed, 3, 1000, "swap_speed")
-    _assert_clamp(settling_time, 0, 99, "settling_time")
-    _assert_clamp(homogenization_volume, 0, 11500, "homogenization_volume")
-    _assert_clamp(homogenization_cycles, 0, 99, "homogenization_cycles")
-    _assert_clamp(homogenization_position_from_liquid_surface, 0, 990, \
+    utils.assert_clamp(aspiration_volumes, 0, 11500, "aspiration_volumes")
+    utils.assert_clamp(aspiration_speed, 3, 5000, "aspiration_speed")
+    utils.assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
+    utils.assert_clamp(blow_out_air_volume, 0, 11500, "blow_out_air_volume")
+    utils.assert_clamp(pre_wetting_volume, 0, 11500, "pre_wetting_volume")
+    utils.assert_clamp(lld_mode, 0, 4, "lld_mode")
+    utils.assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
+    utils.assert_clamp(swap_speed, 3, 1000, "swap_speed")
+    utils.assert_clamp(settling_time, 0, 99, "settling_time")
+    utils.assert_clamp(homogenization_volume, 0, 11500, "homogenization_volume")
+    utils.assert_clamp(homogenization_cycles, 0, 99, "homogenization_cycles")
+    utils.assert_clamp(homogenization_position_from_liquid_surface, 0, 990, \
                   "homogenization_position_from_liquid_surface")
-    _assert_clamp(surface_following_distance_during_homogenization, 0, 990, \
+    utils.assert_clamp(surface_following_distance_during_homogenization, 0, 990, \
                   "surface_following_distance_during_homogenization")
-    _assert_clamp(speed_of_homogenization, 3, 5000, "speed_of_homogenization")
-    _assert_clamp(todo, 4, 5000, "todo")
-    _assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
+    utils.assert_clamp(speed_of_homogenization, 3, 5000, "speed_of_homogenization")
+    utils.assert_clamp(todo, 4, 5000, "todo")
+    utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
 
-    _assert_clamp(recording_mode, 0, 2, "recording_mode")
+    utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
 
     return self.send_command(
       module="C0",
@@ -2601,46 +2597,46 @@ class STAR(HamiltonLiquidHandler):
           be between 0 and 2. Default 0.
     """
 
-    _assert_clamp(dispensing_mode, 0, 4, "dispensing_mode")
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_direction, 0, 1, "x_direction")
-    _assert_clamp(y_position, 1080, 5600, "y_position")
-    _assert_clamp(maximum_immersion_depth, 0, 3425, "maximum_immersion_depth")
-    _assert_clamp(tube_2nd_section_height_measured_from_zm, 0, 3425, \
+    utils.assert_clamp(dispensing_mode, 0, 4, "dispensing_mode")
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 1080, 5600, "y_position")
+    utils.assert_clamp(maximum_immersion_depth, 0, 3425, "maximum_immersion_depth")
+    utils.assert_clamp(tube_2nd_section_height_measured_from_zm, 0, 3425, \
                   "tube_2nd_section_height_measured_from_zm")
-    _assert_clamp(tube_2nd_section_ratio, 0, 10000, "tube_2nd_section_ratio")
-    _assert_clamp(lld_search_height, 0, 3425, "lld_search_height")
-    _assert_clamp(liquid_surface_at_function_without_lld, 0, 3425, \
+    utils.assert_clamp(tube_2nd_section_ratio, 0, 10000, "tube_2nd_section_ratio")
+    utils.assert_clamp(lld_search_height, 0, 3425, "lld_search_height")
+    utils.assert_clamp(liquid_surface_at_function_without_lld, 0, 3425, \
                   "liquid_surface_at_function_without_lld")
-    _assert_clamp(pull_out_distance_to_take_transport_air_in_function_without_lld, 0, 3425, \
+    utils.assert_clamp(pull_out_distance_to_take_transport_air_in_function_without_lld, 0, 3425, \
                   "pull_out_distance_to_take_transport_air_in_function_without_lld")
-    _assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
-    _assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    _assert_clamp(liquid_surface_sink_elevation_at_the_end_of_aspiration, 0, 990, \
+    utils.assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
+    utils.assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
+    utils.assert_clamp(liquid_surface_sink_elevation_at_the_end_of_aspiration, 0, 990, \
                   "liquid_surface_sink_elevation_at_the_end_of_aspiration")
-    _assert_clamp(minimal_traverse_height_at_begin_of_command, 0, 3425, \
+    utils.assert_clamp(minimal_traverse_height_at_begin_of_command, 0, 3425, \
                   "minimal_traverse_height_at_begin_of_command")
-    _assert_clamp(minimal_end_height, 0, 3425, "minimal_end_height")
-    _assert_clamp(dispense_volume, 0, 11500, "dispense_volume")
-    _assert_clamp(dispense_speed, 3, 5000, "dispense_speed")
-    _assert_clamp(cut_off_speed, 3, 5000, "cut_off_speed")
-    _assert_clamp(stop_back_volume, 0, 999, "stop_back_volume")
-    _assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
-    _assert_clamp(blow_out_air_volume, 0, 11500, "blow_out_air_volume")
-    _assert_clamp(lld_mode, 0, 4, "lld_mode")
-    _assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
-    _assert_clamp(swap_speed, 3, 1000, "swap_speed")
-    _assert_clamp(settling_time, 0, 99, "settling_time")
-    _assert_clamp(mixing_volume, 0, 11500, "mixing_volume")
-    _assert_clamp(mixing_cycles, 0, 99, "mixing_cycles")
-    _assert_clamp(mixing_position_from_liquid_surface, 0, 990, \
+    utils.assert_clamp(minimal_end_height, 0, 3425, "minimal_end_height")
+    utils.assert_clamp(dispense_volume, 0, 11500, "dispense_volume")
+    utils.assert_clamp(dispense_speed, 3, 5000, "dispense_speed")
+    utils.assert_clamp(cut_off_speed, 3, 5000, "cut_off_speed")
+    utils.assert_clamp(stop_back_volume, 0, 999, "stop_back_volume")
+    utils.assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
+    utils.assert_clamp(blow_out_air_volume, 0, 11500, "blow_out_air_volume")
+    utils.assert_clamp(lld_mode, 0, 4, "lld_mode")
+    utils.assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
+    utils.assert_clamp(swap_speed, 3, 1000, "swap_speed")
+    utils.assert_clamp(settling_time, 0, 99, "settling_time")
+    utils.assert_clamp(mixing_volume, 0, 11500, "mixing_volume")
+    utils.assert_clamp(mixing_cycles, 0, 99, "mixing_cycles")
+    utils.assert_clamp(mixing_position_from_liquid_surface, 0, 990, \
                   "mixing_position_from_liquid_surface")
-    _assert_clamp(surface_following_distance_during_mixing, 0, 990, \
+    utils.assert_clamp(surface_following_distance_during_mixing, 0, 990, \
                   "surface_following_distance_during_mixing")
-    _assert_clamp(speed_of_mixing, 3, 5000, "speed_of_mixing")
-    _assert_clamp(todo, 4, 5000, "todo")
-    _assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
-    _assert_clamp(recording_mode, 0, 2, "recording_mode")
+    utils.assert_clamp(speed_of_mixing, 3, 5000, "speed_of_mixing")
+    utils.assert_clamp(todo, 4, 5000, "todo")
+    utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
+    utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
 
     return self.send_command(
       module="C0",
@@ -2707,12 +2703,12 @@ class STAR(HamiltonLiquidHandler):
                         between 0 and 3425. Default 3425.
     """
 
-    _assert_clamp(dispsensing_mode, 0, 4, "dispsensing_mode")
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_direction, 0, 1, "x_direction")
-    _assert_clamp(y_position, 1080, 5600, "y_position")
-    _assert_clamp(y_position, 0, 5600, "z_position")
-    _assert_clamp(minimum_height_at_beginning_of_a_command, 0, 3425, \
+    utils.assert_clamp(dispsensing_mode, 0, 4, "dispsensing_mode")
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 1080, 5600, "y_position")
+    utils.assert_clamp(y_position, 0, 5600, "z_position")
+    utils.assert_clamp(minimum_height_at_beginning_of_a_command, 0, 3425, \
                   "minimum_height_at_beginning_of_a_command")
 
     return self.send_command(
@@ -2860,7 +2856,7 @@ class STAR(HamiltonLiquidHandler):
       True if present, False otherwise
     """
 
-    _assert_clamp(carrier_position, 1, 54, "carrier_position")
+    utils.assert_clamp(carrier_position, 1, 54, "carrier_position")
 
     resp = self.send_command(
       module="C0",
@@ -3015,7 +3011,7 @@ class STAR(HamiltonLiquidHandler):
       5 = ReReRe (dual chamber)
     """
 
-    _assert_clamp(pump_station, 1, 3, "pump_station")
+    utils.assert_clamp(pump_station, 1, 3, "pump_station")
 
     resp = self.send_command(
       module="C0",
@@ -3052,7 +3048,7 @@ class STAR(HamiltonLiquidHandler):
       carrier_position: pump station number (1..3)
     """
 
-    _assert_clamp(pump_station, 1, 3, "pump_station")
+    utils.assert_clamp(pump_station, 1, 3, "pump_station")
 
     resp = self.send_command(
       module="C0",
@@ -3079,9 +3075,9 @@ class STAR(HamiltonLiquidHandler):
       drain_before_refill: waste chamber suck time after sensor change [s] (for error handling only)
     """
 
-    _assert_clamp(pump_station, 1, 3, "pump_station")
-    _assert_clamp(wash_fluid, 1, 2, "wash_fluid")
-    _assert_clamp(chamber, 1, 2, "chamber")
+    utils.assert_clamp(pump_station, 1, 3, "pump_station")
+    utils.assert_clamp(wash_fluid, 1, 2, "wash_fluid")
+    utils.assert_clamp(chamber, 1, 2, "chamber")
 
     # wash fluid <-> chamber connection
     # 0 = wash fluid 1 <-> chamber 2
@@ -3116,7 +3112,7 @@ class STAR(HamiltonLiquidHandler):
       carrier_position: pump station number (1..3)
     """
 
-    _assert_clamp(pump_station, 1, 3, "pump_station")
+    utils.assert_clamp(pump_station, 1, 3, "pump_station")
 
     resp = self.send_command(
       module="C0",
@@ -3228,7 +3224,7 @@ class STAR(HamiltonLiquidHandler):
                      Must be between 0 and 9999. Default 860.
     """
 
-    _assert_clamp(open_position, 0, 9999, "open_position")
+    utils.assert_clamp(open_position, 0, 9999, "open_position")
 
     resp = self.send_command(
       module="C0",
@@ -3278,7 +3274,7 @@ class STAR(HamiltonLiquidHandler):
                 of a command [0.1mm]. Must be between 0 and 3600. Default 3600.
     """
 
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
 
     resp = self.send_command(
@@ -3335,23 +3331,23 @@ class STAR(HamiltonLiquidHandler):
       fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_direction, 0, 1, "x_direction")
-    _assert_clamp(y_position, 0, 6500, "y_position")
-    _assert_clamp(y_direction, 0, 1, "y_direction")
-    _assert_clamp(z_position, 0, 3600, "z_position")
-    _assert_clamp(z_direction, 0, 1, "z_direction")
-    _assert_clamp(grip_direction, 1, 4, "grip_direction")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 0, 6500, "y_position")
+    utils.assert_clamp(y_direction, 0, 1, "y_direction")
+    utils.assert_clamp(z_position, 0, 3600, "z_position")
+    utils.assert_clamp(z_direction, 0, 1, "z_direction")
+    utils.assert_clamp(grip_direction, 1, 4, "grip_direction")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
-    _assert_clamp(z_position_at_the_command_end, 0, 3600, "z_position_at_the_command_end")
-    _assert_clamp(grip_strength, 1, 9, "grip_strength")
-    _assert_clamp(open_gripper_position, 0, 9999, "open_gripper_position")
-    _assert_clamp(plate_width, 0, 9999, "plate_width")
-    _assert_clamp(plate_width_tolerance, 0, 99, "plate_width_tolerance")
-    _assert_clamp(collision_control_level, 0, 1, "collision_control_level")
-    _assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
-    _assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
+    utils.assert_clamp(z_position_at_the_command_end, 0, 3600, "z_position_at_the_command_end")
+    utils.assert_clamp(grip_strength, 1, 9, "grip_strength")
+    utils.assert_clamp(open_gripper_position, 0, 9999, "open_gripper_position")
+    utils.assert_clamp(plate_width, 0, 9999, "plate_width")
+    utils.assert_clamp(plate_width_tolerance, 0, 99, "plate_width_tolerance")
+    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
+    utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
+    utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
     return self.send_command(
       module="C0",
@@ -3415,20 +3411,20 @@ class STAR(HamiltonLiquidHandler):
             Default 1.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_direction, 0, 1, "x_direction")
-    _assert_clamp(y_position, 0, 6500, "y_position")
-    _assert_clamp(y_direction, 0, 1, "y_direction")
-    _assert_clamp(z_position, 0, 3600, "z_position")
-    _assert_clamp(z_direction, 0, 1, "z_direction")
-    _assert_clamp(grip_direction, 1, 4, "grip_direction")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 0, 6500, "y_position")
+    utils.assert_clamp(y_direction, 0, 1, "y_direction")
+    utils.assert_clamp(z_position, 0, 3600, "z_position")
+    utils.assert_clamp(z_direction, 0, 1, "z_direction")
+    utils.assert_clamp(grip_direction, 1, 4, "grip_direction")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
-    _assert_clamp(z_position_at_the_command_end, 0, 3600, "z_position_at_the_command_end")
-    _assert_clamp(open_gripper_position, 0, 9999, "open_gripper_position")
-    _assert_clamp(collision_control_level, 0, 1, "collision_control_level")
-    _assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
-    _assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
+    utils.assert_clamp(z_position_at_the_command_end, 0, 3600, "z_position_at_the_command_end")
+    utils.assert_clamp(open_gripper_position, 0, 9999, "open_gripper_position")
+    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
+    utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
+    utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
     return self.send_command(
       module="C0",
@@ -3480,18 +3476,18 @@ class STAR(HamiltonLiquidHandler):
       acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4. Default 1.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_direction, 0, 1, "x_direction")
-    _assert_clamp(y_position, 0, 6500, "y_position")
-    _assert_clamp(y_direction, 0, 1, "y_direction")
-    _assert_clamp(z_position, 0, 3600, "z_position")
-    _assert_clamp(z_direction, 0, 1, "z_direction")
-    _assert_clamp(grip_direction, 1, 4, "grip_direction")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 0, 6500, "y_position")
+    utils.assert_clamp(y_direction, 0, 1, "y_direction")
+    utils.assert_clamp(z_position, 0, 3600, "z_position")
+    utils.assert_clamp(z_direction, 0, 1, "z_direction")
+    utils.assert_clamp(grip_direction, 1, 4, "grip_direction")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
-    _assert_clamp(collision_control_level, 0, 1, "collision_control_level")
-    _assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
-    _assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
+    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
+    utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
+    utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
     return self.send_command(
       module="C0",
@@ -3522,7 +3518,7 @@ class STAR(HamiltonLiquidHandler):
       fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
     """
 
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
 
     return self.send_command(
@@ -3582,19 +3578,19 @@ class STAR(HamiltonLiquidHandler):
                                   Default 1.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_direction, 0, 1, "x_direction")
-    _assert_clamp(y_position, 0, 6500, "y_position")
-    _assert_clamp(y_direction, 0, 1, "y_direction")
-    _assert_clamp(z_position, 0, 3600, "z_position")
-    _assert_clamp(z_direction, 0, 1, "z_direction")
-    _assert_clamp(location, 0, 1, "location")
-    _assert_clamp(hotel_depth, 0, 3000, "hotel_depth")
-    _assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 0, 6500, "y_position")
+    utils.assert_clamp(y_direction, 0, 1, "y_direction")
+    utils.assert_clamp(z_position, 0, 3600, "z_position")
+    utils.assert_clamp(z_direction, 0, 1, "z_direction")
+    utils.assert_clamp(location, 0, 1, "location")
+    utils.assert_clamp(hotel_depth, 0, 3000, "hotel_depth")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
-    _assert_clamp(collision_control_level, 0, 1, "collision_control_level")
-    _assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
-    _assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
+    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
+    utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
+    utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
     return self.send_command(
       module="C0",
@@ -3642,16 +3638,16 @@ class STAR(HamiltonLiquidHandler):
                                Default 1.
     """
 
-    _assert_clamp(x_position, 0, 30000, "x_position")
-    _assert_clamp(x_direction, 0, 1, "x_direction")
-    _assert_clamp(y_position, 0, 6500, "y_position")
-    _assert_clamp(y_direction, 0, 1, "y_direction")
-    _assert_clamp(z_position, 0, 3600, "z_position")
-    _assert_clamp(z_direction, 0, 1, "z_direction")
-    _assert_clamp(location, 0, 1, "location")
-    _assert_clamp(hotel_depth, 0, 3000, "hotel_depth")
-    _assert_clamp(grip_direction, 1, 4, "grip_direction")
-    _assert_clamp(collision_control_level, 0, 1, "collision_control_level")
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
+    utils.assert_clamp(y_position, 0, 6500, "y_position")
+    utils.assert_clamp(y_direction, 0, 1, "y_direction")
+    utils.assert_clamp(z_position, 0, 3600, "z_position")
+    utils.assert_clamp(z_direction, 0, 1, "z_direction")
+    utils.assert_clamp(location, 0, 1, "location")
+    utils.assert_clamp(hotel_depth, 0, 3000, "hotel_depth")
+    utils.assert_clamp(grip_direction, 1, 4, "grip_direction")
+    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
 
     return self.send_command(
       module="C0",

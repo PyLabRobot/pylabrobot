@@ -4,9 +4,6 @@
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-import commonmark # to convert markdown docstrings to rst
-from sphinx.ext.napoleon import _process_docstring
-
 # -- Path setup --------------------------------------------------------------
 
 # If extensions (or modules to document with autodoc) are in another directory,
@@ -59,6 +56,8 @@ exclude_patterns = [
   'jupyter_execute'
 ]
 
+default_role = 'code' # allow single backticks for inline code
+
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
@@ -98,35 +97,3 @@ nb_execution_mode = 'off'
 myst_enable_extensions = ['dollarmath']
 
 source_suffix = ['.rst', '.md']
-
-
-def docstring(app, what, name, obj, options, lines):
-  """ Convert Markdown docstrings to reStructuredText.
-
-  Based on https://stackoverflow.com/a/70174158/8101290.
-  """
-
-  wrapped = []
-  literal = False
-  for line in lines:
-    if line.strip().startswith(r'```'):
-      literal = not literal
-    if not literal:
-      line = ' '.join(x.rstrip() for x in line.split('\n'))
-    indent = (len(line) - len(line.lstrip())) > 0
-    if indent and not literal:
-      wrapped.append(' ' + line.lstrip())
-    else:
-      if literal:
-        wrapped.append('\n' + line)
-      else:
-        wrapped.append('\n' + line.strip())
-  ast = commonmark.Parser().parse(''.join(wrapped))
-  rst = commonmark.ReStructuredTextRenderer().render(ast)
-  lines.clear()
-  lines += rst.splitlines()
-
-
-def setup(app):
-  app.connect('autodoc-process-docstring', docstring)
-

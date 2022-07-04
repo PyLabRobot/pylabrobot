@@ -1,13 +1,14 @@
 import copy
+import functools
 import inspect
 import json
 import logging
 import typing
 
 import pyhamilton.utils.file_parsing as file_parser
+from pyhamilton import utils
 
-# from .backends import LiquidHandlerBackend
-from .backends import STAR as LiquidHandlerBackend
+from .backends import LiquidHandlerBackend
 from . import resources
 from .liquid_classes import (
   LiquidClass,
@@ -244,13 +245,11 @@ class LiquidHandler:
     Example:
       Printing a summary of the deck layout:
 
-      ```
       >>> lh.summary()
       Rail     Resource                   Type                Coordinates (mm)
       ===============================================================================================
       (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
           │   ├── tips_01                STF_L               (x: 117.900, y: 240.000, z: 100.000)
-      ```
     """
 
     if len(self._resources) == 0:
@@ -261,15 +260,15 @@ class LiquidHandler:
       )
 
     # Print header.
-    print(_pad_string("Rail", 9) + _pad_string("Resource", 27) + \
-          _pad_string("Type", 20) + "Coordinates (mm)")
+    print(utils.pad_string("Rail", 9) + utils.pad_string("Resource", 27) + \
+          utils.pad_string("Type", 20) + "Coordinates (mm)")
     print("=" * 95)
 
     def print_resource(resource):
       rails = LiquidHandler._rails_for_x_coordinate(resource.location.x)
-      rail_label = _pad_string(f"({rails})", 4)
-      print(f"{rail_label} ├── {_pad_string(resource.name, 27)}"
-            f"{_pad_string(resource.__class__.__name__, 20)}"
+      rail_label = utils.pad_string(f"({rails})", 4)
+      print(f"{rail_label} ├── {utils.pad_string(resource.name, 27)}"
+            f"{utils.pad_string(resource.__class__.__name__, 20)}"
             f"{resource.location}")
 
       if isinstance(resource, Carrier):
@@ -279,8 +278,8 @@ class LiquidHandler:
           else:
             # Get subresource using `self.get_resource` to update it with the new location.
             subresource = self.get_resource(subresource.name)
-            print(f"     │   ├── {_pad_string(subresource.name, 27-4)}"
-                  f"{_pad_string(subresource.__class__.__name__, 20)}"
+            print(f"     │   ├── {utils.pad_string(subresource.name, 27-4)}"
+                  f"{utils.pad_string(subresource.__class__.__name__, 20)}"
                   f"{subresource.location}")
 
     # Sort resources by rails, left to right in reality.
@@ -371,7 +370,6 @@ class LiquidHandler:
     serialized_resources = []
 
     for resource in self._resources.values():
-      print(resource.serialize())
       serialized_resources.append(resource.serialize())
 
     deck = dict(resources=serialized_resources)

@@ -10,3 +10,4 @@ Subpackages
     :maxdepth: 1
 
     pyhamilton.liquid_handling
+    pyhamilton.utils
