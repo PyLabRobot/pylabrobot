@@ -372,6 +372,7 @@ class STAR(HamiltonLiquidHandler):
 
     super().__init__(**kwargs)
     self.dev = None
+    self._tip_types = {}
 
   def setup(self):
     """ setup
@@ -414,6 +415,32 @@ class STAR(HamiltonLiquidHandler):
 
     logger.info("Found endpoints. \nWrite:\n %s \nRead:\n %s", self.write_endpoint, self.read_endpoint)
 
+    initialized = self.request_instrument_initialization_status()
+    if not initialized:
+      logger.info("Running backend initialization procedure.")
+
+      # initialization procedure
+      # TODO: before layout...
+      self.pre_initialize_instrument()
+
+      # TODO: after layout..., need tip types
+      self.initialize_iswap()
+
+      # Spread PIP channels command = JE ? (Spread PIP channels)
+
+      #C0DIid0201xp08000&yp4050 3782 3514 3246 2978 2710 2442 2175tp2450tz1220te2450tm1&tt04ti0
+      self.initialize_pipetting_channels( # spreads channels
+        x_positions=[8000],
+        # dy = 268
+        y_positions=[4050, 3782, 3514, 3246, 2978, 2710, 2442, 2175],
+        begin_of_tip_deposit_process=2450,
+        end_of_tip_deposit_process=1220,
+        z_position_at_end_of_a_command=3600,
+        tip_pattern=[1], # [1] * 8
+        tip_type="04", # TODO: get from tip types
+        discarding_method=0
+      )
+
   def stop(self):
     if self.dev is None:
       raise ValueError("USB device was not connected.")
@@ -432,6 +459,358 @@ class STAR(HamiltonLiquidHandler):
       self.dev.read(self.read_endpoint, 100) # TODO: instead of 100 we want to read until new line.
       # TODO: what happens when we write 2 commands without reading in between?
 
+  # ============== Tip Types ==============
+
+  def define_tip_type(self, tip_type: TipType):
+    """ Define a new tip type.
+
+    Sends a command to the robot to define a new tip type and save the tip type table index for
+    future reference.
+
+    Args:
+      tip_type: Tip type name.
+
+    Returns:
+      Tip type table index.
+
+    Raises:
+      ValueError: If the tip type is already defined.
+    """
+
+    if tip_type in self._tip_types:
+      raise ValueError(f"Tip type {tip_type} already defined.")
+
+    ttti = len(self._tip_types) + 1
+    if ttti > 99:
+      raise ValueError("Too many tip types defined.")
+
+    # TODO: look up if there are other tip types with the same properties, and use that ID.
+    self.define_tip_needle(
+      tip_type_table_index=ttti,
+      filter=tip_type.has_filter,
+      tip_length=tip_type.tip_length * 10, # in 0.1mm
+      maximum_tip_volume=tip_type.tip_length * 10, # in 0.1ul
+      tip_type=tip_type.tip_type_id,
+      pick_up_method=tip_type.pick_up_method
+    )
+    self._tip_types[tip_type] = ttti
+    return ttti
+
+  def get_tip_type_table_index(self, tip_type: TipType) -> int:
+    """ Get tip type table index.
+
+    Args:
+      tip_type: Tip type.
+
+    Returns:
+      Tip type ID.
+    """
+
+    return self._tip_types[tip_type]
+
+  def get_or_assign_tip_type_index(self, tip_type: TipType) -> int:
+    """ Get a tip type table index for the tip_type if it is defined, otherwise define it and then
+    return it.
+
+    Args:
+      tip_type: Tip type.
+
+    Returns:
+      Tip type IDliquid_handling.
+    """
+
+    if tip_type not in self._tip_types:
+      self.define_tip_type(tip_type)
+    return self.get_tip_type_table_index(tip_type)
+
+  # ============== LiquidHandlerBackend methods ==============
+
+  def assigned_resource_callback(self, resource: Resource):
+    if isinstance(resource, Tips):
+      self.define_tip_type(resource.tip_type)
+
+  def _channel_positions_to_fw_positions(self, channel_positions, resource) -> \
+    typing.Tuple[typing.List[int], typing.List[int], typing.List[bool]]:
+    """ Convert channel positions to firmware positions: `x_positions`, `y_positions`,
+    `channels_involed`.
+
+    Args:
+      channel_positions: List of channel positions.
+      resource: Resource in which the objects with `position` are located.
+
+    Returns:
+      Tuple of `x_positions`, `y_positions`, `channels_involed`.
+    """
+
+    y_positions = []
+    x_positions = []
+    channels_involved = []
+
+    for channel_pos in channel_positions:
+      if channel_pos is None:
+        continue
+
+      row, column = utils.string_to_position(channel_pos)
+
+      # TODO: what is -9?
+      x_positions.append(int((resource.location.x - column*9)*10))
+      y_positions.append(int((resource.location.y - row*9)*10))
+      channels_involved.append(True)
+
+    # TODO: Must have leading zero if len != 8?
+    if len(y_positions) < 8:
+      x_positions.append(0)
+      y_positions.append(0)
+      channels_involved.append(False)
+
+    return (x_positions, y_positions, channels_involved)
+
+  def pickup_tips(
+    self,
+    resource: typing.Union[str, Tips],
+    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
+    **backend_kwargs
+  ):
+    """ Pick up tips from a resource. """
+
+    channels = [channel_1, channel_2, channel_3, channel_4,
+                channel_5, channel_6, channel_7, channel_8]
+
+    x_positions, y_positions, channels_involved = \
+      self._channel_positions_to_fw_positions(channels, resource)
+    ttti = self.get_or_assign_tip_type_index(resource.tip_type)
+
+    params = {
+      "begin_tip_pick_up_process": 2244,
+      "end_tip_pick_up_process": 2164,
+      "minimum_traverse_height_at_beginning_of_a_command": 2450,
+      "pick_up_method": 0
+    }
+    params.update(backend_kwargs)
+
+    return self.pick_up_tip(
+      x_positions=x_positions,
+      y_positions=y_positions,
+      tip_pattern=channels_involved,
+      tip_type=ttti,
+      **params
+    )
+
+  def discard_tips(
+    self,
+    resource: typing.Union[str, Tips],
+    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
+    **backend_kwargs
+  ):
+    """ Discard tips from a resource. """
+
+    channels = [channel_1, channel_2, channel_3, channel_4,
+                channel_5, channel_6, channel_7, channel_8]
+
+    x_positions, y_positions, channels_involved = \
+      self._channel_positions_to_fw_positions(channels, resource)
+    ttti = self.get_or_assign_tip_type_index(resource.tip_type)
+
+    params = {
+      "begin_tip_deposit_process": 2244,
+      "end_tip_deposit_process": 2164,
+      "minimum_traverse_height_at_beginning_of_a_command": 2450,
+      "discarding_method": 0
+    }
+    params.update(backend_kwargs)
+
+    return self.discard_tip(
+      x_positions=x_positions,
+      y_positions=y_positions,
+      tip_pattern=channels_involved,
+      tip_type=ttti,
+      **params
+    )
+
+  def aspirate(
+    self,
+    resource: typing.Union[str, Resource],
+    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
+    **backend_kwargs
+  ):
+    channels = [channel_1, channel_2, channel_3, channel_4,
+                channel_5, channel_6, channel_7, channel_8]
+
+    x_positions, y_positions, channels_involved = \
+      self._channel_positions_to_fw_positions([c.position for c in channels if c is not None],
+        resource)
+
+    # Copied over from old command, some parameters had strange additional values. Can those be
+    # removed?
+    # lld_search_height=[2321] * num_wells, # TODO: is this necessary? + [2450],
+    # clot_detection_height=[0] * num_wells, # TODO: is this necessary? + [0],
+    # liquid_surface_no_lld=[1881] * num_wells, # TODO: is this necessary? + [2450],
+    # second_section_height=[32] * num_wells, # TODO: is this necessary? + [0],
+    # second_section_ratio=[6180] * num_wells, # TODO: is this necessary? + [0],
+    # minimum_height=[1871] * num_wells, # TODO: is this necessary? + [0],
+
+    params = []
+
+    # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL. Also get
+    # all other aspiration parameters.
+    for channel in itertools.compress(channels, channels_involved):
+      params.append({
+        "aspiration_volumes": int(channel.get_corrected_volume() * 10),
+        "lld_search_height": 2321,
+        "clot_detection_height": 0,
+        "liquid_surface_no_lld": 1881,
+        "pull_out_distance_transport_air": 100,
+        "second_section_height": 32,
+        "second_section_ratio": 6180,
+        "minimum_height": 1871,
+        "immersion_depth": 0,
+        "immersion_depth_direction": 0,
+        "surface_following_distance": 0,
+        "aspiration_speed": 1000,
+        "transport_air_volume": 0,
+        "blow_out_air_volume": 0,
+        "pre_wetting_volume": 0,
+        "lld_mode": 0,
+        "gamma_lld_sensitivity": 1,
+        "dp_lld_sensitivity": 1,
+        "aspirate_position_above_z_touch_off": 0,
+        "detection_height_difference_for_dual_lld": 0,
+        "swap_speed": 20,
+        "settling_time": 10,
+        "homogenization_volume": 0,
+        "homogenization_cycles": 0,
+        "homogenization_position_from_liquid_surface": 0,
+        "homogenization_speed": 1000,
+        "homogenization_surface_following_distance": 0,
+        "limit_curve_index": 0,
+
+        "use_2nd_section_aspiration": 0,
+        "retract_height_over_2nd_section_to_empty_tip": 0,
+        "dispensation_speed_during_emptying_tip": 500,
+        "dosing_drive_speed_during_2nd_section_search": 500,
+        "z_drive_speed_during_2nd_section_search": 300,
+        "cup_upper_edge": 0,
+        "ratio_liquid_rise_to_tip_deep_in": 0,
+        "immersion_depth_2nd_section": 0
+      })
+
+    cmd_kwargs = {
+      "minimum_traverse_height_at_beginning_of_a_command": 2450,
+      "min_z_endpos": 2450,
+    }
+
+    # Convert the list of dictionaries to a single dictionary where all values for the same key are
+    # accumulated in a list with that key.
+    for kwargs in params:
+      for key, value in kwargs.items():
+        if key not in cmd_kwargs:
+          cmd_kwargs[key] = []
+        cmd_kwargs[key].append(value)
+
+    # Update kwargs with user properties.
+    cmd_kwargs.update(backend_kwargs)
+
+    return self.aspirate_pip(
+      tip_pattern=channels_involved,
+      x_positions=x_positions,
+      y_positions=y_positions,
+      **cmd_kwargs,
+    )
+
+  def dispense(
+    self,
+    resource: typing.Union[str, Plate],
+    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
+    **backend_kwargs
+  ):
+    channels = [channel_1, channel_2, channel_3, channel_4,
+                channel_5, channel_6, channel_7, channel_8]
+
+    x_positions, y_positions, channels_involved = \
+      self._channel_positions_to_fw_positions([c.position for c in channels if c is not None],
+        resource)
+
+    # Copied over from old command, some parameters had strange additional values. Can those be
+    # removed?
+    # lld_search_height=[2321] * num_wells, # TODO: is this necessary? + [2450],
+    # liquid_surface_no_lld=[1881] * num_wells, # TODO: is this necessary? + [2450],
+    # pull_out_distance_transport_air=[100],
+    # second_section_height=[32] * num_wells, # TODO: is this necessary? + [0],
+    # second_section_ratio=[6180] * num_wells, # TODO: is this necessary? + [0],
+    # minimum_height=[1871] * num_wells, # TODO: is this necessary? + [0],
+
+    params = []
+
+    for channel in itertools.compress(channels, channels_involved):
+      params.append({
+        "dispensing_mode": 2,
+        "dispense_volumes": int(channel.get_corrected_volume() * 10),
+        "lld_search_height": 2321,
+        "liquid_surface_no_lld": 1881,
+        "pull_out_distance_transport_air": 100,
+        "second_section_height": 32,
+        "second_section_ratio": 6180,
+        "minimum_height": 1871,
+        "immersion_depth": 0,
+        "immersion_depth_direction": 0,
+        "surface_following_distance": 0,
+        "dispense_speed": 1200,
+        "cut_off_speed": 50,
+        "stop_back_volume": 0,
+        "transport_air_volume": 0,
+        "blow_out_air_volume": 0,
+        "lld_mode": 0,
+        "dispense_position_above_z_touch_off": 0,
+        "gamma_lld_sensitivity": 1,
+        "dp_lld_sensitivity": 1,
+        "swap_speed": 20,
+        "settling_time": 0,
+        "mix_volume": 0,
+        "mix_cycles": 0,
+        "mix_position_from_liquid_surface": 0,
+        "mix_speed": 10,
+        "mix_surface_following_distance": 0,
+        "limit_curve_index": 0
+      })
+
+    cmd_kwargs = {
+      "minimum_traverse_height_at_beginning_of_a_command": 2450,
+      "min_z_endpos": 2450,
+      "side_touch_off_distance": 0,
+    }
+
+    # Convert the list of dictionaries to a single dictionary where all values for the same key are
+    # accumulated in a list with that key.
+    for kwargs in params:
+      for key, value in kwargs.items():
+        if key not in cmd_kwargs:
+          cmd_kwargs[key] = []
+        cmd_kwargs[key].append(value)
+
+    # Update kwargs with user properties.
+    cmd_kwargs.update(backend_kwargs)
+
+    return self.dispense_pip(
+      tip_pattern=channels_involved,
+      x_positions=x_positions,
+      y_positions=y_positions,
+      **cmd_kwargs
+    )
+
+  def pickup_tips96(self, resource):
+    raise NotImplementedError()
+
+  def discard_tips96(self, resource):
+    raise NotImplementedError()
+
+  def aspirate96(self, resource, pattern, volume):
+    raise NotImplementedError()
+
+  def dispense96(self, resource, pattern, volume):
+    raise NotImplementedError()
+
+  # ============== Firmware Commands ==============
+
   # -------------- 3.2 System general commands --------------
 
   def pre_initialize_instrument(self):
@@ -439,7 +818,7 @@ class STAR(HamiltonLiquidHandler):
     resp = self.send_command(module="C0", command="VI")
     return self.parse_response(resp, "")
 
-  class TipType(enum.Enum):
+  class FirmwareTipType(enum.Enum):
     """ Tip type """
     UNDEFINED=0
     LOW_VOLUME=1
@@ -459,7 +838,7 @@ class STAR(HamiltonLiquidHandler):
     filter: bool = False,
     tip_length: int = 1950,
     maximum_tip_volume: int = 3500,
-    tip_type: TipType = TipType.STANDARD_VOLUME,
+    tip_type: FirmwareTipType = FirmwareTipType.STANDARD_VOLUME,
     pick_up_method: PickUpMethod = PickUpMethod.OUT_OF_RACK
   ):
     """ Tip/needle definition.
@@ -1309,7 +1688,7 @@ class STAR(HamiltonLiquidHandler):
     x_positions: int = 0, # TODO: these are probably lists.
     y_positions: int = 0, # TODO: these are probably lists.
     tip_pattern: bool = True,
-    tip_type: TipType = TipType.STANDARD_VOLUME,
+    tip_type: FirmwareTipType = FirmwareTipType.STANDARD_VOLUME,
     begin_tip_pick_up_process: int = 0,
     end_tip_pick_up_process: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
@@ -1363,7 +1742,7 @@ class STAR(HamiltonLiquidHandler):
     x_positions: int = 0, # TODO: these are probably lists.
     y_positions: int = 0, # TODO: these are probably lists.
     tip_pattern: bool = True,
-    tip_type: TipType = TipType.STANDARD_VOLUME,
+    tip_type: FirmwareTipType = FirmwareTipType.STANDARD_VOLUME,
     begin_tip_deposit_process: int = 0,
     end_tip_deposit_process: int = None,
     minimum_traverse_height_at_beginning_of_a_command: int = None,
@@ -2242,7 +2621,7 @@ class STAR(HamiltonLiquidHandler):
     x_position: int = 0,
     x_direction: int = 0,
     y_position: int = 5600,
-    tip_type: TipType = TipType.STANDARD_VOLUME,
+    tip_type: FirmwareTipType = FirmwareTipType.STANDARD_VOLUME,
     tip_pick_up_method: int = 2,
     z_deposit_position: int = 3425,
     minimum_traverse_height_at_beginning_of_a_command: int = 3425,
