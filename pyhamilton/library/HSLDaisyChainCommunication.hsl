@@ -1,0 +1,530 @@
+// ======================================================================
+// Interface of the Daisy Chained communication library.
+// This library is used for all daisy chained modules.
+//
+// Copyright (C) by HAMILTON Bonaduz AG, CH-7402 Bonaduz.
+// All rights reserved.
+// ======================================================================
+//
+// Modification History
+//		V1.0, 2007-11-05, Ruedi Vogel, created
+//    V2.0, 2008-06-09, Ruedi Vogel,
+//       - new function TxRxReset() implemented, which has to be called 
+//          as first function ("command") in initialisation of a module
+//    V2.1, 2008-10-01, Ruuedi Vogel:
+//       - in function DaisyChainedTxRxReset() ReadTimeout increased up
+//          to 5.0sec because some modules transmit their first message 
+//          "<NUL><CR><LF>" after a software reset more then 2 seconds 
+//          later (actual values were 2.7 sec).
+// ======================================================================
+
+#ifndef __HSL_DaisyChainCommunication_hsl__
+#define __HSL_DaisyChainCommunication_hsl__	1
+
+
+namespace HSLDaisyChainCommunication
+{
+	/*********************************************************************
+	*
+	* Exported return constants
+	*
+	*********************************************************************/
+	const static variable CMD_START    ( 1 );
+	const static variable CMD_COMPLET  ( 2 );
+	const static variable CMD_ERROR    ( 5 );   // to prevent suspicious Phoenix error messages
+	const static variable CMD_PROGRESS ( 4 );
+	const static variable CMD_ERRCOMPL ( 5 );
+
+	const variable TRACE_LEVEL_NONE   ( 0 );
+	const variable TRACE_LEVEL_NORMAL ( 1 );
+   const variable TRACE_LEVEL_FULL   ( 2 );
+
+   const variable HSL_FALSE ( hslFalse );
+   const variable HSL_TRUE  ( hslTrue  );
+   
+   const static variable ERROR_NONE                    ( 0 );
+   const static variable ERROR_ALREADY_INITIALIZED     ( 1 );
+   const static variable ERROR_PARAMETER_OUT_OF_RANGE  ( 2 );
+   const static variable ERROR_FALSE_COMM_PORT         ( 3 );
+   const static variable ERROR_HSL_FUNCTION_FAILED     ( 4 );
+   const static variable ERROR_WRITE_RECORD_FAILED     ( 5 );
+   const static variable ERROR_READ_RECORD_FAILED      ( 6 );
+   const static variable ERROR_UNEXPECTED_TXRX_COMMAND ( 7 );
+   const static variable ERROR_UNEXPECTED_TXRX_RESET   ( 8 );
+
+   const static string ERROR_MSG_NONE                    ( "No error." );
+   const static string ERROR_MSG_ALREADY_INITIALIZED     ( "Assigned module already initialized!" );
+   const static string ERROR_MSG_PARAMETER_OUT_OF_RANGE  ( "Parameter out of range!" );
+   const static string ERROR_MSG_FALSE_COMM_PORT         ( "Assigned COM port false (must be the same as before assigned)!" );
+   const static string ERROR_MSG_HSL_FUNCTION_FAILED     ( "Any HSL function failed!" );
+   const static string ERROR_MSG_WRITE_RECORD_FAILED     ( "Writing to COM port failed!" );
+   const static string ERROR_MSG_READ_RECORD_FAILED      ( "Reading from COM port failed (e.g. timeout)!" );
+   const static string ERROR_MSG_UNEXPECTED_TXRX_COMMAND ( "Unexpected error in transmitting command/receiving response occurred!" );
+   const static string ERROR_MSG_UNEXPECTED_TXRX_RESET   ( "Unexpected error in transmitting software reset/receiving response occurred!" );
+   const static string ERROR_MSG_UNKNOWN_ERROR_CODE      ( "Unknown error code!" );
+
+
+	/*********************************************************************
+	*
+	* Module globale constants/variables
+	*
+	*********************************************************************/
+
+	static global variable DaisyChainCommunication_trcLvl( TRACE_LEVEL_NORMAL );
+	static global event    DaisyChainCommunication_criticalSection;
+	static global variable DaisyChainCommunication_firstInitialize( 0 );
+	static global file     DaisyChainCommunication_comPort;
+	static global variable DaisyChainCommunication_comNumber;
+	static global variable DaisyChainCommunication_comBuffer;
+	static const variable  DaisyChainCommunication_comSettings( "1200,E,8,1,N,CR/LF" );
+	static global variable DaisyChainCommunication_moduleNames[];
+
+
+	/*********************************************************************
+	*
+	* Declarations
+	*
+	*********************************************************************/
+
+	function InitializeDaisyChainCommunication( variable iModuleName, variable iPort, variable iTraceLevel ) variable;
+	function TerminateDaisyChainCommunication( variable iModuleName ) variable;	
+	function DaisyChainedTxRxCommand( variable iModuleName, variable iCommand, variable iParameter, variable & oResponse ) variable;
+	function EvaluateCommErrorMessage( variable iErrorCode ) string;
+
+	
+	/*********************************************************************
+	*
+	* Implementations
+	*
+	*********************************************************************/
+
+	function InitializeDaisyChainCommunication( variable iModuleName, variable iPort, variable iTraceLevel ) variable 
+	{
+		variable ii;
+		
+		DaisyChainCommunication_trcLvl = iTraceLevel;
+		if( TRACE_LEVEL_NONE < DaisyChainCommunication_trcLvl ) FormatTrace(GetFunctionName(), "()", CMD_START, " Initialize Daisy Chain on COM", iPort, " for module ", iModuleName);
+		
+		DaisyChainCommunication_firstInitialize++;
+		for ( ii = 0; ii < DaisyChainCommunication_moduleNames.GetSize(); ii++ )
+		{
+			if( DaisyChainCommunication_moduleNames.GetAt( ii ) == iModuleName )
+			{
+				FormatTrace( GetFunctionName(), "()", CMD_ERROR, " Parameter iModuleName #", iModuleName, " already initialized!" );
+				return( ERROR_ALREADY_INITIALIZED );
+			}
+		}
+		DaisyChainCommunication_moduleNames.AddAsLast( iModuleName );
+
+		// -------------------------------------------------------------------------
+		// check parameters
+		// -------------------------------------------------------------------------
+		if(( 1 > iPort ) || ( 255 < iPort ))
+		{
+			FormatTrace( GetFunctionName(), "()", CMD_ERROR, " Parameter comPort #", iPort, " out of range [1..255]!" );
+			return( ERROR_PARAMETER_OUT_OF_RANGE );
+		}
+
+		if( 1 < DaisyChainCommunication_firstInitialize )
+		{
+			if( DaisyChainCommunication_comNumber != iPort )
+			{
+				FormatTrace( GetFunctionName(), "()", CMD_ERROR, " Parameter comPort #", iPort, " is not equal to already initialized port COM", DaisyChainCommunication_comNumber, "!" );
+				return( ERROR_FALSE_COMM_PORT );
+			}
+   		if( TRACE_LEVEL_NONE < DaisyChainCommunication_trcLvl ) FormatTrace( GetFunctionName(), "()", CMD_COMPLET );
+			return( ERROR_NONE );
+		}
+
+		DaisyChainCommunication_criticalSection.SetEvent();
+		DaisyChainCommunication_comBuffer = "";
+		DaisyChainCommunication_comNumber = iPort;
+		DaisyChainCommunication_criticalSection.WaitEvent( hslInfinite );
+
+		// -------------------------------------------------------------------------
+		// initialize communication port
+		// -------------------------------------------------------------------------
+		DaisyChainCommunication_comPort.SetDelimiter( hslAsciiText );
+		if( 0 == DaisyChainCommunication_comPort.AddField( 1, DaisyChainCommunication_comBuffer, hslString ))
+		{
+			FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<AddField> failed!" );
+			DaisyChainCommunication_criticalSection.SetEvent();
+			return( ERROR_HSL_FUNCTION_FAILED );
+		}
+
+		// -------------------------------------------------------------------------
+		// Open port
+		// -------------------------------------------------------------------------
+		{
+			variable openString( "COM" + IStr(iPort) + " " +  DaisyChainCommunication_comSettings );
+
+			if( 0 == DaisyChainCommunication_comPort.Open( openString, hslWrite ))
+			{
+				DaisyChainCommunication_comPort.RemoveFields();  // is evident for redundant inits!!
+				FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<port.Open()> with [" + openString + "] failed!" );
+				DaisyChainCommunication_criticalSection.SetEvent();
+				return( ERROR_HSL_FUNCTION_FAILED );
+			}
+			if( TRACE_LEVEL_NONE < DaisyChainCommunication_trcLvl ) FormatTrace(GetFunctionName(), "()", CMD_PROGRESS, " port opened with [" + openString + "]" );
+		}
+
+      // -------------------------------------------------------------------------
+      // first configure short timeouts and transmit/receive an empty string to
+      // initiialize some Dell docking stations in a proper way!!!
+		// -------------------------------------------------------------------------
+		// Configure Timeouts
+		// Timeout settings for timeout within HSL-functions <file::ReadRecord> and 
+		// <file::WriteString>
+		// These settings are used by the function <SetCommTimeouts>.
+		// For more information see HSL Reference (document e253518b)
+		// -------------------------------------------------------------------------
+		{
+			variable ReadIntervalTimeout( hslInfinite );			   // maximum time between read chars
+			variable ReadTotalTimeoutMultiplier( hslInfinite );	// mutiplier of characters
+			variable ReadTotalTimeoutConstant( 2.000 );	      // constant in seconds
+			variable WriteTotalTimeoutMultiplier( 0.000 );			// mutiplier of characters 
+			variable WriteTotalTimeoutConstant( 1.000 );			   // constant in seconds
+			if( 0 == SetCommTimeouts( DaisyChainCommunication_comPort ))
+			{
+				DaisyChainCommunication_criticalSection.SetEvent();
+				TerminateDaisyChainCommunication( iModuleName );  
+				FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<SetCommTimeouts> failed!" );
+				return( ERROR_HSL_FUNCTION_FAILED );
+			}
+		}
+		DaisyChainCommunication_comBuffer = "";
+		DaisyChainCommunication_comPort.WriteRecord();
+		DaisyChainCommunication_comPort.ReadRecord();
+
+		// -------------------------------------------------------------------------
+		// Configure Timeouts
+		// Timeout settings for timeout within HSL-functions <file::ReadRecord> and 
+		// <file::WriteString>
+		// These settings are used by the function <SetCommTimeouts>.
+		// For more information see HSL Reference (document e253518b)
+		// -------------------------------------------------------------------------
+		{
+			variable ReadIntervalTimeout( hslInfinite );			   // maximum time between read chars
+			variable ReadTotalTimeoutMultiplier( hslInfinite );	// mutiplier of characters
+			variable ReadTotalTimeoutConstant( 120.000 );	      // constant in seconds
+			variable WriteTotalTimeoutMultiplier( 0.000 );			// mutiplier of characters 
+			variable WriteTotalTimeoutConstant( 1.000 );			   // constant in seconds
+			if( 0 == SetCommTimeouts( DaisyChainCommunication_comPort ))
+			{
+				DaisyChainCommunication_criticalSection.SetEvent();
+				TerminateDaisyChainCommunication( iModuleName );  
+				FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<SetCommTimeouts> failed!" );
+				return( ERROR_HSL_FUNCTION_FAILED );
+			}
+		}
+		
+		DaisyChainCommunication_criticalSection.SetEvent();
+		if( TRACE_LEVEL_NONE < DaisyChainCommunication_trcLvl ) FormatTrace( GetFunctionName(), "()", CMD_COMPLET );
+		return( ERROR_NONE );
+	}
+
+
+	
+	function TerminateDaisyChainCommunication( variable iModuleName ) variable
+	{
+      variable ii;
+		variable response;
+
+		if( TRACE_LEVEL_NONE < DaisyChainCommunication_trcLvl ) FormatTrace(GetFunctionName(), "()", CMD_START, " Module ", iModuleName );
+	
+		// -------------------------------------------------------------------------
+		// remove iModuleName from names list
+		// -------------------------------------------------------------------------
+		for( ii = 0; ii < DaisyChainCommunication_moduleNames.GetSize(); ii++ )
+		{
+			if( DaisyChainCommunication_moduleNames.GetAt( ii ) == iModuleName )
+			{
+				DaisyChainCommunication_moduleNames.RemoveElementAt( ii );
+				break;
+			}
+		}
+
+		// -------------------------------------------------------------------------
+		// close comm. port
+		// -------------------------------------------------------------------------
+		DaisyChainCommunication_firstInitialize--;
+		if( 0 < DaisyChainCommunication_firstInitialize )
+      {
+   		if( TRACE_LEVEL_NONE < DaisyChainCommunication_trcLvl ) FormatTrace( GetFunctionName(), "()", CMD_COMPLET );
+			return( ERROR_NONE );
+      }
+
+		DaisyChainCommunication_criticalSection.WaitEvent( hslInfinite );
+		DaisyChainCommunication_comPort.RemoveFields();
+		if( 0 != DaisyChainCommunication_comPort.Close())
+		{
+   		DaisyChainCommunication_criticalSection.SetEvent();
+			FormatTrace( GetFunctionName(), "()", CMD_ERROR, " <port.Close()> failed!" );
+			return( ERROR_HSL_FUNCTION_FAILED );
+		}
+
+		DaisyChainCommunication_criticalSection.SetEvent();
+		if( TRACE_LEVEL_NONE < DaisyChainCommunication_trcLvl ) FormatTrace( GetFunctionName(), "()", CMD_COMPLET );
+		return( ERROR_NONE );
+	}
+
+
+
+	function DaisyChainedTxRxCommand( variable iModuleName, variable iCommand, variable iParameter, variable & oResponse ) variable
+	{
+		string cmd;
+	
+		if( TRACE_LEVEL_NORMAL < DaisyChainCommunication_trcLvl ) FormatTrace( GetFunctionName(), "()", CMD_START, "Command to send: ", iModuleName, iCommand, iParameter );
+
+		// Activate error handler
+		onerror goto Unexpected;
+		
+		oResponse = "";
+		cmd = iModuleName;
+		cmd = cmd + iCommand;
+		cmd = cmd + iParameter;
+
+		DaisyChainCommunication_criticalSection.WaitEvent( hslInfinite );
+		DaisyChainCommunication_comBuffer = cmd;
+		if( 0 == DaisyChainCommunication_comPort.WriteRecord())
+		{
+			FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<WriteRecord()> failed!" );
+			DaisyChainCommunication_criticalSection.SetEvent();
+			return( ERROR_WRITE_RECORD_FAILED );
+		}
+		if( 0 == DaisyChainCommunication_comPort.ReadRecord())
+		{
+			FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<ReadRecord()> failed!" );
+			DaisyChainCommunication_criticalSection.SetEvent();
+			return( ERROR_READ_RECORD_FAILED );
+		}
+		oResponse = DaisyChainCommunication_comBuffer;
+		DaisyChainCommunication_criticalSection.SetEvent();
+				
+		if( TRACE_LEVEL_NORMAL < DaisyChainCommunication_trcLvl ) FormatTrace(GetFunctionName(), "()", CMD_COMPLET, "Response: ", oResponse );
+		return( ERROR_NONE );
+
+		Unexpected:
+		{
+			DaisyChainCommunication_criticalSection.SetEvent();
+			FormatTrace( GetFunctionName(), "()", CMD_PROGRESS, "Unexpected: Command <", iModuleName, iCommand, iParameter, "> responsed with <", oResponse, ">" );
+			return( ERROR_UNEXPECTED_TXRX_COMMAND );
+		}
+	}
+
+
+
+	function DaisyChainedTxRxReset( variable iModuleName, variable & oResponse ) variable
+	{
+      variable response;
+
+	
+		if( TRACE_LEVEL_NORMAL < DaisyChainCommunication_trcLvl ) FormatTrace(GetFunctionName(), "()", CMD_START, " on system #", iModuleName );
+
+		// Activate error handler
+		onerror goto Unexpected;
+		
+		response = "";
+		DaisyChainCommunication_criticalSection.WaitEvent( hslInfinite );
+
+		// -------------------------------------------------------------------------
+		// Configure Timeouts
+		// Timeout settings for timeout within HSL-functions <file::ReadRecord> and 
+		// <file::WriteString>
+		// These settings are used by the function <SetCommTimeouts>.
+		// For more information see HSL Reference (document e253518b)
+		// -------------------------------------------------------------------------
+		{
+			variable ReadIntervalTimeout( hslInfinite );			   // maximum time between read chars
+			variable ReadTotalTimeoutMultiplier( hslInfinite );	// mutiplier of characters
+			variable ReadTotalTimeoutConstant( 5.000 );	         // constant in seconds
+			variable WriteTotalTimeoutMultiplier( 0.000 );			// mutiplier of characters 
+			variable WriteTotalTimeoutConstant( 1.000 );			   // constant in seconds
+			if( 0 == SetCommTimeouts( DaisyChainCommunication_comPort ))
+			{
+				DaisyChainCommunication_criticalSection.SetEvent();
+				FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<SetCommTimeouts> failed!" );
+				return( ERROR_HSL_FUNCTION_FAILED );
+			}
+		}
+		
+   	// -------------------------------------------------------------------------
+      // send reset command
+		// -------------------------------------------------------------------------
+		DaisyChainCommunication_comBuffer = iModuleName + "AI";
+		if( 0 == DaisyChainCommunication_comPort.WriteRecord())
+		{
+			FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<WriteRecord on <", iModuleName, "AI> failed!" );
+			DaisyChainCommunication_criticalSection.SetEvent();
+			return( ERROR_WRITE_RECORD_FAILED );
+		}
+   	// -------------------------------------------------------------------------
+      // wait for command's response
+		// -------------------------------------------------------------------------
+		if( 0 == DaisyChainCommunication_comPort.ReadRecord())
+		{
+			FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<ReadRecord> on <", iModuleName, "AI> failed!" );
+			DaisyChainCommunication_criticalSection.SetEvent();
+			return( ERROR_READ_RECORD_FAILED );
+		}
+		response = DaisyChainCommunication_comBuffer;
+
+   	// -------------------------------------------------------------------------
+      // wait for empty message transmitted by software reset
+		// -------------------------------------------------------------------------
+      DaisyChainCommunication_comPort.ReadRecord();
+
+		// -------------------------------------------------------------------------
+		// Reconfigure Timeouts to normal settings
+		// Timeout settings for timeout within HSL-functions <file::ReadRecord> and 
+		// <file::WriteString>
+		// These settings are used by the function <SetCommTimeouts>.
+		// For more information see HSL Reference (document e253518b)
+		// -------------------------------------------------------------------------
+		{
+			variable ReadIntervalTimeout( hslInfinite );			   // maximum time between read chars
+			variable ReadTotalTimeoutMultiplier( hslInfinite );	// mutiplier of characters
+			variable ReadTotalTimeoutConstant( 120.000 );	         // constant in seconds
+			variable WriteTotalTimeoutMultiplier( 0.000 );			// mutiplier of characters 
+			variable WriteTotalTimeoutConstant( 1.000 );			   // constant in seconds
+			if( 0 == SetCommTimeouts( DaisyChainCommunication_comPort ))
+			{
+				DaisyChainCommunication_criticalSection.SetEvent();
+				FormatTrace( GetFunctionName(), "()", CMD_ERROR, "<SetCommTimeouts> failed!" );
+				return( ERROR_HSL_FUNCTION_FAILED );
+			}
+		}
+		
+		DaisyChainCommunication_criticalSection.SetEvent();
+      oResponse = response;
+
+		if( TRACE_LEVEL_NORMAL < DaisyChainCommunication_trcLvl ) FormatTrace(GetFunctionName(), "()", CMD_COMPLET, "Response: ", oResponse );
+		return( ERROR_NONE );
+
+		Unexpected:
+		{
+			DaisyChainCommunication_criticalSection.SetEvent();
+			FormatTrace( GetFunctionName(), "()", CMD_PROGRESS, "Unexpected: Command <", iModuleName, "AI> to system #", iModuleName, " responded with <", oResponse, ">" );
+			return( ERROR_UNEXPECTED_TXRX_RESET );
+		}
+	}
+
+
+
+	function EvaluateCommErrorMessage( variable iErrorCode ) string
+	{
+	     if( iErrorCode == ERROR_NONE                    ) return( ERROR_MSG_NONE ); 
+	else if( iErrorCode == ERROR_ALREADY_INITIALIZED     ) return( ERROR_MSG_ALREADY_INITIALIZED );
+	else if( iErrorCode == ERROR_PARAMETER_OUT_OF_RANGE  ) return( ERROR_MSG_PARAMETER_OUT_OF_RANGE );
+	else if( iErrorCode == ERROR_FALSE_COMM_PORT         ) return( ERROR_MSG_FALSE_COMM_PORT );
+	else if( iErrorCode == ERROR_HSL_FUNCTION_FAILED     ) return( ERROR_MSG_HSL_FUNCTION_FAILED );
+	else if( iErrorCode == ERROR_WRITE_RECORD_FAILED     ) return( ERROR_MSG_WRITE_RECORD_FAILED );
+	else if( iErrorCode == ERROR_READ_RECORD_FAILED      ) return( ERROR_MSG_READ_RECORD_FAILED );
+	else if( iErrorCode == ERROR_UNEXPECTED_TXRX_COMMAND ) return( ERROR_MSG_UNEXPECTED_TXRX_COMMAND );
+	else if( iErrorCode == ERROR_UNEXPECTED_TXRX_RESET   ) return( ERROR_MSG_UNEXPECTED_TXRX_RESET );
+	else                                                   return( ERROR_MSG_UNKNOWN_ERROR_CODE );
+	}
+
+
+
+}	//end namespace 
+
+
+/*
+variable myModID(1);
+variable myComPort(3);
+variable myCellImagerX("XD");
+variable myCellImagerY("YD");
+variable myTraceLevel(HSLDaisyChainCommunication::TRACE_LEVEL_FULL);
+
+
+method main() void
+{
+	variable response;
+
+	if( HSLDaisyChainCommunication::CMD_COMPLET != HSLDaisyChainCommunication::InitializeDaisyChainCommunication( myCellImagerX, myComPort, myTraceLevel ))
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "<InitializeDaisyChainCommunication()> for module ",myCellImagerX," failed!" );
+	}
+
+	if( HSLDaisyChainCommunication::CMD_COMPLET != HSLDaisyChainCommunication::InitializeDaisyChainCommunication( myCellImagerY, myComPort, myTraceLevel ))
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "<InitializeDaisyChainCommunication()> for module ",myCellImagerY," failed!" );
+	}
+
+	// transmit "EI", clear error, and ignore response
+	HSLDaisyChainCommunication::DaisyChainedTxRxCommand(myCellImagerX,"EI","",response);
+	HSLDaisyChainCommunication::DaisyChainedTxRxCommand(myCellImagerY,"EI","",response);
+
+	// transmit "RF", request firmware version, command and ignore response
+	HSLDaisyChainCommunication::DaisyChainedTxRxCommand(myCellImagerX,"RF","",response);
+	HSLDaisyChainCommunication::DaisyChainedTxRxCommand(myCellImagerY,"RF","",response);
+
+	// XDSI
+	if( HSLDaisyChainCommunication::CMD_COMPLET != HSLDaisyChainCommunication::DaisyChainedTxRxCommand(myCellImagerX,"SI","",response))
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "<DaisyChainedTxRxCommand(",myCellImagerX,"SI)> failed!" );
+	}
+	if( myCellImagerX+"SIer00" != response )
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "Initializing CellImager Module ",myCellImagerX," failed!" );
+	}
+
+	// XDSA65 move to absolute position
+	if( HSLDaisyChainCommunication::CMD_COMPLET != HSLDaisyChainCommunication::DaisyChainedTxRxCommand(myCellImagerX,"SA","65",response))
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "<DaisyChainedTxRxCommand(",myCellImagerX,"SA65)> failed!" );
+	}
+	if( myCellImagerX+"SAer00" != response )
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "Initializing CellImager Module ",myCellImagerX," failed!" );
+	}
+
+	// YDSI
+	if( HSLDaisyChainCommunication::CMD_COMPLET != HSLDaisyChainCommunication::DaisyChainedTxRxCommand(myCellImagerY,"SI","",response))
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "<DaisyChainedTxRxCommand(",myCellImagerY,"SI)> failed!" );
+	}
+	if( myCellImagerY+"SIer00" != response )
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "Initializing CellImager Module ",myCellImagerY," failed!" );
+	}
+
+	// XDPO
+	if( HSLDaisyChainCommunication::CMD_COMPLET != HSLDaisyChainCommunication::DaisyChainedTxRxCommand(myCellImagerX,"PO","",response)) 
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "<DaisyChainedTxRxCommand(",myCellImagerX,"PO)> failed!" );
+	}
+
+	// YDPO
+	if( HSLDaisyChainCommunication::CMD_COMPLET != HSLDaisyChainCommunication::DaisyChainedTxRxCommand(myCellImagerY,"PO","",response)) 
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "<DaisyChainedTxRxCommand(",myCellImagerY,"PO)> failed!" );
+	}
+
+	// close comm. port
+	HSLDaisyChainCommunication::TerminateDaisyChainCommunication(myCellImagerX);
+	HSLDaisyChainCommunication::TerminateDaisyChainCommunication(myCellImagerY);
+}
+*/
+/*
+method main() void
+{
+   variable myComPort(3);
+   variable myPlatePresenter("00");
+   variable myTraceLevel(HSLDaisyChainCommunication::TRACE_LEVEL_FULL);
+   variable errCode;
+   variable errMsg;
+
+   errCode = HSLDaisyChainCommunication::InitializeDaisyChainCommunication( myPlatePresenter, myComPort, myTraceLevel );
+	if( HSLDaisyChainCommunication::ERROR_NONE != errCode )
+	{
+		FormatTrace( GetFunctionName(),"()",HSLDaisyChainCommunication::CMD_ERROR, "<InitializeDaisyChainCommunication()> for module ",myPlatePresenter," failed! (Error code = ", errCode, ", error message = ", HSLDaisyChainCommunication::EvaluateCommErrorMessage( errCode ), ")" );
+      HSLDaisyChainCommunication::TerminateDaisyChainCommunication( myPlatePresenter );
+	}
+
+   HSLDaisyChainCommunication::TerminateDaisyChainCommunication( myPlatePresenter );
+}
+*/
+#endif
+// $$author=rvogel$$valid=0$$time=2008-10-01 12:20$$checksum=68fc3401$$length=085$$

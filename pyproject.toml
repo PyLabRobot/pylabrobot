@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyhamilton"
+version = "1.40"
+authors = [
+  { name="Dana Gretton", email="dana.gretton@gmail.com" },
+  { name="Stefan Golas", email="stefanmgolas@gmail.com"}
+]
+description = "A Python interface to Hamilton liquid-handling robots"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/dgretton/pyhamilton"
+"Bug Tracker" = "https://github.com/dgretton/pyhamilton/issues"
