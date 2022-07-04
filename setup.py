@@ -2,17 +2,23 @@ from setuptools import setup
 
 long_description = open('README.md', encoding='utf-8').read()
 
-extras_testing = [
-    'pytest',
-]
-
 extras_docs = [
     'sphinx_book_theme',
     'myst_nb',
     'sphinx_copybutton',
 ]
 
-extras_all = extras_testing + extras_docs
+extras_simulation = [
+    'websockets'
+]
+
+extras_testing = [
+    'pytest',
+    'pytest-timeout',
+    'requests'
+] + extras_simulation
+
+extras_all =  extras_docs + extras_simulation + extras_testing
 
 setup(
     name='pyhamilton',
@@ -22,7 +28,7 @@ setup(
     description='Python for Hamilton liquid handling robots',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    install_requires=['pyusb'],
+    install_requires=['pyusb', 'websockets'],
     package_data={'pyhamilton': ['star-oem/*', 'star-oem/VENUS_Method/*']},
     url='https://github.com/dgretton/pyhamilton.git',
     author='Dana Gretton',
@@ -30,6 +36,7 @@ setup(
     extras_require={
         'testing': extras_testing,
         'docs': extras_docs,
+        'simulation': extras_simulation,
         'all': extras_all
     }
 )
