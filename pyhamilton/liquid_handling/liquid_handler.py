@@ -1080,9 +1080,11 @@ class LiquidHandler:
 
     Examples:
       Pick up tips from an entire 96 tips plate:
+
       >>> lh.pickup_tips96("plate_01")
 
       Pick up tips from the left half of a 96 well plate:
+
       >>> lh.pickup_tips96("plate_01")
 
     Args:
@@ -1104,6 +1106,7 @@ class LiquidHandler:
 
     Examples:
       Discard tips to an entire 96 tips plate:
+
       >>> lh.discard_tips96("plate_01")
 
     Args:
@@ -1131,15 +1134,19 @@ class LiquidHandler:
 
     Examples:
       Aspirate an entire 96 well plate:
+
       >>> lh.aspirate96("plate_01", "A1:H12", volume=50)
 
       Aspirate an entire 96 well plate:
+
       >>> lh.aspirate96("plate_01", [[True]*12]*8, volume=50)
 
       Aspirate from the left half of a 96 well plate:
+
       >>> lh.aspirate96("plate_01", "A1:H6", volume=50)
 
       Aspirate from the left half of a 96 well plate:
+
       >>> lh.aspirate96("plate_01", [[True]*6+[False]*6]*8], volume=50)
 
     Args:
@@ -1176,15 +1183,19 @@ class LiquidHandler:
 
     Examples:
       Dispense an entire 96 well plate:
+
       >>> dispense96("plate_01", [[True * 12] * 8], volume=50)
 
       Dispense an entire 96 well plate:
+
       >>> dispense96("plate_01", "A1:H12", volume=50)
 
       Dispense from the left half of a 96 well plate:
+
       >>> dispense96("plate_01", "A1:H6", volume=50)
 
       Dispense from the left half of a 96 well plate:
+
       >>> dispense96("plate_01", [[True]*6+[False]*6]*8], volume=50)
 
     Args:

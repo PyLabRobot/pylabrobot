@@ -391,7 +391,8 @@ class SimulationBackend(LiquidHandlerBackend):
 
     Simulator method to place tips on the robot, for testing of tip pickup/discarding. Unlike,
     :func:`~Simulator.pickup_tips`, this method does not raise an exception if tips are already
-    present on the specified locations. Note that a :class:`~Tips` resource has to be assigned.
+    present on the specified locations. Note that a
+    :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource has to be assigned.
 
     Args:
       resource: The resource to place tips in.
@@ -405,7 +406,8 @@ class SimulationBackend(LiquidHandlerBackend):
       wait_for_response=True)
 
   def fill_tips(self, resource: Resource):
-    """ Completely fill a :class:`Tips` resource with tips. (**simulator only**).
+    """ Completely fill a :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource with
+    tips. (**simulator only**).
 
     Args:
       resource: The resource where all tips should be placed.
@@ -418,7 +420,8 @@ class SimulationBackend(LiquidHandlerBackend):
 
     Simulator method to remove tips from the robot, for testing of tip pickup/discarding. Unlike,
     :func:`~Simulator.pickup_tips`, this method does not raise an exception if tips are not
-    present on the specified locations. Note that a :class:`~Tips` resource has to be assigned.
+    present on the specified locations. Note that a
+    :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource has to be assigned.
 
     Args:
       resource: The resource to remove tips from.
@@ -435,7 +438,8 @@ class SimulationBackend(LiquidHandlerBackend):
       wait_for_response=True)
 
   def clear_tips(self, resource: Resource):
-    """ Completely clear a :class:`Tips` resource. (**simulator only**).
+    """ Completely clear a :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource.
+    (**simulator only**).
 
     Args:
       resource: The resource where all tips should be removed.

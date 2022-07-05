@@ -78,6 +78,7 @@ class Carrier(Resource, metaclass=ABCMeta):
     Getting the tips:
 
     >>> tip_car[0]
+
     STF_L(name='tips_1')
 
     Deleting the tips:
