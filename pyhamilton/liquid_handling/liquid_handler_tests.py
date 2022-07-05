@@ -132,6 +132,29 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertEqual(self.lh.get_resource("aspiration plate").location,
                      Coordinate(320.500, 146.000, 187.150))
 
+  def test_illegal_subresource_assignment_before(self):
+    # Test assigning subresource with the same name as another resource in another carrier. This
+    # should raise an ValueError when the carrier is assigned to the liquid handler.
+    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car[0] = STF_L(name="sub")
+    plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    plt_car[0] = Cos_96_DW_1mL(name="sub")
+    self.lh.assign_resource(tip_car, rails=1)
+    with self.assertRaises(ValueError):
+      self.lh.assign_resource(plt_car, rails=10)
+
+  def test_illegal_subresource_assignment_after(self):
+    # Test assigning subresource with the same name as another resource in another carrier, after
+    # the carrier has been assigned. This should raise an error.
+    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car[0] = STF_L(name="sub")
+    plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    plt_car[0] = Cos_96_DW_1mL(name="ok")
+    self.lh.assign_resource(tip_car, rails=1)
+    self.lh.assign_resource(plt_car, rails=10)
+    with self.assertRaises(ValueError):
+      plt_car[1] = Cos_96_DW_500ul(name="sub")
+
   def build_layout(self):
     tip_car = TIP_CAR_480_A00(name="tip carrier")
     tip_car[0] = STF_L(name="tips_01")

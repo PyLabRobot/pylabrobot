@@ -102,12 +102,35 @@ class Carrier(Resource, metaclass=ABCMeta):
     category: str = "carrier",
     resource_assigned_callback: typing.Optional[typing.Callable] = None,
     resource_unassigned_callback: typing.Optional[typing.Callable] = None,
+    check_can_assign_resource_callback: typing.Optional[typing.Callable] = None,
   ):
     super().__init__(name, size_x, size_y, size_z, category=category)
     self.capacity = len(sites)
     self._sites = sites
     self._resource_assigned_callback = resource_assigned_callback
     self._resource_unassigned_callback = resource_unassigned_callback
+    self._check_can_assign_resource_callback = check_can_assign_resource_callback
+
+  def set_check_can_assign_resource_callback(self, callback: typing.Callable):
+    """ Called when a resource is about to be assigned to the robot.
+
+    This callback will be called before the resource is assigned to the robot. If the callback
+    returns `False`, the resource will not be assigned to the robot and a `ValueError` will be
+    raised. This is useful for checking if the resource can be assigned to the robot. Note that the
+    callback will also be called for all resources that were assigned to this carrier before this
+    callback is assigned.
+
+    Args:
+      resource: The resource that is about to be assigned to the robot.
+    """
+
+    self._check_can_assign_resource_callback = callback
+    for site in self._sites:
+      if site.resource is not None:
+        error = callback(site.resource)
+        if error is not None:
+          raise ValueError(f"A resource with name '{site.resource.name}' cannot be assigned to the "
+                    "liquid handler.")
 
   def set_resource_assigned_callback(self, callback: typing.Callable):
     """ Set the callback function that is called when a subresource is assigned to a carrier.
@@ -149,7 +172,7 @@ class Carrier(Resource, metaclass=ABCMeta):
 
     # Warn if overriding a site.
     if self._sites[key].resource is not None:
-      logger.warning("Overriding resource %s with %s.", self._sites[key], subresource)
+      logger.warning("Overriding resource %s with %s.", self._sites[key].resource, subresource)
     # Check if item with name is not set yet.
     if subresource.name in [s.name if s is not None else None for s in self.get_items()]:
       raise ValueError(f"Subresource with name {subresource.name} already set.")
@@ -157,10 +180,16 @@ class Carrier(Resource, metaclass=ABCMeta):
     # Update the location of the resource to be relative to the carrier.
     subresource.location += self._sites[key].location
 
-    if self._resource_assigned_callback is not None:
-      self._resource_assigned_callback(subresource)
+    if self._check_can_assign_resource_callback is not None:
+      error = self._check_can_assign_resource_callback(subresource)
+      if error is not None:
+        raise ValueError(f"A resource with name '{subresource.name}' cannot be assigned to the "
+                          "liquid handler.")
 
     self._sites[key].resource = subresource
+
+    if self._resource_assigned_callback is not None:
+      self._resource_assigned_callback(subresource)
 
   def __delitem__(self, key: int):
     utils.assert_clamp(key, 0, self.capacity - 1, "key", KeyError)

@@ -465,9 +465,11 @@ class LiquidHandler:
 
     # If the resource is a Carrier, add callbacks to self.
     if isinstance(resource, Carrier):
-      resource_assigned_callback = self._subresource_assigned_callback(resource, True)
+      resource.set_check_can_assign_resource_callback(
+        self._check_subresource_can_be_assigned_callback())
+      resource_assigned_callback = self._subresource_assigned_callback(resource)
       resource.set_resource_assigned_callback(resource_assigned_callback)
-      resource_unassigned_callback = self._subresource_assigned_callback(resource, False)
+      resource_unassigned_callback = self._subresource_assigned_callback(resource)
       resource.set_resource_unassigned_callback(resource_unassigned_callback)
 
     self._resources[resource.name] = resource
@@ -476,7 +478,17 @@ class LiquidHandler:
     if self.setup_finished:
       self.backend.assigned_resource_callback(resource)
 
-  def _subresource_assigned_callback(self, resource: Resource, check_name: bool):
+  def _check_subresource_can_be_assigned_callback(self) -> typing.Optional[str]:
+    """ Returns the error message for the error that would occur if this resource would be assigned,
+    if any. """
+
+    def callback(subresource: Resource):
+      if self.get_resource(subresource.name) is not None:
+        return f"A resource with name '{subresource.name}' already assigned."
+      return None
+    return callback
+
+  def _subresource_assigned_callback(self, resource: Resource):
     """
     Returns a callback that can be used to call the `unassinged_resource_callback` and
     `assigned_resource_callback` of the backend.
@@ -485,10 +497,6 @@ class LiquidHandler:
     """
 
     def callback(subresource: Resource):
-      if check_name and self.get_resource(subresource.name) is not None:
-        raise ValueError(f"A resource with name '{subresource.name}' is already assigned to the "
-                          "liquid handler.")
-
       if self.get_resource(resource.name) is not None:
         # If the resource was already assigned, do a reassign in callbacks. Get resource from self
         # to update location.

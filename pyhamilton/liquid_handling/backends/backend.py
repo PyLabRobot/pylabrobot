@@ -42,12 +42,12 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     return False
 
   def assigned_resource_callback(self, resource: Resource):
-    """ Called when a new resource is assigned to the robot.
+    """ Called when a new resource was assigned to the robot.
 
     This callback will also be called immediately after the setup method has been called for any
     resources that were assigned to the robot before it was set up. Note that this callback
-    will also be called for resources that were assigned and unassigned to the robot before it was
-    set up, but in those cases `unassigned_resource_callback` will be also be called.
+    will also be called for resources that were assigned but not unassigned to the robot before it
+    was set up, but in those cases `unassigned_resource_callback` will be also be called.
 
     Args:
       resource: The resource that was assigned to the robot.
@@ -57,9 +57,6 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
 
   def unassigned_resource_callback(self, name: str):
     """ Called when a resource is unassigned from the robot.
-
-    This callback will also be called immediately after the setup method has been called for any
-    resources that were unassigned from the robot before it was set up.
 
     Args:
       resource: The name of the resource that was unassigned from the robot.
