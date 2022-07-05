@@ -24,13 +24,17 @@ class SimulationBackend(LiquidHandlerBackend):
   """ The simulator backend can be used to simulate robot methods and inspect the results in a
   browser.
 
-  The server will run at [localhost:2121](http://localhost:2121) by default. If a new browser page
-  connects, it will replace the existing connection. All previously sent actions will be sent to
-  the new page, with no simualated delay, to ensure that the state of the simulation remains the
-  same. This also happens when a browser reloads the page or on the first page load.
+  You can view the simulation at `http://localhost:1337 <http://localhost:1337>`_, where
+  `static/index.html` will be served.
 
-  Note that the simulator backend uses :class:`~Resource`s to locate resources, where eg.
-  :class:`~STAR` uses absolute coordinates.
+  The websocket server will run at `http://localhost:2121 <http://localhost:2121>`_ by default. If a
+  new browser page connects, it will replace the existing connection. All previously sent actions
+  will be sent to the new page, with no simualated delay, to ensure that the state of the simulation
+  remains the same. This also happens when a browser reloads the page or on the first page load.
+
+  Note that the simulator backend uses
+  :class:`~pyhamilton.liquid_handling.resources.abstract.Resource` 's to locate resources, where eg.
+  :class:`~pyhamilton.liquid_handling.backends.hamilton.STAR` uses absolute coordinates.
 
   Examples:
     Running a simple simulation:
