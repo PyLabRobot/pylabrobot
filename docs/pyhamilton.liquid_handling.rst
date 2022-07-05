@@ -17,6 +17,8 @@ be run on practically all supported hardware.
   :recursive:
 
     pyhamilton.liquid_handling.LiquidHandler
+    pyhamilton.liquid_handling.liquid_handler.AspirationInfo
+    pyhamilton.liquid_handling.liquid_handler.DispenseInfo
 
 
 Backends

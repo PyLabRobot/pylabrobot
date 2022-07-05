@@ -22,6 +22,7 @@ PyHamilton is an OS agnostic, pure Python interface to Hamilton liquid handling 
    :caption: Liquid handling
 
    basic
+   using-the-simulator
 
 
 .. toctree::

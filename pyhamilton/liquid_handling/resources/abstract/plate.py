@@ -19,7 +19,8 @@ class Plate(Resource, metaclass=ABCMeta):
     dz: float,
     location: Coordinate = Coordinate(None, None, None)
   ):
-    super().__init__(name, size_x, size_y, size_z, location=location + Coordinate(dx, dy, dz))
+    super().__init__(name, size_x, size_y, size_z, location=location + Coordinate(dx, dy, dz),
+                     category="plate")
     self.dx = dx
     self.dy = dy
     self.dz = dz

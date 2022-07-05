@@ -27,3 +27,14 @@ Hardware
 
     pyhamilton.liquid_handling.backends.hamilton.HamiltonLiquidHandler
     pyhamilton.liquid_handling.backends.hamilton.STAR
+
+
+Simulator
+---------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pyhamilton.liquid_handling.backends.simulation.SimulationBackend

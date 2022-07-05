@@ -5,7 +5,7 @@ import unittest
 
 from .tips import Tips
 from .tip_type import TipType, TIP_TYPE_STANDARD_VOLUME
-from .carrier import TipCarrier
+from .carrier import TipCarrier, CarrierSite
 from .coordinate import Coordinate
 
 
@@ -43,12 +43,12 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.tip_car = TipCarrier(
       "tip_car",
       size_x=135.0, size_y=497.0, size_z=13.0,
-      site_positions=[
-        Coordinate(10,  20, 30),
-        Coordinate(10,  50, 30),
-        Coordinate(10,  80, 30),
-        Coordinate(10, 130, 30),
-        Coordinate(10, 160, 30),
+      sites=[
+        CarrierSite(Coordinate(10,   20, 30), 10, 10),
+        CarrierSite(Coordinate(10,   50, 30), 10, 10),
+        CarrierSite(Coordinate(10,   80, 30), 10, 10),
+        CarrierSite(Coordinate(10,  130, 30), 10, 10),
+        CarrierSite(Coordinate(10,  160, 30), 10, 10),
       ])
 
   def test_capacity(self):
@@ -100,32 +100,53 @@ class TestLiquidHandlerLayout(unittest.TestCase):
   def test_serialization(self):
     self.maxDiff = None # pylint: disable=invalid-name
     self.assertEqual(self.tip_car.serialize(), {
+      "category": "tip_carrier",
       "location": {"x": None, "y": None, "z": None},
       "name": "tip_car",
       "sites": [
         {
-          "location": {"x": 10, "y": 20, "z": 30},
-          "resource": None,
+          "site": {
+            "location": {"x": 10, "y": 20, "z": 30},
+            "resource": None,
+            "width": 10,
+            "height": 10
+          },
           "site_id": 0
         },
         {
-          "location": {"x": 10, "y": 50, "z": 30},
-          "resource": None,
+          "site": {
+            "location": {"x": 10, "y": 50, "z": 30},
+            "resource": None,
+            "width": 10,
+            "height": 10
+          },
           "site_id": 1
         },
         {
-          "location": {"x": 10, "y": 80, "z": 30},
-          "resource": None,
+          "site": {
+            "location": {"x": 10, "y": 80, "z": 30},
+            "resource": None,
+            "width": 10,
+            "height": 10
+          },
           "site_id": 2
         },
         {
-          "location": {"x": 10, "y": 130, "z": 30},
-          "resource": None,
+          "site": {
+            "location": {"x": 10, "y": 130, "z": 30},
+            "resource": None,
+            "width": 10,
+            "height": 10
+          },
           "site_id": 3
         },
         {
-          "location": {"x": 10, "y": 160, "z": 30},
-          "resource": None,
+          "site": {
+            "location": {"x": 10, "y": 160, "z": 30},
+            "resource": None,
+            "width": 10,
+            "height": 10
+          },
           "site_id": 4
         }
       ],
@@ -137,49 +158,71 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
     self.tip_car[1] = self.B
     self.assertEqual(self.tip_car.serialize(), {
+      "category": "tip_carrier",
       "location": {"x": None, "y": None, "z": None},
       "name": "tip_car",
       "sites": [
         {
-          "location": {"x": 10, "y": 20, "z": 30},
-          "resource": None,
+          "site": {
+            "location": {"x": 10, "y": 20, "z": 30},
+            "resource": None,
+            "width": 10,
+            "height": 10,
+          },
           "site_id": 0
         },
         {
-          "location": {"x": 10, "y": 50, "z": 30},
-          "resource": {
-            "dx": 9,
-            "dy": 2,
-            "dz": -2,
-            "location": {"x": 19, "y": 52, "z": 28},
-            "name": "B",
-            "size_x": 5,
-            "size_y": 5,
-            "size_z": 5,
-            "tip_type": {
-              "has_filter": False,
-              "maximal_volume": 400,
-              "pick_up_method": 0,
-              "tip_type_id": 2,
-              "total_tip_length": 100
+          "site": {
+            "location": {"x": 10, "y": 50, "z": 30},
+            "resource": {
+              "category": "tips",
+              "dx": 9,
+              "dy": 2,
+              "dz": -2,
+              "location": {"x": 19, "y": 52, "z": 28},
+              "name": "B",
+              "size_x": 5,
+              "size_y": 5,
+              "size_z": 5,
+              "tip_type": {
+                "has_filter": False,
+                "maximal_volume": 400,
+                "pick_up_method": 0,
+                "tip_type_id": 2,
+                "total_tip_length": 100
+              },
+              "type": "Tips"
             },
-            "type": "Tips"
+            "width": 10,
+            "height": 10
           },
           "site_id": 1
         },
         {
-          "location": {"x": 10, "y": 80, "z": 30},
-          "resource": None,
+          "site": {
+            "location": {"x": 10, "y": 80, "z": 30},
+            "resource": None,
+            "width": 10,
+            "height": 10,
+          },
           "site_id": 2
         },
         {
-          "location": {"x": 10, "y": 130, "z": 30},
-          "resource": None,
+          "site": {
+            "location": {"x": 10, "y": 130, "z": 30},
+            "resource": None,
+            "width": 10,
+            "height": 10,
+          },
           "site_id": 3
         },
         {
-          "location": {"x": 10, "y": 160, "z": 30},
-          "resource": None,
+          "site": {
+            "location": {"x": 10, "y": 160, "z": 30},
+            "resource": None,
+            "width": 10,
+            "height": 10,
+          },
           "site_id": 4
         }
       ],

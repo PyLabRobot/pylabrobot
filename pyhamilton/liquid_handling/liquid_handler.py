@@ -1,13 +1,14 @@
 import copy
+import functools
 import inspect
 import json
 import logging
 import typing
 
 import pyhamilton.utils.file_parsing as file_parser
+from pyhamilton import utils
 
-# from .backends import LiquidHandlerBackend
-from .backends import STAR as LiquidHandlerBackend
+from .backends import LiquidHandlerBackend
 from . import resources
 from .liquid_classes import (
   LiquidClass,
@@ -29,27 +30,289 @@ logger = logging.getLogger(__name__) # TODO: get from somewhere else?
 _RAILS_WIDTH = 22.5 # space between rails (mm)
 
 
-# TODO: move to util
-def _pad_string(item: typing.Union[str, int], desired_length: int, left=False) -> str:
-  """ Pad a string or integer with spaces to the desired length.
+class AspirationInfo:
+  """ AspirationInfo is a class that contains information about an aspiration.
 
-  Args:
-    item: string or integer to pad
-    desired_length: length to pad to
-    left: pad to the left instead of the right
+  This class is be used by
+  :meth:`pyhamilton.liquid_handling.liquid_handler.LiquidHandler.aspirate` to store information
+  about the aspiration for each individual channel.
 
-  Returns:
-    padded string
+  Examples:
+    Directly initialize the class:
+
+    >>> aspiration_info = AspirationInfo('A1', 50)
+    >>> aspiration_info.position
+    'A1'
+    >>> aspiration_info.volume
+    50
+
+    Instantiate an aspiration info object from a tuple:
+
+    >>> AspirationInfo.from_tuple(('A1', 50))
+    AspirationInfo(position='A1', volume=50)
+
+    Instantiate an aspiration info object from a dict:
+
+    >>> AspirationInfo.from_dict({'position': 'A1', 'volume': 50})
+    AspirationInfo(position='A1', volume=50)
+
+    Get the corrected volume, using the default liquid class
+    (:class:`pyhamilton.liquid_handling.liquid_classes.StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`):
+
+    >>> aspiration_info = AspirationInfo('A1', 100)
+    >>> aspiration_info.get_corrected_volume()
+    107.2
   """
 
-  length = None
-  if isinstance(item, str):
-    length = len(item)
-  elif isinstance(item, int):
-    length = item // 10
-  spaces = max(0, desired_length - length) * " "
-  item = str(item)
-  return (spaces+item) if left else (item+spaces)
+  def __init__(
+    self,
+    position: str,
+    volume: float,
+    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
+  ):
+    """ Initialize the aspiration info.
+
+    Args:
+      position: The position of the aspiration. Positions are formatted as `<row><column>` where
+        `<row>` is the row string (`A` for row 1, `B` for row 2, etc.) and `<column>` is the column
+        number. For example, `A1` is the top left corner of the resource and `H12` is the bottom
+        right.
+      volume: The volume of the aspiration.
+      liquid_class: The liquid class of the aspiration.
+    """
+
+    self.position = position
+    self.volume = volume
+    self.liquid_class = liquid_class
+
+  @classmethod
+  def from_tuple(cls, tuple_):
+    """ Create aspiration info from a tuple.
+
+    The tuple should either be in the form (position, volume) or (position, volume, liquid_class).
+    In the former case, the liquid class will be set to
+    `StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`. (TODO: link to liquid class
+    in docs)
+
+    Args:
+      tuple: A tuple in the form (position, volume) or (position, volume, liquid_class)
+
+    Returns:
+      AspirationInfo object.
+
+    Raises:
+      ValueError if the tuple is not in the correct format.
+    """
+
+    if len(tuple_) == 2:
+      position, volume = tuple_
+      return cls(position, volume)
+    elif len(tuple_) == 3:
+      position, volume, liquid_class = tuple_
+      return cls(position, volume, liquid_class)
+    else:
+      raise ValueError("Invalid tuple length")
+
+  @classmethod
+  def from_dict(cls, dict_):
+    """ Create aspiration info from a dictionary.
+
+    The dictionary should either be in the form {"position": position, "volume": volume} or
+    {"position": position, "volume": volume, "liquid_class": liquid_class}. In the former case,
+    the liquid class will be set to
+    `StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`.
+
+    Args:
+      dict: A dictionary in the form {"position": position, "volume": volume} or
+        {"position": position, "volume": volume, "liquid_class": liquid_class}
+
+    Returns:
+      AspirationInfo object.
+
+    Raises:
+      ValueError: If the dictionary is invalid.
+    """
+
+    if "position" in dict_ and "volume" in dict_:
+      position = dict_["position"]
+      volume = dict_["volume"]
+      return cls(
+        position=position,
+        volume=volume,
+        liquid_class=dict_.get("liquid_class",
+          StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol))
+
+    raise ValueError("Invalid dictionary")
+
+  def __repr__(self):
+    return f"AspirationInfo(position={self.position}, volume={self.volume})"
+
+  def get_corrected_volume(self):
+    """ Get the corrected volume.
+
+    The corrected volume is computed based on various properties of a liquid, as defined by the
+    :class:`pyhamilton.liquid_handling.liquid_classes.LiquidClass` object.
+
+    Returns:
+      The corrected volume.
+    """
+
+    return self.liquid_class.compute_corrected_volume(self.volume)
+
+  def serialize(self):
+    """ Serialize the aspiration info.
+
+    Returns:
+      A dictionary containing the serialized dispense info.
+    """
+
+    return {
+      "position": self.position,
+      "volume": self.volume,
+      "liquid_class": self.liquid_class.__class__.__name__
+    }
+
+
+class DispenseInfo:
+  """ DispenseInfo is a class that contains information about an dispense.
+
+  This class is be used by
+  :meth:`pyhamilton.liquid_handling.liquid_handler.LiquidHandler.aspirate` to store information
+  about the dispense for each individual channel.
+
+  Examples:
+    Directly initialize the class:
+
+    >>> dispense_info = DispenseInfo('A1', 0.5)
+    >>> dispense_info.position
+    'A1'
+    >>> dispense_info.volume
+    0.5
+
+    Instantiate an dispense info object from a tuple:
+
+    >>> DispenseInfo.from_tuple(('A1', 0.5))
+    DispenseInfo(position='A1', volume=0.5)
+
+    Instantiate an dispense info object from a dict:
+
+    >>> DispenseInfo.from_dict({'position': 'A1', 'volume': 0.5})
+    DispenseInfo(position='A1', volume=0.5)
+
+    Get the corrected volume:
+
+    >>> dispense_info = DispenseInfo('A1', 100)
+    >>> dispense_info.get_corrected_volume()
+    107.2
+  """
+
+  def __init__(
+    self,
+    position: str,
+    volume: float,
+    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
+  ):
+    """ Initialize the dispense info.
+
+    Args:
+      position: The position of the dispense. Positions are formatted as `<row><column>` where
+        `<row>` is the row string (`A` for row 1, `B` for row 2, etc.) and `<column>` is the column
+        number. For example, `A1` is the top left corner of the resource and `H12` is the bottom
+        right.
+      volume: The volume of the dispense.
+      liquid_class: The liquid class of the dispense.
+    """
+
+    self.position = position
+    self.volume = volume
+    self.liquid_class = liquid_class
+
+  @classmethod
+  def from_tuple(cls, tuple_):
+    """ Create dispense info from a tuple.
+
+    The tuple should either be in the form (position, volume) or (position, volume, liquid_class).
+    In the former case, the liquid class will be set to
+    `StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`. (TODO: link to liquid class
+    in docs)
+
+    Args:
+      tuple: A tuple in the form (position, volume) or (position, volume, liquid_class)
+
+    Returns:
+      DispenseInfo object.
+
+    Raises:
+      ValueError if the tuple is not in the correct format.
+    """
+
+    if len(tuple_) == 2:
+      position, volume = tuple_
+      return cls(position, volume)
+    elif len(tuple_) == 3:
+      position, volume, liquid_class = tuple_
+      return cls(position, volume, liquid_class)
+    else:
+      raise ValueError("Invalid tuple length")
+
+  @classmethod
+  def from_dict(cls, dict):
+    """ Create dispense info from a dictionary.
+
+    The dictionary should either be in the form {"position": position, "volume": volume} or
+    {"position": position, "volume": volume, "liquid_class": liquid_class}. In the former case,
+    the liquid class will be set to
+    `StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`.
+
+    Args:
+      dict: A dictionary in the form {"position": position, "volume": volume} or
+        {"position": position, "volume": volume, "liquid_class": liquid_class}
+
+    Returns:
+      DispenseInfo object.
+
+    Raises:
+      ValueError: If the dictionary is invalid.
+    """
+
+    if "position" in dict and "volume" in dict:
+      position = dict["position"]
+      volume = dict["volume"]
+      return cls(
+        position=position,
+        volume=volume,
+        liquid_class=dict.get("liquid_class",
+          StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol))
+
+    raise ValueError("Invalid dictionary")
+
+  def __repr__(self):
+    return f"DispenseInfo(position={self.position}, volume={self.volume})"
+
+  def get_corrected_volume(self):
+    """ Get the corrected volume.
+
+    The corrected volume is computed based on various properties of a liquid, as defined by the
+    :class:`pyhamilton.liquid_handling.liquid_classes.LiquidClass` object.
+
+    Returns:
+      The corrected volume.
+    """
+
+    return self.liquid_class.compute_corrected_volume(self.volume)
+
+  def serialize(self):
+    """ Serialize the dispense info.
+
+    Returns:
+      A dictionary containing the serialized dispense info.
+    """
+
+    return {
+      "position": self.position,
+      "volume": self.volume,
+      "liquid_class": self.liquid_class.__class__.__name__
+    }
 
 
 class LiquidHandler:
@@ -68,6 +331,12 @@ class LiquidHandler:
       - Picking up tips from and dropping tips into a tip box.
     - Serializing and deserializing the liquid handler deck. Decks are serialized as JSON and can
       be loaded from a JSON or .lay (legacy) file.
+    - Static analysis of commands. This includes checking the presence of tips on the head, keeping
+      track of the number of tips in the tip box, and checking the volume of liquid in the liquid
+      handler.
+
+  Attributes:
+    setup_finished: Whether the liquid handler has been setup.
   """
 
   def __init__(self, backend: LiquidHandlerBackend):
@@ -79,42 +348,33 @@ class LiquidHandler:
 
     self.backend = backend
     self._resources = {}
-    self._tip_types = {}
+    self.setup_finished = False
 
-  def setup(self):
-    """ Prepare the robot for use.
+  def need_setup_finished(func: typing.Callable): # pylint: disable=no-self-argument
+    """ Decorator for methods that require the liquid handler to be set up.
 
-    TODO: probably after the layout is defined.
+    Checked by verifying `self.setup_finished` is `True`.
+
+    Raises:
+      RuntimeError: If the liquid handler is not set up.
     """
 
-    # assert len(self._resources) > 0, "no resources found"
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+      if not self.setup_finished:
+        raise RuntimeError("The setup has not finished. See `LiquidHandler.setup`.")
+      func(self, *args, **kwargs) # pylint: disable=not-callable
+    return wrapper
+
+  def setup(self):
+    """ Prepare the robot for use. """
 
     self.backend.setup()
-    initialized = self.backend.request_instrument_initialization_status()
-    if not initialized:
-      logger.info("Running backend initialization procedure.")
 
-      # initialization procedure
-      # TODO: before layout...
-      self.backend.pre_initialize_instrument()
+    for resource in self._resources.values():
+      self.backend.assigned_resource_callback(resource)
 
-      # TODO: after layout..., need tip types
-      self.backend.initialize_iswap()
-
-      # Spread PIP channels command = JE ? (Spread PIP channels)
-
-      #C0DIid0201xp08000&yp4050 3782 3514 3246 2978 2710 2442 2175tp2450tz1220te2450tm1&tt04ti0
-      self.backend.initialize_pipetting_channels( # spreads channels
-        x_positions=[8000],
-        # dy = 268
-        y_positions=[4050, 3782, 3514, 3246, 2978, 2710, 2442, 2175],
-        begin_of_tip_deposit_process=2450,
-        end_of_tip_deposit_process=1220,
-        z_position_at_end_of_a_command=3600,
-        tip_pattern=[1], # [1] * 8
-        tip_type="04", # TODO: get from tip types
-        discarding_method=0
-      )
+    self.setup_finished = True
 
   def stop(self):
     self.backend.stop()
@@ -203,16 +463,62 @@ class LiquidHandler:
         resource.location = None # Revert location.
         raise ValueError(f"Rails {rails} is already occupied by resource '{og_resource.name}'.")
 
+    # If the resource is a Carrier, add callbacks to self.
+    if isinstance(resource, Carrier):
+      resource.set_check_can_assign_resource_callback(
+        self._check_subresource_can_be_assigned_callback())
+      resource_assigned_callback = self._subresource_assigned_callback(resource)
+      resource.set_resource_assigned_callback(resource_assigned_callback)
+      resource_unassigned_callback = self._subresource_assigned_callback(resource)
+      resource.set_resource_unassigned_callback(resource_unassigned_callback)
+
     self._resources[resource.name] = resource
 
-  def unassign_resource(self, name: str):
+    # Only call the backend if the setup is finished.
+    if self.setup_finished:
+      self.backend.assigned_resource_callback(resource)
+
+  def _check_subresource_can_be_assigned_callback(self) -> typing.Optional[str]:
+    """ Returns the error message for the error that would occur if this resource would be assigned,
+    if any. """
+
+    def callback(subresource: Resource):
+      if self.get_resource(subresource.name) is not None:
+        return f"A resource with name '{subresource.name}' already assigned."
+      return None
+    return callback
+
+  def _subresource_assigned_callback(self, resource: Resource):
+    """
+    Returns a callback that can be used to call the `unassinged_resource_callback` and
+    `assigned_resource_callback` of the backend.
+
+    Raises a `ValueError` if a resource with the same name is already assigned.
+    """
+
+    def callback(subresource: Resource):
+      if self.get_resource(resource.name) is not None:
+        # If the resource was already assigned, do a reassign in callbacks. Get resource from self
+        # to update location.
+        resource_ = self.get_resource(resource.name)
+        self.backend.unassigned_resource_callback(resource_.name)
+        self.backend.assigned_resource_callback(resource_)
+    return callback
+
+  def unassign_resource(self, resource: typing.Union[str, Resource]):
     """ Unassign an assigned resource.
+
+    Args:
+      resource: The resource to unassign.
 
     Raises:
       KeyError: If the resource is not currently assigned to this liquid handler.
     """
 
-    del self._resources[name]
+    if isinstance(resource, Resource):
+      resource = resource.name
+    del self._resources[resource]
+    self.backend.unassigned_resource_callback(resource)
 
   def get_resource(self, name: str) -> typing.Optional[Resource]:
     """ Find a resource in self or contained in a carrier in self.
@@ -230,11 +536,12 @@ class LiquidHandler:
         return copy.deepcopy(resource)
 
       if isinstance(resource, Carrier):
-        for subresource in resource.get_items():
-          if subresource is not None and subresource.name == name:
-            # TODO: Why do we need `+ Coordinate(0, resource.location.y, 0)`??? (=63)
-            subresource.location += (resource.location + Coordinate(0, resource.location.y, 0))
-            return subresource
+        if resource.has_resource(name):
+          subresource = copy.deepcopy(resource.get_resource_by_name(name))
+          subresource.location += resource.location
+          # TODO: Why do we need `+ Coordinate(0, resource.location.y, 0)`??? (=63)
+          subresource.location += Coordinate(0, resource.location.y, 0)
+          return subresource
 
     return None
 
@@ -244,13 +551,11 @@ class LiquidHandler:
     Example:
       Printing a summary of the deck layout:
 
-      ```
       >>> lh.summary()
       Rail     Resource                   Type                Coordinates (mm)
       ===============================================================================================
       (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
           │   ├── tips_01                STF_L               (x: 117.900, y: 240.000, z: 100.000)
-      ```
     """
 
     if len(self._resources) == 0:
@@ -261,15 +566,15 @@ class LiquidHandler:
       )
 
     # Print header.
-    print(_pad_string("Rail", 9) + _pad_string("Resource", 27) + \
-          _pad_string("Type", 20) + "Coordinates (mm)")
+    print(utils.pad_string("Rail", 9) + utils.pad_string("Resource", 27) + \
+          utils.pad_string("Type", 20) + "Coordinates (mm)")
     print("=" * 95)
 
     def print_resource(resource):
       rails = LiquidHandler._rails_for_x_coordinate(resource.location.x)
-      rail_label = _pad_string(f"({rails})", 4)
-      print(f"{rail_label} ├── {_pad_string(resource.name, 27)}"
-            f"{_pad_string(resource.__class__.__name__, 20)}"
+      rail_label = utils.pad_string(f"({rails})", 4)
+      print(f"{rail_label} ├── {utils.pad_string(resource.name, 27)}"
+            f"{utils.pad_string(resource.__class__.__name__, 20)}"
             f"{resource.location}")
 
       if isinstance(resource, Carrier):
@@ -279,8 +584,8 @@ class LiquidHandler:
           else:
             # Get subresource using `self.get_resource` to update it with the new location.
             subresource = self.get_resource(subresource.name)
-            print(f"     │   ├── {_pad_string(subresource.name, 27-4)}"
-                  f"{_pad_string(subresource.__class__.__name__, 20)}"
+            print(f"     │   ├── {utils.pad_string(subresource.name, 27-4)}"
+                  f"{utils.pad_string(subresource.__class__.__name__, 20)}"
                   f"{subresource.location}")
 
     # Sort resources by rails, left to right in reality.
@@ -371,7 +676,6 @@ class LiquidHandler:
     serialized_resources = []
 
     for resource in self._resources.values():
-      print(resource.serialize())
       serialized_resources.append(resource.serialize())
 
     deck = dict(resources=serialized_resources)
@@ -412,19 +716,14 @@ class LiquidHandler:
 
       if "sites" in resource_dict:
         for subresource_dict in resource_dict["sites"]:
-          if subresource_dict["resource"] is None:
+          if subresource_dict["site"]["resource"] is None:
             continue
-          subtype = subresource_dict["resource"]["type"]
+          subtype = subresource_dict["site"]["resource"]["type"]
           if subtype in resource_classes: # properties pre-defined
             subresource_klass = getattr(resources, subtype)
-            subresource = subresource_klass(name=subresource_dict["resource"]["name"])
-          else: # read properties explicitly
-            subresource = subresource_klass(
-              name=subresource_dict["resource"]["name"],
-              size_x=subresource_dict["resource"]["size_x"],
-              size_y=subresource_dict["resource"]["size_y"],
-              size_z=subresource_dict["resource"]["size_z"]
-            )
+            subresource = subresource_klass(name=subresource_dict["site"]["resource"]["name"])
+          else: # Custom resources should deserialize the properties they serialized.
+            subresource = subresource_klass(**subresource_dict["site"]["resource"])
           resource[subresource_dict["site_id"]] = subresource
 
       self.assign_resource(resource, location=location)
@@ -445,188 +744,417 @@ class LiquidHandler:
     else:
       raise ValueError(f"Unsupported file extension: {extension}")
 
-  def define_tip_type(self, tip_type: TipType):
-    """ Define a new tip type.
-
-    Sends a command to the robot to define a new tip type and save the tip type table index for
-    future reference.
+  def _assert_positions_unique(self, positions: typing.List[str]):
+    """ Returns whether all items in `positions` are unique where they are not `None`.
 
     Args:
-      tip_type: Tip type name.
-
-    Returns:
-      Tip type table index.
-
-    Raises:
-      ValueError: If the tip type is already defined.
+      positions: List of positions.
     """
 
-    if tip_type in self._tip_types:
-      raise ValueError(f"Tip type {tip_type} already defined.")
+    not_none = [p for p in positions if p is not None]
+    if len(not_none) != len(set(not_none)):
+      raise ValueError("Positions must be unique.")
 
-    ttti = len(self._tip_types) + 1
-    if ttti > 99:
-      raise ValueError("Too many tip types defined.")
-
-    # TODO: look up if there are other tip types with the same properties, and use that ID.
-    self.backend.define_tip_needle(
-      tip_type_table_index=ttti,
-      filter=tip_type.has_filter,
-      tip_length=tip_type.tip_length * 10, # in 0.1mm
-      maximum_tip_volume=tip_type.tip_length * 10, # in 0.1ul
-      tip_type=tip_type.tip_type_id,
-      pick_up_method=tip_type.pick_up_method
-    )
-    self._tip_types[tip_type] = ttti
-    return ttti
-
-  def get_tip_type_table_index(self, tip_type: TipType) -> int:
-    """ Get tip type table index.
-
-    Args:
-      tip_type: Tip type.
-
-    Returns:
-      Tip type ID.
-    """
-
-    return self._tip_types[tip_type]
-
-  def get_or_assign_tip_type_index(self, tip_type: TipType) -> int:
-    """ Get a tip type table index for the tip_type if it is defined, otherwise define it and then
-    return it.
-
-    Args:
-      tip_type: Tip type.
-
-    Returns:
-      Tip type ID.
-    """
-
-    if tip_type not in self._tip_types:
-      self.define_tip_type(tip_type)
-    return self.get_tip_type_table_index(tip_type)
-
+  @need_setup_finished
   def pickup_tips(
     self,
     resource: typing.Union[str, Tips],
-    pattern: typing.List[typing.Optional[bool]]
+    channel_1: typing.Optional[str] = None,
+    channel_2: typing.Optional[str] = None,
+    channel_3: typing.Optional[str] = None,
+    channel_4: typing.Optional[str] = None,
+    channel_5: typing.Optional[str] = None,
+    channel_6: typing.Optional[str] = None,
+    channel_7: typing.Optional[str] = None,
+    channel_8: typing.Optional[str] = None,
+    **backend_kwargs
   ):
     """ Pick up tips from a resource.
 
+    Exampels:
+      Pick up all tips in the first column.
+      >>> lh.pickup_tips(tips_resource, "A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1")
+
+      Specifying each channel explicitly:
+      >>> lh.pickup_tips(
+      ...   tips_resource,
+      ...   channel_1="A1",
+      ...   channel_2="B1",
+      ...   channel_3="C1",
+      ...   channel_4="D1",
+      ...   channel_5="E1",
+      ...   channel_6="F1",
+      ...   channel_7="G1",
+      ...   channel_8="H1"
+      ... )
+
+      Pick up tips from the diagonal:
+      >>> lh.pickup_tips(tips_resource, "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8")
+
     Args:
       resource: Resource name or resource object.
-      pattern: List of boolean values indicating which sites to pick up. Where no tips should be
-        picked up, use `False` or `None`.
+      channel_1: The location where the tip will be picked up. If None, this channel will not pick
+        up a tip.
+      channel_2: The location where the tip will be picked up. If None, this channel will not pick
+        up a tip.
+      channel_3: The location where the tip will be picked up. If None, this channel will not pick
+        up a tip.
+      channel_4: The location where the tip will be picked up. If None, this channel will not pick
+        up a tip.
+      channel_5: The location where the tip will be picked up. If None, this channel will not pick
+        up a tip.
+      channel_6: The location where the tip will be picked up. If None, this channel will not pick
+        up a tip.
+      channel_7: The location where the tip will be picked up. If None, this channel will not pick
+        up a tip.
+      channel_8: The location where the tip will be picked up. If None, this channel will not pick
+        up a tip.
+      kwargs: Additional keyword arguments for the backend, optional.
+
+    Raises:
+      RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
+
+      ValueError: If no channel will pick up a tip, in other words, if all channels are `None`.
+
+      ValueError: If the positions are not unique.
     """
 
+    positions = [channel_1, channel_2, channel_3, channel_4,
+                 channel_5, channel_6, channel_7, channel_8]
+
+    self._assert_positions_unique(positions)
+    assert any(position is not None for position in positions), "Must have at least one tip to " + \
+                                                                "pick up."
+
     # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Tips):
-      resource = resource.name
+    if not isinstance(resource, str):
+      if isinstance(resource, Tips):
+        resource = resource.name
+      else:
+        raise ValueError("Resource must be a string or a Tips object.")
     resource = self.get_resource(resource)
 
-    assert 0 < len(pattern) <= 8, "Must have 0 < len(pattern) <= 8."
+    assert resource is not None, "Resource not found."
 
-    # Get positions of tips.
-    y_positions = []
-    x_positions = []
-
-    for i, y_pattern in enumerate(pattern):
-      for j, y, in enumerate(y_pattern):
-        if y:
-          # TODO: what is -90?
-          x_positions.append(int(resource.location.x * 10) - i*90)
-          y_positions.append(int(resource.location.y * 10) - j*90)
-
-    # TODO: Must have leading zero if len != 8?
-    if len(y_positions) < 8:
-      x_positions.append(0)
-      y_positions.append(0)
-    tip_pattern = [1 if x != 0 else 0 for x in x_positions]
-
-    ttti = self.get_or_assign_tip_type_index(resource.tip_type)
-
-    return self.backend.pick_up_tip(
-      x_positions=x_positions,
-      y_positions=y_positions,
-      tip_pattern=tip_pattern,
-      tip_type=ttti,
-      begin_tip_pick_up_process=2244,
-      end_tip_pick_up_process=2164,
-      minimum_traverse_height_at_beginning_of_a_command=2450,
-      pick_up_method=0
+    self.backend.pickup_tips(
+      resource,
+      channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
+      **backend_kwargs
     )
 
+  @need_setup_finished
   def discard_tips(
     self,
     resource: typing.Union[str, Tips],
-    pattern: typing.List[typing.Optional[bool]]
+    channel_1: typing.Optional[str] = None,
+    channel_2: typing.Optional[str] = None,
+    channel_3: typing.Optional[str] = None,
+    channel_4: typing.Optional[str] = None,
+    channel_5: typing.Optional[str] = None,
+    channel_6: typing.Optional[str] = None,
+    channel_7: typing.Optional[str] = None,
+    channel_8: typing.Optional[str] = None,
+    **backend_kwargs
   ):
-    """ Discard tips from a resource.
+    """ Discard tips to a resource.
 
     Args:
       resource: Resource name or resource object.
-      pattern: List of boolean values indicating which sites to drop. Where no tips should be
-        picked up, use `False` or `None`.
+      channel_1: The location where the tip will be discarded. If None, this channel will not
+        discard a tip.
+      channel_2: The location where the tip will be discarded. If None, this channel will not
+        discard a tip.
+      channel_3: The location where the tip will be discarded. If None, this channel will not
+        discard a tip.
+      channel_4: The location where the tip will be discarded. If None, this channel will not
+        discard a tip.
+      channel_5: The location where the tip will be discarded. If None, this channel will not
+        discard a tip.
+      channel_6: The location where the tip will be discarded. If None, this channel will not
+        discard a tip.
+      channel_7: The location where the tip will be discarded. If None, this channel will not
+        discard a tip.
+      channel_8: The location where the tip will be discarded. If None, this channel will not
+        discard a tip.
+      kwargs: Additional keyword arguments for the backend, optional.
+
+    Raises:
+      RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
+
+      ValueError: If no channel will pick up a tip, in other words, if all channels are `None`.
+
+      ValueError: If the positions are not unique.
+    """
+
+    positions = [channel_1, channel_2, channel_3, channel_4,
+                 channel_5, channel_6, channel_7, channel_8]
+
+    self._assert_positions_unique(positions)
+    assert any(position is not None for position in positions), "Must have at least one tip to " + \
+                                                                "pick up."
+
+    # Get resource using `get_resource` to adjust location.
+    if not isinstance(resource, str):
+      if isinstance(resource, Tips):
+        resource = resource.name
+      else:
+        raise ValueError("Resource must be a string or a Tips object.")
+    resource = self.get_resource(resource)
+
+    assert resource is not None, "Resource not found."
+
+    self.backend.discard_tips(
+      resource,
+      channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
+      **backend_kwargs
+    )
+
+  @need_setup_finished
+  def aspirate(
+    self,
+    resource: typing.Union[str, Resource],
+    channel_1: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    channel_2: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    channel_3: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    channel_4: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    channel_5: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    channel_6: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    channel_7: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    channel_8: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    **backend_kwargs
+  ):
+    """Aspirate liquid from the specified channels.
+
+    Examples:
+      Aspirate liquid from the specified channels using a tuple:
+
+      >>> aspirate("plate_01", ('A1', 50), ('B1', 50))
+
+      Aspirate liquid from the specified channels using a dictionary:
+
+      >>> aspirate("plate_02", {'position': 'A1', 'volume': 50}, {'position': 'B1', 'volume': 50})
+
+      Aspirate liquid from the specified channels using an AspirationInfo object:
+
+      >>> aspiration_info_1 = AspirationInfo('A1', 50)
+      >>> aspiration_info_2 = AspirationInfo('B1', 50)
+      >>> aspirate("plate_01", aspiration_info_1, aspiration_info_2)
+
+    Args:
+      resource: Resource name or resource object.
+      channel_1: The aspiration info for channel 1.
+      channel_2: The aspiration info for channel 2.
+      channel_3: The aspiration info for channel 3.
+      channel_4: The aspiration info for channel 4.
+      channel_5: The aspiration info for channel 5.
+      channel_6: The aspiration info for channel 6.
+      channel_7: The aspiration info for channel 7.
+      channel_8: The aspiration info for channel 8.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
+
+    Raises:
+      RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
+
+      ValueError: If the resource could not be found. See :meth:`~LiquidHandler.assign_resource`.
+
+      ValueError: If the aspiration info is invalid, in other words, when all channels are `None`.
+
+      ValueError: If all channels are `None`.
+    """
+
+    channels = [channel_1, channel_2, channel_3, channel_4,
+                channel_5, channel_6, channel_7, channel_8]
+
+    # Check that there is at least one channel specified
+    if not any(channel is not None for channel in channels):
+      raise ValueError("No channels specified")
+
+    # Get resource using `get_resource` to adjust location.
+    if isinstance(resource, Plate):
+      resource = resource.name
+    resource = self.get_resource(resource)
+    if not resource:
+      raise ValueError(f"Resource with name {resource} not found.")
+
+    # Convert the channels to `AspirationInfo` objects
+    channels_dict = {}
+    for channel_id, channel in enumerate(channels):
+      if channel is None:
+        channels_dict[f"channel_{channel_id+1}"] = None
+      elif isinstance(channel, tuple):
+        channels_dict[f"channel_{channel_id+1}"] = AspirationInfo.from_tuple(channel)
+      elif isinstance(channel, dict):
+        channels_dict[f"channel_{channel_id+1}"] = AspirationInfo.from_dict(channel)
+      elif isinstance(channel, AspirationInfo):
+        channels_dict[f"channel_{channel_id+1}"] = channel
+      else:
+        raise ValueError(f"Invalid channel type for channel {channel_id+1}")
+
+    self.backend.aspirate(resource, **channels_dict, **backend_kwargs)
+
+  @need_setup_finished
+  def dispense(
+    self,
+    resource: typing.Union[str, Resource],
+    channel_1: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    channel_2: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    channel_3: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    channel_4: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    channel_5: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    channel_6: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    channel_7: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    channel_8: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    **backend_kwargs
+  ):
+    """Dispense liquid from the specified channels.
+
+    Examples:
+      Dispense liquid from the specified channels using a tuple:
+
+      >>> dispense("plate_01", ('A1', 50), ('B1', 50))
+
+      Dispense liquid from the specified channels using a dictionary:
+
+      >>> dispense("plate_02", {'position': 'A1', 'volume': 50}, {'position': 'B1', 'volume': 50})
+
+      Dispense liquid from the specified channels using an DispenseInfo object:
+
+      >>> dispense_info_1 = DispenseInfo('A1', 50)
+      >>> dispense_info_2 = DispenseInfo('B1', 50)
+      >>> dispense("plate_01", dispense_info_1, dispense_info_2)
+
+    Args:
+      resource: Resource name or resource object.
+      channel_1: The dispense info for channel 1.
+      channel_2: The dispense info for channel 2.
+      channel_3: The dispense info for channel 3.
+      channel_4: The dispense info for channel 4.
+      channel_5: The dispense info for channel 5.
+      channel_6: The dispense info for channel 6.
+      channel_7: The dispense info for channel 7.
+      channel_8: The dispense info for channel 8.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
+
+    Raises:
+      RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
+
+      ValueError: If the resource could not be found. See :meth:`~LiquidHandler.assign_resource`.
+
+      ValueError: If the dispense info is invalid, in other words, when all channels are `None`.
+
+      ValueError: If all channels are `None`.
+    """
+
+    channels = [channel_1, channel_2, channel_3, channel_4,
+                channel_5, channel_6, channel_7, channel_8]
+
+    # Check that there is at least one channel specified
+    if not any(channel is not None for channel in channels):
+      raise ValueError("No channels specified")
+
+    # Get resource using `get_resource` to adjust location.
+    if isinstance(resource, Plate):
+      resource = resource.name
+    resource = self.get_resource(resource)
+    if not resource:
+      raise ValueError(f"Resource with name {resource} not found.")
+
+    # Convert the channels to `DispenseInfo` objects
+    channels_dict = {}
+    for channel_id, channel in enumerate(channels):
+      if channel is None:
+        channels_dict[f"channel_{channel_id+1}"] = None
+      elif isinstance(channel, tuple):
+        channels_dict[f"channel_{channel_id+1}"] = AspirationInfo.from_tuple(channel)
+      elif isinstance(channel, dict):
+        channels_dict[f"channel_{channel_id+1}"] = AspirationInfo.from_dict(channel)
+      elif isinstance(channel, AspirationInfo):
+        channels_dict[f"channel_{channel_id+1}"] = channel
+      else:
+        raise ValueError(f"Invalid channel type for channel {channel_id+1}")
+
+    self.backend.dispense(resource, **channels_dict, **backend_kwargs)
+
+  def pickup_tips96(self, resource: typing.Union[str, Resource], **backend_kwargs):
+    """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
+
+    Examples:
+      Pick up tips from an entire 96 tips plate:
+
+      >>> lh.pickup_tips96("plate_01")
+
+      Pick up tips from the left half of a 96 well plate:
+
+      >>> lh.pickup_tips96("plate_01")
+
+    Args:
+      resource: Resource name or resource object.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
     # Get resource using `get_resource` to adjust location.
     if isinstance(resource, Tips):
       resource = resource.name
     resource = self.get_resource(resource)
+    if not resource:
+      raise ValueError(f"Resource with name {resource} not found.")
 
-    assert 0 < len(pattern) <= 8, "Must have 0 < len(pattern) <= 8."
+    self.backend.pickup_tips96(resource, **backend_kwargs)
 
-    # Get positions of tips.
-    y_positions = []
-    x_positions = []
+  def discard_tips96(self, resource: typing.Union[str, Resource], **backend_kwargs):
+    """ Discard tips using the CoRe 96 head. This will discard 96 tips.
 
-    for i, y_pattern in enumerate(pattern):
-      for j, y, in enumerate(y_pattern):
-        if y:
-          # TODO: what is -90?
-          x_positions.append(int(resource.location.x * 10) - i*90)
-          y_positions.append(int(resource.location.y * 10) - j*90)
+    Examples:
+      Discard tips to an entire 96 tips plate:
 
-    # TODO: Must have leading zero if len != 8?
-    if len(y_positions) < 8:
-      x_positions.append(0)
-      y_positions.append(0)
-    tip_pattern = [1 if x != 0 else 0 for x in x_positions]
-
-    ttti = self.get_or_assign_tip_type_index(resource.tip_type)
-
-    return self.backend.discard_tip(
-      x_positions=x_positions,
-      y_positions=y_positions,
-      tip_pattern=tip_pattern,
-      tip_type=ttti,
-      begin_tip_deposit_process=2244,
-      end_tip_deposit_process=2164,
-      minimum_traverse_height_at_beginning_of_a_command=2450,
-      discarding_method=0
-    )
-
-  def aspirate(
-    self,
-    resource: typing.Union[str, Plate],
-    volumes: typing.List[typing.List[typing.Optional[float]]],
-    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
-    **kwargs
-  ):
-    """ Aspirate liquid from a resource.
+      >>> lh.discard_tips96("plate_01")
 
     Args:
       resource: Resource name or resource object.
-      volumes: List of lists of volumes to aspirate. The outer list is for rows, the inner list is
-        for columns. Where no liquid should be aspirated, use `None` or `0`.
-      liquid_class: Liquid class of aspirated liquid. This is used to correct the volumes and to
-        update default parameters for aspiration where those are not overwritten by `kwargs`.
-      kwargs: Keyword arguments for `LiquidHandler.aspirate_pip`. Where there is no value for a
-        keyword argument, the default value is used. See `LiquidHandler.aspirate_pip` for details.
-        Each keyword argument for a list parameter (again, see `LiquidHandler.aspirate_pip`) must
-        have the same length as the list of volumes, or length 1, in which case the value is
-        applied to all channels. Non-list parameters are applied to all channels by Hamilton.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
+    """
+
+    # Get resource using `get_resource` to adjust location.
+    if isinstance(resource, Tips):
+      resource = resource.name
+    resource = self.get_resource(resource)
+    if not resource:
+      raise ValueError(f"Resource with name {resource} not found.")
+
+    self.backend.discard_tips96(resource, **backend_kwargs)
+
+  def aspirate96(
+    self,
+    resource: typing.Union[str, Resource],
+    pattern: typing.Union[typing.List[typing.List[bool]], str],
+    volume: float,
+    **backend_kwargs
+  ):
+    """ Aspirate liquid using the CoR96 head in the locations where pattern is `True`.
+
+    Examples:
+      Aspirate an entire 96 well plate:
+
+      >>> lh.aspirate96("plate_01", "A1:H12", volume=50)
+
+      Aspirate an entire 96 well plate:
+
+      >>> lh.aspirate96("plate_01", [[True]*12]*8, volume=50)
+
+      Aspirate from the left half of a 96 well plate:
+
+      >>> lh.aspirate96("plate_01", "A1:H6", volume=50)
+
+      Aspirate from the left half of a 96 well plate:
+
+      >>> lh.aspirate96("plate_01", [[True]*6+[False]*6]*8], volume=50)
+
+    Args:
+      resource: Resource name or resource object.
+      pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
+        represent columns, or a string representing a range of positions.
+      volume: The volume to aspirate from each well.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
     # Get resource using `get_resource` to adjust location.
@@ -636,128 +1164,46 @@ class LiquidHandler:
     if not resource:
       raise ValueError(f"Resource with name {resource} not found.")
 
-    # Get x and y positions.
-    x_positions = []
-    y_positions = []
+    # Convert the pattern to a list of lists of booleans
+    if isinstance(pattern, str):
+      pattern = utils.string_to_pattern(pattern)
 
-    for i, col in enumerate(volumes):
-      for j, vol in enumerate(col):
-        if vol is not None and vol > 0:
-          # TODO: what is -90?
-          x_positions.append(int(resource.location.x * 10) - i*90)
-          y_positions.append(int(resource.location.y * 10) - j*90)
+    utils.assert_shape(pattern, (8, 12))
 
-    # TODO: Must have leading zero if len != 8?
-    if len(y_positions) < 8:
-      y_positions.append(0)
-      x_positions.append(0)
-    tip_pattern = [(1 if x != 0 else 0) for x in x_positions]
+    self.backend.aspirate96(resource, pattern, volume, **backend_kwargs)
 
-    # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL.
-    corrected_volumes = []
-    for i, col in enumerate(volumes):
-      for j, vol in enumerate(col):
-        if vol is not None and vol > 0:
-          corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
-    # TODO: Must have leading zero if len != 8?
-    # if len(corrected_volumes) < 8:
-      # corrected_volumes.append(0)
-
-    num_wells = len(corrected_volumes) #- 1
-
-    # Set default values for command parameters.
-    cmd_kwargs = dict( # pylint: disable=use-dict-literal
-      # aspiration_type=0,
-      minimum_traverse_height_at_beginning_of_a_command=2450,
-      min_z_endpos=2450,
-      lld_search_height=[2321] * num_wells, # TODO: is this necessary? + [2450],
-      clot_detection_height=[0] * num_wells, # TODO: is this necessary? + [0],
-      liquid_surface_no_lld=[1881] * num_wells, # TODO: is this necessary? + [2450],
-      pull_out_distance_transport_air=[100],
-      second_section_height=[32] * num_wells, # TODO: is this necessary? + [0],
-      second_section_ratio=[6180] * num_wells, # TODO: is this necessary? + [0],
-      minimum_height=[1871] * num_wells, # TODO: is this necessary? + [0],
-      immersion_depth=[0],
-      immersion_depth_direction=[0],
-      surface_following_distance=[0],
-      aspiration_speed=[1000],
-      transport_air_volume=[0],
-      blow_out_air_volume=[0],
-      pre_wetting_volume=[0],
-      lld_mode=[0],
-      gamma_lld_sensitivity=[1],
-      dp_lld_sensitivity=[1],
-      aspirate_position_above_z_touch_off=[0],
-      detection_height_difference_for_dual_lld=[0],
-      swap_speed=[20],
-      settling_time=[10],
-      homogenization_volume=[0],
-      homogenization_cycles=[0],
-      homogenization_position_from_liquid_surface=[0],
-      homogenization_speed=[1000],
-      homogenization_surface_following_distance=[0],
-      limit_curve_index=[0],
-
-      use_2nd_section_aspiration=[0],
-      retract_height_over_2nd_section_to_empty_tip=[0],
-      dispensation_speed_during_emptying_tip=[500],
-      dosing_drive_speed_during_2nd_section_search=[500],
-      z_drive_speed_during_2nd_section_search=[300],
-      cup_upper_edge=[0],
-      ratio_liquid_rise_to_tip_deep_in=[0],
-      immersion_depth_2nd_section=[0] * num_wells
-    )
-
-    # Update kwargs with liquid class properties.
-    cmd_kwargs.update(liquid_class.aspirate_kwargs)
-    # TODO: Update wrong liquid class properties, should be fixed with new liquid class.
-    cmd_kwargs.update({
-      "blow_out_air_volume": [0],
-    })
-
-    # Update kwargs with user properties.
-    cmd_kwargs.update(kwargs)
-
-    # Make sure each parameter which is a list of the same length as the number of wells. If the
-    # length of the parameter is 1, then duplicate it for each well. If the length of the parameter
-    # is not 1, then make sure it is the same length as the number of wells. If the length of the
-    # parameter is not 1 and not the same length as the number of wells, then raise an error.
-    for param_name, param_value in cmd_kwargs.items():
-      if isinstance(param_value, list):
-        if len(param_value) == 1:
-          cmd_kwargs[param_name] = [param_value[0]] * num_wells
-        elif len(param_value) != num_wells:
-          raise ValueError(f"The {param_name} parameter must be a list of the same length as the "
-                            "number of wells or a single value.")
-
-    return self.backend.aspirate_pip(
-      tip_pattern=tip_pattern,
-      x_positions=x_positions,
-      y_positions=y_positions,
-      aspiration_volumes=corrected_volumes,
-      **cmd_kwargs,
-    )
-
-  def dispense(
+  def dispense96(
     self,
-    resource: typing.Union[str, Plate],
-    volumes: typing.List[typing.List[typing.Optional[float]]],
-    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
-    **kwargs
+    resource: typing.Union[str, Resource],
+    pattern: typing.Union[typing.List[typing.List[bool]], str],
+    volume: float,
+    **backend_kwargs
   ):
-    """ Dispense liquid from a resource.
+    """ Dispense liquid using the CoR96 head in the locations where pattern is `True`.
+
+    Examples:
+      Dispense an entire 96 well plate:
+
+      >>> dispense96("plate_01", [[True * 12] * 8], volume=50)
+
+      Dispense an entire 96 well plate:
+
+      >>> dispense96("plate_01", "A1:H12", volume=50)
+
+      Dispense from the left half of a 96 well plate:
+
+      >>> dispense96("plate_01", "A1:H6", volume=50)
+
+      Dispense from the left half of a 96 well plate:
+
+      >>> dispense96("plate_01", [[True]*6+[False]*6]*8], volume=50)
 
     Args:
       resource: Resource name or resource object.
-      volumes: List of lists of volumes to dispense. The outer list is for rows, the inner list is
-        for columns. Where no liquid should be dispensed, use `None` or `0`.
-      liquid_class: Liquid class of dispensed liquid. This is used to correct the volumes and to
-        update default parameters for dispension where those are not overwritten by `kwargs`.
-      kwargs: Keyword arguments for `LiquidHandler.dispense_pip`. Where there is no value for a
-        keyword argument, the default value is used. See `LiquidHandler.aspirate_pip` for details.
-        Each keyword argument for a list parameter (again, see `LiquidHandler.aspirate_pip`) must
-        have the same length as the list of volumes, or length 1, in which case the value is
-        applied to all channels. Non-list parameters are applied to all channels by Hamilton.
+      pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
+        represent columns, or a string representing a range of positions.
+      volume: The volume to dispense to each well.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
     # Get resource using `get_resource` to adjust location.
@@ -767,119 +1213,10 @@ class LiquidHandler:
     if not resource:
       raise ValueError(f"Resource with name {resource} not found.")
 
-    # Get x and y positions.
-    x_positions = []
-    y_positions = []
+    # Convert the pattern to a list of lists of booleans
+    if isinstance(pattern, str):
+      pattern = utils.string_to_pattern(pattern)
 
-    for i, col in enumerate(volumes):
-      for j, vol in enumerate(col):
-        if vol is not None and vol > 0:
-          # TODO: what is -90?
-          x_positions.append(int(resource.location.x * 10) - i*90)
-          y_positions.append(int(resource.location.y * 10) - j*90)
+    utils.assert_shape(pattern, (8, 12))
 
-    # TODO: Must have leading zero if len != 8?
-    if len(y_positions) < 8:
-      y_positions.append(0)
-      x_positions.append(0)
-    tip_pattern = [(1 if x != 0 else 0) for x in x_positions]
-
-    # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL.
-    corrected_volumes = []
-    for i, col in enumerate(volumes):
-      for j, vol in enumerate(col):
-        if vol is not None and vol > 0:
-          corrected_volumes.append(int(liquid_class.compute_corrected_volume(vol) * 10))
-    # TODO: Must have leading zero if len != 8?
-    # if len(corrected_volumes) < 8:
-      # corrected_volumes.append(0)
-
-    num_wells = len(corrected_volumes) #- 1
-
-    # Set default values for command parameters.
-    cmd_kwargs = dict( # pylint: disable=use-dict-literal
-      minimum_traverse_height_at_beginning_of_a_command=2450,
-      min_z_endpos=2450,
-      lld_search_height=[2321] * num_wells, # TODO: is this necessary? + [2450],
-      liquid_surface_no_lld=[1881] * num_wells, # TODO: is this necessary? + [2450],
-      pull_out_distance_transport_air=[100],
-      second_section_height=[32] * num_wells, # TODO: is this necessary? + [0],
-      second_section_ratio=[6180] * num_wells, # TODO: is this necessary? + [0],
-      minimum_height=[1871] * num_wells, # TODO: is this necessary? + [0],
-      immersion_depth=[0],
-      immersion_depth_direction=[0],
-      surface_following_distance=[0],
-      dispense_speed=[1200],
-      cut_off_speed=[50],
-      stop_back_volume=[0],
-      transport_air_volume=[0],
-      blow_out_air_volume=[0],
-      lld_mode=[0],
-      side_touch_off_distance=0,
-      dispense_position_above_z_touch_off=[0],
-      gamma_lld_sensitivity=[1],
-      dp_lld_sensitivity=[1],
-      swap_speed=[20],
-      settling_time=[10],
-      mix_volume=[0],
-      mix_cycles=[0],
-      mix_position_from_liquid_surface=[0],
-      mix_speed=[10],
-      mix_surface_following_distance=[0],
-      limit_curve_index=[0]
-    )
-
-    # Update kwargs with liquid class properties.
-    cmd_kwargs.update(liquid_class.dispense_kwargs)
-
-    # Update kwargs with user properties.
-    cmd_kwargs.update(kwargs)
-
-    # Make sure each parameter which is a list of the same length as the number of wells. If the
-    # length of the parameter is 1, then duplicate it for each well. If the length of the parameter
-    # is not 1, then make sure it is the same length as the number of wells. If the length of the
-    # parameter is not 1 and not the same length as the number of wells, then raise an error.
-    for param_name, param_value in cmd_kwargs.items():
-      if isinstance(param_value, list):
-        if len(param_value) == 1:
-          cmd_kwargs[param_name] = [param_value[0]] * num_wells
-        elif len(param_value) != num_wells:
-          raise ValueError(f"The {param_name} parameter must be a list of the same length as the "
-                            "number of wells or a single value.")
-
-    return self.backend.dispense_pip(
-      tip_pattern=tip_pattern,
-      x_positions=x_positions,
-      y_positions=y_positions,
-      dispense_volumes=corrected_volumes,
-      **cmd_kwargs
-    )
-
-  def move(
-    self,
-    from_resource: typing.Union[str, Resource],
-    to_resource: typing.Union[str, Resource],
-    from_volumes: typing.List[typing.List[typing.Optional[float]]],
-    to_volumes: typing.Optional[typing.List[typing.List[typing.Optional[bool]]]] = None,
-    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
-  ):
-    """ Move a resource from one location to another.
-
-    Convenience method to aspirate and dispense to move a liquid.
-
-    Args:
-      from_resource: Resource name or resource object.
-      to_resource: Resource name or resource object.
-      from_volumes: List of lists of volumes to aspirate. The outer list is for rows, the inner list
-        is for columns. Where no liquid should be aspirated, use `None` or `0`.
-      to_volumes: List of lists of volumes to dispense. The outer list is for rows, the inner list
-        is for columns. If not specified, the same volumes and locations used for aspiration are
-        used for the dispense. Where no liquid should be dispensed, use `None` or `0`.
-      liquid_class: Liquid class to use for aspiration and dispense.
-    """
-
-    if to_volumes is None:
-      to_volumes = from_volumes
-
-    self.aspirate(from_resource, from_volumes, liquid_class)
-    self.dispense(to_resource, to_volumes, liquid_class)
+    self.backend.dispense96(resource, pattern, volume, **backend_kwargs)
