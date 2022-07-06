@@ -19,5 +19,10 @@ setup(
     package_data={'pyhamilton': ['star-oem/*', 'star-oem/VENUS_Method/*']},
     url='https://github.com/dgretton/pyhamilton.git',
     author='Dana Gretton',
-    author_email='dgretton@mit.edu'
+    author_email='dgretton@mit.edu',
+    entry_points={
+        'console_scripts': [
+            'pyhamilton-quickstart = pyhamilton.cmd.quickstart:main',
+        ],
+    },
 )

@@ -1,0 +1,3 @@
+[console_scripts]
+pyhamilton-quickstart = pyhamilton.cmd.quickstart:main
+

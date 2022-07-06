@@ -4,12 +4,14 @@ setup.py
 pyhamilton/__init__.py
 pyhamilton/deckresource.py
 pyhamilton/defaultcmds.py
+pyhamilton/diluation_utils.py
 pyhamilton/interface.py
 pyhamilton/oemerr.py
 pyhamilton/util.py
 pyhamilton.egg-info/PKG-INFO
 pyhamilton.egg-info/SOURCES.txt
 pyhamilton.egg-info/dependency_links.txt
+pyhamilton.egg-info/entry_points.txt
 pyhamilton.egg-info/requires.txt
 pyhamilton.egg-info/top_level.txt
 pyhamilton/star-oem/HSLHttp.dll
