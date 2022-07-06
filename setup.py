@@ -10,7 +10,7 @@ except(IOError, ImportError):
 
 setup(
     name='pyhamilton',
-    version='1.235',
+    version='1.43',
     packages=find_packages(exclude=['tests*', 'examples*']),
     license='MIT',
     description='Python for Hamilton liquid handling robots',
@@ -19,5 +19,14 @@ setup(
     package_data={'pyhamilton': ['star-oem/*', 'star-oem/VENUS_Method/*']},
     url='https://github.com/dgretton/pyhamilton.git',
     author='Dana Gretton',
-    author_email='dgretton@mit.edu'
+    author_email='dgretton@mit.edu',
+    entry_points = {
+        'console_scripts': ['pyhamconfig = pyhamilton:autoconfig'],
+    },
+    #entry_points={
+    #'console_scripts': [
+    #    'pyhamconfig = pyhamilton:autoconfig',
+   #     'helloworld = pyhamilton.helloworld'
+    #]
+    #}
 )

@@ -1,0 +1,1086 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// Copyright (C) by HAMILTON Bonaduz AG, CH-7402 Bonaduz.
+// All rights reserved.
+// ----------------------------------------------------------------------------------------------------
+// TraceLevel.hsl - library for dependent traces
+// ----------------------------------------------------------------------------------------------------
+// Modification History
+//  2009-03-02  v1.0  Corsin Alig
+//              - created
+//  2009-03-12  v1.1  Corsin Alig
+//              - functions Debug_Trace6, Release_Trace6 deleted
+//              - functions GetTraceLevel, Debug_Trace8, Release_Trace8 added
+//  2010-02-01  v1.2  Corsin Alig
+//              - Default TraceLevel value is NONE
+//  2013-05-03  v2.0  Bernd Huf
+//              - total rework to comply AAW650410
+//              - removed unneccessary includes
+//              - added some private helper functions (mostly string-related)
+//              - global TraceLevel variable now static
+//              - all "old" functions remain as static thus "old" methods don't have to be upgraded
+//              - new functions (all functions include the desired tracelevel as parameter):
+//                Trace02, Trace04, Trace06, Trace08, Trace10:  trace variables
+//                TraceArray:                                   trace array formatted
+//                TraceArrayHorizontally:                       trace array formatted in one line
+//                TraceArraysFaceToFace:                        trace two arrays next to each other
+//                TraceSequence                                 trace sequence
+//                TraceSequenceParameter                        trace all sequence parameter in one line
+//                SetStringIndicator                            set a character to easily identify all strings (i.e. ')
+//  2013-06-12  v2.1  Bernd Huf
+//              - new function TraceAction to trace action of functions like HSL function FormatTrace
+//              - bugfix in functions Release_Trace2 and Debug_Trace2: tracing of both parameters instead of two times parameter 1
+//              - bugfix in private function _ToString: changed string handling for float values
+//  2013-07-31  v2.2  Bernd Huf
+//              - bugfix in function TraceAction: check limits
+//  2013-09-17  v2.3  Bernd Huf
+//              - new function SetActionIndicator
+//              - new function TraceSequencePositions
+//  2013-11-14  v2.4  Bernd Huf
+//              - bugfix in function _TraceSequence
+//  2014-03-14  v2.5  Bernd Huf
+//              - changed function TraceSequencePositions to trace either only current position or all positions
+//  2014-06-24  v2.6  Bernd Huf
+//              - new internal function _GetComma to retrieve the comma sign based on the actual country settings
+//              - function _ToString: use function _GetComma for float conversions
+//  2014-07-14  v2.7  Bernd Huf
+//              - removed all "direct" initializations of variables (i.e. variable intLength(i_strInput.GetLength()) due to possible problems with scheduler
+//              - initialize all variables with default values
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifndef __TraceLevel_hsl__
+  #define __TraceLevel_hsl__ 1
+
+  namespace TRACELEVEL
+  {
+    // --------------------------------------------------------------------------------------
+    // public constant declarations
+    // --------------------------------------------------------------------------------------
+
+    const global variable TRACE_LEVEL_NONE            (0);
+    const global variable TRACE_LEVEL_RELEASE         (1);
+    const global variable TRACE_LEVEL_DEBUG           (2);
+
+    namespace ACTION
+    {
+      const variable START                (1);
+      const variable COMPLETE             (2);
+      const variable ERROR                (3);
+      const variable PROGRESS             (4);
+      const variable COMPLETE_WITH_ERROR  (5);
+    }
+
+    // --------------------------------------------------------------------------------------
+    // task-local variable declarations
+    // --------------------------------------------------------------------------------------
+
+    static variable _strStringIdentifier                  ("");
+    static variable _strActionStartIdentifier             ("");
+    static variable _strActionCompleteIdentifier          ("");
+    static variable _strActionErrorIdentifier             ("");
+    static variable _strActionProgressIdentifier          ("");
+    static variable _strActionCompleteWithErrorIdentifier ("");
+    static string   _strComma                             ("");
+
+    // --------------------------------------------------------------------------------------
+    // global constant/variable declarations
+    // --------------------------------------------------------------------------------------
+
+    static global variable gTRACELEVEL_intTraceLevel  (TRACE_LEVEL_DEBUG);
+
+    // --------------------------------------------------------------------------------------
+    // function declarations
+    // --------------------------------------------------------------------------------------
+
+    function GetTraceLevel() variable;
+
+    function SetTraceLevel(variable i_intTraceLevel) void;
+
+    function SetStringIndicator(variable i_strStringIndicator) void;
+
+    function Trace_02(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02) void;
+
+    function Trace_04(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02,
+                      variable i_varToTrace_03,
+                      variable i_varToTrace_04) void;
+
+    function Trace_06(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02,
+                      variable i_varToTrace_03,
+                      variable i_varToTrace_04,
+                      variable i_varToTrace_05,
+                      variable i_varToTrace_06) void;
+
+    function Trace_08(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02,
+                      variable i_varToTrace_03,
+                      variable i_varToTrace_04,
+                      variable i_varToTrace_05,
+                      variable i_varToTrace_06,
+                      variable i_varToTrace_07,
+                      variable i_varToTrace_08) void;
+
+    function Trace_10(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02,
+                      variable i_varToTrace_00,
+                      variable i_varToTrace_04,
+                      variable i_varToTrace_05,
+                      variable i_varToTrace_06,
+                      variable i_varToTrace_07,
+                      variable i_varToTrace_08,
+                      variable i_varToTrace_09,
+                      variable i_varToTrace_10) void;
+
+    function TraceArray(variable i_intTraceLevel,
+                        variable i_strDescription,
+                        variable i_arrvarToTrace[]) void;
+
+    function TraceArrayHorizontally(variable i_intTraceLevel,
+                                    variable i_strDescription,
+                                    variable i_arrvarToTrace[]) void;
+
+    function TraceArraysFaceToFace(variable i_intTraceLevel,
+                                   variable i_strDescription_1,
+                                   variable i_strDescription_2,
+                                   variable i_arrvarToTrace_1[],
+                                   variable i_arrvarToTrace_2[]) void;
+
+    function TraceSequence(variable i_intTraceLevel,
+                           sequence i_seqToTrace) void;
+
+    function TraceSequenceParameter(variable i_intTraceLevel,
+                                    sequence i_seqToTrace) void;
+
+    function TraceSequencePositions(device ML_STAR,
+                                    variable i_intTraceLevel,
+                                    sequence i_seqToTrace,
+                                    variable i_blnCurrentPositionOnly) void;
+
+    function TraceAction(variable i_intTraceLevel,
+                         variable i_intAction,
+                         variable i_strFunctionName,
+                         variable i_strMethodName,
+                         variable i_strComment) void;
+
+    function SetActionIndicator(variable i_intAction,
+                                variable i_strIndicator) void;
+
+    // --------------------------------------------------------------------------------------
+    // helper function declarations
+    // --------------------------------------------------------------------------------------
+
+    private function _TraceArray(variable i_strFunctionName,
+                                 variable i_strDescription,
+                                 variable i_arrvarToTrace[]) void;
+
+    private function _TraceSequence(variable i_strFunctionName,
+                                    sequence i_seqToTrace) void;
+
+    private function _Trace(variable i_strFunctionName,
+                            variable i_strToTrace) void;
+
+    private function _LongestElementSize(variable i_arrvarToCheck[]) variable;
+
+    private function _TrimRight(string i_strToTrim,
+                                string i_strToRemove) variable;
+
+    private function _FillLeft(string i_strStringToFill,
+                               variable i_strFillCharacter,
+                               variable i_intLength) variable;
+
+    private function _FillRight(string i_strStringToFill,
+                                variable i_strFillCharacter,
+                                variable i_intLength) variable;
+
+    private function _StringLength(string i_strStringToCheck) variable;
+
+    private function _ToString(variable i_varValue,
+                               variable i_blnUseStringIndicator) variable;
+
+    private function _ToInteger(variable i_varValue) variable;
+
+    private function _ExtractFunctionName(variable i_strFunctionName) variable;
+
+    private function _ExtractMethodName(variable i_strMethodName) variable;
+
+    private function _ReverseFind(string i_strStringToParse,
+                                  string i_strSubstringToFind) variable;
+
+    private function _GetComma() string;
+
+    // --------------------------------------------------------------------------------------
+    // function GetTraceLevel
+    // --------------------------------------------------------------------------------------
+    function GetTraceLevel() variable
+    {
+      return(gTRACELEVEL_intTraceLevel);
+    } // GetTraceLevel
+
+    // --------------------------------------------------------------------------------------
+    // function SetTraceLevel
+    // --------------------------------------------------------------------------------------
+    function SetTraceLevel(variable i_intTraceLevel) void
+    {
+      variable strDescription("");
+
+      gTRACELEVEL_intTraceLevel = _ToInteger(i_intTraceLevel);
+
+      if(gTRACELEVEL_intTraceLevel > TRACE_LEVEL_DEBUG) gTRACELEVEL_intTraceLevel = TRACE_LEVEL_DEBUG;
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_NONE) gTRACELEVEL_intTraceLevel = TRACE_LEVEL_NONE;
+
+      if(gTRACELEVEL_intTraceLevel == TRACE_LEVEL_DEBUG) strDescription = "TRACE_LEVEL_DEBUG";
+      if(gTRACELEVEL_intTraceLevel == TRACE_LEVEL_RELEASE) strDescription = "TRACE_LEVEL_RELEASE";
+      if(gTRACELEVEL_intTraceLevel == TRACE_LEVEL_NONE) strDescription = "TRACE_LEVEL_NONE";
+
+      _Trace("SetTraceLevel", "Trace level set to " + strDescription);
+    } // SetTraceLevel
+
+    // --------------------------------------------------------------------------------------
+    // function SetStringIndicator
+    // --------------------------------------------------------------------------------------
+    function SetStringIndicator(variable i_strStringIndicator) void
+    {
+      if(GetType(i_strStringIndicator) == "s") _strStringIdentifier = i_strStringIndicator;
+    } // SetStringIndicator
+
+    // --------------------------------------------------------------------------------------
+    // function Trace_02
+    // --------------------------------------------------------------------------------------
+    function Trace_02(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02) void
+    {
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      _Trace("Trace_02",
+             _ToString(i_varToTrace_01, hslTrue) +
+             _ToString(i_varToTrace_02, hslTrue));
+    } // Trace_02
+
+    // --------------------------------------------------------------------------------------
+    // function Trace_04
+    // --------------------------------------------------------------------------------------
+    function Trace_04(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02,
+                      variable i_varToTrace_03,
+                      variable i_varToTrace_04) void
+    {
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      _Trace("Trace_04",
+             _ToString(i_varToTrace_01, hslTrue) +
+             _ToString(i_varToTrace_02, hslTrue) +
+             _ToString(i_varToTrace_03, hslTrue) +
+             _ToString(i_varToTrace_04, hslTrue));
+    } // Trace_04
+
+    // --------------------------------------------------------------------------------------
+    // function Trace_06
+    // --------------------------------------------------------------------------------------
+    function Trace_06(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02,
+                      variable i_varToTrace_03,
+                      variable i_varToTrace_04,
+                      variable i_varToTrace_05,
+                      variable i_varToTrace_06) void
+    {
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      _Trace("Trace_06",
+             _ToString(i_varToTrace_01, hslTrue) +
+             _ToString(i_varToTrace_02, hslTrue) +
+             _ToString(i_varToTrace_03, hslTrue) +
+             _ToString(i_varToTrace_04, hslTrue) +
+             _ToString(i_varToTrace_05, hslTrue) +
+             _ToString(i_varToTrace_06, hslTrue));
+    } // Trace_06
+
+    // --------------------------------------------------------------------------------------
+    // function Trace_08
+    // --------------------------------------------------------------------------------------
+    function Trace_08(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02,
+                      variable i_varToTrace_03,
+                      variable i_varToTrace_04,
+                      variable i_varToTrace_05,
+                      variable i_varToTrace_06,
+                      variable i_varToTrace_07,
+                      variable i_varToTrace_08) void
+    {
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      _Trace("Trace_08",
+             _ToString(i_varToTrace_01, hslTrue) +
+             _ToString(i_varToTrace_02, hslTrue) +
+             _ToString(i_varToTrace_03, hslTrue) +
+             _ToString(i_varToTrace_04, hslTrue) +
+             _ToString(i_varToTrace_05, hslTrue) +
+             _ToString(i_varToTrace_06, hslTrue) +
+             _ToString(i_varToTrace_07, hslTrue) +
+             _ToString(i_varToTrace_08, hslTrue));
+    } // Trace_08
+
+    // --------------------------------------------------------------------------------------
+    // function Trace_10
+    // --------------------------------------------------------------------------------------
+    function Trace_10(variable i_intTraceLevel,
+                      variable i_varToTrace_01,
+                      variable i_varToTrace_02,
+                      variable i_varToTrace_03,
+                      variable i_varToTrace_04,
+                      variable i_varToTrace_05,
+                      variable i_varToTrace_06,
+                      variable i_varToTrace_07,
+                      variable i_varToTrace_08,
+                      variable i_varToTrace_09,
+                      variable i_varToTrace_10) void
+    {
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      _Trace("Trace_10",
+             _ToString(i_varToTrace_01, hslTrue) +
+             _ToString(i_varToTrace_02, hslTrue) +
+             _ToString(i_varToTrace_03, hslTrue) +
+             _ToString(i_varToTrace_04, hslTrue) +
+             _ToString(i_varToTrace_05, hslTrue) +
+             _ToString(i_varToTrace_06, hslTrue) +
+             _ToString(i_varToTrace_07, hslTrue) +
+             _ToString(i_varToTrace_08, hslTrue) +
+             _ToString(i_varToTrace_09, hslTrue) +
+             _ToString(i_varToTrace_10, hslTrue));
+    } // Trace_10
+
+    // --------------------------------------------------------------------------------------
+    // function TraceArray
+    // --------------------------------------------------------------------------------------
+    function TraceArray(variable i_intTraceLevel,
+                        variable i_strDescription,
+                        variable i_arrvarToTrace[]) void
+    {
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      _TraceArray("TraceArray", i_strDescription, i_arrvarToTrace);
+    } // TraceArray
+
+    // --------------------------------------------------------------------------------------
+    // function TraceArrayHorizontally
+    // --------------------------------------------------------------------------------------
+    function TraceArrayHorizontally(variable i_intTraceLevel,
+                                    variable i_strDescription,
+                                    variable i_arrvarToTrace[]) void
+    {
+      variable intActualPosition(0), intArraySize(0), intFillupSize(0);
+      variable strToTrace("");
+
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      intArraySize = i_arrvarToTrace.GetSize();
+
+      i_strDescription = _ToString(i_strDescription, hslFalse);
+
+      if(intArraySize == 0)
+      {
+        _Trace("TraceArrayHorizontally", i_strDescription + ": empty array");
+        return;
+      }
+
+      intFillupSize = _StringLength(IStr(intArraySize));
+
+      strToTrace = i_strDescription + " ";
+
+      for(intActualPosition = 0; intActualPosition < intArraySize; intActualPosition++)
+        strToTrace = strToTrace +
+                    "[" +
+                    _FillLeft(IStr(intActualPosition + 1), "0", intFillupSize) +
+                    "]: " +
+                    _ToString(i_arrvarToTrace.GetAt(intActualPosition), hslTrue) +
+                    ", ";
+      _Trace("TraceArrayHorizontally", _TrimRight(strToTrace, ", "));
+    } // TraceArrayHorizontally
+
+    // --------------------------------------------------------------------------------------
+    // function TraceArraysFaceToFace
+    // --------------------------------------------------------------------------------------
+    function TraceArraysFaceToFace(variable i_intTraceLevel,
+                                   variable i_strDescription_1,
+                                   variable i_strDescription_2,
+                                   variable i_arrvarToTrace_1[],
+                                   variable i_arrvarToTrace_2[]) void
+    {
+      variable intActualPosition(0), intArraySize_1(0), intArraySize_2(0), intArraySizeMax(0), intFillupSize_1(0), intFillupSize_2(0), intMaxLength(0), intGapLength(0);
+      variable strToTrace("");
+
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      // convert i_strDescription to a string
+      i_strDescription_1 = _ToString(i_strDescription_1, hslFalse);
+      i_strDescription_2 = _ToString(i_strDescription_2, hslFalse);
+
+      intArraySize_1 = i_arrvarToTrace_1.GetSize();
+      intArraySize_2 = i_arrvarToTrace_2.GetSize();
+
+      intFillupSize_1 = _StringLength(IStr(intArraySize_1));
+      intFillupSize_2 = _StringLength(IStr(intArraySize_2));
+
+      if(intArraySize_1 == 0) i_arrvarToTrace_1.AddAsLast("empty");
+      if(intArraySize_2 == 0) i_arrvarToTrace_2.AddAsLast("empty");
+
+      intGapLength = _LongestElementSize(i_arrvarToTrace_1);
+      intMaxLength = _LongestElementSize(i_arrvarToTrace_2);
+
+      if(intArraySize_1 == 0) i_arrvarToTrace_1.SetSize(0);
+      if(intArraySize_2 == 0) i_arrvarToTrace_2.SetSize(0);
+
+      if(intGapLength > 0) intGapLength = intGapLength + _StringLength(i_strDescription_1) + intFillupSize_1 + 8;
+
+      intMaxLength = intMaxLength + intGapLength + _StringLength(i_strDescription_2) + intFillupSize_2;
+
+      if(intArraySize_1 > intArraySize_2) intArraySizeMax = intArraySize_1; else intArraySizeMax = intArraySize_2;
+
+      FormatTrace("TRACELEVEL", "TraceArraysFaceToFace", ACTION::START, _FillRight("   ", "-", intMaxLength + 8));
+      for(intActualPosition = 0; intActualPosition < intArraySizeMax; intActualPosition++)
+      {
+        strToTrace = "";
+        if(intActualPosition < intArraySize_1)
+        {
+          strToTrace = i_strDescription_1 +
+                       " [" +
+                       _FillLeft(IStr(intActualPosition + 1), "0", intFillupSize_1) +
+                       "]: "  +
+                       _ToString(i_arrvarToTrace_1.GetAt(intActualPosition), hslTrue);
+        }
+
+        if(intActualPosition == 0 && intArraySize_1 == 0)
+          strToTrace = i_strDescription_1 + ": empty array";
+
+        strToTrace = _FillRight(strToTrace, " ", intGapLength);
+
+        if(intActualPosition < intArraySize_2)
+        {
+          strToTrace = strToTrace +
+                       i_strDescription_2 +
+                       " [" +
+                       _FillLeft(IStr(intActualPosition + 1), "0", intFillupSize_2) +
+                       "]: "  +
+                       _ToString(i_arrvarToTrace_2.GetAt(intActualPosition), hslTrue);
+        }
+
+        if(intActualPosition == 0 && intArraySize_2 == 0)
+          strToTrace = strToTrace + i_strDescription_2 + ": empty array";
+        FormatTrace("TRACELEVEL", "TraceArraysFaceToFace", ACTION::PROGRESS, strToTrace);
+      }
+      FormatTrace("TRACELEVEL", "TraceArraysFaceToFace", ACTION::COMPLETE, _FillRight("", "-", intMaxLength + 5));
+    } // TraceArraysFaceToFace
+
+    // --------------------------------------------------------------------------------------
+    // function TraceSequence
+    // --------------------------------------------------------------------------------------
+    function TraceSequence(variable i_intTraceLevel,
+                           sequence i_seqToTrace) void
+    {
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      _TraceSequence("TraceSequence", i_seqToTrace);
+    } // TraceSequence
+
+    // --------------------------------------------------------------------------------------
+    // function TraceSequenceParameter
+    // --------------------------------------------------------------------------------------
+    function TraceSequenceParameter(variable i_intTraceLevel,
+                                    sequence i_seqToTrace) void
+    {
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      _Trace("TraceSequenceParameter",
+             "Name: '" + i_seqToTrace.GetName() + "'" +
+             ", Current: " + IStr(i_seqToTrace.GetCurrentPosition()) +
+             ", Count: " + IStr(i_seqToTrace.GetCount()) +
+             ", Total: " + IStr(i_seqToTrace.GetTotal()) +
+             ", Max: " + IStr(i_seqToTrace.GetMax()) +
+             ", Used: " + IStr(i_seqToTrace.GetUsedPositions()));
+    } // TraceSequenceParameter
+
+     // --------------------------------------------------------------------------------------
+    // function TraceSequencePositions
+    // --------------------------------------------------------------------------------------
+    function TraceSequencePositions(device ML_STAR,
+                                    variable i_intTraceLevel,
+                                    sequence i_seqToTrace,
+                                    variable i_blnCurrentPositionOnly) void
+    {
+      variable strLabwareID(""), strPositionID(""), strTrace("");
+      variable intSequenceSize(0), intLoopCounterTraceSequence(0);
+      variable arrfltPositions[];
+
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      if(i_blnCurrentPositionOnly)
+        intSequenceSize = 1;
+      else
+      {
+        i_seqToTrace.SetCurrentPosition(1);
+        intSequenceSize = i_seqToTrace.GetCount();
+      }
+
+      FormatTrace("TRACELEVEL", "TraceSequencePositions", ACTION::START, _FillRight("   ", "-", 100));
+      for(intLoopCounterTraceSequence = 1; intLoopCounterTraceSequence <= intSequenceSize; intLoopCounterTraceSequence++)
+      {
+        strLabwareID = i_seqToTrace.GetLabwareId();
+        strPositionID = i_seqToTrace.GetPositionId();
+        ML_STAR.GetLabwarePosition(strLabwareID, arrfltPositions, strPositionID);
+        strTrace = strLabwareID + "_" + strPositionID + ": ";
+        strTrace = strTrace + "x = " + FStr(arrfltPositions.GetAt(0));
+        strTrace = strTrace + ", y = " + FStr(arrfltPositions.GetAt(1));
+        strTrace = strTrace + ", z = " + FStr(arrfltPositions.GetAt(2));
+        strTrace = strTrace + ", r = " + FStr(arrfltPositions.GetAt(3));
+        i_seqToTrace.GetNext();
+        FormatTrace("TRACELEVEL", "TraceSequencePositions",  ACTION::PROGRESS, strTrace);
+      }
+      FormatTrace("TRACELEVEL", "TraceSequencePositions", ACTION::COMPLETE, _FillRight("", "-", 97));
+    } // TraceSequencePositions
+
+   // --------------------------------------------------------------------------------------
+    // function TraceAction
+    // --------------------------------------------------------------------------------------
+    function TraceAction(variable i_intTraceLevel,
+                         variable i_intAction,
+                         variable i_strFunctionName,
+                         variable i_strMethodName,
+                         variable i_strComment) void
+    {
+      string strMethodName("");
+      variable strIndicator("");
+
+      if(gTRACELEVEL_intTraceLevel < _ToInteger(i_intTraceLevel)) return;
+
+      i_intAction = _ToInteger(i_intAction);
+
+      if(i_intAction > ACTION::COMPLETE_WITH_ERROR) i_intAction = ACTION::COMPLETE_WITH_ERROR;
+      if(i_intAction < ACTION::START) i_intAction = ACTION::START;
+
+      strMethodName = _ToString(i_strMethodName, hslFalse);
+      strMethodName = _ExtractMethodName(strMethodName);
+      strMethodName.MakeUpper();
+
+      if(i_intAction == ACTION::START) strIndicator = _strActionStartIdentifier;
+      if(i_intAction == ACTION::COMPLETE) strIndicator = _strActionCompleteIdentifier;
+      if(i_intAction == ACTION::ERROR) strIndicator = _strActionErrorIdentifier;
+      if(i_intAction == ACTION::PROGRESS) strIndicator = _strActionProgressIdentifier;
+      if(i_intAction == ACTION::COMPLETE_WITH_ERROR) strIndicator = _strActionCompleteWithErrorIdentifier;
+      if(strIndicator != "")
+      {
+        strIndicator = _FillRight(strIndicator, strIndicator, 100);
+        FormatTrace(strMethodName, _ExtractFunctionName(_ToString(i_strFunctionName, hslFalse)), i_intAction, strIndicator);
+      }
+      FormatTrace(strMethodName, _ExtractFunctionName(_ToString(i_strFunctionName, hslFalse)), i_intAction, i_strComment);
+      if(strIndicator != "")
+        FormatTrace(strMethodName, _ExtractFunctionName(_ToString(i_strFunctionName, hslFalse)), i_intAction, strIndicator);
+    } // TraceAction
+
+    // --------------------------------------------------------------------------------------
+    // function SetActionIndicator
+    // --------------------------------------------------------------------------------------
+    function SetActionIndicator(variable i_intAction,
+                                variable i_strIndicator) void
+    {
+      if(GetType(i_strIndicator) == "s")
+      {
+        if(i_intAction == ACTION::START) _strActionStartIdentifier = i_strIndicator;
+        if(i_intAction == ACTION::COMPLETE) _strActionCompleteIdentifier = i_strIndicator;
+        if(i_intAction == ACTION::ERROR) _strActionErrorIdentifier = i_strIndicator;
+        if(i_intAction == ACTION::PROGRESS) _strActionProgressIdentifier = i_strIndicator;
+        if(i_intAction == ACTION::COMPLETE_WITH_ERROR) _strActionCompleteWithErrorIdentifier = i_strIndicator;
+      }
+    } // SetActionIndicator
+
+    // --------------------------------------------------------------------------------------
+    // private function _TraceArray
+    // --------------------------------------------------------------------------------------
+    private function _TraceArray(variable i_strFunctionName,
+                                 variable i_strDescription,
+                                 variable i_arrvarToTrace[]) void
+    {
+      variable intActualPosition(0), intArraySize(0), intFillupSize(0), intMaxLength(0);
+
+      i_strDescription = _ToString(i_strDescription, hslFalse);
+
+      intArraySize = i_arrvarToTrace.GetSize();
+      intFillupSize = _StringLength(IStr(intArraySize));
+
+      if(intArraySize == 0)
+      {
+        _Trace(i_strFunctionName, _ToString(i_strDescription, hslFalse) + ": empty array");
+        return;
+      }
+
+      intMaxLength = _LongestElementSize(i_arrvarToTrace);
+      intMaxLength = intMaxLength + _StringLength(i_strDescription) + intFillupSize;
+
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::START, _FillRight("   ", "-", intMaxLength + 8));
+      for(intActualPosition = 0; intActualPosition < intArraySize; intActualPosition++)
+        FormatTrace("TRACELEVEL",
+                    i_strFunctionName,
+                    ACTION::PROGRESS,
+                    i_strDescription,
+                     " [",
+                    _FillLeft(IStr(intActualPosition + 1), "0", intFillupSize),
+                    "]: ",
+                    _ToString(i_arrvarToTrace.GetAt(intActualPosition), hslTrue));
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::COMPLETE, _FillRight("", "-", intMaxLength + 5));
+    }// _TraceArray
+
+    // --------------------------------------------------------------------------------------
+    // private function _TraceSequence
+    // --------------------------------------------------------------------------------------
+    private function _TraceSequence(variable i_strFunctionName,
+                                    sequence i_seqToTrace) void
+    {
+      variable intCurrentPosition(0);
+      sequence seqTemp;
+      variable arrTemp[];
+
+      seqTemp = i_seqToTrace;
+
+      seqTemp.SetCurrentPosition(1);
+      seqTemp.SetCount(i_seqToTrace.GetTotal());
+      for(intCurrentPosition = 0;intCurrentPosition < seqTemp.GetTotal(); intCurrentPosition++)
+      {
+        arrTemp.AddAsLast("LabwareID: " + seqTemp.GetLabwareId() + ", PositionID : " + seqTemp.GetPositionId());
+        seqTemp.Increment(1);
+      }
+
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::START, _FillRight("   ", "-", _LongestElementSize(arrTemp) + 3));
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::PROGRESS, "Name:    " + i_seqToTrace.GetName());
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::PROGRESS, "Current: " + IStr(i_seqToTrace.GetCurrentPosition()));
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::PROGRESS, "Count:   " + IStr(i_seqToTrace.GetCount()));
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::PROGRESS, "Total:   " + IStr(i_seqToTrace.GetTotal()));
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::PROGRESS, "Max:     " + IStr(i_seqToTrace.GetMax()));
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::PROGRESS, "Used:    " + IStr(i_seqToTrace.GetUsedPositions()));
+
+      for(intCurrentPosition = 0;intCurrentPosition < arrTemp.GetSize(); intCurrentPosition++)
+        FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::PROGRESS, arrTemp.GetAt(intCurrentPosition));
+
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::COMPLETE, _FillRight("", "-", _LongestElementSize(arrTemp)));
+    } // _TraceSequence
+
+    // --------------------------------------------------------------------------------------
+    // private function _Trace
+    // --------------------------------------------------------------------------------------
+    private function _Trace(variable i_strFunctionName,
+                            variable i_strToTrace) void
+    {
+      FormatTrace("TRACELEVEL", i_strFunctionName, ACTION::COMPLETE, i_strToTrace);
+    } // _Trace
+
+    // --------------------------------------------------------------------------------------
+    // private function _LongestElementSize
+    // --------------------------------------------------------------------------------------
+    private function _LongestElementSize(variable i_arrvarToCheck[]) variable
+    {
+      variable intActualPosition(0), intArraySize(0), intMaxLength(0);
+      string strTemp;
+
+      intArraySize = i_arrvarToCheck.GetSize();
+
+      for(intActualPosition = 0; intActualPosition < intArraySize; intActualPosition++)
+      {
+        strTemp = _ToString(i_arrvarToCheck.GetAt(intActualPosition), hslTrue);
+        if(strTemp.GetLength() > intMaxLength) intMaxLength = strTemp.GetLength();
+      }
+      return(intMaxLength);
+    } // _LongestElementSize
+
+    // --------------------------------------------------------------------------------------
+    // private function _TrimRight
+    // --------------------------------------------------------------------------------------
+    private function _TrimRight(string i_strToTrim,
+                                string i_strToRemove) variable
+    {
+      variable strReturn("");
+      variable intLength(0), intRemoveLength(0), intCount(0);
+      string strTemp("");
+
+      strReturn = i_strToTrim;
+      intLength = i_strToTrim.GetLength();
+      intRemoveLength = i_strToRemove.GetLength();
+
+      for(intCount = intLength - intRemoveLength; intCount > 0; intCount = intCount - intRemoveLength)
+      {
+        strTemp = i_strToTrim.Mid(intCount, intRemoveLength);
+        if(strTemp.Compare(i_strToRemove) != 0) break;
+        strReturn = i_strToTrim.Mid(0, intCount);
+      }
+
+      return(strReturn);
+    } // _TrimRight
+
+    //----------------------------------------------------------------------------------------------
+    // private function _FillLeft
+    //----------------------------------------------------------------------------------------------
+    private function _FillLeft(string i_strStringToFill,
+                               variable i_strFillCharacter,
+                               variable i_intLength) variable
+    {
+      variable strReturn("");
+      variable intCount(0);
+
+      strReturn = i_strStringToFill;
+      for(intCount = i_strStringToFill.GetLength(); intCount < i_intLength; intCount++) strReturn = i_strFillCharacter + strReturn;
+      return(strReturn);
+    } // _FillLeft
+
+    //----------------------------------------------------------------------------------------------
+    // private function _FillRight
+    //----------------------------------------------------------------------------------------------
+    private function _FillRight(string i_strStringToFill,
+                                variable i_strFillCharacter,
+                                variable i_intLength) variable
+    {
+      variable strReturn("");
+      variable intLength(0), intCount(0);
+
+      strReturn = i_strStringToFill;
+      intLength = i_strStringToFill.GetLength();
+      for(intCount = intLength; intCount < i_intLength; intCount++) strReturn = strReturn + i_strFillCharacter;
+      return(strReturn);
+    } // _FillRight
+
+    //----------------------------------------------------------------------------------------------
+    // private function _StringLength
+    //----------------------------------------------------------------------------------------------
+    private function _StringLength(string i_strStringToCheck) variable
+    {
+      return(i_strStringToCheck.GetLength());
+    } // _StringLength
+
+    //----------------------------------------------------------------------------------------------
+    // private function _ToString
+    //----------------------------------------------------------------------------------------------
+    private function _ToString(variable i_varValue,
+                               variable i_blnUseStringIndicator) variable
+    {
+      string strVariableType(""), strTempFloat(""), strComma("");
+
+      strVariableType = GetType(i_varValue);
+      if(strVariableType.Compare(hslString) == 0)
+        if(i_blnUseStringIndicator)
+          return(_strStringIdentifier + i_varValue + _strStringIdentifier);
+        else
+          return(i_varValue);
+      if(strVariableType.Compare(hslInteger) == 0) return(IStr(i_varValue));
+      if(strVariableType.Compare(hslFloat) == 0)
+      {
+        strComma = _GetComma();
+        strTempFloat = FStr(i_varValue, hslTrue, 1000);
+        if(strTempFloat.Find(strComma) == -1)
+        {
+          strTempFloat = strTempFloat + strComma;
+          strTempFloat = strTempFloat + "0";
+        }
+        return(strTempFloat);
+      }
+      return("");
+    } // _ToString
+
+    //----------------------------------------------------------------------------------------------
+    // private function _ToInteger
+    //----------------------------------------------------------------------------------------------
+    private function _ToInteger(variable i_varValue) variable
+    {
+      string strVariableType("");
+
+      strVariableType = GetType(i_varValue);
+      if(strVariableType.Compare(hslInteger) == 0) return(i_varValue);
+      if(strVariableType.Compare(hslString) == 0) return(IVal(i_varValue));
+      if(strVariableType.Compare(hslFloat) == 0) return(Floor(i_varValue));
+      return(0);
+    } // _ToInteger
+
+    //----------------------------------------------------------------------------------------------
+    // private function _ExtractFunctionName
+    //----------------------------------------------------------------------------------------------
+    private function _ExtractFunctionName(variable i_strFunctionName) variable
+    {
+      string strFunctionName("");
+
+      strFunctionName = i_strFunctionName;
+      return(strFunctionName.Mid(_ReverseFind(i_strFunctionName, ":") + 1, strFunctionName.GetLength()));
+    } // _ExtractFunctionName
+
+    //----------------------------------------------------------------------------------------------
+    // private function _ExtractMethodName
+    //----------------------------------------------------------------------------------------------
+    private function _ExtractMethodName(variable i_strMethodName) variable
+    {
+      string strMethodName("");
+      variable intCutPosition(0);
+
+      strMethodName = i_strMethodName;
+      intCutPosition = _ReverseFind(i_strMethodName, "\\") + 1;
+      return(strMethodName.Mid(intCutPosition, _ReverseFind(i_strMethodName, ".") - intCutPosition));
+    } // _ExtractMethodName
+
+    //----------------------------------------------------------------------------------------------
+    // private function _ReverseFind
+    //----------------------------------------------------------------------------------------------
+    private function _ReverseFind(string i_strStringToParse,
+                                  string i_strSubstringToFind) variable
+    {
+      variable intIndex(0), intResult(-1), intStringLength(0);
+      string strTempString("");
+
+      strTempString = i_strStringToParse;
+      intStringLength = strTempString.GetLength();
+      for (intIndex = strTempString.Find(i_strSubstringToFind); intIndex != -1; intIndex = strTempString.Find(i_strSubstringToFind))
+      {
+        intResult = intResult + intIndex + 1;
+        strTempString = strTempString.Mid(intIndex + 1, intStringLength);
+      }
+      return(intResult);
+    } // _ReverseFind
+
+    //----------------------------------------------------------------------------------------------
+    // private function _GetComma
+    //----------------------------------------------------------------------------------------------
+    private function _GetComma() string
+    {
+      if(_strComma.Compare("") == 0)
+      {
+        _strComma = FStr(1.2, hslTrue);
+        _strComma = _strComma.Mid(1,1);
+      }
+      return(_strComma);
+    } // _GetComma
+
+    // --------------------------------------------------------------------------------------
+    // static function Debug_Trace2
+    // --------------------------------------------------------------------------------------
+    static function Debug_Trace2(variable i_varToTrace_1,
+                                 variable i_varToTrace_2) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_DEBUG) return;
+
+      _Trace("Debug_Trace2",
+             _ToString(i_varToTrace_1, hslTrue) +
+             _ToString(i_varToTrace_2, hslTrue));
+    } // Debug_Trace2
+
+    // --------------------------------------------------------------------------------------
+    // static function Debug_Trace4
+    // --------------------------------------------------------------------------------------
+    static function Debug_Trace4(variable i_varToTrace_1,
+                                 variable i_varToTrace_2,
+                                 variable i_varToTrace_3,
+                                 variable i_varToTrace_4) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_DEBUG) return;
+
+      _Trace("Debug_Trace4",
+             _ToString(i_varToTrace_1, hslTrue) +
+             _ToString(i_varToTrace_2, hslTrue) +
+             _ToString(i_varToTrace_3, hslTrue) +
+             _ToString(i_varToTrace_4, hslTrue));
+    } // Debug_Trace4
+
+    // --------------------------------------------------------------------------------------
+    // static function Debug_Trace8
+    // --------------------------------------------------------------------------------------
+    static function Debug_Trace8(variable i_varToTrace_1,
+                                 variable i_varToTrace_2,
+                                 variable i_varToTrace_3,
+                                 variable i_varToTrace_4,
+                                 variable i_varToTrace_5,
+                                 variable i_varToTrace_6,
+                                 variable i_varToTrace_7,
+                                 variable i_varToTrace_8) void
+
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_DEBUG) return;
+
+      _Trace("Debug_Trace8",
+             _ToString(i_varToTrace_1, hslTrue) +
+             _ToString(i_varToTrace_2, hslTrue) +
+             _ToString(i_varToTrace_3, hslTrue) +
+             _ToString(i_varToTrace_4, hslTrue) +
+             _ToString(i_varToTrace_5, hslTrue) +
+             _ToString(i_varToTrace_6, hslTrue) +
+             _ToString(i_varToTrace_7, hslTrue) +
+             _ToString(i_varToTrace_8, hslTrue));
+    } // Debug_Trace8
+
+    // --------------------------------------------------------------------------------------
+    // static function Debug_Trace12
+    // --------------------------------------------------------------------------------------
+    static function Debug_Trace12(variable i_varToTrace_1,
+                                  variable i_varToTrace_2,
+                                  variable i_varToTrace_3,
+                                  variable i_varToTrace_4,
+                                  variable i_varToTrace_5,
+                                  variable i_varToTrace_6,
+                                  variable i_varToTrace_7,
+                                  variable i_varToTrace_8,
+                                  variable i_varToTrace_9,
+                                  variable i_varToTrace_10,
+                                  variable i_varToTrace_11,
+                                  variable i_varToTrace_12) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_DEBUG) return;
+
+      _Trace("Debug_Trace12",
+             _ToString(i_varToTrace_1, hslTrue) +
+             _ToString(i_varToTrace_2, hslTrue) +
+             _ToString(i_varToTrace_3, hslTrue) +
+             _ToString(i_varToTrace_4, hslTrue) +
+             _ToString(i_varToTrace_5, hslTrue) +
+             _ToString(i_varToTrace_6, hslTrue) +
+             _ToString(i_varToTrace_7, hslTrue) +
+             _ToString(i_varToTrace_8, hslTrue) +
+             _ToString(i_varToTrace_9, hslTrue) +
+             _ToString(i_varToTrace_10, hslTrue) +
+             _ToString(i_varToTrace_11, hslTrue) +
+             _ToString(i_varToTrace_12, hslTrue));
+    } // Debug_Trace12
+
+    // --------------------------------------------------------------------------------------
+    // static function Debug_TraceArray
+    // --------------------------------------------------------------------------------------
+    static function Debug_TraceArray(variable i_arrvarToTrace[],
+                                     variable i_strDescription) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_DEBUG) return;
+
+      _TraceArray("Debug_TraceArray", i_strDescription, i_arrvarToTrace);
+    } // Debug_TraceArray
+
+    // --------------------------------------------------------------------------------------
+    // static function Debug_TraceSequence
+    // --------------------------------------------------------------------------------------
+    static function Debug_TraceSequence(sequence i_seqToTrace) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_DEBUG) return;
+
+      _TraceSequence("Debug_TraceSequence", i_seqToTrace);
+    } // Debug_TraceSequence
+
+    // --------------------------------------------------------------------------------------
+    // static function Release_Trace2
+    // --------------------------------------------------------------------------------------
+    static function Release_Trace2(variable i_varToTrace_1,
+                                   variable i_varToTrace_2) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_RELEASE) return;
+
+      _Trace("Release_Trace2",
+             _ToString(i_varToTrace_1, hslTrue) +
+             _ToString(i_varToTrace_2, hslTrue));
+    } // Release_Trace2
+
+    // --------------------------------------------------------------------------------------
+    // static function Release_Trace4
+    // --------------------------------------------------------------------------------------
+    static function Release_Trace4(variable i_varToTrace_1,
+                                   variable i_varToTrace_2,
+                                   variable i_varToTrace_3,
+                                   variable i_varToTrace_4) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_RELEASE) return;
+
+      _Trace("Release_Trace4",
+             _ToString(i_varToTrace_1, hslTrue) +
+             _ToString(i_varToTrace_2, hslTrue) +
+             _ToString(i_varToTrace_3, hslTrue) +
+             _ToString(i_varToTrace_4, hslTrue));
+    } // Release_Trace4
+
+    // --------------------------------------------------------------------------------------
+    // static function Release_Trace8
+    // --------------------------------------------------------------------------------------
+    static function Release_Trace8(variable i_varToTrace_1,
+                                   variable i_varToTrace_2,
+                                   variable i_varToTrace_3,
+                                   variable i_varToTrace_4,
+                                   variable i_varToTrace_5,
+                                   variable i_varToTrace_6,
+                                   variable i_varToTrace_7,
+                                   variable i_varToTrace_8) void
+
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_RELEASE) return;
+
+      _Trace("Release_Trace8",
+             _ToString(i_varToTrace_1, hslTrue) +
+             _ToString(i_varToTrace_2, hslTrue) +
+             _ToString(i_varToTrace_3, hslTrue) +
+             _ToString(i_varToTrace_4, hslTrue) +
+             _ToString(i_varToTrace_5, hslTrue) +
+             _ToString(i_varToTrace_6, hslTrue) +
+             _ToString(i_varToTrace_7, hslTrue) +
+             _ToString(i_varToTrace_8, hslTrue));
+    } // Release_Trace8
+
+    // --------------------------------------------------------------------------------------
+    // static function Release_Trace12
+    // --------------------------------------------------------------------------------------
+    static function Release_Trace12(variable i_varToTrace_1,
+                                    variable i_varToTrace_2,
+                                    variable i_varToTrace_3,
+                                    variable i_varToTrace_4,
+                                    variable i_varToTrace_5,
+                                    variable i_varToTrace_6,
+                                    variable i_varToTrace_7,
+                                    variable i_varToTrace_8,
+                                    variable i_varToTrace_9,
+                                    variable i_varToTrace_10,
+                                    variable i_varToTrace_11,
+                                    variable i_varToTrace_12) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_RELEASE) return;
+
+      _Trace("Release_Trace12",
+             _ToString(i_varToTrace_1, hslTrue) +
+             _ToString(i_varToTrace_2, hslTrue) +
+             _ToString(i_varToTrace_3, hslTrue) +
+             _ToString(i_varToTrace_4, hslTrue) +
+             _ToString(i_varToTrace_5, hslTrue) +
+             _ToString(i_varToTrace_6, hslTrue) +
+             _ToString(i_varToTrace_7, hslTrue) +
+             _ToString(i_varToTrace_8, hslTrue) +
+             _ToString(i_varToTrace_9, hslTrue) +
+             _ToString(i_varToTrace_10, hslTrue) +
+             _ToString(i_varToTrace_11, hslTrue) +
+             _ToString(i_varToTrace_12, hslTrue));
+    } // Release_Trace12
+
+    // --------------------------------------------------------------------------------------
+    // static function Release_TraceArray
+    // --------------------------------------------------------------------------------------
+    static function Release_TraceArray(variable i_arrvarToTrace[],
+                                     variable i_strDescription) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_RELEASE) return;
+
+      _TraceArray("Release_TraceArray", i_strDescription, i_arrvarToTrace);
+    } // Release_TraceArray
+
+    // --------------------------------------------------------------------------------------
+    // static function Release_TraceSequence
+    // --------------------------------------------------------------------------------------
+    static function Release_TraceSequence(sequence i_seqToTrace) void
+    {
+      if(gTRACELEVEL_intTraceLevel < TRACE_LEVEL_RELEASE) return;
+
+      _TraceSequence("Release_TraceSequence", i_seqToTrace);
+    } // Release_TraceSequence
+} // namespace
+#endif
+// $$author=bhuf$$valid=1$$time=2014-07-14 11:38$$checksum=b497a74c$$length=081$$
