@@ -1,13 +1,14 @@
-LICENSE
-README.md
 setup.py
 pyhamilton/__init__.py
+pyhamilton/__main__.py
+pyhamilton/autoconfigure.py
 pyhamilton/deckresource.py
 pyhamilton/defaultcmds.py
 pyhamilton/diluation_utils.py
 pyhamilton/interface.py
 pyhamilton/oemerr.py
 pyhamilton/util.py
+pyhamilton/utils.py
 pyhamilton.egg-info/PKG-INFO
 pyhamilton.egg-info/SOURCES.txt
 pyhamilton.egg-info/dependency_links.txt
