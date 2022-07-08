@@ -42,7 +42,7 @@ if __name__ == "__main__":
 7. **Run the pyhamilton autoconfig tool.** 
 
     ```
-    py -c "import pyhamilton; pyhamilton.autoconfig()
+    py -c "import pyhamilton; pyhamilton.autoconfig()"
     ``` 
 
     Press accept to proceed with the bundled installers.
