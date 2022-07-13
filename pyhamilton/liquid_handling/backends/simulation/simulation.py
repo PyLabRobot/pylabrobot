@@ -189,13 +189,18 @@ class SimulationBackend(LiquidHandlerBackend):
     super().setup()
 
     async def run_server():
-      try:
-        self.stop_ = self.loop.create_future()
-        async with websockets.serve(self._socket_handler, self.ws_host, self.ws_port):
-          logger.info("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
-          await self.stop_
-      except asyncio.CancelledError:
-        pass
+      while True:
+        try:
+          self.stop_ = self.loop.create_future()
+          async with websockets.serve(self._socket_handler, self.ws_host, self.ws_port):
+            logger.info("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
+            await self.stop_
+            break
+        except asyncio.CancelledError:
+          pass
+        except OSError:
+          # If the port is in use, try the next port.
+          self.ws_port += 1
 
     loop = asyncio.new_event_loop()
     self.t = threading.Thread(target=loop.run_forever)
@@ -228,7 +233,7 @@ class SimulationBackend(LiquidHandlerBackend):
         try:
           self.httpd = http.server.HTTPServer((self.fs_host, self.fs_port),
             QuietSimpleHTTPRequestHandler)
-          logger.info("File server started at http://%s:%s" % (self.fs_host, self.fs_port))
+          logger.info("File server started at http://%s:%s", self.fs_host, self.fs_port)
           break
         except OSError:
           self.fs_port += 1
