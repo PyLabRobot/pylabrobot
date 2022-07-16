@@ -19,7 +19,9 @@ OEM_RUN_EXE_PATH = 'C:\\Program Files (x86)\\HAMILTON\\Bin\\HxRun.exe'
 from .interface import *
 from .deckresource import *
 from .oemerr import *
-from .utils import *
+
+from .diluation_utils import *
+
 from autoconfig import pyhamiltonconfig
 
 this_file_dir = os.path.dirname(os.path.abspath(__file__))

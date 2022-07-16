@@ -20,13 +20,9 @@ setup(
     url='https://github.com/dgretton/pyhamilton.git',
     author='Dana Gretton',
     author_email='dgretton@mit.edu',
-    entry_points = {
-        'console_scripts': ['pyhamconfig = pyhamilton:autoconfig'],
+    entry_points={
+        'console_scripts': [
+            'pyhamilton-quickstart = pyhamilton.cmd.quickstart:main',
+        ],
     },
-    #entry_points={
-    #'console_scripts': [
-    #    'pyhamconfig = pyhamilton:autoconfig',
-   #     'helloworld = pyhamilton.helloworld'
-    #]
-    #}
 )

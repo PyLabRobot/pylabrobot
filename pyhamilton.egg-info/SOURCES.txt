@@ -4,6 +4,7 @@ pyhamilton/__main__.py
 pyhamilton/autoconfigure.py
 pyhamilton/deckresource.py
 pyhamilton/defaultcmds.py
+pyhamilton/diluation_utils.py
 pyhamilton/interface.py
 pyhamilton/oemerr.py
 pyhamilton/util.py

@@ -1,3 +1,2 @@
 [console_scripts]
-helloworld = pyhamilton:helloworld
-
+pyhamilton-quickstart = pyhamilton.cmd.quickstart:main
