@@ -10,13 +10,13 @@ except(IOError, ImportError):
 
 setup(
     name='pyhamilton',
-    version='1.43',
+    version='1.46',
     packages=find_packages(exclude=['tests*', 'examples*']),
     license='MIT',
     description='Python for Hamilton liquid handling robots',
     long_description='Forthcoming due to markdown incompatibility',
     install_requires=['requests', 'pythonnet', 'pywin32', 'pyserial'],
-    package_data={'pyhamilton': ['star-oem/*', 'star-oem/VENUS_Method/*']},
+    package_data={'pyhamilton': ['star-oem/*', 'star-oem/VENUS_Method/*', 'bin/*','library/*']},
     url='https://github.com/dgretton/pyhamilton.git',
     author='Dana Gretton',
     author_email='dgretton@mit.edu',
