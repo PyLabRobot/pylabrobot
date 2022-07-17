@@ -23,7 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'pyhamilton-quickstart = pyhamilton.cmd.quickstart:main',
-            'pyhamconfig = pyhamilton.__init__:autoconfig'
+            'pyhamilton-config = pyhamilton.__init__:autoconfig'
         ],
     },
 )
