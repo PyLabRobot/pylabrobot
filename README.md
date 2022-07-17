@@ -39,10 +39,10 @@ if __name__ == "__main__":
     pip install pyhamilton
     ```
     
-7. **Run the pyhamilton autoconfig tool.** 
+7. **Run the pyhamilton autoconfig tool from the command line.** 
 
     ```
-    py -c "import pyhamilton; pyhamilton.autoconfig()"
+    pyhamilton-config
     ``` 
 
     Press accept to proceed with the bundled installers.
