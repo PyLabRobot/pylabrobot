@@ -20,9 +20,9 @@ from .interface import *
 from .deckresource import *
 from .oemerr import *
 
-from .diluation_utils import *
+from .utils import *
 
-from autoconfig import pyhamiltonconfig
+#from autoconfig import pyhamiltonconfig
 
 this_file_dir = os.path.dirname(os.path.abspath(__file__))
 PACKAGE_DIR = os.path.abspath(os.path.join(this_file_dir))
