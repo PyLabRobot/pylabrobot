@@ -46,11 +46,8 @@ _deck.lay_
 
 Next, create a file named `robot_method.py` in your preferred text editor. Inside this file, type 
 
-```from pyhamilton import (HamiltonInterface, LayoutManager, ResourceType,Plate24, Plate96, Tip96,
-   INITIALIZE, PICKUP, EJECT, ASPIRATE, DISPENSE, ISWAP_GET, ISWAP_PLACE, HEPA,
-    WASH96_EMPTY, PICKUP96, EJECT96, ASPIRATE96, DISPENSE96,  initialize, hepa_on, tip_pick_up, 
-    tip_eject, aspirate, dispense, wash_empty_refill, tip_pick_up_96, tip_eject_96, aspirate_96, dispense_96,
-    oemerr, PositionError, move_plate)
+``` 
+from pyhamilton import (HamiltonInterface, LayoutManager, ResourceType,  Plate96, Tip96, initialize, tip_pick_up, tip_eject, aspirate, dispense, tip_pick_up_96, tip_eject_96, aspirate_96, dispense_96, oemerr, , move_plate)
  ```
 
 
