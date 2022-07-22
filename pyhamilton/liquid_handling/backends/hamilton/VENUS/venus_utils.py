@@ -12,7 +12,7 @@ from threading import Thread
 
 from .interface import HamiltonInterface
 from .deckresource import LayoutManager, ResourceType, Plate24, Plate96, Tip96
-from .oemerr import PositionError
+from .oemerr import PositionNotReachableError
 from .interface import (INITIALIZE, PICKUP, EJECT, ASPIRATE, DISPENSE, ISWAP_GET, ISWAP_PLACE, HEPA,
 WASH96_EMPTY, PICKUP96, EJECT96, ASPIRATE96, DISPENSE96, ISWAP_MOVE, MOVE_SEQ)
 
@@ -75,14 +75,14 @@ def move_plate(ham, source_plate, target_plate, gripHeight = 6, try_inversions=N
         try:
             ham.wait_on_response(cid, raise_first_exception=True, timeout=120)
             break
-        except PositionError:
+        except PositionNotReachableError:
             pass
     else:
         raise IOError
     cid = ham.send_command(ISWAP_PLACE, plateLabwarePositions=trgt_pos)
     try:
         ham.wait_on_response(cid, raise_first_exception=True, timeout=120)
-    except PositionError:
+    except PositionNotReachableError:
         raise IOError
 
 def move_by_seq(ham, source_plate_seq, target_plate_seq, grip_height = 0, try_inversions=None, gripForce = 2):
@@ -96,14 +96,14 @@ def move_by_seq(ham, source_plate_seq, target_plate_seq, grip_height = 0, try_in
         try:
             ham.wait_on_response(cid, raise_first_exception=True, timeout=120)
             break
-        except PositionError:
+        except PositionNotReachableError:
             pass
     else:
         raise IOError
     cid = ham.send_command(ISWAP_PLACE, plateSequence=target_plate_seq)
     try:
         ham.wait_on_response(cid, raise_first_exception=True, timeout=120)
-    except PositionError:
+    except PositionNotReachableError:
         raise IOError
 
 def channel_var(pos_tuples):

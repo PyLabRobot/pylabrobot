@@ -1,4 +1,3 @@
-from __future__ import annotations
 
 
 class Coordinate:
@@ -38,5 +37,5 @@ class Coordinate:
     return dict(x=self.x, y=self.y, z=self.z)
 
   @staticmethod
-  def deserialize(d: dict) -> Coordinate:
+  def deserialize(d: dict):
     return Coordinate(x=d["x"], y=d["y"], z=d["z"])

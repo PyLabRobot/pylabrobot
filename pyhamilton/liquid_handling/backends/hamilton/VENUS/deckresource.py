@@ -5,9 +5,9 @@ Module `pyhamilton.deckresource` provides convenience classes and methods for in
 """
 import string, shutil, os, string, re
 from datetime import datetime
-from pyhamilton import OEM_LAY_PATH, LAY_BACKUP_DIR
+# from pyhamilton.liquid_handling.backends.hamilton.VENUS import OEM_LAY_PATH, LAYOUT_DIR
+from .paths import OEM_LAY_PATH, LAY_BACKUP_DIR
 from .oemerr import ResourceUnavailableError
-
 
 class ResourceType:
     """

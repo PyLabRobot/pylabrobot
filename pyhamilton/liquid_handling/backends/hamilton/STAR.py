@@ -12,9 +12,6 @@ import re
 import time
 import typing
 
-import usb.core
-import usb.util
-
 from pyhamilton.liquid_handling.resources import (
   Resource,
   Plate,
@@ -25,13 +22,20 @@ from pyhamilton.liquid_handling.backends import LiquidHandlerBackend
 from pyhamilton import utils
 
 from .errors import (
-  HamiltonError
+  HamiltonFirmwareError
 )
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
 logger.setLevel(logging.INFO)
 
+try:
+  import usb.core
+  import usb.util
+  USE_USB = True
+except ImportError:
+  logger.warn("Could not import pyusb, Hamilton interface will not be available.")
+  USE_USB = False
 
 class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
@@ -279,7 +283,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     has_error = not (errors is None or len(errors) == 0)
     if has_error:
-      he = HamiltonError(errors, raw_response=resp)
+      he = HamiltonFirmwareError(errors, raw_response=resp)
 
       # If there is a faulty parameter error, request which parameter that is.
       for module_name, error in he.items():
@@ -312,7 +316,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
               2 characters long. The value can be any size.
 
     Raises:
-      HamiltonError: if an error response is received.
+      HamiltonFirmwareError: if an error response is received.
 
     Returns:
       A dictionary containing the parsed response, or None if no response was read within `timeout`.
@@ -327,11 +331,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     # Read packets until timeout, or when we identify the right id.
     attempts = 0
     while attempts < (timeout / self.read_poll_interval):
-      res = self.read_packet()
+      res = self._read_packet()
       if res is None:
         continue
-
-      print("got res", res)
 
       # Parse preliminary response, there may be more data to read, but the first packet of the
       # response will definitely contain the id of the command we sent. If we find it, we read
@@ -341,7 +343,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         # While length of response is the maximum length, there may be more data to read.
         last_packet = res
         while last_packet is not None and len(last_packet) == self.read_endpoint.wMaxPacketSize:
-          last_packet = self.read_packet()
+          last_packet = self._read_packet()
           if last_packet is not None:
             res += last_packet
 
@@ -379,6 +381,9 @@ class STAR(HamiltonLiquidHandler):
 
     Creates a USB connection and finds read/write interfaces.
     """
+
+    if not USE_USB:
+      raise RuntimeError("USB is not enabled. Please install pyusb.")
 
     if self.dev is not None:
       logging.warning("Already initialized. Please call stop() first.")

@@ -46,7 +46,7 @@ class TipType(enum.Enum):
   TIP_5mL = 25
 
 
-class CorrectionCurvePoint(typing.TypedDict):
+class CorrectionCurvePoint:
   """ TypedDict for points on a correction curve.
 
   See `LiquidClass` and `compute_corrected_volume`. """

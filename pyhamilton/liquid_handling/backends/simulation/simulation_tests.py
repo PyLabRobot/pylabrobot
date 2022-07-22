@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from multiprocessing.connection import wait
 import time
 import unittest
 
@@ -22,7 +21,7 @@ from pyhamilton.liquid_handling.resources import (
 class SimulatorBackendSetupStopTests(unittest.TestCase):
   """ Tests for the setup and stop methods of the simulator backend. """
 
-  @pytest.mark.timeout(30)
+  @pytest.mark.timeout(20)
   def test_setup_stop(self):
     """ Test that the thread is started and stopped correctly. """
 

@@ -13,10 +13,10 @@ from pyhamilton.liquid_handling.resources import (
 )
 from pyhamilton.liquid_handling.resources.ml_star import STF_L, HTF_L
 
-from .hamilton import STAR
+from .STAR import STAR
 from .errors import (
   CommandSyntaxError,
-  HamiltonError,
+  HamiltonFirmwareError,
   NoTipError,
   HardwareError,
   UnknownHamiltonError
@@ -68,7 +68,7 @@ class TestSTARResponseParsing(unittest.TestCase):
     self.assertEqual(parsed, {"id": 1111})
 
   def test_parse_response_master_error(self):
-    with self.assertRaises(HamiltonError) as ctx:
+    with self.assertRaises(HamiltonFirmwareError) as ctx:
       self.star.parse_response("C0QMid1111 er01/30", "")
     e = ctx.exception
     self.assertEqual(len(e), 1)
@@ -77,13 +77,13 @@ class TestSTARResponseParsing(unittest.TestCase):
     self.assertEqual(e["Master"].message, "Unknown command")
 
   def test_parse_response_slave_errors(self):
-    with self.assertRaises(HamiltonError) as ctx:
-      self.star.parse_response("C0QMid1111 er99/00 P100/00 P231/00 P402/98 PG08/76", "")
+    with self.assertRaises(HamiltonFirmwareError) as ctx:
+      self.star.parse_response("C0QMid1111 er99/00 P100/00 P235/00 P402/98 PG08/76", "")
     e = ctx.exception
     self.assertEqual(len(e), 3)
     self.assertNotIn("Master", e)
     self.assertNotIn("Pipetting channel 1", e)
-    self.assertEqual(e["Pipetting channel 2"].raw_response, "31/00")
+    self.assertEqual(e["Pipetting channel 2"].raw_response, "35/00")
     self.assertEqual(e["Pipetting channel 4"].raw_response, "02/98")
     self.assertEqual(e["Pipetting channel 16"].raw_response, "08/76")
 
@@ -96,7 +96,7 @@ class TestSTARResponseParsing(unittest.TestCase):
     self.assertEqual(e["Pipetting channel 16"].message, "Tip already picked up")
 
   def test_parse_slave_response_errors(self):
-    with self.assertRaises(HamiltonError) as ctx:
+    with self.assertRaises(HamiltonFirmwareError) as ctx:
       self.star.parse_response("P1OQid1111er30", "")
 
     e = ctx.exception

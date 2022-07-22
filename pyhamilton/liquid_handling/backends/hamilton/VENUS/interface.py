@@ -1,14 +1,27 @@
-# pylint: skip-file
-
-try:
-  import time, json, signal, os, requests, string, logging, subprocess, win32gui, win32con
-except: pass
+import time, json, signal, os, requests, string, logging, subprocess
 from http import server
 from threading import Thread
 from multiprocessing import Process
-from pyhamilton import OEM_RUN_EXE_PATH, OEM_HSL_PATH
+
+from pyhamilton.liquid_handling.backends.hamilton.errors import error_code_to_exception, UnknownHamiltonError
+
+# from pyhamilton.liquid_handling.backends.hamilton.VENUS import OEM_RUN_EXE_PATH, OEM_HSL_PATH
+from .paths import OEM_RUN_EXE_PATH, OEM_HSL_PATH
 from .oemerr import * #TODO: specify
+# TODO: replace HAMILTON_ERROR_MAP with new error handling system
 from .defaultcmds import defaults_by_cmd
+
+logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(logging.INFO)
+
+try:
+    import win32gui, win32con
+    USE_WINDOWS = True
+except ImportError:
+    logger.warn("Could not import win32gui or win32con, VENUS interface will not be available.")
+    USE_WINDOWS = False
+
 
 class HamiltonCmdTemplate:
     """
@@ -507,9 +520,9 @@ class HamiltonInterface:
                 errcode = blocks[blocknum][_block_mainerrfield]
                 if errcode != 0:
                     self.log('Exception encoded in Hamilton return.', 'warn')
-                    try:
-                        decoded_exception = HAMILTON_ERROR_MAP[errcode]()
-                    except KeyError:
+                    # decoded_exception = HAMILTON_ERROR_MAP[errcode]()
+                    decoded_exception = error_code_to_exception(errcode)
+                    if isinstance(err, UnknownHamiltonError):
                         self.log_and_raise(InvalidErrCodeError('Response returned had an unknown error code: ' + str(errcode)))
                     self.log('Exception: ' + repr(decoded_exception), 'warn')
                     if raise_first_exception:

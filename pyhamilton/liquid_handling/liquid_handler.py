@@ -369,6 +369,9 @@ class LiquidHandler:
   def setup(self):
     """ Prepare the robot for use. """
 
+    if self.setup_finished:
+      raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
+
     self.backend.setup()
 
     for resource in self._resources.values():

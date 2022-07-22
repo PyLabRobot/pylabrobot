@@ -707,7 +707,7 @@ function openSocket() {
 
   socketLoading = true;
   updateStatusLabel("loading");
-  webSocket = new WebSocket("ws://127.0.0.1:2121");
+  webSocket = new WebSocket(`ws://localhost:2121/`);
 
   webSocket.onopen = function (event) {
     console.log("Connected to " + event.target.URL);

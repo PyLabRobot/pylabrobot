@@ -1,12 +1,18 @@
 """ Hamilton backend errors """
 
 from abc import ABCMeta
+import typing
 
 
 class HamiltonModuleError(Exception, metaclass=ABCMeta):
   """ Base class for all Hamilton backend errors, raised by a single module. """
 
-  def __init__(self, message, raw_response=None, raw_module=None):
+  def __init__(
+    self,
+    message: str,
+    raw_response: typing.Optional[str] = None,
+    raw_module: typing.Optional[str] = None
+  ):
     super().__init__(message)
     self.message = message
     self.raw_response = raw_response
@@ -363,6 +369,36 @@ class ImpossibleToOccupyAreaError(HamiltonModuleError):
   pass
 
 
+class AntiDropControlError(HamiltonModuleError):
+  """
+  Anti drop controlling out of tolerance. (VENUS only)
+
+  Code: 31
+  """
+
+  pass
+
+
+class DecapperError(HamiltonModuleError):
+  """
+  Decapper lock error while screw / unscrew a cap by twister channels. (VENUS only)
+
+  Code: 32
+  """
+
+  pass
+
+
+class DecapperHandlingError(HamiltonModuleError):
+  """
+  Decapper station error while lock / unlock a cap. (VENUS only)
+
+  Code: 33
+  """
+
+  pass
+
+
 class SlaveError(HamiltonModuleError):
   """ Slave error
 
@@ -371,6 +407,161 @@ class SlaveError(HamiltonModuleError):
     software macro code)
 
   Code: 99
+  """
+
+  pass
+
+
+class WrongCarrierError(HamiltonModuleError):
+  """
+  Wrong carrier barcode detected. (VENUS only)
+
+  Code: 100
+  """
+
+  pass
+
+
+class NoCarrierBarcodeError(HamiltonModuleError):
+  """
+  Carrier barcode could not be read or is missing. (VENUS only)
+
+  Code: 101
+  """
+
+  pass
+
+
+class LiquidLevelError(HamiltonModuleError):
+  """
+  Liquid surface not detected. (VENUS only)
+
+  This error is created from main / slave error 06/70, 06/73 and 06/87.
+
+  Code: 102
+  """
+
+  pass
+
+
+class NotDetectedError(HamiltonModuleError):
+  """
+  Carrier not detected at deck end position. (VENUS only)
+
+  Code: 103
+  """
+
+  pass
+
+
+class NotAspiratedError(HamiltonModuleError):
+  """
+  Dispense volume exceeds the aspirated volume. (VENUS only)
+
+  This error is created from main / slave error 02/54.
+
+  Code: 104
+  """
+
+  pass
+
+
+class ImproperDispensationError(HamiltonModuleError):
+  """
+  The dispensed volume is out of tolerance (may only occur for Nano Pipettor Dispense steps).
+  (VENUS only)
+
+  This error is created from main / slave error 02/52 and 02/54.
+
+  Code: 105
+  """
+
+  pass
+
+
+class NoLabwareError(HamiltonModuleError):
+  """
+  The labware to be loaded was not detected by autoload module. (VENUS only)
+
+  Note:
+
+  May only occur on a Reload Carrier step if the labware property 'MlStarCarPosAreRecognizable' is
+  set to 1.
+
+  Code: 106
+  """
+
+  pass
+
+
+class UnexpectedLabwareError(HamiltonModuleError):
+  """
+  The labware contains unexpected barcode ( may only occur on a Reload Carrier step ). (VENUS only)
+
+  Code: 107
+  """
+
+  pass
+
+
+class WrongLabwareError(HamiltonModuleError):
+  """
+  The labware to be reloaded contains wrong barcode ( may only occur on a Reload Carrier step ).
+  (VENUS only)
+
+  Code: 108
+  """
+
+  pass
+
+
+class BarcodeMaskError(HamiltonModuleError):
+  """
+  The barcode read doesn't match the barcode mask defined. (VENUS only)
+
+  Code: 109
+  """
+
+  pass
+
+
+class BarcodeNotUniqueError(HamiltonModuleError):
+  """
+  The barcode read is not unique. Previously loaded labware with same barcode was loaded without
+  unique barcode check. (VENUS only)
+
+  Code: 110
+  """
+
+  pass
+
+
+class BarcodeAlreadyUsedError(HamiltonModuleError):
+  """
+  The barcode read is already loaded as unique barcode ( it's not possible to load the same barcode
+  twice ). (VENUS only)
+
+  Code: 111
+  """
+
+  pass
+
+
+class KitLotExpiredError(HamiltonModuleError):
+  """
+  Kit Lot expired. (VENUS only)
+
+  Code: 112
+  """
+
+  pass
+
+
+class DelimiterError(HamiltonModuleError):
+  """
+  Barcode contains character which is used as delimiter in result string. (VENUS only)
+
+  Code: 113
   """
 
   pass
@@ -420,7 +611,70 @@ def _module_id_to_module_name(id_):
   }[id_]
 
 
+def error_code_to_exception(code: int) -> HamiltonModuleError:
+  """ Convert an error code to an exception. """
+  codes = {
+    1: CommandSyntaxError,
+    2: HardwareError,
+    3: CommandNotCompletedError,
+    4: ClotDetectedError,
+    5: BarcodeUnreadableError,
+    6: TooLittleLiquidError,
+    7: TipAlreadyFittedError,
+    8: NoTipError,
+    9: NoCarrierError,
+    10: NotCompletedError,
+    11: DispenseWithPressureLLDError,
+    12: NoTeachInSignalError,
+    13: LoadingTrayError,
+    14: SequencedAspirationWithPressureLLDError,
+    15: NotAllowedParameterCombinationError,
+    16: CoverCloseError,
+    17: AspirationError,
+    18: WashFluidOrWasteError,
+    19: IncubationError,
+    20: TADMMeasurementError,
+    21: NoElementError,
+    22: ElementStillHoldingError,
+    23: ElementLostError,
+    24: IllegalTargetPlatePositionError,
+    25: IllegalUserAccessError,
+    26: TADMMeasurementError,
+    27: PositionNotReachableError,
+    28: UnexpectedLLDError,
+    29: AreaAlreadyOccupiedError,
+    30: ImpossibleToOccupyAreaError,
+    31: AntiDropControlError,
+    32: DecapperError,
+    33: DecapperHandlingError,
+    99: SlaveError,
+    100: WrongCarrierError,
+    101: NoCarrierBarcodeError,
+    102: LiquidLevelError,
+    103: NotDetectedError,
+    104: NotAspiratedError,
+    105: ImproperDispensationError,
+    106: NoLabwareError,
+    107: UnexpectedLabwareError,
+    108: WrongLabwareError,
+    109: BarcodeMaskError,
+    110: BarcodeNotUniqueError,
+    111: BarcodeAlreadyUsedError,
+    112: KitLotExpiredError,
+    113: DelimiterError
+  }
+  if code in codes:
+    return codes[code]
+  return UnknownHamiltonError
+
+
 class HamiltonError(Exception):
+  """ Base class for all Hamilton errors. """
+
+  pass
+
+
+class HamiltonFirmwareError(HamiltonError):
   """
   All Hamilton machine errors.
 
@@ -455,21 +709,20 @@ class HamiltonError(Exception):
         error_code, trace_information = int(error_code), int(trace_information)
         if error_code == 0: # No error
           continue
-        error_class = HamiltonError.error_code_to_exception(error_code)
+        error_class = error_code_to_exception(error_code)
       else:
         # Slave modules: er## (just trace information)
         error_class = UnknownHamiltonError
         trace_information = int(error)
-      error_description = HamiltonError.trace_information_to_string(
+      error_description = HamiltonFirmwareError.trace_information_to_string(
         module_identifier=module_id, trace_information=trace_information)
       self.errors[module_name] = error_class(error_description,
                                              raw_response=error,
                                              raw_module=module_id)
 
     # If the master error is a SlaveError, remove it from the errors dict.
-    if "Master" in self.errors:
-      if isinstance(self.errors["Master"], SlaveError):
-        self.errors.pop("Master")
+    if isinstance(self.errors.get("Master"), SlaveError):
+      self.errors.pop("Master")
 
     super().__init__(str(self.errors))
 
@@ -487,46 +740,6 @@ class HamiltonError(Exception):
 
   def items(self):
     return self.errors.items()
-
-  @staticmethod
-  def error_code_to_exception(code: int) -> HamiltonModuleError:
-    """ Convert an error code to an exception. """
-    codes = {
-      1: CommandSyntaxError,
-      2: HardwareError,
-      3: CommandNotCompletedError,
-      4: ClotDetectedError,
-      5: BarcodeUnreadableError,
-      6: TooLittleLiquidError,
-      7: TipAlreadyFittedError,
-      8: NoTipError,
-      9: NoCarrierError,
-      10: NotCompletedError,
-      11: DispenseWithPressureLLDError,
-      12: NoTeachInSignalError,
-      13: LoadingTrayError,
-      14: SequencedAspirationWithPressureLLDError,
-      15: NotAllowedParameterCombinationError,
-      16: CoverCloseError,
-      17: AspirationError,
-      18: WashFluidOrWasteError,
-      19: IncubationError,
-      20: TADMMeasurementError,
-      26: TADMMeasurementError,
-      21: NoElementError,
-      22: ElementStillHoldingError,
-      23: ElementLostError,
-      24: IllegalTargetPlatePositionError,
-      25: IllegalUserAccessError,
-      27: PositionNotReachableError,
-      28: UnexpectedLLDError,
-      29: AreaAlreadyOccupiedError,
-      30: ImpossibleToOccupyAreaError,
-      99: SlaveError
-    }
-    if code in codes:
-      return codes[code]
-    return UnknownHamiltonError
 
   @staticmethod
   def trace_information_to_string(module_identifier: str, trace_information: int) -> str:
@@ -617,3 +830,10 @@ class HamiltonError(Exception):
       return table[trace_information]
 
     return f"Unknown trace information code {trace_information:02}"
+
+
+class VENUSError(HamiltonError):
+  """ VENUS error """
+
+  pass
+

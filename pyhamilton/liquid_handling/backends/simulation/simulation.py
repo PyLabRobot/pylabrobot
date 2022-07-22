@@ -11,7 +11,12 @@ import time
 import typing
 import webbrowser
 
-import websockets
+try:
+  import websockets
+  HAS_WEBSOCKETS = True
+except ImportError:
+  print("Simulator requires websockets.") # TODO: change to runtime error.
+  HAS_WEBSOCKETS = False
 
 from pyhamilton.liquid_handling.backends import LiquidHandlerBackend
 from pyhamilton.liquid_handling.resources.abstract import Resource
@@ -99,7 +104,7 @@ class SimulationBackend(LiquidHandlerBackend):
     self._id += 1
     return f"{self._id % 10000:04}"
 
-  async def _socket_handler(self, websocket: websockets.WebSocketServerProtocol):
+  async def _socket_handler(self, websocket):
     """ Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`. """
 
@@ -186,14 +191,18 @@ class SimulationBackend(LiquidHandlerBackend):
     Sets up the websocket server. This will run in a separate thread.
     """
 
+    if not HAS_WEBSOCKETS:
+      raise RuntimeError("The simulator requires websockets to be installed.")
+
     super().setup()
 
     async def run_server():
+      self.stop_ = self.loop.create_future()
       while True:
         try:
-          self.stop_ = self.loop.create_future()
           async with websockets.serve(self._socket_handler, self.ws_host, self.ws_port):
-            logger.info("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
+            print("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
+            # logger.info("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
             await self.stop_
             break
         except asyncio.CancelledError:
@@ -215,7 +224,7 @@ class SimulationBackend(LiquidHandlerBackend):
     """ Start a simple webserver to serve static files. """
 
     dirname = os.path.dirname(__file__)
-    path = os.path.join(dirname, "static")
+    path = os.path.join(dirname, "simulator")
     if not os.path.exists(path):
       raise RuntimeError("Could not find simulation files. Please run from the root of the "
                          "repository.")
