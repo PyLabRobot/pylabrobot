@@ -1,0 +1,12 @@
+{
+  "editor.tabSize": 2,
+  "files.trimTrailingWhitespace": true,
+  "cSpell.words": ["iswap", "pyhamilton", "subresource"],
+  "python.linting.pylintEnabled": true,
+  "python.testing.pytestArgs": ["pyhamilton"],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true,
+  "python.testing.autoTestDiscoverOnSaveEnabled": true,
+  "editor.rulers": [100],
+  "editor.formatOnSave": true
+}

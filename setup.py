@@ -1,12 +1,24 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
-try:
-    print("here")
-    import pypandoc
-    long_description = pypandoc.convert_file('README.md', 'rst')
-    print(long_description)
-except(IOError, ImportError):
-    long_description = open('README.md').read()
+long_description = open('README.md', encoding='utf-8').read()
+
+extras_docs = [
+    'sphinx_book_theme',
+    'myst_nb',
+    'sphinx_copybutton',
+]
+
+extras_simulation = [
+    'websockets'
+]
+
+extras_testing = [
+    'pytest',
+    'pytest-timeout',
+    'requests'
+] + extras_simulation
+
+extras_all =  extras_docs + extras_simulation + extras_testing
 
 setup(
     name='pyhamilton',
@@ -26,4 +38,10 @@ setup(
             'pyhamilton-config = pyhamilton.__init__:autoconfig'
         ],
     },
+    extras_require={
+        'testing': extras_testing,
+        'docs': extras_docs,
+        'simulation': extras_simulation,
+        'all': extras_all
+    }
 )

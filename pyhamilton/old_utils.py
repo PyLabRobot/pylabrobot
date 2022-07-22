@@ -1,3 +1,5 @@
+# pylint: skip-file
+
 # -*- coding: utf-8 -*-
 """
 Created on Wed Mar  9 12:01:01 2022
@@ -52,7 +54,7 @@ def hepa_on(ham, speed=15, asynch=False, **more_options):
     cmd = ham.send_command(HEPA, fanSpeed=speed, **more_options)
     if not asynch:
         ham.wait_on_response(cmd, raise_first_exception=True)
-    return 
+    return
 
 def wash_empty_refill(ham, asynch=False, **more_options):
     logging.info('wash_empty_refill: empty the washer' +
@@ -194,7 +196,7 @@ def tip_eject_96(ham_int, tip96=None, **more_options):
     if tip96 is None:
         labware_poss = ''
         more_options.update({'tipEjectToKnownPosition':2}) # 2 is default waste
-    else:   
+    else:
         labware_poss = compound_pos_str_96(tip96)
     ham_int.wait_on_response(ham_int.send_command(EJECT96,
         labwarePositions=labware_poss,
@@ -238,7 +240,7 @@ class StderrLogger:
 def add_stderr_logging(logger_name=None):
     logger = logging.getLogger(logger_name) # root logger if None
     sys.stderr = StderrLogger(logger.error)
-    
+
 def normal_logging(ham_int):
     local_log_dir = os.path.join(method_local_dir, 'log')
     if not os.path.exists(local_log_dir):

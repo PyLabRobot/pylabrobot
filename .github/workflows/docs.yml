@@ -1,0 +1,54 @@
+name: Build and Publish Documentation
+
+on:
+  push:
+    branches:
+      usb
+
+jobs:
+  build_docs:
+    name: Build documentation
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Update packages
+        run: sudo apt-get update
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Install Dependencies
+        run: pip install -e '.[docs]'
+
+      - name: Remove old documentation
+        run: |
+          rm -rf docs/build
+          rm -rf docs/_autosummary
+
+      - name: Build new documentation
+        run: sphinx-build -b html docs docs/build/ -j auto
+
+      - name: Commit generated documentation
+        run: |
+          cd docs/build
+          git init
+          touch .nojekyll
+          git add -A
+          git config --local user.name "GitHub Action"
+          git config --local user.email "action@github.com"
+          git commit -m 'deploy docs'
+
+      - name: Push to docs branch
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: docs
+          force: true
+          directory: ./docs/build/
