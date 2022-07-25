@@ -381,6 +381,7 @@ class LiquidHandler:
 
   def stop(self):
     self.backend.stop()
+    self.setup_finished = False
 
   def __enter__(self):
     self.setup()
