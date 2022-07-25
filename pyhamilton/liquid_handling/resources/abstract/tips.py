@@ -3,6 +3,7 @@
 from abc import ABCMeta
 
 from .resource import Resource, Coordinate
+from .tip_type import TipType
 
 
 class Tips(Resource, metaclass=ABCMeta):
@@ -14,7 +15,7 @@ class Tips(Resource, metaclass=ABCMeta):
     size_x: float,
     size_y: float,
     size_z: float,
-    tip_type: str,
+    tip_type: TipType,
     dx: float,
     dy: float,
     dz: float,
