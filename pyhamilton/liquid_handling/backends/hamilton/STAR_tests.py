@@ -214,26 +214,30 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_tip_pickup_01(self):
     self.lh.pickup_tips("tips_01", "A1", "B1")
     self._assert_command_sent_once(
-      "C0TPid0000xp01179 01179 00000&yp2418 2328 0000&tm1 1 0&tt01tp2244tz2164th2450td0",
+      "C0TPid0000xp01179 01179 00000 00000 00000 00000 00000 00000&yp2418 2328 0000 0000 0000 0000 "
+      "0000 0000tm1 1 0 0 0 0 0 0&tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_56(self):
     self.lh.pickup_tips("tips_01", channel_5="E1", channel_6="F1")
     self._assert_command_sent_once(
-      "C0TPid0000xp01179 01179 00000&yp2058 1968 0000&tm1 1 0&tt01tp2244tz2164th2450td0",
+      "C0TPid0000xp00000 00000 00000 00000 01179 01179 00000 00000&yp0000 0000 0000 0000 2058 1968 "
+      "0000 0000tm0 0 0 0 1 1 0 0&tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_16(self):
     self.lh.pickup_tips("tips_01", channel_1="A1", channel_5="F1")
     self._assert_command_sent_once(
-      "C0TPid0000xp01179 01179 00000&yp2418 1968 0000&tm1 1 0&tt01tp2244tz2164th2450td0",
+      "C0TPid0000xp01179 00000 00000 00000 01179 00000 00000 00000yp2418 0000 0000 0000 1968 0000 "
+      "0000 0000tm1 0 0 0 1 0 0 0&tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_discard_56(self):
     self.test_tip_pickup_56() # pick up tips first
     self.lh.discard_tips("tips_01", channel_5="E1", channel_6="F1")
     self._assert_command_sent_once(
-      "C0TRid0000xp01179 01179 00000&yp2058 1968 0000&tm1 1 0&tt01tp2244tz2164th2450ti0",
+      "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000 00000yp0000 0000 0000 0000 2058 1968 "
+      "0000 0000tm0 0 0 0 1 1 0 0tt01tp2244tz2164th2450ti0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####ti#")
 
   def test_single_channel_aspiration(self):

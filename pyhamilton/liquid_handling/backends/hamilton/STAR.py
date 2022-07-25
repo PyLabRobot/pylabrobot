@@ -553,6 +553,9 @@ class STAR(HamiltonLiquidHandler):
 
     for channel_pos in channel_positions:
       if channel_pos is None:
+        x_positions.append(0)
+        y_positions.append(0)
+        channels_involved.append(False)
         continue
 
       row, column = utils.string_to_position(channel_pos)
