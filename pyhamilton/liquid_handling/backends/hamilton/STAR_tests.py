@@ -337,6 +337,42 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "ll# (n)lv# (n)de#### (n)mv##### (n)mc## (n)mp### (n)ms#### (n)wt## (n)gi### (n)gj#gk#"
       "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
 
+  def test_core_96_tip_pickup(self):
+    self.lh.pickup_tips96("tips_01")
+
+    self._assert_command_sent_once(
+      "C0EPid0208xs01179xd0yh2418tt01wu0za2164zh2450ze2450",
+                "xs#####xd#yh####tt##wu#za####zh####ze####")
+
+  def test_core_96_tip_discard(self):
+    self.lh.discard_tips96("tips_01")
+
+    self._assert_command_sent_once(
+      "C0ERid0213xs01179xd0yh2418za2164zh2450ze2450",
+                "xs#####xd#yh####za####zh####ze####")
+
+  def test_core_96_aspirate(self):
+    self.lh.aspirate96("plate_01", [[True]*12]*8, 100)
+
+    self._assert_command_sent_once(
+      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1879zm1869iw000ix0fh000af01083ag2500vt050"
+      "bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000hs1200zv0032zq06180mj000cj0cx0cr000"
+      "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
+      "xs#####xd#yh####zh####ze####lz####zt####zm####iw###ix#fh###af#####ag####vt###"
+      "bv#####wv#####cm#cs#bs####wh##hv#####hc##hp###hs####zv####zq#####mj###cj#cx#cr###"
+      "cw************************pp####")
+
+  def test_core_96_dispense(self):
+    self.lh.dispense96("plate_01", [[True]*12]*8, 100)
+
+    self._assert_command_sent_once(
+      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1879zm1869iw000ix0fh000df01083dg1200vt050"
+      "bv00000cm0cs1bs0020wh00hv00000hc00hp000hs1200es0050ev000zv0032ej00zq06180mj000cj0cx0cr000"
+      "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
+      "da#xs#####xd#yh##6#zh####ze####lz####zt####zm##6#iw###ix#fh###df#####dg####vt###"
+      "bv#####cm#cs#bs####wh##hv#####hc##hp###hs####es####ev###zv####ej##zq#6###mj###cj#cx#cr###"
+      "cw************************pp####")
+
 
 if __name__ == "__main__":
   unittest.main()

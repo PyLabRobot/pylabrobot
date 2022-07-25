@@ -493,8 +493,8 @@ class STAR(HamiltonLiquidHandler):
     self.define_tip_needle(
       tip_type_table_index=ttti,
       filter=tip_type.has_filter,
-      tip_length=tip_type.tip_length * 10, # in 0.1mm
-      maximum_tip_volume=tip_type.tip_length * 10, # in 0.1ul
+      tip_length=int(tip_type.tip_length * 10), # in 0.1mm
+      maximum_tip_volume=int(tip_type.tip_length * 10), # in 0.1ul
       tip_type=tip_type.tip_type_id,
       pick_up_method=tip_type.pick_up_method
     )
@@ -558,7 +558,7 @@ class STAR(HamiltonLiquidHandler):
       row, column = utils.string_to_position(channel_pos)
 
       # TODO: what is -9?
-      x_positions.append(int((resource.location.x - column*9)*10))
+      x_positions.append(int((resource.location.x + column*9)*10))
       y_positions.append(int((resource.location.y - row*9)*10))
       channels_involved.append(True)
 
@@ -802,17 +802,147 @@ class STAR(HamiltonLiquidHandler):
       **cmd_kwargs
     )
 
-  def pickup_tips96(self, resource):
-    raise NotImplementedError()
+  def pickup_tips96(self, resource: Tips, **backend_kwargs):
+    ttti = self.get_or_assign_tip_type_index(resource.tip_type)
 
-  def discard_tips96(self, resource):
-    raise NotImplementedError()
+    # Get position of well A1 in the 96 well plate.
+    row, column = utils.string_to_position("A1")
+    x_position = int((resource.location.x + column*9)*10)
+    y_position = int((resource.location.y - row*9)*10)
 
-  def aspirate96(self, resource, pattern, volume):
-    raise NotImplementedError()
+    cmd_kwargs = dict(
+      x_position=x_position,
+      x_direction=0,
+      y_position=y_position,
+      tip_type=ttti,
+      tip_pick_up_method=0,
+      z_deposit_position=2164,
+      minimum_height_command_end=2450,
+      minimum_traverse_height_at_beginning_of_a_command=2450
+    )
 
-  def dispense96(self, resource, pattern, volume):
-    raise NotImplementedError()
+    cmd_kwargs.update(backend_kwargs)
+
+    return self.pick_up_tips_core96(**cmd_kwargs)
+
+  def discard_tips96(self, resource: Resource, **backend_kwargs):
+    # Get position of well A1 in the 96 well plate.
+    row, column = utils.string_to_position("A1")
+    x_position = int((resource.location.x + column*9)*10)
+    y_position = int((resource.location.y - row*9)*10)
+
+    cmd_kwargs = dict(
+      x_position=x_position,
+      x_direction=0,
+      y_position=y_position,
+      z_deposit_position=2164,
+      minimum_height_command_end=2450,
+      minimum_traverse_height_at_beginning_of_a_command=2450
+    )
+
+    cmd_kwargs.update(backend_kwargs)
+
+    return self.discard_tips_core96(**cmd_kwargs)
+
+  def aspirate96(self, resource, pattern, volume, **backend_kwargs):
+    # Get position of well A1 in the 96 well plate.
+    row, column = utils.string_to_position("A1")
+    x_position = int((resource.location.x + column*9)*10)
+    y_position = int((resource.location.y - row*9)*10)
+
+    # flatten pattern array
+    pattern = [item for sublist in pattern for item in sublist]
+
+    cmd_kwargs = dict(
+      x_position=x_position,
+      x_direction=0,
+      y_positions=y_position,
+      aspiration_type=0,
+      minimum_traverse_height_at_beginning_of_a_command=2450,
+      minimal_end_height=2450,
+      lld_search_height=1999,
+      liquid_surface_at_function_without_lld=1879,
+      pull_out_distance_to_take_transport_air_in_function_without_lld=100,
+      maximum_immersion_depth=1869,
+      tube_2nd_section_height_measured_from_zm=32,
+      tube_2nd_section_ratio=6180,
+      immersion_depth=0,
+      immersion_depth_direction=0,
+      liquid_surface_sink_distance_at_the_end_of_aspiration=0,
+      aspiration_volumes=int(volume*10*1.083), # TODO: get_corrected_volume
+      aspiration_speed=2500,
+      transport_air_volume=50,
+      blow_out_air_volume=0,
+      pre_wetting_volume=50,
+      lld_mode=False,
+      gamma_lld_sensitivity=1,
+      swap_speed=20,
+      settling_time=10,
+      homogenization_volume=0,
+      homogenization_cycles=0,
+      homogenization_position_from_liquid_surface=0,
+      surface_following_distance_during_homogenization=0,
+      speed_of_homogenization=1200,
+      channel_pattern=pattern,
+      limit_curve_index=0,
+      tadm_algorithm=False,
+      recording_mode=0
+    )
+
+    cmd_kwargs.update(backend_kwargs)
+
+    return self.aspirate_core_96(**cmd_kwargs)
+
+  def dispense96(self, resource, pattern, volume, **backend_kwargs):
+    # Get position of well A1 in the 96 well plate.
+    row, column = utils.string_to_position("A1")
+    x_position = int((resource.location.x + column*9)*10)
+    y_position = int((resource.location.y - row*9)*10)
+
+    # flatten pattern array
+    pattern = [item for sublist in pattern for item in sublist]
+
+    cmd_kwargs = dict(
+      dispensing_mode=3,
+      x_position=x_position,
+      x_direction=0,
+      y_position=y_position,
+      minimum_traverse_height_at_beginning_of_a_command=2450,
+      minimal_end_height=2450,
+      lld_search_height=1999,
+      liquid_surface_at_function_without_lld=1879,
+      pull_out_distance_to_take_transport_air_in_function_without_lld=100,
+      maximum_immersion_depth=1869,
+      tube_2nd_section_height_measured_from_zm=32,
+      tube_2nd_section_ratio=6180,
+      immersion_depth=0,
+      immersion_depth_direction=0,
+      liquid_surface_sink_distance_at_the_end_of_dispense=0,
+      dispense_volume=int(volume*10*1.083), # TODO: get_corrected_volume
+      dispense_speed=1200,
+      transport_air_volume=50,
+      blow_out_air_volume=0,
+      lld_mode=False,
+      gamma_lld_sensitivity=1,
+      swap_speed=20,
+      settling_time=0,
+      mixing_volume=0,
+      mixing_cycles=0,
+      mixing_position_from_liquid_surface=0,
+      surface_following_distance_during_mixing=0,
+      speed_of_mixing=1200,
+      channel_pattern=pattern,
+      limit_curve_index=0,
+      tadm_algorithm=False,
+      recording_mode=0,
+      cut_off_speed=50,
+      stop_back_volume=0,
+    )
+
+    cmd_kwargs.update(backend_kwargs)
+
+    return self.dispense_core_96(**cmd_kwargs)
+
 
   # ============== Firmware Commands ==============
 
@@ -2621,7 +2751,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
-  def pick_up_tip_core96(
+  def pick_up_tips_core96(
     self,
     x_position: int = 0,
     x_direction: int = 0,
@@ -2649,7 +2779,7 @@ class STAR(HamiltonLiquidHandler):
     """
 
     utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_position, 0, 1, "x_direction")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
     utils.assert_clamp(y_position, 1080, 5600, "y_position")
     utils.assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
     utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
@@ -2659,17 +2789,18 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="EP",
-      xs=x_position,
+      fmt="",
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yh=y_position,
-      tt=tip_type, # .rawValue?
+      yh=f"{y_position:04}",
+      tt=f"{tip_type:02}",
       wu=tip_pick_up_method,
-      za=z_deposit_position,
-      zh=minimum_traverse_height_at_beginning_of_a_command,
-      ze=minimum_height_command_end
+      za=f"{z_deposit_position:04}",
+      zh=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      ze=f"{minimum_height_command_end:04}",
     )
 
-  def discard_tip_core96(
+  def discard_tips_core96(
     self,
     x_position: int = 0,
     x_direction: int = 0,
@@ -2695,7 +2826,7 @@ class STAR(HamiltonLiquidHandler):
     """
 
     utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_position, 0, 1, "x_direction")
+    utils.assert_clamp(x_direction, 0, 1, "x_direction")
     utils.assert_clamp(y_position, 1080, 5600, "y_position")
     utils.assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
     utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
@@ -2705,12 +2836,13 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="ER",
-      xs=x_position,
+      fmt="",
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yh=y_position,
-      za=z_deposit_position,
-      zh=minimum_traverse_height_at_beginning_of_a_command,
-      ze=minimum_height_command_end
+      yh=f"{y_position:04}",
+      za=f"{z_deposit_position:04}",
+      zh=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      ze=f"{minimum_height_command_end:04}"
     )
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
@@ -2746,7 +2878,7 @@ class STAR(HamiltonLiquidHandler):
     homogenization_position_from_liquid_surface: int = 250,
     surface_following_distance_during_homogenization: int = 0,
     speed_of_homogenization: int = 1000,
-    todo: int = None,
+    channel_pattern: typing.List[bool] = [True] * 96,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
     recording_mode: int = 0
@@ -2844,45 +2976,50 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(surface_following_distance_during_homogenization, 0, 990, \
                   "surface_following_distance_during_homogenization")
     utils.assert_clamp(speed_of_homogenization, 3, 5000, "speed_of_homogenization")
-    utils.assert_clamp(todo, 4, 5000, "todo")
     utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
 
     utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
 
+    # Convert bool list to hex string
+    assert len(channel_pattern) == 96, "channel_pattern must be a list of 96 boolean values"
+    channel_pattern = ["1" if x else "0" for x in channel_pattern]
+    channel_pattern = hex(int("".join(channel_pattern), 2)).upper()[2:]
+
     return self.send_command(
       module="C0",
       command="EA",
+      fmt="",
       aa=aspiration_type,
-      xs=x_position,
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yh=y_positions,
-      zh=minimum_traverse_height_at_beginning_of_a_command,
-      ze=minimal_end_height,
-      lz=lld_search_height,
-      zt=liquid_surface_at_function_without_lld,
-      pp=pull_out_distance_to_take_transport_air_in_function_without_lld,
-      zm=maximum_immersion_depth,
-      zv=tube_2nd_section_height_measured_from_zm,
-      zq=tube_2nd_section_ratio,
-      iw=immersion_depth,
+      yh=f"{y_positions:04}",
+      zh=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      ze=f"{minimal_end_height:04}",
+      lz=f"{lld_search_height:04}",
+      zt=f"{liquid_surface_at_function_without_lld:04}",
+      pp=f"{pull_out_distance_to_take_transport_air_in_function_without_lld:04}",
+      zm=f"{maximum_immersion_depth:04}",
+      zv=f"{tube_2nd_section_height_measured_from_zm:04}",
+      zq=f"{tube_2nd_section_ratio:05}",
+      iw=f"{immersion_depth:03}",
       ix=immersion_depth_direction,
-      fh=liquid_surface_sink_distance_at_the_end_of_aspiration,
-      af=aspiration_volumes,
-      ag=aspiration_speed,
-      vt=transport_air_volume,
-      bv=blow_out_air_volume,
-      wv=pre_wetting_volume,
+      fh=f"{liquid_surface_sink_distance_at_the_end_of_aspiration:03}",
+      af=f"{aspiration_volumes:05}",
+      ag=f"{aspiration_speed:04}",
+      vt=f"{transport_air_volume:03}",
+      bv=f"{blow_out_air_volume:05}",
+      wv=f"{pre_wetting_volume:05}",
       cm=lld_mode,
       cs=gamma_lld_sensitivity,
-      bs=swap_speed,
-      wh=settling_time,
-      hv=homogenization_volume,
-      hc=homogenization_cycles,
-      hp=homogenization_position_from_liquid_surface,
-      mj=surface_following_distance_during_homogenization,
-      hs=speed_of_homogenization,
-      cw=todo,
-      cr=limit_curve_index,
+      bs=f"{swap_speed:04}",
+      wh=f"{settling_time:02}",
+      hv=f"{homogenization_volume:05}",
+      hc=f"{homogenization_cycles:02}",
+      hp=f"{homogenization_position_from_liquid_surface:03}",
+      mj=f"{surface_following_distance_during_homogenization:03}",
+      hs=f"{speed_of_homogenization:04}",
+      cw=channel_pattern,
+      cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
       cx=recording_mode,
     )
@@ -2901,8 +3038,8 @@ class STAR(HamiltonLiquidHandler):
     maximum_immersion_depth: int = 3425,
     immersion_depth: int = 0,
     immersion_depth_direction: int = 0,
-    liquid_surface_sink_elevation_at_the_end_of_aspiration: int = 0,
-    minimal_traverse_height_at_begin_of_command: int = 3425,
+    liquid_surface_sink_distance_at_the_end_of_dispense: int = 0,
+    minimum_traverse_height_at_beginning_of_a_command: int = 3425,
     minimal_end_height: int = 3425,
     dispense_volume: int = 0,
     dispense_speed: int = 5000,
@@ -2912,6 +3049,7 @@ class STAR(HamiltonLiquidHandler):
     blow_out_air_volume: int = 200,
     lld_mode: int = 1,
     gamma_lld_sensitivity: int = 1,
+    side_touch_off_distance: int = 0,
     swap_speed: int = 100,
     settling_time: int = 5,
     mixing_volume: int = 0,
@@ -2919,7 +3057,7 @@ class STAR(HamiltonLiquidHandler):
     mixing_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mixing: int = 0,
     speed_of_mixing: int = 1000,
-    todo: int = None,
+    channel_pattern: typing.List[bool] = [[True]*12]*8,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
     recording_mode: int = 0
@@ -2949,9 +3087,9 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth: Immersion depth [0.1mm]. Must be between 0 and 3600. Default 0.
       immersion_depth_direction: Direction of immersion depth (0 = go deeper, 1 = go up out of
           liquid). Must be between 0 and 1. Default 0.
-      liquid_surface_sink_elevation_at_the_end_of_aspiration: Liquid surface sink elevation at
+      liquid_surface_sink_distance_at_the_end_of_dispense: Liquid surface sink elevation at
           the end of aspiration [0.1mm]. Must be between 0 and 990. Default 0.
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
+      minimum_traverse_height_at_beginning_of_a_command: Minimal traverse height at begin of
           command [0.1mm]. Must be between 0 and 3425. Default 3425.
       minimal_end_height: Minimal height at command end [0.1mm]. Must be between 0 and 3425.
           Default 3425.
@@ -2965,6 +3103,8 @@ class STAR(HamiltonLiquidHandler):
           between 0 and 4. Default 1.
       gamma_lld_sensitivity: gamma LLD sensitivity (1= high, 4=low). Must be between 1 and 4.
           Default 1.
+      side_touch_off_distance: side touch off distance [0.1 mm] 0 = OFF ( > 0 = ON & turns LLD off)
+        Must be between 0 and 45. Default 1.
       swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1000. Default 100.
       settling_time: Settling time [0.1s]. Must be between 0 and 99. Default 5.
       mixing_volume: Homogenization volume [0.1ul]. Must be between 0 and 11500. Default 0.
@@ -2974,7 +3114,7 @@ class STAR(HamiltonLiquidHandler):
       surface_following_distance_during_mixing: surface following distance during mixing [0.1mm].
           Must be between 0 and 990. Default 0.
       speed_of_mixing: Speed of mixing [0.1ul/s]. Must be between 3 and 5000. Default 1000.
-      todo: TODO: 24 hex chars. Must be between 4 and 5000.
+      channel_pattern: list of 96 boolean values
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
       tadm_algorithm: TADM algorithm. Default False.
       recording_mode: Recording mode 0 : no 1 : TADM errors only 2 : all TADM measurement. Must
@@ -2996,10 +3136,10 @@ class STAR(HamiltonLiquidHandler):
                   "pull_out_distance_to_take_transport_air_in_function_without_lld")
     utils.assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
     utils.assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    utils.assert_clamp(liquid_surface_sink_elevation_at_the_end_of_aspiration, 0, 990, \
-                  "liquid_surface_sink_elevation_at_the_end_of_aspiration")
-    utils.assert_clamp(minimal_traverse_height_at_begin_of_command, 0, 3425, \
-                  "minimal_traverse_height_at_begin_of_command")
+    utils.assert_clamp(liquid_surface_sink_distance_at_the_end_of_dispense, 0, 990, \
+                  "liquid_surface_sink_distance_at_the_end_of_dispense")
+    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
+                  "minimum_traverse_height_at_beginning_of_a_command")
     utils.assert_clamp(minimal_end_height, 0, 3425, "minimal_end_height")
     utils.assert_clamp(dispense_volume, 0, 11500, "dispense_volume")
     utils.assert_clamp(dispense_speed, 3, 5000, "dispense_speed")
@@ -3009,6 +3149,7 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(blow_out_air_volume, 0, 11500, "blow_out_air_volume")
     utils.assert_clamp(lld_mode, 0, 4, "lld_mode")
     utils.assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
+    utils.assert_clamp(side_touch_off_distance, 0, 45, "side_touch_off_distance")
     utils.assert_clamp(swap_speed, 3, 1000, "swap_speed")
     utils.assert_clamp(settling_time, 0, 99, "settling_time")
     utils.assert_clamp(mixing_volume, 0, 11500, "mixing_volume")
@@ -3018,45 +3159,51 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(surface_following_distance_during_mixing, 0, 990, \
                   "surface_following_distance_during_mixing")
     utils.assert_clamp(speed_of_mixing, 3, 5000, "speed_of_mixing")
-    utils.assert_clamp(todo, 4, 5000, "todo")
     utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
     utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
+
+    # Convert bool list to hex string
+    assert len(channel_pattern) == 96, "channel_pattern must be a list of 96 boolean values"
+    channel_pattern = ["1" if x else "0" for x in channel_pattern]
+    channel_pattern = hex(int("".join(channel_pattern), 2)).upper()[2:]
 
     return self.send_command(
       module="C0",
       command="ED",
-      dm=dispensing_mode,
-      xs=x_position,
+      fmt="",
+      da=dispensing_mode,
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yh=y_position,
-      zm=maximum_immersion_depth,
-      zv=tube_2nd_section_height_measured_from_zm,
-      zq=tube_2nd_section_ratio,
-      lz=lld_search_height,
-      zt=liquid_surface_at_function_without_lld,
-      pp=pull_out_distance_to_take_transport_air_in_function_without_lld,
-      iw=immersion_depth,
+      yh=f"{y_position:04}",
+      zm=f"{maximum_immersion_depth:04}",
+      zv=f"{tube_2nd_section_height_measured_from_zm:04}",
+      zq=f"{tube_2nd_section_ratio:05}",
+      lz=f"{lld_search_height:04}",
+      zt=f"{liquid_surface_at_function_without_lld:04}",
+      pp=f"{pull_out_distance_to_take_transport_air_in_function_without_lld:04}",
+      iw=f"{immersion_depth:03}",
       ix=immersion_depth_direction,
-      fh=liquid_surface_sink_elevation_at_the_end_of_aspiration,
-      zh=minimal_traverse_height_at_begin_of_command,
-      ze=minimal_end_height,
-      df=dispense_volume,
-      dg=dispense_speed,
-      es=cut_off_speed,
-      ev=stop_back_volume,
-      vt=transport_air_volume,
-      bv=blow_out_air_volume,
+      fh=f"{liquid_surface_sink_distance_at_the_end_of_dispense:03}",
+      zh=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      ze=f"{minimal_end_height:04}",
+      df=f"{dispense_volume:05}",
+      dg=f"{dispense_speed:04}",
+      es=f"{cut_off_speed:04}",
+      ev=f"{stop_back_volume:03}",
+      vt=f"{transport_air_volume:03}",
+      bv=f"{blow_out_air_volume:05}",
       cm=lld_mode,
       cs=gamma_lld_sensitivity,
-      bs=swap_speed,
-      wh=settling_time,
-      hv=mixing_volume,
-      hc=mixing_cycles,
-      hp=mixing_position_from_liquid_surface,
-      mj=surface_following_distance_during_mixing,
-      hs=speed_of_mixing,
-      cw=todo,
-      cr=limit_curve_index,
+      ej=f"{side_touch_off_distance:02}",
+      bs=f"{swap_speed:04}",
+      wh=f"{settling_time:02}",
+      hv=f"{mixing_volume:05}",
+      hc=f"{mixing_cycles:02}",
+      hp=f"{mixing_position_from_liquid_surface:03}",
+      mj=f"{surface_following_distance_during_mixing:03}",
+      hs=f"{speed_of_mixing:04}",
+      cw=channel_pattern,
+      cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
       cx=recording_mode,
     )
