@@ -3,6 +3,7 @@ import functools
 import inspect
 import json
 import logging
+import time
 import typing
 
 import pyhamilton.utils.file_parsing as file_parser
@@ -925,6 +926,7 @@ class LiquidHandler:
     channel_6: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
     channel_7: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
     channel_8: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    end_delay: float = 0,
     **backend_kwargs
   ):
     """Aspirate liquid from the specified channels.
@@ -954,6 +956,8 @@ class LiquidHandler:
       channel_6: The aspiration info for channel 6.
       channel_7: The aspiration info for channel 7.
       channel_8: The aspiration info for channel 8.
+      end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
+        the tips used in the aspiration are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -995,6 +999,9 @@ class LiquidHandler:
         raise ValueError(f"Invalid channel type for channel {channel_id+1}")
 
     self.backend.aspirate(resource, **channels_dict, **backend_kwargs)
+
+    if end_delay > 0:
+      time.sleep(end_delay)
 
   @need_setup_finished
   def dispense(
@@ -1132,6 +1139,7 @@ class LiquidHandler:
     resource: typing.Union[str, Resource],
     pattern: typing.Union[typing.List[typing.List[bool]], str],
     volume: float,
+    end_delay: float = 0,
     **backend_kwargs
   ):
     """ Aspirate liquid using the CoR96 head in the locations where pattern is `True`.
@@ -1158,6 +1166,8 @@ class LiquidHandler:
       pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
         represent columns, or a string representing a range of positions.
       volume: The volume to aspirate from each well.
+      end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
+        the tips used in the aspiration are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
@@ -1175,6 +1185,9 @@ class LiquidHandler:
     utils.assert_shape(pattern, (8, 12))
 
     self.backend.aspirate96(resource, pattern, volume, **backend_kwargs)
+
+    if end_delay > 0:
+      time.sleep(end_delay)
 
   def dispense96(
     self,
