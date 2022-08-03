@@ -1,65 +1,19 @@
-from abc import ABCMeta
+from __future__ import annotations
+
 import logging
-import typing
+from this import d
+from typing import List, Optional
 
-from pyhamilton import utils
-
-from .resource import Resource
 from .coordinate import Coordinate
+from .resource import Resource
+from .tips import Tips
+from .plate import Plate
 
 
 logger = logging.getLogger(__name__)
 
 
-class CarrierSite(metaclass=ABCMeta):
-  """ A single site within a carrier. """
-
-  def __init__(
-    self,
-    location: Coordinate,
-    width: float,
-    height: float,
-    resource: typing.Optional[Resource] = None
-  ):
-    """ Initialize a new CarrierSite.
-
-    The location of the site is given by the `location` parameter. The location of the resource
-    will be updated to be the absolute location of the resource.
-
-    Args:
-      location: The location of the site.
-      width: The width of the site.
-      height: The height of the site.
-      resource: The resource that is stored in the site.
-    """
-
-    self.location = location
-    self.width = width
-    self.height = height
-
-    # Update the coordinate to be relative to the carrier.
-    if resource is not None:
-      resource.location += self.location
-    self.resource = resource
-
-  def serialize(self) -> dict:
-    """ Serialize the site to a dict. """
-
-    return {
-      "location": self.location.serialize(),
-      "width": self.width,
-      "height": self.height,
-      "resource": (self.resource.serialize() if self.resource else None)
-    }
-
-  def __repr__(self) -> str:
-    """ Return a string representation of the site. """
-
-    return f"CarrierSite(location={self.location.__repr__()}, width={self.width}, " + \
-           f"height={self.height}, resource={self.resource})"
-
-
-class Carrier(Resource, metaclass=ABCMeta):
+class Carrier(Resource):
   """ Abstract base resource for carriers.
 
   It is recommended to always use a resource carrier to store resources, because this ensures the
@@ -93,160 +47,148 @@ class Carrier(Resource, metaclass=ABCMeta):
     capacity: The maximum number of items that can be stored in this carrier.
   """
 
+  class CarrierSite(Resource):
+    """ A single site within a carrier. """
+    def __init__(self, size_x, size_y, size_z, location, parent, spot):
+      super().__init__(name=f"carrier-{parent.name}-spot-{spot}", size_x=size_x, size_y=size_y,
+        size_z=size_z, location=Coordinate(0, 0, 0), category="carrier_site")
+      self.location: Coordinate = location
+      self.resource: Resource = None
+      self.parent: Carrier = parent
+      self.spot: int = spot
+
+    def assign_child_resource(self, resource, **kwargs):
+      # parent (Carrier) handles our child management.
+      return self.parent.assign_child_resource(resource, spot=self.spot, **kwargs)
+
+    def unassign_child_resource(self, resource):
+      # parent (Carrier) handles our child management.
+      return self.parent.unassign_child_resource(resource)
+
+    def serialize(self):
+      return dict(
+        spot=self.spot,
+        resource=self.resource.serialize() if self.resource is not None else None,
+        **super().serialize()
+      )
+
+    def __eq__(self, other):
+      return super().__eq__(other) and self.spot == other.spot and self.resource == other.resource
+
   def __init__(
     self,
     name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    sites: typing.List[CarrierSite],
-    category: str = "carrier",
-    resource_assigned_callback: typing.Optional[typing.Callable] = None,
-    resource_unassigned_callback: typing.Optional[typing.Callable] = None,
-    check_can_assign_resource_callback: typing.Optional[typing.Callable] = None,
-  ):
-    super().__init__(name, size_x, size_y, size_z, category=category)
+    size_x: float, size_y: float, size_z: float,
+    location: Coordinate,
+    sites: List[Coordinate],
+    site_size_x: float,
+    site_size_y: float,
+    category: Optional[str] = "carrier"):
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
+      location=location, category=category)
     self.capacity = len(sites)
-    self._sites = sites
-    self._resource_assigned_callback = resource_assigned_callback
-    self._resource_unassigned_callback = resource_unassigned_callback
-    self._check_can_assign_resource_callback = check_can_assign_resource_callback
 
-  def set_check_can_assign_resource_callback(self, callback: typing.Callable):
-    """ Called when a resource is about to be assigned to the robot.
+    self.sites: List[Carrier.CarrierSite] = []
+    for i in range(self.capacity):
+      self.sites.append(Carrier.CarrierSite(
+        size_x=site_size_x, size_y=site_size_y, size_z=0,
+        location=sites[i] + Coordinate(0, 0, 0),
+        parent=self, spot=i))
 
-    This callback will be called before the resource is assigned to the robot. If the callback
-    returns `False`, the resource will not be assigned to the robot and a `ValueError` will be
-    raised. This is useful for checking if the resource can be assigned to the robot. Note that the
-    callback will also be called for all resources that were assigned to this carrier before this
-    callback is assigned.
+  def assign_child_resource(self, resource, spot: int, **kwargs):
+    """ Assign a resource to this carrier.
+    Also see :meth:`~Resource.assign_child_resource`
 
     Args:
-      resource: The resource that is about to be assigned to the robot.
+      resource: The resource to assign.
+      spot: The index of the site to assign the resource to.
+
+    Raises:
+      ValueError: If the resource is already assigned to this carrier.
     """
 
-    self._check_can_assign_resource_callback = callback
-    for site in self._sites:
-      if site.resource is not None:
-        error = callback(site.resource)
-        if error is not None:
-          raise ValueError(f"A resource with name '{site.resource.name}' cannot be assigned to the "
-                    "liquid handler.")
+    super().assign_child_resource(resource)
+    if spot < 0 or spot >= self.capacity:
+      raise IndexError(f"Invalid spot {spot}")
+    if self.sites[spot].resource is not None:
+      raise ValueError(f"spot {spot} already has a resource")
 
-  def set_resource_assigned_callback(self, callback: typing.Callable):
-    """ Set the callback function that is called when a subresource is assigned to a carrier.
+    if isinstance(resource, (Plate, Tips)):
+      resource.location += Coordinate(0, 63, 0) # TODO(63) fix
 
-    When subresources have already be assigned, this callback will be called at the end of this
-    method for all of them.
+    # place carrier site in between, but don't see them as children.
+    self.sites[spot].resource = resource
+    resource.parent = self.sites[spot]
+
+  def unassign_child_resource(self, resource):
+    """ Unassign a resource from this carrier, checked by name.
+    Also see :meth:`~Resource.assign_child_resource`
+
+    Args:
+      resource: The resource to unassign.
+
+    Raises:
+      ValueError: If the resource is not assigned to this carrier.
     """
 
-    self._resource_assigned_callback = callback
-    for site in self._sites:
-      if site.resource is not None:
-        callback(site.resource)
+    super().unassign_child_resource(resource)
+    for s in self.sites:
+      if s.resource is not None and s.resource.name == resource.name:
+        if isinstance(resource, (Plate, Tips)):
+          resource.location -= Coordinate(0, 63, 0) # TODO(63) fix
 
-  def set_resource_unassigned_callback(self, callback: typing.Callable):
-    """ Set the callback function that is called when a subresource is unassigned from carrier. """
-    self._resource_unassigned_callback = callback
+        s.resource = None
+        return
 
-  def get_items(self) -> typing.List[typing.Optional[Resource]]:
-    """ Get all items, using self.__getitem__ (so that the location is within this carrier). """
-    return [self[k] for k in range(self.capacity)]
+    raise ValueError(f"Resource {resource.name} not found in carrier")
 
-  def __getitem__(self, key: int) -> typing.Optional[Resource]:
-    """ Get the key'th item in this carrier.
+  def __getitem__(self, idx) -> Carrier.CarrierSite:
+    """ Get a site by index. """
+    if not 0 <= idx < self.capacity:
+      raise IndexError(f"Invalid index {idx}")
+    return self.sites[idx]
 
-    Returns:
-      The resource, if it exists at that location, where the location is updated to be within this
-        carrier.
-    """
+  def __setitem__(self, idx, resource: Optional[Resource]):
+    """ Assign a resource to this carrier. See :meth:`~Carrier.assign_child_resource` """
+    if resource is None:
+      if self[idx].resource is not None:
+        self.unassign_child_resource(self[idx].resource)
+    else:
+      self.assign_child_resource(resource, spot=idx)
 
-    utils.assert_clamp(key, 0, self.capacity - 1, "key", KeyError)
-    return self._sites[key].resource
+  def __delitem__(self, idx):
+    """ Unassign a resource from this carrier. See :meth:`~Carrier.unassign_child_resource` """
+    self.unassign_child_resource(self[idx])
 
-  def __setitem__(self, key: int, subresource: typing.Optional[Resource]):
-    utils.assert_clamp(key, 0, self.capacity - 1, "key", KeyError)
+  def get_resources(self) -> List[Resource]:
+    """ Get all resources, using self.__getitem__ (so that the location is within this carrier). """
+    # return [self[k].resource for k in range(self.capacity) if self[k].resource is not None]
+    return [site.resource for site in self.sites if site.resource is not None]
 
-    if subresource is None: # `self[k] = None` is equal to `del self[k]`
-      del self[key]
-      return
+  def get_sites(self) -> List[Carrier.CarrierSite]:
+    """ Get all sites. """
+    return self.sites
 
-    # Warn if overriding a site.
-    if self._sites[key].resource is not None:
-      logger.warning("Overriding resource %s with %s.", self._sites[key].resource, subresource)
-    # Check if item with name is not set yet.
-    if subresource.name in [s.name if s is not None else None for s in self.get_items()]:
-      raise ValueError(f"Subresource with name {subresource.name} already set.")
-
-    # Update the location of the resource to be relative to the carrier.
-    subresource.location += self._sites[key].location
-
-    if self._check_can_assign_resource_callback is not None:
-      error = self._check_can_assign_resource_callback(subresource)
-      if error is not None:
-        raise ValueError(f"A resource with name '{subresource.name}' cannot be assigned to the "
-                          "liquid handler.")
-
-    self._sites[key].resource = subresource
-
-    if self._resource_assigned_callback is not None:
-      self._resource_assigned_callback(subresource)
-
-  def __delitem__(self, key: int):
-    utils.assert_clamp(key, 0, self.capacity - 1, "key", KeyError)
-
-    resource = self._sites[key].resource
-    self._sites[key].resource = None
-
-    if self._resource_unassigned_callback is not None:
-      self._resource_unassigned_callback(resource)
-
-  def has_resource(self, resource_name: Resource) -> bool:
-    """ Check if the given resource is stored in this carrier. """
-    resource_names = [r.name for r in self.get_items() if r is not None]
-    return resource_name in resource_names
-
-  def get_resource_by_name(self, name: str) -> typing.Optional[Resource]:
-    """ Get the resource with the given name. """
-    for site in self._sites:
-      if site.resource is not None and site.resource.name == name:
-        return site.resource
-    return None
-
-  def serialize(self):
+  def serialize(self) -> dict:
+    """ Serialize this carrier. """
     return dict(
-      **super().serialize(),
-      sites=[
-        dict(
-          site_id=site_id,
-          site=site.serialize()
-        ) for site_id, site in enumerate(self._sites)]
+      sites=[site.serialize() for site in self.sites],
+      **super().serialize()
     )
 
+  def __eq__(self, other):
+    return super().__eq__(other) and self.sites == other.sites
 
-class PlateCarrier(Carrier, metaclass=ABCMeta):
-  """ Abstract base class for plate carriers. """
+class TipCarrier(Carrier):
+  """ Base class for tip carriers. """
+  def __init__(self, name: str, size_x, size_y, size_z,
+    location: Coordinate, sites: List[Coordinate], site_size_x, site_size_y):
+    super().__init__(name, size_x, size_y, size_z, location,
+      sites, site_size_x, site_size_y, category='tip_carrier')
 
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    sites: typing.List[Coordinate]
-  ):
-    super().__init__(name, size_x, size_y, size_z, sites, category="plate_carrier")
-
-
-class TipCarrier(Carrier, metaclass=ABCMeta):
-  """ Abstract base class for tip carriers. """
-
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    sites: typing.List[Coordinate]
-  ):
-    super().__init__(name, size_x, size_y, size_z, sites, category="tip_carrier")
+class PlateCarrier(Carrier):
+  """ Base class for plate carriers. """
+  def __init__(self, name: str, size_x, size_y, size_z,
+    location: Coordinate, sites: List[Coordinate], site_size_x, site_size_y):
+    super().__init__(name, size_x, size_y, size_z, location,
+      sites, site_size_x, site_size_y, category='plate_carrier')

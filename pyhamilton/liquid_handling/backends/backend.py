@@ -1,7 +1,12 @@
 from abc import ABCMeta, abstractmethod
 import typing
+from typing import List, Union
 
-from pyhamilton.liquid_handling.resources import Resource
+from pyhamilton.liquid_handling.resources import (
+  Coordinate,
+  Plate,
+  Resource,
+)
 
 
 class AspirationInfo: # TODO: real import
@@ -133,21 +138,38 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def pickup_tips96(self, resource, **backend_kwargs):
+  def pickup_tips96(self, resource: Resource, **backend_kwargs):
     """ Pick up tips from the specified resource using CoRe 96. """
     pass
 
   @abstractmethod
-  def discard_tips96(self, resource, **backend_kwargs):
+  def discard_tips96(self, resource: Resource, **backend_kwargs):
     """ Discard tips to the specified resource using CoRe 96. """
     pass
 
   @abstractmethod
-  def aspirate96(self, resource, pattern, volume, **backend_kwargs):
+  def aspirate96(
+    self,
+    resource: Resource,
+    pattern: List[List[bool]],
+    volume: float,
+    **backend_kwargs
+  ):
     """ Aspirate liquid from the specified resource using CoRe 96. """
     pass
 
   @abstractmethod
-  def dispense96(self, resource, pattern, volume, **backend_kwargs):
+  def dispense96(
+    self,
+    resource: Resource,
+    pattern: List[List[bool]],
+    volume: float,
+    **backend_kwargs
+  ):
     """ Dispense liquid to the specified resource using CoRe 96. """
+    pass
+
+  @abstractmethod
+  def move_plate(self, plate: Plate, to: Coordinate, **backend_kwargs): # CarrierSite
+    """ Move the specified resource within the robot. """
     pass

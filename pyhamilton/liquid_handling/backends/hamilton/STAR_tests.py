@@ -6,7 +6,7 @@ from pyhamilton.liquid_handling.liquid_handler import LiquidHandler
 from pyhamilton.liquid_handling.resources import (
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
-  Cos_96_DW_1mL,
+  Cos_96_EZWash,
   TipType,
   Cos_96_DW_500ul,
   standard_volume_tip_with_filter,
@@ -135,9 +135,9 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     tip_car[1] = STF_L(name="tips_01")
     self.lh.assign_resource(tip_car, rails=1)
 
-    plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cos_96_DW_1mL(name="plate_01")
-    self.lh.assign_resource(plt_car, rails=9)
+    self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    self.plt_car[0] = Cos_96_EZWash(name="plate_01")
+    self.lh.assign_resource(self.plt_car, rails=9)
 
     self.maxDiff = None
 
@@ -376,6 +376,15 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "da#xs#####xd#yh##6#zh####ze####lz####zt####zm##6#iw###ix#fh###df#####dg####vt###"
       "bv#####cm#cs#bs####wh##hv#####hc##hp###hs####es####ev###zv####ej##zq#6###mj###cj#cx#cr###"
       "cw************************pp####")
+
+  def test_iswap(self):
+    self.lh.move_plate(self.plt_car[0], self.plt_car[1])
+    self._assert_command_sent_once(
+      "C0PPid0011xs03475xd0yj1145yd0zj1924zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+      "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
+    self._assert_command_sent_once(
+      "C0PRid0012xs03475xd0yj2105yd0zj1924zd0th2840te2840gr1go1300ga0",
+      "xs#####xd#yj####yd#zj####zd#th####te####go####ga#")
 
 
 if __name__ == "__main__":

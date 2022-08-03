@@ -7,11 +7,10 @@ from maker import make
 
 sys.path.insert(0, '..')
 
-from pyhamilton.liquid_handling.resources.abstract import Coordinate
 from pyhamilton.utils.file_parsing import find_int, find_float, find_string
 
 
-BASE_DIR = "../../LabWare/Corning-Costar"
+BASE_DIR = "./LabWare/Corning-Costar"
 BASE_CLASS = "Plate"
 OUT_FILE = "plates.py"
 
@@ -32,6 +31,7 @@ def make_from_file(fn, o):
   cname = os.path.basename(fn).split('.')[0]
   description = cname
   EqnOfVol = None
+  one_dot_max = None
 
   # .rck to .ctr filename
   def rck2ctr(fn):
@@ -42,6 +42,8 @@ def make_from_file(fn, o):
     c2 = f2.read()
     EqnOfVol = find_string("1.EqnOfVol", c2)
     dz = find_float("BaseMM", c2)
+
+    one_dot_max = find_float('1.Max', c2)
 
   o.write(f'\n\n')
   o.write(f"class {cname}({BASE_CLASS}):\n")
@@ -60,7 +62,8 @@ def make_from_file(fn, o):
   o.write(f'      size_z={size_z},\n')
   o.write(f'      dx={dx},\n')
   o.write(f'      dy={dy},\n')
-  o.write(f'      dz={dz}\n')
+  o.write(f'      dz={dz},\n')
+  o.write(f'      one_dot_max={one_dot_max}\n')
   o.write(f'    )\n')
   o.write(f'\n')
   o.write(f'  def compute_volume_from_height(self, h):\n')

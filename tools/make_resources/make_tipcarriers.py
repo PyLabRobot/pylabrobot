@@ -7,11 +7,11 @@ from maker import make
 
 sys.path.insert(0, '..')
 
-from pyhamilton.liquid_handling.resources.abstract import Coordinate, CarrierSite
+from pyhamilton.liquid_handling.resources.abstract import Coordinate
 from pyhamilton.utils.file_parsing import find_int, find_float, find_string
 
 
-BASE_DIR = "../../LabWare/ML_STAR"
+BASE_DIR = "./LabWare/ML_STAR"
 BASE_CLASS = "TipCarrier"
 OUT_FILE = "tipcar.py"
 
@@ -26,10 +26,10 @@ def make_from_file(fn, o):
     x = find_float(f"Site.{i}.X", c)
     y = find_float(f"Site.{i}.Y", c)
     z = find_float(f"Site.{i}.Z", c)
-    width = find_float(f"Site.{i}.Dx", c)
-    height = find_float(f"Site.{i}.Dy", c)
-    sites.append(CarrierSite(Coordinate(x, y, z), width, height))
-  sites = sorted(sites, key=lambda c: c.location.y)
+    site_width = find_float(f"Site.{i}.Dx", c)
+    site_height = find_float(f"Site.{i}.Dy", c)
+    sites.append(Coordinate(x, y, z))
+  sites = sorted(sites, key=lambda c: c.y)
 
   size_x = find_float('Dim.Dx', c)
   size_y = find_float('Dim.Dy', c)
@@ -49,8 +49,11 @@ def make_from_file(fn, o):
   o.write(f'      size_z={size_z},\n')
   o.write(f'      sites=[\n')
   for i, site in enumerate(sites):
-    o.write(f'        {site.__repr__()}' + ('' if i == len(sites) - 1 else ',') + '\n')
-  o.write(f'      ]\n')
+    o.write(f'        {repr(site)}' + ('' if i == len(sites) - 1 else ',') + '\n')
+  o.write(f'      ],\n')
+  o.write(f'      site_size_x={site_width},\n')
+  o.write(f'      site_size_y={site_height},\n')
+  o.write(f'      location={repr(Coordinate(0, 0, 0))},\n')
   o.write(f'    )\n')
 
 

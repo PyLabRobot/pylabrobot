@@ -4,9 +4,10 @@ class Coordinate:
   """ Represents coordinates, often relative to either a liquid handler or container """
 
   def __init__(self, x, y, z):
-    self.x = x
-    self.y = y
-    self.z = z
+    # Round to 4 decimal places to prevent floating point errors
+    self.x = round(x, 4) if x is not None else None
+    self.y = round(y, 4) if y is not None else None
+    self.z = round(z, 4) if z is not None else None
 
   def __add__(self, other):
     return Coordinate(

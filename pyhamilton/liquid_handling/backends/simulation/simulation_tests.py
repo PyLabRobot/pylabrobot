@@ -134,17 +134,23 @@ class SimulatorBackendCommandTests(unittest.TestCase):
     self.assert_event_sent(event)
     self.assert_event_not_sent(event)
 
+  def assert_event_sent_n(self, event, times):
+    for _ in range(times):
+      self.assert_event_sent(event)
+    self.assert_event_not_sent(event)
+
   def test_resources_assigned_setup(self):
-    self.assert_event_sent("resource_assigned")
-    self.assert_event_sent("resource_assigned")
-    self.assert_event_not_sent("resource_assigned")
+    self.assert_event_sent_n("resource_assigned", times=4)
+    # self.assert_event_sent("resource_assigned")
+    # self.assert_event_sent("resource_assigned")
+    # self.assert_event_not_sent("resource_assigned")
 
   def test_resources_assigned(self):
     self.backend.clear()
     tip_car = TIP_CAR_480_A00("tip_car_new")
     tip_car[0] = STF_L("tips_1_new")
     self.lh.assign_resource(tip_car, rails=20)
-    self.assert_event_sent_once("resource_assigned")
+    self.assert_event_sent_n("resource_assigned", times=2)
 
   def test_subresource_assigned(self):
     self.backend.clear()
@@ -154,10 +160,11 @@ class SimulatorBackendCommandTests(unittest.TestCase):
 
     tip_car[0] = STF_L("tips_1_new")
     self.assert_event_sent_once("resource_assigned")
-    self.assert_event_sent_once("resource_unassigned")
+    # self.assert_event_sent_once("resource_unassigned")
 
     tip_car[0] = None
-    self.assert_event_sent_once("resource_assigned")
+    # self.assert_event_sent_once("resource_assigned")
+    print(self.backend.sent_datas)
     self.assert_event_sent_once("resource_unassigned")
 
   def test_tip_pickup(self):

@@ -825,6 +825,14 @@ class HamiltonFirmwareError(HamiltonError):
         95: "Invalid limit curve index",
         96: "Limit curve already stored"
       }
+    elif module_identifier in ["R0"]: # iswap
+      table = {
+        51: "Y-drive not initialized",
+        62: "Movement error",
+        94: "Plate not found",
+        96: "Plate not available",
+        97: "Not expected object found"
+      }
 
     if table is not None and trace_information in table:
       return table[trace_information]

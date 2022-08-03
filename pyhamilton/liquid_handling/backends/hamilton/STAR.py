@@ -11,8 +11,11 @@ import logging
 import re
 import time
 import typing
+from typing import Union
 
 from pyhamilton.liquid_handling.resources import (
+  Coordinate,
+  Carrier,
   Resource,
   Plate,
   Tips,
@@ -561,8 +564,8 @@ class STAR(HamiltonLiquidHandler):
       row, column = utils.string_to_position(channel_pos)
 
       # TODO: what is -9?
-      x_positions.append(int((resource.location.x + column*9)*10))
-      y_positions.append(int((resource.location.y - row*9)*10))
+      x_positions.append(int((resource.get_absolute_location().x + column*9)*10))
+      y_positions.append(int((resource.get_absolute_location().y - row*9)*10))
       channels_involved.append(True)
 
     # TODO: Must have leading zero if len != 8?
@@ -810,8 +813,8 @@ class STAR(HamiltonLiquidHandler):
 
     # Get position of well A1 in the 96 well plate.
     row, column = utils.string_to_position("A1")
-    x_position = int((resource.location.x + column*9)*10)
-    y_position = int((resource.location.y - row*9)*10)
+    x_position = int((resource.get_absolute_location().x + column*9)*10)
+    y_position = int((resource.get_absolute_location().y - row*9)*10)
 
     cmd_kwargs = dict(
       x_position=x_position,
@@ -831,8 +834,8 @@ class STAR(HamiltonLiquidHandler):
   def discard_tips96(self, resource: Resource, **backend_kwargs):
     # Get position of well A1 in the 96 well plate.
     row, column = utils.string_to_position("A1")
-    x_position = int((resource.location.x + column*9)*10)
-    y_position = int((resource.location.y - row*9)*10)
+    x_position = int((resource.get_absolute_location().x + column*9)*10)
+    y_position = int((resource.get_absolute_location().y - row*9)*10)
 
     cmd_kwargs = dict(
       x_position=x_position,
@@ -850,8 +853,8 @@ class STAR(HamiltonLiquidHandler):
   def aspirate96(self, resource, pattern, volume, **backend_kwargs):
     # Get position of well A1 in the 96 well plate.
     row, column = utils.string_to_position("A1")
-    x_position = int((resource.location.x + column*9)*10)
-    y_position = int((resource.location.y - row*9)*10)
+    x_position = int((resource.get_absolute_location().x + column*9)*10)
+    y_position = int((resource.get_absolute_location().y - row*9)*10)
 
     # flatten pattern array
     pattern = [item for sublist in pattern for item in sublist]
@@ -899,8 +902,8 @@ class STAR(HamiltonLiquidHandler):
   def dispense96(self, resource, pattern, volume, **backend_kwargs):
     # Get position of well A1 in the 96 well plate.
     row, column = utils.string_to_position("A1")
-    x_position = int((resource.location.x + column*9)*10)
-    y_position = int((resource.location.y - row*9)*10)
+    x_position = int((resource.get_absolute_location().x + column*9)*10)
+    y_position = int((resource.get_absolute_location().y - row*9)*10)
 
     # flatten pattern array
     pattern = [item for sublist in pattern for item in sublist]
@@ -946,6 +949,80 @@ class STAR(HamiltonLiquidHandler):
 
     return self.dispense_core_96(**cmd_kwargs)
 
+  def move_plate(
+    self,
+    plate: Plate,
+    to: Union[Coordinate, Carrier.CarrierSite],
+    **backend_kwargs
+  ):
+    # Get center of source plate.
+    x = plate.get_absolute_location().x + plate.size_x/2 - plate.dx
+    x = int(x * 10)
+
+    y = plate.get_absolute_location().y + plate.size_y/2 - plate.dy - 63 # TODO(63)
+    y = int(y * 10)
+
+    # Get the grip height for the plate.
+    pickup_distance_from_top = backend_kwargs.get("pickup_distance_from_top", 5) # mm
+    grip_height = plate.get_absolute_location().z + plate.one_dot_max - \
+                   plate.dz - pickup_distance_from_top
+    grip_height = int(grip_height * 10)
+
+    get_cmd_kwargs = dict(
+      grip_direction=1,
+      minimum_traverse_height_at_beginning_of_a_command = 2840,
+      z_position_at_the_command_end = 2840,
+      grip_strength = 4,
+      open_gripper_position = 1300,
+      plate_width = 1237, # 127?
+      plate_width_tolerance = 20,
+      collision_control_level = 0,
+      acceleration_index_high_acc = 4,
+      acceleration_index_low_acc = 1,
+      fold_up_sequence_at_the_end_of_process = True
+    )
+
+    get_cmd_kwargs.update(backend_kwargs)
+
+    self.get_plate(
+      x_position=x,
+      x_direction=0,
+      y_position=y,
+      y_direction=0,
+      z_position=grip_height,
+      z_direction=0,
+      **get_cmd_kwargs
+    )
+
+    # Move to the destination.
+    if isinstance(to, Coordinate):
+      to_location = to
+    else:
+      to_location = to.get_absolute_location()
+      to_location = Coordinate(
+        x=to_location.x + plate.size_x/2 ,
+        y=to_location.y + plate.size_y/2 ,
+        z=to_location.z + plate.one_dot_max - pickup_distance_from_top
+      )
+
+    put_cmd_kwargs = dict(
+      grip_direction=1,
+      minimum_traverse_height_at_beginning_of_a_command=2840,
+      z_position_at_the_command_end=2840,
+      open_gripper_position=1300, # 127?
+      collision_control_level=0,
+    )
+    put_cmd_kwargs.update(**backend_kwargs)
+
+    self.put_plate(
+      x_position=int(to_location.x * 10),
+      x_direction=0,
+      y_position=int(to_location.y * 10),
+      y_direction=0,
+      z_position=int(to_location.z * 10),
+      z_direction=0,
+      **put_cmd_kwargs
+    )
 
   # ============== Firmware Commands ==============
 
@@ -3838,7 +3915,7 @@ class STAR(HamiltonLiquidHandler):
     acceleration_index_low_acc: int = 1,
     fold_up_sequence_at_the_end_of_process: bool = True
   ):
-    """ get plate
+    """ Get plate using iswap.
 
     Args:
       x_position: Plate center in X direction  [0.1mm]. Must be between 0 and 30000. Default 0.
@@ -3886,21 +3963,22 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="PP",
-      xs=x_position,
+      fmt="",
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yj=y_position,
+      yj=f"{y_position:04}",
       yd=y_direction,
-      zj=z_position,
+      zj=f"{z_position:04}",
       zd=z_direction,
       gr=grip_direction,
-      th=minimum_traverse_height_at_beginning_of_a_command,
-      te=z_position_at_the_command_end,
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      te=f"{z_position_at_the_command_end:04}",
       gw=grip_strength,
-      go=open_gripper_position,
-      gb=plate_width,
-      gt=plate_width_tolerance,
+      go=f"{open_gripper_position:04}",
+      gb=f"{plate_width:04}",
+      gt=f"{plate_width_tolerance:02}",
       ga=collision_control_level,
-      xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}",
+      # xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}",
       gc=fold_up_sequence_at_the_end_of_process,
     )
 
@@ -3963,18 +4041,19 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="PR",
-      xs=x_position,
+      fmt="",
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yj=y_position,
+      yj=f"{y_position:04}",
       yd=y_direction,
-      zj=z_position,
+      zj=f"{z_position:04}",
       zd=z_direction,
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      te=f"{z_position_at_the_command_end:04}",
       gr=grip_direction,
-      th=minimum_traverse_height_at_beginning_of_a_command,
-      te=z_position_at_the_command_end,
-      go=open_gripper_position,
+      go=f"{open_gripper_position:04}",
       ga=collision_control_level,
-      xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
+      # xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
     )
 
   def move_plate_to_position(

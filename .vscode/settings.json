@@ -3,7 +3,7 @@
   "files.trimTrailingWhitespace": true,
   "cSpell.words": ["iswap", "pyhamilton", "subresource"],
   "python.linting.pylintEnabled": true,
-  "python.testing.pytestArgs": ["pyhamilton"],
+  "python.testing.pytestArgs": ["."],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
   "python.testing.autoTestDiscoverOnSaveEnabled": true,
@@ -11,5 +11,6 @@
   "editor.formatOnSave": true,
   "files.exclude": {
     "**/__pycache__": true
-  }
+  },
+  "python.testing.unittestArgs": ["-v", "-s", ".", "-p", "*_test.py"]
 }

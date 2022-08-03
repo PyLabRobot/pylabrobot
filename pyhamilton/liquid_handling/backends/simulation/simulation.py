@@ -15,11 +15,11 @@ try:
   import websockets
   HAS_WEBSOCKETS = True
 except ImportError:
-  print("Simulator requires websockets.") # TODO: change to runtime error.
+  print("Simulator requires websockets.")
   HAS_WEBSOCKETS = False
 
 from pyhamilton.liquid_handling.backends import LiquidHandlerBackend
-from pyhamilton.liquid_handling.resources.abstract import Resource
+from pyhamilton.liquid_handling.resources.abstract import Resource, Plate, Coordinate
 
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
@@ -464,3 +464,6 @@ class SimulationBackend(LiquidHandlerBackend):
     """
 
     self.remove_tips(resource, [[True] * 12] * 8)
+
+  def move_plate(self, plate: Plate, to: Coordinate, **backend_kwargs):
+    raise NotImplementedError("This method is not implemented in the simulator.")
