@@ -459,7 +459,8 @@ class LiquidHandler:
     else:
       resource.location = location
 
-    if resource.location.x + resource.size_x > LiquidHandler._x_coordinate_for_rails(30):
+    if resource.location.x + resource.size_x > LiquidHandler._x_coordinate_for_rails(30) and \
+      rails is not None:
       raise ValueError(f"Resource with width {resource.size_x} does not fit at rails {rails}.")
 
     # Check if there is space for this new resource.
@@ -1204,7 +1205,12 @@ class LiquidHandler:
 
     self.backend.dispense96(resource, pattern, volume, **backend_kwargs)
 
-  def move_plate(self, plate: Union[str, Plate, Carrier.CarrierSite], to: typing.Union[Carrier.CarrierSite, Coordinate]):
+  def move_plate(
+    self,
+    plate: typing.Union[Plate, Carrier.CarrierSite],
+    target: typing.Union[Resource, Coordinate],
+    **backend_kwargs
+  ):
     """ Move a plate to a new location.
 
     Examples:
@@ -1222,31 +1228,33 @@ class LiquidHandler:
 
     Args:
       plate: The plate to move. Can be either a Plate object or a CarrierSite object.
-      to: The location to move the plate to, either a CarrierSite object or a Coordinate.
+      target: The location to move the plate to, either a CarrierSite object or a Coordinate.
     """
 
-    # Get plate from `plate` param.
-    print(type(plate), plate, isinstance(plate, Carrier.CarrierSite))
+    # Get plate from `plate` param. # (this could be a `Resource` too)
     if isinstance(plate, Carrier.CarrierSite):
-      print("plate is CarrierSite", plate.resource)
       if plate.resource is None:
         raise ValueError(f"No resource found at CarrierSite '{plate}'.")
       plate = plate.resource
     elif isinstance(plate, str):
       plate = self.get_resource(plate)
       if not plate:
-        raise ValueError(f"Resource with name {plate} not found.")
+        raise ValueError(f"Resource with name '{plate}' not found.")
+
+    if isinstance(target, Carrier.CarrierSite):
+      if target.resource is not None:
+        raise ValueError(f"There already exists a resource at {target}.")
 
     # Try to move the physical plate first.
     # Copy because backends like STAR will modify the plate location.
-    self.backend.move_plate(plate, to)
+    self.backend.move_plate(plate, target, **backend_kwargs)
 
     # Move the resource in the layout manager.
     plate.unassign()
-    if isinstance(to, Carrier.CarrierSite):
-      to.assign_child_resource(plate)
-    elif isinstance(to, Coordinate):
-      plate.location = to
+    if isinstance(target, Resource):
+      target.assign_child_resource(plate)
+    elif isinstance(target, Coordinate):
+      plate.location = target
       self.deck.assign_child_resource(plate) # Assign "free" objects directly to the deck.
     else:
-      raise TypeError(f"Invalid location type: {type(to)}")
+      raise TypeError(f"Invalid location type: {type(target)}")

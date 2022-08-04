@@ -88,6 +88,12 @@ class Resource(object):
     unassignment, if parent is not `None`.
     """
 
+    if resource not in self.children:
+      raise ValueError("The plate is not in the plate reader.")
+
+    for child in resource.children:
+      self.resource_unassigned_callback(child)
+
     self.resource_unassigned_callback(resource) # call callbacks first.
     resource.parent = None
     self.children.remove(resource)
@@ -107,6 +113,7 @@ class Resource(object):
     Args:
       resource: The resource that was assigned.
     """
+
     if self.parent is not None:
       self.parent.resource_assigned_callback(resource)
 
@@ -120,6 +127,7 @@ class Resource(object):
     Args:
       resource: The resource that was unassigned.
     """
+
     if self.parent is not None:
       self.parent.resource_unassigned_callback(resource)
 

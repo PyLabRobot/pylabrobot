@@ -7,9 +7,8 @@ from pyhamilton.liquid_handling.resources import (
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
   Cos_96_EZWash,
-  TipType,
-  Cos_96_DW_500ul,
-  standard_volume_tip_with_filter,
+  Coordinate,
+  PlateReader
 )
 from pyhamilton.liquid_handling.resources.ml_star import STF_L, HTF_L
 
@@ -118,7 +117,7 @@ class STARCommandCatcher(STAR):
   def setup(self):
     self.setup_finished = True
 
-  def send_command(self, module, command, **kwargs):
+  def send_command(self, module, command, fmt="", **kwargs):
     cmd, _ = self._assemble_command(module, command, **kwargs)
     self.commands.append(cmd)
 
@@ -385,6 +384,30 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self._assert_command_sent_once(
       "C0PRid0012xs03475xd0yj2105yd0zj1924zd0th2840te2840gr1go1300ga0",
       "xs#####xd#yj####yd#zj####zd#th####te####go####ga#")
+
+  def test_iswap_plate_reader(self):
+    plate_reader = PlateReader(name="plate_reader")
+    self.lh.assign_resource(plate_reader, location=Coordinate(979.5, 285.2-63, 200 - 100), replace=True)
+
+    self.lh.move_plate(self.plt_car[0], plate_reader, pickup_distance_from_top=9,
+      get_open_gripper_position=1320, get_grip_direction=1,
+      put_grip_direction=4, put_open_gripper_position=1320)
+    self._assert_command_sent_once(
+      "C0PPid0003xs03475xd0yj1145yd0zj1884zd0gr1th2840te2840gw4go1320gb1237gt20ga0gc1",
+                "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
+    self._assert_command_sent_once(
+      "C0PRid0004xs10430xd0yj3282yd0zj2023zd0th2840te2840gr4go1320ga0",
+                "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
+
+    self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0], pickup_distance_from_top=11,
+      get_open_gripper_position=1320, get_grip_direction=4,
+      put_grip_direction=1, put_open_gripper_position=1320)
+    self._assert_command_sent_once(
+      "C0PPid0005xs10430xd0yj3282yd0zj2003zd0gr4th2840te2840gw4go1320gb1237gt20ga0gc1",
+                "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
+    self._assert_command_sent_once(
+      "C0PRid0006xs03475xd0yj1145yd0zj1864zd0th2840te2840gr1go1320ga0",
+                "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from this import d
 from typing import List, Optional
 
 from .coordinate import Coordinate

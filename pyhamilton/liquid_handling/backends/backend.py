@@ -170,6 +170,6 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def move_plate(self, plate: Plate, to: Coordinate, **backend_kwargs): # CarrierSite
+  def move_plate(self, plate: Plate, to: typing.Union[Resource, Coordinate], **backend_kwargs):
     """ Move the specified resource within the robot. """
     pass
