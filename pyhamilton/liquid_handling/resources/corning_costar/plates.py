@@ -12,6 +12,7 @@ class Cos_96_DW_1mL_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -22,7 +23,8 @@ class Cos_96_DW_1mL_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
-      one_dot_max=40.0
+      one_dot_max=40.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -36,6 +38,7 @@ class Cos_384_Sq_Rd(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -46,7 +49,8 @@ class Cos_384_Sq_Rd(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
-      one_dot_max=11.6
+      one_dot_max=11.6,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -60,6 +64,7 @@ class Cos_96_PCR_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -70,7 +75,8 @@ class Cos_96_PCR_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=0.5,
-      one_dot_max=20.5
+      one_dot_max=20.5,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -84,6 +90,7 @@ class Cos_1536_10ul_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -94,7 +101,8 @@ class Cos_1536_10ul_P(Plate):
       dx=8.125,
       dy=10.625,
       dz=0.5,
-      one_dot_max=5.75
+      one_dot_max=5.75,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -108,6 +116,7 @@ class Cos_96_ProtCryst_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -118,7 +127,8 @@ class Cos_96_ProtCryst_L(Plate):
       dx=11.7,
       dy=11.5,
       dz=10.0,
-      one_dot_max=1.6
+      one_dot_max=1.6,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -132,6 +142,7 @@ class Cos_1536_10ul(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -142,7 +153,8 @@ class Cos_1536_10ul(Plate):
       dx=10.625,
       dy=8.125,
       dz=0.5,
-      one_dot_max=5.75
+      one_dot_max=5.75,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -156,6 +168,7 @@ class Cos_384_DW_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -166,7 +179,8 @@ class Cos_384_DW_P(Plate):
       dx=9.25,
       dy=11.75,
       dz=1.0,
-      one_dot_max=24.5
+      one_dot_max=24.5,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -180,6 +194,7 @@ class Cos_96_Rd_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -190,7 +205,8 @@ class Cos_96_Rd_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=0.75,
-      one_dot_max=11.3
+      one_dot_max=11.3,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -204,6 +220,7 @@ class Cos_96_UV(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -214,7 +231,8 @@ class Cos_96_UV(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=11.0
+      one_dot_max=11.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -228,6 +246,7 @@ class Cos_96_Fl_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -238,7 +257,8 @@ class Cos_96_Fl_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=10.67
+      one_dot_max=10.67,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -252,6 +272,7 @@ class Cos_96_EZWash_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -262,7 +283,8 @@ class Cos_96_EZWash_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
-      one_dot_max=11.3
+      one_dot_max=11.3,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -276,6 +298,7 @@ class Cos_96_DW_500ul(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -286,7 +309,8 @@ class Cos_96_DW_500ul(Plate):
       dx=14.0,
       dy=11.5,
       dz=2.0,
-      one_dot_max=25.0
+      one_dot_max=25.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -300,6 +324,7 @@ class Cos_384_DW(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -310,7 +335,8 @@ class Cos_384_DW(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
-      one_dot_max=24.5
+      one_dot_max=24.5,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -324,6 +350,7 @@ class Cos_96_SpecOps(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -334,7 +361,8 @@ class Cos_96_SpecOps(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.1,
-      one_dot_max=11.0
+      one_dot_max=11.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -348,6 +376,7 @@ class Cos_384_Sq_Rd_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -358,7 +387,8 @@ class Cos_384_Sq_Rd_L(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
-      one_dot_max=11.6
+      one_dot_max=11.6,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -372,6 +402,7 @@ class Cos_96_DW_2mL_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -382,7 +413,8 @@ class Cos_96_DW_2mL_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
-      one_dot_max=42.0
+      one_dot_max=42.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -396,6 +428,7 @@ class Cos_96_Vb_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -406,7 +439,8 @@ class Cos_96_Vb_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
-      one_dot_max=10.9
+      one_dot_max=10.9,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -420,6 +454,7 @@ class Cos_96_DW_500ul_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -430,7 +465,8 @@ class Cos_96_DW_500ul_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=2.0,
-      one_dot_max=25.0
+      one_dot_max=25.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -444,6 +480,7 @@ class Cos_384_PCR_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -454,7 +491,8 @@ class Cos_384_PCR_P(Plate):
       dx=9.25,
       dy=11.75,
       dz=1.0,
-      one_dot_max=9.5
+      one_dot_max=9.5,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -468,6 +506,7 @@ class Cos_96_Rd(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -478,7 +517,8 @@ class Cos_96_Rd(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.75,
-      one_dot_max=11.3
+      one_dot_max=11.3,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -492,6 +532,7 @@ class Cos_96_SpecOps_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -502,7 +543,8 @@ class Cos_96_SpecOps_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=0.1,
-      one_dot_max=11.0
+      one_dot_max=11.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -516,6 +558,7 @@ class Cos_96_Filter_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -526,7 +569,8 @@ class Cos_96_Filter_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=2.1,
-      one_dot_max=12.2
+      one_dot_max=12.2,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -540,6 +584,7 @@ class Cos_96_ProtCryst(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -550,7 +595,8 @@ class Cos_96_ProtCryst(Plate):
       dx=11.7,
       dy=11.5,
       dz=10.0,
-      one_dot_max=1.6
+      one_dot_max=1.6,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -564,6 +610,7 @@ class Cos_384_Sq_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -574,7 +621,8 @@ class Cos_384_Sq_L(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
-      one_dot_max=11.56
+      one_dot_max=11.56,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -588,6 +636,7 @@ class Cos_96_UV_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -598,7 +647,8 @@ class Cos_96_UV_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
-      one_dot_max=11.0
+      one_dot_max=11.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -612,6 +662,7 @@ class Cos_96_HalfArea_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -622,7 +673,8 @@ class Cos_96_HalfArea_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
-      one_dot_max=10.7
+      one_dot_max=10.7,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -636,6 +688,7 @@ class Cos_96_DW_2mL_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -646,7 +699,8 @@ class Cos_96_DW_2mL_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=42.0
+      one_dot_max=42.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -660,6 +714,7 @@ class Cos_384_Sq_Rd_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -670,7 +725,8 @@ class Cos_384_Sq_Rd_P(Plate):
       dx=9.25,
       dy=11.75,
       dz=1.0,
-      one_dot_max=11.6
+      one_dot_max=11.6,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -684,6 +740,7 @@ class Cos_96_EZWash(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -694,7 +751,8 @@ class Cos_96_EZWash(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=11.3
+      one_dot_max=11.3,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -708,6 +766,7 @@ class Cos_96_FL(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -718,7 +777,8 @@ class Cos_96_FL(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=10.67
+      one_dot_max=10.67,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -732,6 +792,7 @@ class Cos_384_Sq(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -742,7 +803,8 @@ class Cos_384_Sq(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
-      one_dot_max=11.56
+      one_dot_max=11.56,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -756,6 +818,7 @@ class Cos_96_HalfArea_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -766,7 +829,8 @@ class Cos_96_HalfArea_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=10.7
+      one_dot_max=10.7,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -780,6 +844,7 @@ class Cos_96_UV_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -790,7 +855,8 @@ class Cos_96_UV_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=11.0
+      one_dot_max=11.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -804,6 +870,7 @@ class Cos_384_Sq_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -814,7 +881,8 @@ class Cos_384_Sq_P(Plate):
       dx=9.25,
       dy=11.75,
       dz=1.0,
-      one_dot_max=11.56
+      one_dot_max=11.56,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -828,6 +896,7 @@ class Cos_96_DW_1mL(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -838,7 +907,8 @@ class Cos_96_DW_1mL(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=40.0
+      one_dot_max=40.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -852,6 +922,7 @@ class Cos_96_HalfArea(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -862,7 +933,8 @@ class Cos_96_HalfArea(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=10.7
+      one_dot_max=10.7,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -876,6 +948,7 @@ class Cos_96_Filter_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -886,7 +959,8 @@ class Cos_96_Filter_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=2.1,
-      one_dot_max=12.2
+      one_dot_max=12.2,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -900,6 +974,7 @@ class Cos_96_SpecOps_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -910,7 +985,8 @@ class Cos_96_SpecOps_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.1,
-      one_dot_max=11.0
+      one_dot_max=11.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -924,6 +1000,7 @@ class Cos_384_PCR_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -934,7 +1011,8 @@ class Cos_384_PCR_L(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
-      one_dot_max=9.5
+      one_dot_max=9.5,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -948,6 +1026,7 @@ class Cos_96_DW_500ul_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -958,7 +1037,8 @@ class Cos_96_DW_500ul_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=2.0,
-      one_dot_max=25.0
+      one_dot_max=25.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -972,6 +1052,7 @@ class Cos_96_Vb_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -982,7 +1063,8 @@ class Cos_96_Vb_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=10.9
+      one_dot_max=10.9,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -996,6 +1078,7 @@ class Cos_96_Filter(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1006,7 +1089,8 @@ class Cos_96_Filter(Plate):
       dx=14.0,
       dy=11.5,
       dz=2.1,
-      one_dot_max=12.2
+      one_dot_max=12.2,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1020,6 +1104,7 @@ class Cos_96_ProtCryst_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1030,7 +1115,8 @@ class Cos_96_ProtCryst_P(Plate):
       dx=11.5,
       dy=11.7,
       dz=10.0,
-      one_dot_max=1.6
+      one_dot_max=1.6,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1044,6 +1130,7 @@ class Cos_1536_10ul_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1054,7 +1141,8 @@ class Cos_1536_10ul_L(Plate):
       dx=10.625,
       dy=8.125,
       dz=0.5,
-      one_dot_max=5.75
+      one_dot_max=5.75,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1068,6 +1156,7 @@ class Cos_96_Vb(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1078,7 +1167,8 @@ class Cos_96_Vb(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=10.9
+      one_dot_max=10.9,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1092,6 +1182,7 @@ class Cos_96_PCR(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1102,7 +1193,8 @@ class Cos_96_PCR(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.5,
-      one_dot_max=20.5
+      one_dot_max=20.5,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1116,6 +1208,7 @@ class Cos_96_PCR_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1126,7 +1219,8 @@ class Cos_96_PCR_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.5,
-      one_dot_max=20.5
+      one_dot_max=20.5,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1140,6 +1234,7 @@ class Cos_96_DW_1mL_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1150,7 +1245,8 @@ class Cos_96_DW_1mL_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=40.0
+      one_dot_max=40.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1164,6 +1260,7 @@ class Cos_96_EZWash_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1174,7 +1271,8 @@ class Cos_96_EZWash_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=11.3
+      one_dot_max=11.3,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1188,6 +1286,7 @@ class Cos_96_Fl_P(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1198,7 +1297,8 @@ class Cos_96_Fl_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
-      one_dot_max=10.67
+      one_dot_max=10.67,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1212,6 +1312,7 @@ class Cos_96_DW_2mL(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1222,7 +1323,8 @@ class Cos_96_DW_2mL(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
-      one_dot_max=42.0
+      one_dot_max=42.0,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1236,6 +1338,7 @@ class Cos_96_Rd_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1246,7 +1349,8 @@ class Cos_96_Rd_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.75,
-      one_dot_max=11.3
+      one_dot_max=11.3,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1260,6 +1364,7 @@ class Cos_384_PCR(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1270,7 +1375,8 @@ class Cos_384_PCR(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
-      one_dot_max=9.5
+      one_dot_max=9.5,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):
@@ -1284,6 +1390,7 @@ class Cos_384_DW_L(Plate):
     self,
     name: str,
     location: Coordinate = Coordinate(None, None, None),
+    with_lid: bool = False
   ):
     super().__init__(
       name=name,
@@ -1294,7 +1401,8 @@ class Cos_384_DW_L(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
-      one_dot_max=24.5
+      one_dot_max=24.5,
+      lid_height=10 if with_lid else None
     )
 
   def compute_volume_from_height(self, h):

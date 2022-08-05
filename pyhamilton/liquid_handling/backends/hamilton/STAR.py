@@ -16,6 +16,8 @@ from typing import Union
 from pyhamilton.liquid_handling.resources import (
   Coordinate,
   Carrier,
+  Hotel,
+  Lid,
   Resource,
   Plate,
   Tips,
@@ -951,12 +953,10 @@ class STAR(HamiltonLiquidHandler):
 
   def move_plate(
     self,
-    plate: Union[Coordinate, Resource],
+    plate: Union[Coordinate, Plate],
     target: Union[Coordinate, Resource],
     **backend_kwargs
   ):
-    # Get the plate from the `source` and `target` resources.
-    # plate = plate if isinstance(plate, Plate) else target
     assert isinstance(plate, Plate)
 
     # Get center of source plate.
@@ -973,13 +973,10 @@ class STAR(HamiltonLiquidHandler):
     y = int(y * 10)
 
     # Get the grip height for the plate.
+    # TODO: when lid present: pickup_distance_from_top=11
     pickup_distance_from_top = backend_kwargs.pop("pickup_distance_from_top", 5) # mm
-    if isinstance(plate, Plate):
-      grip_height = plate.get_absolute_location().z + plate.one_dot_max - \
-                    plate.dz - pickup_distance_from_top
-    else:
-      grip_height = plate.get_absolute_location().z + plate.size_z + plate.one_dot_max - pickup_distance_from_top
-
+    grip_height = plate.get_absolute_location().z + plate.one_dot_max - \
+                  plate.dz - pickup_distance_from_top
     grip_height = int(grip_height * 10)
 
     get_cmd_kwargs = dict(
@@ -1012,8 +1009,8 @@ class STAR(HamiltonLiquidHandler):
     else:
       to_location = target.get_absolute_location()
       to_location = Coordinate(
-        x=to_location.x + plate.size_x/2 ,
-        y=to_location.y + plate.size_y/2 ,
+        x=to_location.x + plate.size_x/2,
+        y=to_location.y + plate.size_y/2,
         z=to_location.z - pickup_distance_from_top
       )
       if isinstance(plate, Plate):
@@ -1036,6 +1033,89 @@ class STAR(HamiltonLiquidHandler):
       z_direction=0,
       **put_cmd_kwargs
     )
+
+  def move_lid(
+    self,
+    lid: Lid,
+    target: typing.Union[Plate, Hotel],
+    get_grip_direction: int = 1,
+    get_open_gripper_position: int = 1300,
+    pickup_distance_from_top: float = 1.2,
+    put_grip_direction: int = 1,
+    put_open_gripper_position: int = 1300,
+    **backend_kwargs
+  ):
+    assert isinstance(lid, Lid)
+
+    # Get center of source lid.
+    x = lid.get_absolute_location().x + lid.size_x/2
+    y = lid.get_absolute_location().y + lid.size_y/2 - 63 # TODO(63)
+
+    # Get the grip height for the plate.
+    grip_height = lid.get_absolute_location().z - pickup_distance_from_top
+
+    if isinstance(lid.parent, Plate): # TODO: figure out a better way to do this
+      x -= lid.parent.dx
+      y -= lid.parent.dy
+      grip_height -= lid.parent.dz
+
+    x = int(x * 10)
+    y = int(y * 10)
+    grip_height = int(grip_height * 10)
+
+    get_cmd_kwargs = dict(
+      grip_direction=get_grip_direction,
+      minimum_traverse_height_at_beginning_of_a_command = 2840,
+      z_position_at_the_command_end = 2840,
+      grip_strength = 4,
+      open_gripper_position = get_open_gripper_position,
+      plate_width = 1237, # 127?
+      plate_width_tolerance = 20,
+      collision_control_level = 0,
+      acceleration_index_high_acc = 4,
+      acceleration_index_low_acc = 1,
+      fold_up_sequence_at_the_end_of_process = True
+    )
+
+    self.get_plate(
+      x_position=x,
+      x_direction=0,
+      y_position=y,
+      y_direction=0,
+      z_position=grip_height,
+      z_direction=0,
+      **get_cmd_kwargs
+    )
+
+    # Move to the destination.
+    if isinstance(target, Coordinate):
+      to_location = target
+    else:
+      to_location = target.get_absolute_location()
+      to_location = Coordinate(
+        x=to_location.x + lid.size_x/2,
+        y=to_location.y + lid.size_y/2,
+        z=to_location.z - pickup_distance_from_top
+      )
+
+    put_cmd_kwargs = dict(
+      grip_direction=put_grip_direction,
+      minimum_traverse_height_at_beginning_of_a_command=2840,
+      z_position_at_the_command_end=2840,
+      open_gripper_position=put_open_gripper_position, # 127?
+      collision_control_level=0,
+    )
+
+    self.put_plate(
+      x_position=int(to_location.x * 10),
+      x_direction=0,
+      y_position=int(to_location.y * 10),
+      y_direction=0,
+      z_position=int(to_location.z * 10),
+      z_direction=0,
+      **put_cmd_kwargs
+    )
+
 
   # ============== Firmware Commands ==============
 
@@ -3839,7 +3919,7 @@ class STAR(HamiltonLiquidHandler):
 
   def open_gripper(
     self,
-    open_position: int = 860
+    open_position: int = 1400
   ):
     """ Open gripper
 
@@ -3853,7 +3933,7 @@ class STAR(HamiltonLiquidHandler):
     resp = self.send_command(
       module="C0",
       command="GC",
-      go=open_position
+      go=f"{open_position:04}"
     )
     return self.parse_response(resp, "")
 
@@ -3887,7 +3967,7 @@ class STAR(HamiltonLiquidHandler):
 
   def park_iswap(
     self,
-    minimum_traverse_height_at_beginning_of_a_command: int = 3600
+    minimum_traverse_height_at_beginning_of_a_command: int = 2840
   ):
     """ Close gripper
 
@@ -3903,7 +3983,7 @@ class STAR(HamiltonLiquidHandler):
 
     resp = self.send_command(
       module="C0",
-      command="GC",
+      command="PG",
       th=minimum_traverse_height_at_beginning_of_a_command
     )
     return self.parse_response(resp, "")

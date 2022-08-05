@@ -18,6 +18,8 @@ Abstract
 
     pyhamilton.liquid_handling.resources.abstract
     pyhamilton.liquid_handling.resources.abstract.Coordinate
+    pyhamilton.liquid_handling.resources.abstract.Deck
+    pyhamilton.liquid_handling.resources.abstract.Lid
     pyhamilton.liquid_handling.resources.abstract.Resource
     pyhamilton.liquid_handling.resources.abstract.Tips
     pyhamilton.liquid_handling.resources.abstract.TipType
@@ -26,6 +28,19 @@ Abstract
     pyhamilton.liquid_handling.resources.abstract.TipCarrier
     pyhamilton.liquid_handling.resources.abstract.PlateCarrier
 
+
+Shared
+------
+
+Resources that are not abstract, but also not tied to a specific liquid handling equipment.
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pyhamilton.liquid_handling.resources.Hotel
+    pyhamilton.liquid_handling.resources.PlateReader
 
 ML Star resources
 -----------------

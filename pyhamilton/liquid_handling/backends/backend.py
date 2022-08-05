@@ -6,6 +6,7 @@ from pyhamilton.liquid_handling.resources import (
   Coordinate,
   Plate,
   Resource,
+  Lid
 )
 
 
@@ -171,5 +172,10 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
 
   @abstractmethod
   def move_plate(self, plate: Plate, to: typing.Union[Resource, Coordinate], **backend_kwargs):
-    """ Move the specified resource within the robot. """
+    """ Move the specified plate within the robot. """
+    pass
+
+  @abstractmethod
+  def move_lid(self, lid: Lid, to: typing.Union[Resource, Coordinate], **backend_kwargs):
+    """ Move the specified lid within the robot. """
     pass

@@ -8,7 +8,8 @@ from pyhamilton.liquid_handling.resources import (
   PLT_CAR_L5AC_A00,
   Cos_96_EZWash,
   Coordinate,
-  PlateReader
+  PlateReader,
+  Hotel
 )
 from pyhamilton.liquid_handling.resources.ml_star import STF_L, HTF_L
 
@@ -135,7 +136,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.assign_resource(tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = Cos_96_EZWash(name="plate_01")
+    self.plt_car[0] = Cos_96_EZWash(name="plate_01", with_lid=True)
+    self.plt_car[1] = Cos_96_EZWash(name="plate_02", with_lid=True)
     self.lh.assign_resource(self.plt_car, rails=9)
 
     self.maxDiff = None
@@ -377,12 +379,12 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "cw************************pp####")
 
   def test_iswap(self):
-    self.lh.move_plate(self.plt_car[0], self.plt_car[1])
+    self.lh.move_plate(self.plt_car[0], self.plt_car[2])
     self._assert_command_sent_once(
       "C0PPid0011xs03475xd0yj1145yd0zj1924zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0012xs03475xd0yj2105yd0zj1924zd0th2840te2840gr1go1300ga0",
+      "C0PRid0012xs03475xd0yj3065yd0zj1924zd0th2840te2840gr1go1300ga0",
       "xs#####xd#yj####yd#zj####zd#th####te####go####ga#")
 
   def test_iswap_plate_reader(self):
@@ -407,6 +409,27 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
       "C0PRid0006xs03475xd0yj1145yd0zj1864zd0th2840te2840gr1go1320ga0",
+                "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
+
+  def test_iswap_hotel(self):
+    hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=1)
+    # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100)) # for some reason it was like this at some point
+    self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100))
+
+    self.lh.move_lid(self.plt_car[0].resource.lid, hotel)
+    self._assert_command_sent_once(
+      "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+                "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
+    self._assert_command_sent_once(
+      "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0",
+                "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
+
+    self.lh.move_lid(self.plt_car[1].resource.lid, hotel)
+    self._assert_command_sent_once(
+      "C0PPid0004xs03475xd0yj2105yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+                "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
+    self._assert_command_sent_once(
+      "C0PRid0005xs00695xd0yj4570yd0zj2405zd0th2840te2840gr1go1300ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
 

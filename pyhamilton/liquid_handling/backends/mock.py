@@ -19,6 +19,7 @@ class Mock(LiquidHandlerBackend):
   def dispense96(self, *args, **kwargs): pass
 
   def move_plate(self, *args, **kwargs): pass
+  def move_lid(self, *args, **kwargs): pass
 
   # def assigned_resource_callback(self, *args, **kwargs): pass
   # def unassigned_resource_callback(self, *args, **kwargs): pass

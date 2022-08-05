@@ -7,6 +7,8 @@ import time
 import typing
 from typing import Union, Optional
 
+from charset_normalizer import CharsetNormalizerMatches
+
 import pyhamilton.utils.file_parsing as file_parser
 from pyhamilton.liquid_handling.resources.abstract import Deck
 from pyhamilton import utils
@@ -21,6 +23,8 @@ from .resources import (
   Resource,
   Coordinate,
   Carrier,
+  Hotel,
+  Lid,
   Plate,
   Tips
 )
@@ -472,7 +476,8 @@ class LiquidHandler:
          og_x <= resource.location.x + resource.size_x < og_x + og_resource.size_x:
         resource.location = None # Revert location.
         if rails is not None:
-          raise ValueError(f"Rails {rails} is already occupied by resource '{og_resource.name}'.")
+          if not (replace and resource.name == og_resource.name):
+            raise ValueError(f"Resource with width {resource.size_x} does not fit at rails {rails}.")
         else:
           raise ValueError(f"Location {location} is already occupied by resource '{og_resource.name}'.")
 
@@ -1246,7 +1251,6 @@ class LiquidHandler:
         raise ValueError(f"There already exists a resource at {target}.")
 
     # Try to move the physical plate first.
-    # Copy because backends like STAR will modify the plate location.
     self.backend.move_plate(plate, target, **backend_kwargs)
 
     # Move the resource in the layout manager.
@@ -1256,5 +1260,42 @@ class LiquidHandler:
     elif isinstance(target, Coordinate):
       plate.location = target
       self.deck.assign_child_resource(plate) # Assign "free" objects directly to the deck.
+    else:
+      raise TypeError(f"Invalid location type: {type(target)}")
+
+  def move_lid(
+    self,
+    lid: Lid,
+    target: typing.Union[Plate, Hotel, Carrier.CarrierSite],
+    **backend_kwargs
+  ):
+    """ Move a lid to a new location.
+
+    Examples:
+      Move a lid to the :class:`~resources.Hotel`:
+
+      >>> lh.move_lid(plate.lid, hotel)
+
+    Args:
+      lid: The lid to move. Can be either a Plate object or a Lid object.
+      to: The location to move the lid to, either a Resource object or a Coordinate.
+
+    Raises:
+      ValueError: If the lid is not assigned to a resource.
+    """
+
+    if isinstance(target, Carrier.CarrierSite):
+      if target.resource is None:
+        raise ValueError(f"No plate exists at {target}.")
+
+    self.backend.move_lid(lid, target, **backend_kwargs)
+
+    # Move the resource in the layout manager.
+    lid.unassign()
+    if isinstance(target, Resource):
+      target.assign_child_resource(lid)
+    elif isinstance(target, Coordinate):
+      lid.location = target
+      self.deck.assign_child_resource(lid) # Assign "free" objects directly to the deck.
     else:
       raise TypeError(f"Invalid location type: {type(target)}")

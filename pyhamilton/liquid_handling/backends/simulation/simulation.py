@@ -19,7 +19,7 @@ except ImportError:
   HAS_WEBSOCKETS = False
 
 from pyhamilton.liquid_handling.backends import LiquidHandlerBackend
-from pyhamilton.liquid_handling.resources.abstract import Resource, Plate, Coordinate
+from pyhamilton.liquid_handling.resources.abstract import Resource, Plate, Coordinate, Lid
 
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
@@ -466,4 +466,7 @@ class SimulationBackend(LiquidHandlerBackend):
     self.remove_tips(resource, [[True] * 12] * 8)
 
   def move_plate(self, plate: Plate, to: Coordinate, **backend_kwargs):
+    raise NotImplementedError("This method is not implemented in the simulator.")
+
+  def move_lid(self, lid: Lid, to: typing.Union[Resource, Coordinate], **backend_kwargs):
     raise NotImplementedError("This method is not implemented in the simulator.")
