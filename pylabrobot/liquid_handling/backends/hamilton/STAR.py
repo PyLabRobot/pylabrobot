@@ -734,6 +734,25 @@ class STAR(HamiltonLiquidHandler):
         aspiration_volumes=blow_out_air_volume
       )
 
+    # Filter out channels that are not involved in the aspiration, using channels_involved as a mask
+    x_positions = [x for i, x in enumerate(x_positions) if channels_involved[i]]
+    y_positions = [y for i, y in enumerate(y_positions) if channels_involved[i]]
+
+    # Also filter each cmd_kwarg that is a list
+    for key, value in cmd_kwargs.items():
+      if isinstance(value, list):
+        cmd_kwargs[key] = [v for i, v in enumerate(value) if channels_involved[i]]
+
+    # Finally, filter the channels involved list
+    channels_involved = [c for i, c in enumerate(channels_involved) if channels_involved[i]]
+
+    # We do want to have a trailing zero on x_positions, y_positions, and channels_involved, for
+    # some reason, if the length < 8.
+    if len(x_positions) < 8:
+      x_positions = x_positions + [0]
+      y_positions = y_positions + [0]
+      channels_involved = channels_involved + [0]
+
     return self.aspirate_pip(
       tip_pattern=channels_involved,
       x_positions=x_positions,
