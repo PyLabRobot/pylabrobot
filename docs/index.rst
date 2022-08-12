@@ -1,12 +1,12 @@
-Welcome to PyHamilton's documentation!
+Welcome to PyLabRobot's documentation!
 ======================================
 
-PyHamilton is an OS agnostic, pure Python interface to Hamilton liquid handling robots.
+PyLabRobot is an OS agnostic, pure Python interface to Hamilton liquid handling robots.
 
 .. warning::
   This documentation covers
-  `the experimental usb branch <https://github.com/pyhamilton/pyhamilton/tree/usb>`_ and should not
-  be used in production. See `this GitHub repo <https://github.com/dgretton/pyhamilton>`_ for the
+  `the experimental usb branch <https://github.com/pylabrobot/pylabrobot/tree/usb>`_ and should not
+  be used in production. See `this GitHub repo <https://github.com/dgretton/pylabrobot>`_ for the
   current stable version.
 
 .. toctree::
@@ -29,7 +29,7 @@ PyHamilton is an OS agnostic, pure Python interface to Hamilton liquid handling 
    :maxdepth: 4
    :caption: API documentation
 
-   pyhamilton
+   pylabrobot
 
 
 Indices and tables

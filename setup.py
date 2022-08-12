@@ -12,27 +12,27 @@ extras_simulation = [
     'websockets'
 ]
 
+extras_venus = [
+    'pyhamilton'
+]
+
 extras_testing = [
     'pytest',
     'pytest-timeout',
     'requests'
 ] + extras_simulation
 
-extras_all =  extras_docs + extras_simulation + extras_testing
+extras_all =  extras_docs + extras_simulation + extras_testing + extras_venus
 
 setup(
-    name='pyhamilton',
-    version='1.235',
+    name='PyLabRobot',
+    version='0.1',
     packages=find_packages(exclude="tools"),
-    license='MIT',
-    description='Python for Hamilton liquid handling robots',
+    description='A robot agnostic platform for liquid handling',
     long_description=long_description,
     long_description_content_type='text/markdown',
     install_requires=['pyusb', 'websockets'],
-    package_data={'pyhamilton': ['star-oem/*', 'star-oem/VENUS_Method/*']},
-    url='https://github.com/dgretton/pyhamilton.git',
-    author='Dana Gretton',
-    author_email='dgretton@mit.edu',
+    url='https://github.com/pylabrobot/pylabrobot.git',
     extras_require={
         'testing': extras_testing,
         'docs': extras_docs,

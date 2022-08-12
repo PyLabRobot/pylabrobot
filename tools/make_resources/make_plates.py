@@ -7,7 +7,7 @@ from maker import make
 
 sys.path.insert(0, '..')
 
-from pyhamilton.utils.file_parsing import find_int, find_float, find_string
+from pylabrobot.utils.file_parsing import find_int, find_float, find_string
 
 
 BASE_DIR = "./LabWare/Corning-Costar"

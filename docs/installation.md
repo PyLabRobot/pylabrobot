@@ -1,12 +1,12 @@
 # Installation
 
-While PyHamilton is written in pure Python, you will probably need to replace the Hamilton driver
+While PyLabRobot is written in pure Python, you will probably need to replace the Hamilton driver
 with a USB driver that is compatible with [PyUSB](https://github.com/pyusb/pyusb). These
-instructions describe how to install PyHamilton using pip, and how to install a PyUSB driver.
+instructions describe how to install PyLabRobot using pip, and how to install a PyUSB driver.
 
-## Installing PyHamilton
+## Installing PyLabRobot
 
-It is recommended that you use a virtual environment to install PyHamilton. See the
+It is recommended that you use a virtual environment to install PyLabRobot. See the
 [virtualenvironment](https://virtualenv.pypa.io/en/latest/) documentation for more information.
 
 ```bash
@@ -18,31 +18,31 @@ source env/bin/activate
 
 ### Using pip
 
-The following will install PyHamilton and the essential dependencies:
+The following will install PyLabRobot and the essential dependencies:
 
 ```bash
-pip install pyhamilton
+pip install pylabrobot
 ```
 
 If you want to build documentation or run tests, you need install the additional dependencies, also
 using pip:
 
 ```bash
-pip install pyhamilton[docs]
-pip install pyhamilton[tests]
+pip install pylabrobot[docs]
+pip install pylabrobot[tests]
 ```
 
 Or install all dependencies at once:
 
 ```bash
-pip install pyhamilton[all]
+pip install pylabrobot[all]
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/pyhamilton/pyhamilton.git
-cd pyhamilton
+git clone https://github.com/pylabrobot/pylabrobot.git
+cd pylabrobot
 pip install -e .[all]
 ```
 

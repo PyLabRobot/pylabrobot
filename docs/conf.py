@@ -17,9 +17,9 @@ sys.path.insert(0, os.path.abspath('..'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'PyHamilton'
-copyright = '2022, PyHamilton'
-author = 'The PyHamilton authors'
+project = 'PyLabRobot'
+copyright = '2022, PyLabRobot'
+author = 'The PyLabRobot authors'
 
 
 # -- General configuration ---------------------------------------------------
@@ -71,7 +71,7 @@ html_theme = 'sphinx_book_theme'
 html_static_path = ['_static']
 
 html_theme_options = {
-  'repository_url': 'https://github.com/pyhamilton/pyhamilton',
+  'repository_url': 'https://github.com/pylabrobot/pylabrobot',
   'use_repository_button': False,
   'use_edit_page_button': True,
   'repository_branch': 'usb',

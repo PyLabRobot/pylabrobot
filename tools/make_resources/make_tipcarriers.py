@@ -7,8 +7,8 @@ from maker import make
 
 sys.path.insert(0, '..')
 
-from pyhamilton.liquid_handling.resources.abstract import Coordinate
-from pyhamilton.utils.file_parsing import find_int, find_float, find_string
+from pylabrobot.liquid_handling.resources.abstract import Coordinate
+from pylabrobot.utils.file_parsing import find_int, find_float, find_string
 
 
 BASE_DIR = "./LabWare/ML_STAR"
