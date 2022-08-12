@@ -226,7 +226,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "0000 0000tm0 0 0 0 1 1 0 0&tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
-  def test_tip_pickup_16(self):
+  def test_tip_pickup_15(self):
     self.lh.pickup_tips("tips_01", channel_1="A1", channel_5="F1")
     self._assert_command_sent_once(
       "C0TPid0000xp01179 00000 00000 00000 01179 00000 00000 00000yp2418 0000 0000 0000 1968 0000 "
@@ -238,7 +238,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.discard_tips("tips_01", channel_5="E1", channel_6="F1")
     self._assert_command_sent_once(
       "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000 00000yp0000 0000 0000 0000 2058 1968 "
-      "0000 0000tm0 0 0 0 1 1 0 0tt01tp2244tz2164th2450ti0",
+      "0000 0000tm0 0 0 0 1 1 0 0tt01tp1314tz1414th2450ti0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####ti#")
 
   def test_single_channel_aspiration(self):
@@ -260,8 +260,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2321&ch000&zl1881&"
-      "zx1871&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
+      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp1931&ch000&zl1881&"
+      "zx1831&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
       "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
       "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
       fmt="at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
@@ -290,8 +290,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp2321 2321&"
-      "ch000 000&zl1881 1881&zx1871 1871&ip0000 0000&it0 0&fp0000 0000&"
+      "C0ASid0000at0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp1931 1931&"
+      "ch000 000&zl1881 1881&zx1831 1831&ip0000 0000&it0 0&fp0000 0000&"
       "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&ld00 00&"
       "de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&gi000 000&gj0gk0"
       "zu0032 0032&zr06180 06180&mh0000 0000&zo000 000&po0100 0100&lk0 0&ik0000 0000&"
@@ -360,7 +360,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.aspirate96("plate_01", 100)
 
     self._assert_command_sent_once(
-      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1879zm1869iw000ix0fh000af01083ag2500vt050"
+      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01083ag2500vt050"
       "bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000hs1200zv0032zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "xs#####xd#yh####zh####ze####lz####zt####zm####iw###ix#fh###af#####ag####vt###"
@@ -371,7 +371,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.dispense96("plate_01", 100)
 
     self._assert_command_sent_once(
-      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1879zm1869iw000ix0fh000df01083dg1200vt050"
+      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01083dg1200vt050"
       "bv00000cm0cs1bs0020wh00hv00000hc00hp000hs1200es0050ev000zv0032ej00zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "da#xs#####xd#yh##6#zh####ze####lz####zt####zm##6#iw###ix#fh###df#####dg####vt###"
@@ -381,10 +381,10 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_iswap(self):
     self.lh.move_plate(self.plt_car[0], self.plt_car[2])
     self._assert_command_sent_once(
-      "C0PPid0011xs03475xd0yj1145yd0zj1924zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+      "C0PPid0011xs03475xd0yj1145yd0zj1874zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0012xs03475xd0yj3065yd0zj1924zd0th2840te2840gr1go1300ga0",
+      "C0PRid0012xs03475xd0yj3065yd0zj1874zd0th2840te2840gr1go1300ga0",
       "xs#####xd#yj####yd#zj####zd#th####te####go####ga#")
 
   def test_iswap_plate_reader(self):

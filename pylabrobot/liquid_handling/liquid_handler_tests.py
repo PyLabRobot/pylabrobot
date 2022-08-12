@@ -197,7 +197,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertEqual(out.getvalue(), expected_out)
 
   def test_parse_lay_file(self):
-    fn = "./pyhamilton/testing/test_data/test_deck.lay"
+    fn = "./pylabrobot/testing/test_data/test_deck.lay"
     self.lh.load_from_lay_file(fn)
 
     self.assertEqual(self.lh.get_resource("TIP_CAR_480_A00_0001").get_absolute_location(), \
