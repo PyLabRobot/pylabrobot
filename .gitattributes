@@ -1,0 +1,19 @@
+* text eol=lf
+*.lay binary
+*.dll* binary
+*.pdb binary
+*.hsl binary
+*.hsi binary
+*.hs_ binary
+*.sub binary
+*.smt binary
+*.stp binary
+*.chm binary
+*.chw binary
+*.ico binary
+*.med binary
+*.res binary
+*.png binary
+*.bmp binary
+*.exe filter=lfs diff=lfs merge=lfs -text
+*.zip filter=lfs diff=lfs merge=lfs -text

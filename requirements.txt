@@ -1,0 +1,4 @@
+requests
+pythonnet --pre
+pywin32==300
+pyserial

@@ -1,0 +1,7 @@
+*.pyc
+*__pycache__
+*.DS_store
+*.swp
+build/pdf-intermediate.md
+pyhamilton/LAY-BACKUP
+.ipynb_checkpoints
