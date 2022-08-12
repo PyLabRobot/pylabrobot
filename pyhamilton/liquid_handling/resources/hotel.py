@@ -50,7 +50,19 @@ class Hotel(Resource):
       return self.children[-1]
     return None
 
-  def get_absolute_location(self):
-    height = sum([child.size_z for child in self.children]) - \
-             sum([child.stack_height for child in self.children if hasattr(child, "stack_height")])
-    return super().get_absolute_location() + Coordinate(0, 0, height)
+  def get_height(self) -> float:
+    return sum([child.get_size_z() for child in self.children]) - \
+           sum([child.stack_height for child in self.children if hasattr(child, "stack_height")])
+
+  def get_size_z(self) -> float:
+    return super().get_size_z() + self.get_height()
+
+  def assign_child_resource(self, resource: Resource, **kwargs):
+    resource.location = Coordinate(0, 0, self.get_height())
+    return super().assign_child_resource(resource, **kwargs)
+
+  def unassign_child_resource(self, resource: Resource):
+    if resource != self.children[-1]:
+      raise ValueError("Resource is not the top item in the hotel, cannot unassign")
+    resource.location = Coordinate(0, 0, 0) # reset location to 0, 0, 0
+    return super().unassign_child_resource(resource)

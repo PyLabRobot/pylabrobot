@@ -141,9 +141,6 @@ class SimulatorBackendCommandTests(unittest.TestCase):
 
   def test_resources_assigned_setup(self):
     self.assert_event_sent_n("resource_assigned", times=4)
-    # self.assert_event_sent("resource_assigned")
-    # self.assert_event_sent("resource_assigned")
-    # self.assert_event_not_sent("resource_assigned")
 
   def test_resources_assigned(self):
     self.backend.clear()
@@ -192,11 +189,11 @@ class SimulatorBackendCommandTests(unittest.TestCase):
     self.assert_event_sent_once("discard_tips96")
 
   def test_aspirate96(self):
-    self.lh.aspirate96("plt_car", [[True]*12]*8, 100)
+    self.lh.aspirate96("plt_car", 100, [[True]*12]*8)
     self.assert_event_sent_once("aspirate96")
 
   def test_dispense96(self):
-    self.lh.dispense96("plt_car", [[True]*12]*8, 100)
+    self.lh.dispense96("plt_car", 100, [[True]*12]*8)
     self.assert_event_sent_once("dispense96")
 
   def test_adjust_volume(self):

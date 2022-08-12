@@ -357,7 +357,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
                 "xs#####xd#yh####za####zh####ze####")
 
   def test_core_96_aspirate(self):
-    self.lh.aspirate96("plate_01", [[True]*12]*8, 100)
+    self.lh.aspirate96("plate_01", 100)
 
     self._assert_command_sent_once(
       "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1879zm1869iw000ix0fh000af01083ag2500vt050"
@@ -368,7 +368,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "cw************************pp####")
 
   def test_core_96_dispense(self):
-    self.lh.dispense96("plate_01", [[True]*12]*8, 100)
+    self.lh.dispense96("plate_01", 100)
 
     self._assert_command_sent_once(
       "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1879zm1869iw000ix0fh000df01083dg1200vt050"
@@ -412,25 +412,41 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
   def test_iswap_hotel(self):
-    hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=1)
+    hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=0)
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100)) # for some reason it was like this at some point
     self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100))
+
+    get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
+    put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
 
     self.lh.move_lid(self.plt_car[0].resource.lid, hotel)
     self._assert_command_sent_once(
       "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-                "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
+        get_plate_fmt)
     self._assert_command_sent_once(
-      "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0",
-                "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
+      "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
     self.lh.move_lid(self.plt_car[1].resource.lid, hotel)
     self._assert_command_sent_once(
       "C0PPid0004xs03475xd0yj2105yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-                "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
+        get_plate_fmt)
     self._assert_command_sent_once(
-      "C0PRid0005xs00695xd0yj4570yd0zj2405zd0th2840te2840gr1go1300ga0",
-                "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
+      "C0PRid0005xs00695xd0yj4570yd0zj2405zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+
+    # Move lids back (reverse order)
+    self.lh.move_lid(hotel.get_top_item(), self.plt_car[0].resource)
+    self._assert_command_sent_once(
+      "C0PPid0004xs00695xd0yj4570yd0zj2405zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+      get_plate_fmt)
+    self._assert_command_sent_once(
+      "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+
+    self.lh.move_lid(hotel.get_top_item(), self.plt_car[1].resource)
+    self._assert_command_sent_once(
+      "C0PPid0004xs00695xd0yj4570yd0zj2305zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+      get_plate_fmt)
+    self._assert_command_sent_once(
+      "C0PRid0005xs03475xd0yj2105yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
 
 if __name__ == "__main__":

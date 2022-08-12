@@ -318,5 +318,64 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     pass
 
 
+class TestLiquidHandlerLayoutCommands(unittest.TestCase):
+  def test_intelligently_convert_channel_params_to_channels(self):
+    # pylint: disable=protected-access
+    lh = LiquidHandler(backend=backends.Mock())
+
+    # Basic
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", "B1"), ["A1", "B1"])
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", None, "B1"),
+      ["A1", None, "B1"])
+
+    # Trailing none
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", None, "B1", None),
+      ["A1", None, "B1"])
+
+    # Extrapolation
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", "B1", ...),
+      ["A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1"]) # over column
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", "A2", ...),
+      ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]) # over row
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A3", "A4", ...),
+      ["A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10"]) # over row
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", "B2", ...),
+      ["A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8"]) # over diagonal
+
+    # Interpolation
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "B1"),
+      ["A1", "B1"]) # no interpolation
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "D1"),
+      ["A1", "B1", "C1", "D1"]) # no interpolation
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "H1"),
+      ["A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1"]) # over column
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "A8"),
+      ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]) # over row
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A3", ..., "A10"),
+      ["A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10"]) # over row
+    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "H8"),
+      ["A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8"]) # over diagonal
+
+    # Invalid values
+    with self.assertRaises(ValueError):
+      lh._intelligently_convert_channel_params_to_channels("A1", "A1") # duplicate
+    with self.assertRaises(ValueError):
+      lh._intelligently_convert_channel_params_to_channels("A1", ...) # no extrapolation argument
+    with self.assertRaises(ValueError):
+      lh._intelligently_convert_channel_params_to_channels("A1", ..., "A1") # duplicate
+    with self.assertRaises(ValueError):
+      lh._intelligently_convert_channel_params_to_channels("A1", ..., ...) # too many ...
+    with self.assertRaises(ValueError):
+      lh._intelligently_convert_channel_params_to_channels("A1", ..., "C3", "D4") # argument after
+    with self.assertRaises(ValueError):
+      lh._intelligently_convert_channel_params_to_channels("A1", ..., "B4") # invalid interpolation
+    with self.assertRaises(ValueError):
+      lh._intelligently_convert_channel_params_to_channels("A1", ..., "I12") # invalid row
+    with self.assertRaises(ValueError):
+      lh._intelligently_convert_channel_params_to_channels("A1", ..., "A12") # too many columns
+    with self.assertRaises(ValueError):
+      lh._intelligently_convert_channel_params_to_channels(None, "A1", ..., "A3") # start with none
+
+
 if __name__ == "__main__":
   unittest.main()

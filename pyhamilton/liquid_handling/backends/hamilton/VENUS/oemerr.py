@@ -4,6 +4,8 @@ from pyhamilton.liquid_handling.backends.hamilton.errors import VENUSError
 # for legacy, import all errors here
 from pyhamilton.liquid_handling.backends.hamilton.errors import *
 
+PositionError = PositionNotReachableError
+
 ###########################################
 ### BEGIN HAMILTON DECK RESOURCE ERRORS ###
 ###########################################

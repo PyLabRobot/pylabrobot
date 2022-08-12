@@ -98,6 +98,6 @@ class Plate(Resource):
     )
 
   def __repr__(self) -> str:
-    return (f"{self.__class__.__name__}(size_x={self.size_x}, size_y={self.size_y}, "
-            f"size_z={self.size_z}, dx={self.dx}, dy={self.dy}, dz={self.dz}, "
+    return (f"{self.__class__.__name__}(size_x={self._size_x}, size_y={self._size_y}, "
+            f"size_z={self._size_z}, dx={self.dx}, dy={self.dy}, dz={self.dz}, "
             f"location={self.location}, one_dot_max={self.one_dot_max})")

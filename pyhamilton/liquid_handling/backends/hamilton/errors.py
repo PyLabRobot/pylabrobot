@@ -683,7 +683,7 @@ class HamiltonFirmwareError(HamiltonError):
     ...   lh.pickup_tips([True, True, True])
     ... except HamiltonError as e:
     ...   print(e)
-    HamiltonError({
+    HamiltonFirmwareError({
       'Pipetting Channel 1': NoTipError('Tip already picked up'),
       'Pipetting Channel 3': NoTipError('Tip already picked up'),
     })
@@ -825,8 +825,22 @@ class HamiltonFirmwareError(HamiltonError):
         95: "Invalid limit curve index",
         96: "Limit curve already stored"
       }
-    elif module_identifier in ["R0"]: # iswap
+    elif module_identifier == "H0": # Core 96 head
       table = {
+        32: "Parameter out of range",
+        52: "Dispensing drive movement error",
+        53: "Maximum volume in tip reached",
+        54: "Position out of permitted area",
+        57: "Y drive movement error",
+        62: "Z drive movement error",
+        70: "No liquid level found",
+        71: "Not enough liquid present",
+        75: "No tip picked up",
+        76: "Tip already picked up"
+      }
+    elif module_identifier == "R0": # iswap
+      table = {
+        32: "Parameter out of range",
         51: "Y-drive not initialized",
         62: "Movement error",
         94: "Plate not found",

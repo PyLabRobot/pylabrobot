@@ -184,6 +184,7 @@ class VENUS(LiquidHandlerBackend):
     channel_6: typing.Optional[AspirationInfo] = None,
     channel_7: typing.Optional[AspirationInfo] = None,
     channel_8: typing.Optional[AspirationInfo] = None,
+    liquid_height: typing.Optional[float] = None,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified resource using pip. """
@@ -204,7 +205,7 @@ class VENUS(LiquidHandlerBackend):
         pos_tuples.append(None)
         volumes.append(None)
 
-    venus_utils.aspirate(self.ham_int, pos_tuples, volumes, **backend_kwargs)
+    venus_utils.aspirate(self.ham_int, pos_tuples, volumes, liquidHeight=liquid_height, **backend_kwargs)
 
   def dispense(
     self,

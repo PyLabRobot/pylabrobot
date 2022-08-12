@@ -1,13 +1,10 @@
-import copy
 import functools
 import inspect
 import json
 import logging
 import time
 import typing
-from typing import Union, Optional
-
-from charset_normalizer import CharsetNormalizerMatches
+from typing import Union, Optional, List
 
 import pyhamilton.utils.file_parsing as file_parser
 from pyhamilton.liquid_handling.resources.abstract import Deck
@@ -463,23 +460,32 @@ class LiquidHandler:
     else:
       resource.location = location
 
-    if resource.location.x + resource.size_x > LiquidHandler._x_coordinate_for_rails(30) and \
+    if resource.location.x + resource.get_size_x() > LiquidHandler._x_coordinate_for_rails(30) and \
       rails is not None:
-      raise ValueError(f"Resource with width {resource.size_x} does not fit at rails {rails}.")
+      raise ValueError(f"Resource with width {resource.get_size_x()} does not fit at rails {rails}.")
 
     # Check if there is space for this new resource.
     for og_resource in self.deck.get_resources():
       og_x = og_resource.get_absolute_location().x
+      og_y = og_resource.get_absolute_location().y
 
-      # No space if start or end (=x+width) between start and end of current ("og") resource.
-      if og_x <= resource.location.x < og_x + og_resource.size_x or \
-         og_x <= resource.location.x + resource.size_x < og_x + og_resource.size_x:
-        resource.location = None # Revert location.
+      # hack parent to get the absolute location.
+      resource.parent = self.deck
+
+      # A resource is not allowed to overlap with another resource. Resources overlap when a corner
+      # of one resource is inside the boundaries other resource.
+      if (og_x <= resource.get_absolute_location().x < og_x + og_resource.get_size_x() or \
+         og_x <= resource.get_absolute_location().x + resource.get_size_x() < og_x + og_resource.get_size_x()) and\
+          (og_y <= resource.get_absolute_location().y < og_y + og_resource.get_size_y() or \
+            og_y <= resource.get_absolute_location().y + resource.get_size_y() < og_y + og_resource.get_size_y()):
+        # resource.location = None # Revert location.
+        # resource.parent = None # Revert parent.
         if rails is not None:
           if not (replace and resource.name == og_resource.name):
-            raise ValueError(f"Resource with width {resource.size_x} does not fit at rails {rails}.")
+            raise ValueError(f"Rails {rails} is already occupied by resource '{og_resource.name}'.")
         else:
-          raise ValueError(f"Location {location} is already occupied by resource '{og_resource.name}'.")
+          # raise ValueError(f"Location {location} is already occupied by resource '{og_resource.name}'.")
+          pass
 
     self.deck.assign_child_resource(resource)
 
@@ -732,6 +738,117 @@ class LiquidHandler:
     if len(not_none) != len(set(not_none)):
       raise ValueError("Positions must be unique.")
 
+  def _intelligently_convert_channel_params_to_channels(
+    self,
+    channel_1: Optional[str] = None,
+    channel_2: Optional[str] = None,
+    channel_3: Optional[str] = None,
+    channel_4: Optional[str] = None,
+    channel_5: Optional[str] = None,
+    channel_6: Optional[str] = None,
+    channel_7: Optional[str] = None,
+    channel_8: Optional[str] = None,
+  ) -> List[str]:
+    """ Optionally intrapolate or extrapolate channels when the `...` (Ellipsis) operator is used.
+    Removes trailing `None`s.
+
+    Examples:
+      Extrapolation along a diagonal:
+
+      >>> _intelligently_convert_channel_params_to_channel("A1", "B2", ...)
+      ["A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8"]
+
+      Extrapolation along a horizontal line:
+
+      >>> _intelligently_convert_channel_params_to_channel("A1", "B1", ...)
+      ["A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1"]
+
+      Intrapolation along a vertical line:
+
+      >>> _intelligently_convert_channel_params_to_channel("A1", ..., "A5")
+      ["A1", "A2", "A3", "A4", "A5"]
+
+    Args:
+      channels: Channel parameters.
+    """
+
+    channels = [channel_1, channel_2, channel_3, channel_4,
+                channel_5, channel_6, channel_7, channel_8]
+
+    if all(c is None for c in channels):
+      raise ValueError("At least one channel must be specified.")
+
+    self._assert_positions_unique(channels)
+
+    if channels.count(...) == 0:
+      # return all channels
+      pass
+    elif channels.count(...) == 1:
+      if channel_1 is None or channel_2 is None or channel_3 is None:
+        raise ValueError("Unable to infer channels: first three channels must be specified")
+
+      if channel_1 == ...:
+        raise ValueError("Unable to infer channels: first channel must not be ellipsis (...)")
+
+      if not all(item is None for item in channels[3:]):
+        raise ValueError("Unable to infer channels: too many channels specified")
+
+      if channel_3 is ...: # parse `"A1", "B1", ...` (extrapolation)
+        a, b = channel_1, channel_2
+        if a == b:
+          raise ValueError("Unable to infer channels: channels are the same")
+        step_row = ord(b[0]) - ord(a[0])
+        step_column = int(b[1:]) - int(a[1:])
+        channels = [
+          (chr(ord(a[0]) + i*step_row) + str(int(a[1:]) + i*step_column)) for i in range(8)
+        ]
+      elif channel_2 is ...: # parse `"A1", ..., "C1"` (intrapolation)
+        start, end = channel_1, channel_3
+        if start == end:
+          raise ValueError("Invalid channels: channels are the same")
+        start_row, end_row = ord(start[0]), ord(end[0])
+        start_column, end_column = int(start[1:]), int(end[1:])
+        num_rows = end_row - start_row + 1
+        num_columns = end_column - start_column + 1
+
+        if (end_row - start_row) != 0 and (end_column - start_column) != 0 and \
+          num_rows != num_columns:
+          raise ValueError("Unable to infer channels: the number of rows and columns " + \
+            "do not match")
+
+        num_items = max(num_rows, num_columns) # one of them might be 1, if constant dimension
+
+        if num_items > 8:
+          raise ValueError("Unable to infer channels: the number of items is too large")
+
+        assert (end_row - start_row) % 1 == 0, "Delta in row must be an integer"
+        assert (end_column - start_column) % 1 == 0, "Delta in column must be an integer"
+
+        step_row = (end_row - start_row) // (num_items-1)
+        step_column = (end_column - start_column) // (num_items-1)
+
+        channels = [
+          (chr(start_row + i*step_row) + str(start_column + i*step_column)) for i in range(num_items)
+        ]
+    else:
+      raise ValueError("Unable to infer channels: too many ellipsis (...) operators")
+
+    # assert min row is A and max row is H
+    for channel in channels:
+      if channel is not None and channel[0] not in "ABCDEFGH":
+        raise ValueError("Invalid channel: row must be in A-H")
+
+    # assert min column is 1 and max column is 12
+    for channel in channels:
+      if channel is not None and not channel[1:].isdigit() and int(channel[1:]) not in range(1, 13):
+        raise ValueError("Invalid channel: column must be an integer")
+
+    # remove trailing `None`s
+    while channels[-1] is None:
+      channels.pop()
+
+    return channels
+
   @need_setup_finished
   def pickup_tips(
     self,
@@ -750,9 +867,11 @@ class LiquidHandler:
 
     Exampels:
       Pick up all tips in the first column.
+
       >>> lh.pickup_tips(tips_resource, "A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1")
 
       Specifying each channel explicitly:
+
       >>> lh.pickup_tips(
       ...   tips_resource,
       ...   channel_1="A1",
@@ -766,7 +885,20 @@ class LiquidHandler:
       ... )
 
       Pick up tips from the diagonal:
+
       >>> lh.pickup_tips(tips_resource, "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8")
+
+      Using intelligent extrapolation along a column:
+
+      >>> lh.pickup_tips(tips_resource, "A1", "B1", ...)
+
+      Using intelligent extrapolation along the diagonal:
+
+      >>> lh.pickup_tips(tips_resource, "A1", "B2", ...)
+
+      Using intelligent intrapolation along the diagonal from `"A1"` to `"D4"`:
+
+      >>> lh.pickup_tips(tips_resource, "A1", ..., "D4"
 
     Args:
       resource: Resource name or resource object.
@@ -798,10 +930,10 @@ class LiquidHandler:
 
     positions = [channel_1, channel_2, channel_3, channel_4,
                  channel_5, channel_6, channel_7, channel_8]
-
-    self._assert_positions_unique(positions)
-    assert any(position is not None for position in positions), "Must have at least one tip to " + \
-                                                                "pick up."
+    positions = self._intelligently_convert_channel_params_to_channels(*positions)
+    # pad `None`s to the end of the list to make length 8
+    positions += [None] * (8 - len(positions))
+    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8 = positions
 
     # Get resource using `get_resource` to adjust location.
     if not isinstance(resource, str):
@@ -865,10 +997,10 @@ class LiquidHandler:
 
     positions = [channel_1, channel_2, channel_3, channel_4,
                  channel_5, channel_6, channel_7, channel_8]
-
-    self._assert_positions_unique(positions)
-    assert any(position is not None for position in positions), "Must have at least one tip to " + \
-                                                                "pick up."
+    positions = self._intelligently_convert_channel_params_to_channels(*positions)
+    # pad `None` to make length 8
+    positions += [None] * (8 - len(positions))
+    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8 = positions
 
     # Get resource using `get_resource` to adjust location.
     if not isinstance(resource, str):
@@ -950,7 +1082,7 @@ class LiquidHandler:
       raise ValueError("No channels specified")
 
     # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Plate):
+    if isinstance(resource, Resource):
       resource = resource.name
     resource = self.get_resource(resource)
     if not resource:
@@ -958,17 +1090,17 @@ class LiquidHandler:
 
     # Convert the channels to `AspirationInfo` objects
     channels_dict = {}
-    for channel_id, channel in enumerate(channels):
+    for channel_idx, channel in enumerate(channels):
       if channel is None:
-        channels_dict[f"channel_{channel_id+1}"] = None
+        channels_dict[f"channel_{channel_idx+1}"] = None
       elif isinstance(channel, tuple):
-        channels_dict[f"channel_{channel_id+1}"] = AspirationInfo.from_tuple(channel)
+        channels_dict[f"channel_{channel_idx+1}"] = AspirationInfo.from_tuple(channel)
       elif isinstance(channel, dict):
-        channels_dict[f"channel_{channel_id+1}"] = AspirationInfo.from_dict(channel)
+        channels_dict[f"channel_{channel_idx+1}"] = AspirationInfo.from_dict(channel)
       elif isinstance(channel, AspirationInfo):
-        channels_dict[f"channel_{channel_id+1}"] = channel
+        channels_dict[f"channel_{channel_idx+1}"] = channel
       else:
-        raise ValueError(f"Invalid channel type for channel {channel_id+1}")
+        raise ValueError(f"Invalid channel type for channel {channel_idx+1}")
 
     self.backend.aspirate(resource, **channels_dict, **backend_kwargs)
 
@@ -987,6 +1119,7 @@ class LiquidHandler:
     channel_6: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
     channel_7: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
     channel_8: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    end_delay: float = 0,
     **backend_kwargs
   ):
     """Dispense liquid from the specified channels.
@@ -1016,6 +1149,8 @@ class LiquidHandler:
       channel_6: The dispense info for channel 6.
       channel_7: The dispense info for channel 7.
       channel_8: The dispense info for channel 8.
+      end_delay: The delay after the last dispense in seconds, optional. This is useful for when
+        the tips used in the dispense are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -1036,7 +1171,7 @@ class LiquidHandler:
       raise ValueError("No channels specified")
 
     # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Plate):
+    if isinstance(resource, Resource):
       resource = resource.name
     resource = self.get_resource(resource)
     if not resource:
@@ -1057,6 +1192,9 @@ class LiquidHandler:
         raise ValueError(f"Invalid channel type for channel {channel_id+1}")
 
     self.backend.dispense(resource, **channels_dict, **backend_kwargs)
+
+    if end_delay > 0:
+      time.sleep(end_delay)
 
   def pickup_tips96(self, resource: typing.Union[str, Resource], **backend_kwargs):
     """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
@@ -1100,18 +1238,19 @@ class LiquidHandler:
     # Get resource using `get_resource` to adjust location.
     if isinstance(resource, Tips):
       resource = resource.name
-    resource = self.get_resource(resource)
-    if not resource:
+    if not self.get_resource(resource):
       raise ValueError(f"Resource with name {resource} not found.")
+    resource = self.get_resource(resource)
 
     self.backend.discard_tips96(resource, **backend_kwargs)
 
   def aspirate96(
     self,
     resource: typing.Union[str, Resource],
-    pattern: typing.Union[typing.List[typing.List[bool]], str],
     volume: float,
+    pattern: typing.Union[typing.List[typing.List[bool]], str] = [[True]*12]*8,
     end_delay: float = 0,
+    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     **backend_kwargs
   ):
     """ Aspirate liquid using the CoR96 head in the locations where pattern is `True`.
@@ -1144,7 +1283,7 @@ class LiquidHandler:
     """
 
     # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Plate):
+    if isinstance(resource, Resource):
       resource = resource.name
     resource = self.get_resource(resource)
     if not resource:
@@ -1164,8 +1303,11 @@ class LiquidHandler:
   def dispense96(
     self,
     resource: typing.Union[str, Resource],
-    pattern: typing.Union[typing.List[typing.List[bool]], str],
+    # pattern: typing.Union[typing.List[typing.List[bool]], str],
     volume: float,
+    pattern: typing.Union[typing.List[typing.List[bool]], str] = [[True]*12]*8,
+    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
+    end_delay: float = 0,
     **backend_kwargs
   ):
     """ Dispense liquid using the CoR96 head in the locations where pattern is `True`.
@@ -1192,11 +1334,13 @@ class LiquidHandler:
       pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
         represent columns, or a string representing a range of positions.
       volume: The volume to dispense to each well.
+      end_delay: The delay after the last dispense in seconds, optional. This is useful for when
+        the tips used in the dispense are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
     # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Plate):
+    if isinstance(resource, Resource):
       resource = resource.name
     resource = self.get_resource(resource)
     if not resource:
@@ -1209,6 +1353,9 @@ class LiquidHandler:
     utils.assert_shape(pattern, (8, 12))
 
     self.backend.dispense96(resource, pattern, volume, **backend_kwargs)
+
+    if end_delay > 0:
+      time.sleep(end_delay)
 
   def move_plate(
     self,

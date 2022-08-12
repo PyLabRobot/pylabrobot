@@ -5,8 +5,8 @@ from typing import List, Optional
 from .coordinate import Coordinate
 
 
-class Resource(object):
-  """ Abstract base class for deck resources.
+class Resource:
+  """ Base class for deck resources.
 
   Args:
     name: The name of the resource.
@@ -27,9 +27,9 @@ class Resource(object):
     category: str = None
   ):
     self.name = name
-    self.size_x = size_x
-    self.size_y = size_y
-    self.size_z = size_z
+    self._size_x = size_x
+    self._size_y = size_y
+    self._size_z = size_z
     self.location = location
     self.category = category
 
@@ -41,9 +41,9 @@ class Resource(object):
     return dict(
       name=self.name,
       type=self.__class__.__name__,
-      size_x=self.size_x,
-      size_y=self.size_y,
-      size_z=self.size_z,
+      size_x=self._size_x,
+      size_y=self._size_y,
+      size_z=self._size_z,
       location=self.location.serialize(),
       category=self.category or "unknown"
     )
@@ -52,46 +52,57 @@ class Resource(object):
     return (
       isinstance(other, Resource) and
       self.name == other.name and
-      self.size_x == other.size_x and
-      self.size_y == other.size_y and
-      self.size_z == other.size_z and
+      self.get_size_x() == other.get_size_x() and
+      self.get_size_y() == other.get_size_y() and
+      self.get_size_z() == other.get_size_z() and
       self.location == other.location and
       self.category == other.category
     )
 
   def get_absolute_location(self):
-    """ Get the absolute location of this resource, probably within the :class:`~Deck`. """
+    """ Get the absolute location of this resource, probably within the
+    :class:`pyhamilton.liquid_handling.resources.abstract.Deck`. """
     if self.parent is None:
       return self.location
     return self.parent.get_absolute_location() + self.location
 
-  def assign_child_resource(self, resource, **kwargs):
+  def get_size_x(self) -> float:
+    return self._size_x
+
+  def get_size_y(self) -> float:
+    return self._size_y
+
+  def get_size_z(self) -> float:
+    return self._size_z
+
+  def assign_child_resource(self, resource: Resource, **kwargs):
     """ Assign a child resource to this resource.
 
-    Will use :method:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
+    Will use :meth:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
     if parent is not `None`.  If the resource to be assigned has child resources, this method will
     be called for each of them.
     """
 
     self.resource_assigned_callback(resource) # call callbacks first.
 
-    for child in resource.children:
+    for child in resource.get_all_children():
       self.resource_assigned_callback(child)
 
     resource.parent = self
     self.children.append(resource)
 
-  def unassign_child_resource(self, resource):
+  def unassign_child_resource(self, resource: Resource):
     """ Unassign a child resource from this resource.
 
-    Will use :method:`~Resource.resource_unassigned_callback` to notify the parent of the
+    Will use :meth:`~Resource.resource_unassigned_callback` to notify the parent of the
     unassignment, if parent is not `None`.
     """
 
     if resource not in self.children:
-      raise ValueError("The plate is not in the plate reader.")
+      raise ValueError(f"Resource with name '{resource.name}' is not a child of this resource "
+                       f"('{self.name}').")
 
-    for child in resource.children:
+    for child in resource.get_all_children():
       self.resource_unassigned_callback(child)
 
     self.resource_unassigned_callback(resource) # call callbacks first.

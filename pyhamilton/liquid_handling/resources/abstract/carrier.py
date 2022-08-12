@@ -112,7 +112,7 @@ class Carrier(Resource):
     if self.sites[spot].resource is not None:
       raise ValueError(f"spot {spot} already has a resource")
 
-    if isinstance(resource, (Plate, Tips)):
+    if isinstance(resource, (Plate, Tips)) or True: # ??
       resource.location += Coordinate(0, 63, 0) # TODO(63) fix
 
     # place carrier site in between, but don't see them as children.
@@ -133,7 +133,7 @@ class Carrier(Resource):
     super().unassign_child_resource(resource)
     for s in self.sites:
       if s.resource is not None and s.resource.name == resource.name:
-        if isinstance(resource, (Plate, Tips)):
+        if isinstance(resource, (Plate, Tips)) or True: # ??
           resource.location -= Coordinate(0, 63, 0) # TODO(63) fix
 
         s.resource = None

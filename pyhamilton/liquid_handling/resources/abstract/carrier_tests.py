@@ -120,7 +120,8 @@ class CarrierTests(unittest.TestCase):
     plate = Resource("plate", location=Coordinate(5, 5, 5), size_x=10, size_y=10, size_z=10)
     carrier.assign_child_resource(plate, spot=0)
 
-    self.assertEqual(carrier.get_resource("plate").get_absolute_location(), Coordinate(20, 20, 20))
+    # TODO(63)
+    self.assertEqual(carrier.get_resource("plate").get_absolute_location(), Coordinate(20, 20+63, 20))
 
   def test_capacity(self):
     self.assertEqual(self.tip_car.capacity, 5)

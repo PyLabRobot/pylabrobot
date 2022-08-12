@@ -38,6 +38,6 @@ class Tips(Resource, metaclass=ABCMeta):
     )
 
   def __repr__(self) -> str:
-    return (f"{self.__class__.__name__}(name={self.name}, size_x={self.size_x}, "
-            f"size_y={self.size_y}, size_z={self.size_z}, tip_type={self.tip_type}, dx={self.dx}, "
-            f"dy={self.dy}, dz={self.dz}, location={self.location})")
+    return (f"{self.__class__.__name__}(name={self.name}, size_x={self.get_size_x()}, "
+            f"size_y={self.get_size_y()}, size_z={self.get_size_z()}, tip_type={self.tip_type}, "
+            f"dx={self.dx}, dy={self.dy}, dz={self.dz}, location={self.location})")
