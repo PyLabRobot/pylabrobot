@@ -1,18 +1,30 @@
 """ VENUS backend runs through the VENUS program (Windows only) """
 
+import logging
 import re
 import typing
 
-from pyhamilton.deckresource import (
-  DeckResource,
-  LayoutManager,
-  ResourceType,
-  Plate24,
-  Plate96,
-  Plate384,
-  Tip96
-)
-from pyhamilton.interface import *
+logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(logging.INFO)
+
+try:
+  from pyhamilton.deckresource import (
+    DeckResource,
+    LayoutManager,
+    ResourceType,
+    Plate24,
+    Plate96,
+    Plate384,
+    Tip96
+  )
+  from pyhamilton.interface import *
+  from . import venus_utils
+  USE_VENUS = True
+except (ImportError, ModuleNotFoundError):
+  logger.warn("Could not import pyusb, Hamilton interface will not be available.")
+  USE_VENUS = False
+
 
 from pylabrobot.utils.positions import string_to_position
 
@@ -20,8 +32,6 @@ from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources.abstract import Resource
 from pylabrobot.liquid_handling.liquid_handler import AspirationInfo, DispenseInfo
 import pylabrobot.utils.file_parsing as file_parser
-
-from . import venus_utils
 
 
 class VENUS(LiquidHandlerBackend):

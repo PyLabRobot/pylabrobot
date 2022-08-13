@@ -22,7 +22,13 @@ extras_testing = [
     'requests'
 ] + extras_simulation
 
-extras_all =  extras_docs + extras_simulation + extras_testing + extras_venus
+server = [
+    'flask',
+    'wtforms',
+    'wtforms_json'
+]
+
+extras_all =  extras_docs + extras_simulation + extras_testing + extras_venus + server
 
 setup(
     name='PyLabRobot',
