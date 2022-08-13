@@ -409,7 +409,6 @@ class LiquidHandler:
     resource: Resource,
     rails: typing.Optional[int] = None, # board location, 1..52
     location: typing.Optional[Coordinate] = None,
-    # y: int, # board location, x..y?
     replace: bool = False
   ):
     """ Assign a new deck resource.
@@ -477,14 +476,13 @@ class LiquidHandler:
          og_x <= resource.get_absolute_location().x + resource.get_size_x() < og_x + og_resource.get_size_x()) and\
           (og_y <= resource.get_absolute_location().y < og_y + og_resource.get_size_y() or \
             og_y <= resource.get_absolute_location().y + resource.get_size_y() < og_y + og_resource.get_size_y()):
-        # resource.location = None # Revert location.
-        # resource.parent = None # Revert parent.
+        resource.location = None # Revert location.
+        resource.parent = None # Revert parent.
         if rails is not None:
           if not (replace and resource.name == og_resource.name):
             raise ValueError(f"Rails {rails} is already occupied by resource '{og_resource.name}'.")
         else:
-          # raise ValueError(f"Location {location} is already occupied by resource '{og_resource.name}'.")
-          pass
+          raise ValueError(f"Location {location} is already occupied by resource '{og_resource.name}'.")
 
     self.deck.assign_child_resource(resource)
 
@@ -663,15 +661,20 @@ class LiquidHandler:
     with open(fn, "w", encoding="utf-8") as f:
       json.dump(deck, f, indent=indent)
 
-  def load_from_json(self, fn: str):
-    """ Load deck layout serialized in a layout file.
+  def load_from_json(self, fn: Optional[str] = None, content: Optional[dict] = None):
+    """ Load deck layout serialized in JSON. Contents can either be in a layout file or in a
+    dictionary.
 
     Args:
       fn: File name.
+      content: Dictionary containing serialized deck layout.
     """
 
-    with open(fn, "r", encoding="utf-8") as f:
-      content = json.load(f)
+    assert fn is not None or content is not None, "Either fn or content must be provided."
+
+    if content is None:
+      with open(fn, "r", encoding="utf-8") as f:
+        content = json.load(f)
     dict_resources = content["resources"]
 
     # Get class names of all defined resources.
@@ -702,12 +705,10 @@ class LiquidHandler:
           if subtype in resource_classes: # properties pre-defined
             subresource_klass = getattr(resources, subtype)
             subresource = subresource_klass(name=subresource_dict["resource"]["name"])
-            print(subresource)
           else: # Custom resources should deserialize the properties they serialized.
             subresource = subresource_klass(**subresource_dict["resource"])
           resource[subresource_dict["spot"]] = subresource
 
-      print(resource, resource)
       self.assign_resource(resource, location=location)
 
   def load(self, fn: str, file_format: typing.Optional[str] = None):
