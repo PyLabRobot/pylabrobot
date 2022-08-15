@@ -25,21 +25,24 @@ class CarrierTests(unittest.TestCase):
       name="A",
       size_x=5, size_y=5, size_z=5,
       tip_type=tip_type,
-      dx=1, dy=1, dz=1
+      dx=1, dy=1, dz=1,
+      num_tips_x=1, num_tips_y=1, tip_size_x=5, tip_size_y=5
     )
 
     self.B = Tips( # pylint: disable=invalid-name
       name="B",
       size_x=5, size_y=5, size_z=5,
       tip_type=tip_type,
-      dx=9, dy=2, dz=-2
+      dx=9, dy=2, dz=-2,
+      num_tips_x=1, num_tips_y=1, tip_size_x=5, tip_size_y=5
     )
 
     self.alsoB = Tips( # pylint: disable=invalid-name
       name="B",
       size_x=100, size_y=100, size_z=100,
       tip_type=tip_type,
-      dx=0, dy=0, dz=0
+      dx=0, dy=0, dz=0,
+      num_tips_x=1, num_tips_y=1, tip_size_x=5, tip_size_y=5
     )
 
     self.tip_car = TipCarrier(
