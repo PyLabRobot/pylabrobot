@@ -61,7 +61,11 @@ class Tips(Resource, metaclass=ABCMeta):
       tip_type=self.tip_type.serialize(),
       dx=self.dx,
       dy=self.dy,
-      dz=self.dz
+      dz=self.dz,
+      tip_size_x=self.tip_size_x,
+      tip_size_y=self.tip_size_y,
+      num_tips_x=self.num_tips_x,
+      num_tips_y=self.num_tips_y
     )
 
   def __repr__(self) -> str:

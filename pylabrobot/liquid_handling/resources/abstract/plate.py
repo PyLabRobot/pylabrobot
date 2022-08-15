@@ -98,8 +98,8 @@ class Plate(Resource):
       if well_size_x <= 0 or well_size_y <= 0:
         raise ValueError("Well size must be positive if plate has wells")
 
-      for j in range(num_wells_y):
-        for i in range(num_wells_x):
+      for i in range(num_wells_x):
+        for j in range(num_wells_y):
           well = Well(name + f"_well_{i}_{j}",
                       location=Coordinate(
                         x=i * well_size_x, y=j * -well_size_y, z=0))
@@ -152,7 +152,7 @@ class Plate(Resource):
 
     if isinstance(identifier, str):
       row, column = pylabrobot.utils.string_to_position(identifier)
-      identifier = row * self.num_wells_x + column
+      identifier = row + column * self.num_wells_y
 
     if not 0 <= identifier < (self.num_wells_x * self.num_wells_y):
       raise IndexError(f"Well with identifier '{identifier}' does not exist on "

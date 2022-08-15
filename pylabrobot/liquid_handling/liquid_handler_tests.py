@@ -272,7 +272,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)
 
-    tc[0] = Tips("tips", 10, 20, 30, standard_volume_tip_with_filter, -1, -1, -1)
+    tc[0] = Tips("tips", 10, 20, 30, standard_volume_tip_with_filter, -1, -1, -1, 1, 1, 1, 1)
     pc = PlateCarrier("pc", 100, 100, 100, location=Coordinate(0, 0, 0), sites=[
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)
