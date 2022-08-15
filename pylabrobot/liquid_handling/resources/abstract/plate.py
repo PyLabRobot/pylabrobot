@@ -8,6 +8,7 @@ import pylabrobot.utils
 
 from .resource import Resource, Coordinate
 from .well import Well
+from .itemized_resource import ItemizedResource
 
 
 class Lid(Resource):
@@ -34,7 +35,7 @@ class Lid(Resource):
       location=location + Coordinate(0, 0, size_z), category="lid")
 
 
-class Plate(Resource):
+class Plate(ItemizedResource[Well]):
   """ Base class for Plate resources. """
 
   def __init__(
@@ -61,9 +62,12 @@ class Plate(Resource):
       size_x: Size of the plate in the x direction.
       size_y: Size of the plate in the y direction.
       size_z: Size of the plate in the z direction.
-      dx: The position shift in the x direction. Defined by Hamilton.
-      dy: The position shift in the y direction. Defined by Hamilton.
-      dz: The position shift in the z direction. Defined by Hamilton.
+      dx: The distance between the start of the plate and the start of the first well in the x
+        direction.
+      dy: The distance between the start of the plate and the start of the first well in the y
+        direction.
+      dz: The distance between the start of the plate and the start of the first well in the z
+        direction.
       num_wells_x: Number of wells in the x direction.
       num_wells_y: Number of wells in the y direction.
       well_size_x: Size of the wells in the x direction.
@@ -75,7 +79,11 @@ class Plate(Resource):
 
     # TODO: remove location here and add them on wells instead?
     super().__init__(name, size_x, size_y, size_z, location=location + Coordinate(dx, dy, dz),
-                     category="plate")
+                     category="plate",
+                     num_items_x=num_wells_x, num_items_y=num_wells_y,
+                     create_item=lambda i, j: Well(name + f"_well_{i}_{j}",
+                      location=Coordinate(
+                        x=i * well_size_x, y=j * -well_size_y, z=0)))
     self.dx = dx
     self.dy = dy
     self.dz = dz
@@ -88,23 +96,8 @@ class Plate(Resource):
         size_x=size_x, size_y=size_y, size_z=lid_height)
       self.assign_child_resource(lid)
 
-    self._wells = []
-    self.num_wells_x = num_wells_x
-    self.num_wells_y = num_wells_y
     self.well_size_x = well_size_x
     self.well_size_y = well_size_y
-
-    if num_wells_x > 0 and num_wells_y > 0:
-      if well_size_x <= 0 or well_size_y <= 0:
-        raise ValueError("Well size must be positive if plate has wells")
-
-      for i in range(num_wells_x):
-        for j in range(num_wells_y):
-          well = Well(name + f"_well_{i}_{j}",
-                      location=Coordinate(
-                        x=i * well_size_x, y=j * -well_size_y, z=0))
-          self.assign_child_resource(well)
-          self._wells.append(well)
 
   def assign_child_resource(self, resource, **kwargs):
     if isinstance(resource, Lid):
@@ -133,61 +126,18 @@ class Plate(Resource):
             f"size_z={self._size_z}, dx={self.dx}, dy={self.dy}, dz={self.dz}, "
             f"location={self.location}, one_dot_max={self.one_dot_max})")
 
-  def get_item(self, identifier: Union[str, int]) -> Well:
+  def get_well(self, identifier: Union[str, int]) -> Well:
     """ Get the item with the given identifier.
 
-    Args:
-      identifier: The identifier of the well. Either a string or an integer. If an integer, it is
-        the index of the well in the list of wells (counted from 0, top to bottom, left to right).
-        If a string, it uses transposed MS Excel style notation, e.g. "A1" for the first well, "B1"
-        for the well below that, etc.
-
-    Returns:
-      The well with the given identifier.
-
-    Raises:
-      IndexError: If the identifier is out of range. The range is 0 to (num_wells_x * num_wells_y -
-        1).
+    See :meth:`~.get_item` for more information.
     """
 
-    if isinstance(identifier, str):
-      row, column = pylabrobot.utils.string_to_position(identifier)
-      identifier = row + column * self.num_wells_y
-
-    if not 0 <= identifier < (self.num_wells_x * self.num_wells_y):
-      raise IndexError(f"Well with identifier '{identifier}' does not exist on "
-                        "plate '{self.name}'.")
-
-    return self._wells[identifier]
+    return super().get_item(identifier)
 
   def get_wells(self, identifier: Union[str, List[int]]) -> List[Well]:
     """ Get the wells with the given identifier.
 
-    Args:
-      identifier: The identifier of the wells. Either a string or a list of integers. If a string,
-        it uses transposed MS Excel style notation, e.g. "A1" for the first well, "B1" for the well
-        below that, etc. Regions of wells can be specified using a colon, e.g. "A1:H1" for the first
-        column. If a list of integers, it is the indices of the wells in the list of wells (counted
-        from 0, top to bottom, left to right).
-
-    Returns:
-      The wells with the given identifier.
-
-    Examples:
-      Getting the wells with identifiers "A1" through "E1":
-
-        >>> plate.get_wells("A1:E1")
-
-        [<Well A1>, <Well B1>, <Well C1>, <Well D1>, <Well E1>]
-
-      Getting the wells with identifiers 0 through 4:
-
-        >>> plate.get_wells(range(5))
-
-        [<Well A1>, <Well B1>, <Well C1>, <Well D1>, <Well E1>]
+    See :meth:`~.get_items` for more information.
     """
 
-    if isinstance(identifier, str):
-      identifier = pylabrobot.utils.string_to_indices(identifier)
-
-    return [self.get_well(i) for i in identifier]
+    return super().get_items(identifier)
