@@ -38,6 +38,39 @@ def string_to_position(position_string: str) -> typing.Tuple[int, int]:
   return (row, column)
 
 
+def string_to_index(position_string: str, num_rows: int = 8) -> int:
+  """ Convert a position string to an index.
+
+  Args:
+    position_string: The position string.
+
+  Returns:
+    The index of the position.
+  """
+
+  row, column = string_to_position(position_string)
+  return row + (column) * num_rows
+
+
+def string_to_indices(position_range_string: str, num_rows: int = 8) -> typing.List[int]:
+  """ Convert a position string to a list of indices.
+
+  Args:
+    position_string: The position string.
+
+  Returns:
+    A list of indices.
+  """
+
+  positions = string_to_pattern(position_range_string)
+  indices = []
+  for row_idx, row in enumerate(positions):
+    for column_idx, column in enumerate(row):
+      if column:
+        indices.append(row_idx + column_idx * num_rows)
+  return indices
+
+
 def string_to_pattern(position_range_string: str) -> typing.List[typing.List[bool]]:
   """ Convert a position string to a pattern.
 

@@ -567,11 +567,9 @@ class STAR(HamiltonLiquidHandler):
         channels_involved.append(False)
         continue
 
-      row, column = utils.string_to_position(channel_pos)
-
-      # TODO: what is -9?
-      x_positions.append(int((resource.get_absolute_location().x + column*9)*10))
-      y_positions.append(int((resource.get_absolute_location().y - row*9)*10))
+      channel_pos = resource.get_item(channel_pos).get_absolute_location()
+      x_positions.append(int(channel_pos.x*10))
+      y_positions.append(int(channel_pos.y*10))
       channels_involved.append(True)
 
     # TODO: Must have leading zero if len != 8?

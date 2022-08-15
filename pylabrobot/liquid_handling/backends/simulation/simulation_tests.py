@@ -140,7 +140,8 @@ class SimulatorBackendCommandTests(unittest.TestCase):
     self.assert_event_not_sent(event)
 
   def test_resources_assigned_setup(self):
-    self.assert_event_sent_n("resource_assigned", times=4)
+    # 2 carriers, 1 tip, 1 plate, 96 wells
+    self.assert_event_sent_n("resource_assigned", times=2 + 1 + 1 + 96)
 
   def test_resources_assigned(self):
     self.backend.clear()

@@ -11,7 +11,7 @@ from pylabrobot.liquid_handling.resources.hotel import Hotel
 class TestHotel(unittest.TestCase):
   def test_add_item(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
-    one_dot_max=1, lid_height=9)
+      one_dot_max=1, lid_height=1, num_wells_x=1, num_wells_y=1, well_size_x=1, well_size_y=1)
 
     hotel = Hotel("hotel", size_x=135.0, size_y=135.0, size_z=1, location=Coordinate(0, 0, 0))
     hotel.assign_child_resource(plate)
@@ -20,7 +20,7 @@ class TestHotel(unittest.TestCase):
 
   def test_get_absolute_location_plate(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
-      one_dot_max=1, lid_height=9)
+      one_dot_max=1, lid_height=1, num_wells_x=1, num_wells_y=1, well_size_x=1, well_size_y=1)
 
     hotel = Hotel("hotel", size_x=135.0, size_y=135.0, size_z=1, location=Coordinate(0, 0, 0))
     hotel.assign_child_resource(plate)
@@ -29,7 +29,7 @@ class TestHotel(unittest.TestCase):
 
   def test_get_absolute_location_lid(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
-      one_dot_max=1, lid_height=1)
+      one_dot_max=1, lid_height=1, num_wells_x=1, num_wells_y=1, well_size_x=1, well_size_y=1)
 
     hotel = Hotel("hotel", size_x=135.0, size_y=135.0, size_z=1, location=Coordinate(0, 0, 0))
     hotel.assign_child_resource(plate.lid)
@@ -38,9 +38,9 @@ class TestHotel(unittest.TestCase):
 
   def test_get_absolute_location_stack_height(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
-      one_dot_max=1, lid_height=1)
+      one_dot_max=1, lid_height=1, num_wells_x=1, num_wells_y=1, well_size_x=1, well_size_y=1)
     plate2 = Plate("plate2", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
-      one_dot_max=1, lid_height=1)
+      one_dot_max=1, lid_height=1, num_wells_x=1, num_wells_y=1, well_size_x=1, well_size_y=1)
 
     hotel = Hotel("hotel", size_x=135.0, size_y=135.0, size_z=1, location=Coordinate(0, 0, 0))
     hotel.assign_child_resource(plate.lid)

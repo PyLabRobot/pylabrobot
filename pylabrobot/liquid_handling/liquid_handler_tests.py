@@ -276,7 +276,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     pc = PlateCarrier("pc", 100, 100, 100, location=Coordinate(0, 0, 0), sites=[
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)
-    pc[0] = Plate("plate", 10, 20, 30, -1, -1, -1, 0)
+    pc[0] = Plate("plate", 10, 20, 30, -1, -1, -1, 0, 0, 0, 0, 0)
 
     fn = os.path.join(tmp_dir, "layout.json")
     custom_1.save(fn)
