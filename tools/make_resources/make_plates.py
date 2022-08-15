@@ -24,6 +24,11 @@ def make_from_file(fn, o):
   size_z = find_float('Dim.Dz', c)
   tip_type = None
 
+  num_wells_x = find_int('Columns', c)
+  num_wells_y = find_int('Rows', c)
+  well_size_x = find_float('Dx', c)
+  well_size_y = find_float('Dy', c)
+
   dx = find_float('BndryX', c) or 0
   dy = find_float('BndryY', c) or 0
   dz = 0
@@ -64,6 +69,10 @@ def make_from_file(fn, o):
   o.write(f'      dx={dx},\n')
   o.write(f'      dy={dy},\n')
   o.write(f'      dz={dz},\n')
+  o.write(f'      num_wells_x={num_wells_x},\n')
+  o.write(f'      num_wells_y={num_wells_y},\n')
+  o.write(f'      well_size_x={well_size_x},\n')
+  o.write(f'      well_size_y={well_size_y},\n')
   o.write(f'      one_dot_max={one_dot_max},\n')
   o.write(f'      lid_height=10 if with_lid else None\n')
   o.write(f'    )\n')

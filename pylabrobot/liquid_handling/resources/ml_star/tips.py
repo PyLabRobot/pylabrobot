@@ -28,6 +28,10 @@ class FourmlTF_L(Tips):
       dx=16.3,
       dy=14.2,
       dz=-93.2,
+      tip_size_x=18.0,
+      tip_size_y=18.0,
+      num_tips_x=6,
+      num_tips_y=4
     )
 
 
@@ -44,6 +48,10 @@ class LT_L(Tips):
       dx=11.7,
       dy=9.8,
       dz=-22.5,
+      tip_size_x=9.0,
+      tip_size_y=9.0,
+      num_tips_x=12,
+      num_tips_y=8
     )
 
 
@@ -60,6 +68,10 @@ class HTF_L(Tips):
       dx=11.7,
       dy=9.8,
       dz=-83.5,
+      tip_size_x=9.0,
+      tip_size_y=9.0,
+      num_tips_x=12,
+      num_tips_y=8
     )
 
 
@@ -76,6 +88,10 @@ class HT_L(Tips):
       dx=11.7,
       dy=9.8,
       dz=-83.5,
+      tip_size_x=9.0,
+      tip_size_y=9.0,
+      num_tips_x=12,
+      num_tips_y=8
     )
 
 
@@ -92,6 +108,10 @@ class LTF_L(Tips):
       dx=11.7,
       dy=9.8,
       dz=-22.5,
+      tip_size_x=9.0,
+      tip_size_y=9.0,
+      num_tips_x=12,
+      num_tips_y=8
     )
 
 
@@ -108,6 +128,10 @@ class FivemlT_L(Tips):
       dx=16.3,
       dy=14.2,
       dz=-93.2,
+      tip_size_x=18.0,
+      tip_size_y=18.0,
+      num_tips_x=6,
+      num_tips_y=4
     )
 
 
@@ -124,6 +148,10 @@ class STF_L(Tips):
       dx=11.7,
       dy=9.8,
       dz=-50.5,
+      tip_size_x=9.0,
+      tip_size_y=9.0,
+      num_tips_x=12,
+      num_tips_y=8
     )
 
 
@@ -140,4 +168,8 @@ class ST_L(Tips):
       dx=11.7,
       dy=9.8,
       dz=-50.5,
+      tip_size_x=9.0,
+      tip_size_y=9.0,
+      num_tips_x=12,
+      num_tips_y=8
     )

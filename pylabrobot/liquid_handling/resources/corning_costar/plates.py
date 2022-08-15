@@ -23,6 +23,10 @@ class Cos_96_DW_1mL_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=40.0,
       lid_height=10 if with_lid else None
     )
@@ -49,6 +53,10 @@ class Cos_384_Sq_Rd(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
+      num_wells_x=24,
+      num_wells_y=16,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=11.6,
       lid_height=10 if with_lid else None
     )
@@ -75,6 +83,10 @@ class Cos_96_PCR_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=0.5,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=20.5,
       lid_height=10 if with_lid else None
     )
@@ -101,6 +113,10 @@ class Cos_1536_10ul_P(Plate):
       dx=8.125,
       dy=10.625,
       dz=0.5,
+      num_wells_x=32,
+      num_wells_y=48,
+      well_size_x=86.0,
+      well_size_y=127.0,
       one_dot_max=5.75,
       lid_height=10 if with_lid else None
     )
@@ -127,6 +143,10 @@ class Cos_96_ProtCryst_L(Plate):
       dx=11.7,
       dy=11.5,
       dz=10.0,
+      num_wells_x=24,
+      num_wells_y=8,
+      well_size_x=127.0,
+      well_size_y=9.0,
       one_dot_max=1.6,
       lid_height=10 if with_lid else None
     )
@@ -153,6 +173,10 @@ class Cos_1536_10ul(Plate):
       dx=10.625,
       dy=8.125,
       dz=0.5,
+      num_wells_x=48,
+      num_wells_y=32,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=5.75,
       lid_height=10 if with_lid else None
     )
@@ -179,6 +203,10 @@ class Cos_384_DW_P(Plate):
       dx=9.25,
       dy=11.75,
       dz=1.0,
+      num_wells_x=16,
+      num_wells_y=24,
+      well_size_x=86.0,
+      well_size_y=127.0,
       one_dot_max=24.5,
       lid_height=10 if with_lid else None
     )
@@ -205,6 +233,10 @@ class Cos_96_Rd_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=0.75,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.3,
       lid_height=10 if with_lid else None
     )
@@ -231,6 +263,10 @@ class Cos_96_UV(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.0,
       lid_height=10 if with_lid else None
     )
@@ -257,6 +293,10 @@ class Cos_96_Fl_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=10.67,
       lid_height=10 if with_lid else None
     )
@@ -283,6 +323,10 @@ class Cos_96_EZWash_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.3,
       lid_height=10 if with_lid else None
     )
@@ -309,6 +353,10 @@ class Cos_96_DW_500ul(Plate):
       dx=14.0,
       dy=11.5,
       dz=2.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=25.0,
       lid_height=10 if with_lid else None
     )
@@ -335,6 +383,10 @@ class Cos_384_DW(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
+      num_wells_x=24,
+      num_wells_y=16,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=24.5,
       lid_height=10 if with_lid else None
     )
@@ -361,6 +413,10 @@ class Cos_96_SpecOps(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.1,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.0,
       lid_height=10 if with_lid else None
     )
@@ -387,6 +443,10 @@ class Cos_384_Sq_Rd_L(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
+      num_wells_x=24,
+      num_wells_y=16,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=11.6,
       lid_height=10 if with_lid else None
     )
@@ -413,6 +473,10 @@ class Cos_96_DW_2mL_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=42.0,
       lid_height=10 if with_lid else None
     )
@@ -439,6 +503,10 @@ class Cos_96_Vb_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=10.9,
       lid_height=10 if with_lid else None
     )
@@ -465,6 +533,10 @@ class Cos_96_DW_500ul_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=2.0,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=25.0,
       lid_height=10 if with_lid else None
     )
@@ -491,6 +563,10 @@ class Cos_384_PCR_P(Plate):
       dx=9.25,
       dy=11.75,
       dz=1.0,
+      num_wells_x=16,
+      num_wells_y=24,
+      well_size_x=86.0,
+      well_size_y=127.0,
       one_dot_max=9.5,
       lid_height=10 if with_lid else None
     )
@@ -517,6 +593,10 @@ class Cos_96_Rd(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.75,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.3,
       lid_height=10 if with_lid else None
     )
@@ -543,6 +623,10 @@ class Cos_96_SpecOps_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=0.1,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.0,
       lid_height=10 if with_lid else None
     )
@@ -569,6 +653,10 @@ class Cos_96_Filter_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=2.1,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=12.2,
       lid_height=10 if with_lid else None
     )
@@ -595,6 +683,10 @@ class Cos_96_ProtCryst(Plate):
       dx=11.7,
       dy=11.5,
       dz=10.0,
+      num_wells_x=24,
+      num_wells_y=8,
+      well_size_x=127.0,
+      well_size_y=9.0,
       one_dot_max=1.6,
       lid_height=10 if with_lid else None
     )
@@ -621,6 +713,10 @@ class Cos_384_Sq_L(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
+      num_wells_x=24,
+      num_wells_y=16,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=11.56,
       lid_height=10 if with_lid else None
     )
@@ -647,6 +743,10 @@ class Cos_96_UV_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.0,
       lid_height=10 if with_lid else None
     )
@@ -673,6 +773,10 @@ class Cos_96_HalfArea_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=10.7,
       lid_height=10 if with_lid else None
     )
@@ -699,6 +803,10 @@ class Cos_96_DW_2mL_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=42.0,
       lid_height=10 if with_lid else None
     )
@@ -725,6 +833,10 @@ class Cos_384_Sq_Rd_P(Plate):
       dx=9.25,
       dy=11.75,
       dz=1.0,
+      num_wells_x=16,
+      num_wells_y=24,
+      well_size_x=86.0,
+      well_size_y=127.0,
       one_dot_max=11.6,
       lid_height=10 if with_lid else None
     )
@@ -751,6 +863,10 @@ class Cos_96_EZWash(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.3,
       lid_height=10 if with_lid else None
     )
@@ -777,6 +893,10 @@ class Cos_96_FL(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=10.67,
       lid_height=10 if with_lid else None
     )
@@ -803,6 +923,10 @@ class Cos_384_Sq(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
+      num_wells_x=24,
+      num_wells_y=16,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=11.56,
       lid_height=10 if with_lid else None
     )
@@ -829,6 +953,10 @@ class Cos_96_HalfArea_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=10.7,
       lid_height=10 if with_lid else None
     )
@@ -855,6 +983,10 @@ class Cos_96_UV_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.0,
       lid_height=10 if with_lid else None
     )
@@ -881,6 +1013,10 @@ class Cos_384_Sq_P(Plate):
       dx=9.25,
       dy=11.75,
       dz=1.0,
+      num_wells_x=16,
+      num_wells_y=24,
+      well_size_x=86.0,
+      well_size_y=127.0,
       one_dot_max=11.56,
       lid_height=10 if with_lid else None
     )
@@ -907,6 +1043,10 @@ class Cos_96_DW_1mL(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=40.0,
       lid_height=10 if with_lid else None
     )
@@ -933,6 +1073,10 @@ class Cos_96_HalfArea(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=10.7,
       lid_height=10 if with_lid else None
     )
@@ -959,6 +1103,10 @@ class Cos_96_Filter_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=2.1,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=12.2,
       lid_height=10 if with_lid else None
     )
@@ -985,6 +1133,10 @@ class Cos_96_SpecOps_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.1,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.0,
       lid_height=10 if with_lid else None
     )
@@ -1011,6 +1163,10 @@ class Cos_384_PCR_L(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
+      num_wells_x=24,
+      num_wells_y=16,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=9.5,
       lid_height=10 if with_lid else None
     )
@@ -1037,6 +1193,10 @@ class Cos_96_DW_500ul_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=2.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=25.0,
       lid_height=10 if with_lid else None
     )
@@ -1063,6 +1223,10 @@ class Cos_96_Vb_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=10.9,
       lid_height=10 if with_lid else None
     )
@@ -1089,6 +1253,10 @@ class Cos_96_Filter(Plate):
       dx=14.0,
       dy=11.5,
       dz=2.1,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=12.2,
       lid_height=10 if with_lid else None
     )
@@ -1115,6 +1283,10 @@ class Cos_96_ProtCryst_P(Plate):
       dx=11.5,
       dy=11.7,
       dz=10.0,
+      num_wells_x=8,
+      num_wells_y=24,
+      well_size_x=9.0,
+      well_size_y=127.0,
       one_dot_max=1.6,
       lid_height=10 if with_lid else None
     )
@@ -1141,6 +1313,10 @@ class Cos_1536_10ul_L(Plate):
       dx=10.625,
       dy=8.125,
       dz=0.5,
+      num_wells_x=48,
+      num_wells_y=32,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=5.75,
       lid_height=10 if with_lid else None
     )
@@ -1167,6 +1343,10 @@ class Cos_96_Vb(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=10.9,
       lid_height=10 if with_lid else None
     )
@@ -1193,6 +1373,10 @@ class Cos_96_PCR(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.5,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=20.5,
       lid_height=10 if with_lid else None
     )
@@ -1219,6 +1403,10 @@ class Cos_96_PCR_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.5,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=20.5,
       lid_height=10 if with_lid else None
     )
@@ -1245,6 +1433,10 @@ class Cos_96_DW_1mL_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=40.0,
       lid_height=10 if with_lid else None
     )
@@ -1271,6 +1463,10 @@ class Cos_96_EZWash_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.3,
       lid_height=10 if with_lid else None
     )
@@ -1297,6 +1493,10 @@ class Cos_96_Fl_P(Plate):
       dx=11.5,
       dy=14.0,
       dz=1.0,
+      num_wells_x=8,
+      num_wells_y=12,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=10.67,
       lid_height=10 if with_lid else None
     )
@@ -1323,6 +1523,10 @@ class Cos_96_DW_2mL(Plate):
       dx=14.0,
       dy=11.5,
       dz=1.0,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=42.0,
       lid_height=10 if with_lid else None
     )
@@ -1349,6 +1553,10 @@ class Cos_96_Rd_L(Plate):
       dx=14.0,
       dy=11.5,
       dz=0.75,
+      num_wells_x=12,
+      num_wells_y=8,
+      well_size_x=9.0,
+      well_size_y=9.0,
       one_dot_max=11.3,
       lid_height=10 if with_lid else None
     )
@@ -1375,6 +1583,10 @@ class Cos_384_PCR(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
+      num_wells_x=24,
+      num_wells_y=16,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=9.5,
       lid_height=10 if with_lid else None
     )
@@ -1401,6 +1613,10 @@ class Cos_384_DW_L(Plate):
       dx=11.75,
       dy=9.25,
       dz=1.0,
+      num_wells_x=24,
+      num_wells_y=16,
+      well_size_x=127.0,
+      well_size_y=86.0,
       one_dot_max=24.5,
       lid_height=10 if with_lid else None
     )
