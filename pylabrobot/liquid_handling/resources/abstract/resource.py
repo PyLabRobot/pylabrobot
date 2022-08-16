@@ -59,20 +59,31 @@ class Resource:
       self.category == other.category
     )
 
+  def __repr__(self) -> str:
+    return f"{self.__class__.__name__}(name={self.name}, location={self.location}, " \
+           f"size_x={self._size_x}, size_y={self._size_y}, size_z={self._size_z})" \
+           f"category={self.category})"
+
+  def __hash__(self) -> int:
+    return hash(repr(self))
+
   def get_absolute_location(self):
     """ Get the absolute location of this resource, probably within the
-    :class:`pyhamilton.liquid_handling.resources.abstract.Deck`. """
+    :class:`pylabrobot.liquid_handling.resources.abstract.Deck`. """
     if self.parent is None:
       return self.location
     return self.parent.get_absolute_location() + self.location
 
   def get_size_x(self) -> float:
+    """ Get the size of this resource in the x-direction. """
     return self._size_x
 
   def get_size_y(self) -> float:
+    """ Get the size of this resource in the y-direction. """
     return self._size_y
 
   def get_size_z(self) -> float:
+    """ Get the size of this resource in the z-direction. """
     return self._size_z
 
   def assign_child_resource(self, resource: Resource, **kwargs):

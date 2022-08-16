@@ -17,7 +17,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   .. note::
     This class is not meant to be used directly, but rather to be subclassed, most commonly by
     :class:`pylabrobot.liquid_handling.resources.abstract.Plate` and
-    :class:`pylabrobot.liquid_handling.resources.abstract.Item`.
+    :class:`pylabrobot.liquid_handling.resources.abstract.Tips`.
 
   Subclasses are items that have a number of equally spaced child resources, e.g. a plate with
   wells or a tip resource with tips.
@@ -47,6 +47,33 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       'num_items_y': self.num_items_y,
     }
 
+  def __getitem__(self, identifier: Union[str, List[int], slice]) -> Union[T, List[T]]:
+    """ Get the items with the given identifier.
+
+    This is a convenience method for getting the items with the given identifier. It is equivalent
+    to :meth:`get_items`, but adds support for slicing and supports single items in the same
+    functional call. Note that the return type depends on the type of the identifier. If the
+    identifier is a string, a list of items is returned.
+    """
+
+    if isinstance(identifier, str):
+      if ':' in identifier:
+        identifier = pylabrobot.utils.string_to_indices(identifier)
+      else:
+        identifier = [pylabrobot.utils.string_to_index(identifier)]
+    elif isinstance(identifier, int):
+      identifier = [identifier]
+    elif isinstance(identifier, slice):
+      if isinstance(identifier.start, str):
+        identifier.start = pylabrobot.utils.string_to_index(identifier.start)
+      if isinstance(identifier.stop, str):
+        identifier.stop = pylabrobot.utils.string_to_index(identifier.stop)
+      identifier = range(identifier.start, identifier.stop)
+
+    if len(identifier) == 1:
+      return self.get_item(identifier[0])
+    return self.get_items(identifier)
+
   def get_item(self, identifier: Union[str, int]) -> T:
     """ Get the item with the given identifier.
 
@@ -70,7 +97,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     if not 0 <= identifier < (self.num_items_x * self.num_items_y):
       raise IndexError(f"Item with identifier '{identifier}' does not exist on "
-                        "plate '{self.name}'.")
+                       f"plate '{self.name}'.")
 
     return self._items[identifier]
 

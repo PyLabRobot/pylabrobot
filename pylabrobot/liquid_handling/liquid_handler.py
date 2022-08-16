@@ -2,9 +2,10 @@ import functools
 import inspect
 import json
 import logging
+import numbers
 import time
 import typing
-from typing import Union, Optional, List
+from typing import Tuple, Union, Optional, List, overload
 
 import pylabrobot.utils.file_parsing as file_parser
 from pylabrobot.liquid_handling.resources.abstract import Deck
@@ -23,298 +24,16 @@ from .resources import (
   Hotel,
   Lid,
   Plate,
-  Tips
+  Tip,
+  Tips,
+  Well
 )
+from .standard import Aspiration, Dispense
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
 
 
 _RAILS_WIDTH = 22.5 # space between rails (mm)
-
-
-class AspirationInfo:
-  """ AspirationInfo is a class that contains information about an aspiration.
-
-  This class is be used by
-  :meth:`pyhamilton.liquid_handling.liquid_handler.LiquidHandler.aspirate` to store information
-  about the aspiration for each individual channel.
-
-  Examples:
-    Directly initialize the class:
-
-    >>> aspiration_info = AspirationInfo('A1', 50)
-    >>> aspiration_info.position
-    'A1'
-    >>> aspiration_info.volume
-    50
-
-    Instantiate an aspiration info object from a tuple:
-
-    >>> AspirationInfo.from_tuple(('A1', 50))
-    AspirationInfo(position='A1', volume=50)
-
-    Instantiate an aspiration info object from a dict:
-
-    >>> AspirationInfo.from_dict({'position': 'A1', 'volume': 50})
-    AspirationInfo(position='A1', volume=50)
-
-    Get the corrected volume, using the default liquid class
-    (:class:`pyhamilton.liquid_handling.liquid_classes.StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`):
-
-    >>> aspiration_info = AspirationInfo('A1', 100)
-    >>> aspiration_info.get_corrected_volume()
-    107.2
-  """
-
-  def __init__(
-    self,
-    position: str,
-    volume: float,
-    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
-  ):
-    """ Initialize the aspiration info.
-
-    Args:
-      position: The position of the aspiration. Positions are formatted as `<row><column>` where
-        `<row>` is the row string (`A` for row 1, `B` for row 2, etc.) and `<column>` is the column
-        number. For example, `A1` is the top left corner of the resource and `H12` is the bottom
-        right.
-      volume: The volume of the aspiration.
-      liquid_class: The liquid class of the aspiration.
-    """
-
-    self.position = position
-    self.volume = volume
-    self.liquid_class = liquid_class
-
-  @classmethod
-  def from_tuple(cls, tuple_):
-    """ Create aspiration info from a tuple.
-
-    The tuple should either be in the form (position, volume) or (position, volume, liquid_class).
-    In the former case, the liquid class will be set to
-    `StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`. (TODO: link to liquid class
-    in docs)
-
-    Args:
-      tuple: A tuple in the form (position, volume) or (position, volume, liquid_class)
-
-    Returns:
-      AspirationInfo object.
-
-    Raises:
-      ValueError if the tuple is not in the correct format.
-    """
-
-    if len(tuple_) == 2:
-      position, volume = tuple_
-      return cls(position, volume)
-    elif len(tuple_) == 3:
-      position, volume, liquid_class = tuple_
-      return cls(position, volume, liquid_class)
-    else:
-      raise ValueError("Invalid tuple length")
-
-  @classmethod
-  def from_dict(cls, dict_):
-    """ Create aspiration info from a dictionary.
-
-    The dictionary should either be in the form {"position": position, "volume": volume} or
-    {"position": position, "volume": volume, "liquid_class": liquid_class}. In the former case,
-    the liquid class will be set to
-    `StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`.
-
-    Args:
-      dict: A dictionary in the form {"position": position, "volume": volume} or
-        {"position": position, "volume": volume, "liquid_class": liquid_class}
-
-    Returns:
-      AspirationInfo object.
-
-    Raises:
-      ValueError: If the dictionary is invalid.
-    """
-
-    if "position" in dict_ and "volume" in dict_:
-      position = dict_["position"]
-      volume = dict_["volume"]
-      return cls(
-        position=position,
-        volume=volume,
-        liquid_class=dict_.get("liquid_class",
-          StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol))
-
-    raise ValueError("Invalid dictionary")
-
-  def __repr__(self):
-    return f"AspirationInfo(position={self.position}, volume={self.volume})"
-
-  def get_corrected_volume(self):
-    """ Get the corrected volume.
-
-    The corrected volume is computed based on various properties of a liquid, as defined by the
-    :class:`pyhamilton.liquid_handling.liquid_classes.LiquidClass` object.
-
-    Returns:
-      The corrected volume.
-    """
-
-    return self.liquid_class.compute_corrected_volume(self.volume)
-
-  def serialize(self):
-    """ Serialize the aspiration info.
-
-    Returns:
-      A dictionary containing the serialized dispense info.
-    """
-
-    return {
-      "position": self.position,
-      "volume": self.volume,
-      "liquid_class": self.liquid_class.__class__.__name__
-    }
-
-
-class DispenseInfo:
-  """ DispenseInfo is a class that contains information about an dispense.
-
-  This class is be used by
-  :meth:`pyhamilton.liquid_handling.liquid_handler.LiquidHandler.aspirate` to store information
-  about the dispense for each individual channel.
-
-  Examples:
-    Directly initialize the class:
-
-    >>> dispense_info = DispenseInfo('A1', 0.5)
-    >>> dispense_info.position
-    'A1'
-    >>> dispense_info.volume
-    0.5
-
-    Instantiate an dispense info object from a tuple:
-
-    >>> DispenseInfo.from_tuple(('A1', 0.5))
-    DispenseInfo(position='A1', volume=0.5)
-
-    Instantiate an dispense info object from a dict:
-
-    >>> DispenseInfo.from_dict({'position': 'A1', 'volume': 0.5})
-    DispenseInfo(position='A1', volume=0.5)
-
-    Get the corrected volume:
-
-    >>> dispense_info = DispenseInfo('A1', 100)
-    >>> dispense_info.get_corrected_volume()
-    107.2
-  """
-
-  def __init__(
-    self,
-    position: str,
-    volume: float,
-    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
-  ):
-    """ Initialize the dispense info.
-
-    Args:
-      position: The position of the dispense. Positions are formatted as `<row><column>` where
-        `<row>` is the row string (`A` for row 1, `B` for row 2, etc.) and `<column>` is the column
-        number. For example, `A1` is the top left corner of the resource and `H12` is the bottom
-        right.
-      volume: The volume of the dispense.
-      liquid_class: The liquid class of the dispense.
-    """
-
-    self.position = position
-    self.volume = volume
-    self.liquid_class = liquid_class
-
-  @classmethod
-  def from_tuple(cls, tuple_):
-    """ Create dispense info from a tuple.
-
-    The tuple should either be in the form (position, volume) or (position, volume, liquid_class).
-    In the former case, the liquid class will be set to
-    `StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`. (TODO: link to liquid class
-    in docs)
-
-    Args:
-      tuple: A tuple in the form (position, volume) or (position, volume, liquid_class)
-
-    Returns:
-      DispenseInfo object.
-
-    Raises:
-      ValueError if the tuple is not in the correct format.
-    """
-
-    if len(tuple_) == 2:
-      position, volume = tuple_
-      return cls(position, volume)
-    elif len(tuple_) == 3:
-      position, volume, liquid_class = tuple_
-      return cls(position, volume, liquid_class)
-    else:
-      raise ValueError("Invalid tuple length")
-
-  @classmethod
-  def from_dict(cls, dict):
-    """ Create dispense info from a dictionary.
-
-    The dictionary should either be in the form {"position": position, "volume": volume} or
-    {"position": position, "volume": volume, "liquid_class": liquid_class}. In the former case,
-    the liquid class will be set to
-    `StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol`.
-
-    Args:
-      dict: A dictionary in the form {"position": position, "volume": volume} or
-        {"position": position, "volume": volume, "liquid_class": liquid_class}
-
-    Returns:
-      DispenseInfo object.
-
-    Raises:
-      ValueError: If the dictionary is invalid.
-    """
-
-    if "position" in dict and "volume" in dict:
-      position = dict["position"]
-      volume = dict["volume"]
-      return cls(
-        position=position,
-        volume=volume,
-        liquid_class=dict.get("liquid_class",
-          StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol))
-
-    raise ValueError("Invalid dictionary")
-
-  def __repr__(self):
-    return f"DispenseInfo(position={self.position}, volume={self.volume})"
-
-  def get_corrected_volume(self):
-    """ Get the corrected volume.
-
-    The corrected volume is computed based on various properties of a liquid, as defined by the
-    :class:`pyhamilton.liquid_handling.liquid_classes.LiquidClass` object.
-
-    Returns:
-      The corrected volume.
-    """
-
-    return self.liquid_class.compute_corrected_volume(self.volume)
-
-  def serialize(self):
-    """ Serialize the dispense info.
-
-    Returns:
-      A dictionary containing the serialized dispense info.
-    """
-
-    return {
-      "position": self.position,
-      "volume": self.volume,
-      "liquid_class": self.liquid_class.__class__.__name__
-    }
 
 
 class LiquidHandler:
@@ -738,129 +457,29 @@ class LiquidHandler:
     if len(not_none) != len(set(not_none)):
       raise ValueError("Positions must be unique.")
 
-  def _intelligently_convert_channel_params_to_channels(
+  def _channels_to_standard_tip_form(
     self,
-    channel_1: Optional[str] = None,
-    channel_2: Optional[str] = None,
-    channel_3: Optional[str] = None,
-    channel_4: Optional[str] = None,
-    channel_5: Optional[str] = None,
-    channel_6: Optional[str] = None,
-    channel_7: Optional[str] = None,
-    channel_8: Optional[str] = None,
-  ) -> List[str]:
-    """ Optionally intrapolate or extrapolate channels when the `...` (Ellipsis) operator is used.
-    Removes trailing `None`s.
+    *channels: Union[Optional[Tip], List[Optional[Tip]]]
+  ) -> List[Optional[Tip]]:
+    """ Converts channel parameters to standard tip form.
 
-    Examples:
-      Extrapolation along a diagonal:
-
-      >>> _intelligently_convert_channel_params_to_channel("A1", "B2", ...)
-      ["A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8"]
-
-      Extrapolation along a horizontal line:
-
-      >>> _intelligently_convert_channel_params_to_channel("A1", "B1", ...)
-      ["A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1"]
-
-      Intrapolation along a vertical line:
-
-      >>> _intelligently_convert_channel_params_to_channel("A1", ..., "A5")
-      ["A1", "A2", "A3", "A4", "A5"]
-
-    Args:
-      channels: Channel parameters.
+    This will flatten the list of channels into a single list of tips.
     """
 
-    channels = [channel_1, channel_2, channel_3, channel_4,
-                channel_5, channel_6, channel_7, channel_8]
-
-    if all(c is None for c in channels):
-      raise ValueError("At least one channel must be specified.")
-
-    self._assert_positions_unique(channels)
-
-    if channels.count(...) == 0:
-      # return all channels
-      pass
-    elif channels.count(...) == 1:
-      if channel_1 is None or channel_2 is None or channel_3 is None:
-        raise ValueError("Unable to infer channels: first three channels must be specified")
-
-      if channel_1 == ...:
-        raise ValueError("Unable to infer channels: first channel must not be ellipsis (...)")
-
-      if not all(item is None for item in channels[3:]):
-        raise ValueError("Unable to infer channels: too many channels specified")
-
-      if channel_3 is ...: # parse `"A1", "B1", ...` (extrapolation)
-        a, b = channel_1, channel_2
-        if a == b:
-          raise ValueError("Unable to infer channels: channels are the same")
-        step_row = ord(b[0]) - ord(a[0])
-        step_column = int(b[1:]) - int(a[1:])
-        channels = [
-          (chr(ord(a[0]) + i*step_row) + str(int(a[1:]) + i*step_column)) for i in range(8)
-        ]
-      elif channel_2 is ...: # parse `"A1", ..., "C1"` (intrapolation)
-        start, end = channel_1, channel_3
-        if start == end:
-          raise ValueError("Invalid channels: channels are the same")
-        start_row, end_row = ord(start[0]), ord(end[0])
-        start_column, end_column = int(start[1:]), int(end[1:])
-        num_rows = end_row - start_row + 1
-        num_columns = end_column - start_column + 1
-
-        if (end_row - start_row) != 0 and (end_column - start_column) != 0 and \
-          num_rows != num_columns:
-          raise ValueError("Unable to infer channels: the number of rows and columns " + \
-            "do not match")
-
-        num_items = max(num_rows, num_columns) # one of them might be 1, if constant dimension
-
-        if num_items > 8:
-          raise ValueError("Unable to infer channels: the number of items is too large")
-
-        assert (end_row - start_row) % 1 == 0, "Delta in row must be an integer"
-        assert (end_column - start_column) % 1 == 0, "Delta in column must be an integer"
-
-        step_row = (end_row - start_row) // (num_items-1)
-        step_column = (end_column - start_column) // (num_items-1)
-
-        channels = [
-          (chr(start_row + i*step_row) + str(start_column + i*step_column)) for i in range(num_items)
-        ]
-    else:
-      raise ValueError("Unable to infer channels: too many ellipsis (...) operators")
-
-    # assert min row is A and max row is H
+    tips = []
     for channel in channels:
-      if channel is not None and channel[0] not in "ABCDEFGH":
-        raise ValueError("Invalid channel: row must be in A-H")
-
-    # assert min column is 1 and max column is 12
-    for channel in channels:
-      if channel is not None and not channel[1:].isdigit() and int(channel[1:]) not in range(1, 13):
-        raise ValueError("Invalid channel: column must be an integer")
-
-    # remove trailing `None`s
-    while channels[-1] is None:
-      channels.pop()
-
-    return channels
+      if channel is None:
+        tips.append(None)
+      elif isinstance(channel, Tip):
+        tips.append(channel)
+      else:
+        tips.extend(channel)
+    return tips
 
   @need_setup_finished
   def pickup_tips(
     self,
-    resource: typing.Union[str, Tips],
-    channel_1: typing.Optional[str] = None,
-    channel_2: typing.Optional[str] = None,
-    channel_3: typing.Optional[str] = None,
-    channel_4: typing.Optional[str] = None,
-    channel_5: typing.Optional[str] = None,
-    channel_6: typing.Optional[str] = None,
-    channel_7: typing.Optional[str] = None,
-    channel_8: typing.Optional[str] = None,
+    *channels: Union[Tip, List[Tip]],
     **backend_kwargs
   ):
     """ Pick up tips from a resource.
@@ -868,198 +487,215 @@ class LiquidHandler:
     Exampels:
       Pick up all tips in the first column.
 
-      >>> lh.pickup_tips(tips_resource, "A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1")
+      >>> lh.pickup_tips(tips_resource["A1":"H1"])
 
-      Specifying each channel explicitly:
+      Pick up tips on odd numbered rows.
 
-      >>> lh.pickup_tips(
-      ...   tips_resource,
-      ...   channel_1="A1",
-      ...   channel_2="B1",
-      ...   channel_3="C1",
-      ...   channel_4="D1",
-      ...   channel_5="E1",
-      ...   channel_6="F1",
-      ...   channel_7="G1",
-      ...   channel_8="H1"
-      ... )
+      >>> lh.pickup_tips(channels=[
+      ...   "A1",
+      ...   None,
+      ...   "C1",
+      ...   None,
+      ...   "E1",
+      ...   None,
+      ...   "G1",
+      ...   None,
+      ... ])
 
       Pick up tips from the diagonal:
 
-      >>> lh.pickup_tips(tips_resource, "A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8")
+      >>> lh.pickup_tips(tips_resource["A1":"H8"])
 
-      Using intelligent extrapolation along a column:
+      Pick up tips from different tip resources:
 
-      >>> lh.pickup_tips(tips_resource, "A1", "B1", ...)
-
-      Using intelligent extrapolation along the diagonal:
-
-      >>> lh.pickup_tips(tips_resource, "A1", "B2", ...)
-
-      Using intelligent intrapolation along the diagonal from `"A1"` to `"D4"`:
-
-      >>> lh.pickup_tips(tips_resource, "A1", ..., "D4"
+      >>> lh.pickup_tips(tips_resource1["A1"], tips_resource2["B2"], tips_resource3["C3"])
 
     Args:
-      resource: Resource name or resource object.
-      channel_1: The location where the tip will be picked up. If None, this channel will not pick
-        up a tip.
-      channel_2: The location where the tip will be picked up. If None, this channel will not pick
-        up a tip.
-      channel_3: The location where the tip will be picked up. If None, this channel will not pick
-        up a tip.
-      channel_4: The location where the tip will be picked up. If None, this channel will not pick
-        up a tip.
-      channel_5: The location where the tip will be picked up. If None, this channel will not pick
-        up a tip.
-      channel_6: The location where the tip will be picked up. If None, this channel will not pick
-        up a tip.
-      channel_7: The location where the tip will be picked up. If None, this channel will not pick
-        up a tip.
-      channel_8: The location where the tip will be picked up. If None, this channel will not pick
-        up a tip.
-      kwargs: Additional keyword arguments for the backend, optional.
+      channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
+        :class:`Tip` objects. This list will be flattened automatically. Use `None` to indicate
+        that no tips should be picked up by this channel.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
 
-      ValueError: If no channel will pick up a tip, in other words, if all channels are `None`.
+      ValueError: If no channel will pick up a tip, in other words, if all channels are `None` or
+        if the list of channels is empty.
 
       ValueError: If the positions are not unique.
     """
 
-    positions = [channel_1, channel_2, channel_3, channel_4,
-                 channel_5, channel_6, channel_7, channel_8]
-    positions = self._intelligently_convert_channel_params_to_channels(*positions)
-    # pad `None`s to the end of the list to make length 8
-    positions += [None] * (8 - len(positions))
-    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8 = positions
-
-    # Get resource using `get_resource` to adjust location.
-    if not isinstance(resource, str):
-      if isinstance(resource, Tips):
-        resource = resource.name
-      else:
-        raise ValueError("Resource must be a string or a Tips object.")
-    resource = self.get_resource(resource)
-
-    assert resource is not None, "Resource not found."
-
-    self.backend.pickup_tips(
-      resource,
-      channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
-      **backend_kwargs
-    )
+    channels = self._channels_to_standard_tip_form(*channels)
+    if not any(channel is not None for channel in channels):
+      raise ValueError("Must specify at least one channel to pick up tips with.")
+    self.backend.pickup_tips(*channels, **backend_kwargs)
 
   @need_setup_finished
   def discard_tips(
     self,
-    resource: typing.Union[str, Tips],
-    channel_1: typing.Optional[str] = None,
-    channel_2: typing.Optional[str] = None,
-    channel_3: typing.Optional[str] = None,
-    channel_4: typing.Optional[str] = None,
-    channel_5: typing.Optional[str] = None,
-    channel_6: typing.Optional[str] = None,
-    channel_7: typing.Optional[str] = None,
-    channel_8: typing.Optional[str] = None,
+    *channels: Union[Tip, List[Tip]],
     **backend_kwargs
   ):
     """ Discard tips to a resource.
 
     Args:
-      resource: Resource name or resource object.
-      channel_1: The location where the tip will be discarded. If None, this channel will not
-        discard a tip.
-      channel_2: The location where the tip will be discarded. If None, this channel will not
-        discard a tip.
-      channel_3: The location where the tip will be discarded. If None, this channel will not
-        discard a tip.
-      channel_4: The location where the tip will be discarded. If None, this channel will not
-        discard a tip.
-      channel_5: The location where the tip will be discarded. If None, this channel will not
-        discard a tip.
-      channel_6: The location where the tip will be discarded. If None, this channel will not
-        discard a tip.
-      channel_7: The location where the tip will be discarded. If None, this channel will not
-        discard a tip.
-      channel_8: The location where the tip will be discarded. If None, this channel will not
-        discard a tip.
+      channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
+        :class:`Tip` objects. This list will be flattened automatically. Use `None` to indicate
+        that no tips should be discarded up by this channel.
       kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
 
-      ValueError: If no channel will pick up a tip, in other words, if all channels are `None`.
+      ValueError: If no channel will pick up a tip, in other words, if all channels are `None` or
+        if the list of channels is empty.
 
       ValueError: If the positions are not unique.
     """
 
-    positions = [channel_1, channel_2, channel_3, channel_4,
-                 channel_5, channel_6, channel_7, channel_8]
-    positions = self._intelligently_convert_channel_params_to_channels(*positions)
-    # pad `None` to make length 8
-    positions += [None] * (8 - len(positions))
-    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8 = positions
+    channels = self._channels_to_standard_tip_form(*channels)
+    if not any(channel is not None for channel in channels):
+      raise ValueError("Must specify at least one channel to discard tips from.")
+    self.backend.discard_tips(*channels, **backend_kwargs)
 
-    # Get resource using `get_resource` to adjust location.
-    if not isinstance(resource, str):
-      if isinstance(resource, Tips):
-        resource = resource.name
+  def _channels_to_standard_form(
+    self,
+    *channels: Optional[
+      Union[
+        Well, List[Well],
+        Tuple[Well, float], Tuple[List[Well], List[float]]
+      ]],
+    vols: Optional[List[float]] = None
+  ) -> List[Optional[Aspiration]]:
+    """ Convert channels to a list of tuples of wells and volumes.
+
+    If channels is a list of wells, then vols must be a list of volumes. If channels is a list of
+    tuples, then vols must be None.
+
+    Standard form is a list of tuples of length 2 containing a single well and volume.
+
+    TODO: will probably refactor with more universal paramters (like vols).
+
+    Args:
+      channels: A list of channels to aspirate liquid from.
+      vols: A list of volumes to aspirate liquid from.
+    """
+
+    first_non_none = next(c for c in channels if c is not None)
+
+    if isinstance(first_non_none, Well):
+      if vols is None:
+        raise ValueError("If channels is a list of wells, then vols must be a list of volumes.")
+      # Assert parallel None in channels and vols
+      if any((c is None) != (v is None) for c, v in zip(channels, vols)):
+        raise ValueError("If channels is a list of wells, then vols must be a list of volumes " \
+                         "with parallel None in channels and vols.")
+      channels = [(channel, vol) for channel, vol in zip(channels, vols)]
+
+    elif isinstance(first_non_none, list) and all(channel is None or isinstance(channel, Well) for channel in first_non_none):
+      if vols is None:
+        raise ValueError("If channels is a list of wells, then vols must be a list of volumes.")
+      if len(vols) == 1:
+        vols = vols * len(first_non_none)
+      if isinstance(vols, list) and len(vols) != len(first_non_none):
+        raise ValueError("If channels is a list of wells, then vols must be a list of volumes of "
+                         "the same length as channels.")
+      channels = [(channel, vol) for channel, vol in zip(first_non_none, vols)]
+
+    else:
+      if vols is not None:
+        raise ValueError("If channels is a list of tuples, then vols must be None.")
+
+    # Channels is (now) a list of tuples.
+    # Each tuple is of length two containing either a single well and single volume or a list of
+    # wells and list of volumes.
+
+    ret = []
+    for channel in channels:
+      if channel is None or channel[0] is None:
+        ret.append(None)
+        continue
+
+      if not isinstance(channel, tuple):
+        raise TypeError("Channel must be None or a tuple.")
+      if len(channel) != 2:
+        raise TypeError("Channel must be None or a tuple of length 2.")
+
+      if isinstance(channel[0], list):
+        if not all(isinstance(channel, Well) for channel in channel[0]):
+          raise TypeError("If channel is a list, it must be a list of wells.")
+        if not all(isinstance(vol, numbers.Real) for vol in channel[1]):
+          raise TypeError("If channel.volumes is a list, it must be a list of numbers.")
+
+        if (isinstance(channel[1], numbers.Real)): # use a single volume for all wells
+          v = channel[1]
+          ret.extend([Aspiration(resource=r, volume=v) for r in channel[0]])
+        elif (isinstance(channel[1], list)): # use a list of volumes, one vol for each well
+          if not len(channel[0]) == len(channel[1]):
+            raise ValueError("If channels is a list of wells, then vols must be a list of volumes "
+                             "of equal length.")
+
+          ret.extend([Aspiration(resource=c, volume=v) for c, v in zip(channel[0], channel[1])])
+
+      elif isinstance(channel[0], Well) and isinstance(channel[1], numbers.Real):
+        ret.append(Aspiration(resource=channel[0], volume=channel[1]))
+
       else:
-        raise ValueError("Resource must be a string or a Tips object.")
-    resource = self.get_resource(resource)
+        raise TypeError(f"Channel must be a tuple of length 2, containing a tuple of either a "
+          "single well and single volume, a list of wells and a list of volumes, or a list of "
+         f"wells and a single volume, but is '{channel}'.")
 
-    assert resource is not None, "Resource not found."
+    # Assert that all channels positions are unique.
+    if len(ret) != len(set((channel.resource if channel is not None else None) for channel in ret)):
+      raise ValueError("All channels must be unique.")
 
-    self.backend.discard_tips(
-      resource,
-      channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
-      **backend_kwargs
-    )
+    return ret
+
+  @overload
+  def aspirate(
+    self,
+    *channels: Union[Well, List[Well]],
+    vols: List[float], **kwargs) -> None: ...
+
+  @overload
+  def aspirate(
+    self,
+    *channels: Union[Tuple[Well, float], Tuple[List[Well], List[float]]],
+    **kwargs) -> None: ...
 
   @need_setup_finished
   def aspirate(
     self,
-    resource: typing.Union[str, Resource],
-    channel_1: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_2: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_3: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_4: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_5: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_6: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_7: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_8: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
+    *channels: Union[Well, List[Well], Tuple[Well, float], Tuple[List[Well], List[float]]],
+    vols: Optional[List[float]] = None,
     end_delay: float = 0,
     **backend_kwargs
   ):
-    """Aspirate liquid from the specified channels.
+    """Aspirate liquid from the specified wells.
 
     Examples:
-      Aspirate liquid from the specified channels using a tuple:
+      Aspirate a constant amount of liquid from the first column:
 
-      >>> aspirate("plate_01", ('A1', 50), ('B1', 50))
+      >>> lh.aspirate(plate["A1":"H8"], 50)
 
-      Aspirate liquid from the specified channels using a dictionary:
+      Aspirate an linearly increasing amount of liquid from the first column:
 
-      >>> aspirate("plate_02", {'position': 'A1', 'volume': 50}, {'position': 'B1', 'volume': 50})
+      >>> lh.aspirate(plate["A1":"H8"], range(0, 500, 50))
 
-      Aspirate liquid from the specified channels using an AspirationInfo object:
+      Aspirate a arbitrary amounts of liquid from the first column:
 
-      >>> aspiration_info_1 = AspirationInfo('A1', 50)
-      >>> aspiration_info_2 = AspirationInfo('B1', 50)
-      >>> aspirate("plate_01", aspiration_info_1, aspiration_info_2)
+      >>> lh.aspirate(plate["A1":"H8"], [0, 40, 10, 50, 100, 200, 300, 400])
+
+      Aspirate liquid from wells in different plates:
+
+      >>> lh.aspirate((plate["A1"], 50), (plate2["A1"], 50), (plate3["A1"], 50))
 
     Args:
-      resource: Resource name or resource object.
-      channel_1: The aspiration info for channel 1.
-      channel_2: The aspiration info for channel 2.
-      channel_3: The aspiration info for channel 3.
-      channel_4: The aspiration info for channel 4.
-      channel_5: The aspiration info for channel 5.
-      channel_6: The aspiration info for channel 6.
-      channel_7: The aspiration info for channel 7.
-      channel_8: The aspiration info for channel 8.
+      channels: A list of channels to aspirate liquid from. If channels is a well or a list of
+        wells, then vols must be a list of volumes, otherwise vols must be None. If channels is a
+        list of tuples, they must be of length 2, and the first element must be a well or a list of
+        wells, and the second element must be a volume or a list of volumes. When a single volume is
+        passed with a list of wells, it is used for all wells in the list.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
@@ -1067,88 +703,65 @@ class LiquidHandler:
     Raises:
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
 
-      ValueError: If the resource could not be found. See :meth:`~LiquidHandler.assign_resource`.
-
       ValueError: If the aspiration info is invalid, in other words, when all channels are `None`.
 
       ValueError: If all channels are `None`.
     """
 
-    channels = [channel_1, channel_2, channel_3, channel_4,
-                channel_5, channel_6, channel_7, channel_8]
-
-    # Check that there is at least one channel specified
-    if not any(channel is not None for channel in channels):
+    if len(channels) == 0:
       raise ValueError("No channels specified")
 
-    # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Resource):
-      resource = resource.name
-    resource = self.get_resource(resource)
-    if not resource:
-      raise ValueError(f"Resource with name {resource} not found.")
-
-    # Convert the channels to `AspirationInfo` objects
-    channels_dict = {}
-    for channel_idx, channel in enumerate(channels):
-      if channel is None:
-        channels_dict[f"channel_{channel_idx+1}"] = None
-      elif isinstance(channel, tuple):
-        channels_dict[f"channel_{channel_idx+1}"] = AspirationInfo.from_tuple(channel)
-      elif isinstance(channel, dict):
-        channels_dict[f"channel_{channel_idx+1}"] = AspirationInfo.from_dict(channel)
-      elif isinstance(channel, AspirationInfo):
-        channels_dict[f"channel_{channel_idx+1}"] = channel
-      else:
-        raise ValueError(f"Invalid channel type for channel {channel_idx+1}")
-
-    self.backend.aspirate(resource, **channels_dict, **backend_kwargs)
+    channels = self._channels_to_standard_form(*channels, vols=vols)
+    self.backend.aspirate(*channels, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
 
+  @overload
+  def dispense(
+    self,
+    *channels: Union[Well, List[Well]],
+    vols: List[float], **kwargs) -> None: ...
+
+  @overload
+  def dispense(
+    self,
+    *channels: Union[Tuple[Well, float], Tuple[List[Well], List[float]]],
+    **kwargs) -> None: ...
+
   @need_setup_finished
   def dispense(
     self,
-    resource: typing.Union[str, Resource],
-    channel_1: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_2: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_3: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_4: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_5: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_6: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_7: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_8: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
+    *channels: Union[Well, List[Well], Tuple[Well, float], Tuple[List[Well], List[float]]],
+    vols: Optional[List[float]] = None,
     end_delay: float = 0,
     **backend_kwargs
   ):
-    """Dispense liquid from the specified channels.
+    """ Dispense liquid to the specified channels.
 
     Examples:
-      Dispense liquid from the specified channels using a tuple:
+      Dispense a constant amount of liquid to the first column:
 
-      >>> dispense("plate_01", ('A1', 50), ('B1', 50))
+      >>> lh.dispense(plate["A1":"H8"], 50)
 
-      Dispense liquid from the specified channels using a dictionary:
+      Dispense an linearly increasing amount of liquid to the first column:
 
-      >>> dispense("plate_02", {'position': 'A1', 'volume': 50}, {'position': 'B1', 'volume': 50})
+      >>> lh.dispense(plate["A1":"H8"], range(0, 500, 50))
 
-      Dispense liquid from the specified channels using an DispenseInfo object:
+      Dispense a arbitrary amounts of liquid to the first column:
 
-      >>> dispense_info_1 = DispenseInfo('A1', 50)
-      >>> dispense_info_2 = DispenseInfo('B1', 50)
-      >>> dispense("plate_01", dispense_info_1, dispense_info_2)
+      >>> lh.dispense(plate["A1":"H8"], [0, 40, 10, 50, 100, 200, 300, 400])
+
+      Dispense liquid to wells in different plates:
+
+      >>> lh.dispense((plate["A1"], 50), (plate2["A1"], 50), (plate3["A1"], 50))
 
     Args:
-      resource: Resource name or resource object.
-      channel_1: The dispense info for channel 1.
-      channel_2: The dispense info for channel 2.
-      channel_3: The dispense info for channel 3.
-      channel_4: The dispense info for channel 4.
-      channel_5: The dispense info for channel 5.
-      channel_6: The dispense info for channel 6.
-      channel_7: The dispense info for channel 7.
-      channel_8: The dispense info for channel 8.
+      channels: A list of channels to dispense liquid to. If channels is a well or a list of
+        wells, then vols must be a list of volumes, otherwise vols must be None. If channels is a
+        list of tuples, they must be of length 2, and the first element must be a well or a list of
+        wells, and the second element must be a volume or a list of volumes. When a single volume is
+        passed with a list of wells, it is used for all wells in the list.
       end_delay: The delay after the last dispense in seconds, optional. This is useful for when
         the tips used in the dispense are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
@@ -1156,42 +769,13 @@ class LiquidHandler:
     Raises:
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
 
-      ValueError: If the resource could not be found. See :meth:`~LiquidHandler.assign_resource`.
-
       ValueError: If the dispense info is invalid, in other words, when all channels are `None`.
 
       ValueError: If all channels are `None`.
     """
 
-    channels = [channel_1, channel_2, channel_3, channel_4,
-                channel_5, channel_6, channel_7, channel_8]
-
-    # Check that there is at least one channel specified
-    if not any(channel is not None for channel in channels):
-      raise ValueError("No channels specified")
-
-    # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Resource):
-      resource = resource.name
-    resource = self.get_resource(resource)
-    if not resource:
-      raise ValueError(f"Resource with name {resource} not found.")
-
-    # Convert the channels to `DispenseInfo` objects
-    channels_dict = {}
-    for channel_id, channel in enumerate(channels):
-      if channel is None:
-        channels_dict[f"channel_{channel_id+1}"] = None
-      elif isinstance(channel, tuple):
-        channels_dict[f"channel_{channel_id+1}"] = AspirationInfo.from_tuple(channel)
-      elif isinstance(channel, dict):
-        channels_dict[f"channel_{channel_id+1}"] = AspirationInfo.from_dict(channel)
-      elif isinstance(channel, AspirationInfo):
-        channels_dict[f"channel_{channel_id+1}"] = channel
-      else:
-        raise ValueError(f"Invalid channel type for channel {channel_id+1}")
-
-    self.backend.dispense(resource, **channels_dict, **backend_kwargs)
+    channels = self._channels_to_standard_form(*channels, vols=vols)
+    self.backend.dispense(*channels, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)

@@ -9,6 +9,7 @@ import os
 import threading
 import time
 import typing
+from typing import Optional, Tuple, List
 import webbrowser
 
 try:
@@ -19,7 +20,18 @@ except ImportError:
   HAS_WEBSOCKETS = False
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.resources.abstract import Resource, Plate, Coordinate, Lid
+from pylabrobot.liquid_handling.resources import (
+  Coordinate,
+  Lid,
+  Plate,
+  Resource,
+  Tip,
+  Well
+)
+from pylabrobot.liquid_handling.standard import (
+  Aspiration,
+  Dispense,
+)
 
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
@@ -311,59 +323,22 @@ class SimulationBackend(LiquidHandlerBackend):
   def unassigned_resource_callback(self, name):
     self.send_event(event="resource_unassigned", resource_name=name, wait_for_response=False)
 
-  def pickup_tips(
-    self,
-    resource,
-    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
-  ):
-    channels = {
-      "channel_1": channel_1, "channel_2": channel_2, "channel_3": channel_3,
-      "channel_4": channel_4, "channel_5": channel_5, "channel_6": channel_6,
-      "channel_7": channel_7, "channel_8": channel_8,
-    }
-    self.send_event(event="pickup_tips", resource=resource.serialize(), channels=channels,
+  def pickup_tips(self, *channels: List[Optional[Tip]]):
+    channels = [channel.serialize() if channel is not None else None for channel in channels]
+    self.send_event(event="pickup_tips", channels=channels,
       wait_for_response=True)
 
-  def discard_tips(
-    self,
-    resource,
-    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
-  ):
-    channels = {
-      "channel_1": channel_1, "channel_2": channel_2, "channel_3": channel_3,
-      "channel_4": channel_4, "channel_5": channel_5, "channel_6": channel_6,
-      "channel_7": channel_7, "channel_8": channel_8,
-    }
-    self.send_event(event="discard_tips", resource=resource.serialize(), channels=channels,
-      wait_for_response=True)
+  def discard_tips(self, *channels: List[Optional[Tip]]):
+    channels = [channel.serialize() if channel is not None else None for channel in channels]
+    self.send_event(event="discard_tips", channels=channels, wait_for_response=True)
 
-  def aspirate(
-    self,
-    resource,
-    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
-  ):
-    # Serialize channels.
-    channels = {}
-    for i, channel in enumerate([channel_1, channel_2, channel_3, channel_4,
-                                 channel_5, channel_6, channel_7, channel_8]):
-      if channel is not None:
-        channels[f"channel_{i+1}"] = channel.serialize()
-    self.send_event(event="aspirate", resource=resource.serialize(), channels=channels,
-      wait_for_response=True)
+  def aspirate(self, *channels: Optional[Aspiration]):
+    channels = [channel.serialize() for channel in channels]
+    self.send_event(event="aspirate", channels=channels, wait_for_response=True)
 
-  def dispense(
-    self,
-    resource,
-    channel_1, channel_2, channel_3, channel_4, channel_5, channel_6, channel_7, channel_8,
-  ):
-    # Serialize channels.
-    channels = {}
-    for i, channel in enumerate([channel_1, channel_2, channel_3, channel_4,
-                                 channel_5, channel_6, channel_7, channel_8]):
-      if channel is not None:
-        channels[f"channel_{i+1}"] = channel.serialize()
-    self.send_event(event="dispense", resource=resource.serialize(), channels=channels,
-      wait_for_response=True)
+  def dispense(self, *channels: Optional[Dispense]):
+    channels = [channel.serialize() for channel in channels]
+    self.send_event(event="dispense", channels=channels, wait_for_response=True)
 
   def pickup_tips96(self, resource):
     self.send_event(event="pickup_tips96", resource=resource.serialize(), wait_for_response=True)

@@ -118,7 +118,7 @@ class STARCommandCatcher(STAR):
   def setup(self):
     self.setup_finished = True
 
-  def send_command(self, module, command, fmt="", **kwargs):
+  def send_command(self, module, command, fmt="", timeout=0, **kwargs):
     cmd, _ = self._assemble_command(module, command, **kwargs)
     self.commands.append(cmd)
 
@@ -131,9 +131,9 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.mockSTAR = STARCommandCatcher()
     self.lh = LiquidHandler(self.mockSTAR)
 
-    tip_car = TIP_CAR_480_A00(name="tip carrier")
-    tip_car[1] = STF_L(name="tips_01")
-    self.lh.assign_resource(tip_car, rails=1)
+    self.tip_car = TIP_CAR_480_A00(name="tip carrier")
+    self.tip_car[1] = STF_L(name="tips_01")
+    self.lh.assign_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = Cos_96_EZWash(name="plate_01", with_lid=True)
@@ -195,12 +195,12 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     """ Convert channel positions to firmware positions. """
     resource = self.lh.get_resource("tips_01")
     self.assertEqual(
-      self.mockSTAR._channel_positions_to_fw_positions(["A1"], resource),
+      self.mockSTAR._channel_positions_to_fw_positions([resource["A1"]]),
       ([1179, 0], [2418, 0], [True, False])
     )
 
     self.assertEqual(
-      self.mockSTAR._channel_positions_to_fw_positions(["A1", "F1"], resource),
+      self.mockSTAR._channel_positions_to_fw_positions(resource["A1", "F1"]),
       ([1179, 1179, 0], [2418, 1968, 0], [True, True, False])
     )
 
@@ -213,37 +213,37 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     pass
 
   def test_tip_pickup_01(self):
-    self.lh.pickup_tips("tips_01", "A1", "B1")
+    self.lh.pickup_tips(self.tip_car[1].resource["A1", "B1"])
     self._assert_command_sent_once(
-      "C0TPid0000xp01179 01179 00000 00000 00000 00000 00000 00000&yp2418 2328 0000 0000 0000 0000 "
-      "0000 0000tm1 1 0 0 0 0 0 0&tt01tp2244tz2164th2450td0",
+      "C0TPid0000xp01179 01179 00000&yp2418 2328 0000tm1 1 0&tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_56(self):
-    self.lh.pickup_tips("tips_01", channel_5="E1", channel_6="F1")
+    self.lh.pickup_tips([None] * 4 + self.tip_car[1].resource["E1", "F1"])
     self._assert_command_sent_once(
-      "C0TPid0000xp00000 00000 00000 00000 01179 01179 00000 00000&yp0000 0000 0000 0000 2058 1968 "
-      "0000 0000tm0 0 0 0 1 1 0 0&tt01tp2244tz2164th2450td0",
+      "C0TPid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
+      "0000&tm0 0 0 0 1 1 0 &tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_15(self):
-    self.lh.pickup_tips("tips_01", channel_1="A1", channel_5="F1")
+    tips = self.tip_car[1].resource
+    self.lh.pickup_tips([tips["A1"]] + [None] * 3 + [tips["F1"]])
     self._assert_command_sent_once(
-      "C0TPid0000xp01179 00000 00000 00000 01179 00000 00000 00000yp2418 0000 0000 0000 1968 0000 "
-      "0000 0000tm1 0 0 0 1 0 0 0&tt01tp2244tz2164th2450td0",
+      "C0TPid0000xp01179 00000 00000 00000 01179 00000&yp2418 0000 0000 0000 1968 0000 "
+      "&tm1 0 0 0 1 0&tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_discard_56(self):
     self.test_tip_pickup_56() # pick up tips first
-    self.lh.discard_tips("tips_01", channel_5="E1", channel_6="F1")
+    tips = self.tip_car[1].resource
+    self.lh.discard_tips([None] * 4 + tips["E1", "F1"])
     self._assert_command_sent_once(
-      "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000 00000yp0000 0000 0000 0000 2058 1968 "
-      "0000 0000tm0 0 0 0 1 1 0 0tt01tp1314tz1414th2450ti0",
+      "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
+      "0000&tm0 0 0 0 1 1 0&tt01tp1314tz1414th2450ti0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####ti#")
 
   def test_single_channel_aspiration(self):
-    self.lh.pickup_tips("tips_01", "A1")
-    self.lh.aspirate("plate_01", ("A1", 100))
+    self.lh.aspirate(self.plt_car[0].resource["A1"], vols=[100])
 
     # Real command, but with extra parameters. `lp`, `zl`, `zx`, `av`, `zu`, `zr` changed
     # TODO: Do we need these parameters with the real robot?
@@ -271,8 +271,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "sz#### (n)io#### (n)il##### (n)in#### (n)")
 
   def test_multi_channel_aspiration(self):
-    self.lh.pickup_tips("tips_01", "A1", "B1")
-    self.lh.aspirate("plate_01", ("A1", 100), ("B1", 100))
+    self.lh.aspirate(self.plt_car[0].resource["A1:B1"], vols=[100])
 
     # Real command
     # self._assert_command_sent_once(
@@ -303,8 +302,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "sz#### (n)io#### (n)il##### (n)in#### (n)")
 
   def test_single_channel_dispense(self):
-    self.lh.pickup_tips("tips_01", "A1")
-    self.lh.dispense("plate_01", ("A1", 100))
+    self.lh.dispense(self.plt_car[0].resource["A1"], vols=[100])
     self._assert_command_sent_once(
       "C0DSid0000dm2&tm1 0&xp02980 00000&yp1460 0000&zx1871&lp2321&zl1881&"
       "ip0000&it0&fp0000&th2450te2450dv01072&ds1200&ss0050&rv000&ta000&ba0000&lm0&zo000&ll1&"
@@ -316,8 +314,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
 
   def test_multi_channel_dispense(self):
-    self.lh.pickup_tips("tips_01", "A1", "B1")
-    self.lh.dispense("plate_01", ("A1", 100), ("B1", 100))
+    print([x.get_absolute_location() for x in self.plt_car[0].resource["A1:B1"]])
+    self.lh.dispense(self.plt_car[0].resource["A1:B1"], vols=[100])
 
     # self._assert_command_sent_once(
     #   "C0DSid0317dm2 2&tm1 1 0&dv01072 01072 00000&xp02980 02980 00000&yp1460 1370 0000&"

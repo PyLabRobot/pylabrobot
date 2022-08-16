@@ -19,6 +19,7 @@ Abstract
     pylabrobot.liquid_handling.resources.abstract
     pylabrobot.liquid_handling.resources.abstract.Coordinate
     pylabrobot.liquid_handling.resources.abstract.Deck
+    pylabrobot.liquid_handling.resources.abstract.ItemizedResource
     pylabrobot.liquid_handling.resources.abstract.Lid
     pylabrobot.liquid_handling.resources.abstract.Resource
     pylabrobot.liquid_handling.resources.abstract.Tips

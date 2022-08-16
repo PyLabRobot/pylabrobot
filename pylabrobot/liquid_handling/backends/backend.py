@@ -1,19 +1,17 @@
 from abc import ABCMeta, abstractmethod
-import typing
-from typing import List, Union
+from typing import List, Tuple, Union, Optional
 
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
   Plate,
   Resource,
-  Lid
+  Lid,
+  Tip,
 )
-
-
-class AspirationInfo: # TODO: real import
-  pass
-class DispenseInfo:
-  pass
+from pylabrobot.liquid_handling.standard import (
+  Aspiration,
+  Dispense
+)
 
 
 class LiquidHandlerBackend(object, metaclass=ABCMeta):
@@ -71,70 +69,22 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def pickup_tips(
-    self,
-    resource,
-    channel_1: typing.Optional[str] = None,
-    channel_2: typing.Optional[str] = None,
-    channel_3: typing.Optional[str] = None,
-    channel_4: typing.Optional[str] = None,
-    channel_5: typing.Optional[str] = None,
-    channel_6: typing.Optional[str] = None,
-    channel_7: typing.Optional[str] = None,
-    channel_8: typing.Optional[str] = None,
-    **backend_kwargs
-  ):
+  def pickup_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
     """ Pick up tips from the specified resource. """
     pass
 
   @abstractmethod
-  def discard_tips(
-    self,
-    resource,
-    channel_1: typing.Optional[str] = None,
-    channel_2: typing.Optional[str] = None,
-    channel_3: typing.Optional[str] = None,
-    channel_4: typing.Optional[str] = None,
-    channel_5: typing.Optional[str] = None,
-    channel_6: typing.Optional[str] = None,
-    channel_7: typing.Optional[str] = None,
-    channel_8: typing.Optional[str] = None,
-    **backend_kwars
-  ):
+  def discard_tips(self, *channels: List[Optional[Tip]], **backend_kwars):
     """ Discard tips from the specified resource. """
     pass
 
   @abstractmethod
-  def aspirate(
-    self,
-    resource: typing.Union[str, Resource],
-    channel_1: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_2: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_3: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_4: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_5: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_6: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_7: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    channel_8: typing.Optional[typing.Union[tuple, dict, AspirationInfo]] = None,
-    **backend_kwargs
-  ):
+  def aspirate(self, *channels: Optional[Aspiration], **backend_kwargs):
     """ Aspirate liquid from the specified resource using pip. """
     pass
 
   @abstractmethod
-  def dispense(
-    self,
-    resource: typing.Union[str, Resource],
-    channel_1: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_2: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_3: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_4: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_5: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_6: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_7: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    channel_8: typing.Optional[typing.Union[tuple, dict, DispenseInfo]] = None,
-    **backend_kwargs
-  ):
+  def dispense(self, *channels: Optional[Dispense], **backend_kwargs):
     """ Dispense liquid from the specified resource using pip. """
     pass
 
@@ -171,11 +121,11 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def move_plate(self, plate: Plate, to: typing.Union[Resource, Coordinate], **backend_kwargs):
+  def move_plate(self, plate: Plate, to: Union[Resource, Coordinate], **backend_kwargs):
     """ Move the specified plate within the robot. """
     pass
 
   @abstractmethod
-  def move_lid(self, lid: Lid, to: typing.Union[Resource, Coordinate], **backend_kwargs):
+  def move_lid(self, lid: Lid, to: Union[Resource, Coordinate], **backend_kwargs):
     """ Move the specified lid within the robot. """
     pass

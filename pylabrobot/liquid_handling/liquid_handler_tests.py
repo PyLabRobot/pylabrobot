@@ -8,6 +8,8 @@ import textwrap
 import unittest
 import unittest.mock
 
+from .standard import Aspiration
+
 from . import backends
 from .liquid_handler import LiquidHandler
 from .resources import (
@@ -21,6 +23,7 @@ from .resources import (
   PLT_CAR_L5AC_A00,
   Cos_96_DW_1mL,
   Cos_96_DW_500ul,
+  Well,
   standard_volume_tip_with_filter
 )
 from .resources.ml_star import STF_L, HTF_L
@@ -318,63 +321,52 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     pass
 
 
-class TestLiquidHandlerLayoutCommands(unittest.TestCase):
-  def test_intelligently_convert_channel_params_to_channels(self):
-    # pylint: disable=protected-access
-    lh = LiquidHandler(backend=backends.Mock())
+class TestLiquidHandlerCommands(unittest.TestCase):
+  def setUp(self):
+    self.lh = LiquidHandler(backends.Mock())
 
-    # Basic
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", "B1"), ["A1", "B1"])
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", None, "B1"),
-      ["A1", None, "B1"])
+  def test_channels_to_standard_form(self):
+    lh = self.lh
 
-    # Trailing none
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", None, "B1", None),
-      ["A1", None, "B1"])
+    w1 = Well("w1")
+    w2 = Well("w2")
+    w3 = Well("w3")
+    w4 = Well("w4")
+    ans = [Aspiration(w1, 20), Aspiration(w2, 30), Aspiration(w3, 40), Aspiration(w4, 50)]
 
-    # Extrapolation
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", "B1", ...),
-      ["A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1"]) # over column
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", "A2", ...),
-      ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]) # over row
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A3", "A4", ...),
-      ["A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10"]) # over row
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", "B2", ...),
-      ["A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8"]) # over diagonal
+    self.assertEqual(lh._channels_to_standard_form(w1, vols=[20]), [Aspiration(w1, 20)])
 
-    # Interpolation
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "B1"),
-      ["A1", "B1"]) # no interpolation
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "D1"),
-      ["A1", "B1", "C1", "D1"]) # no interpolation
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "H1"),
-      ["A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1"]) # over column
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "A8"),
-      ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]) # over row
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A3", ..., "A10"),
-      ["A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10"]) # over row
-    self.assertEqual(lh._intelligently_convert_channel_params_to_channels("A1", ..., "H8"),
-      ["A1", "B2", "C3", "D4", "E5", "F6", "G7", "H8"]) # over diagonal
+    # without tuple
+    self.assertEqual(lh._channels_to_standard_form([w1, w2, w3, w4], vols=[20, 30, 40, 50]), ans)
 
-    # Invalid values
+    # with tuple, but just 1
+    self.assertEqual(lh._channels_to_standard_form(([w1, w2, w3, w4], [20, 30, 40, 50])), ans)
+
+    # multiple tuples, already in standard form
+    self.assertEqual(lh._channels_to_standard_form((w1, 20), (w2, 30), (w3, 40), (w4, 50)), ans)
+
+    # multiple tuples, grouped by arbitrary
+    self.assertEqual(lh._channels_to_standard_form(([w1, w2], [20, 30]), (w3, 40), (w4, 50)), ans)
+
+  def test_channels_to_standard_form_with_none(self):
+    lh = self.lh
+    w1 = Well("w1")
+    w2 = Well("w2")
+
+    ans = [Aspiration(w1, 100), None, Aspiration(w2, 100)]
+
+    # Simple
+    self.assertEqual(lh._channels_to_standard_form(w1, None, w2, vols=[100, None, 100]), ans)
+
+    # In list
+    self.assertEqual(lh._channels_to_standard_form([w1, None, w2], vols=[100, None, 100]), ans)
+
+    # In tuples
+    self.assertEqual(lh._channels_to_standard_form((w1, 100), None, (w2, 100)), ans)
+
+    # Raise error when None's are not aligned
     with self.assertRaises(ValueError):
-      lh._intelligently_convert_channel_params_to_channels("A1", "A1") # duplicate
-    with self.assertRaises(ValueError):
-      lh._intelligently_convert_channel_params_to_channels("A1", ...) # no extrapolation argument
-    with self.assertRaises(ValueError):
-      lh._intelligently_convert_channel_params_to_channels("A1", ..., "A1") # duplicate
-    with self.assertRaises(ValueError):
-      lh._intelligently_convert_channel_params_to_channels("A1", ..., ...) # too many ...
-    with self.assertRaises(ValueError):
-      lh._intelligently_convert_channel_params_to_channels("A1", ..., "C3", "D4") # argument after
-    with self.assertRaises(ValueError):
-      lh._intelligently_convert_channel_params_to_channels("A1", ..., "B4") # invalid interpolation
-    with self.assertRaises(ValueError):
-      lh._intelligently_convert_channel_params_to_channels("A1", ..., "I12") # invalid row
-    with self.assertRaises(ValueError):
-      lh._intelligently_convert_channel_params_to_channels("A1", ..., "A12") # too many columns
-    with self.assertRaises(ValueError):
-      lh._intelligently_convert_channel_params_to_channels(None, "A1", ..., "A3") # start with none
+      lh._channels_to_standard_form(w1, None, w2, vols=[100, 100])
 
 
 if __name__ == "__main__":
