@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABCMeta
 
 
@@ -46,7 +48,7 @@ class TipType(object, metaclass=ABCMeta):
     }[tip_type_id]
     self.tip_length = total_tip_length - fitting_depth
 
-  def __eq__(self, other):
+  def __eq__(self, other: TipType) -> bool:
     return (
       self.has_filter == other.has_filter and
       self.total_tip_length == other.total_tip_length and
@@ -55,15 +57,15 @@ class TipType(object, metaclass=ABCMeta):
       self.pick_up_method == other.pick_up_method
     )
 
-  def __hash__(self):
+  def __hash__(self) -> int:
     return hash(self.__repr__())
 
-  def __repr__(self):
+  def __repr__(self) -> str:
     return (f"TipType(has_filter={self.has_filter}, total_tip_length={self.total_tip_length}, "
             f"maximal_volume={self.maximal_volume}, tip_type_id={self.tip_type_id}, "
             f"pick_up_method={self.pick_up_method})")
 
-  def serialize(self):
+  def serialize(self) -> dict:
     return {
       "has_filter": self.has_filter,
       "total_tip_length": self.total_tip_length,

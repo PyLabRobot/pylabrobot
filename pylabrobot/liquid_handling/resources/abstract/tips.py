@@ -15,6 +15,7 @@ class Tip(Resource):
   def __init__(self, name: str, size_x: float, size_y: float, tip_type: TipType,
     location: Coordinate = ..., category: str = "tip"):
     super().__init__(name, size_x, size_y, tip_type.tip_length, location, category)
+    self.tip_type = tip_type
 
 
 class Tips(ItemizedResource[Tip], metaclass=ABCMeta):

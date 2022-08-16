@@ -39,6 +39,9 @@ class Coordinate:
   def __repr__(self) -> str:
     return f"Coordinate({self.x}, {self.y}, {self.z})"
 
+  def __hash__(self) -> int:
+    return hash((self.x, self.y, self.z))
+
   def serialize(self) -> dict:
     return dict(x=self.x, y=self.y, z=self.z)
 

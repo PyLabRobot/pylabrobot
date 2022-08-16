@@ -179,6 +179,27 @@ class LiquidClass:
       "dispensing_mode": [self.dispense_mode],
     }
 
+  def serialize(self) -> dict:
+    """ Serialize the liquid class to a dict. """
+    return {
+      "device": [d.name for d in self.device],
+      "tip_type": self.tip_type.name,
+      "dispense_mode": self.dispense_mode,
+      "pressure_lld": self.pressure_lld,
+      "max_height_difference": self.max_height_difference,
+      "flow_rate": list(self.flow_rate),
+      "mix_flow_rate": list(self.mix_flow_rate),
+      "air_transport_volume": list(self.air_transport_volume),
+      "blowout_volume": list(self.blowout_volume),
+      "swap_speed": list(self.swap_speed),
+      "settling_time": list(self.settling_time),
+      "over_aspirate_volume": self.over_aspirate_volume,
+      "clot_retract_height": self.clot_retract_height,
+      "stop_flow_rate": self.stop_flow_rate,
+      "stop_back_volume": self.stop_back_volume,
+      "correction_curve": {str(k): v for k, v in self.correction_curve.items()},
+    }
+
 
 #: HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol
 HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol = LiquidClass(

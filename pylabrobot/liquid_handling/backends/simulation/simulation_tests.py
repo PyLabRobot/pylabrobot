@@ -1,9 +1,9 @@
 """ Tests for the simulation backend. """
 
-import asyncio
 import json
 import time
 import unittest
+from typing import List
 
 import pytest
 import requests
@@ -102,12 +102,8 @@ class SimulatorBackendEventCatcher(SimulationBackend):
   def clear(self):
     self.sent_datas.clear()
 
-  def get_command(self, event):
-    for data in self.sent_datas:
-      if data["event"] == event:
-        self.sent_datas.remove(data)
-        return data
-    return None
+  def get_commands(self, event) -> List[dict]:
+    return [data for data in self.sent_datas if data["event"] == event]
 
 
 class SimulatorBackendCommandTests(unittest.TestCase):
@@ -124,20 +120,21 @@ class SimulatorBackendCommandTests(unittest.TestCase):
     self.lh.assign_resource(self.plt_car, rails=10)
     self.lh.setup()
 
+    self.maxDiff = None
+
   def assert_event_sent(self, event):
-    self.assertIsNotNone(self.backend.get_command(event))
+    self.assertGreaterEqual(event, times=1)
 
   def assert_event_not_sent(self, event):
-    self.assertIsNone(self.backend.get_command(event))
-
-  def assert_event_sent_once(self, event):
-    self.assert_event_sent(event)
-    self.assert_event_not_sent(event)
+    self.assert_event_sent_n(event, times=0)
 
   def assert_event_sent_n(self, event, times):
-    for _ in range(times):
-      self.assert_event_sent(event)
-    self.assert_event_not_sent(event)
+    self.assertEqual(len(self.backend.get_commands(event)), times)
+
+  def assert_command_equal(self, right, left):
+    right.pop("id", None)
+    left.pop("id", None)
+    self.assertEqual(right, left)
 
   def test_resources_assigned_setup(self):
     # 2 carriers, 1 tip resource, 96 tip, 1 plate, 96 wells
@@ -154,65 +151,193 @@ class SimulatorBackendCommandTests(unittest.TestCase):
     self.backend.clear()
     tip_car = TIP_CAR_480_A00("tip_car_new")
     self.lh.assign_resource(tip_car, rails=20)
-    self.assert_event_sent_once("resource_assigned")
+    self.assert_event_sent_n("resource_assigned", times=1)
 
     tip_car[0] = STF_L("tips_1_new")
-    self.assert_event_sent_n("resource_assigned", times=1 + 96)
+    self.assert_event_sent_n("resource_assigned", times=1 + 1 + 96)
 
     tip_car[0] = None
     self.assert_event_sent_n("resource_unassigned", times=1 + 96)
 
   def test_tip_pickup(self):
-    self.lh.pickup_tips("tip_car", "A1")
-    self.assert_event_sent_once("pickup_tips")
+    self.lh.pickup_tips(self.tip_car[0].resource["A1"])
+    self.assert_event_sent_n("pickup_tips", times=1)
 
   def test_discard_tips(self):
-    self.lh.discard_tips("tip_car", "A1")
-    self.assert_event_sent_once("discard_tips")
+    self.lh.discard_tips(self.tip_car[0].resource["A1"])
+    self.assert_event_sent_n("discard_tips", times=1)
 
   def test_aspirate(self):
-    self.lh.aspirate("plt_car", ("A1", 100))
-    self.assert_event_sent_once("aspirate")
+    self.lh.aspirate(self.plt_car[0].resource["A1:A2"], vols=[100, 100])
+    self.assert_event_sent_n("aspirate", times=1)
+    self.assert_command_equal(self.backend.get_commands("aspirate")[0], {
+      "event": "aspirate",
+      "id": "0197",
+      "channels": [
+        {
+          "resource": {
+            "category": "well",
+            "location": {"x": 0.0, "y": 0.0, "z": 0},
+            "name": "plate_1_well_0_0",
+            "size_x": 9,
+            "size_y": 9,
+            "size_z": 9,
+            "type": "Well"
+          },
+          "volume": 100,
+          "liquid_class": {
+            "device": ["CHANNELS_1000uL"],
+            "tip_type": "STANDARD_VOLUME_TIP_300uL",
+            "dispense_mode": 2,
+            "pressure_lld": 0,
+            "max_height_difference": 0,
+            "flow_rate": [100, 120],
+            "mix_flow_rate": [100, 1],
+            "air_transport_volume": [0, 0],
+            "blowout_volume": [0, 0],
+            "swap_speed": [2, 2],
+            "settling_time": [1, 0],
+            "over_aspirate_volume": 0,
+            "clot_retract_height": 0,
+            "stop_flow_rate": 5,
+            "stop_back_volume": 0,
+            "correction_curve": {
+              "5": 6.5,
+              "10": 11.9,
+              "20": 23.2,
+              "50": 55.1,
+              "100": 107.2,
+              "200": 211.0,
+              "300": 313.5,
+              "0": 0
+            }
+          }
+        },
+        {
+          "resource": {
+            "category": "well",
+            "location": {"x": 9.0, "y": 0.0, "z": 0},
+            "name": "plate_1_well_1_0",
+            "size_x": 9,
+            "size_y": 9,
+            "size_z": 9,
+            "type": "Well"
+          },
+          "volume": 100,
+          "liquid_class": {
+            "device": ["CHANNELS_1000uL"],
+            "tip_type": "STANDARD_VOLUME_TIP_300uL",
+            "dispense_mode": 2,
+            "pressure_lld": 0,
+            "max_height_difference": 0,
+            "flow_rate": [100, 120],
+            "mix_flow_rate": [100, 1],
+            "air_transport_volume": [0, 0],
+            "blowout_volume": [0, 0],
+            "swap_speed": [2, 2],
+            "settling_time": [1, 0],
+            "over_aspirate_volume": 0,
+            "clot_retract_height": 0,
+            "stop_flow_rate": 5,
+            "stop_back_volume": 0,
+            "correction_curve": {
+              "5": 6.5,
+              "10": 11.9,
+              "20": 23.2,
+              "50": 55.1,
+              "100": 107.2,
+              "200": 211.0,
+              "300": 313.5,
+              "0": 0
+            }
+          }
+        }
+      ]
+    })
 
   def test_dispense(self):
-    self.lh.dispense("plt_car", ("A1", 100))
-    self.assert_event_sent_once("dispense")
+    self.lh.dispense(self.plt_car[0].resource["A1"], vols=[100])
+    self.assert_event_sent_n("dispense", times=1)
+    self.assert_command_equal(self.backend.get_commands("dispense")[0], {
+      "channels": [
+        {
+          "resource": {
+            "category": "well",
+            "location": {"x": 0.0, "y": 0.0, "z": 0},
+            "name": "plate_1_well_0_0",
+            "size_x": 9,
+            "size_y": 9,
+            "size_z": 9,
+            "type": "Well"
+          },
+          "volume": 100,
+          "liquid_class": {
+            "device": ["CHANNELS_1000uL"],
+            "tip_type": "STANDARD_VOLUME_TIP_300uL",
+            "dispense_mode": 2,
+            "pressure_lld": 0,
+            "max_height_difference": 0,
+            "flow_rate": [100, 120],
+            "mix_flow_rate": [100, 1],
+            "air_transport_volume": [0, 0],
+            "blowout_volume": [0, 0],
+            "swap_speed": [2, 2],
+            "settling_time": [1, 0],
+            "over_aspirate_volume": 0,
+            "clot_retract_height": 0,
+            "stop_flow_rate": 5,
+            "stop_back_volume": 0,
+            "correction_curve": {
+              "5": 6.5,
+              "10": 11.9,
+              "20": 23.2,
+              "50": 55.1,
+              "100": 107.2,
+              "200": 211.0,
+              "300": 313.5,
+              "0": 0
+            }
+          }
+        }
+      ],
+      "event": "dispense",
+    })
 
   def test_pickup_tips96(self):
     self.lh.pickup_tips96("tip_car")
-    self.assert_event_sent_once("pickup_tips96")
+    self.assert_event_sent_n("pickup_tips96", times=1)
 
   def test_discard_tips96(self):
     self.lh.discard_tips96("tip_car")
-    self.assert_event_sent_once("discard_tips96")
+    self.assert_event_sent_n("discard_tips96", times=1)
 
   def test_aspirate96(self):
     self.lh.aspirate96("plt_car", 100, [[True]*12]*8)
-    self.assert_event_sent_once("aspirate96")
+    self.assert_event_sent_n("aspirate96", times=1)
 
   def test_dispense96(self):
     self.lh.dispense96("plt_car", 100, [[True]*12]*8)
-    self.assert_event_sent_once("dispense96")
+    self.assert_event_sent_n("dispense96", times=1)
 
   def test_adjust_volume(self):
     self.backend.adjust_well_volume(self.plt_car[0], [[100]*12]*8)
-    self.assert_event_sent_once("adjust_well_volume")
+    self.assert_event_sent_n("adjust_well_volume", times=1)
 
   def test_place_tips(self):
     self.backend.place_tips(self.tip_car[0], [[True]*12]*8)
-    self.assert_event_sent_once("edit_tips")
+    self.assert_event_sent_n("edit_tips", times=1)
 
   def test_fill_tips(self):
     self.backend.fill_tips(self.tip_car[0])
-    self.assert_event_sent_once("edit_tips")
+    self.assert_event_sent_n("edit_tips", times=1)
 
   def test_remove_tips(self):
     self.backend.remove_tips(self.tip_car[0], [[True]*12]*8)
-    self.assert_event_sent_once("edit_tips")
+    self.assert_event_sent_n("edit_tips", times=1)
 
   def test_clear_tips(self):
     self.backend.clear_tips(self.tip_car[0])
-    self.assert_event_sent_once("edit_tips")
+    self.assert_event_sent_n("edit_tips", times=1)
 
 
 if __name__ == "__main__":
