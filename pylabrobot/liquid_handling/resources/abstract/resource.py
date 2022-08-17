@@ -45,7 +45,8 @@ class Resource:
       size_y=self._size_y,
       size_z=self._size_z,
       location=self.location.serialize(),
-      category=self.category or "unknown"
+      category=self.category or "unknown",
+      children=[child.serialize() for child in self.children]
     )
 
   def __eq__(self, other):
@@ -90,16 +91,17 @@ class Resource:
     """ Assign a child resource to this resource.
 
     Will use :meth:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
-    if parent is not `None`.  If the resource to be assigned has child resources, this method will
-    be called for each of them.
+    if parent is not `None`.  Note that the resource to be assigned may have child resources, in
+    which case you will be responsible for handling any checking, if necessary.
     """
 
-    self.resource_assigned_callback(resource) # call callbacks first.
-
-    for child in resource.get_all_children():
-      self.resource_assigned_callback(child)
-
     resource.parent = self
+    try:
+      self.resource_assigned_callback(resource) # call callbacks first.
+    except Exception as e:
+      resource.parent = None
+      raise e
+
     self.children.append(resource)
 
   def unassign_child_resource(self, resource: Resource):
@@ -112,9 +114,6 @@ class Resource:
     if resource not in self.children:
       raise ValueError(f"Resource with name '{resource.name}' is not a child of this resource "
                        f"('{self.name}').")
-
-    for child in resource.get_all_children():
-      self.resource_unassigned_callback(child)
 
     self.resource_unassigned_callback(resource) # call callbacks first.
     resource.parent = None

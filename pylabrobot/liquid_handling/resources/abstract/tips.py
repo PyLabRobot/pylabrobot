@@ -4,8 +4,6 @@ from abc import ABCMeta
 
 from typing import List, Union
 
-import pylabrobot.utils
-
 from .itemized_resource import ItemizedResource
 from .resource import Resource, Coordinate
 from .tip_type import TipType
@@ -37,11 +35,13 @@ class Tips(ItemizedResource[Tip], metaclass=ABCMeta):
     num_tips_y: int,
     location: Coordinate = Coordinate(None, None, None)
   ):
-    super().__init__(name, size_x, size_y, size_z, location=location + Coordinate(dx, dy, dz),
+    super().__init__(name, size_x, size_y, size_z, location=location,
                      category="tips",
-                     num_items_x=num_tips_x, num_items_y=num_tips_y, create_item=lambda i, j: Tip(
-          f"{self.name}_{i}_{j}", tip_size_x, tip_size_y, tip_type,
-          location=Coordinate(i * tip_size_x, j * -tip_size_y, 0), category=self.category))
+                     num_items_x=num_tips_x, num_items_y=num_tips_y,
+                     create_item=lambda i, j: Tip(
+                        name=f"{self.name}_{i}_{j}",
+                        size_x=tip_size_x, size_y=tip_size_y, tip_type=tip_type,
+                        location=Coordinate(dx + i * tip_size_x, dy + (num_tips_y-j-1) * tip_size_y, dz)))
     self.tip_type = tip_type
     self.dx = dx
     self.dy = dy
@@ -62,8 +62,8 @@ class Tips(ItemizedResource[Tip], metaclass=ABCMeta):
     )
 
   def __repr__(self) -> str:
-    return (f"{self.__class__.__name__}(name={self.name}, size_x={self.get_size_x()}, "
-            f"size_y={self.get_size_y()}, size_z={self.get_size_z()}, tip_type={self.tip_type}, "
+    return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
+            f"size_y={self._size_y}, size_z={self._size_z}, tip_type={self.tip_type}, "
             f"dx={self.dx}, dy={self.dy}, dz={self.dz}, location={self.location})")
 
   def get_tip(self, identifier: Union[str, int]) -> Tip:

@@ -1,12 +1,3 @@
-// Simulator.js
-
-// ===========================================================================
-// UI tools
-// ===========================================================================
-
-const robotWidthMM = 30 * 22.5; // mm, just the deck
-const robotHeightMM = 497; // mm
-
 var layer = new Konva.Layer();
 var resourceLayer = new Konva.Layer();
 var tooltipLayer = new Konva.Layer();
@@ -15,29 +6,17 @@ var stage;
 
 var canvasWidth, canvasHeight;
 
+const robotWidthMM = 100 + 30 * 22.5; // mm, just the deck
+const robotHeightMM = 497; // mm
+var scaleX, scaleY;
+
 const numRails = 30;
 
-var resources = {};
+var resources = {}; // name -> {info, resource, group, shape}
 
 const plateColor = "#2B2D42";
-
-function locationToPixel(location) {
-  return {
-    x: (location.x * canvasWidth) / robotWidthMM,
-    y: (location.y * canvasHeight) / robotHeightMM,
-  };
-}
-
-function robotWidthToScreenWidth(robotWidth) {
-  return (robotWidth * canvasWidth) / robotWidthMM;
-}
-
-function robotHeightToScreenHeight(robotHeight) {
-  return (robotHeight * canvasHeight) / robotHeightMM;
-}
-
-var tips = {};
-var wells = {};
+const hasTipsColor = "#40CDA1";
+const noTipsColor = plateColor;
 
 // Initialize pipetting heads.
 var pipHead = []; // [{has_tip: bool, volume: float, tipMaxVolume: float}]
@@ -76,220 +55,80 @@ function updateStatusLabel(status) {
   }
 }
 
-function drawCarrier(resource) {}
+const COLORS = {
+  tip_carrier: "#D80032",
+  carrier_site: "#00D2FF",
+  plate_carrier: "#D80032",
+  tips: plateColor,
+  tip: noTipsColor,
+  plate: plateColor,
+  well: "#AAFF32",
+};
 
-function addTooltipOnMouseMove(text) {
-  var mousePos = stage.getPointerPosition();
-  tooltip.position({
-    x: mousePos.x + 5,
-    // y: canvasHeight - (mousePos.y + 5),
-    y: mousePos.y + 5,
-  });
-  tooltip.getText().text(text);
-  tooltip.show();
+function min(a, b) {
+  return a < b ? a : b;
 }
 
-function addTooltipWell(well, row, column, resource) {
-  const letter = String.fromCharCode(65 + row);
-
-  well.on("mousemove", () => {
-    addTooltipOnMouseMove(
-      `${resource.name} (${letter}${column + 1}) (${
-        wells[resource.name][row][column].volume
-      }uL)`
-    );
-  });
-
-  well.on("mouseout", function () {
-    tooltip.hide();
-  });
-}
-
-function addTooltipTip(tip, row, column, resource) {
-  const letter = String.fromCharCode(65 + row);
-
-  tip.on("mousemove", () => {
-    addTooltipOnMouseMove(
-      `${resource.name} (${letter}${column + 1}) (${
-        tips[resource.name][row][column].has_tip ? "has" : "no"
-      } tip)`
-    );
-  });
-
-  tip.on("mouseout", function () {
-    tooltip.hide();
-  });
-}
-
-function drawPlate(resource, resourceLocation, group) {
-  // Draw plate background.
-  var plate = new Konva.Rect({
-    x: resourceLocation.x,
-    y: resourceLocation.y,
-    width: robotWidthToScreenWidth(resource.size_x),
-    height: robotHeightToScreenHeight(resource.size_y),
-    fill: plateColor,
-    stroke: "black",
-    strokeWidth: 1,
-  });
-  group.add(plate);
-
-  // Initialize empty well objects.
-  wells[resource.name] = {};
-  for (var i = 0; i < 8; i++) {
-    wells[resource.name][i] = {};
-    for (var j = 0; j < 12; j++) {
-      wells[resource.name][i][j] = {};
-    }
+function createShape(resource) {
+  if (resource.category === "tip" || resource.category === "well") {
+    return new Konva.Circle({
+      x: 0,
+      y: 0,
+      width: min(resource.size_x, resource.size_y),
+      height: min(resource.size_x, resource.size_y),
+      fill: noTipsColor,
+      stroke: hasTipsColor,
+      strokeWidth: 1,
+    }); 
   }
-
-  // Draw wells.
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 12; j++) {
-      // Fit n+1 wells in the row/column.
-      var well = new Konva.Circle({
-        x:
-          resourceLocation.x +
-          ((j + 1) * robotWidthToScreenWidth(resource.size_x) - 0) / (12 + 1),
-        y:
-          resourceLocation.y +
-          ((8 - i) * robotHeightToScreenHeight(resource.size_y) - 20) / (8 + 1),
-        width: 10,
-        height: 10,
-        stroke: "#D80032",
-        strokeWidth: 1,
-      });
-
-      const volume = 0;
-      const maxVolume = 1000; // TODO: get well volume from server.
-      wells[resource.name][i][j] = {
-        maxVolume: maxVolume,
-        shape: well,
-        volume: volume,
-      };
-
-      adjustVolumeSingleWell(resource, i, j, volume);
-
-      addTooltipWell(well, i, j, resource);
-
-      group.add(well);
-    }
-  }
-}
-
-function drawTips(resource, resourceLocation, group) {
-  // Draw tips background.
-  var tipsShape = new Konva.Rect({
-    x: resourceLocation.x,
-    y: resourceLocation.y,
-    width: robotWidthToScreenWidth(resource.size_x),
-    height: robotHeightToScreenHeight(resource.size_y),
-    fill: plateColor,
-    stroke: "black",
-    strokeWidth: 1,
-  });
-  group.add(tipsShape);
-
-  // Initialize empty tip objects.
-  tips[resource.name] = {};
-  for (var i = 0; i < 8; i++) {
-    tips[resource.name][i] = {};
-    for (var j = 0; j < 12; j++) {
-      tips[resource.name][i][j] = {};
-    }
-  }
-
-  // Draw tips.
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 12; j++) {
-      var tip = new Konva.Circle({
-        x:
-          resourceLocation.x +
-          ((j + 1) * robotWidthToScreenWidth(resource.size_x) - 0) / (12 + 1),
-        y:
-          resourceLocation.y +
-          ((8 - i) * robotHeightToScreenHeight(resource.size_y) - 20) / (8 + 1),
-        width: 10,
-        height: 10,
-        fill: noTipsColor,
-        stroke: "#1ee172",
-        strokeWidth: 1,
-      });
-
-      tips[resource.name][i][j] = {
-        tip: tip,
-        has_tip: false,
-      };
-      addTooltipTip(tip, i, j, resource);
-
-      group.add(tip);
-    }
-  }
-}
-
-// ===========================================================================
-// event handling
-// ===========================================================================
-
-function drawResource(resource) {
-  const location = locationToPixel({
-    x: resource.location.x - 100,
-    y: resource.location.y - 63,
-  });
-
-  var group = new Konva.Group({
-    x: location.x,
-    y: location.y,
-  });
-
-  var carrier = new Konva.Rect({
+  return new Konva.Rect({
     x: 0,
     y: 0,
-    width: robotWidthToScreenWidth(resource.size_x),
-    height: robotHeightToScreenHeight(resource.size_y),
-    fill: "#8D99AE",
-    stroke: "black",
+    width: resource.size_x,
+    height: resource.size_y,
+    fill: COLORS[resource.category],
+    stroke: hasTipsColor,
     strokeWidth: 1,
   });
+}
 
-  group.add(carrier);
+function drawResource(resource, parentGroup) {
+  var group = new Konva.Group({
+    x: resource.location.x,
+    y: resource.location.y 
+  });
 
-  // If resource is a carrier, draw the sites too.
-  for (var i = 0; i < resource.sites.length; i++) {
-    const site = resource.sites[i].site;
-    const location = locationToPixel(site.location);
+  var shape = createShape(resource);
+  group.add(shape);
 
-    // If the site has a resource, draw that too.
-    if (site.resource) {
-      if (site.resource.category === "plate") {
-        drawPlate(site.resource, location, group);
-      } else if (site.resource.category === "tips") {
-        drawTips(site.resource, location, group);
-      }
-    } else {
-      // If the site is empty, draw a circle.
-      var emptySite = new Konva.Rect({
-        x: location.x,
-        y: location.y,
-        width: robotWidthToScreenWidth(site.width),
-        height: robotHeightToScreenHeight(site.height),
-        fill: plateColor,
-        stroke: "black",
-        opacity: 0.5,
-        strokeWidth: 1,
-      });
-      group.add(emptySite);
-    }
+  for (var i = 0; i < resource.children.length; i++) {
+    var child = resource.children[i];
+    drawResource(child, group);
   }
 
-  // TODO: should we add subresources, plates in particular, as separate resources?
-  resources[resource.name] = group;
-  layer.add(group);
+  // TODO: move to create resource.
+  // TODO: get maxVolume from server.
+  var info = {};
+  if (resource.category === "well") {
+    info = {
+      maxVolume: 1000,
+      volume: 0,
+    };
+  }
+  resources[resource.name] = {
+    resource: resource,
+    info: info,
+    group: group,
+    shape: shape,
+  };
+
+  parentGroup.add(group);
 }
 
 function removeResource(resource_name) {
   if (resource_name in resources) {
-    resources[resource_name].destroy();
+    resources[resource_name].shape.destroy();
+    resources[resource_name].group.destroy();
     delete resources[resource_name];
   }
 }
@@ -298,97 +137,57 @@ function colorForVolume(volume, maxVolume) {
   return `rgba(239, 35, 60, ${volume / maxVolume})`;
 }
 
-function adjustVolumeSingleWell(resource, row, column, volume) {
-  const well = wells[resource.name][row][column];
-  well.volume = volume;
-  const newColor = colorForVolume(volume, well.maxVolume);
-  well.shape.fill(newColor);
+function adjustVolumeSingleWell(well_name, volume) {
+  resources[well_name].info.volume = volume;
+  const newColor = colorForVolume(volume, resources[well_name].info.maxVolume);
+  resources[well_name].shape.fill(newColor);
 }
 
-function adjustVolume(resource, pattern) {
+function adjustVolume(pattern) {
   for (let i = 0; i < pattern.length; i++) {
-    for (let j = 0; j < pattern[i].length; j++) {
-      adjustVolumeSingleWell(resource, i, j, pattern[i][j]);
-    }
+    const {well, volume} = pattern[i];
+    adjustVolumeSingleWell(well.name, volume);
   }
   return null;
 }
 
-const hasTipsColor = "#40CDA1";
-const noTipsColor = plateColor;
-
-// A1 -> 0, 0; B2 -> 1, 1; C3 -> 2, 2; etc.
-function positionToCoordinate(position) {
-  const row = position.charCodeAt(0) - 65;
-  const column = position.slice(1) - 1;
-  return { row, column };
-}
-
 // Returns error message if there is a problem, otherwise returns null.
-function pickUpTips(resource, channels) {
-  // channel locations
-  channels = [
-    channels["channel_1"],
-    channels["channel_2"],
-    channels["channel_3"],
-    channels["channel_4"],
-    channels["channel_5"],
-    channels["channel_6"],
-    channels["channel_7"],
-    channels["channel_8"],
-  ];
-  for (let i = 0; i < channels.length; i++) {
-    let location = channels[i];
-
-    // Skip if the channel is empty: in that case, no tip should be picked up.
-    if (location === null) {
+function pickUpTips(channels) {
+  for (var i = 0; i < channels.length; i++) {
+    var tip = channels[i];
+    if (tip === null || tip === undefined) {
       continue;
     }
 
-    const { row, column } = positionToCoordinate(location);
+    const resource = resources[tip.name];
 
-    const tip = tips[resource.name][row][column];
-    if (!tip.has_tip) {
-      return `No tip at location ${location}.`;
+    if (!resource.info.has_tip) {
+      return `${tip.name} is not a tip`;
     }
     if (pipHead[i].has_tip) {
-      return `Pip head channel ${i + 1} already has a tip.`;
+      return `${tip.name} is already picked up`;
     }
 
-    tip.has_tip = false;
-    tip.tip.fill(noTipsColor);
+    resource.shape.fill(noTipsColor);
+    resource.info.has_tip = false;
     pipHead[i].has_tip = true;
-    pipHead[i].tipMaxVolume = resource.tip_type.maximal_volume;
+    pipHead[i].tipMaxVolume = resource.info.maxVolume;
   }
   return null;
 }
 
 // Returns error message if there is a problem, otherwise returns null.
-function discardTips(resource, channels) {
-  // channel locations
-  channels = [
-    channels["channel_1"],
-    channels["channel_2"],
-    channels["channel_3"],
-    channels["channel_4"],
-    channels["channel_5"],
-    channels["channel_6"],
-    channels["channel_7"],
-    channels["channel_8"],
-  ];
+function discardTips(channels) {
   for (let i = 0; i < channels.length; i++) {
-    let location = channels[i];
-
-    // Skip if the channel is empty: in that case, no tip should be picked up.
-    if (location === null) {
+    var tip = channels[i];
+    if (tip === null || tip === undefined) {
       continue;
     }
 
-    const { row, column } = positionToCoordinate(location);
+    const resource = resources[tip.name];
 
-    const tip = tips[resource.name][row][column];
-    if (tip.has_tip) {
-      return `There already is tip at location ${location}.`;
+    if (resource.info.has_tip) {
+      return `There already is tip at location ${tip.resource}.`;
     }
     if (!pipHead[i].has_tip) {
       return `Pip head channel ${i + 1} already does not have a tip.`;
@@ -399,102 +198,71 @@ function discardTips(resource, channels) {
       }uL > 0`;
     }
 
-    tip.has_tip = true;
-    tip.tip.fill(hasTipsColor);
+    resource.shape.fill(hasTipsColor);
+    resource.info.has_tip = true;
     pipHead[i].has_tip = false;
     pipHead[i].tipMaxVolume = undefined;
   }
   return null;
 }
 
-function editTips(resource, pattern) {
+function editTips(pattern) {
   for (let i = 0; i < pattern.length; i++) {
-    for (let j = 0; j < pattern[i].length; j++) {
-      tips[resource.name][i][j].tip.fill(
-        pattern[i][j] ? hasTipsColor : noTipsColor
-      );
-      tips[resource.name][i][j].has_tip = pattern[i][j];
-    }
+    const {tip, has_one} = pattern[i];
+    resources[tip.name].shape.fill(has_one ? hasTipsColor : noTipsColor);
+    resources[tip.name].info.has_tip = has_one;
   }
   return null;
 }
 
-function aspirate(resource, channels) {
-  var channels = [
-    channels["channel_1"],
-    channels["channel_2"],
-    channels["channel_3"],
-    channels["channel_4"],
-    channels["channel_5"],
-    channels["channel_6"],
-    channels["channel_7"],
-    channels["channel_8"],
-  ];
+function aspirate(channels) {
   for (let i = 0; i < channels.length; i++) {
-    let info = channels[i];
-
-    // Skip if the channel is empty.
-    if (info === null || info === undefined) {
+    if (channels[i] === null || channels[i] === undefined) {
       continue;
     }
 
-    const { row, column } = positionToCoordinate(info.position);
-    const well = wells[resource.name][row][column];
+    let {resource, volume} = channels[i];
 
-    if (well.volume < info.volume) {
-      return `Not enough volume in well: ${well.volume}uL.`;
+    const well = resources[resource.name];
+
+    if (well.info.volume < volume) {
+      return `Not enough volume in well: ${well.info.volume}uL.`;
     }
-
     if (!pipHead[i].has_tip) {
       return `Pip head channel ${i + 1} does not have a tip.`;
     }
-
-    if (info.volume + pipHead[i].volume > pipHead[i].tipMaxVolume) {
-      return `Aspirated volume (${info.volume}uL) + volume of tip (${pipHead[i].volume}uL) > maximal volume of tip (${pipHead[i].tipMaxVolume}uL).`;
+    if (volume + pipHead[i].volume > pipHead[i].tipMaxVolume) {
+      return `Aspirated volume (${volume}uL) + volume of tip (${pipHead[i].volume}uL) > maximal volume of tip (${pipHead[i].tipMaxVolume}uL).`;
     }
 
-    pipHead[i].volume += info.volume;
-    adjustVolumeSingleWell(resource, row, column, well.volume - info.volume);
+    pipHead[i].volume += volume;
+    adjustVolumeSingleWell(resource.name, well.info.volume - volume);
   }
   return null;
 }
 
-function dispense(resource, channels) {
-  var channels = [
-    channels["channel_1"],
-    channels["channel_2"],
-    channels["channel_3"],
-    channels["channel_4"],
-    channels["channel_5"],
-    channels["channel_6"],
-    channels["channel_7"],
-    channels["channel_8"],
-  ];
+function dispense(channels) {
   for (let i = 0; i < channels.length; i++) {
-    let info = channels[i];
-
-    // Skip if the channel is empty.
-    if (info === null || info === undefined) {
+    if (channels[i] === null || channels[i] === undefined) {
       continue;
     }
 
-    const { row, column } = positionToCoordinate(info.position);
-    const well = wells[resource.name][row][column];
+    let {resource, volume} = channels[i];
 
-    if (pipHead[i].volume < info.volume) {
+    const well = resources[resource.name];
+
+    if (pipHead[i].volume < volume) {
       return `Not enough volume in tip: ${pipHead[i].volume}.`;
     }
-
     if (!pipHead[i].has_tip) {
       return `Pip head channel ${i + 1} does not have a tip.`;
     }
-
-    if (info.volume + well.volume > well.maxVolume) {
-      return `Dispensed volume (${info.volume}uL) + volume of well (${well.volume}uL) > maximal volume of well (${well.maxVolume}uL).`;
+    if (volume + well.volume > well.maxVolume) {
+      return `Dispensed volume (${volume}uL) + volume of well (${well.volume}uL) > maximal volume of well (${well.maxVolume}uL).`;
     }
 
-    pipHead[i].volume -= info.volume;
-    adjustVolumeSingleWell(resource, row, column, well.volume + info.volume);
+    pipHead[i].volume -= volume;
+    adjustVolumeSingleWell(resource.name, well.info.volume + volume);
   }
   return null;
 }
@@ -503,7 +271,9 @@ function pickupTips96(resource) {
   // Validate there are enough tips first, and that there are no tips in the head.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      if (!tips[resource.name][i][j].has_tip) {
+      const tip_name = resource.children[i * resource.num_items_x + j].name;
+      const tip = resources[tip_name];
+      if (!tip.info.has_tip) {
         return `There is no tip at (${i},${j}) in ${resource.name}.`;
       }
       if (CoRe96Head[i][j].has_tip) {
@@ -515,11 +285,12 @@ function pickupTips96(resource) {
   // Then pick up the tips.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      const tip = tips[resource.name][i][j];
-      tip.has_tip = false;
-      tip.tip.fill(noTipsColor);
+      const tip_name = resource.children[i * resource.num_items_x + j].name;
+      const tip = resources[tip_name];
+      tip.info.has_tip = false;
+      tip.shape.fill(noTipsColor);
       CoRe96Head[i][j].has_tip = true;
-      CoRe96Head[i][j].tipMaxVolume = resource.tip_type.maximal_volume;
+      CoRe96Head[i][j].tipMaxVolume = tip.info.maxVolume;
     }
   }
 }
@@ -528,7 +299,9 @@ function discardTips96(resource) {
   // Validate there are enough tips first, and that there are no tips in the head.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      if (tips[resource.name][i][j].has_tip) {
+      const tip_name = resource.children[i * resource.num_items_x + j].name;
+      const tip = resources[tip_name];
+      if (tip.info.has_tip) {
         return `There already is a tip at (${i},${j}) in ${resource.name}.`;
       }
       if (!CoRe96Head[i][j].has_tip) {
@@ -540,9 +313,10 @@ function discardTips96(resource) {
   // Then pick up the tips.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      const tip = tips[resource.name][i][j];
-      tip.has_tip = true;
-      tip.tip.fill(hasTipsColor);
+      const tip_name = resource.children[i * resource.num_items_x + j].name;
+      const tip = resources[tip_name];
+      tip.info.has_tip = true;
+      tip.shape.fill(hasTipsColor);
       CoRe96Head[i][j].has_tip = false;
       CoRe96Head[i][j].tipMaxVolume = undefined;
     }
@@ -554,29 +328,29 @@ function aspirate96(resource, pattern) {
   // has a tip before aspiration.
   for (let i = 0; i < pattern.length; i++) {
     for (let j = 0; j < pattern[i].length; j++) {
-      if (pattern[i][j] > 0) {
-        const well = wells[resource.name][i][j];
-        if (well.volume < pattern[i][j]) {
-          return `Not enough volume in well: ${well.volume}uL.`;
-        }
-        if (
-          CoRe96Head[i][j].volume + pattern[i][j] >
-          CoRe96Head[i][j].maxVolume
-        ) {
-          return `Aspirated volume (${pattern[i][j]}uL) + volume of tip (${CoRe96Head[i][j].volume}uL) > maximal volume of tip (${CoRe96Head[i][j].maxVolume}uL).`;
-        }
-        if (!CoRe96Head[i][j].has_tip) {
-          return `CoRe 96 head channel (${i},${j}) does not have a tip.`;
-        }
+      const well_name = resource.children[i * resource.num_items_x + j].name;
+      const well = resources[well_name];
+      if (well.info.volume < pattern[i][j]) {
+        return `Not enough volume in well: ${well.volume}uL.`;
+      }
+      if (
+        CoRe96Head[i][j].volume + pattern[i][j] >
+        CoRe96Head[i][j].maxVolume
+      ) {
+        return `Aspirated volume (${pattern[i][j]}uL) + volume of tip (${CoRe96Head[i][j].volume}uL) > maximal volume of tip (${CoRe96Head[i][j].maxVolume}uL).`;
+      }
+      if (!CoRe96Head[i][j].has_tip) {
+        return `CoRe 96 head channel (${i},${j}) does not have a tip.`;
       }
     }
   }
 
   for (let i = 0; i < pattern.length; i++) {
     for (let j = 0; j < pattern[i].length; j++) {
-      const well = wells[resource.name][i][j];
+      const well_name = resource.children[i * resource.num_items_x + j].name;
+      const well = resources[well_name];
       CoRe96Head[i][j].volume += pattern[i][j];
-      adjustVolumeSingleWell(resource, i, j, well.volume - pattern[i][j]);
+      adjustVolumeSingleWell(well_name, well.info.volume - pattern[i][j]);
     }
   }
 
@@ -588,26 +362,26 @@ function dispense96(resource, pattern) {
   // has a tip before dispense.
   for (let i = 0; i < pattern.length; i++) {
     for (let j = 0; j < pattern[i].length; j++) {
-      if (pattern[i][j] > 0) {
-        const well = wells[resource.name][i][j];
-        if (CoRe96Head[i][j].volume < pattern[i][j]) {
-          return `Not enough volume in head: ${CoRe96Head[i][j].volume}uL.`;
-        }
-        if (well.volume + pattern[i][j] > well.maxVolume) {
-          return `Dispensed volume (${pattern[i][j]}uL) + volume of well (${well.volume}uL) > maximal volume of well (${well.maxVolume}uL).`;
-        }
-        if (!CoRe96Head[i][j].has_tip) {
-          return `CoRe 96 head channel (${i},${j}) does not have a tip.`;
-        }
+      const well_name = resource.children[i * resource.num_items_x + j].name;
+      const well = resources[well_name];
+      if (CoRe96Head[i][j].volume < pattern[i][j]) {
+        return `Not enough volume in head: ${CoRe96Head[i][j].volume}uL.`;
       }
+      if (well.info.volume + pattern[i][j] > well.info.maxVolume) {
+        return `Dispensed volume (${pattern[i][j]}uL) + volume of well (${well.info.volume}uL) > maximal volume of well (${well.info.maxVolume}uL).`;
+      }
+      if (!CoRe96Head[i][j].has_tip) {
+        return `CoRe 96 head channel (${i},${j}) does not have a tip.`;
+    }
     }
   }
 
   for (let i = 0; i < pattern.length; i++) {
     for (let j = 0; j < pattern[i].length; j++) {
-      const well = wells[resource.name][i][j];
+      const well_name = resource.children[i * resource.num_items_x + j].name;
+      const well = resources[well_name];
       CoRe96Head[i][j].volume -= pattern[i][j];
-      adjustVolumeSingleWell(resource, i, j, well.volume + pattern[i][j]);
+      adjustVolumeSingleWell(well_name, well.info.volume + pattern[i][j]);
     }
   }
 
@@ -633,7 +407,18 @@ function handleEvent(event, data) {
 
   switch (event) {
     case "resource_assigned":
-      drawResource(resource);
+      var group;
+      const has_parent_name = data.hasOwnProperty("parent_name");
+      if (
+        has_parent_name === undefined ||
+        has_parent_name === null ||
+        data["parent_name"] === "deck"
+      ) {
+        group = resourceLayer;
+      } else {
+        group = resources[data["parent_name"]].group;
+      }
+      drawResource(resource, group);
       break;
 
     case "resource_unassigned":
@@ -641,27 +426,27 @@ function handleEvent(event, data) {
       break;
 
     case "pickup_tips":
-      ret.error = pickUpTips(resource, data.channels);
+      ret.error = pickUpTips(data.channels);
       break;
 
     case "discard_tips":
-      ret.error = discardTips(resource, data.channels);
+      ret.error = discardTips(data.channels);
       break;
 
     case "edit_tips":
-      ret.error = editTips(resource, data.pattern);
+      ret.error = editTips(data.pattern);
       break;
 
     case "adjust_well_volume":
-      ret.error = adjustVolume(resource, data.pattern);
+      ret.error = adjustVolume(data.pattern);
       break;
 
     case "aspirate":
-      ret.error = aspirate(resource, data.channels);
+      ret.error = aspirate(data.channels);
       break;
 
     case "dispense":
-      ret.error = dispense(resource, data.channels);
+      ret.error = dispense(data.channels);
       break;
 
     case "pickup_tips96":
@@ -735,43 +520,17 @@ function openSocket() {
   });
 }
 
+const railOffsetX = 100;
 function drawRails() {
-  for (var i = 1; i < numRails; i++) {
-    const x = (canvasWidth / numRails) * i;
+  for (var i = 0; i < numRails; i++) {
+    const x = 100 + ((canvasWidth / scaleX - 100) / numRails) * i;
     const line = new Konva.Line({
       points: [x, 0, x, canvasHeight],
-      stroke: "black",
+      stroke: "gray",
       strokeWidth: 1,
     });
     layer.add(line);
   }
-}
-
-function drawTooltip() {
-  tooltip = new Konva.Label({
-    x: 0,
-    y: 0,
-    opacity: 1,
-    visible: false,
-  });
-
-  tooltip.add(
-    new Konva.Tag({
-      fill: "yellow",
-    })
-  );
-
-  tooltip.add(
-    new Konva.Text({
-      text: "",
-      fontFamily: "Arial",
-      fontSize: 14,
-      padding: 5,
-      fill: "black",
-    })
-  );
-
-  tooltipLayer.add(tooltip);
 }
 
 window.addEventListener("load", function () {
@@ -779,18 +538,21 @@ window.addEventListener("load", function () {
   canvasWidth = canvas.offsetWidth;
   canvasHeight = canvas.offsetHeight;
 
+  scaleX = canvasWidth / robotWidthMM;
+  scaleY = canvasHeight / robotHeightMM;
+
+  // TODO: use min(scaleX, scaleY)
+
   stage = new Konva.Stage({
     container: "kanvas",
     width: canvasWidth,
     height: canvasHeight,
 
-    // VENUS & robot coordinates have the origin in the bottom left corner.
-    scaleY: -1,
-    offsetY: canvasHeight,
+    scaleX: scaleX,
+    // VENUS & robot coordinates have the origin in the bottom left corner, so we need to flip the y axis.
+    scaleY: -1 * scaleY,
+    offsetY: canvasHeight / scaleY,
   });
-
-  drawRails();
-  drawTooltip();
 
   // add the layer to the stage
   stage.add(layer);
@@ -799,6 +561,8 @@ window.addEventListener("load", function () {
   tooltipLayer.scaleY(-1);
   tooltipLayer.offsetY(canvasHeight);
   updateStatusLabel("disconnected");
+
+  drawRails();
 
   openSocket();
 });

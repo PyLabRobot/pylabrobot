@@ -120,11 +120,10 @@ class CarrierTests(unittest.TestCase):
       size_x=200, size_y=200, size_z=50,
       sites=[Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10
     )
-    plate = Resource("plate", location=Coordinate(5, 5, 5), size_x=10, size_y=10, size_z=10)
+    plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_child_resource(plate, spot=0)
 
-    # TODO(63)
-    self.assertEqual(carrier.get_resource("plate").get_absolute_location(), Coordinate(20, 20+63, 20))
+    self.assertEqual(carrier.get_resource("plate").get_absolute_location(), Coordinate(15, 15, 15))
 
   def test_capacity(self):
     self.assertEqual(self.tip_car.capacity, 5)
@@ -180,7 +179,7 @@ class CarrierTests(unittest.TestCase):
   def test_serialization(self):
     self.maxDiff = None # pylint: disable=invalid-name
     self.assertEqual(self.tip_car.serialize(), {
-      "sites": [
+      "children": [
         {
           "spot": 0,
           "name": "carrier-tip_car-spot-0",
@@ -194,7 +193,8 @@ class CarrierTests(unittest.TestCase):
             "y": 20,
             "z": 30
           },
-          "category": "carrier_site"
+          "category": "carrier_site",
+          "children": []
         },
         {
           "spot": 1,
@@ -209,7 +209,8 @@ class CarrierTests(unittest.TestCase):
             "y": 50,
             "z": 30
           },
-          "category": "carrier_site"
+          "category": "carrier_site",
+          "children": []
         },
         {
           "spot": 2,
@@ -224,7 +225,8 @@ class CarrierTests(unittest.TestCase):
             "y": 80,
             "z": 30
           },
-          "category": "carrier_site"
+          "category": "carrier_site",
+          "children": []
         },
         {
           "spot": 3,
@@ -239,7 +241,8 @@ class CarrierTests(unittest.TestCase):
             "y": 130,
             "z": 30
           },
-          "category": "carrier_site"
+          "category": "carrier_site",
+          "children": []
         },
         {
           "spot": 4,
@@ -254,14 +257,15 @@ class CarrierTests(unittest.TestCase):
             "y": 160,
             "z": 30
           },
-          "category": "carrier_site"
+          "category": "carrier_site",
+          "children": []
         }
       ],
       "name": "tip_car",
       "type": "TipCarrier",
-      "size_x": 135,
-      "size_y": 497,
-      "size_z": 13,
+      "size_x": 135.0,
+      "size_y": 497.0,
+      "size_z": 13.0,
       "location": {
         "x": 0,
         "y": 0,

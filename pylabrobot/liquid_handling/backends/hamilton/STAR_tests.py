@@ -389,7 +389,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     plate_reader = PlateReader(name="plate_reader")
     self.lh.assign_resource(plate_reader, location=Coordinate(979.5, 285.2-63, 200 - 100), replace=True)
 
-    self.lh.move_plate(self.plt_car[0], plate_reader, pickup_distance_from_top=9,
+    self.lh.move_plate(self.plt_car[0], plate_reader, pickup_distance_from_top=12.2,
       get_open_gripper_position=1320, get_grip_direction=1,
       put_grip_direction=4, put_open_gripper_position=1320)
     self._assert_command_sent_once(
@@ -399,7 +399,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "C0PRid0004xs10430xd0yj3282yd0zj2023zd0th2840te2840gr4go1320ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
-    self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0], pickup_distance_from_top=11,
+    self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0], pickup_distance_from_top=14.2,
       get_open_gripper_position=1320, get_grip_direction=4,
       put_grip_direction=1, put_open_gripper_position=1320)
     self._assert_command_sent_once(

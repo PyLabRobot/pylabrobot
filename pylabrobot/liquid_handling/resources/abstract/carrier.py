@@ -5,8 +5,6 @@ from typing import List, Optional
 
 from .coordinate import Coordinate
 from .resource import Resource
-from .tips import Tips
-from .plate import Plate
 
 
 logger = logging.getLogger(__name__)
@@ -57,12 +55,12 @@ class Carrier(Resource):
       self.spot: int = spot
 
     def assign_child_resource(self, resource, **kwargs):
-      # parent (Carrier) handles our child management.
-      return self.parent.assign_child_resource(resource, spot=self.spot, **kwargs)
+      self.resource = resource
+      return super().assign_child_resource(resource, **kwargs)
 
     def unassign_child_resource(self, resource):
-      # parent (Carrier) handles our child management.
-      return self.parent.unassign_child_resource(resource)
+      self.resource = None
+      return super().unassign_child_resource(resource)
 
     def serialize(self):
       return dict(
@@ -89,10 +87,12 @@ class Carrier(Resource):
 
     self.sites: List[Carrier.CarrierSite] = []
     for i in range(self.capacity):
-      self.sites.append(Carrier.CarrierSite(
+      site = Carrier.CarrierSite(
         size_x=site_size_x, size_y=site_size_y, size_z=0,
         location=sites[i] + Coordinate(0, 0, 0),
-        parent=self, spot=i))
+        parent=self, spot=i)
+      self.sites.append(site)
+      super().assign_child_resource(site)
 
   def assign_child_resource(self, resource, spot: int, **kwargs):
     """ Assign a resource to this carrier.
@@ -106,18 +106,14 @@ class Carrier(Resource):
       ValueError: If the resource is already assigned to this carrier.
     """
 
-    super().assign_child_resource(resource)
+    # super().assign_child_resource(resource)
     if spot < 0 or spot >= self.capacity:
       raise IndexError(f"Invalid spot {spot}")
     if self.sites[spot].resource is not None:
       raise ValueError(f"spot {spot} already has a resource")
 
-    if isinstance(resource, (Plate, Tips)) or True: # ??
-      resource.location += Coordinate(0, 63, 0) # TODO(63) fix
-
-    # place carrier site in between, but don't see them as children.
-    self.sites[spot].resource = resource
-    resource.parent = self.sites[spot]
+    resource.location = Coordinate(0, 0, 0) # directly in carrier site
+    self.sites[spot].assign_child_resource(resource)
 
   def unassign_child_resource(self, resource):
     """ Unassign a resource from this carrier, checked by name.
@@ -130,16 +126,7 @@ class Carrier(Resource):
       ValueError: If the resource is not assigned to this carrier.
     """
 
-    super().unassign_child_resource(resource)
-    for s in self.sites:
-      if s.resource is not None and s.resource.name == resource.name:
-        if isinstance(resource, (Plate, Tips)) or True: # ??
-          resource.location -= Coordinate(0, 63, 0) # TODO(63) fix
-
-        s.resource = None
-        return
-
-    raise ValueError(f"Resource {resource.name} not found in carrier")
+    self.sites[resource.parent.spot].unassign_child_resource(resource)
 
   def __getitem__(self, idx) -> Carrier.CarrierSite:
     """ Get a site by index. """
@@ -157,23 +144,15 @@ class Carrier(Resource):
 
   def __delitem__(self, idx):
     """ Unassign a resource from this carrier. See :meth:`~Carrier.unassign_child_resource` """
-    self.unassign_child_resource(self[idx])
+    self.unassign_child_resource(self[idx].resource)
 
   def get_resources(self) -> List[Resource]:
     """ Get all resources, using self.__getitem__ (so that the location is within this carrier). """
-    # return [self[k].resource for k in range(self.capacity) if self[k].resource is not None]
     return [site.resource for site in self.sites if site.resource is not None]
 
   def get_sites(self) -> List[Carrier.CarrierSite]:
     """ Get all sites. """
     return self.sites
-
-  def serialize(self) -> dict:
-    """ Serialize this carrier. """
-    return dict(
-      sites=[site.serialize() for site in self.sites],
-      **super().serialize()
-    )
 
   def __eq__(self, other):
     return super().__eq__(other) and self.sites == other.sites

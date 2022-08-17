@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Optional, Union, List
 
-import pylabrobot.utils
-
 from .resource import Resource, Coordinate
 from .well import Well
 from .itemized_resource import ItemizedResource
@@ -62,11 +60,11 @@ class Plate(ItemizedResource[Well]):
       size_x: Size of the plate in the x direction.
       size_y: Size of the plate in the y direction.
       size_z: Size of the plate in the z direction.
-      dx: The distance between the start of the plate and the start of the first well in the x
+      dx: The distance between the start of the plate and the center of the first well (A1) in the x
         direction.
-      dy: The distance between the start of the plate and the start of the first well in the y
+      dy: The distance between the start of the plate and the center of the first well (A1) in the y
         direction.
-      dz: The distance between the start of the plate and the start of the first well in the z
+      dz: The distance between the start of the plate and the center of the first well (A1) in the z
         direction.
       num_wells_x: Number of wells in the x direction.
       num_wells_y: Number of wells in the y direction.
@@ -78,12 +76,12 @@ class Plate(ItemizedResource[Well]):
     """
 
     # TODO: remove location here and add them on wells instead?
-    super().__init__(name, size_x, size_y, size_z, location=location + Coordinate(dx, dy, dz),
+    super().__init__(name, size_x, size_y, size_z, location=location,
                      category="plate",
                      num_items_x=num_wells_x, num_items_y=num_wells_y,
-                     create_item=lambda i, j: Well(name + f"_well_{i}_{j}",
-                      location=Coordinate(
-                        x=i * well_size_x, y=j * -well_size_y, z=0)))
+                     create_item=lambda i, j: Well(
+                        name=name + f"_well_{i}_{j}", location=Coordinate(
+                        x=dx + i * well_size_x, y=dy + (num_wells_y-j-1) * well_size_y, z=dz)))
     self.dx = dx
     self.dy = dy
     self.dz = dz

@@ -9,7 +9,7 @@ import os
 import threading
 import time
 import typing
-from typing import Optional, Tuple, List
+from typing import Optional, List
 import webbrowser
 
 try:
@@ -25,6 +25,7 @@ from pylabrobot.liquid_handling.resources import (
   Lid,
   Plate,
   Resource,
+  Tips,
   Tip,
   Well
 )
@@ -213,7 +214,7 @@ class SimulationBackend(LiquidHandlerBackend):
       while True:
         try:
           async with websockets.serve(self._socket_handler, self.ws_host, self.ws_port):
-            print("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
+            print("Simulation server started at http://%s:%s" % (self.ws_host, self.ws_port))
             # logger.info("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
             await self.stop_
             break
@@ -318,6 +319,7 @@ class SimulationBackend(LiquidHandlerBackend):
 
   def assigned_resource_callback(self, resource):
     self.send_event(event="resource_assigned", resource=resource.serialize(),
+      parent_name=(resource.parent.name if resource.parent else None),
       wait_for_response=False)
 
   def unassigned_resource_callback(self, name):
@@ -359,7 +361,7 @@ class SimulationBackend(LiquidHandlerBackend):
 
   # -------------- Simulator only methods --------------
 
-  def adjust_well_volume(self, resource: Resource, pattern: typing.List[typing.List[float]]):
+  def adjust_well_volume(self, plate: Plate, pattern: typing.List[typing.List[float]]):
     """ Fill a resource with liquid (**simulator only**).
 
     Simulator method to fill a resource with liquid, for testing of liquid handling.
@@ -376,29 +378,50 @@ class SimulationBackend(LiquidHandlerBackend):
     if not self.setup_finished:
       raise RuntimeError("The setup has not been finished.")
 
-    self.send_event(event="adjust_well_volume", resource=resource.serialize(), pattern=pattern,
-     wait_for_response=True)
+    serialized_pattern = []
 
-  def place_tips(self, resource: Resource, pattern: typing.List[typing.List[bool]]):
-    """ Place tips on the robot (**simulator only**).
+    for i, row in enumerate(pattern):
+      for j, vol in enumerate(row):
+        idx = i + j * 8
+        serialized_pattern.append({
+          "well": plate.get_item(idx).serialize(),
+          "volume": vol
+        })
+
+    self.send_event(event="adjust_well_volume", pattern=serialized_pattern,
+      wait_for_response=True)
+
+  def edit_tips(self, tips_resource: Tips, pattern: typing.List[typing.List[bool]]):
+    """ Place and/or remove tips on the robot (**simulator only**).
 
     Simulator method to place tips on the robot, for testing of tip pickup/discarding. Unlike,
     :func:`~Simulator.pickup_tips`, this method does not raise an exception if tips are already
     present on the specified locations. Note that a
-    :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource has to be assigned.
+    :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource has to be assigned first.
 
     Args:
       resource: The resource to place tips in.
-      pattern: A list of lists of places where to place a tip.
+      pattern: A list of lists of places where to place a tip. Tips will be removed from the
+        resource where the pattern is `False`.
 
     Raises:
       RuntimeError: if this method is called before :func:`~setup`.
     """
 
-    self.send_event(event="edit_tips", resource=resource.serialize(), pattern=pattern,
+    serialized_pattern = []
+
+    for i, row in enumerate(pattern):
+      for j, has_one in enumerate(row):
+        idx = i + j * 8
+        serialized_pattern.append({
+          "tip": tips_resource.get_item(idx).serialize(),
+          "has_one": has_one
+        })
+
+    self.send_event(event="edit_tips", pattern=serialized_pattern,
       wait_for_response=True)
 
-  def fill_tips(self, resource: Resource):
+  def fill_tips(self, resource: Tips):
     """ Completely fill a :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource with
     tips. (**simulator only**).
 
@@ -406,29 +429,7 @@ class SimulationBackend(LiquidHandlerBackend):
       resource: The resource where all tips should be placed.
     """
 
-    self.place_tips(resource, [[True] * 12] * 8)
-
-  def remove_tips(self, resource: Resource, pattern: typing.List[typing.List[bool]]):
-    """ Remove tips from the robot (**simulator only**).
-
-    Simulator method to remove tips from the robot, for testing of tip pickup/discarding. Unlike,
-    :func:`~Simulator.pickup_tips`, this method does not raise an exception if tips are not
-    present on the specified locations. Note that a
-    :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource has to be assigned.
-
-    Args:
-      resource: The resource to remove tips from.
-      pattern: A list of lists of places where to remove a tip.
-
-    Raises:
-      RuntimeError: if this method is called before :func:`~setup`.
-    """
-
-    # Flip each boolean in the 2d array.
-    pattern = [[not p for p in pattern[i]] for i in range(len(pattern))]
-
-    self.send_event(event="edit_tips", resource=resource.serialize(), pattern=pattern,
-      wait_for_response=True)
+    self.edit_tips(resource, [[True] * 12] * 8)
 
   def clear_tips(self, resource: Resource):
     """ Completely clear a :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource.
@@ -438,7 +439,7 @@ class SimulationBackend(LiquidHandlerBackend):
       resource: The resource where all tips should be removed.
     """
 
-    self.remove_tips(resource, [[True] * 12] * 8)
+    self.edit_tips(resource, [[True] * 12] * 8)
 
   def move_plate(self, plate: Plate, to: Coordinate, **backend_kwargs):
     raise NotImplementedError("This method is not implemented in the simulator.")
