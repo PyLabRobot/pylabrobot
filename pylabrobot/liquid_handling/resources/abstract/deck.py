@@ -31,24 +31,51 @@ class Deck(Resource):
     self.resource_assigned_callback_callback = resource_assigned_callback
     self.resource_unassigned_callback_callback = resource_unassigned_callback
 
-  def resource_assigned_callback(self, resource):
+  def _check_name_exists(self, resource: Resource):
+    """ Raises a ValueError if the resource name already exists. This method is recursive, and
+    will also check child resources. """
+
+    if self.has_resource(resource.name):
+      raise ValueError(f"Resource '{resource.name}' already assigned to deck")
+    for child in resource.children:
+      self._check_name_exists(child)
+
+  def _assign_resource(self, resource: Resource):
+    """ Recursively assign the given resource and all child resources to the `self.resources`
+    dictionary.
+
+    Precondition: All child resources must be assignable, see `self._check_name_exists`.
+    """
+
+    for child in resource.children:
+      self._assign_resource(child)
+    self.resources[resource.name] = resource
+
+  def resource_assigned_callback(self, resource: Resource):
     """
     - Keeps track of the resources in the deck.
     - Raises a `ValueError` if a resource with the same name is already assigned.
     """
 
-    if self.has_resource(resource.name):
-      raise ValueError(f"Resource '{resource.name}' already assigned to deck")
+    self._check_name_exists(resource)
     super().resource_assigned_callback(resource)
 
-    self.resources[resource.name] = resource
+    self._assign_resource(resource)
 
     if self.resource_assigned_callback_callback is not None:
       self.resource_assigned_callback_callback(resource)
 
-  def resource_unassigned_callback(self, resource):
-    if resource.name in self.resources:
+  def _unassign_resource(self, resource: Resource):
+    """ Recursively unassigns the given resource and all child resources from the `self.resources`
+    dictionary."""
+
+    if self.has_resource(resource.name):
       del self.resources[resource.name]
+    for child in resource.children:
+      self._unassign_resource(child)
+
+  def resource_unassigned_callback(self, resource: Resource):
+    self._unassign_resource(resource)
     super().resource_unassigned_callback(resource)
     if self.resource_unassigned_callback_callback is not None:
       self.resource_unassigned_callback_callback(resource)

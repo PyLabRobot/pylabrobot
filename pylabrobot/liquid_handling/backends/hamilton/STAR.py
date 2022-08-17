@@ -867,7 +867,7 @@ class STAR(HamiltonLiquidHandler):
     volume: float,
     blow_out_air_volume: float = 0,
     use_lld: bool = False,
-    liquid_height: Optional[float] = None,
+    liquid_height: float = 2,
     air_transport_retract_dist: float = 10,
     **backend_kwargs
   ):
@@ -876,7 +876,7 @@ class STAR(HamiltonLiquidHandler):
     # flatten pattern array
     pattern = [item for sublist in pattern for item in sublist]
 
-    liquid_height = resource.get_absolute_location().z + (liquid_height or 1)
+    liquid_height = resource.get_absolute_location().z + liquid_height
 
     cmd_kwargs = dict(
       x_position=int(position.x * 10),
@@ -940,7 +940,7 @@ class STAR(HamiltonLiquidHandler):
     mix_volume=0,
     jet=False,
     blow_out=True, # TODO: do we need this if we can just check if blow_out_air_volume > 0?
-    liquid_height: Optional[float]=None,
+    liquid_height: float = 2,
     dispense_mode=3,
     air_transport_retract_dist=10,
     blow_out_air_volume: float = 0,
@@ -950,7 +950,7 @@ class STAR(HamiltonLiquidHandler):
     # flatten pattern array
     pattern = [item for sublist in pattern for item in sublist]
 
-    liquid_height = resource.get_absolute_location().z + (liquid_height or 1)
+    liquid_height = resource.get_absolute_location().z + liquid_height
 
     dispense_mode = {
       (True, False): 0,
@@ -1018,6 +1018,7 @@ class STAR(HamiltonLiquidHandler):
     self,
     plate: Union[Coordinate, Plate],
     target: Union[Coordinate, Resource],
+    pickup_distance_from_top: float = 13.2,
     **backend_kwargs
   ):
     assert isinstance(plate, Plate)
@@ -1026,21 +1027,13 @@ class STAR(HamiltonLiquidHandler):
     x = plate.get_absolute_location().x + plate.get_size_x()/2
     y = plate.get_absolute_location().y + plate.get_size_y()/2
 
-    if isinstance(plate, Plate):
-      x -= plate.dx
-      y -= plate.dy
-      if isinstance(plate.parent, Carrier.CarrierSite): # TODO(63)
-        y -= 63
-
+    # Get the grip height for the plate.
+    # grip_height = plate.get_absolute_location().z + plate.one_dot_max - \
+    #               plate.dz - pickup_distance_from_top
+    grip_height = plate.get_absolute_location().z + plate.get_size_z() - pickup_distance_from_top
+    grip_height = int(grip_height * 10)
     x = int(x * 10)
     y = int(y * 10)
-
-    # Get the grip height for the plate.
-    # TODO: when lid present: pickup_distance_from_top=11
-    pickup_distance_from_top = backend_kwargs.pop("pickup_distance_from_top", 10) # mm
-    grip_height = plate.get_absolute_location().z + plate.one_dot_max - \
-                  plate.dz - pickup_distance_from_top
-    grip_height = int(grip_height * 10)
 
     get_cmd_kwargs = dict(
       grip_direction=backend_kwargs.pop("get_grip_direction", 1),
@@ -1074,10 +1067,8 @@ class STAR(HamiltonLiquidHandler):
       to_location = Coordinate(
         x=to_location.x + plate.get_size_x()/2,
         y=to_location.y + plate.get_size_y()/2,
-        z=to_location.z - pickup_distance_from_top
+        z=to_location.z + plate.get_size_z() - pickup_distance_from_top
       )
-      if isinstance(plate, Plate):
-        to_location.z += plate.one_dot_max
 
     put_cmd_kwargs = dict(
       grip_direction=backend_kwargs.pop("put_grip_direction", 1),
@@ -1113,20 +1104,9 @@ class STAR(HamiltonLiquidHandler):
     # Get center of source lid.
     x = lid.get_absolute_location().x + lid.get_size_x()/2
     y = lid.get_absolute_location().y + lid.get_size_y()/2
-    try:
-      if isinstance(lid.parent.parent, Carrier.CarrierSite): # lid's plate's parent a CarrierSite?
-        y -= 63 # TODO(63)
-        pass
-    except AttributeError:
-      pass
 
     # Get the grip height for the plate.
     grip_height = lid.get_absolute_location().z - pickup_distance_from_top
-
-    if isinstance(lid.parent, Plate): # TODO: figure out a better way to do this
-      x -= lid.parent.dx
-      y -= lid.parent.dy
-      grip_height -= lid.parent.dz
 
     x = int(x * 10)
     y = int(y * 10)
@@ -1171,19 +1151,11 @@ class STAR(HamiltonLiquidHandler):
       to_location.z += target.get_size_z()
 
       try:
-        if isinstance(target, Plate): # TODO: figure out a better way to do this
-          to_location.x -= target.dx
-          to_location.y -= target.dy
-          to_location.z -= target.dz
-
         if isinstance(lid.parent, Hotel):
           to_location.z += lid.get_size_z() # beacause it was removed by hotel when location changed
           to_location.z -= target.get_size_z() # the lid.get_size_z() is the height of the lid,
                                                # which will fit on top of the plate, so no need to
                                                # factor in the height of the plate.
-
-        if isinstance(target.parent, Carrier.CarrierSite): # plate's parent a CarrierSite?
-          to_location.y -= 63 # TODO(63)
       except AttributeError:
         pass
 

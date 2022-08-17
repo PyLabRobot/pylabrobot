@@ -56,6 +56,14 @@ exclude_patterns = [
   'jupyter_execute'
 ]
 
+autodoc_default_options = {
+  # 'members': False,
+  # 'undoc-members': False,
+  'show-inheritance': True,
+  # 'special-members': '__init__,__getitem__',
+  'exclude-members': '__weakref__'
+}
+
 default_role = 'code' # allow single backticks for inline code
 
 # -- Options for HTML output -------------------------------------------------

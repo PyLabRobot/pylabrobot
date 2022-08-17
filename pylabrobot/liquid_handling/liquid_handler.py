@@ -209,7 +209,7 @@ class LiquidHandler:
     self.backend.assigned_resource_callback(resource)
 
   def resource_unassigned_callback(self, resource: Resource):
-    self.backend.unassigned_resource_callback(resource)
+    self.backend.unassigned_resource_callback(resource.name)
 
   def unassign_resource(self, resource: typing.Union[str, Resource]):
     """ Unassign an assigned resource.
@@ -279,11 +279,14 @@ class LiquidHandler:
           if site.resource is None:
             print("     │   ├── <empty>")
           else:
-            # Get subresource using `self.get_resource` to update it with the new location.
             subresource = site.resource
+            if isinstance(subresource, (Tips, Plate)):
+              location = subresource.get_item("A1").get_absolute_location()
+            else:
+              location = subresource.get_absolute_location()
             print(f"     │   ├── {utils.pad_string(subresource.name, 27-4)}"
                   f"{utils.pad_string(subresource.__class__.__name__, 20)}"
-                  f"{subresource.get_absolute_location()}")
+                  f"{location}")
 
     # Sort resources by rails, left to right in reality.
     sorted_resources = sorted(self.deck.children, key=lambda r: r.get_absolute_location().x)

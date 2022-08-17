@@ -49,7 +49,8 @@ class SimulatorBackendServerTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     await super().asyncSetUp()
 
-    self.uri = "ws://localhost:2121"
+    ws_port = self.backend.ws_port # port may change if port is already in use
+    self.uri = f"ws://localhost:{ws_port}"
     self.client = await websockets.connect(self.uri)
 
   def tearDown(self):
@@ -138,14 +139,14 @@ class SimulatorBackendCommandTests(unittest.TestCase):
 
   def test_resources_assigned_setup(self):
     # 2 carriers, 1 tip resource, 96 tip, 1 plate, 96 wells
-    self.assert_event_sent_n("resource_assigned", times=2 + 1 + 96 + 1 + 96)
+    self.assert_event_sent_n("resource_assigned", times=2)
 
   def test_resources_assigned(self):
     self.backend.clear()
     tip_car = TIP_CAR_480_A00("tip_car_new")
     tip_car[0] = STF_L("tips_1_new")
     self.lh.assign_resource(tip_car, rails=20)
-    self.assert_event_sent_n("resource_assigned", times=1 + 1 + 96)
+    self.assert_event_sent_n("resource_assigned", times=1)
 
   def test_subresource_assigned(self):
     self.backend.clear()
@@ -153,11 +154,13 @@ class SimulatorBackendCommandTests(unittest.TestCase):
     self.lh.assign_resource(tip_car, rails=20)
     self.assert_event_sent_n("resource_assigned", times=1)
 
+    self.backend.clear()
     tip_car[0] = STF_L("tips_1_new")
-    self.assert_event_sent_n("resource_assigned", times=1 + 1 + 96)
+    self.assert_event_sent_n("resource_assigned", times=1)
 
+    self.backend.clear()
     tip_car[0] = None
-    self.assert_event_sent_n("resource_unassigned", times=1 + 96)
+    self.assert_event_sent_n("resource_unassigned", times=1)
 
   def test_tip_pickup(self):
     self.lh.pickup_tips(self.tip_car[0].resource["A1"])
@@ -177,7 +180,8 @@ class SimulatorBackendCommandTests(unittest.TestCase):
         {
           "resource": {
             "category": "well",
-            "location": {"x": 0.0, "y": 0.0, "z": 0},
+            "children": [],
+            "location": {"x": 14.0, "y": 74.5, "z": 1.0},
             "name": "plate_1_well_0_0",
             "size_x": 9,
             "size_y": 9,
@@ -216,7 +220,8 @@ class SimulatorBackendCommandTests(unittest.TestCase):
         {
           "resource": {
             "category": "well",
-            "location": {"x": 9.0, "y": 0.0, "z": 0},
+            "children": [],
+            "location": {"x": 23.0, "y": 74.5, "z": 1.0},
             "name": "plate_1_well_1_0",
             "size_x": 9,
             "size_y": 9,
@@ -263,7 +268,8 @@ class SimulatorBackendCommandTests(unittest.TestCase):
         {
           "resource": {
             "category": "well",
-            "location": {"x": 0.0, "y": 0.0, "z": 0},
+            "children": [],
+            "location": {"x": 14.0, "y": 74.5, "z": 1.0},
             "name": "plate_1_well_0_0",
             "size_x": 9,
             "size_y": 9,
@@ -320,25 +326,20 @@ class SimulatorBackendCommandTests(unittest.TestCase):
     self.assert_event_sent_n("dispense96", times=1)
 
   def test_adjust_volume(self):
-    self.backend.adjust_well_volume(self.plt_car[0], [[100]*12]*8)
+    self.backend.adjust_well_volume(self.plt_car[0].resource, [[100]*12]*8)
     self.assert_event_sent_n("adjust_well_volume", times=1)
 
-  def test_place_tips(self):
-    self.backend.place_tips(self.tip_car[0], [[True]*12]*8)
+  def test_edit_tips(self):
+    self.backend.edit_tips(self.tip_car[0].resource, [[True]*12]*8)
     self.assert_event_sent_n("edit_tips", times=1)
 
   def test_fill_tips(self):
-    self.backend.fill_tips(self.tip_car[0])
-    self.assert_event_sent_n("edit_tips", times=1)
-
-  def test_remove_tips(self):
-    self.backend.remove_tips(self.tip_car[0], [[True]*12]*8)
+    self.backend.fill_tips(self.tip_car[0].resource)
     self.assert_event_sent_n("edit_tips", times=1)
 
   def test_clear_tips(self):
-    self.backend.clear_tips(self.tip_car[0])
+    self.backend.clear_tips(self.tip_car[0].resource)
     self.assert_event_sent_n("edit_tips", times=1)
-
 
 if __name__ == "__main__":
   unittest.main()
