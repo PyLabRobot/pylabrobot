@@ -3,7 +3,7 @@ name: Build and Publish Documentation
 on:
   push:
     branches:
-      usb
+      main
 
 jobs:
   build_docs:
