@@ -28,6 +28,18 @@ Hardware
     pylabrobot.liquid_handling.backends.hamilton.HamiltonLiquidHandler
     pylabrobot.liquid_handling.backends.hamilton.STAR
 
+Net
+---
+
+Net backends can be used to communicate with servers that manage liquid handling devices.
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.liquid_handling.backends.net.HTTPBackend
+    pylabrobot.liquid_handling.backends.net.WebSocketBackend
 
 Simulator
 ---------
@@ -37,4 +49,4 @@ Simulator
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.backends.simulation.SimulationBackend
+    pylabrobot.liquid_handling.backends.simulation.SimulatorBackend

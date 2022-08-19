@@ -1,22 +1,16 @@
-""" Simulation """
-
 import asyncio
 from contextlib import suppress
-import http.server
 import json
 import logging
-import os
 import threading
 import time
 import typing
 from typing import Optional, List
-import webbrowser
 
 try:
   import websockets
   HAS_WEBSOCKETS = True
 except ImportError:
-  print("Simulator requires websockets.")
   HAS_WEBSOCKETS = False
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
@@ -25,9 +19,7 @@ from pylabrobot.liquid_handling.resources import (
   Lid,
   Plate,
   Resource,
-  Tips,
   Tip,
-  Well
 )
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
@@ -38,72 +30,31 @@ from pylabrobot.liquid_handling.standard import (
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
 
 
-class SimulationBackend(LiquidHandlerBackend):
-  """ The simulator backend can be used to simulate robot methods and inspect the results in a
-  browser.
-
-  You can view the simulation at `http://localhost:1337 <http://localhost:1337>`_, where
-  `static/index.html` will be served.
-
-  The websocket server will run at `http://localhost:2121 <http://localhost:2121>`_ by default. If a
-  new browser page connects, it will replace the existing connection. All previously sent actions
-  will be sent to the new page, with no simualated delay, to ensure that the state of the simulation
-  remains the same. This also happens when a browser reloads the page or on the first page load.
-
-  Note that the simulator backend uses
-  :class:`~pyhamilton.liquid_handling.resources.abstract.Resource` 's to locate resources, where eg.
-  :class:`~pyhamilton.liquid_handling.backends.hamilton.STAR` uses absolute coordinates.
-
-  Examples:
-    Running a simple simulation:
-
-    >>> import pyhamilton.liquid_handling.backends.simulation.simulation as simulation
-    >>> from pylabrobot.liquid_handling.liquid_handler import LiquidHandler
-    >>> sb = simulation.SimulationBackend()
-    >>> lh = pyhamilton.liquid_handling.LiquidHandler(backend=sb)
-    >>> lh.setup()
-    INFO:websockets.server:server listening on 127.0.0.1:2121
-    INFO:pyhamilton.liquid_handling.backends.simulation.simulation:Simulation server started at
-      http://127.0.0.1:2121
-    INFO:pyhamilton.liquid_handling.backends.simulation.simulation:File server started at
-      http://127.0.0.1:1337
-    >>> lh.place_tips([[True]*12]*8)
-    >>> lh.pickup_tips(locations)
-  """
+class WebSocketBackend(LiquidHandlerBackend):
+  """ A backend that hosts a websocket server and sends commands over it. """
 
   def __init__(
     self,
-    simulate_delay: bool = False,
     ws_host: str = "127.0.0.1",
     ws_port: int = 2121,
-    fs_host: str = "127.0.0.1",
-    fs_port: int = 1337,
-    open_browser: bool = True,
   ):
-    """ Create a new simulation backend.
+    """ Create a new web socket backend.
 
     Args:
-      simulate_delay: If `True`, the simulator will simulate the wait times for various actions,
-        otherwise actions will be instant.
       ws_host: The hostname of the websocket server.
       ws_port: The port of the websocket server. If this port is in use, the port will be
         incremented until a free port is found.
-      fs_host: The hostname of the file server. This is where the simulation will be served.
-      fs_port: The port of the file server. If this port is in use, the port will be incremented
-        until a free port is found.
-      open_browser: If `True`, the simulation will open a browser window when it is started.
     """
+
+    if not HAS_WEBSOCKETS:
+      raise RuntimeError("The simulator requires websockets to be installed.")
 
     super().__init__()
     self._resources = {}
     self.websocket = None
 
-    self.simulate_delay = simulate_delay
     self.ws_host = ws_host
     self.ws_port = ws_port
-    self.fs_host = fs_host
-    self.fs_port = fs_port
-    self.open_browser = open_browser
 
     self._sent_messages = []
     self.received = []
@@ -231,44 +182,6 @@ class SimulationBackend(LiquidHandlerBackend):
 
     asyncio.run_coroutine_threadsafe(run_server(), self.loop)
 
-    self._run_file_server()
-
-  def _run_file_server(self):
-    """ Start a simple webserver to serve static files. """
-
-    dirname = os.path.dirname(__file__)
-    path = os.path.join(dirname, "simulator")
-    if not os.path.exists(path):
-      raise RuntimeError("Could not find simulation files. Please run from the root of the "
-                         "repository.")
-
-    def start_server():
-      # try to start the server. If the port is in use, try with another port until it succeeds.
-      os.chdir(path) # only within thread.
-
-      class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-        """ A simple HTTP request handler that does not log requests. """
-        def log_message(self, format, *args):
-          pass
-
-      while True:
-        try:
-          self.httpd = http.server.HTTPServer((self.fs_host, self.fs_port),
-            QuietSimpleHTTPRequestHandler)
-          logger.info("File server started at http://%s:%s", self.fs_host, self.fs_port)
-          break
-        except OSError:
-          self.fs_port += 1
-
-      self.httpd.serve_forever()
-
-    self.fst = threading.Thread(name="simulation_fs", target=start_server)
-    self.fst.setDaemon(True)
-    self.fst.start()
-
-    if self.open_browser:
-      webbrowser.open(f"http://{self.fs_host}:{self.fs_port}")
-
   def stop(self):
     """ Stop the simulation. """
 
@@ -303,10 +216,6 @@ class SimulationBackend(LiquidHandlerBackend):
     while lock.locked():
       pass
 
-    # Stop the file server.
-    self.httpd.shutdown()
-    self.httpd.server_close()
-
     # Clear all relevant attributes.
     self._sent_messages.clear()
     self.received.clear()
@@ -314,8 +223,6 @@ class SimulationBackend(LiquidHandlerBackend):
     self.loop = None
     self.t = None
     self.stop_ = None
-    self.httpd = None
-    self.fst = None
 
   def assigned_resource_callback(self, resource):
     self.send_event(event="resource_assigned", resource=resource.serialize(),
@@ -358,88 +265,6 @@ class SimulationBackend(LiquidHandlerBackend):
     pattern = [[volume if p else 0 for p in pattern[i]] for i in range(len(pattern))]
     self.send_event(event="dispense96", resource=resource.serialize(), pattern=pattern,
       volume=volume, wait_for_response=True)
-
-  # -------------- Simulator only methods --------------
-
-  def adjust_well_volume(self, plate: Plate, pattern: typing.List[typing.List[float]]):
-    """ Fill a resource with liquid (**simulator only**).
-
-    Simulator method to fill a resource with liquid, for testing of liquid handling.
-
-    Args:
-      resource: The resource to fill.
-      pattern: A list of lists of liquid volumes to fill the resource with.
-
-    Raises:
-      RuntimeError: if this method is called before :func:`~setup`.
-    """
-
-    # Check if set up has been run, else raise a ValueError.
-    if not self.setup_finished:
-      raise RuntimeError("The setup has not been finished.")
-
-    serialized_pattern = []
-
-    for i, row in enumerate(pattern):
-      for j, vol in enumerate(row):
-        idx = i + j * 8
-        serialized_pattern.append({
-          "well": plate.get_item(idx).serialize(),
-          "volume": vol
-        })
-
-    self.send_event(event="adjust_well_volume", pattern=serialized_pattern,
-      wait_for_response=True)
-
-  def edit_tips(self, tips_resource: Tips, pattern: typing.List[typing.List[bool]]):
-    """ Place and/or remove tips on the robot (**simulator only**).
-
-    Simulator method to place tips on the robot, for testing of tip pickup/discarding. Unlike,
-    :func:`~Simulator.pickup_tips`, this method does not raise an exception if tips are already
-    present on the specified locations. Note that a
-    :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource has to be assigned first.
-
-    Args:
-      resource: The resource to place tips in.
-      pattern: A list of lists of places where to place a tip. Tips will be removed from the
-        resource where the pattern is `False`.
-
-    Raises:
-      RuntimeError: if this method is called before :func:`~setup`.
-    """
-
-    serialized_pattern = []
-
-    for i, row in enumerate(pattern):
-      for j, has_one in enumerate(row):
-        idx = i + j * 8
-        serialized_pattern.append({
-          "tip": tips_resource.get_item(idx).serialize(),
-          "has_one": has_one
-        })
-
-    self.send_event(event="edit_tips", pattern=serialized_pattern,
-      wait_for_response=True)
-
-  def fill_tips(self, resource: Tips):
-    """ Completely fill a :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource with
-    tips. (**simulator only**).
-
-    Args:
-      resource: The resource where all tips should be placed.
-    """
-
-    self.edit_tips(resource, [[True] * 12] * 8)
-
-  def clear_tips(self, resource: Resource):
-    """ Completely clear a :class:`~pyhamilton.liquid_handling.resources.abstract.Tips` resource.
-    (**simulator only**).
-
-    Args:
-      resource: The resource where all tips should be removed.
-    """
-
-    self.edit_tips(resource, [[True] * 12] * 8)
 
   def move_plate(self, plate: Plate, to: Coordinate, **backend_kwargs):
     raise NotImplementedError("This method is not implemented in the simulator.")
