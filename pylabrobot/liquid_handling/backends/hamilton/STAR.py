@@ -8,14 +8,12 @@ import datetime
 import enum
 import logging
 import re
-import time
 import typing
 from typing import Union, List, Optional
 
 from pylabrobot import utils
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
-  Carrier,
   Hotel,
   Lid,
   Resource,
@@ -43,22 +41,23 @@ except ImportError:
   logger.warn("Could not import pyusb, Hamilton interface will not be available.")
   USE_USB = False
 
+
 class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
   """
 
   @abstractmethod
-  def __init__(self, read_poll_interval=0.005):
+  def __init__(self, read_timeout=0.005):
     """
 
     Args:
-      read_poll_interval: The sleep after each check for device responses, in seconds.
+      read_timeout: The timeout for reading packets from the Hamilton machine.
     """
 
     super().__init__()
 
-    self.read_poll_interval = read_poll_interval
+    self.read_timeout = read_timeout
     self.id_ = 0
 
   def _generate_id(self):
@@ -110,7 +109,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     try:
       res = self.dev.read(
         self.read_endpoint,
-        self.read_endpoint.wMaxPacketSize
+        self.read_endpoint.wMaxPacketSize,
+        timeout=self.read_timeout
       )
     except usb.core.USBError:
       # No data available (yet), this will give a timeout error. Don't reraise.
@@ -335,9 +335,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self.dev.write(self.write_endpoint, cmd)
     logger.info("Sent command: %s", cmd)
 
-    # Read packets until timeout, or when we identify the right id.
+    # Read packets until timeout, or when we identify the right id. Timeout is approximately
+    # equal to the number of packet reads * the packet timeout (self.read_timeout).
     attempts = 0
-    while attempts < (timeout / self.read_poll_interval):
+    while attempts < (timeout / self.read_timeout):
       res = self._read_packet()
       if res is None:
         continue
@@ -361,7 +362,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
           return res
         return self.parse_response(res, fmt)
 
-      time.sleep(self.read_poll_interval)
       attempts += 1
 
     return None
@@ -380,9 +380,12 @@ class STAR(HamiltonLiquidHandler):
     """
 
     super().__init__(**kwargs)
-    self.dev = None
+    self.dev: Optional[usb.core.Device] = None
     self._tip_types = {}
     self.num_channels = num_channels
+
+    self.read_endpoint: Optional[usb.core.Endpoint] = None
+    self.write_endpoint: Optional[usb.core.Endpoint] = None
 
   def setup(self):
     """ setup
@@ -417,14 +420,14 @@ class STAR(HamiltonLiquidHandler):
       custom_match = \
       lambda e: \
           usb.util.endpoint_direction(e.bEndpointAddress) == \
-          usb.util.ENDPOINT_OUT) # 0x3?
+          usb.util.ENDPOINT_OUT)
 
     self.read_endpoint = usb.util.find_descriptor(
       intf,
       custom_match = \
       lambda e: \
           usb.util.endpoint_direction(e.bEndpointAddress) == \
-          usb.util.ENDPOINT_IN) # 0x83?
+          usb.util.ENDPOINT_IN)
 
     logger.info("Found endpoints. \nWrite:\n %s \nRead:\n %s", self.write_endpoint, self.read_endpoint)
 
@@ -450,7 +453,7 @@ class STAR(HamiltonLiquidHandler):
         end_of_tip_deposit_process=1220,
         z_position_at_end_of_a_command=3600,
         tip_pattern=[1], # [1] * 8
-        tip_type="04", # TODO: get from tip types
+        tip_type=4, # TODO: get from tip types
         discarding_method=0
       )
 
@@ -462,17 +465,6 @@ class STAR(HamiltonLiquidHandler):
     logging.warning("Closing connection to USB device.")
     usb.util.dispose_resources(self.dev)
     self.dev = None
-
-  def _read(self):
-    """
-    continuously read data sent by Hamilton device and store each entry
-    with an id in the responses cache.
-    """
-
-    while True:
-      time.sleep(self.read_poll_interval)
-      self.dev.read(self.read_endpoint, 100) # TODO: instead of 100 we want to read until new line.
-      # TODO: what happens when we write 2 commands without reading in between?
 
   # ============== Tip Types ==============
 
