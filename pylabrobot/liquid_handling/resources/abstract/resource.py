@@ -62,13 +62,13 @@ class Resource:
 
   def __repr__(self) -> str:
     return f"{self.__class__.__name__}(name={self.name}, location={self.location}, " \
-           f"size_x={self._size_x}, size_y={self._size_y}, size_z={self._size_z})" \
+           f"size_x={self._size_x}, size_y={self._size_y}, size_z={self._size_z}, " \
            f"category={self.category})"
 
   def __hash__(self) -> int:
     return hash(repr(self))
 
-  def get_absolute_location(self):
+  def get_absolute_location(self) -> Coordinate:
     """ Get the absolute location of this resource, probably within the
     :class:`pylabrobot.liquid_handling.resources.abstract.Deck`. """
     if self.parent is None:
