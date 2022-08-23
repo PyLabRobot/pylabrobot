@@ -122,6 +122,9 @@ class STARCommandCatcher(STAR):
     cmd, _ = self._assemble_command(module, command, **kwargs)
     self.commands.append(cmd)
 
+  def stop(self):
+    self.stop_finished = True
+
 
 class TestSTARLiquidHandlerCommands(unittest.TestCase):
   """ Test STAR backend for liquid handling. """
@@ -195,7 +198,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     """ Convert channel positions to firmware positions. """
     resource = self.lh.get_resource("tips_01")
     self.assertEqual(
-      self.mockSTAR._channel_positions_to_fw_positions([resource["A1"]]),
+      self.mockSTAR._channel_positions_to_fw_positions(resource["A1"]),
       ([1179, 0], [2418, 0], [True, False])
     )
 
@@ -227,7 +230,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_tip_pickup_15(self):
     tips = self.tip_car[1].resource
-    self.lh.pickup_tips([tips["A1"]] + [None] * 3 + [tips["F1"]])
+    self.lh.pickup_tips(tips["A1"] + [None] * 3 + tips["F1"])
     self._assert_command_sent_once(
       "C0TPid0000xp01179 00000 00000 00000 01179 00000&yp2418 0000 0000 0000 1968 0000 "
       "&tm1 0 0 0 1 0&tt01tp2244tz2164th2450td0",
@@ -271,7 +274,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "sz#### (n)io#### (n)il##### (n)in#### (n)")
 
   def test_multi_channel_aspiration(self):
-    self.lh.aspirate(self.plt_car[0].resource["A1:B1"], vols=[100])
+    self.lh.aspirate(self.plt_car[0].resource["A1:B1"], vols=100)
 
     # Real command
     # self._assert_command_sent_once(
@@ -315,7 +318,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_multi_channel_dispense(self):
     print([x.get_absolute_location() for x in self.plt_car[0].resource["A1:B1"]])
-    self.lh.dispense(self.plt_car[0].resource["A1:B1"], vols=[100])
+    self.lh.dispense(self.plt_car[0].resource["A1:B1"], vols=100)
 
     # self._assert_command_sent_once(
     #   "C0DSid0317dm2 2&tm1 1 0&dv01072 01072 00000&xp02980 02980 00000&yp1460 1370 0000&"

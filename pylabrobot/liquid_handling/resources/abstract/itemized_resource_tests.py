@@ -31,10 +31,10 @@ class TestItemizedResource(unittest.TestCase):
     self.assertEqual(self.plate.get_item(95).get_absolute_location(), Coordinate(99, 0, 0))
 
   def test_getitem_int(self):
-    self.assertEqual(self.plate[0].name, "plate_well_0_0")
+    self.assertEqual(self.plate[0][0].name, "plate_well_0_0")
 
   def test_getitem_str(self):
-    self.assertEqual(self.plate["A1"].name, "plate_well_0_0")
+    self.assertEqual(self.plate["A1"][0].name, "plate_well_0_0")
 
   def test_getitem_slice(self):
     self.assertEqual([w.name for w in self.plate[0:7]], ["plate_well_0_0", "plate_well_0_1",

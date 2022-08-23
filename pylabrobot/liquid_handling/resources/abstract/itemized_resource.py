@@ -47,13 +47,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       'num_items_y': self.num_items_y,
     }
 
-  def __getitem__(self, identifier: Union[str, List[int], slice]) -> Union[T, List[T]]:
+  def __getitem__(self, identifier: Union[str, List[int], slice]) -> List[T]:
     """ Get the items with the given identifier.
 
     This is a convenience method for getting the items with the given identifier. It is equivalent
     to :meth:`get_items`, but adds support for slicing and supports single items in the same
-    functional call. Note that the return type depends on the type of the identifier. If the
-    identifier is a string, a list of items is returned.
+    functional call. Note that the return type will always be a list, even if a single item is
+    requested.
     """
 
     if isinstance(identifier, str):
@@ -70,8 +70,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         identifier.stop = pylabrobot.utils.string_to_index(identifier.stop)
       identifier = range(identifier.start, identifier.stop)
 
-    if len(identifier) == 1:
-      return self.get_item(identifier[0])
     return self.get_items(identifier)
 
   def get_item(self, identifier: Union[str, int]) -> T:

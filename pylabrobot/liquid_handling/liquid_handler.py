@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 import functools
 import inspect
 import json
@@ -561,116 +562,11 @@ class LiquidHandler:
       raise ValueError("Must specify at least one channel to discard tips from.")
     self.backend.discard_tips(*channels, **backend_kwargs)
 
-  def _channels_to_standard_form(
-    self,
-    *channels: Optional[
-      Union[
-        Well, List[Well],
-        Tuple[Well, float], Tuple[List[Well], List[float]]
-      ]],
-    vols: Optional[List[float]] = None
-  ) -> List[Optional[Aspiration]]:
-    """ Convert channels to a list of tuples of wells and volumes.
-
-    If channels is a list of wells, then vols must be a list of volumes. If channels is a list of
-    tuples, then vols must be None.
-
-    Standard form is a list of tuples of length 2 containing a single well and volume.
-
-    TODO: will probably refactor with more universal paramters (like vols).
-
-    Args:
-      channels: A list of channels to aspirate liquid from.
-      vols: A list of volumes to aspirate liquid from.
-    """
-
-    first_non_none = next(c for c in channels if c is not None)
-
-    if isinstance(first_non_none, Well):
-      if vols is None:
-        raise ValueError("If channels is a list of wells, then vols must be a list of volumes.")
-      # Assert parallel None in channels and vols
-      if any((c is None) != (v is None) for c, v in zip(channels, vols)):
-        raise ValueError("If channels is a list of wells, then vols must be a list of volumes " \
-                         "with parallel None in channels and vols.")
-      channels = [(channel, vol) for channel, vol in zip(channels, vols)]
-
-    elif isinstance(first_non_none, list) and all(channel is None or isinstance(channel, Well) for channel in first_non_none):
-      if vols is None:
-        raise ValueError("If channels is a list of wells, then vols must be a list of volumes.")
-      if len(vols) == 1:
-        vols = vols * len(first_non_none)
-      if isinstance(vols, list) and len(vols) != len(first_non_none):
-        raise ValueError("If channels is a list of wells, then vols must be a list of volumes of "
-                         "the same length as channels.")
-      channels = [(channel, vol) for channel, vol in zip(first_non_none, vols)]
-
-    else:
-      if vols is not None:
-        raise ValueError("If channels is a list of tuples, then vols must be None.")
-
-    # Channels is (now) a list of tuples.
-    # Each tuple is of length two containing either a single well and single volume or a list of
-    # wells and list of volumes.
-
-    ret = []
-    for channel in channels:
-      if channel is None or channel[0] is None:
-        ret.append(None)
-        continue
-
-      if not isinstance(channel, tuple):
-        raise TypeError("Channel must be None or a tuple.")
-      if len(channel) != 2:
-        raise TypeError("Channel must be None or a tuple of length 2.")
-
-      if isinstance(channel[0], list):
-        if not all(isinstance(channel, Well) for channel in channel[0]):
-          raise TypeError("If channel is a list, it must be a list of wells.")
-        if not all(isinstance(vol, numbers.Real) for vol in channel[1]):
-          raise TypeError("If channel.volumes is a list, it must be a list of numbers.")
-
-        if (isinstance(channel[1], numbers.Real)): # use a single volume for all wells
-          v = channel[1]
-          ret.extend([Aspiration(resource=r, volume=v) for r in channel[0]])
-        elif (isinstance(channel[1], list)): # use a list of volumes, one vol for each well
-          if not len(channel[0]) == len(channel[1]):
-            raise ValueError("If channels is a list of wells, then vols must be a list of volumes "
-                             "of equal length.")
-
-          ret.extend([Aspiration(resource=c, volume=v) for c, v in zip(channel[0], channel[1])])
-
-      elif isinstance(channel[0], Well) and isinstance(channel[1], numbers.Real):
-        ret.append(Aspiration(resource=channel[0], volume=channel[1]))
-
-      else:
-        raise TypeError(f"Channel must be a tuple of length 2, containing a tuple of either a "
-          "single well and single volume, a list of wells and a list of volumes, or a list of "
-         f"wells and a single volume, but is '{channel}'.")
-
-    # Assert that all channels positions are unique.
-    if len(ret) != len(set((channel.resource if channel is not None else None) for channel in ret)):
-      raise ValueError("All channels must be unique.")
-
-    return ret
-
-  @overload
-  def aspirate(
-    self,
-    *channels: Union[Well, List[Well]],
-    vols: List[float], **kwargs) -> None: ...
-
-  @overload
-  def aspirate(
-    self,
-    *channels: Union[Tuple[Well, float], Tuple[List[Well], List[float]]],
-    **kwargs) -> None: ...
-
   @need_setup_finished
   def aspirate(
     self,
-    *channels: Union[Well, List[Well], Tuple[Well, float], Tuple[List[Well], List[float]]],
-    vols: Optional[List[float]] = None,
+    channels: Iterable[Well],
+    vols: Union[Iterable[float], numbers.Rational],
     end_delay: float = 0,
     **backend_kwargs
   ):
@@ -691,14 +587,13 @@ class LiquidHandler:
 
       Aspirate liquid from wells in different plates:
 
-      >>> lh.aspirate((plate["A1"], 50), (plate2["A1"], 50), (plate3["A1"], 50))
+      >>> lh.aspirate(plate["A1"] + plate2["A1"] + plate3["A1"], 50)
 
     Args:
-      channels: A list of channels to aspirate liquid from. If channels is a well or a list of
-        wells, then vols must be a list of volumes, otherwise vols must be None. If channels is a
-        list of tuples, they must be of length 2, and the first element must be a well or a list of
-        wells, and the second element must be a volume or a list of volumes. When a single volume is
-        passed with a list of wells, it is used for all wells in the list.
+      channels: A list of channels to aspirate liquid from. Use `None` to skip a channel.
+      vols: A list of volumes to aspirate, one for each channel. Note that the `None` values must
+        be in the same position in both lists. If `vols` is a single number, then all channels
+        will aspirate that volume.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
@@ -714,7 +609,10 @@ class LiquidHandler:
     if len(channels) == 0:
       raise ValueError("No channels specified")
 
-    channels = self._channels_to_standard_form(*channels, vols=vols)
+    if isinstance(vols, numbers.Rational):
+      vols = [vols] * len(channels)
+    channels = [(Aspiration(c, v) if c is not None else None) for c, v in zip(channels, vols)]
+
     self.backend.aspirate(*channels, **backend_kwargs)
 
     if end_delay > 0:
@@ -735,8 +633,8 @@ class LiquidHandler:
   @need_setup_finished
   def dispense(
     self,
-    *channels: Union[Well, List[Well], Tuple[Well, float], Tuple[List[Well], List[float]]],
-    vols: Optional[List[float]] = None,
+    channels: List[Well],
+    vols: List[float] = None,
     end_delay: float = 0,
     **backend_kwargs
   ):
@@ -777,7 +675,11 @@ class LiquidHandler:
       ValueError: If all channels are `None`.
     """
 
-    channels = self._channels_to_standard_form(*channels, vols=vols)
+    # channels = self._channels_to_standard_form(*channels, vols=vols)
+    if isinstance(vols, numbers.Rational):
+      vols = [vols] * len(channels)
+    channels = [(Dispense(c, v) if c is not None else None) for c, v in zip(channels, vols)]
+
     self.backend.dispense(*channels, **backend_kwargs)
 
     if end_delay > 0:
