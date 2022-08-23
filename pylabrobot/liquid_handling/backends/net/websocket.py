@@ -25,6 +25,7 @@ from pylabrobot.liquid_handling.standard import (
   Aspiration,
   Dispense,
 )
+from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
@@ -91,6 +92,12 @@ class WebSocketBackend(LiquidHandlerBackend):
         # Echo command
         await websocket.send(json.dumps(data))
 
+  def _assemble_command(self, event: str, **kwargs) -> str:
+    """ Assemble a command into standard JSON form. """
+    id_ = self._generate_id()
+    data = dict(event=event, id=id_, version=STANDARD_FORM_JSON_VERSION, **kwargs)
+    return json.dumps(data)
+
   def send_event(
     self,
     event: str,
@@ -114,9 +121,7 @@ class WebSocketBackend(LiquidHandlerBackend):
       The response from the browser, if `wait_for_response` is `True`, otherwise `None`.
     """
 
-    id_ = self._generate_id()
-    data = dict(event=event, id=id_, **kwargs)
-    data = json.dumps(data)
+    data = self._assemble_command(event, **kwargs)
     self._sent_messages.append(data)
 
     # Run and save if the websocket connection has been established, otherwise just save.

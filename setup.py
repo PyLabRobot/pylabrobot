@@ -1,5 +1,7 @@
 from setuptools import setup, find_packages
 
+from pylabrobot.__version__ import __version__
+
 long_description = open('README.md', encoding='utf-8').read()
 
 extras_docs = [
@@ -43,7 +45,7 @@ extras_all = extras_docs + extras_simulation + extras_http + extras_websockets +
 
 setup(
     name='PyLabRobot',
-    version='0.1',
+    version=__version__,
     packages=find_packages(exclude="tools"),
     description='A hardware agnostic platform for liquid handling',
     long_description=long_description,
