@@ -40,6 +40,7 @@ jobs:
           cd docs/build
           git init
           touch .nojekyll
+          echo 'docs.pylabrobot.org' > CNAME
           git add -A
           git config --local user.name "GitHub Action"
           git config --local user.email "action@github.com"
