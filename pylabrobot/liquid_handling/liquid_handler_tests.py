@@ -316,49 +316,6 @@ class TestLiquidHandlerCommands(unittest.TestCase):
   def setUp(self):
     self.lh = LiquidHandler(backends.Mock())
 
-  def test_channels_to_standard_form(self):
-    lh = self.lh
-
-    w1 = Well("w1")
-    w2 = Well("w2")
-    w3 = Well("w3")
-    w4 = Well("w4")
-    ans = [Aspiration(w1, 20), Aspiration(w2, 30), Aspiration(w3, 40), Aspiration(w4, 50)]
-
-    self.assertEqual(lh._channels_to_standard_form(w1, vols=[20]), [Aspiration(w1, 20)])
-
-    # without tuple
-    self.assertEqual(lh._channels_to_standard_form([w1, w2, w3, w4], vols=[20, 30, 40, 50]), ans)
-
-    # with tuple, but just 1
-    self.assertEqual(lh._channels_to_standard_form(([w1, w2, w3, w4], [20, 30, 40, 50])), ans)
-
-    # multiple tuples, already in standard form
-    self.assertEqual(lh._channels_to_standard_form((w1, 20), (w2, 30), (w3, 40), (w4, 50)), ans)
-
-    # multiple tuples, grouped by arbitrary
-    self.assertEqual(lh._channels_to_standard_form(([w1, w2], [20, 30]), (w3, 40), (w4, 50)), ans)
-
-  def test_channels_to_standard_form_with_none(self):
-    lh = self.lh
-    w1 = Well("w1")
-    w2 = Well("w2")
-
-    ans = [Aspiration(w1, 100), None, Aspiration(w2, 100)]
-
-    # Simple
-    self.assertEqual(lh._channels_to_standard_form(w1, None, w2, vols=[100, None, 100]), ans)
-
-    # In list
-    self.assertEqual(lh._channels_to_standard_form([w1, None, w2], vols=[100, None, 100]), ans)
-
-    # In tuples
-    self.assertEqual(lh._channels_to_standard_form((w1, 100), None, (w2, 100)), ans)
-
-    # Raise error when None's are not aligned
-    with self.assertRaises(ValueError):
-      lh._channels_to_standard_form(w1, None, w2, vols=[100, 100])
-
 
 if __name__ == "__main__":
   unittest.main()
