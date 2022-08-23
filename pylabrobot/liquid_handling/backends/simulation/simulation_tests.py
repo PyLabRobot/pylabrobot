@@ -9,7 +9,10 @@ import pytest
 import requests
 import websockets
 
-from pylabrobot.liquid_handling.backends.net.websocket_tests import WebSocketBackendCommandTests
+from pylabrobot.liquid_handling.backends.net.websocket_tests import (
+  WebSocketBackendCommandTests,
+  WebSocketBackendEventCatcher
+)
 from pylabrobot.liquid_handling.backends.simulation import SimulatorBackend
 
 
@@ -78,29 +81,14 @@ class SimulatorBackendServerTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(data["event"], "test")
 
 
-class SimulatorBackendEventCatcher(SimulatorBackend):
-  """ Catches events that would be sent over the websocket for easy testing. """
-  def __init__(self):
-    super().__init__(open_browser=False)
-    self.sent_datas = []
+class SimulatorBackendEventCatcher(WebSocketBackendEventCatcher, SimulatorBackend):
+  """ Catches events that would be sent over the websocket for easy testing.
 
-  def setup(self):
-    self.setup_finished = True
+  This class inherits from SimulatorBackend to get the same functionality as the
+  SimulatorBackend class.
+  """
 
-  def send_event(self, event: str, wait_for_response: bool = True, **kwargs):
-    id_ = super()._generate_id()
-    data = dict(event=event, id=id_, **kwargs)
-    self.sent_datas.append(data)
-
-  def stop(self):
-    pass
-
-  def clear(self):
-    self.sent_datas.clear()
-
-  def get_commands(self, event) -> List[dict]:
-    return [data for data in self.sent_datas if data["event"] == event]
-
+  pass
 
 class SimulatorBackendCommandTests(WebSocketBackendCommandTests):
   """ Tests for command sending using the simulator backend. """
@@ -114,6 +102,14 @@ class SimulatorBackendCommandTests(WebSocketBackendCommandTests):
     backend.setup()
     backend.sent_datas = self.backend.sent_datas
     self.backend = backend
+
+  def test_send_simple_command(self):
+    self.backend.send_event("test", test=True)
+    self.assert_event_sent_n("test", times=1)
+    self.assertEqual(self.backend.get_commands("test")[0],
+      {"event": "test", "test": True, "id": "0001", "version": "0.1.0"})
+    self.assert_command_equal(self.backend.get_commands("test")[0],
+      {"event": "test", "test": True, "id": 0000, "version": "0.1.0"})
 
   def test_adjust_volume(self):
     self.backend.adjust_well_volume(self.plt_car[0].resource, [[100]*12]*8)

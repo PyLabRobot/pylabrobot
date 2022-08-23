@@ -87,9 +87,10 @@ class WebSocketBackendEventCatcher(WebSocketBackend):
     self.setup_finished = True
 
   def send_event(self, event: str, wait_for_response: bool = True, **kwargs):
-    id_ = super()._generate_id()
-    data = dict(event=event, id=id_, **kwargs)
-    self.sent_datas.append(data)
+    data = self._assemble_command(event, **kwargs)
+
+    # Save command for testing in deserialize form.
+    self.sent_datas.append(json.loads(data))
 
   def stop(self):
     pass
@@ -170,6 +171,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
     self.assert_command_equal(self.backend.get_commands("aspirate")[0], {
       "event": "aspirate",
       "id": "0197",
+      "version": "0.1.0",
       "channels": [
         {
           "resource": {
@@ -301,6 +303,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
         }
       ],
       "event": "dispense",
+      "version": "0.1.0",
     })
 
   def test_pickup_tips96(self):

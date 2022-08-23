@@ -13,6 +13,7 @@ from pylabrobot.liquid_handling.standard import (
   Aspiration,
   Dispense,
 )
+from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 
 try:
   import requests
@@ -86,7 +87,7 @@ class HTTPBackend(LiquidHandlerBackend):
     url = urllib.parse.urlparse(self.url, event)
 
     id_ = self._generate_id()
-    data = dict(event=event, id=id_, **kwargs)
+    data = dict(event=event, id=id_, version=STANDARD_FORM_JSON_VERSION, **kwargs)
     data = json.dumps(data)
     self.session.post(url, data=data)
 
