@@ -77,6 +77,9 @@ class LiquidHandler:
       origin=Coordinate(0, 63, 100)
     )
 
+  def __del__(self):
+    self.stop()
+
   def need_setup_finished(func: typing.Callable): # pylint: disable=no-self-argument
     """ Decorator for methods that require the liquid handler to be set up.
 
