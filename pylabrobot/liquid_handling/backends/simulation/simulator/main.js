@@ -79,7 +79,7 @@ function createShape(resource) {
       fill: noTipsColor,
       stroke: hasTipsColor,
       strokeWidth: 1,
-    }); 
+    });
   }
   return new Konva.Rect({
     x: 0,
@@ -95,7 +95,7 @@ function createShape(resource) {
 function drawResource(resource, parentGroup) {
   var group = new Konva.Group({
     x: resource.location.x,
-    y: resource.location.y 
+    y: resource.location.y,
   });
 
   var shape = createShape(resource);
@@ -145,7 +145,7 @@ function adjustVolumeSingleWell(well_name, volume) {
 
 function adjustVolume(pattern) {
   for (let i = 0; i < pattern.length; i++) {
-    const {well, volume} = pattern[i];
+    const { well, volume } = pattern[i];
     adjustVolumeSingleWell(well.name, volume);
   }
   return null;
@@ -208,7 +208,7 @@ function discardTips(channels) {
 
 function editTips(pattern) {
   for (let i = 0; i < pattern.length; i++) {
-    const {tip, has_one} = pattern[i];
+    const { tip, has_one } = pattern[i];
     resources[tip.name].shape.fill(has_one ? hasTipsColor : noTipsColor);
     resources[tip.name].info.has_tip = has_one;
   }
@@ -221,7 +221,7 @@ function aspirate(channels) {
       continue;
     }
 
-    let {resource, volume} = channels[i];
+    let { resource, volume } = channels[i];
 
     const well = resources[resource.name];
 
@@ -247,7 +247,7 @@ function dispense(channels) {
       continue;
     }
 
-    let {resource, volume} = channels[i];
+    let { resource, volume } = channels[i];
 
     const well = resources[resource.name];
 
@@ -372,7 +372,7 @@ function dispense96(resource, pattern) {
       }
       if (!CoRe96Head[i][j].has_tip) {
         return `CoRe 96 head channel (${i},${j}) does not have a tip.`;
-    }
+      }
     }
   }
 
@@ -499,6 +499,8 @@ function openSocket() {
     webSocket.send(`{"event": "ready"}`);
     updateStatusLabel("loaded");
     socketLoading = false;
+
+    heartbeat();
   };
 
   webSocket.onerror = function () {
@@ -518,6 +520,12 @@ function openSocket() {
     console.log(`[message] Data received from server:`, data);
     handleEvent(data.event, data);
   });
+}
+
+function heartbeat() {
+  if (!webSocket) return;
+  webSocket.send(JSON.stringify({ event: "ping" }));
+  setTimeout(heartbeat, 5000);
 }
 
 const railOffsetX = 100;

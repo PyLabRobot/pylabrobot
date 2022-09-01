@@ -85,12 +85,14 @@ class WebSocketBackend(LiquidHandlerBackend):
       self.received.append(data)
 
       # If the event is "ready", then we can save the connection and send the saved messages.
-      if "event" in data and data["event"] == "ready":
+      if data.get("event") == "ready":
         self.websocket = websocket
         await self._replay()
 
         # Echo command
         await websocket.send(json.dumps(data))
+      elif data.get("event")  == "ping":
+        await websocket.send(json.dumps({"event": "pong"}))
 
   def _assemble_command(self, event: str, **kwargs) -> str:
     """ Assemble a command into standard JSON form. """
