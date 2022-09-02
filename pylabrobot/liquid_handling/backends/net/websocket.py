@@ -69,6 +69,20 @@ class WebSocketBackend(LiquidHandlerBackend):
     self._id += 1
     return f"{self._id % 10000:04}"
 
+  async def handle_event(self, event: str, data: dict):
+    """ Handle an event from the browser.
+
+    This method is intended to be overridden by subclasses. Be sure to call the superclass if you
+    want to preserve the default behavior.
+
+    Args:
+      event: The event identifier.
+      data: The event data, deserialized from JSON.
+    """
+
+    if event == "ping":
+      await self.websocket.send(json.dumps({"event": "pong"}))
+
   async def _socket_handler(self, websocket):
     """ Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`. """
@@ -91,14 +105,17 @@ class WebSocketBackend(LiquidHandlerBackend):
 
         # Echo command
         await websocket.send(json.dumps(data))
-      elif data.get("event")  == "ping":
-        await websocket.send(json.dumps({"event": "pong"}))
+
+      if "event" in data:
+        await self.handle_event(data.get("event"), data)
+      else:
+        logger.warning(f"Unhandled message: {message}")
 
   def _assemble_command(self, event: str, **kwargs) -> str:
     """ Assemble a command into standard JSON form. """
     id_ = self._generate_id()
     data = dict(event=event, id=id_, version=STANDARD_FORM_JSON_VERSION, **kwargs)
-    return json.dumps(data)
+    return json.dumps(data), id_
 
   def send_event(
     self,
@@ -123,7 +140,7 @@ class WebSocketBackend(LiquidHandlerBackend):
       The response from the browser, if `wait_for_response` is `True`, otherwise `None`.
     """
 
-    data = self._assemble_command(event, **kwargs)
+    data, id_ = self._assemble_command(event, **kwargs)
     self._sent_messages.append(data)
 
     # Run and save if the websocket connection has been established, otherwise just save.

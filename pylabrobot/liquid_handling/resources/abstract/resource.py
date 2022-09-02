@@ -46,7 +46,8 @@ class Resource:
       size_z=self._size_z,
       location=self.location.serialize(),
       category=self.category or "unknown",
-      children=[child.serialize() for child in self.children]
+      children=[child.serialize() for child in self.children],
+      parent_name=self.parent.name if self.parent is not None else None
     )
 
   def __eq__(self, other):

@@ -6,7 +6,6 @@ import unittest
 from typing import List
 
 import pytest
-import requests
 import websockets
 
 from pylabrobot.liquid_handling import LiquidHandler
@@ -87,7 +86,7 @@ class WebSocketBackendEventCatcher(WebSocketBackend):
     self.setup_finished = True
 
   def send_event(self, event: str, wait_for_response: bool = True, **kwargs):
-    data = self._assemble_command(event, **kwargs)
+    data, _ = self._assemble_command(event, **kwargs)
 
     # Save command for testing in deserialize form.
     self.sent_datas.append(json.loads(data))
@@ -179,6 +178,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "children": [],
             "location": {"x": 14.0, "y": 74.5, "z": 1.0},
             "name": "plate_1_well_0_0",
+            "parent_name": "plate_1",
             "size_x": 9,
             "size_y": 9,
             "size_z": 9,
@@ -219,6 +219,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "children": [],
             "location": {"x": 23.0, "y": 74.5, "z": 1.0},
             "name": "plate_1_well_1_0",
+            "parent_name": "plate_1",
             "size_x": 9,
             "size_y": 9,
             "size_z": 9,
@@ -267,6 +268,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "children": [],
             "location": {"x": 14.0, "y": 74.5, "z": 1.0},
             "name": "plate_1_well_0_0",
+            "parent_name": "plate_1",
             "size_x": 9,
             "size_y": 9,
             "size_z": 9,

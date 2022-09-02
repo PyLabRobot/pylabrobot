@@ -18,7 +18,7 @@
 
     <script src="https://unpkg.com/konva@8/konva.min.js"></script>
 
-    <link href="./main.css" rel="stylesheet"></link>
+    <link href="./main.css" rel="stylesheet" />
   </head>
   <body>
     <nav class="navbar bg-light">
@@ -27,7 +27,9 @@
           PyLabRobot Simulator <span class="fs-6 text-muted">(v0.1)</span></a
         >
         <div class="ml-auto">
-          <p onclick="openSocket();"><span id="status-indicator"></span> <span id="status-label">Loading...</span></p>
+          <span onclick="openSocket();" id="status-indicator"></span>
+          <span id="status-label">Loading...</span>
+          <button onclick="openSettings();">Open Settings</button>
         </div>
       </div>
     </nav>
@@ -35,6 +37,186 @@
     <div class="row content">
       <main class="col-12">
         <div id="kanvas"></div>
+
+        <div id="settings-window" style="display: none">
+          <div id="settings">
+            <div id="settings-header">
+              <h2 id="settings-title">Settings</h2>
+              <button onclick="closeSettings();" id="settings-close-btn">
+                &times;
+              </button>
+            </div>
+            <div id="settings-content">
+              <form>
+                <h3 class="form-row-header">Pip unit operations durations</h3>
+
+                <div class="columns">
+                  <div class="form-column">
+                    <div class="form-group">
+                      <label for="form-pip-tip-pickup-duration"
+                        >Tip pickup duration (s)</label
+                      >
+                      <input
+                        type="number"
+                        name="pip_tip_pickup_duration"
+                        id="form-pip-tip-pickup-duration"
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-pip-tip-discard-duration"
+                        >Tip discard duration (s)</label
+                      >
+                      <input
+                        type="number"
+                        name="pip_tip_discard_duration"
+                        id="form-pip-tip-discard-duration"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="form-column">
+                    <div class="form-group">
+                      <label for="form-pip-aspiration-duration"
+                        >Aspiration duration (s)</label
+                      >
+                      <input
+                        type="number"
+                        name="pip_aspiration_duration"
+                        id="form-pip-aspiration-duration"
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-pip-dispense-duration"
+                        >Dispense duration (s)</label
+                      >
+                      <input
+                        type="number"
+                        name="pip_dispense_duration"
+                        id="form-pip-dispense-duration"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <h3 class="form-row-header">
+                  CoRe 96 unit operations durations
+                </h3>
+
+                <div class="columns">
+                  <div class="form-column">
+                    <div class="form-group">
+                      <label for="form-core-tip-pickup-duration"
+                        >Tip pickup duration (s)</label
+                      >
+                      <input
+                        type="number"
+                        name="core_tip_pickup_duration"
+                        id="form-core-tip-pickup-duration"
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-core-tip-discard-duration"
+                        >Tip discard duration (s)</label
+                      >
+                      <input
+                        type="number"
+                        name="core_tip_discard_duration"
+                        id="form-core-tip-discard-duration"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="form-column">
+                    <div class="form-group">
+                      <label for="form-core-aspiration-duration"
+                        >Aspiration duration (s)</label
+                      >
+                      <input
+                        type="number"
+                        name="core_aspiration_duration"
+                        id="form-core-aspiration-duration"
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-core-dispense-duration"
+                        >Dispense duration (s)</label
+                      >
+                      <input
+                        type="number"
+                        name="core_dispense_duration"
+                        id="form-core-dispense-duration"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <h3 class="form-row-header">Robot movement limits</h3>
+                <p>Use -1 for no limit.</p>
+
+                <div class="columns">
+                  <div class="form-column">
+                    <div class="form-group">
+                      <label for="form-min-core-head-location"
+                        >Min CoRe 96 head location</label
+                      >
+                      <input
+                        type="number"
+                        name="min_core_head_location"
+                        id="form-min-core-head-location"
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-max-core-head-location"
+                        >Max CoRe 96 head location</label
+                      >
+                      <input
+                        type="number"
+                        name="max_core_head_location"
+                        id="form-max-core-head-location"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="form-column">
+                    <div class="form-group">
+                      <label for="form-min-pipe-head-location"
+                        >Min pip head location</label
+                      >
+                      <input
+                        type="number"
+                        name="min_pip_head_location"
+                        id="form-min-pipe-head-location"
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-max-pipe-head-location"
+                        >Max pip head location</label
+                      >
+                      <input
+                        type="number"
+                        name="max_pip_head_location"
+                        id="form-max-pipe-head-location"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <p>
+                  <i
+                    >Note: settings are stored in the browser, and therefore
+                    won't be shared across browsers or devices.</i
+                  >
+                </p>
+              </form>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
 
