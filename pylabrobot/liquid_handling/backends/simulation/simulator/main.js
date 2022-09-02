@@ -1,3 +1,20 @@
+var config = {
+  pip_aspiration_duration: 2,
+  pip_dispense_duration: 2,
+  pip_tip_pickup_duration: 2,
+  pip_tip_discard_duration: 2,
+
+  core_aspiration_duration: 2,
+  core_dispense_duration: 2,
+  core_tip_pickup_duration: 2,
+  core_tip_discard_duration: 2,
+
+  min_pip_head_location: -1,
+  max_pip_head_location: -1,
+  min_core_head_location: -1,
+  max_core_head_location: -1,
+};
+
 var layer = new Konva.Layer();
 var resourceLayer = new Konva.Layer();
 var tooltipLayer = new Konva.Layer();
@@ -67,6 +84,11 @@ const COLORS = {
 
 function min(a, b) {
   return a < b ? a : b;
+}
+
+function sleep(s) {
+  let ms = s * 1000;
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function createShape(resource) {
@@ -151,6 +173,55 @@ function adjustVolume(pattern) {
   return null;
 }
 
+function getAbsoluteLocation(resource) {
+  var parentLocation;
+  if (
+    resource.hasOwnProperty("parent_name") &&
+    resource.parent_name in resources
+  ) {
+    const parent = resources[resource.parent_name].resource;
+    parentLocation = getAbsoluteLocation(parent);
+  } else {
+    // If resource has no parent, assume it's at the origin.
+    // TODO: get the origin from the server / load deck as parent.
+    parentLocation = { x: 0, y: 63 };
+  }
+  return {
+    x: resource.location.x + parentLocation.x,
+    y: resource.location.y + parentLocation.y,
+  };
+}
+
+function checkPipHeadReach(x) {
+  // Check if the x coordinate is within the pip head range. Undefined indicates no limit.
+  // Returns the error.
+  if (config.min_pip_head_location !== -1 && x < config.min_pip_head_location) {
+    return `x position ${x} not reachable, because it is lower than the left limit (${config.min_pip_head_location})`;
+  }
+  if (config.max_pip_head_location !== -1 && x > config.max_pip_head_location) {
+    return `x position ${x} not reachable, because it is higher than the right limit (${config.max_pip_head_location})`;
+  }
+  return undefined;
+}
+
+function checkCoreHeadReachable(x) {
+  // Check if the x coordinate is within the core head range. Undefined indicates no limit.
+  // Returns the error.
+  if (
+    config.min_core_head_location !== -1 &&
+    x < config.min_core_head_location
+  ) {
+    return `x position ${x} not reachable, because it is lower than the left limit (${config.min_core_head_location})`;
+  }
+  if (
+    config.max_core_head_location !== -1 &&
+    x > config.max_core_head_location
+  ) {
+    return `x position ${x} not reachable, because it is higher than the right limit (${config.max_core_head_location})`;
+  }
+  return undefined;
+}
+
 // Returns error message if there is a problem, otherwise returns null.
 function pickUpTips(channels) {
   for (var i = 0; i < channels.length; i++) {
@@ -166,6 +237,12 @@ function pickUpTips(channels) {
     }
     if (pipHead[i].has_tip) {
       return `${tip.name} is already picked up`;
+    }
+
+    if (
+      checkPipHeadReach(getAbsoluteLocation(resource.resource).x) !== undefined
+    ) {
+      return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
     }
 
     resource.shape.fill(noTipsColor);
@@ -196,6 +273,12 @@ function discardTips(channels) {
       return `Pip head channel ${i + 1} has a volume of ${
         pipHead[i].volume
       }uL > 0`;
+    }
+
+    if (
+      checkPipHeadReach(getAbsoluteLocation(resource.resource).x) !== undefined
+    ) {
+      return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
     }
 
     resource.shape.fill(hasTipsColor);
@@ -235,6 +318,12 @@ function aspirate(channels) {
       return `Aspirated volume (${volume}uL) + volume of tip (${pipHead[i].volume}uL) > maximal volume of tip (${pipHead[i].tipMaxVolume}uL).`;
     }
 
+    if (
+      checkPipHeadReach(getAbsoluteLocation(resource.resource).x) !== undefined
+    ) {
+      return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
+    }
+
     pipHead[i].volume += volume;
     adjustVolumeSingleWell(resource.name, well.info.volume - volume);
   }
@@ -261,6 +350,12 @@ function dispense(channels) {
       return `Dispensed volume (${volume}uL) + volume of well (${well.volume}uL) > maximal volume of well (${well.maxVolume}uL).`;
     }
 
+    if (
+      checkPipHeadReach(getAbsoluteLocation(resource.resource).x) !== undefined
+    ) {
+      return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
+    }
+
     pipHead[i].volume -= volume;
     adjustVolumeSingleWell(resource.name, well.info.volume + volume);
   }
@@ -280,6 +375,13 @@ function pickupTips96(resource) {
         return `There already is a tip in the CoRe 96 head at (${i},${j}) in ${resource.name}.`;
       }
     }
+  }
+
+  // Check reachable for A1.
+  let a1_name = resource.children[0].name;
+  let a1_resource = resources[a1_name];
+  if (checkCoreHeadReachable(a1_resource.x) !== undefined) {
+    return checkCoreHeadReachable(a1_resource.x);
   }
 
   // Then pick up the tips.
@@ -310,6 +412,13 @@ function discardTips96(resource) {
     }
   }
 
+  // Check reachable for A1.
+  let a1_name = resource.children[0].name;
+  let a1_resource = resources[a1_name];
+  if (checkCoreHeadReachable(a1_resource.x) !== undefined) {
+    return checkCoreHeadReachable(a1_resource.x);
+  }
+
   // Then pick up the tips.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
@@ -324,6 +433,13 @@ function discardTips96(resource) {
 }
 
 function aspirate96(resource, pattern) {
+  // Check reachable for A1.
+  let a1_name = resource.children[0].name;
+  let a1_resource = resources[a1_name];
+  if (checkCoreHeadReachable(a1_resource.x) !== undefined) {
+    return checkCoreHeadReachable(a1_resource.x);
+  }
+
   // Validate there is enough liquid available, that it fits in the tips, and that each channel
   // has a tip before aspiration.
   for (let i = 0; i < pattern.length; i++) {
@@ -358,6 +474,13 @@ function aspirate96(resource, pattern) {
 }
 
 function dispense96(resource, pattern) {
+  // Check reachable for A1.
+  let a1_name = resource.children[0].name;
+  let a1_resource = resources[a1_name];
+  if (checkCoreHeadReachable(a1_resource.x) !== undefined) {
+    return checkCoreHeadReachable(a1_resource.x);
+  }
+
   // Validate there is enough liquid available, that it fits in the well, and that each channel
   // has a tip before dispense.
   for (let i = 0; i < pattern.length; i++) {
@@ -388,7 +511,7 @@ function dispense96(resource, pattern) {
   return null;
 }
 
-function handleEvent(event, data) {
+async function handleEvent(event, data) {
   if (event === "ready") {
     return; // don't parse response.
   }
@@ -426,10 +549,12 @@ function handleEvent(event, data) {
       break;
 
     case "pickup_tips":
+      await sleep(config.pip_tip_pickup_duration);
       ret.error = pickUpTips(data.channels);
       break;
 
     case "discard_tips":
+      await sleep(config.pip_tip_discard_duration);
       ret.error = discardTips(data.channels);
       break;
 
@@ -442,26 +567,32 @@ function handleEvent(event, data) {
       break;
 
     case "aspirate":
+      await sleep(config.pip_aspiration_duration);
       ret.error = aspirate(data.channels);
       break;
 
     case "dispense":
+      await sleep(config.pip_dispense_duration);
       ret.error = dispense(data.channels);
       break;
 
     case "pickup_tips96":
+      await sleep(config.core_tip_pickup_duration);
       ret.error = pickupTips96(resource);
       break;
 
     case "discard_tips96":
+      await sleep(config.core_tip_discard_duration);
       ret.error = discardTips96(resource);
       break;
 
     case "aspirate96":
+      await sleep(config.core_aspiration_duration);
       ret.error = aspirate96(resource, data.pattern);
       break;
 
     case "dispense96":
+      await sleep(config.core_dispense_duration);
       ret.error = dispense96(resource, data.pattern);
       break;
 
@@ -524,6 +655,7 @@ function openSocket() {
 
 function heartbeat() {
   if (!webSocket) return;
+  if (webSocket.readyState !== WebSocket.OPEN) return;
   webSocket.send(JSON.stringify({ event: "ping" }));
   setTimeout(heartbeat, 5000);
 }
@@ -541,6 +673,57 @@ function drawRails() {
   }
 }
 
+var settingsWindow = document.getElementById("settings-window");
+settingsWindow.onclick = function (event) {
+  if (event.target.id === "settings-window") {
+    closeSettings();
+  }
+};
+
+function loadSettings() {
+  // Load settings from localStorage.
+  if (localStorage.getItem("config") !== null) {
+    let configString = localStorage.getItem("config");
+    let configFromLS = JSON.parse(configString);
+    // Override config with config from localStorage.
+    // This makes any new keys will be added to the config.
+    for (let key in configFromLS) {
+      config[key] = Number(configFromLS[key]); // FIXME: this is not good style
+    }
+  }
+
+  // Set settings in UI.
+  for (var c in config) {
+    var input = document.querySelector(`input[name="${c}"]`);
+    if (input) {
+      input.value = config[c];
+    }
+  }
+}
+
+function saveSettings(e) {
+  // Get settings from UI.
+  for (var c in config) {
+    var input = document.querySelector(`input[name="${c}"]`);
+    if (input) {
+      config[c] = input.value;
+    }
+  }
+
+  // Save settings to localStorage.
+  let configString = JSON.stringify(config);
+  localStorage.setItem("config", configString);
+}
+
+function openSettings() {
+  settingsWindow.style.display = "block";
+}
+
+function closeSettings() {
+  saveSettings();
+  settingsWindow.style.display = "none";
+}
+
 window.addEventListener("load", function () {
   const canvas = document.getElementById("kanvas");
   canvasWidth = canvas.offsetWidth;
@@ -549,7 +732,7 @@ window.addEventListener("load", function () {
   scaleX = canvasWidth / robotWidthMM;
   scaleY = canvasHeight / robotHeightMM;
 
-  // TODO: use min(scaleX, scaleY)
+  // TODO: use min(scaleX, scaleY) to preserve aspect ratio.
 
   stage = new Konva.Stage({
     container: "kanvas",
@@ -573,4 +756,6 @@ window.addEventListener("load", function () {
   drawRails();
 
   openSocket();
+
+  loadSettings();
 });
