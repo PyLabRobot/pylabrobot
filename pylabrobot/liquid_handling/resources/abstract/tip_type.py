@@ -73,3 +73,13 @@ class TipType(object, metaclass=ABCMeta):
       "tip_type_id": self.tip_type_id,
       "pick_up_method": self.pick_up_method
     }
+
+  @classmethod
+  def deserialize(cls, data: dict) -> TipType:
+    return cls(
+      has_filter=data["has_filter"],
+      total_tip_length=data["total_tip_length"],
+      maximal_volume=data["maximal_volume"],
+      tip_type_id=data["tip_type_id"],
+      pick_up_method=data["pick_up_method"]
+    )

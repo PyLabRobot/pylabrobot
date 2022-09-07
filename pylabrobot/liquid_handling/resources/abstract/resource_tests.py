@@ -14,7 +14,7 @@ class TestResource(unittest.TestCase):
     parent = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
     deck.assign_child_resource(parent)
     child = Resource("child", location=Coordinate(5, 5, 5), size_x=10, size_y=10, size_z=10)
-    parent.assign_child_resource(child, spot=0)
+    parent.assign_child_resource(child)
 
     self.assertEqual(deck.get_resource("parent"), parent)
     self.assertEqual(deck.get_resource("child"), child)
@@ -100,6 +100,28 @@ class TestResource(unittest.TestCase):
     child1 = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
     child2 = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
     self.assertEqual(child1, child2)
+
+  def test_serialize(self):
+    r = Resource("test", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
+    self.assertEqual(r.serialize(), {
+      "name": "test",
+      "location": {
+        "x": 10,
+        "y": 10,
+        "z": 10
+      },
+      "size_x": 10,
+      "size_y": 10,
+      "size_z": 10,
+      "type": "Resource",
+      "children": [],
+      "category": None,
+      "parent_name": None
+    })
+
+  def test_deserialize(self):
+    r = Resource("test", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
+    self.assertEqual(Resource.deserialize(r.serialize()), r)
 
 
 if __name__ == "__main__":

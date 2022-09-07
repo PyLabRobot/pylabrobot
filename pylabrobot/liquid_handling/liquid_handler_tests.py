@@ -2,11 +2,11 @@
 # pylint: disable=missing-class-docstring
 
 import io
+import tempfile
 import textwrap
+import os
 import unittest
 import unittest.mock
-
-from .standard import Aspiration
 
 from . import backends
 from .liquid_handler import LiquidHandler
@@ -16,7 +16,11 @@ from .resources import (
   PLT_CAR_L5AC_A00,
   Cos_96_DW_1mL,
   Cos_96_DW_500ul,
-  Well,
+  Tips,
+  TipCarrier,
+  Plate,
+  PlateCarrier,
+  standard_volume_tip_with_filter
 )
 from .resources.ml_star import STF_L, HTF_L
 
@@ -27,7 +31,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.lh = LiquidHandler(star)
 
   def test_resource_assignment(self):
-    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = STF_L(name="tips_01")
     tip_car[1] = STF_L(name="tips_02")
     tip_car[3] = HTF_L("tips_04")
@@ -78,7 +82,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
       self.lh.assign_resource(plt_car, rails=27)
 
   def test_get_resource(self):
-    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = STF_L(name="tips_01")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
@@ -86,7 +90,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.lh.assign_resource(plt_car, rails=10)
 
     # Get resource.
-    self.assertEqual(self.lh.get_resource("tip carrier").name, "tip carrier")
+    self.assertEqual(self.lh.get_resource("tip_carrier").name, "tip_carrier")
     self.assertEqual(self.lh.get_resource("plate carrier").name, "plate carrier")
 
     # Get subresource.
@@ -97,7 +101,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertIsNone(self.lh.get_resource("unknown resource"))
 
   def test_subcoordinates(self):
-    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = STF_L(name="tips_01")
     tip_car[3] = HTF_L(name="tips_04")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
@@ -108,11 +112,11 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
     # Rails 10 should be left of rails 1.
     self.assertGreater(self.lh.get_resource("plate carrier").get_absolute_location().x,
-                       self.lh.get_resource("tip carrier").get_absolute_location().x)
+                       self.lh.get_resource("tip_carrier").get_absolute_location().x)
 
     # Verified with Hamilton Method Editor.
     # Carriers.
-    self.assertEqual(self.lh.get_resource("tip carrier").get_absolute_location(),
+    self.assertEqual(self.lh.get_resource("tip_carrier").get_absolute_location(),
                      Coordinate(100.0, 63.0, 100.0))
     self.assertEqual(self.lh.get_resource("plate carrier").get_absolute_location(),
                      Coordinate(302.5, 63.0, 100.0))
@@ -131,7 +135,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
   def test_illegal_subresource_assignment_before(self):
     # Test assigning subresource with the same name as another resource in another carrier. This
     # should raise an ValueError when the carrier is assigned to the liquid handler.
-    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = STF_L(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="sub")
@@ -142,7 +146,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
   def test_illegal_subresource_assignment_after(self):
     # Test assigning subresource with the same name as another resource in another carrier, after
     # the carrier has been assigned. This should raise an error.
-    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = STF_L(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="ok")
@@ -152,7 +156,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
       plt_car[1] = Cos_96_DW_500ul(name="sub")
 
   def build_layout(self):
-    tip_car = TIP_CAR_480_A00(name="tip carrier")
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = STF_L(name="tips_01")
     tip_car[1] = STF_L(name="tips_02")
     tip_car[3] = HTF_L(name="tips_04")
@@ -174,17 +178,17 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     expected_out = textwrap.dedent("""
     Rail     Resource                   Type                Coordinates (mm)
     ===============================================================================================
-    (1)  ├── tip carrier                TIP_CAR_480_A00     (100.000, 063.000, 100.000)
-         │   ├── tips_01                STF_L               (117.900, 145.800, 164.450)
-         │   ├── tips_02                STF_L               (117.900, 241.800, 164.450)
+    (1)  ├── tip_carrier                TipCarrier          (100.000, 063.000, 100.000)
+         │   ├── tips_01                Tips                (117.900, 145.800, 164.450)
+         │   ├── tips_02                Tips                (117.900, 241.800, 164.450)
          │   ├── <empty>
-         │   ├── tips_04                HTF_L               (117.900, 433.800, 131.450)
+         │   ├── tips_04                Tips                (117.900, 433.800, 131.450)
          │   ├── <empty>
          │
-    (21) ├── plate carrier              PLT_CAR_L5AC_A00    (550.000, 063.000, 100.000)
-         │   ├── aspiration plate       Cos_96_DW_1mL       (568.000, 146.000, 187.150)
+    (21) ├── plate carrier              PlateCarrier        (550.000, 063.000, 100.000)
+         │   ├── aspiration plate       Plate               (568.000, 146.000, 187.150)
          │   ├── <empty>
-         │   ├── dispense plate         Cos_96_DW_500ul     (568.000, 338.000, 188.150)
+         │   ├── dispense plate         Plate               (568.000, 338.000, 188.150)
          │   ├── <empty>
          │   ├── <empty>
     """[1:])
@@ -249,44 +253,43 @@ class TestLiquidHandlerLayout(unittest.TestCase):
   def test_json_serialization(self):
     self.maxDiff = None
 
-    # TODO(serializer)
+    # test with standard resource classes
+    self.build_layout()
+    tmp_dir = tempfile.gettempdir()
+    fn = os.path.join(tmp_dir, "layout.json")
+    self.lh.save(fn)
 
-    pass
-
-    # # test with standard resource classes
-    # self.build_layout()
-    # tmp_dir = tempfile.gettempdir()
-    # fn = os.path.join(tmp_dir, "layout.json")
-    # self.lh.save(fn)
-
-    # be = backends.Mock()
-    # recovered = LiquidHandler(be)
-    # recovered.load_from_json(fn)
+    be = backends.Mock()
+    recovered = LiquidHandler(be)
+    recovered.load_from_json(fn)
 
     # self.assert_same(self.lh, recovered)
+    self.assertEqual(self.lh.deck.get_resource("carrier-plate carrier-spot-2"), recovered.deck.get_resource("carrier-plate carrier-spot-2"))
+    self.assertEqual(self.lh.deck.get_resource("plate carrier"), recovered.deck.get_resource("plate carrier"))
 
-    # # test with custom classes
-    # custom_1 = LiquidHandler(be)
-    # tc = TipCarrier("tc", 200, 200, 200, location=Coordinate(0, 0, 0), sites=[
-    #   Coordinate(10, 20, 30)
-    # ], site_size_x=10, site_size_y=10)
+    # test with custom classes
+    custom_1 = LiquidHandler(be)
+    tc = TipCarrier("tc", 200, 200, 200, location=Coordinate(0, 0, 0), sites=[
+      Coordinate(10, 20, 30)
+    ], site_size_x=10, site_size_y=10)
 
-    # tc[0] = Tips("tips", 10, 20, 30, standard_volume_tip_with_filter, -1, -1, -1, 1, 1, 1, 1)
-    # pc = PlateCarrier("pc", 100, 100, 100, location=Coordinate(0, 0, 0), sites=[
-    #   Coordinate(10, 20, 30)
-    # ], site_size_x=10, site_size_y=10)
-    # pc[0] = Plate("plate", 10, 20, 30, -1, -1, -1, 0, 0, 0, 0, 0)
+    tc[0] = Tips("tips", 10, 20, 30, standard_volume_tip_with_filter, -1, -1, -1, 1, 1, 1, 1)
+    pc = PlateCarrier("pc", 100, 100, 100, location=Coordinate(0, 0, 0), sites=[
+      Coordinate(10, 20, 30)
+    ], site_size_x=10, site_size_y=10)
+    pc[0] = Plate("plate", 10, 20, 30, -1, -1, -1, 0, 0, 0, 0, 0)
 
-    # fn = os.path.join(tmp_dir, "layout.json")
-    # custom_1.save(fn)
-    # custom_recover = LiquidHandler(be)
-    # custom_recover.load(fn)
+    fn = os.path.join(tmp_dir, "layout.json")
+    custom_1.save(fn)
+    custom_recover = LiquidHandler(be)
+    custom_recover.load(fn)
 
+    self.assertEqual(custom_1.deck.get_resource("carrier-plate carrier-spot-2"), custom_recover.deck.get_resource("carrier-plate carrier-spot-2"))
     # self.assert_same(custom_1, custom_recover)
 
-    # # unsupported format
-    # with self.assertRaises(ValueError):
-    #   custom_recover.load(fn + ".unsupported")
+    # unsupported format
+    with self.assertRaises(ValueError):
+      custom_recover.load(fn + ".unsupported")
 
   def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")

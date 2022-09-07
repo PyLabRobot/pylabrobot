@@ -12,7 +12,8 @@ from .tip_type import TipType
 class Tip(Resource):
   def __init__(self, name: str, size_x: float, size_y: float, tip_type: TipType,
     location: Coordinate = ..., category: str = "tip"):
-    super().__init__(name, size_x, size_y, tip_type.tip_length, location, category)
+    super().__init__(name, size_x=size_y, size_y=size_x, size_z=tip_type.tip_length,
+      location=location, category=category)
     self.tip_type = tip_type
 
 
@@ -31,17 +32,18 @@ class Tips(ItemizedResource[Tip], metaclass=ABCMeta):
     dz: float,
     tip_size_x: float,
     tip_size_y: float,
-    num_tips_x: int,
-    num_tips_y: int,
-    location: Coordinate = Coordinate(None, None, None)
+    num_items_x: int,
+    num_items_y: int,
+    location: Coordinate = Coordinate(None, None, None),
+    category: str = "tips",
   ):
     super().__init__(name, size_x, size_y, size_z, location=location,
-                     category="tips",
-                     num_items_x=num_tips_x, num_items_y=num_tips_y,
+                     category=category,
+                     num_items_x=num_items_x, num_items_y=num_items_y,
                      create_item=lambda i, j: Tip(
                         name=f"{self.name}_{i}_{j}",
                         size_x=tip_size_x, size_y=tip_size_y, tip_type=tip_type,
-                        location=Coordinate(dx + i * tip_size_x, dy + (num_tips_y-j-1) * tip_size_y, dz)))
+                        location=Coordinate(dx + i * tip_size_x, dy + (num_items_y-j-1) * tip_size_y, dz)))
     self.tip_type = tip_type
     self.dx = dx
     self.dy = dy
@@ -60,6 +62,12 @@ class Tips(ItemizedResource[Tip], metaclass=ABCMeta):
       tip_size_x=self.tip_size_x,
       tip_size_y=self.tip_size_y,
     )
+
+  @classmethod
+  def deserialize(cls, data):
+    # Deserialize the tip type
+    data["tip_type"] = TipType.deserialize(data["tip_type"])
+    return super().deserialize(data)
 
   def __repr__(self) -> str:
     return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "

@@ -9,8 +9,8 @@ from .plate import Plate, Lid
 
 class TestLid(unittest.TestCase):
   def test_initialize_with_lid(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
-      one_dot_max=1, lid_height=10, num_wells_x=1, num_wells_y=1, well_size_x=1, well_size_y=1)
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0, one_dot_max=1,
+      lid_height=10, with_lid=True, num_items_x=1, num_items_y=1, well_size_x=1, well_size_y=1)
 
     self.assertIsNotNone(plate.lid)
     self.assertEqual(plate.lid.name, "plate_lid")
@@ -20,7 +20,7 @@ class TestLid(unittest.TestCase):
 
   def test_add_lid(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
-      one_dot_max=1, lid_height=None, num_wells_x=1, num_wells_y=1, well_size_x=1, well_size_y=1)
+      one_dot_max=1, lid_height=None, num_items_x=1, num_items_y=1, well_size_x=1, well_size_y=1)
     lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(), size_z=plate.get_size_z(),
       location=Coordinate(0, 0, 0))
     plate.assign_child_resource(lid)

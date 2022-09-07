@@ -6,7 +6,7 @@ from pylabrobot.liquid_handling.resources.abstract import Coordinate, Plate
 class TestItemizedResource(unittest.TestCase):
   def setUp(self) -> None:
     self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
-      one_dot_max=1, lid_height=None, num_wells_x=12, num_wells_y=8, well_size_x=9, well_size_y=9)
+      one_dot_max=1, lid_height=None, num_items_x=12, num_items_y=8, well_size_x=9, well_size_y=9)
     return super().setUp()
 
   def test_initialize_with_wells(self):

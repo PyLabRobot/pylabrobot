@@ -22,6 +22,7 @@ from .resources import (
   Resource,
   Coordinate,
   Carrier,
+  CarrierSite,
   Hotel,
   Lid,
   Plate,
@@ -78,7 +79,9 @@ class LiquidHandler:
     )
 
   def __del__(self):
-    self.stop()
+    # If setup was finished, close automatically to prevent blocking the USB device.
+    if self.setup_finished:
+      self.stop()
 
   def need_setup_finished(func: typing.Callable): # pylint: disable=no-self-argument
     """ Decorator for methods that require the liquid handler to be set up.
@@ -377,15 +380,12 @@ class LiquidHandler:
       indent: Same as `json.dump`'s `indent` argument (for json pretty printing).
     """
 
-    serialized_resources = []
+    serialized = self.deck.serialize()
 
-    for resource in self.deck.children:
-      serialized_resources.append(resource.serialize())
-
-    deck = dict(resources=serialized_resources)
+    serialized = dict(deck=serialized)
 
     with open(fn, "w", encoding="utf-8") as f:
-      json.dump(deck, f, indent=indent)
+      json.dump(serialized, f, indent=indent)
 
   def load_from_json(self, fn: Optional[str] = None, content: Optional[dict] = None):
     """ Load deck layout serialized in JSON. Contents can either be in a layout file or in a
@@ -396,46 +396,34 @@ class LiquidHandler:
       content: Dictionary containing serialized deck layout.
     """
 
-    assert fn is not None or content is not None, "Either fn or content must be provided."
+    assert (fn is not None) != (content is not None), "Either fn or content must be provided."
 
     if content is None:
       with open(fn, "r", encoding="utf-8") as f:
         content = json.load(f)
-    dict_resources = content["resources"]
 
     # Get class names of all defined resources.
     resource_classes = [c[0] for c in inspect.getmembers(resources)]
 
-    for resource_dict in dict_resources:
-      klass_type = resource_dict["type"]
-      location = Coordinate.deserialize(resource_dict.pop("location"))
-      if klass_type in resource_classes: # properties pre-defined
-        klass = getattr(resources, resource_dict["type"])
-        resource = klass(name=resource_dict["name"])
-      else: # read properties explicitly
-        args = dict(
-          name=resource_dict["name"],
-          size_x=resource_dict["size_x"],
-          size_y=resource_dict["size_y"],
-          size_z=resource_dict["size_z"]
-        )
-        if "type" in resource_dict:
-          args["type"] = resource_dict["type"]
-        subresource = subresource_klass(**args)
+    def deserialize_resource(dict_resource):
+      """ Deserialize a single resource. """
 
-      if "sites" in resource_dict:
-        for subresource_dict in resource_dict["sites"]:
-          if subresource_dict["resource"] is None:
-            continue
-          subtype = subresource_dict["resource"]["type"]
-          if subtype in resource_classes: # properties pre-defined
-            subresource_klass = getattr(resources, subtype)
-            subresource = subresource_klass(name=subresource_dict["resource"]["name"])
-          else: # Custom resources should deserialize the properties they serialized.
-            subresource = subresource_klass(**subresource_dict["resource"])
-          resource[subresource_dict["spot"]] = subresource
+      # Get class name.
+      class_name = dict_resource["type"]
+      if class_name in resource_classes:
+        klass = getattr(resources, class_name)
+        resource = klass.deserialize(dict_resource)
+        for child_dict in dict_resource["children"]:
+          child_resource = deserialize_resource(child_dict)
+          resource.assign_child_resource(child_resource, location=child_resource.location)
+        return resource
+      else:
+        raise ValueError(f"Resource with classname {class_name} not found.")
 
-      self.assign_resource(resource, location=location)
+    deck_dict = content["deck"]
+    self.deck = deserialize_resource(deck_dict)
+    self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
+    self.deck.resource_unassigned_callback_callback = self.resource_unassigned_callback
 
   def load(self, fn: str, file_format: typing.Optional[str] = None):
     """ Load deck layout serialized in a file, either from a .lay or .json file.
@@ -851,7 +839,7 @@ class LiquidHandler:
 
   def move_plate(
     self,
-    plate: typing.Union[Plate, Carrier.CarrierSite],
+    plate: typing.Union[Plate, CarrierSite],
     target: typing.Union[Resource, Coordinate],
     **backend_kwargs
   ):
@@ -876,7 +864,7 @@ class LiquidHandler:
     """
 
     # Get plate from `plate` param. # (this could be a `Resource` too)
-    if isinstance(plate, Carrier.CarrierSite):
+    if isinstance(plate, CarrierSite):
       if plate.resource is None:
         raise ValueError(f"No resource found at CarrierSite '{plate}'.")
       plate = plate.resource
@@ -885,7 +873,7 @@ class LiquidHandler:
       if not plate:
         raise ValueError(f"Resource with name '{plate}' not found.")
 
-    if isinstance(target, Carrier.CarrierSite):
+    if isinstance(target, CarrierSite):
       if target.resource is not None:
         raise ValueError(f"There already exists a resource at {target}.")
 
@@ -905,7 +893,7 @@ class LiquidHandler:
   def move_lid(
     self,
     lid: Lid,
-    target: typing.Union[Plate, Hotel, Carrier.CarrierSite],
+    target: typing.Union[Plate, Hotel, CarrierSite],
     **backend_kwargs
   ):
     """ Move a lid to a new location.
@@ -923,7 +911,7 @@ class LiquidHandler:
       ValueError: If the lid is not assigned to a resource.
     """
 
-    if isinstance(target, Carrier.CarrierSite):
+    if isinstance(target, CarrierSite):
       if target.resource is None:
         raise ValueError(f"No plate exists at {target}.")
 

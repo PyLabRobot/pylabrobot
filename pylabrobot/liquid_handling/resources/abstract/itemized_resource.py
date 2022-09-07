@@ -47,6 +47,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       'num_items_y': self.num_items_y,
     }
 
+  @classmethod
+  def deserialize(self, data: dict):
+    """ Deserialize the resource. """
+    # Children are created by us, so we don't need to deserialize them.
+    data["children"] = []
+    return super().deserialize(data)
+
   def __getitem__(self, identifier: Union[str, List[int], slice]) -> List[T]:
     """ Get the items with the given identifier.
 

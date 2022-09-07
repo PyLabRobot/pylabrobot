@@ -26,7 +26,7 @@ class CarrierTests(unittest.TestCase):
       size_x=5, size_y=5, size_z=5,
       tip_type=tip_type,
       dx=1, dy=1, dz=1,
-      num_tips_x=1, num_tips_y=1, tip_size_x=5, tip_size_y=5
+      num_items_x=1, num_items_y=1, tip_size_x=5, tip_size_y=5
     )
 
     self.B = Tips( # pylint: disable=invalid-name
@@ -34,7 +34,7 @@ class CarrierTests(unittest.TestCase):
       size_x=5, size_y=5, size_z=5,
       tip_type=tip_type,
       dx=9, dy=2, dz=-2,
-      num_tips_x=1, num_tips_y=1, tip_size_x=5, tip_size_y=5
+      num_items_x=1, num_items_y=1, tip_size_x=5, tip_size_y=5
     )
 
     self.alsoB = Tips( # pylint: disable=invalid-name
@@ -42,7 +42,7 @@ class CarrierTests(unittest.TestCase):
       size_x=100, size_y=100, size_z=100,
       tip_type=tip_type,
       dx=0, dy=0, dz=0,
-      num_tips_x=1, num_tips_y=1, tip_size_x=5, tip_size_y=5
+      num_items_x=1, num_items_y=1, tip_size_x=5, tip_size_y=5
     )
 
     self.tip_car = TipCarrier(
@@ -179,6 +179,18 @@ class CarrierTests(unittest.TestCase):
   def test_serialization(self):
     self.maxDiff = None # pylint: disable=invalid-name
     self.assertEqual(self.tip_car.serialize(), {
+      "name": "tip_car",
+      "type": "TipCarrier",
+      "size_x": 135.0,
+      "size_y": 497.0,
+      "size_z": 13.0,
+      "location": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "category": "tip_carrier",
+      "parent_name": None,
       "children": [
         {
           "spot": 0,
@@ -265,21 +277,18 @@ class CarrierTests(unittest.TestCase):
           "children": [],
           "parent_name": "tip_car"
         }
-      ],
-      "name": "tip_car",
-      "type": "TipCarrier",
-      "size_x": 135.0,
-      "size_y": 497.0,
-      "size_z": 13.0,
-      "location": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
-      "category": "tip_carrier",
-      "parent_name": None
+      ]
     })
 
+  def test_deserialization(self):
+    self.maxDiff = None
+    tip_car = TipCarrier(
+      "tip_car",
+      size_x=135.0, size_y=497.0, size_z=13.0, location=Coordinate(0, 0, 0),
+      sites=[], # sites are not deserialized here
+      site_size_x=10, site_size_y=10
+    )
+    self.assertEqual(tip_car, TipCarrier.deserialize(tip_car.serialize()))
 
 if __name__ == "__main__":
   unittest.main()
