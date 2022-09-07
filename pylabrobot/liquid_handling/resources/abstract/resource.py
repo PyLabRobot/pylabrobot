@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 
 from typing import List, Optional
 
@@ -24,7 +25,8 @@ class Resource:
     size_y: float,
     size_z: float,
     location: Coordinate = Coordinate(None, None, None),
-    category: str = None
+    category: Optional[str] = None,
+    model: Optional[str] = None
   ):
     self.name = name
     self._size_x = size_x
@@ -32,6 +34,7 @@ class Resource:
     self._size_z = size_z
     self.location = location
     self.category = category
+    self.model = model
 
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
@@ -45,10 +48,21 @@ class Resource:
       size_y=self._size_y,
       size_z=self._size_z,
       location=self.location.serialize(),
-      category=self.category or "unknown",
+      category=self.category,
       children=[child.serialize() for child in self.children],
       parent_name=self.parent.name if self.parent is not None else None
     )
+
+  @classmethod
+  def deserialize(cls, data: dict) -> Resource:
+    """ Deserialize this resource from a dictionary. """
+
+    data_copy = data.copy()
+    # remove keys that are already present in the definition or that we added in the serialization
+    for key in ["type", "children", "parent_name"]:
+      data_copy.pop(key, [])
+    data_copy["location"] = Coordinate.deserialize(data_copy["location"])
+    return cls(**data_copy)
 
   def __eq__(self, other):
     return (
@@ -58,7 +72,8 @@ class Resource:
       self.get_size_y() == other.get_size_y() and
       self.get_size_z() == other.get_size_z() and
       self.location == other.location and
-      self.category == other.category
+      self.category == other.category and
+      self.children == other.children
     )
 
   def __repr__(self) -> str:

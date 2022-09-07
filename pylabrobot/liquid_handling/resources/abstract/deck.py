@@ -9,11 +9,17 @@ class Deck(Resource):
 
   def __init__(
     self,
+    size_x: float = 1360,
+    size_y: float = 653.5,
+    size_z: float = 900,
     resource_assigned_callback: Optional[Callable] = None,
     resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 0, 0),
   ):
     """ Initialize a new deck.
+
+    TODO: sizes from HAMILTON\Config\ML_Starlet.dck (mm probably), want to create
+      STARDeck(HamiltonDeck)
 
     Args:
       resource_assigned_callback: A callback function that is called when a resource is assigned to
@@ -25,11 +31,21 @@ class Deck(Resource):
         function is called with the resource as an argument.
     """
 
-    # sizes from HAMILTON\Config\ML_Starlet.dck (mm probably)
-    super().__init__(name="deck", size_x=1360, size_y=653.5, size_z=900, location=origin, category="deck")
+    super().__init__(name="deck", size_x=size_x, size_y=size_y, size_z=size_z,
+      location=origin, category="deck")
     self.resources = {}
     self.resource_assigned_callback_callback = resource_assigned_callback
     self.resource_unassigned_callback_callback = resource_unassigned_callback
+
+  @classmethod
+  def deserialize(cls, data: dict):
+    """ Deserialize the deck from a dictionary. """
+    return cls(
+      size_x=data["size_x"],
+      size_y=data["size_y"],
+      size_z=data["size_z"],
+      origin=Coordinate.deserialize(data["location"]),
+    )
 
   def _check_name_exists(self, resource: Resource):
     """ Raises a ValueError if the resource name already exists. This method is recursive, and

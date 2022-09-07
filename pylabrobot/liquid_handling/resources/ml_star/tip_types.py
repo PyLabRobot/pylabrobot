@@ -22,7 +22,8 @@ __all__ = [
   "high_volume_tip_no_filter",
   "high_volume_tip_with_filter",
   "four_ml_tip_with_filter",
-  "five_ml_tip_with_filter"
+  "five_ml_tip_with_filter",
+  "five_ml_tip"
 ]
 
 
@@ -92,6 +93,17 @@ four_ml_tip_with_filter = TipType(
 #: 5mL tip with a filter (`tt25` in venus)
 five_ml_tip_with_filter = TipType(
   has_filter=True,
+  total_tip_length=116,
+  maximal_volume=5420,
+  tip_type_id=TIP_TYPE_XL_CHANNEL,
+  pick_up_method=0
+)
+
+#: 5mL tip without a filter (`tt25` in venus)
+# This tip type is copied from five_ml_tip_with_filter, but the filter is set to False. I'm not sure
+# where the actual thing is defined.
+five_ml_tip = TipType(
+  has_filter=False,
   total_tip_length=116,
   maximal_volume=5420,
   tip_type_id=TIP_TYPE_XL_CHANNEL,
