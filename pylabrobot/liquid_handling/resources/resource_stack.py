@@ -1,5 +1,4 @@
-from time import sleep
-from typing import List
+from typing import List, Optional
 
 from pylabrobot.liquid_handling.resources.abstract.resource import Resource
 from pylabrobot.liquid_handling.resources.abstract.coordinate import Coordinate
@@ -35,14 +34,14 @@ class ResourceStack(Resource):
     self,
     name: str,
     direction: str,
-    resources: List[Resource] = [],
+    resources: Optional[List[Resource]] = None,
     location: Coordinate = Coordinate(None, None, None),
   ):
     super().__init__(name, size_x=0, size_y=0, size_z=0,
       location=location, category="resource_group")
     assert direction in ["x", "y", "z"], "Direction must be one of 'x', 'y', or 'z'"
     self.direction = direction
-    for resource in resources:
+    for resource in (resources or []):
       self.assign_child_resource(resource)
 
   def __str__(self) -> str:

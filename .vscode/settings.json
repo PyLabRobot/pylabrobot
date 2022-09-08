@@ -1,7 +1,7 @@
 {
   "editor.tabSize": 2,
   "files.trimTrailingWhitespace": true,
-  "cSpell.words": ["iswap", "pyhamilton", "subresource"],
+  "cSpell.words": ["iswap", "klass", "pyhamilton", "pytest", "subresource"],
   "python.linting.pylintEnabled": true,
   "python.testing.pytestArgs": ["."],
   "python.testing.unittestEnabled": false,

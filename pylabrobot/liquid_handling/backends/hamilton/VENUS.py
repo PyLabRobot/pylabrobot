@@ -4,10 +4,6 @@ import logging
 import re
 import typing
 
-logger = logging.getLogger(__name__)
-logging.basicConfig()
-logger.setLevel(logging.INFO)
-
 try:
   from pyhamilton.deckresource import (
     DeckResource,
@@ -18,13 +14,14 @@ try:
     Plate384,
     Tip96
   )
-  from pyhamilton.interface import *
+  from pyhamilton.interface import (
+    HamiltonInterface,
+    INITIALIZE,
+  )
   from . import venus_utils
   USE_VENUS = True
 except (ImportError, ModuleNotFoundError):
-  logger.warn("Could not import pyusb, Hamilton interface will not be available.")
   USE_VENUS = False
-
 
 from pylabrobot.utils.positions import string_to_position
 
@@ -32,6 +29,10 @@ from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources.abstract import Resource
 from pylabrobot.liquid_handling.liquid_handler import AspirationInfo, DispenseInfo
 import pylabrobot.utils.file_parsing as file_parser
+
+logger = logging.getLogger(__name__)
+logging.basicConfig()
+logger.setLevel(logging.INFO)
 
 
 class VENUS(LiquidHandlerBackend):
@@ -56,6 +57,9 @@ class VENUS(LiquidHandlerBackend):
     self._venus_resources = {}
 
   def setup(self):
+    if not USE_VENUS:
+      raise RuntimeError("Venus backend requires the pyhamilton library.")
+
     super().setup()
 
     self._load_resources_from_layfile()
@@ -119,7 +123,7 @@ class VENUS(LiquidHandlerBackend):
 
   def _get_venus_resource(self, resource: typing.Union[str, Resource]) -> DeckResource:
     name = resource if isinstance(resource, str) else resource.name
-    return self._venus_resources[resource]
+    return self._venus_resources[name]
 
   def pickup_tips(
     self,
@@ -214,7 +218,8 @@ class VENUS(LiquidHandlerBackend):
         pos_tuples.append(None)
         volumes.append(None)
 
-    venus_utils.aspirate(self.ham_int, pos_tuples, volumes, liquidHeight=liquid_height, **backend_kwargs)
+    venus_utils.aspirate(self.ham_int, pos_tuples, volumes, liquidHeight=liquid_height,
+      **backend_kwargs)
 
   def dispense(
     self,

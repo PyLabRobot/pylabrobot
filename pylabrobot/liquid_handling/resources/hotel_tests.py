@@ -4,7 +4,7 @@
 import unittest
 
 from pylabrobot.liquid_handling.resources.abstract.coordinate import Coordinate
-from pylabrobot.liquid_handling.resources.abstract.plate import Plate, Lid
+from pylabrobot.liquid_handling.resources.abstract.plate import Plate
 from pylabrobot.liquid_handling.resources.hotel import Hotel
 
 

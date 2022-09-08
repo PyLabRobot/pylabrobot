@@ -51,8 +51,8 @@ class Hotel(Resource):
     return None
 
   def get_height(self) -> float:
-    return sum([child.get_size_z() for child in self.children]) - \
-           sum([child.stack_height for child in self.children if hasattr(child, "stack_height")])
+    return sum(child.get_size_z() for child in self.children) - \
+           sum(child.stack_height for child in self.children if hasattr(child, "stack_height"))
 
   def get_size_z(self) -> float:
     return super().get_size_z() + self.get_height()

@@ -21,15 +21,15 @@ class TestLid(unittest.TestCase):
   def test_add_lid(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
       one_dot_max=1, lid_height=None, num_items_x=1, num_items_y=1, well_size_x=1, well_size_y=1)
-    lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(), size_z=plate.get_size_z(),
-      location=Coordinate(0, 0, 0))
+    lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
+      size_z=plate.get_size_z(), location=Coordinate(0, 0, 0))
     plate.assign_child_resource(lid)
     return plate
 
   def test_add_lid_with_existing_lid(self):
     plate = self.test_add_lid()
-    another_lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(), size_z=plate.get_size_z(),
-      location=Coordinate(0, 0, 0))
+    another_lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
+    size_z=plate.get_size_z(), location=Coordinate(0, 0, 0))
     with self.assertRaises(ValueError):
       plate.assign_child_resource(another_lid)
 

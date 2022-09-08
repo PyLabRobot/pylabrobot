@@ -11,7 +11,7 @@ from pylabrobot.liquid_handling.resources import (
   PlateReader,
   Hotel
 )
-from pylabrobot.liquid_handling.resources.ml_star import STF_L, HTF_L
+from pylabrobot.liquid_handling.resources.ml_star import STF_L
 
 from .STAR import STAR
 from .errors import (
@@ -196,6 +196,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_channel_positions_to_fw_positions(self):
     """ Convert channel positions to firmware positions. """
+    # pylint: disable=protected-access
     resource = self.lh.get_resource("tips_01")
     self.assertEqual(
       self.mockSTAR._channel_positions_to_fw_positions(resource["A1"]),
@@ -248,19 +249,6 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_single_channel_aspiration(self):
     self.lh.aspirate(self.plt_car[0].resource["A1"], vols=[100])
 
-    # Real command, but with extra parameters. `lp`, `zl`, `zx`, `av`, `zu`, `zr` changed
-    # TODO: Do we need these parameters with the real robot?
-    # self._assert_command_sent_once(
-    #   "C0ASid0300at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2321 2450&ch000&zl1881 2450&"
-    #   "zx1871 0000&ip0000&it0&fp0000&av01072 00000&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
-    #   "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032 0000&zr06180 00000&mh0000&zo000&"
-    #   "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
-    #   fmt="at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
-    #   "ip#### (n)it# (n)fp#### (n)av#### (n)as#### (n)ta### (n)ba#### (n)oa### (n)lm# (n)ll# (n)"
-    #   "lv# (n)ld## (n)de#### (n)wt## (n)mv##### (n)mc## (n)mp### (n)ms#### (n)gi### (n)gj#gk#"
-    #   "zu#### (n)zr#### (n)mh#### (n)zo### (n)po#### (n)lk# (n)ik#### (n)sd#### (n)se#### (n)"
-    #   "sz#### (n)io#### (n)il##### (n)in#### (n)")
-
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
       "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp1931&ch000&zl1881&"
@@ -275,20 +263,6 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_multi_channel_aspiration(self):
     self.lh.aspirate(self.plt_car[0].resource["A1:B1"], vols=100)
-
-    # Real command
-    # self._assert_command_sent_once(
-    #   "C0ASid0225at0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp2321 2321 2450&"
-    #   "ch000 000&zl1881 1881 2450&zx1871 1871 0000&ip0000 0000&it0 0&fp0000 0000&"
-    #   "av01072 01072 00000&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&ld00 00&"
-    #   "de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&gi000 000&gj0gk0"
-    #   "zu0032 0032 0000&zr06180 06180 00000&mh0000 0000&zo000 000&po0100 0100&lk0 0&ik0000 0000&"
-    #   "sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&il00000 00000&in0000 0000&",
-    #   fmt="at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
-    #   "ip#### (n)it# (n)fp#### (n)av#### (n)as#### (n)ta### (n)ba#### (n)oa### (n)lm# (n)ll# (n)"
-    #   "lv# (n)ld## (n)de#### (n)wt## (n)mv##### (n)mc## (n)mp### (n)ms#### (n)gi### (n)gj#gk#"
-    #   "zu#### (n)zr#### (n)mh#### (n)zo### (n)po#### (n)lk# (n)ik#### (n)sd#### (n)se#### (n)"
-    #   "sz#### (n)io#### (n)il##### (n)in#### (n)")
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -320,18 +294,6 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     print([x.get_absolute_location() for x in self.plt_car[0].resource["A1:B1"]])
     self.lh.dispense(self.plt_car[0].resource["A1:B1"], vols=100)
 
-    # self._assert_command_sent_once(
-    #   "C0DSid0317dm2 2&tm1 1 0&dv01072 01072 00000&xp02980 02980 00000&yp1460 1370 0000&"
-    #   "zx1871 1871 0000&lp2321 2321 2450&zl1881 1881 2450&ip0000 0000&it0 0&fp0000 0000&th2450"
-    #   "te2450ds1200 1200&ss0050 0050&rv000 000&ta000 000&ba0000 0000&lm0 0&zo000 000&ll1 1&",
-    #   "lv1 1&de0020 0020&mv00000 00000&mc00 00&mp000 000&ms0010 0010&wt00 00&gi000 000&gj0gk0"
-    #   "zu0032 0032 0000&dj00zr06180 06180 00000&mh0000 0000&po0100 0100&",
-    #   "dm# (n)tm# (n)xp##### (n)yp#### (n)zx#### (n)lp#### (n)zl#### (n)ip#### (n)it# (n)fp#### (n)"
-    #   "th####te####dv##### (n)ds#### (n)ss#### (n)rv### (n)ta### (n)ba#### (n)lm# (n)zo### (n)"
-    #   "ll# (n)lv# (n)de#### (n)mv##### (n)mc## (n)mp### (n)ms#### (n)wt## (n)gi### (n)gj#gk#"
-    #   "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
-    # modified to remove additional values in parameters (dm, dv, lp, zl, zr, zu, zx)
-
     self._assert_command_sent_once(
       "C0DSid0317dm2 2&tm1 1 0&dv01072 01072&xp02980 02980 00000&yp1460 1370 0000&"
       "zx1871 1871&lp2321 2321&zl1881 1881&ip0000 0000&it0 0&fp0000 0000&th2450"
@@ -361,7 +323,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.aspirate96("plate_01", 100)
 
     self._assert_command_sent_once(
-      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01083ag2500vt050"
+      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01072ag2500vt050"
       "bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000hs1200zv0032zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "xs#####xd#yh####zh####ze####lz####zt####zm####iw###ix#fh###af#####ag####vt###"
@@ -372,7 +334,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.dispense96("plate_01", 100)
 
     self._assert_command_sent_once(
-      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01083dg1200vt050"
+      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01072dg1200vt050"
       "bv00000cm0cs1bs0020wh00hv00000hc00hp000hs1200es0050ev000zv0032ej00zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "da#xs#####xd#yh##6#zh####ze####lz####zt####zm##6#iw###ix#fh###df#####dg####vt###"
@@ -390,7 +352,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_iswap_plate_reader(self):
     plate_reader = PlateReader(name="plate_reader")
-    self.lh.assign_resource(plate_reader, location=Coordinate(979.5, 285.2-63, 200 - 100), replace=True)
+    self.lh.assign_resource(plate_reader, location=Coordinate(979.5, 285.2-63, 200 - 100),
+      replace=True)
 
     self.lh.move_plate(self.plt_car[0], plate_reader, pickup_distance_from_top=12.2,
       get_open_gripper_position=1320, get_grip_direction=1,
@@ -414,7 +377,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_iswap_hotel(self):
     hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=0)
-    # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100)) # for some reason it was like this at some point
+    # for some reason it was like this at some point
+    # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
     self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100))
 
     get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"

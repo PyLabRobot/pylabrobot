@@ -1,3 +1,8 @@
+""" Abstract resources.
+
+NOTE: not that abstract anymore, so will probably rename soon.
+"""
+
 from .carrier import Carrier, CarrierSite, PlateCarrier, TipCarrier
 from .coordinate import Coordinate
 from .deck import Deck

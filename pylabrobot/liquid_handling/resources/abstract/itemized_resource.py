@@ -8,7 +8,7 @@ from .coordinate import Coordinate
 from .resource import Resource
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
@@ -43,12 +43,12 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     return {
       **super().serialize(),
-      'num_items_x': self.num_items_x,
-      'num_items_y': self.num_items_y,
+      "num_items_x": self.num_items_x,
+      "num_items_y": self.num_items_y,
     }
 
   @classmethod
-  def deserialize(self, data: dict):
+  def deserialize(cls, data: dict):
     """ Deserialize the resource. """
     # Children are created by us, so we don't need to deserialize them.
     data["children"] = []
@@ -64,7 +64,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """
 
     if isinstance(identifier, str):
-      if ':' in identifier:
+      if ":" in identifier:
         identifier = pylabrobot.utils.string_to_indices(identifier)
       else:
         identifier = [pylabrobot.utils.string_to_index(identifier)]

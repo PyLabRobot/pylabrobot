@@ -1,5 +1,7 @@
 """ Corning Costar plates """
 
+# pylint: disable=invalid-name
+
 from functools import partial
 
 from pylabrobot.liquid_handling.resources.abstract import Plate

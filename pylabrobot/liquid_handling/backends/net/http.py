@@ -5,6 +5,7 @@ import urllib.parse
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
+  Lid,
   Plate,
   Resource,
   Tip,
@@ -144,6 +145,6 @@ class HTTPBackend(LiquidHandlerBackend):
     self.send_event(event="move_plate", plate=plate.serialize(), to=to.serialize(),
       **backend_kwargs)
 
-  def move_lid(self, resource: Resource, to: Union[Resource, Coordinate], **backend_kwargs):
-    self.send_event(event="move_lid", resource=resource.serialize(), to=to.serialize(),
+  def move_lid(self, lid: Lid, to: Union[Resource, Coordinate], **backend_kwargs):
+    self.send_event(event="move_lid", lid=lid.serialize(), to=to.serialize(),
       **backend_kwargs)

@@ -11,6 +11,8 @@ from pylabrobot.utils import (
 
 
 class TestPositions(unittest.TestCase):
+  """ Tests for position utilities. """
+
   def setUp(self) -> None:
     super().setUp()
     self.maxDiff = None

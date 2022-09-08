@@ -21,9 +21,10 @@ class CarrierSite(Resource):
     self.parent: Carrier = None # will be set after Carrier.assign_child_resource
     self.spot: int = spot
 
-  def assign_child_resource(self, resource, **kwargs):
+  def assign_child_resource(self, resource, location=Coordinate(0, 0, 0)):
     self.resource = resource
-    return super().assign_child_resource(resource, **kwargs)
+    self.resource.location = location
+    return super().assign_child_resource(resource)
 
   def unassign_child_resource(self, resource):
     self.resource = None
@@ -49,6 +50,7 @@ class CarrierSite(Resource):
 
   def __eq__(self, other):
     return super().__eq__(other) and self.spot == other.spot and self.resource == other.resource
+
 
 class Carrier(Resource):
   """ Abstract base resource for carriers.
@@ -125,11 +127,11 @@ class Carrier(Resource):
     )
     return out
 
-  def assign_child_resource(self, resource, spot: Optional[int] = None, **kwargs):
+  def assign_child_resource(self, resource, spot: Optional[int] = None):
     """ Assign a resource to this carrier.
 
     NOTE: currently this method is ambiguous: with spot = None, we assign a resource to self,
-    otherwise we assign a resource to a site. This was done for deseralialization. Will probably
+    otherwise we assign a resource to a site. This was done for deserialization. Will probably
     rename this method to `assign_resource_to_site` or something.
 
     Also see :meth:`~Resource.assign_child_resource`
@@ -202,7 +204,7 @@ class TipCarrier(Carrier):
   """ Base class for tip carriers. """
   def __init__(self, name: str, size_x, size_y, size_z,
     sites: List[Coordinate], site_size_x, site_size_y,
-    location: Coordinate = Coordinate(None, None, None), category='tip_carrier'):
+    location: Coordinate = Coordinate(None, None, None), category="tip_carrier"):
     super().__init__(name, size_x, size_y, size_z, location,
       sites, site_size_x, site_size_y, category=category)
 
@@ -210,6 +212,6 @@ class PlateCarrier(Carrier):
   """ Base class for plate carriers. """
   def __init__(self, name: str, size_x, size_y, size_z,
     sites: List[Coordinate], site_size_x, site_size_y,
-    location: Coordinate = Coordinate(None, None, None), category='plate_carrier'):
+    location: Coordinate = Coordinate(None, None, None), category="plate_carrier"):
     super().__init__(name, size_x, size_y, size_z, location,
       sites, site_size_x, site_size_y, category=category)

@@ -129,8 +129,9 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
     self.assertEqual(self.lh.get_resource("dispense plate").get_item("A1").get_absolute_location(),
                      Coordinate(320.500, 338.000, 188.150))
-    self.assertEqual(self.lh.get_resource("aspiration plate").get_item("A1").get_absolute_location(),
-                     Coordinate(320.500, 146.000, 187.150))
+    self.assertEqual(
+      self.lh.get_resource("aspiration plate").get_item("A1") .get_absolute_location(),
+      Coordinate(320.500, 146.000, 187.150))
 
   def test_illegal_subresource_assignment_before(self):
     # Test assigning subresource with the same name as another resource in another carrier. This
@@ -225,11 +226,15 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertEqual(self.lh.get_resource("Cos_96_DW_2mL_0001").get_item("A1") \
                     .get_absolute_location(), Coordinate(320.500, 530.000, 187.150))
 
-    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[0].resource.name, "Cos_96_DW_1mL_0001")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[0].resource.name,
+      "Cos_96_DW_1mL_0001")
     self.assertIsNone(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[1].resource)
-    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[2].resource.name, "Cos_96_DW_500ul_0001")
-    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[3].resource.name, "Cos_96_DW_1mL_0002")
-    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[4].resource.name, "Cos_96_DW_2mL_0001")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[2].resource.name,
+      "Cos_96_DW_500ul_0001")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[3].resource.name,
+      "Cos_96_DW_1mL_0002")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0001")[4].resource.name,
+      "Cos_96_DW_2mL_0001")
 
     self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002").get_absolute_location(), \
                      Coordinate(482.500, 63.000, 100.000))
@@ -240,10 +245,13 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertEqual(self.lh.get_resource("Cos_96_PCR_0001").get_item("A1") \
                      .get_absolute_location(), Coordinate(500.500, 434.000, 186.650))
 
-    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[0].resource.name, "Cos_96_DW_1mL_0003")
-    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[1].resource.name, "Cos_96_DW_500ul_0003")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[0].resource.name,
+      "Cos_96_DW_1mL_0003")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[1].resource.name,
+      "Cos_96_DW_500ul_0003")
     self.assertIsNone(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[2].resource)
-    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[3].resource.name, "Cos_96_PCR_0001")
+    self.assertEqual(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[3].resource.name,
+      "Cos_96_PCR_0001")
     self.assertIsNone(self.lh.get_resource("PLT_CAR_L5AC_A00_0002")[4].resource)
 
   def assert_same(self, lh1, lh2):
@@ -263,9 +271,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     recovered = LiquidHandler(be)
     recovered.load_from_json(fn)
 
-    # self.assert_same(self.lh, recovered)
-    self.assertEqual(self.lh.deck.get_resource("carrier-plate carrier-spot-2"), recovered.deck.get_resource("carrier-plate carrier-spot-2"))
-    self.assertEqual(self.lh.deck.get_resource("plate carrier"), recovered.deck.get_resource("plate carrier"))
+    self.assert_same(self.lh, recovered)
 
     # test with custom classes
     custom_1 = LiquidHandler(be)
@@ -284,8 +290,8 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     custom_recover = LiquidHandler(be)
     custom_recover.load(fn)
 
-    self.assertEqual(custom_1.deck.get_resource("carrier-plate carrier-spot-2"), custom_recover.deck.get_resource("carrier-plate carrier-spot-2"))
-    # self.assert_same(custom_1, custom_recover)
+    self.assertEqual(custom_1.deck,
+                     custom_recover.deck)
 
     # unsupported format
     with self.assertRaises(ValueError):
@@ -311,8 +317,10 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.lh.move_plate(plt_car[0], Coordinate(100, 100, 100))
     self.assertIsNotNone(self.lh.get_resource("plate"))
     self.assertIsNone(plt_car[0].resource)
-    # TODO: will probably update this test some time, when we make the deck universal and not just star.
-    self.assertEqual(self.lh.get_resource("plate").get_absolute_location(), Coordinate(100, 163, 200))
+    # TODO: will probably update this test some time, when we make the deck universal and not just
+    # star.
+    self.assertEqual(self.lh.get_resource("plate").get_absolute_location(),
+      Coordinate(100, 163, 200))
 
 
 class TestLiquidHandlerCommands(unittest.TestCase):

@@ -1,12 +1,12 @@
+""" Define mock backend. """
+
+# pylint: disable=multiple-statements
+
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 
 
 class Mock(LiquidHandlerBackend):
   """ A liquid handling backend that does absolutely nothing. """
-
-  def __init__(self): pass
-  def setup(self): pass
-  def stop(self): pass
 
   def pickup_tips(self, *args, **kwargs): pass
   def discard_tips(self, *args, **kwargs): pass
@@ -20,6 +20,3 @@ class Mock(LiquidHandlerBackend):
 
   def move_plate(self, *args, **kwargs): pass
   def move_lid(self, *args, **kwargs): pass
-
-  # def assigned_resource_callback(self, *args, **kwargs): pass
-  # def unassigned_resource_callback(self, *args, **kwargs): pass
