@@ -1,3 +1,6 @@
+""" Liquid classes for liquid handling robots. These define aspects of liquid handling operations
+such as correction curves for volumes, preferred tip types, air transport volumes, etc. """
+
 import enum
 import typing
 

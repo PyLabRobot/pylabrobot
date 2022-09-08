@@ -33,7 +33,7 @@ def stop():
   lh.stop()
   return jsonify({"status": "stopped"})
 
-@lh_api.route("/status", methods=["POST"])
+@lh_api.route("/status", methods=["GET"])
 def status():
   status = "running" if lh.setup_finished else "stopped"
   return jsonify({"status": status})

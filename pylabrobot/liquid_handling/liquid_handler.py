@@ -1,3 +1,5 @@
+""" Defines LiquidHandler class, the coordinator for liquid handling operations. """
+
 from collections.abc import Iterable
 import functools
 import inspect
@@ -186,7 +188,8 @@ class LiquidHandler:
 
     if resource.location.x + resource.get_size_x() > LiquidHandler._x_coordinate_for_rails(30) and \
       rails is not None:
-      raise ValueError(f"Resource with width {resource.get_size_x()} does not fit at rails {rails}.")
+      raise ValueError(f"Resource with width {resource.get_size_x()} does not "
+                       f"fit at rails {rails}.")
 
     # Check if there is space for this new resource.
     for og_resource in self.deck.get_resources():
@@ -199,16 +202,19 @@ class LiquidHandler:
       # A resource is not allowed to overlap with another resource. Resources overlap when a corner
       # of one resource is inside the boundaries other resource.
       if (og_x <= resource.get_absolute_location().x < og_x + og_resource.get_size_x() or \
-         og_x <= resource.get_absolute_location().x + resource.get_size_x() < og_x + og_resource.get_size_x()) and\
+         og_x <= resource.get_absolute_location().x + resource.get_size_x() <
+           og_x + og_resource.get_size_x()) and\
           (og_y <= resource.get_absolute_location().y < og_y + og_resource.get_size_y() or \
-            og_y <= resource.get_absolute_location().y + resource.get_size_y() < og_y + og_resource.get_size_y()):
+            og_y <= resource.get_absolute_location().y + resource.get_size_y() <
+               og_y + og_resource.get_size_y()):
         resource.location = None # Revert location.
         resource.parent = None # Revert parent.
         if rails is not None:
           if not (replace and resource.name == og_resource.name):
             raise ValueError(f"Rails {rails} is already occupied by resource '{og_resource.name}'.")
         else:
-          raise ValueError(f"Location {location} is already occupied by resource '{og_resource.name}'.")
+          raise ValueError(f"Location {location} is already occupied by resource "
+                           f"'{og_resource.name}'.")
 
     self.deck.assign_child_resource(resource)
 
@@ -256,7 +262,7 @@ class LiquidHandler:
 
       >>> lh.summary()
       Rail     Resource                   Type                Coordinates (mm)
-      ===============================================================================================
+      ==============================================================================================
       (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
           │   ├── tips_01                STF_L               (x: 117.900, y: 240.000, z: 100.000)
     """
@@ -415,7 +421,7 @@ class LiquidHandler:
         resource = klass.deserialize(dict_resource)
         for child_dict in dict_resource["children"]:
           child_resource = deserialize_resource(child_dict)
-          resource.assign_child_resource(child_resource, location=child_resource.location)
+          resource.assign_child_resource(child_resource)
         return resource
       else:
         raise ValueError(f"Resource with classname {class_name} not found.")
@@ -728,7 +734,7 @@ class LiquidHandler:
     self,
     resource: typing.Union[str, Resource],
     volume: float,
-    pattern: typing.Union[typing.List[typing.List[bool]], str] = [[True]*12]*8,
+    pattern: Optional[Union[List[List[bool]], str]] = None,
     end_delay: float = 0,
     liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     **backend_kwargs
@@ -755,7 +761,7 @@ class LiquidHandler:
     Args:
       resource: Resource name or resource object.
       pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
-        represent columns, or a string representing a range of positions.
+        represent columns, or a string representing a range of positions. Default all.
       volume: The volume to aspirate from each well.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
@@ -770,22 +776,23 @@ class LiquidHandler:
       raise ValueError(f"Resource with name {resource} not found.")
 
     # Convert the pattern to a list of lists of booleans
-    if isinstance(pattern, str):
+    if pattern is None:
+      pattern = [[True]*12]*8
+    elif isinstance(pattern, str):
       pattern = utils.string_to_pattern(pattern)
 
     utils.assert_shape(pattern, (8, 12))
 
-    self.backend.aspirate96(resource, pattern, volume, **backend_kwargs)
+    self.backend.aspirate96(resource, pattern, volume, liquid_class=liquid_class, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
 
   def dispense96(
     self,
-    resource: typing.Union[str, Resource],
-    # pattern: typing.Union[typing.List[typing.List[bool]], str],
+    resource: Union[str, Resource],
     volume: float,
-    pattern: typing.Union[typing.List[typing.List[bool]], str] = [[True]*12]*8,
+    pattern: Optional[Union[List[List[bool]], str]] = None,
     liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     end_delay: float = 0,
     **backend_kwargs
@@ -812,7 +819,7 @@ class LiquidHandler:
     Args:
       resource: Resource name or resource object.
       pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
-        represent columns, or a string representing a range of positions.
+        represent columns, or a string representing a range of positions. Default all.
       volume: The volume to dispense to each well.
       end_delay: The delay after the last dispense in seconds, optional. This is useful for when
         the tips used in the dispense are dripping.
@@ -827,12 +834,14 @@ class LiquidHandler:
       raise ValueError(f"Resource with name {resource} not found.")
 
     # Convert the pattern to a list of lists of booleans
-    if isinstance(pattern, str):
+    if pattern is None:
+      pattern = [[True]*12]*8
+    elif isinstance(pattern, str):
       pattern = utils.string_to_pattern(pattern)
 
     utils.assert_shape(pattern, (8, 12))
 
-    self.backend.dispense96(resource, pattern, volume, **backend_kwargs)
+    self.backend.dispense96(resource, pattern, volume, liquid_class, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)

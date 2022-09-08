@@ -21,7 +21,7 @@ python server.py
 
 #### Setting up the robot
 
-`POST /api/v1/liquid_handler/setup`
+`POST /api/v1/liquid_handling/setup`
 
 **Response**
 
@@ -52,7 +52,7 @@ Check the logs for more details.
 
 #### Stopping the robot
 
-`POST /api/v1/liquid_handler/stop`
+`POST /api/v1/liquid_handling/stop`
 
 **Response**
 
@@ -66,7 +66,7 @@ Check the logs for more details.
 
 #### Requesting the robot status
 
-`GET /api/v1/liquid_handler/status`
+`GET /api/v1/liquid_handling/status`
 
 **Response**
 
@@ -80,7 +80,7 @@ Check the logs for more details.
 
 #### Defining labware
 
-`POST /api/v1/liquid_handler/labware`
+`POST /api/v1/liquid_handling/labware`
 
 Post a JSON object that was generatated by calling `serialize()` on `lh`.
 
@@ -90,7 +90,7 @@ Post a JSON object that was generatated by calling `serialize()` on `lh`.
 
 #### Picking up tips
 
-`POST /api/v1/liquid_handler/pick-up-tips`
+`POST /api/v1/liquid_handling/pick-up-tips`
 
 ```json
 {
@@ -111,7 +111,7 @@ Post a JSON object that was generatated by calling `serialize()` on `lh`.
 
 #### Discarding tips
 
-`POST /api/v1/liquid_handler/discard-tips`
+`POST /api/v1/liquid_handling/discard-tips`
 
 ```json
 {
@@ -132,7 +132,7 @@ Post a JSON object that was generatated by calling `serialize()` on `lh`.
 
 #### Aspirating liquid
 
-`POST /api/v1/liquid_handler/aspirate`
+`POST /api/v1/liquid_handling/aspirate`
 
 ```json
 {
@@ -165,7 +165,7 @@ Post a JSON object that was generatated by calling `serialize()` on `lh`.
 
 #### Dispensing liquid
 
-`POST /api/v1/liquid_handler/dispense`
+`POST /api/v1/liquid_handling/dispense`
 
 ```json
 {

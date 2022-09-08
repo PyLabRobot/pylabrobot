@@ -147,6 +147,7 @@ disable=abstract-method,
         wrong-import-order,
         xrange-builtin,
         zip-builtin-not-iterating,
+        missing-module-docstring
 
 
 [REPORTS]
@@ -440,3 +441,7 @@ valid-metaclass-classmethod-first-arg=mcs
 overgeneral-exceptions=StandardError,
                        Exception,
                        BaseException
+
+
+
+good-names=maxDiff, __version__, _, VENUS, STAR, STAR_tests

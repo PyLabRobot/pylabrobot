@@ -2,8 +2,7 @@ name: Build and Publish Documentation
 
 on:
   push:
-    branches:
-      main
+    branches: main
 
 jobs:
   build_docs:

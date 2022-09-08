@@ -1,3 +1,5 @@
+""" TipType object and identifiers """
+
 from __future__ import annotations
 
 from abc import ABCMeta

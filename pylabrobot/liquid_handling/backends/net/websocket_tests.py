@@ -117,12 +117,6 @@ class WebSocketBackendCommandTests(unittest.TestCase):
 
     self.maxDiff = None
 
-  def assert_event_sent(self, event):
-    self.assertGreaterEqual(event, times=1)
-
-  def assert_event_not_sent(self, event):
-    self.assert_event_sent_n(event, times=0)
-
   def assert_event_sent_n(self, event, times):
     self.assertEqual(len(self.backend.get_commands(event)), times)
 

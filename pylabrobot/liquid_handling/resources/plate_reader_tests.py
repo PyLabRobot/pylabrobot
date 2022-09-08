@@ -1,7 +1,6 @@
 """ Tests for Resource """
 # pylint: disable=missing-class-docstring
 
-from multiprocessing.sharedctypes import Value
 import unittest
 
 from pylabrobot.liquid_handling.resources.abstract.plate import Plate

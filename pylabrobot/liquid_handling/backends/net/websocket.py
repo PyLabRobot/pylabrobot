@@ -80,6 +80,8 @@ class WebSocketBackend(LiquidHandlerBackend):
       data: The event data, deserialized from JSON.
     """
 
+    # pylint: disable=unused-argument
+
     if event == "ping":
       await self.websocket.send(json.dumps({"event": "pong"}))
 
@@ -109,7 +111,7 @@ class WebSocketBackend(LiquidHandlerBackend):
       if "event" in data:
         await self.handle_event(data.get("event"), data)
       else:
-        logger.warning(f"Unhandled message: {message}")
+        logger.warning("Unhandled message: %s", message)
 
   def _assemble_command(self, event: str, **kwargs) -> str:
     """ Assemble a command into standard JSON form. """
@@ -189,7 +191,7 @@ class WebSocketBackend(LiquidHandlerBackend):
       while True:
         try:
           async with websockets.serve(self._socket_handler, self.ws_host, self.ws_port):
-            print("Simulation server started at http://%s:%s" % (self.ws_host, self.ws_port))
+            print(f"Simulation server started at http://{self.ws_host}:{self.ws_port}")
             # logger.info("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
             await self.stop_
             break
@@ -280,15 +282,15 @@ class WebSocketBackend(LiquidHandlerBackend):
     self.send_event(event="discard_tips96", resource=resource.serialize(),
       wait_for_response=True)
 
-  def aspirate96(self, resource, pattern, volume):
+  def aspirate96(self, resource, pattern, volume, liquid_class):
     pattern = [[(volume if p else 0) for p in pattern[i]] for i in range(len(pattern))]
     self.send_event(event="aspirate96", resource=resource.serialize(), pattern=pattern,
-      volume=volume, wait_for_response=True)
+    liquid_class=liquid_class.serialize(),  volume=volume, wait_for_response=True)
 
-  def dispense96(self, resource, pattern, volume):
+  def dispense96(self, resource, pattern, volume, liquid_class):
     pattern = [[volume if p else 0 for p in pattern[i]] for i in range(len(pattern))]
     self.send_event(event="dispense96", resource=resource.serialize(), pattern=pattern,
-      volume=volume, wait_for_response=True)
+    liquid_class=liquid_class.serialize(),  volume=volume, wait_for_response=True)
 
   def move_plate(self, plate: Plate, to: Coordinate, **backend_kwargs):
     raise NotImplementedError("This method is not implemented in the simulator.")

@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import List, Tuple, Union, Optional
+from typing import List, Union, Optional
 
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
@@ -25,15 +25,12 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     setup_finished: Whether the backend has been set up.
   """
 
-  @abstractmethod
   def __init__(self):
     self.setup_finished = False
 
-  @abstractmethod
   def setup(self):
     self.setup_finished = True
 
-  @abstractmethod
   def stop(self):
     self.setup_finished = False
 

@@ -18,7 +18,7 @@ class Deck(Resource):
   ):
     """ Initialize a new deck.
 
-    TODO: sizes from HAMILTON\Config\ML_Starlet.dck (mm probably), want to create
+    TODO: sizes from HAMILTON\\Config\\ML_Starlet.dck (mm probably), want to create
       STARDeck(HamiltonDeck)
 
     Args:

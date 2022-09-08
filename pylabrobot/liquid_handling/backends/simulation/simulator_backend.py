@@ -119,6 +119,7 @@ class SimulatorBackend(WebSocketBackend):
       class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         """ A simple HTTP request handler that does not log requests. """
         def log_message(self, format, *args):
+          # pylint: disable=redefined-builtin
           pass
 
       while True:

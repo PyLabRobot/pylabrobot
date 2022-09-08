@@ -37,13 +37,19 @@ class Tips(ItemizedResource[Tip], metaclass=ABCMeta):
     location: Coordinate = Coordinate(None, None, None),
     category: str = "tips",
   ):
+    def create_tip(i, j):
+      return Tip(
+        name=f"{self.name}_{i}_{j}",
+        size_x=tip_size_x, size_y=tip_size_y,
+        tip_type=tip_type,
+        location=Coordinate(
+          x=dx + i * tip_size_x,
+          y=dy + (num_items_y-j-1) * tip_size_y,
+          z=dz))
+
     super().__init__(name, size_x, size_y, size_z, location=location,
-                     category=category,
-                     num_items_x=num_items_x, num_items_y=num_items_y,
-                     create_item=lambda i, j: Tip(
-                        name=f"{self.name}_{i}_{j}",
-                        size_x=tip_size_x, size_y=tip_size_y, tip_type=tip_type,
-                        location=Coordinate(dx + i * tip_size_x, dy + (num_items_y-j-1) * tip_size_y, dz)))
+                     category=category, num_items_x=num_items_x, num_items_y=num_items_y,
+                     create_item=create_tip)
     self.tip_type = tip_type
     self.dx = dx
     self.dy = dy

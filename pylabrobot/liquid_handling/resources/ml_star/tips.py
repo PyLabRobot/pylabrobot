@@ -11,7 +11,6 @@ from .tip_types import (
   high_volume_tip_no_filter,
   high_volume_tip_with_filter,
   four_ml_tip_with_filter,
-  five_ml_tip_with_filter,
   five_ml_tip
 )
 

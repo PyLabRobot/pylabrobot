@@ -4,12 +4,15 @@ from pylabrobot.liquid_handling.resources.abstract import Coordinate, Plate
 
 
 class TestItemizedResource(unittest.TestCase):
+  """ Tests for ItemizedResource """
+
   def setUp(self) -> None:
     self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
       one_dot_max=1, lid_height=None, num_items_x=12, num_items_y=8, well_size_x=9, well_size_y=9)
     return super().setUp()
 
   def test_initialize_with_wells(self):
+    # pylint: disable=protected-access
     self.assertEqual(len(self.plate._items), 96)
     self.assertEqual(self.plate._items[0].name, "plate_well_0_0")
     self.assertEqual(self.plate._items[95].name, "plate_well_11_7")

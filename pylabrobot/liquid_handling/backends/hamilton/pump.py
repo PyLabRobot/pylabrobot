@@ -3,6 +3,8 @@ from pylabrobot.liquid_handling.backends.hamilton import STAR
 
 
 class Pump(Resource):
+  """ Pump is the washer. Will rename later. """
+
   def __init__(self, backend: STAR, name="pump"):
     super().__init__(name, size_x=1, size_y=1, size_z=1, category="pump")
     self.backend = backend

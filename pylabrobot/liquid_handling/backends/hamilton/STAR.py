@@ -1,7 +1,7 @@
 """
 This file defines interfaces for all supported Hamilton liquid handling robots.
 """
-# pylint: disable=invalid-sequence-index
+# pylint: disable=invalid-sequence-index, dangerous-default-value
 
 from abc import ABCMeta, abstractmethod
 import datetime
@@ -23,6 +23,7 @@ from pylabrobot.liquid_handling.resources import (
   TipType,
 )
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.liquid_classes import LiquidClass
 from pylabrobot.liquid_handling.standard import Aspiration, Dispense
 
 from .errors import (
@@ -38,7 +39,7 @@ try:
   import usb.util
   USE_USB = True
 except ImportError:
-  logger.warn("Could not import pyusb, Hamilton interface will not be available.")
+  logger.warning("Could not import pyusb, Hamilton interface will not be available.")
   USE_USB = False
 
 
@@ -48,11 +49,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
 
   @abstractmethod
-  def __init__(self, read_timeout=0.005):
+  def __init__(self, read_timeout=5):
     """
 
     Args:
-      read_timeout: The timeout for reading packets from the Hamilton machine.
+      read_timeout: The timeout for reading packets from the Hamilton machine in seconds.
     """
 
     super().__init__()
@@ -110,7 +111,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       res = self.dev.read(
         self.read_endpoint,
         self.read_endpoint.wMaxPacketSize,
-        timeout=self.read_timeout
+        timeout=int(self.read_timeout * 1000) # timeout in ms
       )
     except usb.core.USBError:
       # No data available (yet), this will give a timeout error. Don't reraise.
@@ -310,6 +311,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     command: str,
     timeout: int = 16,
     fmt: typing.Optional[str]=None,
+    wait = True,
     **kwargs
   ):
     """ Send a firmware command to the Hamilton machine.
@@ -335,10 +337,13 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self.dev.write(self.write_endpoint, cmd)
     logger.info("Sent command: %s", cmd)
 
-    # Read packets until timeout, or when we identify the right id. Timeout is approximately
-    # equal to the number of packet reads * the packet timeout (self.read_timeout).
+    if not wait:
+      return
+
+    # Attempt to read packets until timeout, or when we identify the right id. Timeout is
+    # approximately equal to the (number of attempts to read packets) * (self.read_timeout).
     attempts = 0
-    while attempts < (timeout / self.read_timeout):
+    while attempts < (timeout // self.read_timeout):
       res = self._read_packet()
       if res is None:
         continue
@@ -364,24 +369,21 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
       attempts += 1
 
-    return None
-
-
 class STAR(HamiltonLiquidHandler):
   """
   Interface for the Hamilton STAR.
   """
 
-  def __init__(self, num_channels: int = 8, **kwargs):
+  def __init__(self, num_channels: int = 8, read_timeout: int = 5, **kwargs):
     """ Create a new STAR interface.
 
     Args:
-      read_poll_interval: The sleep after each check for device responses, in ms.
+      read_timeout: the timeout in seconds for reading packets.
     """
 
-    super().__init__(**kwargs)
+    super().__init__(read_timeout=read_timeout, **kwargs)
     self.dev: Optional[usb.core.Device] = None
-    self._tip_types = {}
+    self._tip_types: dict[str, int] = {}
     self.num_channels = num_channels
 
     self.read_endpoint: Optional[usb.core.Endpoint] = None
@@ -429,7 +431,8 @@ class STAR(HamiltonLiquidHandler):
           usb.util.endpoint_direction(e.bEndpointAddress) == \
           usb.util.ENDPOINT_IN)
 
-    logger.info("Found endpoints. \nWrite:\n %s \nRead:\n %s", self.write_endpoint, self.read_endpoint)
+    logger.info("Found endpoints. \nWrite:\n %s \nRead:\n %s", self.write_endpoint,
+      self.read_endpoint)
 
     initialized = self.request_instrument_initialization_status()
     if not initialized:
@@ -607,9 +610,10 @@ class STAR(HamiltonLiquidHandler):
     x_positions, y_positions, channels_involved = self._channel_positions_to_fw_positions(channels)
     ttti = self.get_ttti(channels)
 
+    # TODO: should depend on tip carrier/type?
     params = {
       "begin_tip_deposit_process": 1314, #1744, #1970, #2244,
-      "end_tip_deposit_process": 1414, # 1644, #1870, #2164, # TODO: should depend on tip carrier/type?
+      "end_tip_deposit_process": 1414, # 1644, #1870, #2164,
       "minimum_traverse_height_at_beginning_of_a_command": 2450,
       "discarding_method": 0
     }
@@ -633,14 +637,14 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ Aspirate liquid from the specified channels. """
 
-    x_positions, y_positions, channels_involved = \
-      self._channel_positions_to_fw_positions([c.resource for c in channels])
+    resources = [(channel.resource if channel is not None else None) for channel in channels]
+    x_positions, y_positions, channels_involved = self._channel_positions_to_fw_positions(resources)
 
     params = []
 
     # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL. Also get
     # all other aspiration parameters.
-    for channel in channels: #itertools.compress(channels, channels_involved):
+    for channel in channels:
       liquid_surface_no_lld = channel.resource.get_absolute_location().z + (liquid_height or 1)
 
       params.append({
@@ -733,8 +737,8 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ Dispense liquid from the specified channels. """
 
-    x_positions, y_positions, channels_involved = \
-      self._channel_positions_to_fw_positions([c.resource for c in channels])
+    resources = [(channel.resource if channel is not None else None) for channel in channels]
+    x_positions, y_positions, channels_involved = self._channel_positions_to_fw_positions(resources)
 
     params = []
 
@@ -811,7 +815,8 @@ class STAR(HamiltonLiquidHandler):
         x_positions=x_positions,
         y_positions=y_positions,
         lld_mode=0,
-        liquid_surface_no_lld=[int((channels[0][0].get_absolute_location().z + 10) * 10)] * 8, # units of 0.1mm, 1cm above
+        # units of 0.1mm, 1cm above
+        liquid_surface_no_lld=[int((channels[0][0].get_absolute_location().z + 10) * 10)] * 8,
         dispense_volumes=boavs
       )
 
@@ -857,6 +862,7 @@ class STAR(HamiltonLiquidHandler):
     resource: Resource,
     pattern: List[List[bool]],
     volume: float,
+    liquid_class: Optional[LiquidClass] = None,
     blow_out_air_volume: float = 0,
     use_lld: bool = False,
     liquid_height: float = 2,
@@ -879,14 +885,15 @@ class STAR(HamiltonLiquidHandler):
       minimal_end_height=2450,
       lld_search_height=1999,
       liquid_surface_at_function_without_lld=int(liquid_height * 10), # bleach: 1269, plate: 1879
-      pull_out_distance_to_take_transport_air_in_function_without_lld=(air_transport_retract_dist * 10),
+      pull_out_distance_to_take_transport_air_in_function_without_lld=
+        (air_transport_retract_dist * 10),
       maximum_immersion_depth=1269,
       tube_2nd_section_height_measured_from_zm=32,
       tube_2nd_section_ratio=6180,
       immersion_depth=0,
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_aspiration=0,
-      aspiration_volumes=int(volume*10*1.083), # TODO: get_corrected_volume
+      aspiration_volumes=int(liquid_class.compute_corrected_volume(volume)*10),
       aspiration_speed=2500,
       transport_air_volume=50,
       blow_out_air_volume=0,
@@ -925,9 +932,10 @@ class STAR(HamiltonLiquidHandler):
 
   def dispense96(
     self,
-    resource,
-    pattern,
-    volume,
+    resource: Resource,
+    pattern: List[List[bool]],
+    volume: float,
+    liquid_class: Optional[LiquidClass] = None,
     mix_cycles=0,
     mix_volume=0,
     jet=False,
@@ -968,7 +976,7 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth=0,
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_dispense=0,
-      dispense_volume=int(volume*10*1.083), # TODO: get_corrected_volume
+      dispense_volume=int(liquid_class.compute_corrected_volume(volume)*10),
       dispense_speed=1200,
       transport_air_volume=50,
       blow_out_air_volume=0,
@@ -1009,7 +1017,7 @@ class STAR(HamiltonLiquidHandler):
   def move_plate(
     self,
     plate: Union[Coordinate, Plate],
-    target: Union[Coordinate, Resource],
+    to: Union[Coordinate, Resource],
     pickup_distance_from_top: float = 13.2,
     **backend_kwargs
   ):
@@ -1052,10 +1060,10 @@ class STAR(HamiltonLiquidHandler):
     )
 
     # Move to the destination.
-    if isinstance(target, Coordinate):
-      to_location = target
+    if isinstance(to, Coordinate):
+      to_location = to
     else:
-      to_location = target.get_absolute_location()
+      to_location = to.get_absolute_location()
       to_location = Coordinate(
         x=to_location.x + plate.get_size_x()/2,
         y=to_location.y + plate.get_size_y()/2,
@@ -1083,7 +1091,7 @@ class STAR(HamiltonLiquidHandler):
   def move_lid(
     self,
     lid: Lid,
-    target: typing.Union[Plate, Hotel],
+    to: typing.Union[Plate, Hotel],
     get_grip_direction: int = 1,
     get_open_gripper_position: int = 1300,
     pickup_distance_from_top: float = 1.2,
@@ -1129,23 +1137,23 @@ class STAR(HamiltonLiquidHandler):
     )
 
     # Move to the destination.
-    if isinstance(target, Coordinate):
-      to_location = target
+    if isinstance(to, Coordinate):
+      to_location = to
     else:
-      to_location = target.get_absolute_location()
+      to_location = to.get_absolute_location()
       to_location = Coordinate(
         x=to_location.x + lid.get_size_x()/2,
         y=to_location.y + lid.get_size_y()/2,
         z=to_location.z - pickup_distance_from_top
       )
 
-      # We're gonna place the lid on top of the target resource.
-      to_location.z += target.get_size_z()
+      # We're gonna place the lid on top of the to resource.
+      to_location.z += to.get_size_z()
 
       try:
         if isinstance(lid.parent, Hotel):
           to_location.z += lid.get_size_z() # beacause it was removed by hotel when location changed
-          to_location.z -= target.get_size_z() # the lid.get_size_z() is the height of the lid,
+          to_location.z -= to.get_size_z() # the lid.get_size_z() is the height of the lid,
                                                # which will fit on top of the plate, so no need to
                                                # factor in the height of the plate.
       except AttributeError:
@@ -1592,11 +1600,14 @@ class STAR(HamiltonLiquidHandler):
                                     and 9999. Default 60.
     """
 
-    utils.assert_clamp(instrument_size_in_slots_x_range, 10, 99, "instrument_size_in_slots_(x_range)")
+    utils.assert_clamp(instrument_size_in_slots_x_range, 10, 99,
+      "instrument_size_in_slots_(x_range)")
     utils.assert_clamp(auto_load_size_in_slots, 10, 54, "auto_load_size_in_slots")
     utils.assert_clamp(tip_waste_x_position, 1000, 25000, "tip_waste_x_position")
-    utils.assert_clamp(right_x_drive_configuration_byte_1, 0, 1, "right_x_drive_configuration_byte_1")
-    utils.assert_clamp(right_x_drive_configuration_byte_2, 0, 1, "right_x_drive_configuration_byte_2")
+    utils.assert_clamp(right_x_drive_configuration_byte_1, 0, 1,
+      "right_x_drive_configuration_byte_1")
+    utils.assert_clamp(right_x_drive_configuration_byte_2, 0, 1,
+      "right_x_drive_configuration_byte_2")
     utils.assert_clamp(minimal_iswap_collision_free_position, 0, 30000, \
                   "minimal_iswap_collision_free_position")
     utils.assert_clamp(maximal_iswap_collision_free_position, 0, 30000, \
@@ -1921,7 +1932,8 @@ class STAR(HamiltonLiquidHandler):
                                         Must be between 0 and 9999. Default 0.
     """
 
-    utils.assert_clamp(taken_area_identification_number, 0, 9999, "taken_area_identification_number")
+    utils.assert_clamp(taken_area_identification_number, 0, 9999,
+      "taken_area_identification_number")
 
     resp = self.send_command(
       module="C0",
@@ -2038,7 +2050,7 @@ class STAR(HamiltonLiquidHandler):
       tz=f"{end_of_tip_deposit_process:04}",
       te=f"{z_position_at_end_of_a_command:04}",
       tm=[f"{tm:01}" for tm in tip_pattern],
-      tt=f'{tip_type:02}',
+      tt=f"{tip_type:02}",
       ti=discarding_method,
     )
 
@@ -2343,7 +2355,8 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(z_drive_speed_during_2nd_section_search, 3, 1600, \
                   "z_drive_speed_during_2nd_section_search")
     utils.assert_clamp(cup_upper_edge, 0, 3600, "cup_upper_edge")
-    utils.assert_clamp(ratio_liquid_rise_to_tip_deep_in, 0, 50000, "ratio_liquid_rise_to_tip_deep_in")
+    utils.assert_clamp(ratio_liquid_rise_to_tip_deep_in, 0, 50000,
+      "ratio_liquid_rise_to_tip_deep_in")
     utils.assert_clamp(immersion_depth_2nd_section, 0, 3600, "immersion_depth_2nd_section")
 
     resp = self.send_command(
@@ -2659,8 +2672,7 @@ class STAR(HamiltonLiquidHandler):
   def spread_pip_channels(self):
     """ Spread PIP channels """
 
-    resp = self.send_command(module="C0", command="JE")
-    return self.parse_response(resp, "") # TODO: what does `( Pn##/##)` response mean?
+    return self.send_command(module="C0", command="JE", fmt="")
 
   def move_all_pipetting_channels_to_defined_position(
     self,
@@ -3852,15 +3864,16 @@ class STAR(HamiltonLiquidHandler):
       (2, 2): 3
     }[wash_fluid, chamber]
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="EH",
+      fmt="",
       ep=pump_station,
       ed=drain_before_refill,
       ek=connection,
-      eu=f"{waste_chamber_suck_time_after_sensor_change:02}"
+      eu=f"{waste_chamber_suck_time_after_sensor_change:02}",
+      wait=False
     )
-    return self.parse_response(resp, "")
 
   # TODO:(command:EK) Drain selected chamber
 
@@ -3876,12 +3889,12 @@ class STAR(HamiltonLiquidHandler):
 
     utils.assert_clamp(pump_station, 1, 3, "pump_station")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="EL",
+      fmt="",
       ep=pump_station
     )
-    return self.parse_response(resp, "")
 
   # TODO:(command:QD) Request dual chamber pump station prime status
 
@@ -4039,12 +4052,12 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="PG",
+      fmt="",
       th=minimum_traverse_height_at_beginning_of_a_command
     )
-    return self.parse_response(resp, "")
 
   def get_plate(
     self,
