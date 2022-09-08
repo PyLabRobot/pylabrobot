@@ -31,7 +31,8 @@ extras_venus = [
 extras_testing = [
     'pytest',
     'pytest-timeout',
-    'requests'
+    'requests',
+    'pylint'
 ] + extras_simulation
 
 extras_server = [
