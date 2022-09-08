@@ -19,4 +19,4 @@ jobs:
       - name: Install Dependencies
         run: pip install -e '.[testing]'
       - name: Run Pytest
-        run: pylint pylabrobot
+        run: python -m pylint pylabrobot
