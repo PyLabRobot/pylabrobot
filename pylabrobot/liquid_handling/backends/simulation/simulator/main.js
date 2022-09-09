@@ -318,10 +318,8 @@ function aspirate(channels) {
       return `Aspirated volume (${volume}uL) + volume of tip (${pipHead[i].volume}uL) > maximal volume of tip (${pipHead[i].tipMaxVolume}uL).`;
     }
 
-    if (
-      checkPipHeadReach(getAbsoluteLocation(resource.resource).x) !== undefined
-    ) {
-      return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
+    if (checkPipHeadReach(getAbsoluteLocation(well.resource).x) !== undefined) {
+      return checkPipHeadReach(getAbsoluteLocation(well.resource).x);
     }
 
     pipHead[i].volume += volume;
@@ -350,10 +348,8 @@ function dispense(channels) {
       return `Dispensed volume (${volume}uL) + volume of well (${well.volume}uL) > maximal volume of well (${well.maxVolume}uL).`;
     }
 
-    if (
-      checkPipHeadReach(getAbsoluteLocation(resource.resource).x) !== undefined
-    ) {
-      return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
+    if (checkPipHeadReach(getAbsoluteLocation(well.resource).x) !== undefined) {
+      return checkPipHeadReach(getAbsoluteLocation(well.resource).x);
     }
 
     pipHead[i].volume -= volume;
