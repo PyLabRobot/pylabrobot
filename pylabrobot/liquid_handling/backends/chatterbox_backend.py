@@ -1,3 +1,5 @@
+# pylint: disable=unused-argument
+
 from typing import List, Union, Optional
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
