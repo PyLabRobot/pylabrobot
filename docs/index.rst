@@ -15,6 +15,7 @@ PyLabRobot is an OS agnostic, pure Python interface to Hamilton liquid handling 
 
    installation.md
    development.md
+   how-to-open-source.md
 
 
 .. toctree::

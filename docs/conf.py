@@ -87,6 +87,8 @@ html_theme_options = {
   'use_issues_button': False,
 }
 
+html_logo = '_static/logo.png'
+
 
 autodoc_default_flags = ['members']
 autosummary_generate = True

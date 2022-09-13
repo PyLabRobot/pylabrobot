@@ -12,5 +12,9 @@
   "files.exclude": {
     "**/__pycache__": true
   },
-  "python.testing.unittestArgs": ["-v", "-s", ".", "-p", "*_test.py"]
+  "python.testing.unittestArgs": ["-v", "-s", ".", "-p", "*_test.py"],
+  "[markdown]": {
+    "editor.wordWrap": "bounded",
+    "editor.wordWrapColumn": 100
+  }
 }
