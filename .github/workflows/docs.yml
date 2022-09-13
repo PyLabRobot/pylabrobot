@@ -32,7 +32,7 @@ jobs:
           rm -rf docs/_autosummary
 
       - name: Build new documentation
-        run: sphinx-build -b html docs docs/build/ -j auto
+        run: make docs
 
       - name: Commit generated documentation
         run: |
