@@ -1,10 +1,12 @@
-ifeq (,$(wildcard /env/bin)) # check if virtualenv exists
+ifeq ($(shell test -e ./env/ && echo yes),yes)
 	BIN=env/bin/
 $(info Using virtualenv in env)
 endif
 
+.PHONY: docs lint test
+
 docs:
-	$(BIN)python sphinx-build -b html docs docs/build/ -j auto
+	sphinx-build -b html docs docs/build/ -j auto
 
 lint:
 	$(BIN)python -m pylint pylabrobot
