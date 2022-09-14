@@ -442,9 +442,6 @@ class STAR(HamiltonLiquidHandler):
       # TODO: before layout...
       self.pre_initialize_instrument()
 
-      # TODO: after layout..., need tip types
-      self.initialize_iswap()
-
       # Spread PIP channels command = JE ? (Spread PIP channels)
 
       #C0DIid0201xp08000&yp4050 3782 3514 3246 2978 2710 2442 2175tp2450tz1220te2450tm1&tt04ti0
@@ -459,6 +456,9 @@ class STAR(HamiltonLiquidHandler):
         tip_type=4, # TODO: get from tip types
         discarding_method=0
       )
+
+    if not self.request_iswap_initialization_status():
+      self.initialize_iswap()
 
     self.park_iswap()
 
@@ -4479,3 +4479,13 @@ class STAR(HamiltonLiquidHandler):
 
     resp = self.send_command(module="C0", command="QG")
     return self.parse_response(resp, "xs#####xd#yj####yd#zj####zd#")
+
+  def request_iswap_initialization_status(self) -> bool:
+    """ Request iSWAP initialization status
+
+    Returns:
+      True if iSWAP is fully initialized
+    """
+
+    resp = self.send_command(module="R0", command="QW", fmt="qw#")
+    return resp["qw"] == 1
