@@ -843,9 +843,10 @@ class HamiltonFirmwareError(HamiltonError):
         32: "Parameter out of range",
         51: "Y-drive not initialized",
         62: "Movement error",
+        91: "iSWAP not initialized. Call star.initialize_iswap().",
         94: "Plate not found",
         96: "Plate not available",
-        97: "Not expected object found"
+        97: "Unexpected object found"
       }
 
     if table is not None and trace_information in table:
