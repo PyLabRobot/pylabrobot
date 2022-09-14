@@ -327,6 +327,14 @@ class TestLiquidHandlerCommands(unittest.TestCase):
   def setUp(self):
     self.lh = LiquidHandler(backends.Mock())
 
+  def test_return_tips(self):
+    # TODO: figure out a way to test "composite" commands
+    pass
+
+  def test_return_tips96(self):
+    # TODO: figure out a way to test "composite" commands
+    pass
+
 
 if __name__ == "__main__":
   unittest.main()
