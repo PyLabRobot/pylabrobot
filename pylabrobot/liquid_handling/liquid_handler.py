@@ -73,6 +73,8 @@ class LiquidHandler:
 
     self.backend = backend
     self.setup_finished = False
+    self._picked_up_tips = None
+    self._picked_up_tips96 = None
 
     self.deck = Deck(
       resource_assigned_callback=self.resource_assigned_callback,
@@ -531,6 +533,9 @@ class LiquidHandler:
       raise ValueError("Must specify at least one channel to pick up tips with.")
     self.backend.pickup_tips(*channels, **backend_kwargs)
 
+    # Save the tips that are currently picked up.
+    self._picked_up_tips = channels
+
   @need_setup_finished
   def discard_tips(
     self,
@@ -558,6 +563,26 @@ class LiquidHandler:
     if not any(channel is not None for channel in channels):
       raise ValueError("Must specify at least one channel to discard tips from.")
     self.backend.discard_tips(*channels, **backend_kwargs)
+
+    self._picked_up_tips = None
+
+  def return_tips(self):
+    """ Return all tips that are currently picked up to their original place.
+
+    Examples:
+      Return the tips on the head to the tip rack where they were picked up:
+
+      >>> lh.pickup_tips("plate_01")
+      >>> lh.return_tips()
+
+    Raises:
+      RuntimeError: If no tips have been picked up.
+    """
+
+    if self._picked_up_tips is None:
+      raise RuntimeError("No tips are currently picked up.")
+
+    self.discard_tips(*self._picked_up_tips)
 
   @need_setup_finished
   def aspirate(
@@ -699,14 +724,16 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Tips):
-      resource = resource.name
-    resource = self.get_resource(resource)
+    if isinstance(resource, str):
+      resource = self.get_resource(resource)
+
     if not resource:
       raise ValueError(f"Resource with name {resource} not found.")
 
     self.backend.pickup_tips96(resource, **backend_kwargs)
+
+    # Save the tips as picked up.
+    self._picked_up_tips96 = resource
 
   def discard_tips96(self, resource: typing.Union[str, Resource], **backend_kwargs):
     """ Discard tips using the CoRe 96 head. This will discard 96 tips.
@@ -722,13 +749,33 @@ class LiquidHandler:
     """
 
     # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Tips):
-      resource = resource.name
-    if not self.get_resource(resource):
+    if isinstance(resource, str):
+      resource = self.get_resource(resource)
+
+    if not resource:
       raise ValueError(f"Resource with name {resource} not found.")
-    resource = self.get_resource(resource)
 
     self.backend.discard_tips96(resource, **backend_kwargs)
+
+    self._picked_up_tips96 = None
+
+  def return_tips96(self):
+    """ Return the tips on the 96 head to the tip rack where they were picked up.]
+
+    Examples:
+      Return the tips on the 96 head to the tip rack where they were picked up:
+
+      >>> lh.pickup_tips96("plate_01")
+      >>> lh.return_tips96()
+
+    Raises:
+      RuntimeError: If no tips have been picked up.
+    """
+
+    if self._picked_up_tips96 is None:
+      raise RuntimeError("No tips picked up.")
+
+    self.discard_tips96(self._picked_up_tips96)
 
   def aspirate96(
     self,
