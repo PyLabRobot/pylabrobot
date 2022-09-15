@@ -889,7 +889,8 @@ class HamiltonFirmwareError(HamiltonError):
         83: "Wrist twist drive movement error: position counter over/underflow",
         85: "Gripper drive: communication error to gripper DMS digital potentiometer",
         86: "Gripper drive: Auto adjustment of DMS digital potentiometer not possible",
-        89: "Gripper drive movement error: drive locked or incremental sensor fault during gripping",
+        89:
+          "Gripper drive movement error: drive locked or incremental sensor fault during gripping",
         90: "Gripper drive initialized failed",
         91: "iSWAP not initialized. Call star.initialize_iswap().",
         92: "Gripper drive movement error: drive locked or incremental sensor fault during release",
