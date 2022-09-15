@@ -17,8 +17,6 @@ be run on practically all supported hardware.
   :recursive:
 
     pylabrobot.liquid_handling.LiquidHandler
-    pylabrobot.liquid_handling.liquid_handler.AspirationInfo
-    pylabrobot.liquid_handling.liquid_handler.DispenseInfo
 
 
 Backends

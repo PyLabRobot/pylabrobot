@@ -1,6 +1,6 @@
 # How to Open Source
 
-This is a general guide on how to contribute to open source projects, like PyLabRobot, for people who are new to open source. If you are looking for a tutorial on how to contribute specifically to PyLabRobot, please see [CONTRIBUTING.md](CONTRIBUTING.md). You are invited to follow along with this guide and create your first contribution to PyLabRobot!
+This is a general guide on how to contribute to open source projects, like PyLabRobot, for people who are new to open source. If you are looking for a tutorial on how to contribute specifically to PyLabRobot, please see [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md). You are invited to follow along with this guide and create your first contribution to PyLabRobot!
 
 Before we start, I recommend you use a git gui, like [GitHub Desktop](https://desktop.github.com/), [Tower](https://www.git-tower.com), or the one built into [VSCode](https://code.visualstudio.com). **While command line commands are included in this guide, it is generally much easier to just use the gui.** This guide will use GitHub Desktop as an example, so if you have never contributed to open source before, start by installing [GitHub Desktop](https://desktop.github.com).
 

@@ -67,7 +67,7 @@ cd pylabrobot
 pip install -e '.[all]'
 ```
 
-See [the developer guide](development) for specific instructions on testing, documentation and development.
+See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
 
 ## Updating the USB driver
 
