@@ -13,6 +13,7 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
    :caption: Getting Started
 
    installation.md
+   contributing.md
    how-to-open-source.md
 
 
