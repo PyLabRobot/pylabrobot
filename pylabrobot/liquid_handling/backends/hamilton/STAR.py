@@ -19,7 +19,7 @@ from pylabrobot.liquid_handling.resources import (
   Resource,
   Plate,
   Tip,
-  Tips,
+  TipRack,
   TipType,
 )
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
@@ -536,7 +536,7 @@ class STAR(HamiltonLiquidHandler):
   # ============== LiquidHandlerBackend methods ==============
 
   def assigned_resource_callback(self, resource: Resource):
-    if isinstance(resource, Tips):
+    if isinstance(resource, TipRack):
       if resource.tip_type not in self._tip_types:
         self.define_tip_type(resource.tip_type)
 
@@ -822,7 +822,7 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
-  def pickup_tips96(self, resource: Tips, **backend_kwargs):
+  def pickup_tips96(self, resource: TipRack, **backend_kwargs):
     ttti = self.get_or_assign_tip_type_index(resource.tip_type)
     position = resource.get_item("A1").get_absolute_location()
 
@@ -3506,7 +3506,7 @@ class STAR(HamiltonLiquidHandler):
     """ Request Tip presence in CoRe 96 Head
 
     Returns:
-      qh: 0 = no tips, 1 = Tips are picked up
+      qh: 0 = no tips, 1 = TipRack are picked up
     """
 
     resp = self.send_command(module="C0", command="QH")

@@ -16,7 +16,7 @@ from .resources import (
   PLT_CAR_L5AC_A00,
   Cos_96_DW_1mL,
   Cos_96_DW_500ul,
-  Tips,
+  TipRack,
   TipCarrier,
   Plate,
   PlateCarrier,
@@ -180,10 +180,10 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     Rail     Resource                   Type                Coordinates (mm)
     ===============================================================================================
     (1)  ├── tip_carrier                TipCarrier          (100.000, 063.000, 100.000)
-         │   ├── tips_01                Tips                (117.900, 145.800, 164.450)
-         │   ├── tips_02                Tips                (117.900, 241.800, 164.450)
+         │   ├── tips_01                TipRack             (117.900, 145.800, 164.450)
+         │   ├── tips_02                TipRack             (117.900, 241.800, 164.450)
          │   ├── <empty>
-         │   ├── tips_04                Tips                (117.900, 433.800, 131.450)
+         │   ├── tips_04                TipRack             (117.900, 433.800, 131.450)
          │   ├── <empty>
          │
     (21) ├── plate carrier              PlateCarrier        (550.000, 063.000, 100.000)
@@ -279,7 +279,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)
 
-    tc[0] = Tips("tips", 10, 20, 30, standard_volume_tip_with_filter, -1, -1, -1, 1, 1, 1, 1)
+    tc[0] = TipRack("tips", 10, 20, 30, standard_volume_tip_with_filter, -1, -1, -1, 1, 1, 1, 1)
     pc = PlateCarrier("pc", 100, 100, 100, location=Coordinate(0, 0, 0), sites=[
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)

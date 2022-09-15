@@ -17,7 +17,7 @@ class Tip(Resource):
     self.tip_type = tip_type
 
 
-class Tips(ItemizedResource[Tip], metaclass=ABCMeta):
+class TipRack(ItemizedResource[Tip], metaclass=ABCMeta):
   """ Abstract base class for Tips resources. """
 
   def __init__(
