@@ -133,8 +133,7 @@ class SimulatorBackend(WebSocketBackend):
 
       self.httpd.serve_forever()
 
-    self.fst = threading.Thread(name="simulation_fs", target=start_server)
-    self.fst.setDaemon(True)
+    self.fst = threading.Thread(name="simulation_fs", target=start_server, daemon=True)
     self.fst.start()
 
     if self.open_browser:
@@ -189,7 +188,8 @@ class SimulatorBackend(WebSocketBackend):
     Simulator method to place tips on the robot, for testing of tip pickup/discarding. Unlike,
     :func:`~Simulator.pickup_tips`, this method does not raise an exception if tips are already
     present on the specified locations. Note that a
-    :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource has to be assigned first.
+    :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource has to be assigned
+    first.
 
     Args:
       resource: The resource to place tips in.
@@ -214,8 +214,8 @@ class SimulatorBackend(WebSocketBackend):
       wait_for_response=True)
 
   def fill_tips(self, resource: TipRack):
-    """ Completely fill a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource with
-    tips. (**simulator only**).
+    """ Completely fill a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource
+    with tips. (**simulator only**).
 
     Args:
       resource: The resource where all tips should be placed.
