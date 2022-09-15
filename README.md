@@ -1,4 +1,4 @@
-<div style="text-align: center">
+<div style="text-align: center" align="center">
 <img width="400" src=".github/img/logo.png" />
 <h1>PyLabRobot</h1>
 </div>
