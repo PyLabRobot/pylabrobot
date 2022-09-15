@@ -71,7 +71,7 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def discard_tips(self, *channels: List[Optional[Tip]], **backend_kwars):
+  def discard_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
     """ Discard tips from the specified resource. """
     pass
 
