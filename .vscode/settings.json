@@ -1,7 +1,14 @@
 {
   "editor.tabSize": 2,
   "files.trimTrailingWhitespace": true,
-  "cSpell.words": ["iswap", "klass", "pyhamilton", "pytest", "subresource"],
+  "cSpell.words": [
+    "iswap",
+    "klass",
+    "pyhamilton",
+    "pytest",
+    "subresource",
+    "tiprack"
+  ],
   "python.linting.pylintEnabled": true,
   "python.testing.pytestArgs": ["."],
   "python.testing.unittestEnabled": false,
@@ -14,6 +21,10 @@
   },
   "python.testing.unittestArgs": ["-v", "-s", ".", "-p", "*_test.py"],
   "[markdown]": {
+    "editor.wordWrap": "bounded",
+    "editor.wordWrapColumn": 100
+  },
+  "[restructuredtext]": {
     "editor.wordWrap": "bounded",
     "editor.wordWrapColumn": 100
   }

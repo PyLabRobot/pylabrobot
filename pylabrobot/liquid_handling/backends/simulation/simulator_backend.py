@@ -11,7 +11,7 @@ from pylabrobot.liquid_handling.backends.net import WebSocketBackend
 from pylabrobot.liquid_handling.resources import (
   Plate,
   Resource,
-  Tips,
+  TipRack,
 )
 
 
@@ -183,17 +183,17 @@ class SimulatorBackend(WebSocketBackend):
     self.send_event(event="adjust_well_volume", pattern=serialized_pattern,
       wait_for_response=True)
 
-  def edit_tips(self, tips_resource: Tips, pattern: typing.List[typing.List[bool]]):
+  def edit_tips(self, tips_resource: TipRack, pattern: typing.List[typing.List[bool]]):
     """ Place and/or remove tips on the robot (**simulator only**).
 
     Simulator method to place tips on the robot, for testing of tip pickup/discarding. Unlike,
     :func:`~Simulator.pickup_tips`, this method does not raise an exception if tips are already
     present on the specified locations. Note that a
-    :class:`~pylabrobot.liquid_handling.resources.abstract.Tips` resource has to be assigned first.
+    :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource has to be assigned first.
 
     Args:
       resource: The resource to place tips in.
-      pattern: A list of lists of places where to place a tip. Tips will be removed from the
+      pattern: A list of lists of places where to place a tip. TipRack will be removed from the
         resource where the pattern is `False`.
 
     Raises:
@@ -213,8 +213,8 @@ class SimulatorBackend(WebSocketBackend):
     self.send_event(event="edit_tips", pattern=serialized_pattern,
       wait_for_response=True)
 
-  def fill_tips(self, resource: Tips):
-    """ Completely fill a :class:`~pylabrobot.liquid_handling.resources.abstract.Tips` resource with
+  def fill_tips(self, resource: TipRack):
+    """ Completely fill a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource with
     tips. (**simulator only**).
 
     Args:
@@ -224,7 +224,7 @@ class SimulatorBackend(WebSocketBackend):
     self.edit_tips(resource, [[True] * 12] * 8)
 
   def clear_tips(self, resource: Resource):
-    """ Completely clear a :class:`~pylabrobot.liquid_handling.resources.abstract.Tips` resource.
+    """ Completely clear a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource.
     (**simulator only**).
 
     Args:

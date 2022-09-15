@@ -7,7 +7,7 @@ from .carrier import Carrier, TipCarrier
 from .coordinate import Coordinate
 from .deck import Deck
 from .resource import Resource
-from .tips import Tips
+from .tiprack import TipRack
 from .tip_type import TipType, TIP_TYPE_STANDARD_VOLUME
 
 
@@ -21,7 +21,7 @@ class CarrierTests(unittest.TestCase):
       pick_up_method=0
     )
 
-    self.A = Tips( # pylint: disable=invalid-name
+    self.A = TipRack( # pylint: disable=invalid-name
       name="A",
       size_x=5, size_y=5, size_z=5,
       tip_type=tip_type,
@@ -29,7 +29,7 @@ class CarrierTests(unittest.TestCase):
       num_items_x=1, num_items_y=1, tip_size_x=5, tip_size_y=5
     )
 
-    self.B = Tips( # pylint: disable=invalid-name
+    self.B = TipRack( # pylint: disable=invalid-name
       name="B",
       size_x=5, size_y=5, size_z=5,
       tip_type=tip_type,
@@ -37,7 +37,7 @@ class CarrierTests(unittest.TestCase):
       num_items_x=1, num_items_y=1, tip_size_x=5, tip_size_y=5
     )
 
-    self.alsoB = Tips( # pylint: disable=invalid-name
+    self.alsoB = TipRack( # pylint: disable=invalid-name
       name="B",
       size_x=100, size_y=100, size_z=100,
       tip_type=tip_type,

@@ -1,7 +1,7 @@
 Welcome to PyLabRobot's documentation!
 ======================================
 
-PyLabRobot is a hardware agnostic, pure Python library for lab automation.
+PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots.
 
 PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton robots, but we will soon have one for Opentrons and eventually others. The two Hamilton drivers are Venus, which is derived from the PyHamilton library, and STAR, which is a low-level firmware interface. We also provide a simulator which plays the role of a device driver but renders commands in a browser-based deck visualization.
 

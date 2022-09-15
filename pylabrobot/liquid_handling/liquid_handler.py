@@ -29,7 +29,7 @@ from .resources import (
   Lid,
   Plate,
   Tip,
-  Tips,
+  TipRack,
   Well
 )
 from .standard import Aspiration, Dispense
@@ -295,7 +295,7 @@ class LiquidHandler:
             print("     │   ├── <empty>")
           else:
             subresource = site.resource
-            if isinstance(subresource, (Tips, Plate)):
+            if isinstance(subresource, (TipRack, Plate)):
               location = subresource.get_item("A1").get_absolute_location()
             else:
               location = subresource.get_absolute_location()

@@ -2,7 +2,7 @@
 
 from functools import partial
 
-from pylabrobot.liquid_handling.resources.abstract import Tips
+from pylabrobot.liquid_handling.resources.abstract import TipRack
 from .tip_types import (
   low_volume_tip_no_filter,
   low_volume_tip_with_filter,
@@ -17,7 +17,7 @@ from .tip_types import (
 
 
 #: Tip Rack 24x 4ml Tip with Filter landscape oriented
-FourmlTF_L = partial(Tips,
+FourmlTF_L = partial(TipRack,
   size_x=122.4,
   size_y=82.6,
   size_z=7.0,
@@ -33,7 +33,7 @@ FourmlTF_L = partial(Tips,
 
 
 #: Rack with 96 10ul Low Volume Tip
-LT_L = partial(Tips,
+LT_L = partial(TipRack,
   size_x=122.4,
   size_y=82.6,
   size_z=20.0,
@@ -49,7 +49,7 @@ LT_L = partial(Tips,
 
 
 #: Rack with 96 1000ul High Volume Tip with filter
-HTF_L = partial(Tips,
+HTF_L = partial(TipRack,
   size_x=122.4,
   size_y=82.6,
   size_z=20.0,
@@ -65,7 +65,7 @@ HTF_L = partial(Tips,
 
 
 #: Rack with 96 1000ul High Volume Tip
-HT_L = partial(Tips,
+HT_L = partial(TipRack,
   size_x=122.4,
   size_y=82.6,
   size_z=20.0,
@@ -81,7 +81,7 @@ HT_L = partial(Tips,
 
 
 #: Rack with 96 10ul Low Volume Tip with filter
-LTF_L = partial(Tips,
+LTF_L = partial(TipRack,
   size_x=122.4,
   size_y=82.6,
   size_z=20.0,
@@ -97,7 +97,7 @@ LTF_L = partial(Tips,
 
 
 #: Tip Rack 24x 5ml Tip landscape oriented
-FivemlT_L = partial(Tips,
+FivemlT_L = partial(TipRack,
   size_x=122.4,
   size_y=82.6,
   size_z=7.0,
@@ -113,7 +113,7 @@ FivemlT_L = partial(Tips,
 
 
 #: Rack with 96 300ul Standard Volume Tip with filter
-STF_L = partial(Tips,
+STF_L = partial(TipRack,
   size_x=122.4,
   size_y=82.6,
   size_z=20.0,
@@ -129,7 +129,7 @@ STF_L = partial(Tips,
 
 
 #: Rack with 96 300ul Standard Volume Tip
-ST_L = partial(Tips,
+ST_L = partial(TipRack,
   size_x=122.4,
   size_y=82.6,
   size_z=20.0,

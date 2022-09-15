@@ -11,8 +11,8 @@ from pylabrobot.utils.file_parsing import find_int, find_float, find_string
 
 
 BASE_DIR = "LabWare/ML_STAR"
-BASE_CLASS = "Tips"
-OUT_FILE = "tips.py"
+BASE_CLASS = "TipRack"
+OUT_FILE = "tipracks.py"
 
 
 tip_table = {
