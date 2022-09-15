@@ -43,6 +43,10 @@ class TestItemizedResource(unittest.TestCase):
     self.assertEqual([w.name for w in self.plate[0:7]], ["plate_well_0_0", "plate_well_0_1",
       "plate_well_0_2", "plate_well_0_3", "plate_well_0_4", "plate_well_0_5", "plate_well_0_6"])
 
+  def test_getitem_range(self):
+    self.assertEqual([w.name for w in self.plate[range(7)]], ["plate_well_0_0", "plate_well_0_1",
+      "plate_well_0_2", "plate_well_0_3", "plate_well_0_4", "plate_well_0_5", "plate_well_0_6"])
+
   def test_getitem_str_range(self):
     self.assertEqual([w.name for w in self.plate["A1:B2"]], ["plate_well_0_0", "plate_well_1_0",
       "plate_well_0_1", "plate_well_1_1"])

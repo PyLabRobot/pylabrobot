@@ -61,6 +61,31 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     to :meth:`get_items`, but adds support for slicing and supports single items in the same
     functional call. Note that the return type will always be a list, even if a single item is
     requested.
+
+    Examples:
+      Getting the items with identifiers "A1" through "E1":
+
+        >>> items["A1:E1"]
+
+        [<Item A1>, <Item B1>, <Item C1>, <Item D1>, <Item E1>]
+
+      Getting the items with identifiers 0 through 4 (note that this is the same as above):
+
+        >>> items[range(5)]
+
+        [<Item A1>, <Item B1>, <Item C1>, <Item D1>, <Item E1>]
+
+      Getting items with a slice (note that this is the same as above):
+
+        >>> items[0:5]
+
+        [<Item A1>, <Item B1>, <Item C1>, <Item D1>, <Item E1>]
+
+      Getting a single item:
+
+        >>> items[0]
+
+        [<Item A1>]
     """
 
     if isinstance(identifier, str):
