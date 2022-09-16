@@ -1,6 +1,6 @@
 
 from abc import ABCMeta
-from typing import Union, TypeVar, Generic, List, Callable, Optional
+from typing import Literal, Union, TypeVar, Generic, List, Callable, Optional, Generator
 
 import pylabrobot.utils
 
@@ -162,3 +162,134 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       identifier = pylabrobot.utils.string_to_indices(identifier)
 
     return [self.get_item(i) for i in identifier]
+
+  @property
+  def num_items(self) -> int:
+    """ The number of items on this resource. """
+    return self.num_items_x * self.num_items_y
+
+  def traverse(
+    self,
+    batch_size: int,
+    direction: Literal["up", "down", "right", "left",
+                       "snake_up", "snake_down", "snake_left", "snake_right"],
+    repeat: bool = False,
+  ) -> Generator[T, None, None]:
+    """ Traverse the items in the plate.
+
+    Directions `"down"`, `"snake_down"`, `"right"`, and `"snake_right"` start at the top left item
+    (A1). Directions `"up"` and `"snake_up"` start at the bottom left (H1). Directions `"left"`
+    and `"snake_left"` start at the top right (A12).
+
+    The snake directions alternate between going in the given direction and going in the opposite
+    direction. For example, `"snake_down"` will go from A1 to H1, then H2 to A2, then A3 to H3, etc.
+
+    Args:
+      batch_size: The number of items to return in each batch.
+      direction: The direction to traverse the items. Can be one of "up", "down", "right", "left",
+        "snake_up", "snake_down", "snake_left" or "snake_right".
+      repeat: Whether to repeat the traversal when the end of the plate is reached.
+
+    Returns:
+      A list of items.
+
+    Raises:
+      ValueError: If the direction is not valid.
+
+    Examples:
+      Traverse the items in the plate from top to bottom, in batches of 3:
+
+        >>> items.traverse(batch_size=3, direction="down", repeat=False)
+
+        [[<Item A1>, <Item B1>, <Item C1>], [<Item D1>, <Item E1>, <Item F1>], ...]
+
+        >> items.traverse(batch_size=3, direction="right", repeat=True)
+
+        [[<Item A1>, <Item A2>, <Item A3>], [<Item A4>, <Item A5>, <Item A6>], ...]
+    """
+
+    def make_generator(indices, batch_size, repeat):
+      """ Make a generator from a list, that returns items in batches, optionally repeating """
+
+      # If we're repeating, we need to make a copy of the indices
+      if repeat:
+        indices = indices.copy()
+
+      start = 0
+
+      while True:
+        if (len(indices)-start) < batch_size: # not enough items left
+          if repeat:
+            # if we're repeating, shift the indices and start over
+            indices = indices[start:] + indices[:start]
+            start = 0
+          else:
+            if start != len(indices):
+              # there are items left, so yield last (partial) batch
+              batch = indices[start:]
+              batch = [self.get_item(i) for i in batch]
+              yield batch
+            break
+
+        batch = indices[start:start+batch_size]
+        batch = [self.get_item(i) for i in batch]
+        yield batch
+        start += batch_size
+
+    if direction == "up":
+      # start at the bottom, and go up in each column
+      indices = [(8*y+x) for y in range(12) for x in range(7, -1, -1)]
+    elif direction == "down":
+      # start at the top, and go down in each column. This is how the items are stored in the
+      # list, so no need to do anything special.
+      indices = list(range(self.num_items))
+    elif direction == "right":
+      # Start at the top left, and go right in each row
+      indices = [(8*y+x) for x in range(8) for y in range(0, 12)]
+    elif direction == "left":
+      # Start at the top right, and go left in each row
+      indices = [(8*y+x) for x in range(8) for y in range(11, -1, -1)]
+    elif direction == "snake_right":
+      top_right = 88
+      indices = []
+      for x in range(8):
+        if x%2==0:
+          # even rows go left to right
+          indices.extend((8*y+x) for y in range(0, 12))
+        else:
+          # odd rows go right to left
+          indices.extend((top_right+x-8*y) for y in range(0, 12))
+    elif direction == "snake_down":
+      top_right = 88
+      indices = []
+      for x in range(12):
+        if x%2==0:
+          # even columns go top to bottom
+          indices.extend(8*x+y for y in range(0, 8))
+        else:
+          # odd columns go bottom to top
+          indices.extend(8*x+(7-y) for y in range(0, 8))
+    elif direction == "snake_left":
+      top_right = 88
+      indices = []
+      for x in range(8):
+        if x%2==0:
+          # even rows go right to left
+          indices.extend((8*y+x) for y in range(11, -1, -1))
+        else:
+          # odd rows go left to right
+          indices.extend((top_right+x-8*y) for y in range(11, -1, -1))
+    elif direction == "snake_up":
+      top_right = 88
+      indices = []
+      for x in range(12):
+        if x%2==0:
+          # even columns go bottom to top
+          indices.extend(8*x+y for y in range(7, -1, -1))
+        else:
+          # odd columns go top to bottom
+          indices.extend(8*x+(7-y) for y in range(7, -1, -1))
+    else:
+      raise ValueError(f"Invalid direction '{direction}'.")
+
+    return make_generator(indices, batch_size, repeat)
