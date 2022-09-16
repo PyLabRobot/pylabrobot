@@ -184,6 +184,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     The snake directions alternate between going in the given direction and going in the opposite
     direction. For example, `"snake_down"` will go from A1 to H1, then H2 to A2, then A3 to H3, etc.
 
+    With `repeat=False`, if the batch size does not divide the number of items evenly, the last
+    batch will be smaller than the others. With `repeat=True`, the batch would contain the same
+    number of items, and batch would be padded with items from the beginning of the plate. For
+    example, if the plate has 96 items and the batch size is 5, the first batch would be `[A1, B1,
+    C1, D1, E1]`, and the 20th batch would be `[H12, A1, B1, C1, D1]`, and the 21st batch would
+    be `[E1, F1, G1, H1, A2]`.
+
     Args:
       batch_size: The number of items to return in each batch.
       direction: The direction to traverse the items. Can be one of "up", "down", "right", "left",
@@ -203,7 +210,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
         [[<Item A1>, <Item B1>, <Item C1>], [<Item D1>, <Item E1>, <Item F1>], ...]
 
-        >> items.traverse(batch_size=3, direction="right", repeat=True)
+      Traverse the items in the plate from left to right, in batches of 5, repeating the traversal
+      when the end of the plate is reached:
+
+        >>> items.traverse(batch_size=5, direction="right", repeat=True)
 
         [[<Item A1>, <Item A2>, <Item A3>], [<Item A4>, <Item A5>, <Item A6>], ...]
     """
