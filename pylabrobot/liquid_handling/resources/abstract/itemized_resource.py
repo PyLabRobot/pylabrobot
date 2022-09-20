@@ -104,7 +104,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     return self.get_items(identifier)
 
-  def get_item(self, identifier: Union[str, int]) -> T:
+  def get_item(self, identifier: Optional[Union[str, int]]) -> Optional[T]:
     """ Get the item with the given identifier.
 
     Args:
@@ -121,7 +121,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         1).
     """
 
-    if isinstance(identifier, str):
+    if identifier is None:
+      return None
+    elif isinstance(identifier, str):
       row, column = pylabrobot.utils.string_to_position(identifier)
       identifier = row + column * self.num_items_y
 
@@ -131,7 +133,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     return self._items[identifier]
 
-  def get_items(self, identifier: Union[str, List[int]]) -> List[T]:
+  def get_items(self, identifier: Union[Optional[str], List[Optional[int]]]) -> List[Optional[T]]:
     """ Get the items with the given identifier.
 
     Args:
@@ -160,6 +162,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     if isinstance(identifier, str):
       identifier = pylabrobot.utils.string_to_indices(identifier)
+    elif identifier is None:
+      return [None]
 
     return [self.get_item(i) for i in identifier]
 

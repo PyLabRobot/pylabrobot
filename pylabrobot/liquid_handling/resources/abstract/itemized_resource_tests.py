@@ -147,6 +147,13 @@ class TestItemizedResource(unittest.TestCase):
       num_batches += 1
     self.assertEqual(len(items), self.plate.num_items*num_rounds)
 
+  def test_get_item_none(self):
+    self.assertIsNone(self.plate.get_item(None))
+
+  def test_get_items_none(self):
+    self.assertEqual(self.plate.get_items(None), [None])
+    self.assertEqual(self.plate.get_items([None, 0]), [None, self.plate.get_item(0)])
+
 
 if __name__ == "__main__":
   unittest.main()
