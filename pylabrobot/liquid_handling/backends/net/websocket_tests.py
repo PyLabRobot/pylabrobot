@@ -126,7 +126,6 @@ class WebSocketBackendCommandTests(unittest.TestCase):
     self.assertEqual(right, left)
 
   def test_resources_assigned_setup(self):
-    print(self.backend.sent_datas)
     self.assert_event_sent_n("resource_assigned", times=2)
 
   def test_resources_assigned(self):
