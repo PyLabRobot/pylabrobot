@@ -8,6 +8,8 @@ import os
 import unittest
 import unittest.mock
 
+from pylabrobot.liquid_handling.resources.abstract import Tip, Well, create_equally_spaced
+
 from . import backends
 from .liquid_handler import LiquidHandler
 from .resources import (
@@ -279,11 +281,19 @@ class TestLiquidHandlerLayout(unittest.TestCase):
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)
 
-    tc[0] = TipRack("tips", 10, 20, 30, standard_volume_tip_with_filter, -1, -1, -1, 1, 1, 1, 1)
+    tc[0] = TipRack("tips", 10, 20, 30, tip_type=standard_volume_tip_with_filter,
+      items=create_equally_spaced(Tip,
+        num_items_x=1, num_items_y=1,
+        dx=-1, dy=-1, dz=-1,
+        item_size_x=1, item_size_y=1, tip_type=standard_volume_tip_with_filter))
     pc = PlateCarrier("pc", 100, 100, 100, location=Coordinate(0, 0, 0), sites=[
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)
-    pc[0] = Plate("plate", 10, 20, 30, -1, -1, -1, 0, 0, 0, 0, 0)
+    pc[0] = Plate("plate", 10, 20, 30,
+      items=create_equally_spaced(Well,
+        num_items_x=1, num_items_y=1,
+        dx=-1, dy=-1, dz=-1,
+        item_size_x=1, item_size_y=1))
 
     fn = os.path.join(tmp_dir, "layout.json")
     custom_1.save(fn)

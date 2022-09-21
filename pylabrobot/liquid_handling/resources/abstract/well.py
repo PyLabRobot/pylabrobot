@@ -9,7 +9,9 @@ class Well(Resource):
   :class:`pylabrobot.liquid_handling.resources.abstract.Plate` class.
   """
 
-  def __init__(self, name, location: Coordinate = Coordinate(None, None, None)):
+  def __init__(self, name: str, size_x: float, size_y: float, size_z: float = 9,
+    location: Coordinate = Coordinate(None, None, None), category: str = "well"):
+    super().__init__(name, size_x=size_x, size_y=size_y, size_z=size_z,
+      location=location, category="well")
     # TODO: max_volume: float,
-    super().__init__(name, size_x=9, size_y=9, size_z=9, location=location, category="well")
     # self.max_volume = max_volume

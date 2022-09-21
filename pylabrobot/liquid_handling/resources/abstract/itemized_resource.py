@@ -1,6 +1,6 @@
 
 from abc import ABCMeta
-from typing import Literal, Union, TypeVar, Generic, List, Callable, Optional, Generator
+from typing import Literal, Union, TypeVar, Generic, List, Optional, Generator
 
 import pylabrobot.utils
 
@@ -24,35 +24,53 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
-                num_items_x: int, num_items_y: int, create_item: Callable[[int, int], T],
+                items: List[List[T]] = None,
                 location: Coordinate = Coordinate(None, None, None),
                 category: Optional[str] = None):
+    """ Initialize an itemized resource
+
+    Args:
+      name: The name of the resource.
+      size_x: The size of the resource in the x direction.
+      size_y: The size of the resource in the y direction.
+      size_z: The size of the resource in the z direction.
+      items: The items on the resource. See
+        :func:`pylabrobot.liquid_handling.resources.abstract.create_equally_spaced`. Note that items
+        names will be prefixed with the resource name.
+      location: The location of the resource.
+      category: The category of the resource.
+
+    Examples:
+
+      Creating a plate with 96 wells with
+      :func:`pylabrobot.liquid_handling.resources.abstract.create_equally_spaced`:
+
+        >>> from pylabrobot.liquid_handling.resources import Plate
+        >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
+        ...   items=create_equally_spaced(Well
+        ...     dx=0, dy=0, dz=0, item_size_x=1, item_size_y=1,
+        ...     num_items_x=1, num_items_y=1))
+
+      Creating a plate with 1 well with a list:
+
+        >>> from pylabrobot.liquid_handling.resources import Plate
+        >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
+        ...   items=[[Well("well", size_x=1, size_y=1, size_z=1)]])
+    """
+
+    if items is None:
+      items = []
+
     super().__init__(name, size_x, size_y, size_z, location=location, category=category)
-    self.num_items_x = num_items_x
-    self.num_items_y = num_items_y
 
-    self._items = []
-    for i in range(num_items_x):
-      for j in range(num_items_y):
-        item = create_item(i, j)
-        self._items.append(item)
+    self.num_items_x = len(items)
+    self.num_items_y = len(items[0]) if self.num_items_x > 0 else 0
+
+    for row in items:
+      for item in row:
+        assert not item.name.startswith(self.name)
+        item.name = f"{self.name}_{item.name}"
         self.assign_child_resource(item)
-
-  def serialize(self) -> dict:
-    """ Serialize the resource. """
-
-    return {
-      **super().serialize(),
-      "num_items_x": self.num_items_x,
-      "num_items_y": self.num_items_y,
-    }
-
-  @classmethod
-  def deserialize(cls, data: dict):
-    """ Deserialize the resource. """
-    # Children are created by us, so we don't need to deserialize them.
-    data["children"] = []
-    return super().deserialize(data)
 
   def __getitem__(self, identifier: Union[str, List[int], slice]) -> List[T]:
     """ Get the items with the given identifier.
@@ -131,7 +149,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       raise IndexError(f"Item with identifier '{identifier}' does not exist on "
                        f"plate '{self.name}'.")
 
-    return self._items[identifier]
+    return self.children[identifier]
 
   def get_items(self, identifier: Union[Optional[str], List[Optional[int]]]) -> List[Optional[T]]:
     """ Get the items with the given identifier.
@@ -307,3 +325,52 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       raise ValueError(f"Invalid direction '{direction}'.")
 
     return make_generator(indices, batch_size, repeat)
+
+
+def create_equally_spaced(
+    klass: T,
+    num_items_x: int, num_items_y: int,
+    dx: float, dy: float, dz: float,
+    item_size_x: float, item_size_y: float,
+    **kwargs
+) -> List[List[T]]:
+  """ Make equally spaced resources.
+
+  See :class:`ItemizedResource` for more details.
+
+  Args:
+    klass: The class of the resource to create
+    num_items_x: The number of items in the x direction
+    num_items_y: The number of items in the y direction
+    dx: The center for items in the left column
+    dy: The center for items in the top row
+    dz: The z coordinate for all items
+    item_size_x: The size of the items in the x direction
+    item_size_y: The size of the items in the y direction
+    **kwargs: Additional keyword arguments to pass to the resource constructor
+
+  Returns:
+    A list of lists of resources. The outer list contains the columns, and the inner list contains
+    the items in each column.
+  """
+
+  # TODO: It probably makes more sense to transpose this.
+
+  items = []
+  for i in range(num_items_x):
+    items.append([])
+    for j in range(num_items_y):
+      name = f"{klass.__name__.lower()}_{i}_{j}"
+      item = klass(
+        name=name,
+        location=Coordinate(
+          x=dx + i * item_size_x,
+          y=dy + (num_items_y-j-1) * item_size_y,
+          z=dz),
+        size_x=item_size_x,
+        size_y=item_size_y,
+        **kwargs
+      )
+      items[i].append(item)
+
+  return items

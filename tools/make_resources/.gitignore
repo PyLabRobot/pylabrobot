@@ -2,4 +2,5 @@
 
 !make_*.py
 !maker.py
+!writer.py
 !.gitignore

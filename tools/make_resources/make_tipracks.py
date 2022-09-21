@@ -8,6 +8,7 @@ from maker import make
 sys.path.insert(0, '..')
 
 from pylabrobot.utils.file_parsing import find_int, find_float, find_string
+import tools.make_resources.writer as writer
 
 
 BASE_DIR = "LabWare/ML_STAR"
@@ -56,21 +57,7 @@ def make_from_file(fn, o):
   elif cname[0] == '5': cname = 'Five' + cname[1:]
   description = find_string("Description", c)
 
-  o.write(f'\n\n')
-  o.write(f'#: {description}\n')
-  o.write(f"{cname} = partial({BASE_CLASS},\n")
-  o.write(f'  size_x={size_x},\n')
-  o.write(f'  size_y={size_y},\n')
-  o.write(f'  size_z={size_z},\n')
-  o.write(f'  tip_type={tip_type},\n')
-  o.write(f'  dx={dx},\n')
-  o.write(f'  dy={dy},\n')
-  o.write(f'  dz={dz},\n')
-  o.write(f'  tip_size_x={tip_size_x},\n')
-  o.write(f'  tip_size_y={tip_size_y},\n')
-  o.write(f'  num_items_x={num_items_x},\n')
-  o.write(f'  num_items_y={num_items_y}\n')
-  o.write(f')\n')
+  writer.write_tip_rack_with_create_equally_spaced(o=o, base_class=BASE_CLASS, name=cname, description=description, size_x=size_x, size_y=size_y, size_z=size_z, tip_type=tip_type, dx=dx, dy=dy, dz=dz, tip_size_x=tip_size_x, tip_size_y=tip_size_y, num_items_x=num_items_x, num_items_y=num_items_y)
 
 
 if __name__ == "__main__":
