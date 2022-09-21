@@ -1,22 +1,29 @@
 from typing import List
 import unittest
 
-from pylabrobot.liquid_handling.resources.abstract import Coordinate, Plate
+from pylabrobot.liquid_handling.resources.abstract import (
+  Coordinate,
+  Plate,
+  Well,
+  create_equally_spaced
+)
 
 
 class TestItemizedResource(unittest.TestCase):
   """ Tests for ItemizedResource """
 
   def setUp(self) -> None:
-    self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, dx=0, dy=0, dz=0,
-      one_dot_max=1, lid_height=None, num_items_x=12, num_items_y=8, well_size_x=9, well_size_y=9)
+    self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=None,
+      items=create_equally_spaced(Well,
+      num_items_x=12, num_items_y=8,
+      dx=0, dy=0, dz=0,
+      item_size_x=9, item_size_y=9))
     return super().setUp()
 
   def test_initialize_with_wells(self):
-    # pylint: disable=protected-access
-    self.assertEqual(len(self.plate._items), 96)
-    self.assertEqual(self.plate._items[0].name, "plate_well_0_0")
-    self.assertEqual(self.plate._items[95].name, "plate_well_11_7")
+    self.assertEqual(len(self.plate.children), 96)
+    self.assertEqual(self.plate.children[0].name, "plate_well_0_0")
+    self.assertEqual(self.plate.children[95].name, "plate_well_11_7")
 
   def test_get_item_int(self):
     self.assertEqual(self.plate.get_item(0).name, "plate_well_0_0")
@@ -39,6 +46,7 @@ class TestItemizedResource(unittest.TestCase):
 
   def test_getitem_str(self):
     self.assertEqual(self.plate["A1"][0].name, "plate_well_0_0")
+    self.assertEqual(self.plate["B2"][0].name, "plate_well_1_1")
 
   def test_getitem_slice(self):
     self.assertEqual([w.name for w in self.plate[0:7]], ["plate_well_0_0", "plate_well_0_1",
@@ -153,6 +161,40 @@ class TestItemizedResource(unittest.TestCase):
   def test_get_items_none(self):
     self.assertEqual(self.plate.get_items(None), [None])
     self.assertEqual(self.plate.get_items([None, 0]), [None, self.plate.get_item(0)])
+
+
+class TestCreateEquallySpaced(unittest.TestCase):
+  """ Test for create_equally_spaced function. """
+
+  def test_create_equally_spaced(self):
+    self.maxDiff = None
+    equally_spaced = create_equally_spaced(Well,
+      num_items_x=3, num_items_y=2,
+      dx=0, dy=0, dz=0,
+      item_size_x=9, item_size_y=9)
+
+    # assert that ids of items are correct
+    ids = [id(item) for item in equally_spaced]
+    self.assertEqual(len(ids), len(set(ids)))
+
+    self.assertEqual(len(equally_spaced), 3)
+    self.assertEqual(len(equally_spaced[0]), 2)
+    self.assertEqual(len(equally_spaced[1]), 2)
+    self.assertEqual(len(equally_spaced[2]), 2)
+    self.assertEqual(equally_spaced, [
+      [
+        Well("well_0_0", size_x=9, size_y=9, location=Coordinate(0, 9, 0)),
+        Well("well_0_1", size_x=9, size_y=9, location=Coordinate(0, 0, 0)),
+      ],
+      [
+        Well("well_1_0", size_x=9, size_y=9, location=Coordinate(9, 9, 0)),
+        Well("well_1_1", size_x=9, size_y=9, location=Coordinate(9, 0, 0)),
+      ],
+      [
+        Well("well_2_0", size_x=9, size_y=9, location=Coordinate(18, 9, 0)),
+        Well("well_2_1", size_x=9, size_y=9, location=Coordinate(18, 0, 0)),
+      ],
+    ])
 
 
 if __name__ == "__main__":

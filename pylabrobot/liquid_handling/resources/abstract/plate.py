@@ -42,21 +42,15 @@ class Plate(ItemizedResource[Well]):
     size_x: float,
     size_y: float,
     size_z: float,
-    dx: float,
-    dy: float,
-    dz: float,
-    num_items_x: int,
-    num_items_y: int,
-    well_size_x: float,
-    well_size_y: float,
-    one_dot_max: float,
+    items: List[List[Well]] = None,
+    one_dot_max: float = 0,
     category: str = "plate",
     location: Coordinate = Coordinate(None, None, None),
     lid_height: float = 0,
     with_lid: bool = False,
     compute_volume_from_height: Optional[Callable[[float], float]] = None
   ):
-    """ Initializea  Plate resource.
+    """ Initialize a Plate resource.
 
     Args:
       name: Name of the plate.
@@ -73,7 +67,7 @@ class Plate(ItemizedResource[Well]):
       num_items_y: Number of wells in the y direction.
       well_size_x: Size of the wells in the x direction.
       well_size_y: Size of the wells in the y direction.
-      one_dot_max: I don't know.
+      one_dot_max: I don't know. Hamilton specific.
       location: Coordinate of the plate.
       lid_height: Height of the lid in mm, only used if `with_lid` is True.
       with_lid: Whether the plate has a lid.
@@ -81,13 +75,7 @@ class Plate(ItemizedResource[Well]):
 
     super().__init__(name, size_x, size_y, size_z, location=location,
                      category=category,
-                     num_items_x=num_items_x, num_items_y=num_items_y,
-                     create_item=lambda i, j: Well(
-                        name=name + f"_well_{i}_{j}", location=Coordinate(
-                        x=dx + i * well_size_x, y=dy + (num_items_y-j-1) * well_size_y, z=dz)))
-    self.dx = dx
-    self.dy = dy
-    self.dz = dz
+                     items=items)
     self.one_dot_max = one_dot_max
     self.lid: Optional[Lid] = None
     self._compute_volume_from_height = compute_volume_from_height
@@ -99,9 +87,6 @@ class Plate(ItemizedResource[Well]):
       lid = Lid(name + "_lid", location=Coordinate(0, 0, 0),
         size_x=size_x, size_y=size_y, size_z=lid_height)
       self.assign_child_resource(lid)
-
-    self.well_size_x = well_size_x
-    self.well_size_y = well_size_y
 
   def compute_volume_from_height(self, height: float) -> float:
     """ Compute the volume of liquid in a well from the height of the liquid.
@@ -136,40 +121,29 @@ class Plate(ItemizedResource[Well]):
   def serialize(self):
     return dict(
       **super().serialize(),
-      dx=self.dx,
-      dy=self.dy,
-      dz=self.dz,
       one_dot_max=self.one_dot_max,
     )
 
   @classmethod
   def deserialize(cls, data):
-    first_well = data["children"][0]
+    # first_well = data["children"][0]
     out = cls(
       name=data["name"],
       size_x=data["size_x"],
       size_y=data["size_y"],
       size_z=data["size_z"],
-      dx=data["dx"],
-      dy=data["dy"],
-      dz=data["dz"],
-      num_items_x=data["num_items_x"],
-      num_items_y=data["num_items_y"],
-      well_size_x=first_well["size_x"],
-      well_size_y=first_well["size_y"],
+      items=[], # will be filled in by LiquidHandler
       one_dot_max=data["one_dot_max"],
       location=Coordinate.deserialize(data["location"]),
       lid_height=data["lid"]["size_z"] if "lid" in data else 0,
       with_lid="lid" in data,
       compute_volume_from_height=None, # TODO: deserialize this, probably deserialize for well.
     )
-    data["children"] = [] # just like ItemizedResource.deserialize
     return out
 
   def __repr__(self) -> str:
     return (f"{self.__class__.__name__}(size_x={self._size_x}, size_y={self._size_y}, "
-            f"size_z={self._size_z}, dx={self.dx}, dy={self.dy}, dz={self.dz}, "
-            f"location={self.location}, one_dot_max={self.one_dot_max})")
+            f"size_z={self._size_z}, location={self.location}, one_dot_max={self.one_dot_max})")
 
   def get_well(self, identifier: Union[str, int]) -> Well:
     """ Get the item with the given identifier.
