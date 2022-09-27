@@ -28,12 +28,17 @@ extras_venus = [
     'pyhamilton'
 ]
 
+extras_opentrons = [
+    'opentrons-http-api-client',
+    'opentrons-shared-data'
+]
+
 extras_testing = [
     'pytest',
     'pytest-timeout',
     'requests',
     'pylint'
-] + extras_simulation
+] + extras_simulation + extras_opentrons
 
 extras_server = [
     'flask',
@@ -42,7 +47,7 @@ extras_server = [
 ]
 
 extras_all = extras_docs + extras_simulation + extras_http + extras_websockets + extras_testing + \
-              extras_venus + extras_server + extras_fw
+              extras_venus + extras_server + extras_fw + extras_opentrons
 
 setup(
     name='PyLabRobot',
@@ -60,6 +65,7 @@ setup(
         'http': extras_http,
         'websockets': extras_websockets,
         'venus': extras_venus,
+        'opentrons': extras_opentrons,
         'server': extras_server,
         'all': extras_all
     }

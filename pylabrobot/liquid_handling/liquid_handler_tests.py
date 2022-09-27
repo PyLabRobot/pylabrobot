@@ -24,13 +24,14 @@ from .resources import (
   PlateCarrier,
   standard_volume_tip_with_filter
 )
+from .resources.hamilton import STARLetDeck
 from .resources.ml_star import STF_L, HTF_L
 
 
 class TestLiquidHandlerLayout(unittest.TestCase):
   def setUp(self):
     star = backends.Mock()
-    self.lh = LiquidHandler(star)
+    self.lh = LiquidHandler(star, deck=STARLetDeck())
 
   def test_resource_assignment(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
@@ -42,31 +43,31 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
     plt_car[2] = Cos_96_DW_500ul(name="dispense plate")
 
-    self.lh.assign_resource(tip_car, rails=1)
-    self.lh.assign_resource(plt_car, rails=21)
+    self.lh.deck.assign_child_resource(tip_car, rails=1)
+    self.lh.deck.assign_child_resource(plt_car, rails=21)
 
     # Test placing a carrier at a location where another carrier is located.
     with self.assertRaises(ValueError):
       dbl_plt_car_1 = PLT_CAR_L5AC_A00(name="double placed carrier 1")
-      self.lh.assign_resource(dbl_plt_car_1, rails=1)
+      self.lh.deck.assign_child_resource(dbl_plt_car_1, rails=1)
 
     with self.assertRaises(ValueError):
       dbl_plt_car_2 = PLT_CAR_L5AC_A00(name="double placed carrier 2")
-      self.lh.assign_resource(dbl_plt_car_2, rails=2)
+      self.lh.deck.assign_child_resource(dbl_plt_car_2, rails=2)
 
     with self.assertRaises(ValueError):
       dbl_plt_car_3 = PLT_CAR_L5AC_A00(name="double placed carrier 3")
-      self.lh.assign_resource(dbl_plt_car_3, rails=20)
+      self.lh.deck.assign_child_resource(dbl_plt_car_3, rails=20)
 
     # Test carrier with same name.
     with self.assertRaises(ValueError):
       same_name_carrier = PLT_CAR_L5AC_A00(name="plate carrier")
-      self.lh.assign_resource(same_name_carrier, rails=10)
+      self.lh.deck.assign_child_resource(same_name_carrier, rails=10)
     # Should not raise when replacing.
-    self.lh.assign_resource(same_name_carrier, rails=10, replace=True)
+    self.lh.deck.assign_child_resource(same_name_carrier, rails=10, replace=True)
     # Should not raise when unassinged.
     self.lh.unassign_resource("plate carrier")
-    self.lh.assign_resource(same_name_carrier, rails=10, replace=True)
+    self.lh.deck.assign_child_resource(same_name_carrier, rails=10, replace=True)
 
     # Test unassigning unassigned resource
     self.lh.unassign_resource("plate carrier")
@@ -77,19 +78,19 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
     # Test invalid rails.
     with self.assertRaises(ValueError):
-      self.lh.assign_resource(plt_car, rails=-1)
+      self.lh.deck.assign_child_resource(plt_car, rails=-1)
     with self.assertRaises(ValueError):
-      self.lh.assign_resource(plt_car, rails=42)
+      self.lh.deck.assign_child_resource(plt_car, rails=42)
     with self.assertRaises(ValueError):
-      self.lh.assign_resource(plt_car, rails=27)
+      self.lh.deck.assign_child_resource(plt_car, rails=27)
 
   def test_get_resource(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
     tip_car[0] = STF_L(name="tips_01")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
-    self.lh.assign_resource(tip_car, rails=1)
-    self.lh.assign_resource(plt_car, rails=10)
+    self.lh.deck.assign_child_resource(tip_car, rails=1)
+    self.lh.deck.assign_child_resource(plt_car, rails=10)
 
     # Get resource.
     self.assertEqual(self.lh.get_resource("tip_carrier").name, "tip_carrier")
@@ -109,8 +110,8 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
     plt_car[2] = Cos_96_DW_500ul(name="dispense plate")
-    self.lh.assign_resource(tip_car, rails=1)
-    self.lh.assign_resource(plt_car, rails=10)
+    self.lh.deck.assign_child_resource(tip_car, rails=1)
+    self.lh.deck.assign_child_resource(plt_car, rails=10)
 
     # Rails 10 should be left of rails 1.
     self.assertGreater(self.lh.get_resource("plate carrier").get_absolute_location().x,
@@ -142,9 +143,9 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     tip_car[0] = STF_L(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="sub")
-    self.lh.assign_resource(tip_car, rails=1)
+    self.lh.deck.assign_child_resource(tip_car, rails=1)
     with self.assertRaises(ValueError):
-      self.lh.assign_resource(plt_car, rails=10)
+      self.lh.deck.assign_child_resource(plt_car, rails=10)
 
   def test_illegal_subresource_assignment_after(self):
     # Test assigning subresource with the same name as another resource in another carrier, after
@@ -153,8 +154,8 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     tip_car[0] = STF_L(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="ok")
-    self.lh.assign_resource(tip_car, rails=1)
-    self.lh.assign_resource(plt_car, rails=10)
+    self.lh.deck.assign_child_resource(tip_car, rails=1)
+    self.lh.deck.assign_child_resource(plt_car, rails=10)
     with self.assertRaises(ValueError):
       plt_car[1] = Cos_96_DW_500ul(name="sub")
 
@@ -168,8 +169,8 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
     plt_car[2] = Cos_96_DW_500ul(name="dispense plate")
 
-    self.lh.assign_resource(tip_car, rails=1, replace=True)
-    self.lh.assign_resource(plt_car, rails=21, replace=True)
+    self.lh.deck.assign_child_resource(tip_car, rails=1)
+    self.lh.deck.assign_child_resource(plt_car, rails=21)
 
   @unittest.mock.patch("sys.stdout", new_callable=io.StringIO)
   def test_summary(self, out):
@@ -258,7 +259,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
   def assert_same(self, lh1, lh2):
     """ Assert two liquid handler decks are the same. """
-    self.assertEqual(lh1.deck.get_resources(), lh2.deck.get_resources())
+    self.assertEqual(lh1.deck.get_all_resources(), lh2.deck.get_all_resources())
 
   def test_json_serialization(self):
     self.maxDiff = None
@@ -270,13 +271,13 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.lh.save(fn)
 
     be = backends.Mock()
-    recovered = LiquidHandler(be)
+    recovered = LiquidHandler(be, deck=STARLetDeck())
     recovered.load_from_json(fn)
 
     self.assert_same(self.lh, recovered)
 
     # test with custom classes
-    custom_1 = LiquidHandler(be)
+    custom_1 = LiquidHandler(be, deck=STARLetDeck()) # TODO: Deck is what should be deserialized...
     tc = TipCarrier("tc", 200, 200, 200, location=Coordinate(0, 0, 0), sites=[
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)
@@ -297,7 +298,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
     fn = os.path.join(tmp_dir, "layout.json")
     custom_1.save(fn)
-    custom_recover = LiquidHandler(be)
+    custom_recover = LiquidHandler(be, deck=STARLetDeck())
     custom_recover.load(fn)
 
     self.assertEqual(custom_1.deck,
@@ -310,7 +311,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
   def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="plate")
-    self.lh.assign_resource(plt_car, rails=21)
+    self.lh.deck.assign_child_resource(plt_car, rails=21)
 
     self.lh.move_plate(plt_car[0], plt_car[2])
     self.assertIsNotNone(plt_car[2].resource)
@@ -322,20 +323,20 @@ class TestLiquidHandlerLayout(unittest.TestCase):
   def test_move_plate_free(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="plate")
-    self.lh.assign_resource(plt_car, rails=1)
+    self.lh.deck.assign_child_resource(plt_car, rails=1)
 
-    self.lh.move_plate(plt_car[0], Coordinate(100, 100, 100))
+    self.lh.move_plate(plt_car[0], Coordinate(1000, 1000, 1000))
     self.assertIsNotNone(self.lh.get_resource("plate"))
     self.assertIsNone(plt_car[0].resource)
     # TODO: will probably update this test some time, when we make the deck universal and not just
     # star.
     self.assertEqual(self.lh.get_resource("plate").get_absolute_location(),
-      Coordinate(100, 163, 200))
+      Coordinate(1000, 1000+63, 1000+100))
 
 
 class TestLiquidHandlerCommands(unittest.TestCase):
   def setUp(self):
-    self.lh = LiquidHandler(backends.Mock())
+    self.lh = LiquidHandler(backends.Mock(), deck=STARLetDeck())
 
   def test_return_tips(self):
     # TODO: figure out a way to test "composite" commands

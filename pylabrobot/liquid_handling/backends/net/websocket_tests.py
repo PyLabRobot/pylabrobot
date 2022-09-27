@@ -16,6 +16,8 @@ from pylabrobot.liquid_handling.resources import (
   Cos_96_DW_1mL,
   STF_L
 )
+from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+
 
 class WebSocketBackendSetupStopTests(unittest.TestCase):
   """ Tests for the setup and stop methods of the websocket backend. """
@@ -106,13 +108,13 @@ class WebSocketBackendCommandTests(unittest.TestCase):
 
   def setUp(self):
     self.backend = WebSocketBackendEventCatcher()
-    self.lh = LiquidHandler(self.backend)
+    self.lh = LiquidHandler(self.backend, deck=STARLetDeck())
     self.tip_car = TIP_CAR_480_A00("tip_car")
     self.tip_car[0] = STF_L("tips_1")
     self.plt_car = PLT_CAR_L5AC_A00("plt_car")
     self.plt_car[0] = Cos_96_DW_1mL("plate_1")
-    self.lh.assign_resource(self.tip_car, rails=1)
-    self.lh.assign_resource(self.plt_car, rails=10)
+    self.lh.deck.assign_child_resource(self.tip_car, rails=1)
+    self.lh.deck.assign_child_resource(self.plt_car, rails=10)
     self.lh.setup()
 
     self.maxDiff = None
@@ -132,13 +134,13 @@ class WebSocketBackendCommandTests(unittest.TestCase):
     self.backend.clear()
     tip_car = TIP_CAR_480_A00("tip_car_new")
     tip_car[0] = STF_L("tips_1_new")
-    self.lh.assign_resource(tip_car, rails=20)
+    self.lh.deck.assign_child_resource(tip_car, rails=20)
     self.assert_event_sent_n("resource_assigned", times=1)
 
   def test_subresource_assigned(self):
     self.backend.clear()
     tip_car = TIP_CAR_480_A00("tip_car_new")
-    self.lh.assign_resource(tip_car, rails=20)
+    self.lh.deck.assign_child_resource(tip_car, rails=20)
     self.assert_event_sent_n("resource_assigned", times=1)
 
     self.backend.clear()

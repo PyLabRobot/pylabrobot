@@ -1,5 +1,6 @@
 from .list import (
   assert_shape,
+  reshape_2d
 )
 from .numbers import (
   assert_clamp

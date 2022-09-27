@@ -18,9 +18,6 @@ class Deck(Resource):
   ):
     """ Initialize a new deck.
 
-    TODO: sizes from HAMILTON\\Config\\ML_Starlet.dck (mm probably), want to create
-      STARDeck(HamiltonDeck)
-
     Args:
       resource_assigned_callback: A callback function that is called when a resource is assigned to
         the deck. This includes resources assigned to child resources. The callback function is
@@ -105,6 +102,6 @@ class Deck(Resource):
     """ Returns True if the deck has a resource with the given name. """
     return name in self.resources
 
-  def get_resources(self) -> List[Resource]:
+  def get_all_resources(self) -> List[Resource]:
     """ Returns a list of all resources in the deck. """
     return list(self.resources.values())

@@ -3,7 +3,6 @@
 # pylint: skip-file
 
 from pylabrobot.liquid_handling.resources.abstract import TipRack
-from pylabrobot.liquid_handling.resources.abstract import tiprack
 from pylabrobot.liquid_handling.resources.abstract.itemized_resource import create_equally_spaced
 from pylabrobot.liquid_handling.resources.abstract.tiprack import Tip
 from .tip_types import (

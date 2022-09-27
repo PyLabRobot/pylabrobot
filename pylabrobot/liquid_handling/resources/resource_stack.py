@@ -82,6 +82,7 @@ class ResourceStack(Resource):
       resource.location += Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
       # top z > bottom z, so we need to move the resources down
+      # TODO: better workaround for when location is None, None, None
       resource.location += Coordinate(0, 0, 0)
       for r in self.children:
         r.location.z += resource.get_size_z()

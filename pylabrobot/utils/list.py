@@ -1,9 +1,9 @@
 """ Utilities for working with lists. """
 
-import typing
+from typing import List, Tuple
 
 
-def assert_shape(list_: list, shape: typing.Tuple[int]):
+def assert_shape(list_: list, shape: Tuple[int]):
   """Assert that a list has the correct shape.
 
   Args:
@@ -16,3 +16,27 @@ def assert_shape(list_: list, shape: typing.Tuple[int]):
   for row in list_:
     if len(row) != shape[1]:
       raise ValueError(f"List has incorrect shape: {list_}")
+
+
+def reshape_2d(list_: list, shape: Tuple[int, int]) -> List[List[int]]:
+  """ Reshape a list into a 2d list.
+
+  Args:
+    list_: The list to reshape.
+    shape: The new shape.
+
+  Returns:
+    The reshaped list.
+  """
+
+  if not len(list_) == shape[0] * shape[1]:
+    raise ValueError(f"Cannot reshape list {list_} into shape {shape}")
+
+  new_list = []
+
+  for i in range(shape[0]):
+    new_list.append([])
+    for j in range(shape[1]):
+      new_list[i].append(list_[i * shape[1] + j])
+
+  return new_list
