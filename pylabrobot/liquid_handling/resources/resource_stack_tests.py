@@ -45,7 +45,6 @@ class ResourceStackTests(unittest.TestCase):
       Resource("A", size_x=10, size_y=10, size_z=10),
       Resource("B", size_x=10, size_y=10, size_z=10),
     ])
-    print(stack.children)
     self.assertEqual(stack.get_resource("A").location, Coordinate(0, 0, 10))
     self.assertEqual(stack.get_resource("B").location, Coordinate(0, 0, 0))
 

@@ -7,15 +7,14 @@ import json
 import logging
 import numbers
 import time
-import typing
-from typing import Tuple, Union, Optional, List, overload
+from typing import Union, Optional, List, Callable
 
 import pylabrobot.utils.file_parsing as file_parser
 from pylabrobot.liquid_handling.resources.abstract import Deck
 from pylabrobot import utils
 
 from .backends import LiquidHandlerBackend
-from . import resources
+from . import resources as resources_module
 from .liquid_classes import (
   LiquidClass,
   StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
@@ -35,9 +34,6 @@ from .resources import (
 from .standard import Aspiration, Dispense
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
-
-
-_RAILS_WIDTH = 22.5 # space between rails (mm)
 
 
 class LiquidHandler:
@@ -64,7 +60,7 @@ class LiquidHandler:
     setup_finished: Whether the liquid handler has been setup.
   """
 
-  def __init__(self, backend: LiquidHandlerBackend):
+  def __init__(self, backend: LiquidHandlerBackend, deck: Deck):
     """ Initialize a LiquidHandler.
 
     Args:
@@ -76,18 +72,16 @@ class LiquidHandler:
     self._picked_up_tips = None
     self._picked_up_tips96 = None
 
-    self.deck = Deck(
-      resource_assigned_callback=self.resource_assigned_callback,
-      resource_unassigned_callback=self.resource_unassigned_callback,
-      origin=Coordinate(0, 63, 100)
-    )
+    self.deck = deck
+    self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
+    self.deck.resource_unassigned_callback_callback = self.resource_unassigned_callback
 
   def __del__(self):
     # If setup was finished, close automatically to prevent blocking the USB device.
     if self.setup_finished:
       self.stop()
 
-  def need_setup_finished(func: typing.Callable): # pylint: disable=no-self-argument
+  def need_setup_finished(func: Callable): # pylint: disable=no-self-argument
     """ Decorator for methods that require the liquid handler to be set up.
 
     Checked by verifying `self.setup_finished` is `True`.
@@ -124,101 +118,13 @@ class LiquidHandler:
     self.stop()
     return False
 
-  @staticmethod
-  def _x_coordinate_for_rails(rails: int):
-    """ Convert a rail identifier (1-30 for STARLet, max 54 for STAR) to an x coordinate. """
-    return 100.0 + (rails - 1) * _RAILS_WIDTH
-
+  # TODO: artifact until we move .summary() to STARLetDeck
   @staticmethod
   def _rails_for_x_coordinate(x: int):
     """ Convert an x coordinate to a rail identifier (1-30 for STARLet, max 54 for STAR). """
+    # pylint: disable=invalid-name
+    _RAILS_WIDTH = 22.5 # TODO: this entire function is gonna be removed.
     return int((x - 100.0) / _RAILS_WIDTH) + 1
-
-  def assign_resource(
-    self,
-    resource: Resource,
-    rails: typing.Optional[int] = None, # board location, 1..52
-    location: typing.Optional[Coordinate] = None,
-    replace: bool = False
-  ):
-    """ Assign a new deck resource.
-
-    The identifier will be the Resource.name, which must be unique amongst previously assigned
-    resources.
-
-    Note that some resources, such as tips on a tip carrier or plates on a plate carrier must
-    be assigned directly to the tip or plate carrier respectively. See TipCarrier and PlateCarrier
-    for details.
-
-    Based on the rails argument, the absolute (x, y, z) coordinates will be computed.
-
-    Args:
-      resource: A Resource to assign to this liquid handler.
-      rails: The left most real (inclusive) of the deck resource (between and 1-30 for STARLet,
-             max 54 for STAR.) Either rails or location must be None, but not both.
-      location: The location of the resource relative to the liquid handler. Either rails or
-                location must be None, but not both.
-      replace: Replace the resource with the same name that was previously assigned, if it exists.
-               If a resource is assigned with the same name and replace is False, a ValueError
-               will be raised.
-
-    Raises:
-      ValueError: If a resource is assigned with the same name and replace is `False`.
-    """
-
-    # TODO: most things here should be handled by Deck.
-
-    if (rails is not None) == (location is not None):
-      raise ValueError("Rails or location must be None.")
-
-    if rails is not None and not 1 <= rails <= 30:
-      raise ValueError("Rails must be between 1 and 30.")
-
-    # Check if resource exists.
-    if self.deck.has_resource(resource.name):
-      if replace:
-        # unassign first, so we don't have problems with location checking later.
-        self.unassign_resource(resource.name)
-      else:
-        raise ValueError(f"Resource with name '{resource.name}' already defined.")
-
-    # Set resource location.
-    if rails is not None:
-      resource.location = Coordinate(x=LiquidHandler._x_coordinate_for_rails(rails), y=0, z=0)
-    else:
-      resource.location = location
-
-    if resource.location.x + resource.get_size_x() > LiquidHandler._x_coordinate_for_rails(30) and \
-      rails is not None:
-      raise ValueError(f"Resource with width {resource.get_size_x()} does not "
-                       f"fit at rails {rails}.")
-
-    # Check if there is space for this new resource.
-    for og_resource in self.deck.get_resources():
-      og_x = og_resource.get_absolute_location().x
-      og_y = og_resource.get_absolute_location().y
-
-      # hack parent to get the absolute location.
-      resource.parent = self.deck
-
-      # A resource is not allowed to overlap with another resource. Resources overlap when a corner
-      # of one resource is inside the boundaries other resource.
-      if (og_x <= resource.get_absolute_location().x < og_x + og_resource.get_size_x() or \
-         og_x <= resource.get_absolute_location().x + resource.get_size_x() <
-           og_x + og_resource.get_size_x()) and\
-          (og_y <= resource.get_absolute_location().y < og_y + og_resource.get_size_y() or \
-            og_y <= resource.get_absolute_location().y + resource.get_size_y() <
-               og_y + og_resource.get_size_y()):
-        resource.location = None # Revert location.
-        resource.parent = None # Revert parent.
-        if rails is not None:
-          if not (replace and resource.name == og_resource.name):
-            raise ValueError(f"Rails {rails} is already occupied by resource '{og_resource.name}'.")
-        else:
-          raise ValueError(f"Location {location} is already occupied by resource "
-                           f"'{og_resource.name}'.")
-
-    self.deck.assign_child_resource(resource)
 
   def resource_assigned_callback(self, resource: Resource):
     self.backend.assigned_resource_callback(resource)
@@ -226,7 +132,7 @@ class LiquidHandler:
   def resource_unassigned_callback(self, resource: Resource):
     self.backend.unassigned_resource_callback(resource.name)
 
-  def unassign_resource(self, resource: typing.Union[str, Resource]):
+  def unassign_resource(self, resource: Union[str, Resource]): # TODO: remove this.
     """ Unassign an assigned resource.
 
     Args:
@@ -244,7 +150,7 @@ class LiquidHandler:
       raise KeyError(f"Resource '{resource}' is not assigned to this liquid handler.")
     r.unassign()
 
-  def get_resource(self, name: str) -> typing.Optional[Resource]:
+  def get_resource(self, name: str) -> Optional[Resource]:
     """ Find a resource on the deck of this liquid handler. Also see :meth:`~Deck.get_resource`.
 
     Args:
@@ -269,7 +175,7 @@ class LiquidHandler:
           │   ├── tips_01                STF_L               (x: 117.900, y: 240.000, z: 100.000)
     """
 
-    if len(self.deck.get_resources()) == 0:
+    if len(self.deck.get_all_resources()) == 0:
       raise ValueError(
           "This liquid editor does not have any resources yet. "
           "Build a layout first by calling `assign_resource()`. "
@@ -312,7 +218,7 @@ class LiquidHandler:
       print("     │")
       print_resource(resource)
 
-  def load_from_lay_file(self, fn: str):
+  def load_from_lay_file(self, fn: str): # TODO: this can probably become STARLet specific method.
     """ Parse a .lay file (legacy layout definition) and build the layout on this liquid handler.
 
     Args:
@@ -324,7 +230,7 @@ class LiquidHandler:
       c = f.read()
 
     # Get class names of all defined resources.
-    resource_classes = [c[0] for c in inspect.getmembers(resources)]
+    resource_classes = [c[0] for c in inspect.getmembers(resources_module)]
 
     # Get number of items on deck.
     num_items = file_parser.find_int("Labware.Cnt", c)
@@ -346,7 +252,7 @@ class LiquidHandler:
         class_name = file_name.split(".tml")[0]
 
       if class_name in resource_classes:
-        klass = getattr(resources, class_name)
+        klass = getattr(resources_module, class_name)
         resource = klass(name=name)
       else:
         # TODO: replace with real template.
@@ -378,9 +284,10 @@ class LiquidHandler:
 
     # Assign all resources to self.
     for cont in containers.values():
-      self.assign_resource(cont, location=cont.location - Coordinate(0, 63.0, 100)) # TODO(63) fix
+      # TODO(63) fix
+      self.deck.assign_child_resource(cont, location=cont.location - Coordinate(0, 63.0, 100))
 
-  def save(self, fn: str, indent: typing.Optional[int] = None):
+  def save(self, fn: str, indent: Optional[int] = None):
     """ Save a deck layout to a JSON file.
 
     Args:
@@ -411,7 +318,7 @@ class LiquidHandler:
         content = json.load(f)
 
     # Get class names of all defined resources.
-    resource_classes = [c[0] for c in inspect.getmembers(resources)]
+    resource_classes = [c[0] for c in inspect.getmembers(resources_module)]
 
     def deserialize_resource(dict_resource):
       """ Deserialize a single resource. """
@@ -419,7 +326,7 @@ class LiquidHandler:
       # Get class name.
       class_name = dict_resource["type"]
       if class_name in resource_classes:
-        klass = getattr(resources, class_name)
+        klass = getattr(resources_module, class_name)
         resource = klass.deserialize(dict_resource)
         for child_dict in dict_resource["children"]:
           child_resource = deserialize_resource(child_dict)
@@ -433,7 +340,7 @@ class LiquidHandler:
     self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
     self.deck.resource_unassigned_callback_callback = self.resource_unassigned_callback
 
-  def load(self, fn: str, file_format: typing.Optional[str] = None):
+  def load(self, fn: str, file_format: Optional[str] = None):
     """ Load deck layout serialized in a file, either from a .lay or .json file.
 
     Args:
@@ -449,7 +356,7 @@ class LiquidHandler:
     else:
       raise ValueError(f"Unsupported file extension: {extension}")
 
-  def _assert_positions_unique(self, positions: typing.List[str]):
+  def _assert_positions_unique(self, positions: List[str]):
     """ Returns whether all items in `positions` are unique where they are not `None`.
 
     Args:
@@ -459,6 +366,19 @@ class LiquidHandler:
     not_none = [p for p in positions if p is not None]
     if len(not_none) != len(set(not_none)):
       raise ValueError("Positions must be unique.")
+
+  def _assert_resources_exist(self, resources: List[Optional[Resource]]):
+    """ Checks that each resource in `resources` is assigned to the deck. None values are ignored.
+
+    Args:
+      resources: List of resources.
+    """
+
+    for resource in resources:
+      if resource is None:
+        continue
+      if resource not in self.deck.get_all_resources():
+        raise ValueError(f"Resource named '{resource.name}' not found on deck.")
 
   def _channels_to_standard_tip_form(
     self,
@@ -531,6 +451,8 @@ class LiquidHandler:
     channels = self._channels_to_standard_tip_form(*channels)
     if not any(channel is not None for channel in channels):
       raise ValueError("Must specify at least one channel to pick up tips with.")
+    self._assert_resources_exist(channels)
+
     self.backend.pickup_tips(*channels, **backend_kwargs)
 
     # Save the tips that are currently picked up.
@@ -562,6 +484,8 @@ class LiquidHandler:
     channels = self._channels_to_standard_tip_form(*channels)
     if not any(channel is not None for channel in channels):
       raise ValueError("Must specify at least one channel to discard tips from.")
+    self._assert_resources_exist(channels)
+
     self.backend.discard_tips(*channels, **backend_kwargs)
 
     self._picked_up_tips = None
@@ -587,8 +511,9 @@ class LiquidHandler:
   @need_setup_finished
   def aspirate(
     self,
-    channels: Iterable[Well],
+    wells: Iterable[Well],
     vols: Union[Iterable[float], numbers.Rational],
+    liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
     end_delay: float = 0,
     **backend_kwargs
   ):
@@ -628,34 +553,28 @@ class LiquidHandler:
       ValueError: If all channels are `None`.
     """
 
-    if len(channels) == 0:
+    if len(wells) == 0:
       raise ValueError("No channels specified")
 
     if isinstance(vols, numbers.Rational):
-      vols = [vols] * len(channels)
-    channels = [(Aspiration(c, v) if c is not None else None) for c, v in zip(channels, vols)]
+      vols = [vols] * len(wells)
 
-    self.backend.aspirate(*channels, **backend_kwargs)
+    if isinstance(liquid_class, LiquidClass):
+      liquid_class = [liquid_class] * len(wells)
+
+    self._assert_resources_exist(wells)
+
+    aspirations = [(Aspiration(c, v) if c is not None else None) for c, v in zip(wells, vols)]
+
+    self.backend.aspirate(*aspirations, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
 
-  @overload
-  def dispense(
-    self,
-    *channels: Union[Well, List[Well]],
-    vols: List[float], **kwargs) -> None: ...
-
-  @overload
-  def dispense(
-    self,
-    *channels: Union[Tuple[Well, float], Tuple[List[Well], List[float]]],
-    **kwargs) -> None: ...
-
   @need_setup_finished
   def dispense(
     self,
-    channels: List[Well],
+    wells: Iterable[Well],
     vols: List[float] = None,
     end_delay: float = 0,
     **backend_kwargs
@@ -697,17 +616,22 @@ class LiquidHandler:
       ValueError: If all channels are `None`.
     """
 
-    # channels = self._channels_to_standard_form(*channels, vols=vols)
-    if isinstance(vols, numbers.Rational):
-      vols = [vols] * len(channels)
-    channels = [(Dispense(c, v) if c is not None else None) for c, v in zip(channels, vols)]
+    if len(wells) == 0:
+      raise ValueError("No channels specified")
 
-    self.backend.dispense(*channels, **backend_kwargs)
+    if isinstance(vols, numbers.Rational):
+      vols = [vols] * len(wells)
+
+    self._assert_resources_exist(wells)
+
+    dispenses = [(Dispense(c, v) if c is not None else None) for c, v in zip(wells, vols)]
+
+    self.backend.dispense(*dispenses, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
 
-  def pickup_tips96(self, resource: typing.Union[str, Resource], **backend_kwargs):
+  def pickup_tips96(self, resource: Union[str, Resource], **backend_kwargs):
     """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
 
     Examples:
@@ -735,7 +659,7 @@ class LiquidHandler:
     # Save the tips as picked up.
     self._picked_up_tips96 = resource
 
-  def discard_tips96(self, resource: typing.Union[str, Resource], **backend_kwargs):
+  def discard_tips96(self, resource: Union[str, Resource], **backend_kwargs):
     """ Discard tips using the CoRe 96 head. This will discard 96 tips.
 
     Examples:
@@ -779,7 +703,7 @@ class LiquidHandler:
 
   def aspirate96(
     self,
-    resource: typing.Union[str, Resource],
+    resource: Union[str, Resource],
     volume: float,
     pattern: Optional[Union[List[List[bool]], str]] = None,
     end_delay: float = 0,
@@ -895,8 +819,8 @@ class LiquidHandler:
 
   def move_plate(
     self,
-    plate: typing.Union[Plate, CarrierSite],
-    target: typing.Union[Resource, Coordinate],
+    plate: Union[Plate, CarrierSite],
+    target: Union[Resource, Coordinate],
     **backend_kwargs
   ):
     """ Move a plate to a new location.
@@ -949,7 +873,7 @@ class LiquidHandler:
   def move_lid(
     self,
     lid: Lid,
-    target: typing.Union[Plate, Hotel, CarrierSite],
+    target: Union[Plate, Hotel, CarrierSite],
     **backend_kwargs
   ):
     """ Move a lid to a new location.

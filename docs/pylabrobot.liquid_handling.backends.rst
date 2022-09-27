@@ -27,6 +27,7 @@ Hardware
 
     pylabrobot.liquid_handling.backends.hamilton.HamiltonLiquidHandler
     pylabrobot.liquid_handling.backends.hamilton.STAR
+    pylabrobot.liquid_handling.backends.opentrons_backend.OpentronsBackend
 
 Net
 ---

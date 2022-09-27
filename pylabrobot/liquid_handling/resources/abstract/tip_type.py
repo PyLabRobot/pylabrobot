@@ -16,6 +16,8 @@ TIP_TYPE_XL_CHANNEL = 5
 class TipType(object, metaclass=ABCMeta):
   """ TipType class
 
+  TODO: there is some Hamilton specific stuff here, should be moved to Hamilton specific code.
+
   Attributes:
     has_filter: whether the tip type has a filter
     total_tip_length: total length of the tip, in in mm
@@ -42,6 +44,7 @@ class TipType(object, metaclass=ABCMeta):
     self.pick_up_method = pick_up_method
 
     fitting_depth = {
+      None: 0,
       1: 8,
       2: 8,
       3: 8,

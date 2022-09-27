@@ -9,8 +9,9 @@ from pylabrobot.liquid_handling.resources import (
   Cos_96_EZWash,
   Coordinate,
   PlateReader,
-  Hotel
+  Hotel,
 )
+from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
 from pylabrobot.liquid_handling.resources.ml_star import STF_L
 
 from .STAR import STAR
@@ -132,16 +133,16 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def setUp(self):
     # pylint: disable=invalid-name
     self.mockSTAR = STARCommandCatcher()
-    self.lh = LiquidHandler(self.mockSTAR)
+    self.lh = LiquidHandler(self.mockSTAR, deck=STARLetDeck())
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[1] = STF_L(name="tips_01")
-    self.lh.assign_resource(self.tip_car, rails=1)
+    self.lh.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = Cos_96_EZWash(name="plate_01", with_lid=True)
     self.plt_car[1] = Cos_96_EZWash(name="plate_02", with_lid=True)
-    self.lh.assign_resource(self.plt_car, rails=9)
+    self.lh.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.maxDiff = None
 
@@ -352,8 +353,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_iswap_plate_reader(self):
     plate_reader = PlateReader(name="plate_reader")
-    self.lh.assign_resource(plate_reader, location=Coordinate(979.5, 285.2-63, 200 - 100),
-      replace=True)
+    self.lh.deck.assign_child_resource(plate_reader,
+      location=Coordinate(979.5, 285.2-63, 200 - 100))
 
     self.lh.move_plate(self.plt_car[0], plate_reader, pickup_distance_from_top=12.2,
       get_open_gripper_position=1320, get_grip_direction=1,
@@ -379,7 +380,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=0)
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
-    self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100))
+    self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100))
 
     get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
     put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"

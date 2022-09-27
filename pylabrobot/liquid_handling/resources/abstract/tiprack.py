@@ -13,7 +13,7 @@ class Tip(Resource):
   """ A single Tip resource. """
 
   def __init__(self, name: str, size_x: float, size_y: float, tip_type: TipType,
-    location: Coordinate = ..., category: str = "tip"):
+    location: Coordinate = None, category: str = "tip"):
     super().__init__(name, size_x=size_y, size_y=size_x, size_z=tip_type.tip_length,
       location=location, category=category)
     self.tip_type = tip_type
@@ -45,7 +45,7 @@ class TipRack(ItemizedResource[Tip], metaclass=ABCMeta):
     tip_type: TipType,
     items: List[List[Tip]] = None,
     location: Coordinate = Coordinate(None, None, None),
-    category: str = "tips",
+    category: str = "tip_rack",
   ):
     super().__init__(name, size_x, size_y, size_z, location=location,
                      category=category, items=items)
