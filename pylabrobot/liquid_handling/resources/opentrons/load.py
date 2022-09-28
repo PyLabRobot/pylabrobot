@@ -2,8 +2,11 @@ import math
 import json
 from typing import Union
 
-import opentrons_shared_data
-import opentrons_shared_data.labware
+try:
+  import opentrons_shared_data.labware
+  USE_OT = True
+except ImportError:
+  USE_OT = False
 
 from pylabrobot.liquid_handling.resources import Coordinate, Plate, TipRack, Well, Tip, TipType
 
@@ -14,6 +17,10 @@ class UnknownResourceType(Exception):
 
 def ot_definition_to_resource(data: dict, name: str) -> Union[Plate, TipRack]:
   """ Convert an Opentrons definition file to a PyLabRobot resource file. """
+
+  if not USE_OT:
+    raise ImportError("opentrons_shared_data is not installed. "
+                      "run `pip install opentrons_shared_data`")
 
   display_category = data["metadata"]["displayCategory"]
 
