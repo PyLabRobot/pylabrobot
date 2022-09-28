@@ -68,7 +68,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     for row in items:
       for item in row:
-        assert not item.name.startswith(self.name)
         item.name = f"{self.name}_{item.name}"
         self.assign_child_resource(item)
 
