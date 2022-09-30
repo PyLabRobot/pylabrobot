@@ -119,6 +119,22 @@ class WebSocketBackend(LiquidHandlerBackend):
     data = dict(event=event, id=id_, version=STANDARD_FORM_JSON_VERSION, **kwargs)
     return json.dumps(data), id_
 
+  def has_connection(self) -> bool:
+    """ Return `True` if a websocket connection has been established. """
+    # Since the websocket connection is saved in self.websocket, we can just check if it is `None`.
+    return self.websocket is not None
+
+  def wait_for_connection(self):
+    """ Wait for a websocket connection to be established.
+
+    This method will block until a websocket connection is established. It is not required to wait,
+    since :meth:`~WebSocketBackend.send_event` automatically save messages until a connection is
+    established, but only if its `wait_for_response` is `False`.
+    """
+
+    while not self.has_connection():
+      time.sleep(0.1)
+
   def send_event(
     self,
     event: str,
@@ -146,10 +162,10 @@ class WebSocketBackend(LiquidHandlerBackend):
     self._sent_messages.append(data)
 
     # Run and save if the websocket connection has been established, otherwise just save.
-    if self.websocket is None and wait_for_response:
+    if wait_for_response and not self.has_connection():
       raise ValueError("Cannot wait for response when no websocket connection is established.")
 
-    if self.websocket is not None:
+    if self.has_connection():
       asyncio.run_coroutine_threadsafe(self.websocket.send(data), self.loop)
 
       if wait_for_response:
