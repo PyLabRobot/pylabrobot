@@ -684,7 +684,7 @@ function loadSettings() {
     // Override config with config from localStorage.
     // This makes any new keys will be added to the config.
     for (let key in configFromLS) {
-      config[key] = Number(configFromLS[key]); // FIXME: this is not good style
+      config[key] = parseInt(configFromLS[key]); // FIXME: this is not good style.
     }
   }
 
@@ -702,7 +702,7 @@ function saveSettings(e) {
   for (var c in config) {
     var input = document.querySelector(`input[name="${c}"]`);
     if (input) {
-      config[c] = input.value;
+      config[c] = parseInt(input.value); // FIXME: this is not good style, what if value is not int?
     }
   }
 
