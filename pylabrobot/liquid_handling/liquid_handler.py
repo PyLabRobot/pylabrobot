@@ -1,13 +1,11 @@
 """ Defines LiquidHandler class, the coordinator for liquid handling operations. """
-
-from collections.abc import Iterable
 import functools
 import inspect
 import json
 import logging
 import numbers
 import time
-from typing import Union, Optional, List, Callable
+from typing import Union, Optional, List, Callable, Iterable
 
 import pylabrobot.utils.file_parsing as file_parser
 from pylabrobot.liquid_handling.resources.abstract import Deck
