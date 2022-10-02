@@ -44,6 +44,26 @@ except ImportError:
   USE_USB = False
 
 
+def need_iswap_parked(method: Callable):
+  """Ensure that the iSWAP is in parked position before running command.
+
+  If the iSWAP is not parked, it get's parked before running the command.
+  """
+
+  @functools.wraps(method)
+  def wrapper(self, *args, **kwargs):
+    if self.iswap_parked:
+      result = method(self, *args, **kwargs)
+      self.iswap_parked = False
+    else:
+      self.park_iswap()
+      self.iswap_parked = True
+      result = method(self, *args, **kwargs)
+      self.iswap_parked = False
+
+    return result
+  return wrapper
+
 class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
@@ -391,6 +411,14 @@ class STAR(HamiltonLiquidHandler):
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
+  @property
+  def iswap_parked(self):
+    return self._iswap_parked
+
+  @iswap_parked.setter
+  def iswap_parked(self, parked: bool):
+    self._iswap_parked = parked
+
   def setup(self):
     """ setup
 
@@ -471,27 +499,6 @@ class STAR(HamiltonLiquidHandler):
     logging.warning("Closing connection to USB device.")
     usb.util.dispose_resources(self.dev)
     self.dev = None
-
-
-  def need_iswap_parked(self, func: Callable):
-    """Ensure that the iSWAP is in parked position before running command.
-
-    If the iSWAP is not parked, it get's parked before running the command.
-    """
-
-    @functools.wraps(func)
-    def wrapper(self, *args, **kwargs):
-      if self._iswap_parked:
-        result = func(*args, **kwargs)
-        self._iswap_parked = False
-      else:
-        self.park_iswap()
-        self._iswap_parked = True
-        result = func(*args, **kwargs)
-        self._iswap_parked = False
-
-      return result
-    return wrapper
 
   # ============== Tip Types ==============
 
@@ -598,6 +605,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self.get_or_assign_tip_type_index(tip_types.pop())
 
+  @need_iswap_parked
   def pickup_tips(
     self,
     *channels: List[Optional[Tip]],
@@ -624,6 +632,7 @@ class STAR(HamiltonLiquidHandler):
       **params
     )
 
+  @need_iswap_parked
   def discard_tips(
     self,
     *channels: List[Optional[Tip]],
@@ -651,6 +660,7 @@ class STAR(HamiltonLiquidHandler):
       **params
     )
 
+  @need_iswap_parked
   def aspirate(
     self,
     *channels: Aspiration,
@@ -751,6 +761,7 @@ class STAR(HamiltonLiquidHandler):
       **cmd_kwargs,
     )
 
+  @need_iswap_parked
   def dispense(
     self,
     *channels: Dispense,
@@ -846,6 +857,7 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
+  @need_iswap_parked
   def pickup_tips96(self, resource: TipRack, **backend_kwargs):
     ttti = self.get_or_assign_tip_type_index(resource.tip_type)
     position = resource.get_item("A1").get_absolute_location()
@@ -865,6 +877,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self.pick_up_tips_core96(**cmd_kwargs)
 
+  @need_iswap_parked
   def discard_tips96(self, resource: Resource, **backend_kwargs):
     position = resource.get_item("A1").get_absolute_location()
 
@@ -881,6 +894,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self.discard_tips_core96(**cmd_kwargs)
 
+  @need_iswap_parked
   def aspirate96(
     self,
     resource: Resource,
@@ -954,6 +968,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self.aspirate_core_96(**cmd_kwargs)
 
+  @need_iswap_parked
   def dispense96(
     self,
     resource: Resource,
