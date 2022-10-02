@@ -1,7 +1,6 @@
 """ Tests for the simulation backend. """
 
 import json
-import time
 import unittest
 from typing import List
 
@@ -28,17 +27,16 @@ class WebSocketBackendSetupStopTests(unittest.TestCase):
     """ Test that the thread is started and stopped correctly. """
 
     backend = WebSocketBackend()
-    backend.setup()
-    time.sleep(2)
-    self.assertIsNotNone(backend.loop)
-    backend.stop()
-    self.assertIsNone(backend.websocket)
 
-    backend.setup()
-    time.sleep(2)
-    self.assertIsNotNone(backend.loop)
-    backend.stop()
-    self.assertIsNone(backend.websocket)
+    def setup_stop_single():
+      backend.setup()
+      self.assertIsNotNone(backend.loop)
+      backend.stop()
+      self.assertIsNone(backend.websocket)
+
+    # setup and stop twice to ensure that everything is recycled correctly
+    setup_stop_single()
+    setup_stop_single()
 
 
 class WebSocketBackendServerTests(unittest.TestCase):
