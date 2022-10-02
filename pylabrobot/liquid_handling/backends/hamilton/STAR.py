@@ -44,26 +44,6 @@ except ImportError:
   USE_USB = False
 
 
-def need_iswap_parked(method: Callable):
-  """Ensure that the iSWAP is in parked position before running command.
-
-  If the iSWAP is not parked, it get's parked before running the command.
-  """
-
-  @functools.wraps(method)
-  def wrapper(self, *args, **kwargs):
-    if self.iswap_parked:
-      result = method(self, *args, **kwargs)
-      self.iswap_parked = False
-    else:
-      self.park_iswap()
-      self.iswap_parked = True
-      result = method(self, *args, **kwargs)
-      self.iswap_parked = False
-
-    return result
-  return wrapper
-
 class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
@@ -408,16 +388,29 @@ class STAR(HamiltonLiquidHandler):
     self.num_channels = num_channels
     self._iswap_parked: bool = False
 
+    @property
+    def iswap_parked(self)->bool:
+      return self._iswap_parked
+
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
-  @property
-  def iswap_parked(self):
-    return self._iswap_parked
+  def need_iswap_parked(method: Callable): # pylint: disable=no-self-argument
+    """Ensure that the iSWAP is in parked position before running command.
 
-  @iswap_parked.setter
-  def iswap_parked(self, parked: bool):
-    self._iswap_parked = parked
+    If the iSWAP is not parked, it get's parked before running the command.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+      if self.iswap_parked:
+        result = method(self, *args, **kwargs) # pylint: disable=not-callable
+      else:
+        self.park_iswap()
+        result = method(self, *args, **kwargs) # pylint: disable=not-callable
+
+      return result
+    return wrapper
 
   def setup(self):
     """ setup
@@ -4091,12 +4084,16 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
 
-    return self.send_command(
+    command_output = self.send_command(
       module="C0",
       command="PG",
       fmt="",
       th=minimum_traverse_height_at_beginning_of_a_command
     )
+
+    # Once the command has completed successfuly, set _iswap_parked to True
+    self._iswap_parked = True
+    return command_output
 
   def get_plate(
     self,
@@ -4163,7 +4160,7 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
     utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
-    return self.send_command(
+    command_output = self.send_command(
       module="C0",
       command="PP",
       fmt="",
@@ -4184,6 +4181,10 @@ class STAR(HamiltonLiquidHandler):
       # xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}",
       gc=fold_up_sequence_at_the_end_of_process,
     )
+
+    # Once the command has completed successfully, set _iswap_parked to false
+    self._iswap_parked = False
+    return command_output
 
   def put_plate(
     self,
@@ -4241,7 +4242,7 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
     utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
-    return self.send_command(
+    command_output = self.send_command(
       module="C0",
       command="PR",
       fmt="",
@@ -4258,6 +4259,10 @@ class STAR(HamiltonLiquidHandler):
       ga=collision_control_level,
       # xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
     )
+
+    # Once the command has completed successfully, set _iswap_parked to false
+    self._iswap_parked = False
+    return command_output
 
   def move_plate_to_position(
     self,
@@ -4305,7 +4310,7 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
     utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
-    return self.send_command(
+    command_output = self.send_command(
       module="C0",
       command="PM",
       xs=x_position,
@@ -4319,6 +4324,9 @@ class STAR(HamiltonLiquidHandler):
       ga=collision_control_level,
       xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
     )
+    # Once the command has completed successfuly, set _iswap_parked to false
+    self._iswap_parked = False
+    return command_output
 
   def collapse_gripper_arm(
     self,
