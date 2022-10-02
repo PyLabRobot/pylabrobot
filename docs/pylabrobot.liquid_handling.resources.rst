@@ -3,10 +3,7 @@
 pylabrobot.liquid_handling.resources package
 ============================================
 
-Resources represent on-deck liquid handling equipment, including plate and plate carriers and tips
-and carriers. Many resources defined in VENUS are also defined in this package. In addition,
-using the abstract base classes defined in :ref:`pylabrobot.liquid_handling.resources.abstract <pylabrobot.liquid_handling.resources:abstract>`,
-you can define your own resources.
+Resources represent on-deck liquid handling equipment, including plate and plate carriers and tips and carriers. Many resources defined in VENUS are also defined in this package. In addition, by instantiating classes defined in :ref:`pylabrobot.liquid_handling.resources.abstract <pylabrobot.liquid_handling.resources:abstract>` from scratch, you can define your own resources.
 
 Abstract
 --------
@@ -68,3 +65,29 @@ Corning Costar
   :recursive:
 
     pylabrobot.liquid_handling.resources.corning_costar.plates
+
+
+Hamilton
+--------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.liquid_handling.resources.hamilton
+    pylabrobot.liquid_handling.resources.hamilton.STARLetDeck
+
+
+Opentrons
+---------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.liquid_handling.resources.opentrons
+    pylabrobot.liquid_handling.resources.opentrons.load
+    pylabrobot.liquid_handling.resources.opentrons.tip_racks
+    pylabrobot.liquid_handling.resources.opentrons.plates
