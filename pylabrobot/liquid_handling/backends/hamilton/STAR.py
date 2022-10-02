@@ -6,10 +6,11 @@ This file defines interfaces for all supported Hamilton liquid handling robots.
 from abc import ABCMeta, abstractmethod
 import datetime
 import enum
+import functools
 import logging
 import re
 import typing
-from typing import Union, List, Optional
+from typing import Callable, Union, List, Optional
 
 from pylabrobot import utils
 from pylabrobot.liquid_handling.resources import (
@@ -385,6 +386,7 @@ class STAR(HamiltonLiquidHandler):
     self.dev: Optional[usb.core.Device] = None
     self._tip_types: dict[str, int] = {}
     self.num_channels = num_channels
+    self._iswap_parked: bool = False
 
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
@@ -461,6 +463,7 @@ class STAR(HamiltonLiquidHandler):
       self.initialize_iswap()
 
     self.park_iswap()
+    self._iswap_parked = True
 
   def stop(self):
     if self.dev is None:
@@ -468,6 +471,27 @@ class STAR(HamiltonLiquidHandler):
     logging.warning("Closing connection to USB device.")
     usb.util.dispose_resources(self.dev)
     self.dev = None
+
+
+  def need_iswap_parked(self, func: Callable):
+    """Ensure that the iSWAP is in parked position before running command.
+
+    If the iSWAP is not parked, it get's parked before running the command.
+    """
+
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+      if self._iswap_parked:
+        result = func(*args, **kwargs)
+        self._iswap_parked = False
+      else:
+        self.park_iswap()
+        self._iswap_parked = True
+        result = func(*args, **kwargs)
+        self._iswap_parked = False
+
+      return result
+    return wrapper
 
   # ============== Tip Types ==============
 
