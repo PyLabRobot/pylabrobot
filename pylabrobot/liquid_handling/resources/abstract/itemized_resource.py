@@ -1,6 +1,10 @@
 
 from abc import ABCMeta
-from typing import Literal, Union, TypeVar, Generic, List, Optional, Generator
+from typing import Union, TypeVar, Generic, List, Optional, Generator
+try:
+  from typing import Literal
+except ImportError:
+  from typing_extensions import Literal
 
 import pylabrobot.utils
 

@@ -444,4 +444,4 @@ overgeneral-exceptions=StandardError,
 
 
 
-good-names=maxDiff, __version__, _, VENUS, STAR, STAR_tests
+good-names=maxDiff, __version__, _, VENUS, STAR, STAR_tests, asyncSetUp, asyncTearDown

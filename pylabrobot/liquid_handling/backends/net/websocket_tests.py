@@ -17,6 +17,7 @@ from pylabrobot.liquid_handling.resources import (
   STF_L
 )
 from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+from pylabrobot.utils.testing import async_test
 
 
 class WebSocketBackendSetupStopTests(unittest.TestCase):
@@ -39,7 +40,8 @@ class WebSocketBackendSetupStopTests(unittest.TestCase):
     backend.stop()
     self.assertIsNone(backend.websocket)
 
-class WebSocketBackendServerTests(unittest.IsolatedAsyncioTestCase):
+
+class WebSocketBackendServerTests(unittest.TestCase):
   """ Tests for servers (ws/fs). """
 
   def setUp(self):
@@ -47,9 +49,10 @@ class WebSocketBackendServerTests(unittest.IsolatedAsyncioTestCase):
     self.backend = WebSocketBackend()
     self.backend.setup()
 
-  async def asyncSetUp(self):
-    await super().asyncSetUp()
+    self.asyncSetUp()
 
+  @async_test
+  async def asyncSetUp(self):
     ws_port = self.backend.ws_port # port may change if port is already in use
     self.uri = f"ws://localhost:{ws_port}"
     self.client = await websockets.connect(self.uri)
@@ -58,15 +61,19 @@ class WebSocketBackendServerTests(unittest.IsolatedAsyncioTestCase):
     super().tearDown()
     self.backend.stop()
 
+    self.asyncTearDown()
+
+  @async_test
   async def asyncTearDown(self):
-    await super().asyncTearDown()
     await self.client.close()
 
+  @async_test
   async def test_connect(self):
     await self.client.send('{"event": "ready"}')
     response = await self.client.recv()
     self.assertEqual(response, '{"event": "ready"}')
 
+  @async_test
   async def test_event_sent(self):
     await self.client.send('{"event": "ready"}')
     response = await self.client.recv()
