@@ -13,6 +13,7 @@ from pylabrobot.liquid_handling.backends.net.websocket_tests import (
   WebSocketBackendEventCatcher
 )
 from pylabrobot.liquid_handling.backends.simulation import SimulatorBackend
+from pylabrobot.utils.testing import async_test
 
 
 class SimulatorBackendSetupStopTests(unittest.TestCase):
@@ -35,7 +36,8 @@ class SimulatorBackendSetupStopTests(unittest.TestCase):
     backend.stop()
     self.assertIsNone(backend.websocket)
 
-class SimulatorBackendServerTests(unittest.IsolatedAsyncioTestCase):
+
+class SimulatorBackendServerTests(unittest.TestCase):
   """ Tests for servers (ws/fs). """
 
   def setUp(self):
@@ -43,9 +45,10 @@ class SimulatorBackendServerTests(unittest.IsolatedAsyncioTestCase):
     self.backend = SimulatorBackend(open_browser=False)
     self.backend.setup()
 
-  async def asyncSetUp(self):
-    await super().asyncSetUp()
+    self.asyncSetUp()
 
+  @async_test
+  async def asyncSetUp(self):
     ws_port = self.backend.ws_port # port may change if port is already in use
     self.uri = f"ws://localhost:{ws_port}"
     self.client = await websockets.connect(self.uri)
@@ -54,8 +57,10 @@ class SimulatorBackendServerTests(unittest.IsolatedAsyncioTestCase):
     super().tearDown()
     self.backend.stop()
 
+    self.asyncTearDown()
+
+  @async_test
   async def asyncTearDown(self):
-    await super().asyncTearDown()
     await self.client.close()
 
   def test_get_index_html(self):
@@ -64,11 +69,13 @@ class SimulatorBackendServerTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(r.status_code, 200)
     self.assertEqual(r.headers["Content-Type"], "text/html")
 
+  @async_test
   async def test_connect(self):
     await self.client.send('{"event": "ready"}')
     response = await self.client.recv()
     self.assertEqual(response, '{"event": "ready"}')
 
+  @async_test
   async def test_event_sent(self):
     await self.client.send('{"event": "ready"}')
     response = await self.client.recv()
