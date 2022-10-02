@@ -388,12 +388,12 @@ class STAR(HamiltonLiquidHandler):
     self.num_channels = num_channels
     self._iswap_parked: bool = False
 
-    @property
-    def iswap_parked(self)->bool:
-      return self._iswap_parked
-
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
+
+  @property
+  def iswap_parked(self)->bool:
+    return self._iswap_parked
 
   def need_iswap_parked(method: Callable): # pylint: disable=no-self-argument
     """Ensure that the iSWAP is in parked position before running command.
