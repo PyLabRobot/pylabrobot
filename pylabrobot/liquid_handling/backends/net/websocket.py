@@ -1,5 +1,4 @@
 import asyncio
-from contextlib import suppress
 import json
 import logging
 import threading
@@ -209,6 +208,7 @@ class WebSocketBackend(LiquidHandlerBackend):
           async with websockets.serve(self._socket_handler, self.ws_host, self.ws_port):
             print(f"Simulation server started at http://{self.ws_host}:{self.ws_port}")
             # logger.info("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
+            lock.release()
             await self.stop_
             break
         except asyncio.CancelledError:
@@ -217,12 +217,18 @@ class WebSocketBackend(LiquidHandlerBackend):
           # If the port is in use, try the next port.
           self.ws_port += 1
 
-    loop = asyncio.new_event_loop()
-    self.t = threading.Thread(target=loop.run_forever)
-    self.t.start()
-    self.loop = loop
+    def start_loop():
+      self.loop.run_until_complete(run_server())
 
-    asyncio.run_coroutine_threadsafe(run_server(), self.loop)
+    # Acquire a lock to prevent setup from returning until the server is running.
+    lock = threading.Lock()
+    lock.acquire() # pylint: disable=consider-using-with
+    self.loop = asyncio.new_event_loop()
+    self.t = threading.Thread(target=start_loop)
+    self.t.start()
+
+    while lock.locked():
+      time.sleep(0.001)
 
   def stop(self):
     """ Stop the simulation. """
@@ -235,28 +241,8 @@ class WebSocketBackend(LiquidHandlerBackend):
     # send stop event to the browser
     self.send_event("stop", wait_for_response=False)
 
-    # stop server, graceful
-    self.stop_.set_result("done")
-
-    async def cancel_handler():
-      for task in asyncio.all_tasks(loop=self.loop):
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-          await task
-
-      self.loop.stop()
-      lock.release()
-
-    # Lock to prevent the loop from exiting while we're waiting for the cancel to complete.
-    lock = threading.Lock()
-    lock.acquire() # pylint: disable=consider-using-with
-
-    # Cancel all pending tasks, wait for them to complete, and then stop the loop.
-    asyncio.run_coroutine_threadsafe(cancel_handler(), loop=self.loop)
-
-    # While the loop is still running, wait for it to stop.
-    while lock.locked():
-      pass
+    # must be thread safe, because event loop is running in a separate thread
+    self.loop.call_soon_threadsafe(self.stop_.set_result, "done")
 
     # Clear all relevant attributes.
     self._sent_messages.clear()
