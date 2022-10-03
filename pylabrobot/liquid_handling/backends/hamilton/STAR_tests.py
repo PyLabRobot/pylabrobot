@@ -292,7 +292,6 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
 
   def test_multi_channel_dispense(self):
-    print([x.get_absolute_location() for x in self.plt_car[0].resource["A1:B1"]])
     self.lh.dispense(self.plt_car[0].resource["A1:B1"], vols=100)
 
     self._assert_command_sent_once(
