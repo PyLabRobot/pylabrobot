@@ -213,7 +213,7 @@ class SimulatorBackend(WebSocketBackend):
     self.send_event(event="edit_tips", pattern=serialized_pattern,
       wait_for_response=True)
 
-  def fill_tips(self, resource: TipRack):
+  def fill_tip_rack(self, resource: TipRack):
     """ Completely fill a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource
     with tips. (**simulator only**).
 

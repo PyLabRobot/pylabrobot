@@ -9,7 +9,7 @@ from .carrier import Carrier, TipCarrier
 from .coordinate import Coordinate
 from .deck import Deck
 from .resource import Resource
-from .tiprack import TipRack, Tip
+from .tip_rack import TipRack, Tip
 from .tip_type import TipType, TIP_TYPE_STANDARD_VOLUME
 
 
