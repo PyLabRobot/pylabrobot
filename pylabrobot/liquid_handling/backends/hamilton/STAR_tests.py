@@ -218,13 +218,13 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     pass
 
   def test_tip_pickup_01(self):
-    self.lh.pickup_tips(self.tip_car[1].resource["A1", "B1"])
+    self.lh.pick_up_tips(self.tip_car[1].resource["A1", "B1"])
     self._assert_command_sent_once(
       "C0TPid0000xp01179 01179 00000&yp2418 2328 0000tm1 1 0&tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_56(self):
-    self.lh.pickup_tips([None] * 4 + self.tip_car[1].resource["E1", "F1"])
+    self.lh.pick_up_tips([None] * 4 + self.tip_car[1].resource["E1", "F1"])
     self._assert_command_sent_once(
       "C0TPid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
       "0000&tm0 0 0 0 1 1 0 &tt01tp2244tz2164th2450td0",
@@ -232,7 +232,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_tip_pickup_15(self):
     tips = self.tip_car[1].resource
-    self.lh.pickup_tips(tips["A1"] + [None] * 3 + tips["F1"])
+    self.lh.pick_up_tips(tips["A1"] + [None] * 3 + tips["F1"])
     self._assert_command_sent_once(
       "C0TPid0000xp01179 00000 00000 00000 01179 00000&yp2418 0000 0000 0000 1968 0000 "
       "&tm1 0 0 0 1 0&tt01tp2244tz2164th2450td0",
@@ -306,7 +306,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
 
   def test_core_96_tip_pickup(self):
-    self.lh.pickup_tips96("tips_01")
+    self.lh.pick_up_tips96("tips_01")
 
     self._assert_command_sent_once(
       "C0EPid0208xs01179xd0yh2418tt01wu0za2164zh2450ze2450",

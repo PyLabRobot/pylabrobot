@@ -571,7 +571,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self.get_or_assign_tip_type_index(tip_types.pop())
 
-  def pickup_tips(
+  def pick_up_tips(
     self,
     *channels: List[Optional[Tip]],
     **backend_kwargs
@@ -819,7 +819,7 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
-  def pickup_tips96(self, resource: TipRack, **backend_kwargs):
+  def pick_up_tips96(self, resource: TipRack, **backend_kwargs):
     ttti = self.get_or_assign_tip_type_index(resource.tip_type)
     position = resource.get_item("A1").get_absolute_location()
 

@@ -680,7 +680,7 @@ class HamiltonFirmwareError(HamiltonError):
 
   Example:
     >>> try:
-    ...   lh.pickup_tips([True, True, True])
+    ...   lh.pick_up_tips([True, True, True])
     ... except HamiltonError as e:
     ...   print(e)
     HamiltonFirmwareError({
@@ -689,7 +689,7 @@ class HamiltonFirmwareError(HamiltonError):
     })
 
     >>> try:
-    ...   lh.pickup_tips([True, False, True])
+    ...   lh.pick_up_tips([True, False, True])
     ... except HamiltonError as e:
     ...   if 'Pipetting Channel 1' in e:
     ...     print('Pipetting Channel 1 error: ', e['Pipetting Channel 1'], e.error_code)
