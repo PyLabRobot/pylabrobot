@@ -125,8 +125,8 @@ class SimulatorBackendCommandTests(WebSocketBackendCommandTests):
     self.backend.edit_tips(self.tip_car[0].resource, [[True]*12]*8)
     self.assert_event_sent_n("edit_tips", times=1)
 
-  def test_fill_tips(self):
-    self.backend.fill_tips(self.tip_car[0].resource)
+  def test_fill_tip_rack(self):
+    self.backend.fill_tip_rack(self.tip_car[0].resource)
     self.assert_event_sent_n("edit_tips", times=1)
 
   def test_clear_tips(self):

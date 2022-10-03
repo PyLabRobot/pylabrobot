@@ -8,7 +8,7 @@ from pylabrobot.liquid_handling.resources import (
   Lid,
   Tip,
 )
-from pylabrobot.liquid_handling.resources.abstract.tiprack import TipRack
+from pylabrobot.liquid_handling.resources.abstract.tip_rack import TipRack
 from pylabrobot.liquid_handling.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
