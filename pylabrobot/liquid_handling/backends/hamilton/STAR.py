@@ -31,15 +31,12 @@ from .errors import (
 )
 
 logger = logging.getLogger(__name__)
-logging.basicConfig()
-logger.setLevel(logging.INFO)
 
 try:
   import usb.core
   import usb.util
   USE_USB = True
 except ImportError:
-  logger.warning("Could not import pyusb, Hamilton interface will not be available.")
   USE_USB = False
 
 
