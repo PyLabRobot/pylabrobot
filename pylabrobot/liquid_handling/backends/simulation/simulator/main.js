@@ -31,10 +31,6 @@ const numRails = 30;
 
 var resources = {}; // name -> {info, resource, group, shape}
 
-const plateColor = "#2B2D42";
-const hasTipsColor = "#40CDA1";
-const noTipsColor = plateColor;
-
 // Initialize pipetting heads.
 var pipHead = []; // [{has_tip: bool, volume: float, tipMaxVolume: float}]
 for (var i = 0; i < 8; i++) {
@@ -73,13 +69,14 @@ function updateStatusLabel(status) {
 }
 
 const COLORS = {
-  tip_carrier: "#D80032",
-  carrier_site: "#00D2FF",
-  plate_carrier: "#D80032",
-  tips: plateColor,
-  tip: noTipsColor,
-  plate: plateColor,
+  tip_carrier: "#8D99AE",
+  carrier_site: "#5B6D8F",
+  plate_carrier: "#8D99AE",
+  tip_rack: "#2B2D42",
+  tip: "#40CDA1",
+  plate: "#2B2D42",
   well: "#AAFF32",
+  noTipsColor: "#2B2D42",
 };
 
 function min(a, b) {
@@ -93,13 +90,15 @@ function sleep(s) {
 
 function createShape(resource) {
   if (resource.category === "tip" || resource.category === "well") {
+    const strokeColor =
+      resource.category === "tip" ? COLORS["tip"] : colorForVolume(1, 1);
     return new Konva.Circle({
-      x: 0,
-      y: 0,
-      width: min(resource.size_x, resource.size_y),
-      height: min(resource.size_x, resource.size_y),
-      fill: noTipsColor,
-      stroke: hasTipsColor,
+      x: 1,
+      y: 1,
+      width: min(resource.size_x, resource.size_y) - 2,
+      height: min(resource.size_x, resource.size_y) - 2,
+      fill: COLORS["noTipsColor"],
+      stroke: strokeColor,
       strokeWidth: 1,
     });
   }
@@ -109,7 +108,7 @@ function createShape(resource) {
     width: resource.size_x,
     height: resource.size_y,
     fill: COLORS[resource.category],
-    stroke: hasTipsColor,
+    stroke: "black",
     strokeWidth: 1,
   });
 }
@@ -245,7 +244,7 @@ function pickUpTips(channels) {
       return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
     }
 
-    resource.shape.fill(noTipsColor);
+    resource.shape.fill(COLORS["noTipsColor"]);
     resource.info.has_tip = false;
     pipHead[i].has_tip = true;
     pipHead[i].tipMaxVolume = resource.info.maxVolume;
@@ -281,7 +280,7 @@ function discardTips(channels) {
       return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
     }
 
-    resource.shape.fill(hasTipsColor);
+    resource.shape.fill(COLORS["tip"]);
     resource.info.has_tip = true;
     pipHead[i].has_tip = false;
     pipHead[i].tipMaxVolume = undefined;
@@ -292,7 +291,9 @@ function discardTips(channels) {
 function editTips(pattern) {
   for (let i = 0; i < pattern.length; i++) {
     const { tip, has_one } = pattern[i];
-    resources[tip.name].shape.fill(has_one ? hasTipsColor : noTipsColor);
+    resources[tip.name].shape.fill(
+      has_one ? COLORS["tip"] : COLORS["noTipsColor"]
+    );
     resources[tip.name].info.has_tip = has_one;
   }
   return null;
@@ -386,7 +387,7 @@ function pickupTips96(resource) {
       const tip_name = resource.children[i * resource.num_items_x + j].name;
       const tip = resources[tip_name];
       tip.info.has_tip = false;
-      tip.shape.fill(noTipsColor);
+      tip.shape.fill(COLORS["noTipsColor"]);
       CoRe96Head[i][j].has_tip = true;
       CoRe96Head[i][j].tipMaxVolume = tip.info.maxVolume;
     }
@@ -421,7 +422,7 @@ function discardTips96(resource) {
       const tip_name = resource.children[i * resource.num_items_x + j].name;
       const tip = resources[tip_name];
       tip.info.has_tip = true;
-      tip.shape.fill(hasTipsColor);
+      tip.shape.fill(COLORS["tip"]);
       CoRe96Head[i][j].has_tip = false;
       CoRe96Head[i][j].tipMaxVolume = undefined;
     }
