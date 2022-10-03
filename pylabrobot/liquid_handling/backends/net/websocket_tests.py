@@ -157,8 +157,8 @@ class WebSocketBackendCommandTests(unittest.TestCase):
     self.assert_event_sent_n("resource_unassigned", times=1)
 
   def test_tip_pickup(self):
-    self.lh.pickup_tips(self.tip_car[0].resource["A1"])
-    self.assert_event_sent_n("pickup_tips", times=1)
+    self.lh.pick_up_tips(self.tip_car[0].resource["A1"])
+    self.assert_event_sent_n("pick_up_tips", times=1)
 
   def test_discard_tips(self):
     self.lh.discard_tips(self.tip_car[0].resource["A1"])
@@ -308,9 +308,9 @@ class WebSocketBackendCommandTests(unittest.TestCase):
       "version": "0.1.0",
     })
 
-  def test_pickup_tips96(self):
-    self.lh.pickup_tips96("tip_car")
-    self.assert_event_sent_n("pickup_tips96", times=1)
+  def test_pick_up_tips96(self):
+    self.lh.pick_up_tips96("tip_car")
+    self.assert_event_sent_n("pick_up_tips96", times=1)
 
   def test_discard_tips96(self):
     self.lh.discard_tips96("tip_car")

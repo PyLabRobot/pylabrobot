@@ -216,7 +216,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     return None
 
-  def pickup_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
+  def pick_up_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
     """ Pick up tips from the specified resource. """
 
     assert len(channels) == 1, "only one channel supported for now"
@@ -315,7 +315,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.lh.dispense(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=flow_rate)
 
-  def pickup_tips96(self, resource: Resource, **backend_kwargs):
+  def pick_up_tips96(self, resource: Resource, **backend_kwargs):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
   def discard_tips96(self, resource: Resource, **backend_kwargs):

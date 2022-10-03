@@ -253,11 +253,10 @@ class LiquidHandler:
         klass = getattr(resources_module, class_name)
         resource = klass(name=name)
       else:
-        # TODO: replace with real template.
-        # logger.warning(
-          # "Resource with classname %s not found. Please file an issue at "
-          # "https://github.com/pyhamilton/pyhamilton/issues/new?assignees=&"
-          # "labels=&template=bug_report.md&title=Class\%20%s\%20not\%20found", class_name)
+        logger.warning(
+          "Resource with classname %s not found. Please file an issue at "
+          "https://github.com/pylabrobot/pylabrobot/issues/new?assignees=&labels="
+          "&title=Deserialization%%3A%%20Class%%20%s%%20not%%20found", class_name, class_name)
         continue
 
       # get location props
@@ -398,7 +397,7 @@ class LiquidHandler:
     return tips
 
   @need_setup_finished
-  def pickup_tips(
+  def pick_up_tips(
     self,
     *channels: Union[Tip, List[Tip]],
     **backend_kwargs
@@ -408,11 +407,11 @@ class LiquidHandler:
     Exampels:
       Pick up all tips in the first column.
 
-      >>> lh.pickup_tips(tips_resource["A1":"H1"])
+      >>> lh.pick_up_tips(tips_resource["A1":"H1"])
 
       Pick up tips on odd numbered rows.
 
-      >>> lh.pickup_tips(channels=[
+      >>> lh.pick_up_tips(channels=[
       ...   "A1",
       ...   None,
       ...   "C1",
@@ -425,11 +424,11 @@ class LiquidHandler:
 
       Pick up tips from the diagonal:
 
-      >>> lh.pickup_tips(tips_resource["A1":"H8"])
+      >>> lh.pick_up_tips(tips_resource["A1":"H8"])
 
       Pick up tips from different tip resources:
 
-      >>> lh.pickup_tips(tips_resource1["A1"], tips_resource2["B2"], tips_resource3["C3"])
+      >>> lh.pick_up_tips(tips_resource1["A1"], tips_resource2["B2"], tips_resource3["C3"])
 
     Args:
       channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
@@ -451,7 +450,7 @@ class LiquidHandler:
       raise ValueError("Must specify at least one channel to pick up tips with.")
     self._assert_resources_exist(channels)
 
-    self.backend.pickup_tips(*channels, **backend_kwargs)
+    self.backend.pick_up_tips(*channels, **backend_kwargs)
 
     # Save the tips that are currently picked up.
     self._picked_up_tips = channels
@@ -494,7 +493,7 @@ class LiquidHandler:
     Examples:
       Return the tips on the head to the tip rack where they were picked up:
 
-      >>> lh.pickup_tips("plate_01")
+      >>> lh.pick_up_tips("plate_01")
       >>> lh.return_tips()
 
     Raises:
@@ -629,17 +628,17 @@ class LiquidHandler:
     if end_delay > 0:
       time.sleep(end_delay)
 
-  def pickup_tips96(self, resource: Union[str, Resource], **backend_kwargs):
+  def pick_up_tips96(self, resource: Union[str, Resource], **backend_kwargs):
     """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
 
     Examples:
       Pick up tips from an entire 96 tips plate:
 
-      >>> lh.pickup_tips96("plate_01")
+      >>> lh.pick_up_tips96("plate_01")
 
       Pick up tips from the left half of a 96 well plate:
 
-      >>> lh.pickup_tips96("plate_01")
+      >>> lh.pick_up_tips96("plate_01")
 
     Args:
       resource: Resource name or resource object.
@@ -652,7 +651,7 @@ class LiquidHandler:
     if not resource:
       raise ValueError(f"Resource with name {resource} not found.")
 
-    self.backend.pickup_tips96(resource, **backend_kwargs)
+    self.backend.pick_up_tips96(resource, **backend_kwargs)
 
     # Save the tips as picked up.
     self._picked_up_tips96 = resource
@@ -687,7 +686,7 @@ class LiquidHandler:
     Examples:
       Return the tips on the 96 head to the tip rack where they were picked up:
 
-      >>> lh.pickup_tips96("plate_01")
+      >>> lh.pick_up_tips96("plate_01")
       >>> lh.return_tips96()
 
     Raises:

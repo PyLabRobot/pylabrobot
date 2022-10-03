@@ -88,7 +88,7 @@ class OpentronsBackendCommandTests(unittest.TestCase):
       self.assertEqual(pipette_id, "left-pipette-id")
     mock_pick_up_tip.side_effect = assert_parameters
 
-    self.lh.pickup_tips(self.tip_rack["A1"])
+    self.lh.pick_up_tips(self.tip_rack["A1"])
 
   @patch("ot_api.lh.drop_tip")
   def test_tip_discard(self, mock_drop_tip):

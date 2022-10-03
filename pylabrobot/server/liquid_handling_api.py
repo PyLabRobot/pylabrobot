@@ -60,7 +60,7 @@ def pick_up_tips():
   if not lh.deck.has_resource(form.resource.data):
     return jsonify({"error": "resource not found"}), 404
 
-  lh.pickup_tips(
+  lh.pick_up_tips(
     form.resource.data,
     *data["channels"],
     **data.get("kwargs", {})

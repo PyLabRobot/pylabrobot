@@ -66,7 +66,7 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def pickup_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
+  def pick_up_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
     """ Pick up tips from the specified resource. """
     pass
 
@@ -86,7 +86,7 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def pickup_tips96(self, resource: Resource, **backend_kwargs):
+  def pick_up_tips96(self, resource: Resource, **backend_kwargs):
     """ Pick up tips from the specified resource using CoRe 96. """
     pass
 
