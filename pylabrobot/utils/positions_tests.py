@@ -40,6 +40,12 @@ class TestPositions(unittest.TestCase):
     self.assertEqual(string_to_pattern("A1:C1"),
       [[True] + [False] * 11]*3 + [[False]*12]*5)
 
+  def test_num_rows(self):
+    self.assertEqual(string_to_index("A2", num_rows=2), 2)
+
+    with self.assertRaises(AssertionError):
+      string_to_index("C1", num_rows=2)
+
 
 if __name__ == "__main__":
   unittest.main()

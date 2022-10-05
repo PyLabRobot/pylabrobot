@@ -111,16 +111,18 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     if isinstance(identifier, str):
       if ":" in identifier:
-        identifier = pylabrobot.utils.string_to_indices(identifier)
+        identifier = pylabrobot.utils.string_to_indices(identifier, num_rows=self.num_items_y)
       else:
-        identifier = [pylabrobot.utils.string_to_index(identifier)]
+        identifier = [pylabrobot.utils.string_to_index(identifier, num_rows=self.num_items_y)]
     elif isinstance(identifier, int):
       identifier = [identifier]
     elif isinstance(identifier, slice):
       if isinstance(identifier.start, str):
-        identifier.start = pylabrobot.utils.string_to_index(identifier.start)
+        identifier.start = \
+          pylabrobot.utils.string_to_index(identifier.start, num_rows=self.num_items_y)
       if isinstance(identifier.stop, str):
-        identifier.stop = pylabrobot.utils.string_to_index(identifier.stop)
+        identifier.stop = \
+          pylabrobot.utils.string_to_index(identifier.stop, num_rows=self.num_items_y)
       identifier = range(identifier.start, identifier.stop)
 
     return self.get_items(identifier)
@@ -182,7 +184,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """
 
     if isinstance(identifier, str):
-      identifier = pylabrobot.utils.string_to_indices(identifier)
+      identifier = pylabrobot.utils.string_to_indices(identifier, num_rows=self.num_items_y)
     elif identifier is None:
       return [None]
 
