@@ -7,6 +7,7 @@ import textwrap
 import os
 import unittest
 import unittest.mock
+from typing import Optional
 
 from pylabrobot.liquid_handling.resources.abstract import Tip, Well, create_equally_spaced
 
@@ -26,6 +27,7 @@ from .resources import (
 )
 from .resources.hamilton import STARLetDeck
 from .resources.ml_star import STF_L, HTF_L
+from .standard import Aspiration, Dispense
 
 
 class TestLiquidHandlerLayout(unittest.TestCase):
@@ -336,15 +338,105 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
 class TestLiquidHandlerCommands(unittest.TestCase):
   def setUp(self):
-    self.lh = LiquidHandler(backends.Mock(), deck=STARLetDeck())
+    self.maxDiff = None
+
+    self.lh = LiquidHandler(backends.SaverBackend(), deck=STARLetDeck())
+    self.tip_rack = STF_L(name="tip_rack")
+    self.plate = Cos_96_DW_1mL(name="plate")
+    self.lh.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    self.lh.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
+    self.lh.setup()
+
+  def get_first_command(self, command) -> Optional[dict]:
+    for sent_command in self.lh.backend.commands_received:
+      if sent_command["command"] == command:
+        return sent_command
+    return None
 
   def test_return_tips(self):
-    # TODO: figure out a way to test "composite" commands
-    pass
+    tips = self.tip_rack["A1"]
+    self.lh.pick_up_tips(tips)
+    self.lh.return_tips()
+
+    self.assertEqual(self.get_first_command("discard_tips"), {
+      "command": "discard_tips",
+      "args": (tips[0],),
+      "kwargs": {}})
+
+    with self.assertRaises(RuntimeError):
+      self.lh.return_tips()
 
   def test_return_tips96(self):
-    # TODO: figure out a way to test "composite" commands
-    pass
+    self.lh.pick_up_tips96(self.tip_rack)
+    self.lh.return_tips96()
+
+    self.assertEqual(self.get_first_command("discard_tips96"), {
+      "command": "discard_tips96",
+      "args": (self.tip_rack,),
+      "kwargs": {}})
+
+    with self.assertRaises(RuntimeError):
+      self.lh.return_tips()
+
+  def test_transfer(self):
+    # Simple transfer
+    self.lh.transfer(self.plate["A1"], self.plate["A2"], 10)
+    self.assertEqual(self.get_first_command("aspirate"), {
+      "command": "aspirate",
+      "args": (Aspiration(resource=self.plate.get_item("A1"), volume=10.0),),
+      "kwargs": {}})
+    self.assertEqual(self.get_first_command("dispense"), {
+      "command": "dispense",
+      "args": (Dispense(resource=self.plate.get_item("A2"), volume=10.0),),
+      "kwargs": {}})
+    self.lh.backend.clear()
+
+    # Transfer to multiple wells
+    self.lh.transfer(self.plate["A1"], self.plate["A1:H1"], source_vol=80)
+    self.assertEqual(self.get_first_command("aspirate"), {
+      "command": "aspirate",
+      "args": (Aspiration(resource=self.plate.get_item("A1"), volume=80.0),),
+      "kwargs": {}})
+    self.assertEqual(self.get_first_command("dispense"), {
+      "command": "dispense",
+      "args": tuple(Dispense(resource=well, volume=10.0) for well in self.plate["A1:H1"]),
+      "kwargs": {}})
+    self.lh.backend.clear()
+
+    # Transfer with ratios
+    self.lh.transfer(self.plate["A1"], self.plate["B1:C1"], source_vol=60, ratios=[2, 1])
+    self.assertEqual(self.get_first_command("aspirate"), {
+      "command": "aspirate",
+      "args": (Aspiration(resource=self.plate.get_item("A1"), volume=60.0),),
+      "kwargs": {}})
+    self.assertEqual(self.get_first_command("dispense"), {
+      "command": "dispense",
+      "args": (Dispense(resource=self.plate.get_item("B1"), volume=40.0),
+               Dispense(resource=self.plate.get_item("C1"), volume=20.0)),
+      "kwargs": {}})
+    self.lh.backend.clear()
+
+    # Transfer with target_vols
+    vols = [3, 1, 4, 1, 5, 9, 6, 2]
+    self.lh.transfer(self.plate["A1"], self.plate["A1:H1"], target_vols=vols)
+    self.assertEqual(self.get_first_command("aspirate"), {
+      "command": "aspirate",
+      "args": (Aspiration(resource=self.plate.get_item("A1"), volume=sum(vols)),),
+      "kwargs": {}})
+    self.assertEqual(self.get_first_command("dispense"), {
+      "command": "dispense",
+      "args":
+        tuple(Dispense(resource=well, volume=vol) for well, vol in zip(self.plate["A1:H1"], vols)),
+      "kwargs": {}})
+    self.lh.backend.clear()
+
+    # target_vols and source_vol specified
+    with self.assertRaises(TypeError):
+      self.lh.transfer(self.plate["A1"], self.plate["A1:H1"], source_vol=100, target_vols=vols)
+
+    # target_vols and ratios specified
+    with self.assertRaises(TypeError):
+      self.lh.transfer(self.plate["A1"], self.plate["A1:H1"], ratios=[1]*8, target_vols=vols)
 
 
 if __name__ == "__main__":
