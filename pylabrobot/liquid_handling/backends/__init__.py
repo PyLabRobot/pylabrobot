@@ -6,4 +6,5 @@ from .hamilton import STAR
 from .mock import Mock
 from .net import HTTPBackend, WebSocketBackend
 from .opentrons_backend import OpentronsBackend
+from .saver_backend import SaverBackend
 from .simulation import SimulatorBackend

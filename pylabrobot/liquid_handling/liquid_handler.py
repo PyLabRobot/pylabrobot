@@ -573,6 +573,7 @@ class LiquidHandler:
     self,
     wells: Iterable[Well],
     vols: List[float] = None,
+    liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
     end_delay: float = 0,
     **backend_kwargs
   ):
@@ -619,6 +620,9 @@ class LiquidHandler:
     if isinstance(vols, numbers.Rational):
       vols = [vols] * len(wells)
 
+    if isinstance(liquid_class, LiquidClass):
+      liquid_class = [liquid_class] * len(wells)
+
     self._assert_resources_exist(wells)
 
     dispenses = [(Dispense(c, v) if c is not None else None) for c, v in zip(wells, vols)]
@@ -627,6 +631,67 @@ class LiquidHandler:
 
     if end_delay > 0:
       time.sleep(end_delay)
+
+  def transfer(
+    self,
+    source: Well,
+    targets: Union[Well, List[Well]],
+    source_vol: Optional[float] = None,
+    ratios: Optional[List[float]] = None,
+    target_vols: Optional[List[float]] = None,
+    liquid_class: LiquidClass = None,
+    **backend_kwargs
+  ):
+    """Transfer liquid from one well to another.
+
+    Examples:
+
+      Transfer 50 uL of liquid from the first well to the second well:
+
+      >>> lh.transfer(plate["A1"], plate["B1"], 50)
+
+      Transfer 80 uL of liquid from the first well equally to the first column:
+
+      >>> lh.transfer(plate["A1"], plate["A1:H1"], source_vol=80)
+
+      Transfer 60 uL of liquid from the first well in a 1:2 ratio to 2 other wells:
+
+      >>> lh.transfer(plate["A1"], plate["B1:C1"], source_vol=60, ratios=[2, 1])
+
+      Transfer arbitrary volumes to the first column:
+
+      >>> lh.transfer(plate["A1"], plate["A1:H1"], target_vols=[3, 1, 4, 1, 5, 9, 6, 2])
+
+    Args:
+      source: The source well.
+      targets: The target wells.
+      source_vol: The volume to transfer from the source well.
+      ratios: The ratios to use when transferring liquid to the target wells. If not specified, then
+        the volumes will be distributed equally.
+      target_vols: The volumes to transfer to the target wells. If specified, `source_vols` and
+        `ratios` must be `None`.
+      liquid_class: The liquid class to use for the transfer, optional.
+
+    Raises:
+      RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
+    """
+
+    if isinstance(targets, Well):
+      targets = [targets]
+
+    if target_vols is not None:
+      if ratios is not None:
+        raise TypeError("Cannot specify ratios and target_vols at the same time")
+      if source_vol is not None:
+        raise TypeError("Cannot specify source_vol and target_vols at the same time")
+    else:
+      if ratios is None:
+        ratios = [1] * len(targets)
+
+      target_vols = [source_vol * r / sum(ratios) for r in ratios]
+
+    self.aspirate(source, vols=[sum(target_vols)], liquid_class=liquid_class, **backend_kwargs)
+    self.dispense(targets, target_vols, liquid_class=liquid_class, **backend_kwargs)
 
   def pick_up_tips96(self, resource: Union[str, Resource], **backend_kwargs):
     """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
