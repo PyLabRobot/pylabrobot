@@ -18,13 +18,15 @@ class LiquidHandlingOp(ABC):
     resource: The resource that will be used in the operation.
     volume: The volume of the liquid that is being handled.
     liquid_class: The liquid class of the liquid that is being handled.
+    offset_z: The offset in the z direction.
   """
 
   def __init__(
     self,
     resource: Resource,
     volume: float,
-    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
+    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
+    offset_z: float = 0
   ):
     """ Initialize the operation.
 
@@ -32,18 +34,21 @@ class LiquidHandlingOp(ABC):
       resource: The resource that will be used in the operation.
       volume: The volume of the liquid that is being handled.
       liquid_class: The liquid class of the liquid that is being handled.
+      offset_z: The offset in the z direction.
     """
 
     self.resource = resource
     self.volume = volume
     self.liquid_class = liquid_class
+    self.offset_z = offset_z
 
   def __eq__(self, other: LiquidHandlingOp) -> bool:
     return (
       isinstance(other, LiquidHandlingOp) and
       self.resource == other.resource and
       self.volume == other.volume and
-      self.liquid_class == other.liquid_class
+      self.liquid_class == other.liquid_class and
+      self.offset_z == other.offset_z
     )
 
   def __hash__(self) -> int:
@@ -52,7 +57,7 @@ class LiquidHandlingOp(ABC):
   def __repr__(self) -> str:
     return (
       f"{self.__class__.__name__}(resource={repr(self.resource)}, volume={repr(self.volume)}, "
-      f"liquid_class={repr(self.liquid_class)})"
+      f"liquid_class={repr(self.liquid_class)}, offset_z={self.offset_z})"
     )
 
   def get_corrected_volume(self) -> float:
@@ -77,7 +82,8 @@ class LiquidHandlingOp(ABC):
     return {
       "resource": self.resource.serialize(),
       "volume": self.volume,
-      "liquid_class": self.liquid_class.serialize()
+      "liquid_class": self.liquid_class.serialize(),
+      "offset_z": self.offset_z,
     }
 
 

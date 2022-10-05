@@ -296,7 +296,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.aspirate(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=flow_rate)
+      volume=volume, flow_rate=flow_rate, offset_z=channel.offset_z)
 
   def dispense(self, *channels: Optional[Dispense], **backend_kwargs):
     """ Dispense liquid from the specified resource using pip. """
@@ -313,7 +313,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.dispense(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=flow_rate)
+      volume=volume, flow_rate=flow_rate, offset_z=channel.offset_z)
 
   def pick_up_tips96(self, resource: Resource, **backend_kwargs):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
