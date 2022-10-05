@@ -2,7 +2,7 @@
 
 These instructions describe how to install PyLabRobot.
 
-**If you are using VENUS**, you will probably need to replace the Hamilton driver with a USB driver that is compatible with [PyUSB](https://github.com/pyusb/pyusb). [Later on](#updating-the-usb-driver) in this guide you'll find instructions on how to do this.
+Note that there are additional installation steps for using the firmware (universal) interface to Hamiltons, see [below](#using-the-firmware-interface-with-hamilton-robots).
 
 ## Installing PyLabRobot
 
@@ -69,11 +69,31 @@ pip install -e '.[all]'
 
 See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
 
-## Updating the USB driver
+## Using the firmware interface with Hamilton robots
 
-_These instructions only apply if you are using VENUS on your computer!_
+If you want to use the firmware version of the Hamilton driver, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions [here](https://github.com/pyusb/pyusb#requirements-and-platform-support). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
 
-### Installation
+Reminder: when you are using the firmware version, make sure to install the firmware dependencies as follows:
+
+```bash
+pip install pylabrobot[fw]
+```
+
+### On Linux
+
+You should be all set!
+
+### On Mac
+
+You need to install [libusb](https://libusb.info/). You can do this using [Homebrew](https://brew.sh/):
+
+```bash
+brew install libusb
+```
+
+### On Windows
+
+#### Installation
 
 1. Download and install [Zadig](https://zadig.akeo.ie).
 
@@ -99,7 +119,9 @@ _These instructions only apply if you are using VENUS on your computer!_
 
 ![](./img/installation/install-5.png)
 
-### Uninstallation
+#### Uninstallation
+
+_These instructions only apply if you are using VENUS on your computer!_
 
 If you ever wish to switch back from firmware command to use `pyhamilton`, the `VENUS` backend or plain VENUS, you have to replace the updated driver with the original Hamilton one.
 
@@ -130,3 +152,9 @@ If you ever wish to switch back from firmware command to use `pyhamilton`, the `
 7. Click "Close" to finish.
 
 ![](./img/installation/uninstall-7.png)
+
+### Troubleshooting
+
+If you get a `usb.core.NoBackendError: No backend available` error: [this](https://github.com/pyusb/pyusb/blob/master/docs/faq.rst#how-do-i-fix-no-backend-available-errors) may be helpful.
+
+If you are still having trouble, please reach out on the [forum](https://forums.pylabrobot.org/c/pylabrobot-user-discussion/26).
