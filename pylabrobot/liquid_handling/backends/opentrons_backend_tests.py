@@ -103,12 +103,13 @@ class OpentronsBackendCommandTests(unittest.TestCase):
 
   @patch("ot_api.lh.aspirate")
   def test_aspirate(self, mock_aspirate):
-    def assert_parameters(labware_id, well_name, pipette_id, volume, flow_rate):
+    def assert_parameters(labware_id, well_name, pipette_id, volume, flow_rate, offset_z):
       self.assertEqual(labware_id, "tip_rack")
       self.assertEqual(well_name, "tip_rack_A1")
       self.assertEqual(pipette_id, "left-pipette-id")
       self.assertEqual(volume, 10)
       self.assertEqual(flow_rate, 100)
+      self.assertEqual(offset_z, 0)
     mock_aspirate.side_effect = assert_parameters
 
     self.test_tip_pick_up()
@@ -116,12 +117,13 @@ class OpentronsBackendCommandTests(unittest.TestCase):
 
   @patch("ot_api.lh.dispense")
   def test_dispense(self, mock_dispense):
-    def assert_parameters(labware_id, well_name, pipette_id, volume, flow_rate):
+    def assert_parameters(labware_id, well_name, pipette_id, volume, flow_rate, offset_z):
       self.assertEqual(labware_id, "tip_rack")
       self.assertEqual(well_name, "tip_rack_A1")
       self.assertEqual(pipette_id, "left-pipette-id")
       self.assertEqual(volume, 10)
       self.assertEqual(flow_rate, 100)
+      self.assertEqual(offset_z, 0)
     mock_dispense.side_effect = assert_parameters
 
     self.test_tip_pick_up()

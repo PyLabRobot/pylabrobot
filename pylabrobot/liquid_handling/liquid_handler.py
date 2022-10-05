@@ -512,6 +512,7 @@ class LiquidHandler:
     vols: Union[Iterable[float], numbers.Rational],
     liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
     end_delay: float = 0,
+    offsets_z: Union[float, List[float]] = 0,
     **backend_kwargs
   ):
     """Aspirate liquid from the specified wells.
@@ -559,9 +560,14 @@ class LiquidHandler:
     if isinstance(liquid_class, LiquidClass):
       liquid_class = [liquid_class] * len(wells)
 
+    if isinstance(offsets_z, numbers.Rational):
+      offsets_z = [offsets_z] * len(wells)
+
     self._assert_resources_exist(wells)
 
-    aspirations = [(Aspiration(c, v) if c is not None else None) for c, v in zip(wells, vols)]
+    aspirations = [
+      (Aspiration(c, v, offset_z=offset_z) if c is not None else None)
+      for c, v, offset_z in zip(wells, vols, offsets_z)]
 
     self.backend.aspirate(*aspirations, **backend_kwargs)
 
@@ -575,6 +581,7 @@ class LiquidHandler:
     vols: List[float] = None,
     liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
     end_delay: float = 0,
+    offsets_z: Union[float, List[float]] = 0,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
@@ -623,9 +630,14 @@ class LiquidHandler:
     if isinstance(liquid_class, LiquidClass):
       liquid_class = [liquid_class] * len(wells)
 
+    if isinstance(offsets_z, numbers.Rational):
+      offsets_z = [offsets_z] * len(wells)
+
     self._assert_resources_exist(wells)
 
-    dispenses = [(Dispense(c, v) if c is not None else None) for c, v in zip(wells, vols)]
+    dispenses = [
+      (Dispense(c, v, offset_z=offset_z) if c is not None else None)
+      for c, v, offset_z in zip(wells, vols, offsets_z)]
 
     self.backend.dispense(*dispenses, **backend_kwargs)
 

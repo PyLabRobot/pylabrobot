@@ -184,6 +184,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "size_z": 9,
             "type": "Well"
           },
+          "offset_z": 0,
           "volume": 100,
           "liquid_class": {
             "device": ["CHANNELS_1000uL"],
@@ -225,6 +226,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "size_z": 9,
             "type": "Well"
           },
+          "offset_z": 0,
           "volume": 100,
           "liquid_class": {
             "device": ["CHANNELS_1000uL"],
@@ -275,6 +277,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "type": "Well"
           },
           "volume": 100,
+          "offset_z": 0,
           "liquid_class": {
             "device": ["CHANNELS_1000uL"],
             "tip_type": "STANDARD_VOLUME_TIP_300uL",
