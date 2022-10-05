@@ -87,6 +87,8 @@ You should be all set!
 
 You need to install [libusb](https://libusb.info/). You can do this using [Homebrew](https://brew.sh/):
 
+If you are not working in a conda environment you need to follow [this](https://forums.pylabrobot.org/t/how-to-use-hamilton-star-with-mac/503/4?u=maxhager) instructions.
+
 ```bash
 brew install libusb
 ```
