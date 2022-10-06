@@ -331,6 +331,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     return make_generator(indices, batch_size, repeat)
 
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "num_items_x": self.num_items_x,
+      "num_items_y": self.num_items_y,
+    }
+
 
 def create_equally_spaced(
     klass: T,
