@@ -49,7 +49,8 @@ def string_to_index(position_string: str, num_rows: int = 8) -> int:
   """
 
   row, column = string_to_position(position_string)
-  return row + (column) * num_rows
+  assert row < num_rows, f"Row must be less than {num_rows}"
+  return row + column * num_rows
 
 
 def string_to_indices(position_range_string: str, num_rows: int = 8) -> typing.List[int]:

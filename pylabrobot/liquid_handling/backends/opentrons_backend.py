@@ -8,7 +8,7 @@ from pylabrobot.liquid_handling.resources import (
   Lid,
   Tip,
 )
-from pylabrobot.liquid_handling.resources.abstract.tiprack import TipRack
+from pylabrobot.liquid_handling.resources.abstract.tip_rack import TipRack
 from pylabrobot.liquid_handling.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
@@ -216,7 +216,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     return None
 
-  def pickup_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
+  def pick_up_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
     """ Pick up tips from the specified resource. """
 
     assert len(channels) == 1, "only one channel supported for now"
@@ -296,7 +296,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.aspirate(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=flow_rate)
+      volume=volume, flow_rate=flow_rate, offset_z=channel.offset_z)
 
   def dispense(self, *channels: Optional[Dispense], **backend_kwargs):
     """ Dispense liquid from the specified resource using pip. """
@@ -313,9 +313,9 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.dispense(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=flow_rate)
+      volume=volume, flow_rate=flow_rate, offset_z=channel.offset_z)
 
-  def pickup_tips96(self, resource: Resource, **backend_kwargs):
+  def pick_up_tips96(self, resource: Resource, **backend_kwargs):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
   def discard_tips96(self, resource: Resource, **backend_kwargs):

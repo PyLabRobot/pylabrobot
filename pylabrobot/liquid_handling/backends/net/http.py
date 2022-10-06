@@ -109,9 +109,9 @@ class HTTPBackend(LiquidHandlerBackend):
   def unassigned_resource_callback(self, name):
     self.send_event(event="resource_unassigned", resource_name=name)
 
-  def pickup_tips(self, *channels: List[Optional[Tip]]):
+  def pick_up_tips(self, *channels: List[Optional[Tip]]):
     channels = [channel.serialize() if channel is not None else None for channel in channels]
-    self.send_event(event="pickup_tips", channels=channels)
+    self.send_event(event="pick_up_tips", channels=channels)
 
   def discard_tips(self, *channels: List[Optional[Tip]]):
     channels = [channel.serialize() if channel is not None else None for channel in channels]
@@ -125,8 +125,8 @@ class HTTPBackend(LiquidHandlerBackend):
     channels = [channel.serialize() for channel in channels]
     self.send_event(event="dispense", channels=channels)
 
-  def pickup_tips96(self, resource):
-    self.send_event(event="pickup_tips96", resource=resource.serialize())
+  def pick_up_tips96(self, resource):
+    self.send_event(event="pick_up_tips96", resource=resource.serialize())
 
   def discard_tips96(self, resource):
     self.send_event(event="discard_tips96", resource=resource.serialize())

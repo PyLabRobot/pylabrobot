@@ -39,7 +39,7 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def unassigned_resource_callback(self, name: str):
     print(f"Resource {name} was unassigned from the robot.")
 
-  def pickup_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
+  def pick_up_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
     print(f"Picking up tips {channels}.")
 
   def discard_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
@@ -51,7 +51,7 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def dispense(self, *channels: Optional[Dispense], **backend_kwargs):
     print(f"Dispensing {channels}.")
 
-  def pickup_tips96(self, resource: Resource, **backend_kwargs):
+  def pick_up_tips96(self, resource: Resource, **backend_kwargs):
     print(f"Picking up tips from {resource}.")
 
   def discard_tips96(self, resource: Resource, **backend_kwargs):

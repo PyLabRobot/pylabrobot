@@ -13,7 +13,7 @@ import tools.make_resources.writer as writer
 
 BASE_DIR = "LabWare/ML_STAR"
 BASE_CLASS = "TipRack"
-OUT_FILE = "tipracks.py"
+OUT_FILE = "tip_racks.py"
 
 
 tip_table = {

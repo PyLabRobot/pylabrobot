@@ -1,7 +1,6 @@
 """ Tests for the simulation backend. """
 
 import json
-import time
 import unittest
 from typing import List
 
@@ -28,17 +27,16 @@ class WebSocketBackendSetupStopTests(unittest.TestCase):
     """ Test that the thread is started and stopped correctly. """
 
     backend = WebSocketBackend()
-    backend.setup()
-    time.sleep(2)
-    self.assertIsNotNone(backend.loop)
-    backend.stop()
-    self.assertIsNone(backend.websocket)
 
-    backend.setup()
-    time.sleep(2)
-    self.assertIsNotNone(backend.loop)
-    backend.stop()
-    self.assertIsNone(backend.websocket)
+    def setup_stop_single():
+      backend.setup()
+      self.assertIsNotNone(backend.loop)
+      backend.stop()
+      self.assertIsNone(backend.websocket)
+
+    # setup and stop twice to ensure that everything is recycled correctly
+    setup_stop_single()
+    setup_stop_single()
 
 
 class WebSocketBackendServerTests(unittest.TestCase):
@@ -159,8 +157,8 @@ class WebSocketBackendCommandTests(unittest.TestCase):
     self.assert_event_sent_n("resource_unassigned", times=1)
 
   def test_tip_pickup(self):
-    self.lh.pickup_tips(self.tip_car[0].resource["A1"])
-    self.assert_event_sent_n("pickup_tips", times=1)
+    self.lh.pick_up_tips(self.tip_car[0].resource["A1"])
+    self.assert_event_sent_n("pick_up_tips", times=1)
 
   def test_discard_tips(self):
     self.lh.discard_tips(self.tip_car[0].resource["A1"])
@@ -186,6 +184,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "size_z": 9,
             "type": "Well"
           },
+          "offset_z": 0,
           "volume": 100,
           "liquid_class": {
             "device": ["CHANNELS_1000uL"],
@@ -227,6 +226,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "size_z": 9,
             "type": "Well"
           },
+          "offset_z": 0,
           "volume": 100,
           "liquid_class": {
             "device": ["CHANNELS_1000uL"],
@@ -277,6 +277,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "type": "Well"
           },
           "volume": 100,
+          "offset_z": 0,
           "liquid_class": {
             "device": ["CHANNELS_1000uL"],
             "tip_type": "STANDARD_VOLUME_TIP_300uL",
@@ -310,9 +311,9 @@ class WebSocketBackendCommandTests(unittest.TestCase):
       "version": "0.1.0",
     })
 
-  def test_pickup_tips96(self):
-    self.lh.pickup_tips96("tip_car")
-    self.assert_event_sent_n("pickup_tips96", times=1)
+  def test_pick_up_tips96(self):
+    self.lh.pick_up_tips96("tip_car")
+    self.assert_event_sent_n("pick_up_tips96", times=1)
 
   def test_discard_tips96(self):
     self.lh.discard_tips96("tip_car")

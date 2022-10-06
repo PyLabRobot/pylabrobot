@@ -43,6 +43,8 @@ class Plate(ItemizedResource[Well]):
     size_y: float,
     size_z: float,
     items: List[List[Well]] = None,
+    num_items_x: Optional[int] = None,
+    num_items_y: Optional[int] = None,
     one_dot_max: float = 0,
     category: str = "plate",
     location: Coordinate = Coordinate(None, None, None),
@@ -73,9 +75,8 @@ class Plate(ItemizedResource[Well]):
       with_lid: Whether the plate has a lid.
     """
 
-    super().__init__(name, size_x, size_y, size_z, location=location,
-                     category=category,
-                     items=items)
+    super().__init__(name, size_x, size_y, size_z, location=location, items=items,
+                     num_items_x=num_items_x, num_items_y=num_items_y, category=category)
     self.one_dot_max = one_dot_max
     self.lid: Optional[Lid] = None
     self._compute_volume_from_height = compute_volume_from_height
