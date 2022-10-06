@@ -2,7 +2,7 @@
 
 from abc import ABCMeta
 
-from typing import List, Union
+from typing import List, Union, Optional
 
 from .itemized_resource import ItemizedResource
 from .resource import Resource, Coordinate
@@ -44,11 +44,13 @@ class TipRack(ItemizedResource[Tip], metaclass=ABCMeta):
     size_z: float,
     tip_type: TipType,
     items: List[List[Tip]] = None,
+    num_items_x: Optional[int] = None,
+    num_items_y: Optional[int] = None,
     location: Coordinate = Coordinate(None, None, None),
     category: str = "tip_rack",
   ):
     super().__init__(name, size_x, size_y, size_z, location=location,
-                     category=category, items=items)
+      items=items, num_items_x=num_items_x, num_items_y=num_items_y, category=category)
     self.tip_type = tip_type
 
   def serialize(self):
