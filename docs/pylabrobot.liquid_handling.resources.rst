@@ -76,6 +76,8 @@ Hamilton
   :recursive:
 
     pylabrobot.liquid_handling.resources.hamilton
+    pylabrobot.liquid_handling.resources.hamilton.hamilton_decks.HamiltonDeck
+    pylabrobot.liquid_handling.resources.hamilton.STARDeck
     pylabrobot.liquid_handling.resources.hamilton.STARLetDeck
 
 
