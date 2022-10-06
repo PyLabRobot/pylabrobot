@@ -221,6 +221,15 @@ class LiquidHandler:
 
     Args:
       fn: Filename of .lay file.
+
+    Examples:
+
+      Loading from a lay file:
+
+      >>> from pylabrobot.liquid_handling.backends import STAR
+      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
+      >>> lh.load_from_lay_file("deck.lay")
     """
 
     c = None
@@ -253,11 +262,10 @@ class LiquidHandler:
         klass = getattr(resources_module, class_name)
         resource = klass(name=name)
       else:
-        # TODO: replace with real template.
-        # logger.warning(
-          # "Resource with classname %s not found. Please file an issue at "
-          # "https://github.com/pyhamilton/pyhamilton/issues/new?assignees=&"
-          # "labels=&template=bug_report.md&title=Class\%20%s\%20not\%20found", class_name)
+        logger.warning(
+          "Resource with classname %s not found. Please file an issue at "
+          "https://github.com/pylabrobot/pylabrobot/issues/new?assignees=&labels="
+          "&title=Deserialization%%3A%%20Class%%20%s%%20not%%20found", class_name, class_name)
         continue
 
       # get location props
@@ -291,6 +299,15 @@ class LiquidHandler:
     Args:
       fn: File name. Caution: file will be overwritten.
       indent: Same as `json.dump`'s `indent` argument (for json pretty printing).
+
+    Examples:
+
+      Loading from a json file:
+
+      >>> from pylabrobot.liquid_handling.backends import STAR
+      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
+      >>> lh.load_from_lay_file("deck.json")
     """
 
     serialized = self.deck.serialize()
@@ -344,6 +361,22 @@ class LiquidHandler:
     Args:
       fn: Filename for serialized model file.
       format: file format (`json` or `lay`). If None, file format will be inferred from file name.
+
+    Examples:
+
+      Loading from a .lay file:
+
+      >>> from pylabrobot.liquid_handling.backends import STAR
+      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
+      >>> lh.load_from_lay_file("deck.lay")
+
+      Loading from a .json file:
+
+      >>> from pylabrobot.liquid_handling.backends import STAR
+      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
+      >>> lh.load_from_lay_file("deck.json")
     """
 
     extension = "." + (file_format or fn.split(".")[-1])
@@ -398,7 +431,7 @@ class LiquidHandler:
     return tips
 
   @need_setup_finished
-  def pickup_tips(
+  def pick_up_tips(
     self,
     *channels: Union[Tip, List[Tip]],
     **backend_kwargs
@@ -408,11 +441,11 @@ class LiquidHandler:
     Exampels:
       Pick up all tips in the first column.
 
-      >>> lh.pickup_tips(tips_resource["A1":"H1"])
+      >>> lh.pick_up_tips(tips_resource["A1":"H1"])
 
       Pick up tips on odd numbered rows.
 
-      >>> lh.pickup_tips(channels=[
+      >>> lh.pick_up_tips(channels=[
       ...   "A1",
       ...   None,
       ...   "C1",
@@ -425,11 +458,11 @@ class LiquidHandler:
 
       Pick up tips from the diagonal:
 
-      >>> lh.pickup_tips(tips_resource["A1":"H8"])
+      >>> lh.pick_up_tips(tips_resource["A1":"H8"])
 
       Pick up tips from different tip resources:
 
-      >>> lh.pickup_tips(tips_resource1["A1"], tips_resource2["B2"], tips_resource3["C3"])
+      >>> lh.pick_up_tips(tips_resource1["A1"], tips_resource2["B2"], tips_resource3["C3"])
 
     Args:
       channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
@@ -451,7 +484,7 @@ class LiquidHandler:
       raise ValueError("Must specify at least one channel to pick up tips with.")
     self._assert_resources_exist(channels)
 
-    self.backend.pickup_tips(*channels, **backend_kwargs)
+    self.backend.pick_up_tips(*channels, **backend_kwargs)
 
     # Save the tips that are currently picked up.
     self._picked_up_tips = channels
@@ -494,7 +527,7 @@ class LiquidHandler:
     Examples:
       Return the tips on the head to the tip rack where they were picked up:
 
-      >>> lh.pickup_tips("plate_01")
+      >>> lh.pick_up_tips("plate_01")
       >>> lh.return_tips()
 
     Raises:
@@ -513,6 +546,7 @@ class LiquidHandler:
     vols: Union[Iterable[float], numbers.Rational],
     liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
     end_delay: float = 0,
+    offsets_z: Union[float, List[float]] = 0,
     **backend_kwargs
   ):
     """Aspirate liquid from the specified wells.
@@ -560,9 +594,14 @@ class LiquidHandler:
     if isinstance(liquid_class, LiquidClass):
       liquid_class = [liquid_class] * len(wells)
 
+    if isinstance(offsets_z, numbers.Rational):
+      offsets_z = [offsets_z] * len(wells)
+
     self._assert_resources_exist(wells)
 
-    aspirations = [(Aspiration(c, v) if c is not None else None) for c, v in zip(wells, vols)]
+    aspirations = [
+      (Aspiration(c, v, offset_z=offset_z) if c is not None else None)
+      for c, v, offset_z in zip(wells, vols, offsets_z)]
 
     self.backend.aspirate(*aspirations, **backend_kwargs)
 
@@ -574,7 +613,9 @@ class LiquidHandler:
     self,
     wells: Iterable[Well],
     vols: List[float] = None,
+    liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
     end_delay: float = 0,
+    offsets_z: Union[float, List[float]] = 0,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
@@ -620,26 +661,95 @@ class LiquidHandler:
     if isinstance(vols, numbers.Rational):
       vols = [vols] * len(wells)
 
+    if isinstance(liquid_class, LiquidClass):
+      liquid_class = [liquid_class] * len(wells)
+
+    if isinstance(offsets_z, numbers.Rational):
+      offsets_z = [offsets_z] * len(wells)
+
     self._assert_resources_exist(wells)
 
-    dispenses = [(Dispense(c, v) if c is not None else None) for c, v in zip(wells, vols)]
+    dispenses = [
+      (Dispense(c, v, offset_z=offset_z) if c is not None else None)
+      for c, v, offset_z in zip(wells, vols, offsets_z)]
 
     self.backend.dispense(*dispenses, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
 
-  def pickup_tips96(self, resource: Union[str, Resource], **backend_kwargs):
+  def transfer(
+    self,
+    source: Well,
+    targets: Union[Well, List[Well]],
+    source_vol: Optional[float] = None,
+    ratios: Optional[List[float]] = None,
+    target_vols: Optional[List[float]] = None,
+    liquid_class: LiquidClass = None,
+    **backend_kwargs
+  ):
+    """Transfer liquid from one well to another.
+
+    Examples:
+
+      Transfer 50 uL of liquid from the first well to the second well:
+
+      >>> lh.transfer(plate["A1"], plate["B1"], 50)
+
+      Transfer 80 uL of liquid from the first well equally to the first column:
+
+      >>> lh.transfer(plate["A1"], plate["A1:H1"], source_vol=80)
+
+      Transfer 60 uL of liquid from the first well in a 1:2 ratio to 2 other wells:
+
+      >>> lh.transfer(plate["A1"], plate["B1:C1"], source_vol=60, ratios=[2, 1])
+
+      Transfer arbitrary volumes to the first column:
+
+      >>> lh.transfer(plate["A1"], plate["A1:H1"], target_vols=[3, 1, 4, 1, 5, 9, 6, 2])
+
+    Args:
+      source: The source well.
+      targets: The target wells.
+      source_vol: The volume to transfer from the source well.
+      ratios: The ratios to use when transferring liquid to the target wells. If not specified, then
+        the volumes will be distributed equally.
+      target_vols: The volumes to transfer to the target wells. If specified, `source_vols` and
+        `ratios` must be `None`.
+      liquid_class: The liquid class to use for the transfer, optional.
+
+    Raises:
+      RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
+    """
+
+    if isinstance(targets, Well):
+      targets = [targets]
+
+    if target_vols is not None:
+      if ratios is not None:
+        raise TypeError("Cannot specify ratios and target_vols at the same time")
+      if source_vol is not None:
+        raise TypeError("Cannot specify source_vol and target_vols at the same time")
+    else:
+      if ratios is None:
+        ratios = [1] * len(targets)
+
+      target_vols = [source_vol * r / sum(ratios) for r in ratios]
+
+    self.aspirate(source, vols=[sum(target_vols)], liquid_class=liquid_class, **backend_kwargs)
+    self.dispense(targets, target_vols, liquid_class=liquid_class, **backend_kwargs)
+
+  def pick_up_tips96(self, resource: Union[str, Resource], **backend_kwargs):
     """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
 
     Examples:
       Pick up tips from an entire 96 tips plate:
 
-      >>> lh.pickup_tips96("plate_01")
+      >>> lh.pick_up_tips96("plate_01")
 
       Pick up tips from the left half of a 96 well plate:
 
-      >>> lh.pickup_tips96("plate_01")
+      >>> lh.pick_up_tips96("plate_01")
 
     Args:
       resource: Resource name or resource object.
@@ -652,7 +762,7 @@ class LiquidHandler:
     if not resource:
       raise ValueError(f"Resource with name {resource} not found.")
 
-    self.backend.pickup_tips96(resource, **backend_kwargs)
+    self.backend.pick_up_tips96(resource, **backend_kwargs)
 
     # Save the tips as picked up.
     self._picked_up_tips96 = resource
@@ -687,7 +797,7 @@ class LiquidHandler:
     Examples:
       Return the tips on the 96 head to the tip rack where they were picked up:
 
-      >>> lh.pickup_tips96("plate_01")
+      >>> lh.pick_up_tips96("plate_01")
       >>> lh.return_tips96()
 
     Raises:

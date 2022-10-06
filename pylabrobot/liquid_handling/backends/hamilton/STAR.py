@@ -32,15 +32,12 @@ from .errors import (
 )
 
 logger = logging.getLogger(__name__)
-logging.basicConfig()
-logger.setLevel(logging.INFO)
 
 try:
   import usb.core
   import usb.util
   USE_USB = True
 except ImportError:
-  logger.warning("Could not import pyusb, Hamilton interface will not be available.")
   USE_USB = False
 
 
@@ -599,7 +596,7 @@ class STAR(HamiltonLiquidHandler):
     return self.get_or_assign_tip_type_index(tip_types.pop())
 
   @need_iswap_parked
-  def pickup_tips(
+  def pick_up_tips(
     self,
     *channels: List[Optional[Tip]],
     **backend_kwargs
@@ -658,7 +655,6 @@ class STAR(HamiltonLiquidHandler):
     self,
     *channels: Aspiration,
     blow_out_air_volume: float = 0,
-    liquid_height: float = 1,
     air_transport_retract_dist: float = 10,
     **backend_kwargs
   ):
@@ -672,7 +668,7 @@ class STAR(HamiltonLiquidHandler):
     # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL. Also get
     # all other aspiration parameters.
     for channel in channels:
-      liquid_surface_no_lld = channel.resource.get_absolute_location().z + (liquid_height or 1)
+      liquid_surface_no_lld = channel.resource.get_absolute_location().z + (channel.offset_z or 1)
 
       params.append({
         "aspiration_volumes": int(channel.get_corrected_volume()*10) if channel is not None else 0,
@@ -759,7 +755,6 @@ class STAR(HamiltonLiquidHandler):
     self,
     *channels: Dispense,
     blow_out_air_volumes: float = 0,
-    liquid_height: Optional[float] = None,
     air_transport_retract_dist: float = 10,
     **backend_kwargs
   ):
@@ -771,7 +766,7 @@ class STAR(HamiltonLiquidHandler):
     params = []
 
     for channel in channels:
-      liquid_surface_no_lld = channel.resource.get_absolute_location().z + (liquid_height or 1)
+      liquid_surface_no_lld = channel.resource.get_absolute_location().z + (channel.offset_z or 1)
 
       params.append({
         "dispensing_mode": 2,
@@ -851,7 +846,7 @@ class STAR(HamiltonLiquidHandler):
     return ret
 
   @need_iswap_parked
-  def pickup_tips96(self, resource: TipRack, **backend_kwargs):
+  def pick_up_tips96(self, resource: TipRack, **backend_kwargs):
     ttti = self.get_or_assign_tip_type_index(resource.tip_type)
     position = resource.get_item("A1").get_absolute_location()
 

@@ -29,8 +29,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
                 items: List[List[T]] = None,
+                num_items_x: Optional[int] = None,
+                num_items_y: Optional[int] = None,
                 location: Coordinate = Coordinate(None, None, None),
-                category: Optional[str] = None):
+                category: Optional[str] = None,
+                ):
     """ Initialize an itemized resource
 
     Args:
@@ -41,6 +44,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       items: The items on the resource. See
         :func:`pylabrobot.liquid_handling.resources.abstract.create_equally_spaced`. Note that items
         names will be prefixed with the resource name.
+      num_items_x: The number of items in the x direction. This method can only and must be used if
+        `items` is not specified.
+      num_items_y: The number of items in the y direction. This method can only and must be used if
+        `items` is not specified.
       location: The location of the resource.
       category: The category of the resource.
 
@@ -62,15 +69,19 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         ...   items=[[Well("well", size_x=1, size_y=1, size_z=1)]])
     """
 
-    if items is None:
-      items = []
 
     super().__init__(name, size_x, size_y, size_z, location=location, category=category)
 
-    self.num_items_x = len(items)
-    self.num_items_y = len(items[0]) if self.num_items_x > 0 else 0
+    if items is None:
+      if num_items_x is None or num_items_y is None:
+        raise ValueError("Either items or (num_items_x and num_items_y) must be specified.")
+      self.num_items_x = num_items_x
+      self.num_items_y = num_items_y
+    else:
+      self.num_items_x = len(items)
+      self.num_items_y = len(items[0]) if self.num_items_x > 0 else 0
 
-    for row in items:
+    for row in (items or []):
       for item in row:
         item.name = f"{self.name}_{item.name}"
         self.assign_child_resource(item)
@@ -111,16 +122,18 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     if isinstance(identifier, str):
       if ":" in identifier:
-        identifier = pylabrobot.utils.string_to_indices(identifier)
+        identifier = pylabrobot.utils.string_to_indices(identifier, num_rows=self.num_items_y)
       else:
-        identifier = [pylabrobot.utils.string_to_index(identifier)]
+        identifier = [pylabrobot.utils.string_to_index(identifier, num_rows=self.num_items_y)]
     elif isinstance(identifier, int):
       identifier = [identifier]
     elif isinstance(identifier, slice):
       if isinstance(identifier.start, str):
-        identifier.start = pylabrobot.utils.string_to_index(identifier.start)
+        identifier.start = \
+          pylabrobot.utils.string_to_index(identifier.start, num_rows=self.num_items_y)
       if isinstance(identifier.stop, str):
-        identifier.stop = pylabrobot.utils.string_to_index(identifier.stop)
+        identifier.stop = \
+          pylabrobot.utils.string_to_index(identifier.stop, num_rows=self.num_items_y)
       identifier = range(identifier.start, identifier.stop)
 
     return self.get_items(identifier)
@@ -182,7 +195,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """
 
     if isinstance(identifier, str):
-      identifier = pylabrobot.utils.string_to_indices(identifier)
+      identifier = pylabrobot.utils.string_to_indices(identifier, num_rows=self.num_items_y)
     elif identifier is None:
       return [None]
 
@@ -328,6 +341,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       raise ValueError(f"Invalid direction '{direction}'.")
 
     return make_generator(indices, batch_size, repeat)
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "num_items_x": self.num_items_x,
+      "num_items_y": self.num_items_y,
+    }
 
 
 def create_equally_spaced(

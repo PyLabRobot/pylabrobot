@@ -51,7 +51,7 @@ ML Star resources
 
     pylabrobot.liquid_handling.resources.ml_star
     pylabrobot.liquid_handling.resources.ml_star.tip_types
-    pylabrobot.liquid_handling.resources.ml_star.tipracks
+    pylabrobot.liquid_handling.resources.ml_star.tip_racks
     pylabrobot.liquid_handling.resources.ml_star.tip_carriers
     pylabrobot.liquid_handling.resources.ml_star.plate_carriers
 
@@ -76,6 +76,8 @@ Hamilton
   :recursive:
 
     pylabrobot.liquid_handling.resources.hamilton
+    pylabrobot.liquid_handling.resources.hamilton.hamilton_decks.HamiltonDeck
+    pylabrobot.liquid_handling.resources.hamilton.STARDeck
     pylabrobot.liquid_handling.resources.hamilton.STARLetDeck
 
 

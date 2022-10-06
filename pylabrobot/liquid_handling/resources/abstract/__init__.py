@@ -9,5 +9,5 @@ from .deck import Deck
 from .itemized_resource import ItemizedResource, create_equally_spaced
 from .plate import Plate, Lid, Well
 from .resource import Resource
-from .tiprack import TipRack, Tip
+from .tip_rack import TipRack, Tip
 from .tip_type import *

@@ -52,7 +52,7 @@ class SimulatorBackend(WebSocketBackend):
     INFO:pyhamilton.liquid_handling.backends.simulation.simulation:File server started at
       http://127.0.0.1:1337
     >>> lh.edit_tips(tips, pattern=[[True]*12]*8)
-    >>> lh.pickup_tips(locations)
+    >>> lh.pick_up_tips(locations)
   """
 
   def __init__(
@@ -186,7 +186,7 @@ class SimulatorBackend(WebSocketBackend):
     """ Place and/or remove tips on the robot (**simulator only**).
 
     Simulator method to place tips on the robot, for testing of tip pickup/discarding. Unlike,
-    :func:`~Simulator.pickup_tips`, this method does not raise an exception if tips are already
+    :func:`~Simulator.pick_up_tips`, this method does not raise an exception if tips are already
     present on the specified locations. Note that a
     :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource has to be assigned
     first.
@@ -213,7 +213,7 @@ class SimulatorBackend(WebSocketBackend):
     self.send_event(event="edit_tips", pattern=serialized_pattern,
       wait_for_response=True)
 
-  def fill_tips(self, resource: TipRack):
+  def fill_tip_rack(self, resource: TipRack):
     """ Completely fill a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource
     with tips. (**simulator only**).
 

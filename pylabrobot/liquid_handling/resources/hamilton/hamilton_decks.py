@@ -6,23 +6,40 @@ from pylabrobot.liquid_handling.resources import Coordinate, Deck, Resource
 _RAILS_WIDTH = 22.5 # space between rails (mm)
 
 
-class STARLetDeck(Deck):
-  """ The Hamilton STARLet deck.
-
-  Sizes from HAMILTON\\Config\\ML_Starlet.dck
-  """
+class HamiltonDeck(Deck):
+  """ Hamilton decks. Currently only STARLet and STAR are supported. """
 
   def __init__(
     self,
-    size_x: float = 1360,
-    size_y: float = 653.5,
-    size_z: float = 900,
+    num_rails: int,
+    size_x: float,
+    size_y: float,
+    size_z: float,
     resource_assigned_callback: Optional[Callable] = None,
     resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 63, 100),
   ):
     super().__init__(size_x, size_y, size_z,
       resource_assigned_callback, resource_unassigned_callback, origin)
+    self.num_rails = num_rails
+
+  def serialize(self) -> dict:
+    """ Serialize this deck. """
+    return {
+      **super().serialize(),
+      "num_rails": self.num_rails,
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict):
+    """ Deserialize this deck. """
+    return cls(
+      num_rails=data["num_rails"],
+      size_x=data["size_x"],
+      size_y=data["size_y"],
+      size_z=data["size_z"],
+      origin=Coordinate.deserialize(data["location"]),
+    )
 
   def assign_child_resource(
     self,
@@ -58,7 +75,7 @@ class STARLetDeck(Deck):
 
     # TODO: many things here should be moved to Resource and Deck, instead of just STARLetDeck
 
-    if rails is not None and not 1 <= rails <= 30:
+    if rails is not None and not 1 <= rails <= self.num_rails:
       raise ValueError("Rails must be between 1 and 30.")
 
     # Check if resource exists.
@@ -73,11 +90,11 @@ class STARLetDeck(Deck):
       raise ValueError("At least one of rails and location must be None.")
 
     if rails is not None:
-      resource.location = Coordinate(x=STARLetDeck._x_coordinate_for_rails(rails), y=0, z=0)
+      resource.location = Coordinate(x=self._x_coordinate_for_rails(rails), y=0, z=0)
     elif location is not None:
       resource.location = location
 
-    if resource.location.x + resource.get_size_x() > STARLetDeck._x_coordinate_for_rails(30) and \
+    if resource.location.x + resource.get_size_x() > self._x_coordinate_for_rails(30) and \
       rails is not None:
       raise ValueError(f"Resource with width {resource.get_size_x()} does not "
                        f"fit at rails {rails}.")
@@ -106,7 +123,42 @@ class STARLetDeck(Deck):
 
     return super().assign_child_resource(resource)
 
-  @staticmethod
-  def _x_coordinate_for_rails(rails: int):
+  def _x_coordinate_for_rails(self, rails: int):
     """ Convert a rail identifier (1-30 for STARLet, max 54 for STAR) to an x coordinate. """
     return 100.0 + (rails - 1) * _RAILS_WIDTH
+
+
+def STARLetDeck(
+  resource_assigned_callback: Optional[Callable] = None,
+  resource_unassigned_callback: Optional[Callable] = None,
+  origin: Coordinate = Coordinate(0, 63, 100),
+) -> HamiltonDeck:
+  """ A STARLet deck. """
+  return HamiltonDeck(
+      num_rails=30,
+      size_x=1360,
+      size_y=653.5,
+      size_z=900,
+      resource_assigned_callback=resource_assigned_callback,
+      resource_unassigned_callback=resource_unassigned_callback,
+      origin=origin)
+
+
+def STARDeck(
+  resource_assigned_callback: Optional[Callable] = None,
+  resource_unassigned_callback: Optional[Callable] = None,
+  origin: Coordinate = Coordinate(0, 63, 100),
+) -> HamiltonDeck:
+  """ The Hamilton STAR deck.
+
+  Sizes from `HAMILTON\\Config\\ML_STAR2.dck`
+  """
+
+  return HamiltonDeck(
+      num_rails=55,
+      size_x=1900,
+      size_y=653.5,
+      size_z=900,
+      resource_assigned_callback=resource_assigned_callback,
+      resource_unassigned_callback=resource_unassigned_callback,
+      origin=origin)
