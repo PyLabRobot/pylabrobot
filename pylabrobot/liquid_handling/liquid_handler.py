@@ -221,6 +221,15 @@ class LiquidHandler:
 
     Args:
       fn: Filename of .lay file.
+
+    Examples:
+
+      Loading from a lay file:
+
+      >>> from pylabrobot.liquid_handling.backends import STAR
+      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
+      >>> lh.load_from_lay_file("deck.lay")
     """
 
     c = None
@@ -290,6 +299,15 @@ class LiquidHandler:
     Args:
       fn: File name. Caution: file will be overwritten.
       indent: Same as `json.dump`'s `indent` argument (for json pretty printing).
+
+    Examples:
+
+      Loading from a json file:
+
+      >>> from pylabrobot.liquid_handling.backends import STAR
+      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
+      >>> lh.load_from_lay_file("deck.json")
     """
 
     serialized = self.deck.serialize()
@@ -343,6 +361,22 @@ class LiquidHandler:
     Args:
       fn: Filename for serialized model file.
       format: file format (`json` or `lay`). If None, file format will be inferred from file name.
+
+    Examples:
+
+      Loading from a .lay file:
+
+      >>> from pylabrobot.liquid_handling.backends import STAR
+      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
+      >>> lh.load_from_lay_file("deck.lay")
+
+      Loading from a .json file:
+
+      >>> from pylabrobot.liquid_handling.backends import STAR
+      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
+      >>> lh.load_from_lay_file("deck.json")
     """
 
     extension = "." + (file_format or fn.split(".")[-1])
