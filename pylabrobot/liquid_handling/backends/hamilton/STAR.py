@@ -383,13 +383,13 @@ class STAR(HamiltonLiquidHandler):
     self.dev: Optional[usb.core.Device] = None
     self._tip_types: dict[str, int] = {}
     self.num_channels = num_channels
-    self._iswap_parked: bool = False
+    self._iswap_parked: Optional[bool] = None
 
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
   @property
-  def iswap_parked(self)->bool:
+  def iswap_parked(self) -> bool:
     return self._iswap_parked
 
   def need_iswap_parked(method: Callable): # pylint: disable=no-self-argument
@@ -400,11 +400,10 @@ class STAR(HamiltonLiquidHandler):
 
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
-      if self.iswap_parked:
-        result = method(self, *args, **kwargs) # pylint: disable=not-callable
-      else:
+      if not self.iswap_parked:
         self.park_iswap()
-        result = method(self, *args, **kwargs) # pylint: disable=not-callable
+
+      result = method(self, *args, **kwargs) # pylint: disable=not-callable
 
       return result
     return wrapper
