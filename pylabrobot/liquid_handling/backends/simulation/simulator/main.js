@@ -545,7 +545,7 @@ async function handleEvent(event, data) {
       removeResource(data.resource_name);
       break;
 
-    case "pickup_tips":
+    case "pick_up_tips":
       await sleep(config.pip_tip_pickup_duration);
       ret.error = pickUpTips(data.channels);
       break;
@@ -573,7 +573,7 @@ async function handleEvent(event, data) {
       ret.error = dispense(data.channels);
       break;
 
-    case "pickup_tips96":
+    case "pick_up_tips96":
       await sleep(config.core_tip_pickup_duration);
       ret.error = pickupTips96(resource);
       break;
