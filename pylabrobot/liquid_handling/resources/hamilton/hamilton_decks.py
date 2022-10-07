@@ -136,7 +136,7 @@ def STARLetDeck(
   origin: Coordinate = Coordinate(0, 63, 100),
 ) -> HamiltonDeck:
   """ A STARLet deck.
-  
+
   Sizes from `HAMILTON\\Config\\ML_Starlet.dck`
   """
 
