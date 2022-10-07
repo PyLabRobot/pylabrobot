@@ -108,7 +108,7 @@ class OpentronsBackendCommandTests(unittest.TestCase):
       self.assertEqual(well_name, "tip_rack_A1")
       self.assertEqual(pipette_id, "left-pipette-id")
       self.assertEqual(volume, 10)
-      self.assertEqual(flow_rate, 100)
+      self.assertEqual(flow_rate, 3.78)
       self.assertEqual(offset_z, 0)
     mock_aspirate.side_effect = assert_parameters
 
@@ -122,7 +122,7 @@ class OpentronsBackendCommandTests(unittest.TestCase):
       self.assertEqual(well_name, "tip_rack_A1")
       self.assertEqual(pipette_id, "left-pipette-id")
       self.assertEqual(volume, 10)
-      self.assertEqual(flow_rate, 100)
+      self.assertEqual(flow_rate, 7.56)
       self.assertEqual(offset_z, 0)
     mock_dispense.side_effect = assert_parameters
 

@@ -281,34 +281,107 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     return None
 
-  def aspirate(self, *channels: Optional[Aspiration], **backend_kwargs):
+  def get_pipette_name(self, pipette_id: str) -> str:
+    """ Get the name of a pipette from its id. """
+
+    if pipette_id == self.left_pipette["pipetteId"]:
+      return self.left_pipette["name"]
+    elif pipette_id == self.right_pipette["pipetteId"]:
+      return self.right_pipette["name"]
+    raise ValueError(f"Unknown pipette id: {pipette_id}")
+
+  def _get_default_aspiration_flow_rate(self, pipette_name: str) -> float:
+    """ Get the default aspiration flow rate for the specified pipette.
+
+    Data from https://archive.ph/ZUN9f
+
+    Returns:
+      The default flow rate in ul/s.
+    """
+
+    return {
+      "p300_multi_gen2": 94,
+      "p10_single": 5,
+      "p10_multi": 5,
+      "p50_single": 25,
+      "p50_multi": 25,
+      "p300_single": 150,
+      "p300_multi": 150,
+      "p1000_single": 500,
+
+      "p20_single_gen2": 3.78,
+      "p300_single_gen2": 46.43,
+      "p1000_single_gen2": 137.35,
+      "p20_multi_gen2": 7.6
+    }[pipette_name]
+
+  def aspirate(
+    self,
+    *channels: Optional[Aspiration],
+    flow_rate: Optional[float] = None,
+  ):
     """ Aspirate liquid from the specified resource using pip. """
 
-    assert len(channels) == 1 # only one channel supported for now
+    assert len(channels) == 1, "only one channel supported for now"
 
-    channel   = channels[0] # for channel in channels
-    volume    = channel.volume
-    flow_rate = channel.liquid_class.flow_rate[0]
+    channel = channels[0] # for channel in channels
+    volume  = channel.volume
+
+    pipette_id   = self.select_liquid_pipette(volume)
+    pipette_name = self.get_pipette_name(pipette_id)
+    if flow_rate is None:
+      flow_rate = self._get_default_aspiration_flow_rate(pipette_name)
 
     labware_id = self.defined_labware[channel.resource.parent.name]
-    pipette_id = self.select_liquid_pipette(volume)
     if pipette_id is None:
       raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.aspirate(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=flow_rate, offset_z=channel.offset_z)
 
-  def dispense(self, *channels: Optional[Dispense], **backend_kwargs):
+  def _get_default_dispense_flow_rate(self, pipette_name: str) -> float:
+    """ Get the default dispense flow rate for the specified pipette.
+
+    Data from https://archive.ph/ZUN9f
+
+    Returns:
+      The default flow rate in ul/s.
+    """
+
+    return {
+      "p300_multi_gen2": 94,
+      "p10_single": 10,
+      "p10_multi": 10,
+      "p50_single": 50,
+      "p50_multi": 50,
+      "p300_single": 300,
+      "p300_multi": 300,
+      "p1000_single": 1000,
+
+      "p20_single_gen2": 7.56,
+      "p300_single_gen2": 92.86,
+      "p1000_single_gen2": 274.7,
+      "p20_multi_gen2": 7.6
+    }[pipette_name]
+
+  def dispense(
+    self,
+    *channels: Optional[Dispense],
+    flow_rate: Optional[float] = None,
+  ):
     """ Dispense liquid from the specified resource using pip. """
 
-    assert len(channels) == 1 # only one channel supported for now
+    assert len(channels) == 1, "only one channel supported for now"
 
-    channel   = channels[0] # for channel in channels
-    volume    = channel.volume
-    flow_rate = channel.liquid_class.flow_rate[0]
+    channel = channels[0] # for channel in channels
+    volume  = channel.volume
+
+    pipette_id   = self.select_liquid_pipette(volume)
+    pipette_name = self.get_pipette_name(pipette_id)
+    if flow_rate is None:
+      flow_rate = self._get_default_dispense_flow_rate(pipette_name)
 
     labware_id = self.defined_labware[channel.resource.parent.name]
-    pipette_id = self.select_liquid_pipette(volume)
     if pipette_id is None:
       raise NoTipError("No pipette channel of right type with tip available.")
 
