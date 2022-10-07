@@ -32,7 +32,7 @@ dependencies. Also using pip:
 
 ```bash
 pip install pylabrobot[docs]
-pip install pylabrobot[tests]
+pip install pylabrobot[testing]
 ```
 
 There's a multitude of other optional dependencies that you can install. Replace `[docs]` with one of the following items to install the desired dependencies.

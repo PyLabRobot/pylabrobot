@@ -6,10 +6,11 @@ This file defines interfaces for all supported Hamilton liquid handling robots.
 from abc import ABCMeta, abstractmethod
 import datetime
 import enum
+import functools
 import logging
 import re
 import typing
-from typing import Union, List, Optional
+from typing import Callable, Union, List, Optional
 
 from pylabrobot import utils
 from pylabrobot.liquid_handling.resources import (
@@ -382,9 +383,30 @@ class STAR(HamiltonLiquidHandler):
     self.dev: Optional[usb.core.Device] = None
     self._tip_types: dict[str, int] = {}
     self.num_channels = num_channels
+    self._iswap_parked: Optional[bool] = None
 
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
+
+  @property
+  def iswap_parked(self) -> bool:
+    return self._iswap_parked
+
+  def need_iswap_parked(method: Callable): # pylint: disable=no-self-argument
+    """Ensure that the iSWAP is in parked position before running command.
+
+    If the iSWAP is not parked, it get's parked before running the command.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+      if not self.iswap_parked:
+        self.park_iswap()
+
+      result = method(self, *args, **kwargs) # pylint: disable=not-callable
+
+      return result
+    return wrapper
 
   def setup(self):
     """ setup
@@ -458,6 +480,7 @@ class STAR(HamiltonLiquidHandler):
       self.initialize_iswap()
 
     self.park_iswap()
+    self._iswap_parked = True
 
   def stop(self):
     if self.dev is None:
@@ -571,6 +594,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self.get_or_assign_tip_type_index(tip_types.pop())
 
+  @need_iswap_parked
   def pick_up_tips(
     self,
     *channels: List[Optional[Tip]],
@@ -597,6 +621,7 @@ class STAR(HamiltonLiquidHandler):
       **params
     )
 
+  @need_iswap_parked
   def discard_tips(
     self,
     *channels: List[Optional[Tip]],
@@ -624,6 +649,7 @@ class STAR(HamiltonLiquidHandler):
       **params
     )
 
+  @need_iswap_parked
   def aspirate(
     self,
     *channels: Aspiration,
@@ -723,6 +749,7 @@ class STAR(HamiltonLiquidHandler):
       **cmd_kwargs,
     )
 
+  @need_iswap_parked
   def dispense(
     self,
     *channels: Dispense,
@@ -817,6 +844,7 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
+  @need_iswap_parked
   def pick_up_tips96(self, resource: TipRack, **backend_kwargs):
     ttti = self.get_or_assign_tip_type_index(resource.tip_type)
     position = resource.get_item("A1").get_absolute_location()
@@ -836,6 +864,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self.pick_up_tips_core96(**cmd_kwargs)
 
+  @need_iswap_parked
   def discard_tips96(self, resource: Resource, **backend_kwargs):
     position = resource.get_item("A1").get_absolute_location()
 
@@ -852,6 +881,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self.discard_tips_core96(**cmd_kwargs)
 
+  @need_iswap_parked
   def aspirate96(
     self,
     resource: Resource,
@@ -925,6 +955,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self.aspirate_core_96(**cmd_kwargs)
 
+  @need_iswap_parked
   def dispense96(
     self,
     resource: Resource,
@@ -4047,12 +4078,16 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
                   "minimum_traverse_height_at_beginning_of_a_command")
 
-    return self.send_command(
+    command_output = self.send_command(
       module="C0",
       command="PG",
       fmt="",
       th=minimum_traverse_height_at_beginning_of_a_command
     )
+
+    # Once the command has completed successfuly, set _iswap_parked to True
+    self._iswap_parked = True
+    return command_output
 
   def get_plate(
     self,
@@ -4119,7 +4154,7 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
     utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
-    return self.send_command(
+    command_output = self.send_command(
       module="C0",
       command="PP",
       fmt="",
@@ -4140,6 +4175,10 @@ class STAR(HamiltonLiquidHandler):
       # xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}",
       gc=fold_up_sequence_at_the_end_of_process,
     )
+
+    # Once the command has completed successfully, set _iswap_parked to false
+    self._iswap_parked = False
+    return command_output
 
   def put_plate(
     self,
@@ -4197,7 +4236,7 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
     utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
-    return self.send_command(
+    command_output = self.send_command(
       module="C0",
       command="PR",
       fmt="",
@@ -4214,6 +4253,10 @@ class STAR(HamiltonLiquidHandler):
       ga=collision_control_level,
       # xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
     )
+
+    # Once the command has completed successfully, set _iswap_parked to false
+    self._iswap_parked = False
+    return command_output
 
   def move_plate_to_position(
     self,
@@ -4261,7 +4304,7 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
     utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
 
-    return self.send_command(
+    command_output = self.send_command(
       module="C0",
       command="PM",
       xs=x_position,
@@ -4275,6 +4318,9 @@ class STAR(HamiltonLiquidHandler):
       ga=collision_control_level,
       xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
     )
+    # Once the command has completed successfuly, set _iswap_parked to false
+    self._iswap_parked = False
+    return command_output
 
   def collapse_gripper_arm(
     self,
