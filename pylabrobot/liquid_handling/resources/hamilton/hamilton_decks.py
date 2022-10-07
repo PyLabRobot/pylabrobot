@@ -94,6 +94,7 @@ class HamiltonDeck(Deck):
     elif location is not None:
       resource.location = location
 
+
     if resource.location.x + resource.get_size_x() > \
         self._x_coordinate_for_rails(self.num_rails) and \
       rails is not None:
@@ -134,7 +135,11 @@ def STARLetDeck(
   resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate(0, 63, 100),
 ) -> HamiltonDeck:
-  """ A STARLet deck. """
+  """ A STARLet deck.
+  
+  Sizes from `HAMILTON\\Config\\ML_Starlet.dck`
+  """
+
   return HamiltonDeck(
       num_rails=30,
       size_x=1360,
