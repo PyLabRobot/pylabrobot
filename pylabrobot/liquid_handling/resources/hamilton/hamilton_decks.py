@@ -62,7 +62,7 @@ class HamiltonDeck(Deck):
     Args:
       resource: A Resource to assign to this liquid handler.
       rails: The left most real (inclusive) of the deck resource (between and 1-30 for STARLet,
-             max 54 for STAR.) Either rails or location must be None, but not both.
+             max 55 for STAR.) Either rails or location must be None, but not both.
       location: The location of the resource relative to the liquid handler. Either rails or
                 location must be None, but not both.
       replace: Replace the resource with the same name that was previously assigned, if it exists.
@@ -76,7 +76,7 @@ class HamiltonDeck(Deck):
     # TODO: many things here should be moved to Resource and Deck, instead of just STARLetDeck
 
     if rails is not None and not 1 <= rails <= self.num_rails:
-      raise ValueError("Rails must be between 1 and 30.")
+      raise ValueError(f"Rails must be between 1 and {self.num_rails}.")
 
     # Check if resource exists.
     if self.has_resource(resource.name):
@@ -94,7 +94,9 @@ class HamiltonDeck(Deck):
     elif location is not None:
       resource.location = location
 
-    if resource.location.x + resource.get_size_x() > self._x_coordinate_for_rails(30) and \
+
+    if resource.location.x + resource.get_size_x() > \
+        self._x_coordinate_for_rails(self.num_rails) and \
       rails is not None:
       raise ValueError(f"Resource with width {resource.get_size_x()} does not "
                        f"fit at rails {rails}.")
@@ -124,7 +126,7 @@ class HamiltonDeck(Deck):
     return super().assign_child_resource(resource)
 
   def _x_coordinate_for_rails(self, rails: int):
-    """ Convert a rail identifier (1-30 for STARLet, max 54 for STAR) to an x coordinate. """
+    """ Convert a rail identifier to an x coordinate. """
     return 100.0 + (rails - 1) * _RAILS_WIDTH
 
 
@@ -133,7 +135,11 @@ def STARLetDeck(
   resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate(0, 63, 100),
 ) -> HamiltonDeck:
-  """ A STARLet deck. """
+  """ A STARLet deck.
+  
+  Sizes from `HAMILTON\\Config\\ML_Starlet.dck`
+  """
+
   return HamiltonDeck(
       num_rails=30,
       size_x=1360,
