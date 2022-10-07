@@ -61,6 +61,7 @@ setup(
     extras_require={
         'testing': extras_testing,
         'docs': extras_docs,
+        'fw': extras_fw,
         'simulation': extras_simulation,
         'http': extras_http,
         'websockets': extras_websockets,
