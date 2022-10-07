@@ -11,6 +11,8 @@ endif
 .PHONY: docs lint test
 
 docs:
+	rm -rf docs/build
+	rm -rf docs/_autosummary
 	sphinx-build -b html docs docs/build/ -j auto
 
 lint:
