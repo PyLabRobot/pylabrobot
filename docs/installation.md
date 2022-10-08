@@ -64,7 +64,7 @@ Alternatively, you can install PyLabRobot from source. This is particularly usef
 ```bash
 git clone https://github.com/pylabrobot/pylabrobot.git
 cd pylabrobot
-pip install -e '.[all]'
+pip install -e '.[dev]'
 ```
 
 See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
