@@ -46,6 +46,9 @@ extras_server = [
     'wtforms_json'
 ]
 
+extras_dev = extras_docs + extras_simulation + extras_http + extras_websockets + extras_testing + \
+              extras_server + extras_fw + extras_opentrons
+
 extras_all = extras_docs + extras_simulation + extras_http + extras_websockets + extras_testing + \
               extras_venus + extras_server + extras_fw + extras_opentrons
 
@@ -68,6 +71,7 @@ setup(
         'venus': extras_venus,
         'opentrons': extras_opentrons,
         'server': extras_server,
-        'all': extras_all
+        'dev': extras_dev,
+        'all': extras_all,
     }
 )
