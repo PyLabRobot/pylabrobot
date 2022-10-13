@@ -51,7 +51,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     super().__init__()
 
     if not USE_OT:
-      raise RuntimeError("Opentrons is not installed. Please run pip install opentrons")
+      raise RuntimeError("Opentrons is not installed. Please run pip install pylabrobot[opentrons]")
 
     ot_api.set_host(host)
     ot_api.set_port(port)
