@@ -101,6 +101,7 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     resource: Resource,
     pattern: List[List[bool]],
     volume: float,
+    flow_rate: Optional[float],
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified resource using CoRe 96. """
@@ -112,6 +113,7 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     resource: Resource,
     pattern: List[List[bool]],
     volume: float,
+    flow_rate: Optional[float],
     **backend_kwargs
   ):
     """ Dispense liquid to the specified resource using CoRe 96. """

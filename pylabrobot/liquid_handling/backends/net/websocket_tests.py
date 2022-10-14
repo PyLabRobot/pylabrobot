@@ -165,7 +165,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
     self.assert_event_sent_n("discard_tips", times=1)
 
   def test_aspirate(self):
-    self.lh.aspirate(self.plt_car[0].resource["A1:A2"], vols=[100, 100])
+    self.lh.aspirate(self.plt_car[0].resource["A1:A2"], vols=[100, 100], liquid_classes=None)
     self.assert_event_sent_n("aspirate", times=1)
     self.assert_command_equal(self.backend.get_commands("aspirate")[0], {
       "event": "aspirate",
@@ -186,33 +186,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
           },
           "offset_z": 0,
           "volume": 100,
-          "liquid_class": {
-            "device": ["CHANNELS_1000uL"],
-            "tip_type": "STANDARD_VOLUME_TIP_300uL",
-            "dispense_mode": 2,
-            "pressure_lld": 0,
-            "max_height_difference": 0,
-            "flow_rate": [100, 120],
-            "mix_flow_rate": [100, 1],
-            "air_transport_volume": [0, 0],
-            "blowout_volume": [0, 0],
-            "swap_speed": [2, 2],
-            "settling_time": [1, 0],
-            "over_aspirate_volume": 0,
-            "clot_retract_height": 0,
-            "stop_flow_rate": 5,
-            "stop_back_volume": 0,
-            "correction_curve": {
-              "5": 6.5,
-              "10": 11.9,
-              "20": 23.2,
-              "50": 55.1,
-              "100": 107.2,
-              "200": 211.0,
-              "300": 313.5,
-              "0": 0
-            }
-          }
+          "flow_rate": None,
         },
         {
           "resource": {
@@ -228,39 +202,13 @@ class WebSocketBackendCommandTests(unittest.TestCase):
           },
           "offset_z": 0,
           "volume": 100,
-          "liquid_class": {
-            "device": ["CHANNELS_1000uL"],
-            "tip_type": "STANDARD_VOLUME_TIP_300uL",
-            "dispense_mode": 2,
-            "pressure_lld": 0,
-            "max_height_difference": 0,
-            "flow_rate": [100, 120],
-            "mix_flow_rate": [100, 1],
-            "air_transport_volume": [0, 0],
-            "blowout_volume": [0, 0],
-            "swap_speed": [2, 2],
-            "settling_time": [1, 0],
-            "over_aspirate_volume": 0,
-            "clot_retract_height": 0,
-            "stop_flow_rate": 5,
-            "stop_back_volume": 0,
-            "correction_curve": {
-              "5": 6.5,
-              "10": 11.9,
-              "20": 23.2,
-              "50": 55.1,
-              "100": 107.2,
-              "200": 211.0,
-              "300": 313.5,
-              "0": 0
-            }
-          }
+          "flow_rate": None,
         }
       ]
     })
 
   def test_dispense(self):
-    self.lh.dispense(self.plt_car[0].resource["A1"], vols=[100])
+    self.lh.dispense(self.plt_car[0].resource["A1"], vols=[100], liquid_classes=None)
     self.assert_event_sent_n("dispense", times=1)
     self.assert_command_equal(self.backend.get_commands("dispense")[0], {
       "channels": [
@@ -278,33 +226,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
           },
           "volume": 100,
           "offset_z": 0,
-          "liquid_class": {
-            "device": ["CHANNELS_1000uL"],
-            "tip_type": "STANDARD_VOLUME_TIP_300uL",
-            "dispense_mode": 2,
-            "pressure_lld": 0,
-            "max_height_difference": 0,
-            "flow_rate": [100, 120],
-            "mix_flow_rate": [100, 1],
-            "air_transport_volume": [0, 0],
-            "blowout_volume": [0, 0],
-            "swap_speed": [2, 2],
-            "settling_time": [1, 0],
-            "over_aspirate_volume": 0,
-            "clot_retract_height": 0,
-            "stop_flow_rate": 5,
-            "stop_back_volume": 0,
-            "correction_curve": {
-              "5": 6.5,
-              "10": 11.9,
-              "20": 23.2,
-              "50": 55.1,
-              "100": 107.2,
-              "200": 211.0,
-              "300": 313.5,
-              "0": 0
-            }
-          }
+          "flow_rate": None
         }
       ],
       "event": "dispense",

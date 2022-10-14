@@ -59,7 +59,7 @@ class CorrectionCurvePoint:
 
 
 class LiquidClass:
-  """ Wrapper class for liquid classes. """
+  """ Liquid classes are a collection of parameters for liquid handling operations. """
 
   def __init__(
     self,
