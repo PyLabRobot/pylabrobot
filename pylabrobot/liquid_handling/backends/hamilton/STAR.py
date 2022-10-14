@@ -24,7 +24,6 @@ from pylabrobot.liquid_handling.resources import (
   TipType,
 )
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.liquid_classes import LiquidClass
 from pylabrobot.liquid_handling.standard import Aspiration, Dispense
 
 from .errors import (
@@ -669,15 +668,13 @@ class STAR(HamiltonLiquidHandler):
     for channel in channels:
       liquid_surface_no_lld = channel.resource.get_absolute_location().z + (channel.offset_z or 1)
 
-      if channel.flow_rate:
+      if channel.flow_rate is not None:
         flow_rate = channel.flow_rate
-      elif channel.liquid_class is not None and channel.liquid_class.flow_rate[0] is not None:
-        flow_rate = channel.liquid_class.flow_rate[0]
       else:
         flow_rate = 100
 
       params.append({
-        "aspiration_volumes": int(channel.get_corrected_volume()*10) if channel is not None else 0,
+        "aspiration_volumes": int(channel.volume*10) if channel is not None else 0,
         "lld_search_height": int((liquid_surface_no_lld+5) * 10), #2321,
         "clot_detection_height": 0,
         "liquid_surface_no_lld": int(liquid_surface_no_lld * 10), #1881,
@@ -774,16 +771,14 @@ class STAR(HamiltonLiquidHandler):
     for channel in channels:
       liquid_surface_no_lld = channel.resource.get_absolute_location().z + (channel.offset_z or 1)
 
-      if channel.flow_rate:
+      if channel.flow_rate is not None:
         flow_rate = channel.flow_rate
-      elif channel.liquid_class is not None and channel.liquid_class.flow_rate[1] is not None:
-        flow_rate = channel.liquid_class.flow_rate[1]
       else:
         flow_rate = 120
 
       params.append({
         "dispensing_mode": 2,
-        "dispense_volumes": int(channel.get_corrected_volume()*10) if channel is not None else 0,
+        "dispense_volumes": int(channel.volume*10) if channel is not None else 0,
         "lld_search_height": 2321,
         "liquid_surface_no_lld": int(liquid_surface_no_lld * 10), #1881,
         "pull_out_distance_transport_air": int(air_transport_retract_dist * 10),
@@ -902,7 +897,6 @@ class STAR(HamiltonLiquidHandler):
     pattern: List[List[bool]],
     volume: float,
     flow_rate: Optional[float],
-    liquid_class: Optional[LiquidClass] = None,
     blow_out_air_volume: float = 0,
     use_lld: bool = False,
     liquid_height: float = 2,
@@ -917,10 +911,7 @@ class STAR(HamiltonLiquidHandler):
     liquid_height = resource.get_absolute_location().z + liquid_height
 
     if flow_rate is None:
-      if liquid_class is None:
-        flow_rate = liquid_class.flow_rate[0]
-      else:
-        flow_rate = 250
+      flow_rate = 250
 
     cmd_kwargs = dict(
       x_position=int(position.x * 10),
@@ -939,7 +930,7 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth=0,
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_aspiration=0,
-      aspiration_volumes=int(liquid_class.compute_corrected_volume(volume)*10),
+      aspiration_volumes=int(volume*10),
       aspiration_speed=int(flow_rate * 10),
       transport_air_volume=50,
       blow_out_air_volume=0,
@@ -983,7 +974,6 @@ class STAR(HamiltonLiquidHandler):
     pattern: List[List[bool]],
     volume: float,
     flow_rate: Optional[float],
-    liquid_class: Optional[LiquidClass] = None,
     mix_cycles=0,
     mix_volume=0,
     jet=False,
@@ -1001,10 +991,7 @@ class STAR(HamiltonLiquidHandler):
     liquid_height = resource.get_absolute_location().z + liquid_height
 
     if flow_rate is None:
-      if liquid_class is None:
-        flow_rate = liquid_class.flow_rate[1]
-      else:
-        flow_rate = 120
+      flow_rate = 120
 
     dispense_mode = {
       (True, False): 0,
@@ -1030,7 +1017,7 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth=0,
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_dispense=0,
-      dispense_volume=int(liquid_class.compute_corrected_volume(volume)*10),
+      dispense_volume=int(volume*10),
       dispense_speed=int(flow_rate * 10),
       transport_air_volume=50,
       blow_out_air_volume=0,

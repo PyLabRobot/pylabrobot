@@ -8,6 +8,7 @@ import os
 import unittest
 import unittest.mock
 from typing import Optional
+from pylabrobot.liquid_handling import liquid_classes
 
 from pylabrobot.liquid_handling.resources.abstract import Tip, Well, create_equally_spaced
 
@@ -380,7 +381,9 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_transfer(self):
     # Simple transfer
-    self.lh.transfer(self.plate["A1"], self.plate["A2"], 10)
+    self.lh.transfer(self.plate["A1"], self.plate["A2"], 10,
+      aspiration_liquid_class=None, dispense_liquid_classes=None)
+
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (Aspiration(resource=self.plate.get_item("A1"), volume=10.0),),
@@ -392,7 +395,8 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     self.lh.backend.clear()
 
     # Transfer to multiple wells
-    self.lh.transfer(self.plate["A1"], self.plate["A1:H1"], source_vol=80)
+    self.lh.transfer(self.plate["A1"], self.plate["A1:H1"], source_vol=80,
+      aspiration_liquid_class=None, dispense_liquid_classes=None)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (Aspiration(resource=self.plate.get_item("A1"), volume=80.0),),
@@ -404,7 +408,8 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     self.lh.backend.clear()
 
     # Transfer with ratios
-    self.lh.transfer(self.plate["A1"], self.plate["B1:C1"], source_vol=60, ratios=[2, 1])
+    self.lh.transfer(self.plate["A1"], self.plate["B1:C1"], source_vol=60, ratios=[2, 1],
+      aspiration_liquid_class=None, dispense_liquid_classes=None)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (Aspiration(resource=self.plate.get_item("A1"), volume=60.0),),
@@ -418,7 +423,8 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
     # Transfer with target_vols
     vols = [3, 1, 4, 1, 5, 9, 6, 2]
-    self.lh.transfer(self.plate["A1"], self.plate["A1:H1"], target_vols=vols)
+    self.lh.transfer(self.plate["A1"], self.plate["A1:H1"], target_vols=vols,
+      aspiration_liquid_class=None, dispense_liquid_classes=None)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (Aspiration(resource=self.plate.get_item("A1"), volume=sum(vols)),),

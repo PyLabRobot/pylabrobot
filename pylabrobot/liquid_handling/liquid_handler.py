@@ -545,12 +545,13 @@ class LiquidHandler:
     wells: Iterable[Well],
     vols: Union[Iterable[float], numbers.Rational],
     flow_rates: Optional[Union[float, List[float]]] = None,
-    liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
+    liquid_classes: Optional[Union[LiquidClass, List[LiquidClass]]] =
+      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     end_delay: float = 0,
     offsets_z: Union[float, List[float]] = 0,
     **backend_kwargs
   ):
-    """Aspirate liquid from the specified wells.
+    """ Aspirate liquid from the specified wells.
 
     Examples:
       Aspirate a constant amount of liquid from the first column:
@@ -574,14 +575,15 @@ class LiquidHandler:
       vols: A list of volumes to aspirate, one for each channel. Note that the `None` values must
         be in the same position in both lists. If `vols` is a single number, then all channels
         will aspirate that volume.
+      flow_rates: the aspiration speed. In ul/s.
+      liquid_classes: the liquid class with which to perform the aspirations. It provides default
+        values for parameters flow_rate, and soon others.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
-
-      ValueError: If the aspiration info is invalid, in other words, when all channels are `None`.
 
       ValueError: If all channels are `None`.
     """
@@ -594,20 +596,25 @@ class LiquidHandler:
     if isinstance(vols, numbers.Rational):
       vols = [vols] * len(wells)
 
-    if isinstance(liquid_class, LiquidClass):
-      liquid_class = [liquid_class] * len(wells)
-    elif liquid_class is None:
-      liquid_class = [None] * len(wells)
+    if isinstance(liquid_classes, LiquidClass):
+      liquid_classes = [liquid_classes] * len(wells)
+    elif liquid_classes is None:
+      liquid_classes = [None] * len(wells)
 
     if isinstance(offsets_z, numbers.Rational):
       offsets_z = [offsets_z] * len(wells)
 
-    if isinstance(flow_rates, float):
+    if flow_rates is None:
+      flow_rates = [(lc.flow_rate[0] if lc is not None else None) for lc in liquid_classes]
+    elif isinstance(flow_rates, float):
       flow_rates = [flow_rates] * len(wells)
-    elif flow_rates is None:
-      flow_rates = [None] * len(wells)
 
-    assert len(vols) == len(liquid_class) == len(offsets_z) == len(flow_rates)
+    # Correct volumes using the liquid class' correction curve
+    for i, lc in enumerate(liquid_classes):
+      if lc is not None:
+        vols[i] = lc.compute_corrected_volume(vols[i])
+
+    assert len(vols) == len(offsets_z) == len(flow_rates)
 
     aspirations = [
       (Aspiration(c, v, offset_z=offset_z, flow_rate=fr) if c is not None else None)
@@ -624,7 +631,8 @@ class LiquidHandler:
     wells: Iterable[Well],
     vols: List[float],
     flow_rates: Optional[Union[float, List[float]]] = None,
-    liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
+    liquid_classes: Union[LiquidClass, List[LiquidClass]] =
+      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     end_delay: float = 0,
     offsets_z: Union[float, List[float]] = 0,
     **backend_kwargs
@@ -654,6 +662,9 @@ class LiquidHandler:
         list of tuples, they must be of length 2, and the first element must be a well or a list of
         wells, and the second element must be a volume or a list of volumes. When a single volume is
         passed with a list of wells, it is used for all wells in the list.
+      flow_rates: the flow rates, in ul/s
+      liquid_classes: the liquid class with which to perform the dispenses. It provides default
+        values for parameters flow_rate, and soon others.
       end_delay: The delay after the last dispense in seconds, optional. This is useful for when
         the tips used in the dispense are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
@@ -672,22 +683,27 @@ class LiquidHandler:
     if isinstance(vols, numbers.Rational):
       vols = [vols] * len(wells)
 
-    if isinstance(liquid_class, LiquidClass):
-      liquid_class = [liquid_class] * len(wells)
-    elif liquid_class is None:
-      liquid_class = [None] * len(wells)
+    if isinstance(liquid_classes, LiquidClass):
+      liquid_classes = [liquid_classes] * len(wells)
+    elif liquid_classes is None:
+      liquid_classes = [None] * len(wells)
 
     if isinstance(offsets_z, numbers.Rational):
       offsets_z = [offsets_z] * len(wells)
 
-    if isinstance(flow_rates, float):
+    if flow_rates is None:
+      flow_rates = [(lc.flow_rate[1] if lc is not None else None) for lc in liquid_classes]
+    elif isinstance(flow_rates, float):
       flow_rates = [flow_rates] * len(wells)
-    elif flow_rates is None:
-      flow_rates = [None] * len(wells)
+
+    # Correct volumes using the liquid class' correction curve
+    for i, lc in enumerate(liquid_classes):
+      if lc is not None:
+        vols[i] = lc.compute_corrected_volume(vols[i])
 
     self._assert_resources_exist(wells)
 
-    assert len(vols) == len(liquid_class) == len(offsets_z) == len(flow_rates)
+    assert len(vols) == len(offsets_z) == len(flow_rates)
 
     dispenses = [
       (Dispense(c, v, offset_z=offset_z, flow_rate=fr) if c is not None else None)
@@ -706,8 +722,11 @@ class LiquidHandler:
     ratios: Optional[List[float]] = None,
     target_vols: Optional[List[float]] = None,
     aspiration_flow_rate: Optional[float] = None,
+    aspiration_liquid_class: Optional[LiquidClass] =
+      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     dispense_flow_rates: Optional[Union[float, List[float]]] = None,
-    liquid_class: LiquidClass = None,
+    dispense_liquid_classes: Optional[Union[LiquidClass, List[LiquidClass]]] =
+      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     **backend_kwargs
   ):
     """Transfer liquid from one well to another.
@@ -764,14 +783,14 @@ class LiquidHandler:
     self.aspirate(
       wells=source,
       vols=[sum(target_vols)],
-      liquid_class=liquid_class,
       flow_rates=aspiration_flow_rate,
+      liquid_classes=aspiration_liquid_class,
       **backend_kwargs)
     self.dispense(
       wells=targets,
       vols=target_vols,
-      liquid_class=liquid_class,
       flow_rates=dispense_flow_rates,
+      liquid_classes=dispense_liquid_classes,
       **backend_kwargs)
 
   def pick_up_tips96(self, resource: Union[str, Resource], **backend_kwargs):
@@ -851,7 +870,8 @@ class LiquidHandler:
     flow_rate: Optional[float] = None,
     pattern: Optional[Union[List[List[bool]], str]] = None,
     end_delay: float = 0,
-    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
+    liquid_class: Optional[LiquidClass] =
+      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     **backend_kwargs
   ):
     """ Aspirate liquid using the CoR96 head in the locations where pattern is `True`.
@@ -898,11 +918,14 @@ class LiquidHandler:
 
     utils.assert_shape(pattern, (8, 12))
 
+    # Correct volume using the liquid class' correction curve.
+    if liquid_class is not None:
+      volume = liquid_class.compute_corrected_volume(volume)
+
     self.backend.aspirate96(
       resource=resource,
       pattern=pattern,
       volume=volume,
-      liquid_class=liquid_class,
       flow_rate=flow_rate,
       **backend_kwargs)
 
@@ -961,13 +984,16 @@ class LiquidHandler:
     elif isinstance(pattern, str):
       pattern = utils.string_to_pattern(pattern)
 
+    # Correct volume using the liquid class' correction curve.
+    if liquid_class is not None:
+      volume = liquid_class.compute_corrected_volume(volume)
+
     utils.assert_shape(pattern, (8, 12))
 
     self.backend.dispense96(
       resource=resource,
       pattern=pattern,
       volume=volume,
-      liquid_class=liquid_class,
       flow_rate=flow_rate,
       **backend_kwargs)
 

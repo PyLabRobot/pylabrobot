@@ -5,10 +5,6 @@ from __future__ import annotations
 from abc import ABC
 from typing import Optional
 
-from pylabrobot.liquid_handling.liquid_classes import (
-  LiquidClass,
-  StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
-)
 from pylabrobot.liquid_handling.resources import Resource
 
 
@@ -18,7 +14,7 @@ class LiquidHandlingOp(ABC):
   Attributes:
     resource: The resource that will be used in the operation.
     volume: The volume of the liquid that is being handled.
-    liquid_class: The liquid class of the liquid that is being handled.
+    flow_rate: The flow rate with which to perform this operation.
     offset_z: The offset in the z direction.
   """
 
@@ -27,7 +23,6 @@ class LiquidHandlingOp(ABC):
     resource: Resource,
     volume: float,
     flow_rate: Optional[float] = None,
-    liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     offset_z: float = 0
   ):
     """ Initialize the operation.
@@ -36,14 +31,12 @@ class LiquidHandlingOp(ABC):
       resource: The resource that will be used in the operation.
       volume: The volume of the liquid that is being handled. In ul.
       flow_rate: The flow rate. None is default for the Machine. In ul/s.
-      liquid_class: The liquid class of the liquid that is being handled.
       offset_z: The offset in the z direction. In mm.
     """
 
     self.resource = resource
     self.volume = volume
     self.flow_rate = flow_rate
-    self.liquid_class = liquid_class
     self.offset_z = offset_z
 
   def __eq__(self, other: LiquidHandlingOp) -> bool:
@@ -52,18 +45,16 @@ class LiquidHandlingOp(ABC):
       self.resource == other.resource and
       self.volume == other.volume and
       self.flow_rate == other.flow_rate and
-      self.liquid_class == other.liquid_class and
       self.offset_z == other.offset_z
     )
 
   def __hash__(self) -> int:
-    return hash((self.resource, self.volume, self.liquid_class))
+    return hash((self.resource, self.volume, self.flow_rate, self.offset_z))
 
   def __repr__(self) -> str:
     return (
       f"{self.__class__.__name__}(resource={repr(self.resource)}, volume={repr(self.volume)}, "
-      f"flow_rate={self.flow_rate}, liquid_class={repr(self.liquid_class)}, "
-      "offset_z={self.offset_z})"
+      f"flow_rate={self.flow_rate}, offset_z={self.offset_z})"
     )
 
   def get_corrected_volume(self) -> float:
@@ -88,7 +79,6 @@ class LiquidHandlingOp(ABC):
     return {
       "resource": self.resource.serialize(),
       "volume": self.volume,
-      "liquid_class": self.liquid_class.serialize(),
       "flow_rate": self.flow_rate,
       "offset_z": self.offset_z,
     }
