@@ -318,7 +318,6 @@ class OpentronsBackend(LiquidHandlerBackend):
   def aspirate(
     self,
     *channels: Optional[Aspiration],
-    flow_rate: Optional[float] = None,
   ):
     """ Aspirate liquid from the specified resource using pip. """
 
@@ -329,15 +328,15 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     pipette_id   = self.select_liquid_pipette(volume)
     pipette_name = self.get_pipette_name(pipette_id)
-    if flow_rate is None:
-      flow_rate = self._get_default_aspiration_flow_rate(pipette_name)
+    if channel.flow_rate is None:
+      channel.flow_rate = self._get_default_aspiration_flow_rate(pipette_name)
 
     labware_id = self.defined_labware[channel.resource.parent.name]
     if pipette_id is None:
       raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.aspirate(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=flow_rate, offset_z=channel.offset_z)
+      volume=volume, flow_rate=channel.flow_rate, offset_z=channel.offset_z)
 
   def _get_default_dispense_flow_rate(self, pipette_name: str) -> float:
     """ Get the default dispense flow rate for the specified pipette.
@@ -367,7 +366,6 @@ class OpentronsBackend(LiquidHandlerBackend):
   def dispense(
     self,
     *channels: Optional[Dispense],
-    flow_rate: Optional[float] = None,
   ):
     """ Dispense liquid from the specified resource using pip. """
 
@@ -378,15 +376,15 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     pipette_id   = self.select_liquid_pipette(volume)
     pipette_name = self.get_pipette_name(pipette_id)
-    if flow_rate is None:
-      flow_rate = self._get_default_dispense_flow_rate(pipette_name)
+    if channel.flow_rate is None:
+      channel.flow_rate = self._get_default_dispense_flow_rate(pipette_name)
 
     labware_id = self.defined_labware[channel.resource.parent.name]
     if pipette_id is None:
       raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.dispense(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=flow_rate, offset_z=channel.offset_z)
+      volume=volume, flow_rate=channel.flow_rate, offset_z=channel.offset_z)
 
   def pick_up_tips96(self, resource: Resource, **backend_kwargs):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")

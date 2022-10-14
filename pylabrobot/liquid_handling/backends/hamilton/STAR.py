@@ -669,6 +669,13 @@ class STAR(HamiltonLiquidHandler):
     for channel in channels:
       liquid_surface_no_lld = channel.resource.get_absolute_location().z + (channel.offset_z or 1)
 
+      if channel.flow_rate:
+        flow_rate = channel.flow_rate
+      elif channel.liquid_class is not None and channel.liquid_class.flow_rate[0] is not None:
+        flow_rate = channel.liquid_class.flow_rate[0]
+      else:
+        flow_rate = 100
+
       params.append({
         "aspiration_volumes": int(channel.get_corrected_volume()*10) if channel is not None else 0,
         "lld_search_height": int((liquid_surface_no_lld+5) * 10), #2321,
@@ -681,7 +688,7 @@ class STAR(HamiltonLiquidHandler):
         "immersion_depth": 0,
         "immersion_depth_direction": 0,
         "surface_following_distance": 0,
-        "aspiration_speed": 1000,
+        "aspiration_speed": int(flow_rate*10),
         "transport_air_volume": 0,
         "blow_out_air_volume": 0, # blow out air volume is handled separately, see below.
         "pre_wetting_volume": 0,
@@ -767,6 +774,13 @@ class STAR(HamiltonLiquidHandler):
     for channel in channels:
       liquid_surface_no_lld = channel.resource.get_absolute_location().z + (channel.offset_z or 1)
 
+      if channel.flow_rate:
+        flow_rate = channel.flow_rate
+      elif channel.liquid_class is not None and channel.liquid_class.flow_rate[1] is not None:
+        flow_rate = channel.liquid_class.flow_rate[1]
+      else:
+        flow_rate = 120
+
       params.append({
         "dispensing_mode": 2,
         "dispense_volumes": int(channel.get_corrected_volume()*10) if channel is not None else 0,
@@ -779,7 +793,7 @@ class STAR(HamiltonLiquidHandler):
         "immersion_depth": 0,
         "immersion_depth_direction": 0,
         "surface_following_distance": 0,
-        "dispense_speed": 1200,
+        "dispense_speed": int(flow_rate*10),
         "cut_off_speed": 50,
         "stop_back_volume": 0,
         "transport_air_volume": 0,
@@ -887,6 +901,7 @@ class STAR(HamiltonLiquidHandler):
     resource: Resource,
     pattern: List[List[bool]],
     volume: float,
+    flow_rate: Optional[float],
     liquid_class: Optional[LiquidClass] = None,
     blow_out_air_volume: float = 0,
     use_lld: bool = False,
@@ -900,6 +915,12 @@ class STAR(HamiltonLiquidHandler):
     pattern = [item for sublist in pattern for item in sublist]
 
     liquid_height = resource.get_absolute_location().z + liquid_height
+
+    if flow_rate is None:
+      if liquid_class is None:
+        flow_rate = liquid_class.flow_rate[0]
+      else:
+        flow_rate = 250
 
     cmd_kwargs = dict(
       x_position=int(position.x * 10),
@@ -919,7 +940,7 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_aspiration=0,
       aspiration_volumes=int(liquid_class.compute_corrected_volume(volume)*10),
-      aspiration_speed=2500,
+      aspiration_speed=int(flow_rate * 10),
       transport_air_volume=50,
       blow_out_air_volume=0,
       pre_wetting_volume=50,
@@ -961,6 +982,7 @@ class STAR(HamiltonLiquidHandler):
     resource: Resource,
     pattern: List[List[bool]],
     volume: float,
+    flow_rate: Optional[float],
     liquid_class: Optional[LiquidClass] = None,
     mix_cycles=0,
     mix_volume=0,
@@ -977,6 +999,12 @@ class STAR(HamiltonLiquidHandler):
     pattern = [item for sublist in pattern for item in sublist]
 
     liquid_height = resource.get_absolute_location().z + liquid_height
+
+    if flow_rate is None:
+      if liquid_class is None:
+        flow_rate = liquid_class.flow_rate[1]
+      else:
+        flow_rate = 120
 
     dispense_mode = {
       (True, False): 0,
@@ -1003,7 +1031,7 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_dispense=0,
       dispense_volume=int(liquid_class.compute_corrected_volume(volume)*10),
-      dispense_speed=1200,
+      dispense_speed=int(flow_rate * 10),
       transport_air_volume=50,
       blow_out_air_volume=0,
       lld_mode=False,

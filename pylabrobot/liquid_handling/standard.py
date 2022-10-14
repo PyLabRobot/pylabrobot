@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from typing import Optional
 
 from pylabrobot.liquid_handling.liquid_classes import (
   LiquidClass,
@@ -25,6 +26,7 @@ class LiquidHandlingOp(ABC):
     self,
     resource: Resource,
     volume: float,
+    flow_rate: Optional[float] = None,
     liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     offset_z: float = 0
   ):
@@ -32,13 +34,15 @@ class LiquidHandlingOp(ABC):
 
     Args:
       resource: The resource that will be used in the operation.
-      volume: The volume of the liquid that is being handled.
+      volume: The volume of the liquid that is being handled. In ul.
+      flow_rate: The flow rate. None is default for the Machine. In ul/s.
       liquid_class: The liquid class of the liquid that is being handled.
-      offset_z: The offset in the z direction.
+      offset_z: The offset in the z direction. In mm.
     """
 
     self.resource = resource
     self.volume = volume
+    self.flow_rate = flow_rate
     self.liquid_class = liquid_class
     self.offset_z = offset_z
 
@@ -47,6 +51,7 @@ class LiquidHandlingOp(ABC):
       isinstance(other, LiquidHandlingOp) and
       self.resource == other.resource and
       self.volume == other.volume and
+      self.flow_rate == other.flow_rate and
       self.liquid_class == other.liquid_class and
       self.offset_z == other.offset_z
     )
@@ -57,7 +62,8 @@ class LiquidHandlingOp(ABC):
   def __repr__(self) -> str:
     return (
       f"{self.__class__.__name__}(resource={repr(self.resource)}, volume={repr(self.volume)}, "
-      f"liquid_class={repr(self.liquid_class)}, offset_z={self.offset_z})"
+      f"flow_rate={self.flow_rate}, liquid_class={repr(self.liquid_class)}, "
+      "offset_z={self.offset_z})"
     )
 
   def get_corrected_volume(self) -> float:
@@ -83,6 +89,7 @@ class LiquidHandlingOp(ABC):
       "resource": self.resource.serialize(),
       "volume": self.volume,
       "liquid_class": self.liquid_class.serialize(),
+      "flow_rate": self.flow_rate,
       "offset_z": self.offset_z,
     }
 
