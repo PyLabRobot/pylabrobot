@@ -98,25 +98,23 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
   @abstractmethod
   def aspirate96(
     self,
-    resource: Resource,
-    pattern: List[List[bool]],
+    plate: Plate,
     volume: float,
     flow_rate: Optional[float],
     **backend_kwargs
   ):
-    """ Aspirate liquid from the specified resource using CoRe 96. """
+    """ Aspirate from all wells in 96 well plate. """
     pass
 
   @abstractmethod
   def dispense96(
     self,
-    resource: Resource,
-    pattern: List[List[bool]],
+    plate: Plate,
     volume: float,
     flow_rate: Optional[float],
     **backend_kwargs
   ):
-    """ Dispense liquid to the specified resource using CoRe 96. """
+    """ Dispense to all wells in 96 well plate. """
     pass
 
   @abstractmethod

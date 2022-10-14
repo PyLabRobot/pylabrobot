@@ -284,14 +284,12 @@ class WebSocketBackend(LiquidHandlerBackend):
     self.send_event(event="discard_tips96", resource=resource.serialize(),
       wait_for_response=True)
 
-  def aspirate96(self, resource, pattern, volume, flow_rate):
-    pattern = [[(volume if p else 0) for p in pattern[i]] for i in range(len(pattern))]
-    self.send_event(event="aspirate96", resource=resource.serialize(), pattern=pattern,
+  def aspirate96(self, plate, volume, flow_rate):
+    self.send_event(event="aspirate96", plate=plate.serialize(),
       flow_rate=flow_rate, volume=volume, wait_for_response=True)
 
-  def dispense96(self, resource, pattern, volume, flow_rate):
-    pattern = [[volume if p else 0 for p in pattern[i]] for i in range(len(pattern))]
-    self.send_event(event="dispense96", resource=resource.serialize(), pattern=pattern,
+  def dispense96(self, plate, volume, flow_rate):
+    self.send_event(event="dispense96", plate=plate.serialize(),
       flow_rate=flow_rate, volume=volume, wait_for_response=True)
 
   def move_plate(self, plate: Plate, to: Coordinate, **backend_kwargs):

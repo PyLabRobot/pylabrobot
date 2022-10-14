@@ -863,35 +863,22 @@ class LiquidHandler:
 
     self.discard_tips96(self._picked_up_tips96)
 
-  def aspirate96(
+  def aspirate_plate(
     self,
-    resource: Union[str, Resource],
+    plate: Plate,
     volume: float,
     flow_rate: Optional[float] = None,
-    pattern: Optional[Union[List[List[bool]], str]] = None,
     end_delay: float = 0,
     liquid_class: Optional[LiquidClass] =
       StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     **backend_kwargs
   ):
-    """ Aspirate liquid using the CoR96 head in the locations where pattern is `True`.
+    """ Aspirate from all wells in a plate.
 
     Examples:
       Aspirate an entire 96 well plate:
 
-      >>> lh.aspirate96("plate_01", "A1:H12", volume=50)
-
-      Aspirate an entire 96 well plate:
-
-      >>> lh.aspirate96("plate_01", [[True]*12]*8, volume=50)
-
-      Aspirate from the left half of a 96 well plate:
-
-      >>> lh.aspirate96("plate_01", "A1:H6", volume=50)
-
-      Aspirate from the left half of a 96 well plate:
-
-      >>> lh.aspirate96("plate_01", [[True]*6+[False]*6]*8], volume=50)
+      >>> lh.aspirate_plate(plate, volume=50)
 
     Args:
       resource: Resource name or resource object.
@@ -903,63 +890,38 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Resource):
-      resource = resource.name
-    resource = self.get_resource(resource)
-    if not resource:
-      raise ValueError(f"Resource with name {resource} not found.")
-
-    # Convert the pattern to a list of lists of booleans
-    if pattern is None:
-      pattern = [[True]*12]*8
-    elif isinstance(pattern, str):
-      pattern = utils.string_to_pattern(pattern)
-
-    utils.assert_shape(pattern, (8, 12))
-
     # Correct volume using the liquid class' correction curve.
     if liquid_class is not None:
       volume = liquid_class.compute_corrected_volume(volume)
 
-    self.backend.aspirate96(
-      resource=resource,
-      pattern=pattern,
-      volume=volume,
-      flow_rate=flow_rate,
-      **backend_kwargs)
+    if plate.num_items_x == 12 and plate.num_items_y == 8:
+      self.backend.aspirate96(
+        plate=plate,
+        volume=volume,
+        flow_rate=flow_rate,
+        **backend_kwargs)
+    else:
+      raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
+                               f"by {plate.num_items_y} plate")
 
     if end_delay > 0:
       time.sleep(end_delay)
 
-  def dispense96(
+  def dispense_plate(
     self,
-    resource: Union[str, Resource],
+    plate: Union[str, Resource],
     volume: float,
-    pattern: Optional[Union[List[List[bool]], str]] = None,
     flow_rate: Optional[float] = None,
     liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     end_delay: float = 0,
     **backend_kwargs
   ):
-    """ Dispense liquid using the CoR96 head in the locations where pattern is `True`.
+    """ Dispense to all wells in a plate.
 
     Examples:
       Dispense an entire 96 well plate:
 
-      >>> dispense96("plate_01", [[True * 12] * 8], volume=50)
-
-      Dispense an entire 96 well plate:
-
-      >>> dispense96("plate_01", "A1:H12", volume=50)
-
-      Dispense from the left half of a 96 well plate:
-
-      >>> dispense96("plate_01", "A1:H6", volume=50)
-
-      Dispense from the left half of a 96 well plate:
-
-      >>> dispense96("plate_01", [[True]*6+[False]*6]*8], volume=50)
+      >>> dispense96(plate, volume=50)
 
     Args:
       resource: Resource name or resource object.
@@ -971,34 +933,60 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, Resource):
-      resource = resource.name
-    resource = self.get_resource(resource)
-    if not resource:
-      raise ValueError(f"Resource with name {resource} not found.")
-
-    # Convert the pattern to a list of lists of booleans
-    if pattern is None:
-      pattern = [[True]*12]*8
-    elif isinstance(pattern, str):
-      pattern = utils.string_to_pattern(pattern)
-
     # Correct volume using the liquid class' correction curve.
     if liquid_class is not None:
       volume = liquid_class.compute_corrected_volume(volume)
 
-    utils.assert_shape(pattern, (8, 12))
-
-    self.backend.dispense96(
-      resource=resource,
-      pattern=pattern,
-      volume=volume,
-      flow_rate=flow_rate,
-      **backend_kwargs)
+    if plate.num_items_x == 12 and plate.num_items_y == 8:
+      self.backend.dispense96(
+        plate=plate,
+        volume=volume,
+        flow_rate=flow_rate,
+        **backend_kwargs)
+    else:
+      raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "
+                               f"by {plate.num_items_y} plate")
 
     if end_delay > 0:
       time.sleep(end_delay)
+
+  def stamp(
+    self,
+    source: Plate,
+    target: Plate,
+    volume: float,
+    aspiration_flow_rate: Optional[float] = None,
+    aspiration_liquid_class: Optional[LiquidClass] =
+      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
+    dispense_flow_rate: Optional[float] = None,
+    dispense_liquid_class: Optional[LiquidClass] =
+      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
+  ):
+    """ Stamp (aspiration and dispense) one plate onto another.
+
+    Args:
+      source: the source plate
+      target: the target plate
+      volume: the volume to be transported
+      aspiration_flow_rate: the flow rate for the aspiration, in ul/s
+      aspiration_liquid_class: the liquid class for the aspiration, in ul/s
+      dispense_flow_rate: the flow rate for the dispense, in ul/s
+      dispense_liquid_class: the liquid class for the dispense, in ul/s
+    """
+
+    assert (source.num_items_x, source.num_items_y) == (target.num_items_x, target.num_items_y), \
+      "Source and target plates must be the same shape"
+
+    self.aspirate_plate(
+      plate=source,
+      volume=volume,
+      flow_rate=aspiration_flow_rate,
+      liquid_class=aspiration_liquid_class)
+    self.dispense_plate(
+      plate=source,
+      volume=volume,
+      flow_rate=dispense_flow_rate,
+      liquid_class=dispense_liquid_class)
 
   def move_plate(
     self,

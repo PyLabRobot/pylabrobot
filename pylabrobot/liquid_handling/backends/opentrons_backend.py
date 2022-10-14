@@ -394,8 +394,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
   def aspirate96(
     self,
-    resource: Resource,
-    pattern: List[List[bool]],
+    plate: Plate,
     volume: float,
     **backend_kwargs
   ):
@@ -403,8 +402,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
   def dispense96(
     self,
-    resource: Resource,
-    pattern: List[List[bool]],
+    plate: Plate,
     volume: float,
     **backend_kwargs
   ):

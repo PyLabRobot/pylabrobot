@@ -242,11 +242,11 @@ class WebSocketBackendCommandTests(unittest.TestCase):
     self.assert_event_sent_n("discard_tips96", times=1)
 
   def test_aspirate96(self):
-    self.lh.aspirate96("plt_car", 100, [[True]*12]*8)
+    self.lh.aspirate_plate(self.lh.get_resource("plate_1"), 100)
     self.assert_event_sent_n("aspirate96", times=1)
 
   def test_dispense96(self):
-    self.lh.dispense96("plt_car", 100, [[True]*12]*8)
+    self.lh.dispense_plate(self.lh.get_resource("plate_1"), 100)
     self.assert_event_sent_n("dispense96", times=1)
 
 

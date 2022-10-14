@@ -893,8 +893,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def aspirate96(
     self,
-    resource: Resource,
-    pattern: List[List[bool]],
+    plate: Plate,
     volume: float,
     flow_rate: Optional[float],
     blow_out_air_volume: float = 0,
@@ -903,12 +902,9 @@ class STAR(HamiltonLiquidHandler):
     air_transport_retract_dist: float = 10,
     **backend_kwargs
   ):
-    position = resource.get_item("A1").get_absolute_location()
+    position = plate.get_item("A1").get_absolute_location()
 
-    # flatten pattern array
-    pattern = [item for sublist in pattern for item in sublist]
-
-    liquid_height = resource.get_absolute_location().z + liquid_height
+    liquid_height = plate.get_absolute_location().z + liquid_height
 
     if flow_rate is None:
       flow_rate = 250
@@ -944,7 +940,7 @@ class STAR(HamiltonLiquidHandler):
       homogenization_position_from_liquid_surface=0,
       surface_following_distance_during_homogenization=0,
       speed_of_homogenization=1200,
-      channel_pattern=pattern,
+      channel_pattern=[True]*12*8,
       limit_curve_index=0,
       tadm_algorithm=False,
       recording_mode=0
@@ -970,8 +966,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def dispense96(
     self,
-    resource: Resource,
-    pattern: List[List[bool]],
+    plate: Plate,
     volume: float,
     flow_rate: Optional[float],
     mix_cycles=0,
@@ -983,12 +978,9 @@ class STAR(HamiltonLiquidHandler):
     air_transport_retract_dist=10,
     blow_out_air_volume: float = 0,
   ):
-    position = resource.get_item("A1").get_absolute_location()
+    position = plate.get_item("A1").get_absolute_location()
 
-    # flatten pattern array
-    pattern = [item for sublist in pattern for item in sublist]
-
-    liquid_height = resource.get_absolute_location().z + liquid_height
+    liquid_height = plate.get_absolute_location().z + liquid_height
 
     if flow_rate is None:
       flow_rate = 120
@@ -1030,7 +1022,7 @@ class STAR(HamiltonLiquidHandler):
       mixing_position_from_liquid_surface=0,
       surface_following_distance_during_mixing=0,
       speed_of_mixing=1200,
-      channel_pattern=pattern,
+      channel_pattern=[True]*12*8,
       limit_curve_index=0,
       tadm_algorithm=False,
       recording_mode=0,
