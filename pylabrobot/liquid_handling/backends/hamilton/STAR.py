@@ -64,12 +64,14 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self.id_ += 1
     return f"{self.id_ % 10000:04}"
 
-  def _assemble_command(self, module, command, **kwargs) -> str:
+  def _assemble_command(self, module, command, parameter=None, **kwargs) -> str:
     """ Assemble a firmware command to the Hamilton machine.
 
     Args:
       module: 2 character module identifier (C0 for master, ...)
       command: 2 character command identifier (QM for request status, ...)
+      parameter: if a command only has a single parameter, its name can (and often is) emitted. Use
+        this parameter if hsl defines a single parameter, without providing the name.
       kwargs: any named parameters. the parameter name should also be
               2 characters long. The value can be any size.
 
@@ -82,6 +84,12 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     cmd = module + command
     id = self._generate_id()
     cmd += f"id{id}" # has to be first param
+
+    if parameter is not None:
+      if len(kwargs) != 0:
+        raise ValueError("Cannot have `parameter` if kwargs are defined.")
+
+      kwargs[""] = parameter
 
     for k, v in kwargs.items():
       if type(v) is datetime.datetime:
@@ -307,6 +315,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self,
     module: str,
     command: str,
+    parameter: Optional[str] = None,
     timeout: int = 16,
     fmt: typing.Optional[str]=None,
     wait = True,
@@ -317,6 +326,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     Args:
       module: 2 character module identifier (C0 for master, ...)
       command: 2 character command identifier (QM for request status)
+      parameter: if a command only has a single parameter, its name can (and often is) emitted. Use
+        this parameter if hsl defines a single parameter, without providing the name.
       timeout: timeout in seconds.
       fmt: A string containing the format of the response. If None, the raw response is returned.
       kwargs: any named parameters. the parameter name should also be
@@ -329,7 +340,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       A dictionary containing the parsed response, or None if no response was read within `timeout`.
     """
 
-    cmd, id_ = self._assemble_command(module, command, **kwargs)
+    cmd, id_ = self._assemble_command(module, command, parameter, **kwargs)
 
     # write command to endpoint
     self.dev.write(self.write_endpoint, cmd)
@@ -649,45 +660,102 @@ class STAR(HamiltonLiquidHandler):
       **params
     )
 
+  class LLDMode(enum.Enum):
+    """ Liquid level detection mode. """
+
+    OFF = 0
+    GAMMA = 1
+    PRESSURE = 2
+    DUAL = 3
+    Z_TOUCH_OFF = 4
+
   @need_iswap_parked
   def aspirate(
     self,
     *channels: Aspiration,
     blow_out_air_volume: float = 0,
     air_transport_retract_dist: float = 10,
-    **backend_kwargs
+    lld_modes: List[LLDMode] = None,
+    gamma_lld_sensitivities: List[float] = None,
+    dp_lld_sensitivities: List[float] = None,
+    surface_following_distances: List[float] = None
   ):
-    """ Aspirate liquid from the specified channels. """
+    """ Aspirate liquid from the specified channels.
+
+    Most args are defined by LiquidHandlerBackend. Below are the args specific to this backend.
+
+    Args:
+      lld_modes: Liquid level detection mode for each channel.
+      gamma_lld_sensitivities: Gamma liquid level detection sensitivity for each channel.
+        (1= high, 4=low)
+      dp_lld_sensitivities: Differential pressure liquid level detection sensitivity for each
+        channel. (1= high, 4=low)
+      surface_following_distances: Distance to follow the surface of the liquid in mm.
+    """
 
     resources = [(channel.resource if channel is not None else None) for channel in channels]
     x_positions, y_positions, channels_involved = self._channel_positions_to_fw_positions(resources)
 
+    # Fill in default values for lld_modes, gamma_lld_sensitivities, dp_lld_sensitivities, and
+    # surface_following_distances
+    if lld_modes is None:
+      lld_modes = [self.LLDMode.OFF] * len(channels)
+
+    assert len(lld_modes) == len(channels), \
+      f"lld_modes must be a list of length {len(channels)} or None"
+
+    if gamma_lld_sensitivities is None:
+      gamma_lld_sensitivities = [1] * len(channels)
+
+    assert len(gamma_lld_sensitivities) == len(channels), \
+      f"gamma_lld_sensitivities must be a list of length {len(channels)} or None"
+    assert all(1 <= s <= 4 for s in gamma_lld_sensitivities), \
+      "gamma_lld_sensitivities must be between 1 and 4"
+
+    if dp_lld_sensitivities is None:
+      dp_lld_sensitivities = [1] * len(channels)
+
+    assert len(dp_lld_sensitivities) == len(channels), \
+      f"dp_lld_sensitivities must be a list of length {len(channels)} or None"
+    assert all(1 <= s <= 4 for s in dp_lld_sensitivities), \
+      "dp_lld_sensitivities must be between 1 and 4"
+
+    if surface_following_distances is None:
+      surface_following_distances = [0] * len(channels)
+
+    assert len(surface_following_distances) == len(channels), \
+      f"surface_following_distances must be a list of length {len(channels)} or None"
+
+    # Collect full aspiration parameters for each channel
     params = []
 
     # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL. Also get
     # all other aspiration parameters.
-    for channel in channels:
+    for i, channel in enumerate(channels):
       liquid_surface_no_lld = channel.resource.get_absolute_location().z + (channel.offset_z or 1)
+      lld_search_height     = channel.resource.get_absolute_location().z + \
+                                channel.resource.get_size_z() + 5
 
       params.append({
         "aspiration_volumes": int(channel.get_corrected_volume()*10) if channel is not None else 0,
-        "lld_search_height": int((liquid_surface_no_lld+5) * 10), #2321,
+        "lld_search_height": int(lld_search_height * 10), #2321,
         "clot_detection_height": 0,
         "liquid_surface_no_lld": int(liquid_surface_no_lld * 10), #1881,
         "pull_out_distance_transport_air": int(air_transport_retract_dist * 10),
         "second_section_height": 32,
         "second_section_ratio": 6180,
-        "minimum_height": int((liquid_surface_no_lld-5) * 10), #1871,
+        #1871, not sure where the 4mm comes from, but it is consistent with the venus log files
+        "minimum_height": int(channel.resource.get_absolute_location().z * 10) - 40,
         "immersion_depth": 0,
         "immersion_depth_direction": 0,
-        "surface_following_distance": 0,
+        "surface_following_distance": int(surface_following_distances[i] * 10),
         "aspiration_speed": 1000,
         "transport_air_volume": 0,
         "blow_out_air_volume": 0, # blow out air volume is handled separately, see below.
         "pre_wetting_volume": 0,
-        "lld_mode": 0,
-        "gamma_lld_sensitivity": 1,
-        "dp_lld_sensitivity": 1,
+        "lld_mode": lld_modes[i].value,
+        "gamma_lld_sensitivity": gamma_lld_sensitivities[i],
+        "dp_lld_sensitivity": dp_lld_sensitivities[i],
         "aspirate_position_above_z_touch_off": 0,
         "detection_height_difference_for_dual_lld": 0,
         "swap_speed": 20,
@@ -722,9 +790,6 @@ class STAR(HamiltonLiquidHandler):
           cmd_kwargs[key] = []
         cmd_kwargs[key].append(value)
 
-    # Update kwargs with user properties.
-    cmd_kwargs.update(backend_kwargs)
-
     # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
     # manually.
     if blow_out_air_volume is not None and blow_out_air_volume > 0:
@@ -755,39 +820,86 @@ class STAR(HamiltonLiquidHandler):
     *channels: Dispense,
     blow_out_air_volumes: float = 0,
     air_transport_retract_dist: float = 10,
-    **backend_kwargs
+    lld_modes: List[LLDMode] = None,
+    gamma_lld_sensitivities: List[float] = None,
+    dp_lld_sensitivities: List[float] = None,
+    surface_following_distances: List[float] = None
   ):
-    """ Dispense liquid from the specified channels. """
+    """ Dispense liquid from the specified channels.
+
+    Most args are defined by LiquidHandlerBackend. Below are the args specific to this backend.
+
+    Args:
+      lld_modes: Liquid level detection mode for each channel.
+      gamma_lld_sensitivities: Gamma liquid level detection sensitivity for each channel.
+        (1= high, 4=low)
+      dp_lld_sensitivities: Differential pressure liquid level detection sensitivity for each
+        channel. (1= high, 4=low)
+      surface_following_distances: Distance to follow the surface of the liquid in mm.
+    """
 
     resources = [(channel.resource if channel is not None else None) for channel in channels]
     x_positions, y_positions, channels_involved = self._channel_positions_to_fw_positions(resources)
 
+    # Fill in default values for lld_modes, gamma_lld_sensitivities, dp_lld_sensitivities, and
+    # surface_following_distances
+    if lld_modes is None:
+      lld_modes = [self.LLDMode.OFF] * len(channels)
+
+    assert len(lld_modes) == len(channels), \
+      f"lld_modes must be a list of length {len(channels)} or None"
+
+    if gamma_lld_sensitivities is None:
+      gamma_lld_sensitivities = [1] * len(channels)
+
+    assert len(gamma_lld_sensitivities) == len(channels), \
+      f"gamma_lld_sensitivities must be a list of length {len(channels)} or None"
+    assert all(1 <= s <= 4 for s in gamma_lld_sensitivities), \
+      "gamma_lld_sensitivities must be between 1 and 4"
+
+    if dp_lld_sensitivities is None:
+      dp_lld_sensitivities = [1] * len(channels)
+
+    assert len(dp_lld_sensitivities) == len(channels), \
+      f"dp_lld_sensitivities must be a list of length {len(channels)} or None"
+    assert all(1 <= s <= 4 for s in dp_lld_sensitivities), \
+      "dp_lld_sensitivities must be between 1 and 4"
+
+    if surface_following_distances is None:
+      surface_following_distances = [0] * len(channels)
+
+    assert len(surface_following_distances) == len(channels), \
+      f"surface_following_distances must be a list of length {len(channels)} or None"
+
+    # Collect full aspiration parameters for each channel
     params = []
 
-    for channel in channels:
+    for i, channel in enumerate(channels):
       liquid_surface_no_lld = channel.resource.get_absolute_location().z + (channel.offset_z or 1)
+      lld_search_height     = channel.resource.get_absolute_location().z + \
+                                channel.resource.get_size_z() + 5
 
       params.append({
         "dispensing_mode": 2,
         "dispense_volumes": int(channel.get_corrected_volume()*10) if channel is not None else 0,
-        "lld_search_height": 2321,
+        "lld_search_height": int(lld_search_height * 10),
         "liquid_surface_no_lld": int(liquid_surface_no_lld * 10), #1881,
         "pull_out_distance_transport_air": int(air_transport_retract_dist * 10),
         "second_section_height": 32,
         "second_section_ratio": 6180,
-        "minimum_height": 1871,
+        "minimum_height": int(channel.resource.get_absolute_location().z * 10),
         "immersion_depth": 0,
         "immersion_depth_direction": 0,
-        "surface_following_distance": 0,
+        "surface_following_distance": surface_following_distances[i],
         "dispense_speed": 1200,
         "cut_off_speed": 50,
         "stop_back_volume": 0,
         "transport_air_volume": 0,
         "blow_out_air_volume": 0, # blow out air volume is handled separately, see below.
-        "lld_mode": 0,
+        "lld_mode": lld_modes[i].value,
         "dispense_position_above_z_touch_off": 0,
-        "gamma_lld_sensitivity": 1,
-        "dp_lld_sensitivity": 1,
+        "gamma_lld_sensitivity": gamma_lld_sensitivities[i],
+        "dp_lld_sensitivity": dp_lld_sensitivities[i],
         "swap_speed": 20,
         "settling_time": 0,
         "mix_volume": 0,
@@ -811,9 +923,6 @@ class STAR(HamiltonLiquidHandler):
         if key not in cmd_kwargs:
           cmd_kwargs[key] = []
         cmd_kwargs[key].append(value)
-
-    # Update kwargs with user properties.
-    cmd_kwargs.update(backend_kwargs)
 
     # Do normal dispense first, then blow out air (maybe).
     ret = self.dispense_pip(

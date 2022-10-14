@@ -803,6 +803,9 @@ class HamiltonFirmwareError(HamiltonError):
         70: "No liquid level found (possibly because no liquid was present)",
         71: "Not enough liquid present (Immersion depth or surface following position possiby"
             "below minimal access range)",
+        72: "Auto calibration at pressure (Sensor not possible)",
+        73: "No liquid level found with dual LLD",
+        74: "Liquid at a not allowed position detected",
         75: "No tip picked up, possibly because no was present at specified position",
         76: "Tip already picked up",
         77: "Tip not discarded",

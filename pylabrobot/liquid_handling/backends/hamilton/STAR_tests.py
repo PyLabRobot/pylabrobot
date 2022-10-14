@@ -252,7 +252,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp1931&ch000&zl1881&"
+      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2011&ch000&zl1881&"
       "zx1831&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
       "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
       "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
@@ -267,7 +267,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp1931 1931&"
+      "C0ASid0000at0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp2011 2011&"
       "ch000 000&zl1881 1881&zx1831 1831&ip0000 0000&it0 0&fp0000 0000&"
       "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&ld00 00&"
       "de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&gi000 000&gj0gk0"
@@ -282,7 +282,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_single_channel_dispense(self):
     self.lh.dispense(self.plt_car[0].resource["A1"], vols=[100])
     self._assert_command_sent_once(
-      "C0DSid0000dm2&tm1 0&xp02980 00000&yp1460 0000&zx1871&lp2321&zl1881&"
+      "C0DSid0000dm2&tm1 0&xp02980 00000&yp1460 0000&zx1871&lp2011&zl1881&"
       "ip0000&it0&fp0000&th2450te2450dv01072&ds1200&ss0050&rv000&ta000&ba0000&lm0&zo000&ll1&"
       "lv1&de0020&mv00000&mc00&mp000&ms0010&wt00&gi000&gj0gk0zu0032&dj00zr06180&"
       " mh0000&po0100&",
@@ -296,7 +296,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     self._assert_command_sent_once(
       "C0DSid0317dm2 2&tm1 1 0&dv01072 01072&xp02980 02980 00000&yp1460 1370 0000&"
-      "zx1871 1871&lp2321 2321&zl1881 1881&ip0000 0000&it0 0&fp0000 0000&th2450"
+      "zx1871 1871&lp2011 2011&zl1881 1881&ip0000 0000&it0 0&fp0000 0000&th2450"
       "te2450ds1200 1200&ss0050 0050&rv000 000&ta000 000&ba0000 0000&lm0 0&zo000 000&ll1 1&"
       "lv1 1&de0020 0020&mv00000 00000&mc00 00&mp000 000&ms0010 0010&wt00 00&gi000 000&gj0gk0"
       "zu0032 0032&dj00zr06180 06180&mh0000 0000&po0100 0100&",
