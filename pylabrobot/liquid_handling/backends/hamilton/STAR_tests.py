@@ -320,7 +320,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
                 "xs#####xd#yh####za####zh####ze####")
 
   def test_core_96_aspirate(self):
-    self.lh.aspirate96("plate_01", 100)
+    self.lh.aspirate_plate(self.lh.get_resource("plate_01"), 100)
 
     self._assert_command_sent_once(
       "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01072ag2500vt050"
@@ -331,7 +331,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "cw************************pp####")
 
   def test_core_96_dispense(self):
-    self.lh.dispense96("plate_01", 100)
+    self.lh.dispense_plate(self.lh.get_resource("plate_01"), 100)
 
     self._assert_command_sent_once(
       "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01072dg1200vt050"

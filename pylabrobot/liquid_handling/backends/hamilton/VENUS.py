@@ -264,12 +264,14 @@ class VENUS(LiquidHandlerBackend):
     venus_resource = self._get_venus_resource(resource)
     venus_utils.tip_eject_96(self.ham_int, venus_resource, **backend_kwargs)
 
-  def aspirate96(self, resource, pattern, volume, **backend_kwargs):
+  def aspirate96(self, plate, volume, flow_rate, **backend_kwargs):
     """ Aspirate liquid from the specified resource using CoRe 96. """
-    venus_resource = self._get_venus_resource(resource)
-    venus_utils.aspirate_96(self.ham_int, venus_resource, volume, **backend_kwargs)
+    venus_resource = self._get_venus_resource(plate)
+    venus_utils.aspirate_96(self.ham_int, venus_resource, volume,
+      aspiration_speed=flow_rate, **backend_kwargs)
 
-  def dispense96(self, resource, pattern, volume, **backend_kwargs):
+  def dispense96(self, plate, volume, flow_rate, **backend_kwargs):
     """ Dispense liquid to the specified resource using CoRe 96. """
-    venus_resource = self._get_venus_resource(resource)
-    venus_utils.dispense_96(self.ham_int, venus_resource, volume, **backend_kwargs)
+    venus_resource = self._get_venus_resource(plate)
+    venus_utils.dispense_96(self.ham_int, venus_resource, volume,
+      dispense_speed=flow_rate, **backend_kwargs)

@@ -429,7 +429,7 @@ function discardTips96(resource) {
   }
 }
 
-function aspirate96(resource, pattern) {
+function aspirate96(resource, volume) {
   // Check reachable for A1.
   let a1_name = resource.children[0].name;
   let a1_resource = resources[a1_name];
@@ -439,18 +439,15 @@ function aspirate96(resource, pattern) {
 
   // Validate there is enough liquid available, that it fits in the tips, and that each channel
   // has a tip before aspiration.
-  for (let i = 0; i < pattern.length; i++) {
-    for (let j = 0; j < pattern[i].length; j++) {
+  for (let i = 0; i < resource.num_items_y; i++) {
+    for (let j = 0; j < resource.num_items_x; j++) {
       const well_name = resource.children[i * resource.num_items_x + j].name;
       const well = resources[well_name];
-      if (well.info.volume < pattern[i][j]) {
+      if (well.info.volume < volume) {
         return `Not enough volume in well: ${well.volume}uL.`;
       }
-      if (
-        CoRe96Head[i][j].volume + pattern[i][j] >
-        CoRe96Head[i][j].maxVolume
-      ) {
-        return `Aspirated volume (${pattern[i][j]}uL) + volume of tip (${CoRe96Head[i][j].volume}uL) > maximal volume of tip (${CoRe96Head[i][j].maxVolume}uL).`;
+      if (CoRe96Head[i][j].volume + volume > CoRe96Head[i][j].maxVolume) {
+        return `Aspirated volume (${volume}uL) + volume of tip (${CoRe96Head[i][j].volume}uL) > maximal volume of tip (${CoRe96Head[i][j].maxVolume}uL).`;
       }
       if (!CoRe96Head[i][j].has_tip) {
         return `CoRe 96 head channel (${i},${j}) does not have a tip.`;
@@ -458,19 +455,19 @@ function aspirate96(resource, pattern) {
     }
   }
 
-  for (let i = 0; i < pattern.length; i++) {
-    for (let j = 0; j < pattern[i].length; j++) {
+  for (let i = 0; i < resource.num_items_y; i++) {
+    for (let j = 0; j < resource.num_items_x; j++) {
       const well_name = resource.children[i * resource.num_items_x + j].name;
       const well = resources[well_name];
-      CoRe96Head[i][j].volume += pattern[i][j];
-      adjustVolumeSingleWell(well_name, well.info.volume - pattern[i][j]);
+      CoRe96Head[i][j].volume += volume;
+      adjustVolumeSingleWell(well_name, well.info.volume - volume);
     }
   }
 
   return null;
 }
 
-function dispense96(resource, pattern) {
+function dispense96(resource, volume) {
   // Check reachable for A1.
   let a1_name = resource.children[0].name;
   let a1_resource = resources[a1_name];
@@ -480,15 +477,15 @@ function dispense96(resource, pattern) {
 
   // Validate there is enough liquid available, that it fits in the well, and that each channel
   // has a tip before dispense.
-  for (let i = 0; i < pattern.length; i++) {
-    for (let j = 0; j < pattern[i].length; j++) {
+  for (let i = 0; i < resource.num_items_y; i++) {
+    for (let j = 0; j < resource.num_items_x; j++) {
       const well_name = resource.children[i * resource.num_items_x + j].name;
       const well = resources[well_name];
-      if (CoRe96Head[i][j].volume < pattern[i][j]) {
+      if (CoRe96Head[i][j].volume < volume) {
         return `Not enough volume in head: ${CoRe96Head[i][j].volume}uL.`;
       }
-      if (well.info.volume + pattern[i][j] > well.info.maxVolume) {
-        return `Dispensed volume (${pattern[i][j]}uL) + volume of well (${well.info.volume}uL) > maximal volume of well (${well.info.maxVolume}uL).`;
+      if (well.info.volume + volume > well.info.maxVolume) {
+        return `Dispensed volume (${volume}uL) + volume of well (${well.info.volume}uL) > maximal volume of well (${well.info.maxVolume}uL).`;
       }
       if (!CoRe96Head[i][j].has_tip) {
         return `CoRe 96 head channel (${i},${j}) does not have a tip.`;
@@ -496,12 +493,12 @@ function dispense96(resource, pattern) {
     }
   }
 
-  for (let i = 0; i < pattern.length; i++) {
-    for (let j = 0; j < pattern[i].length; j++) {
+  for (let i = 0; i < resource.num_items_y; i++) {
+    for (let j = 0; j < resource.num_items_x; j++) {
       const well_name = resource.children[i * resource.num_items_x + j].name;
       const well = resources[well_name];
-      CoRe96Head[i][j].volume -= pattern[i][j];
-      adjustVolumeSingleWell(well_name, well.info.volume + pattern[i][j]);
+      CoRe96Head[i][j].volume -= volume;
+      adjustVolumeSingleWell(well_name, well.info.volume + volume);
     }
   }
 
@@ -585,12 +582,12 @@ async function handleEvent(event, data) {
 
     case "aspirate96":
       await sleep(config.core_aspiration_duration);
-      ret.error = aspirate96(resource, data.pattern);
+      ret.error = aspirate96(resource, data.volume);
       break;
 
     case "dispense96":
       await sleep(config.core_dispense_duration);
-      ret.error = dispense96(resource, data.pattern);
+      ret.error = dispense96(resource, data.volume);
       break;
 
     default:

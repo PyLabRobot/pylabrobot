@@ -131,15 +131,13 @@ class HTTPBackend(LiquidHandlerBackend):
   def discard_tips96(self, resource):
     self.send_event(event="discard_tips96", resource=resource.serialize())
 
-  def aspirate96(self, resource, pattern, volume):
-    pattern = [[(volume if p else 0) for p in pattern[i]] for i in range(len(pattern))]
-    self.send_event(event="aspirate96", resource=resource.serialize(), pattern=pattern,
-      volume=volume)
+  def aspirate96(self, plate, volume, flow_rate):
+    self.send_event(event="aspirate96", resource=plate.serialize(),
+      volume=volume, flow_rate=flow_rate)
 
-  def dispense96(self, resource, pattern, volume):
-    pattern = [[volume if p else 0 for p in pattern[i]] for i in range(len(pattern))]
-    self.send_event(event="dispense96", resource=resource.serialize(), pattern=pattern,
-      volume=volume)
+  def dispense96(self, plate, volume, flow_rate):
+    self.send_event(event="dispense96", resource=plate.serialize(),
+      volume=volume, flow_rate=flow_rate)
 
   def move_plate(self, plate: Plate, to: Union[Resource, Coordinate], **backend_kwargs):
     self.send_event(event="move_plate", plate=plate.serialize(), to=to.serialize(),

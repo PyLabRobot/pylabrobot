@@ -57,14 +57,23 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def discard_tips96(self, resource: Resource, **backend_kwargs):
     print(f"Discarding tips to {resource}.")
 
-  def dispense96(
+  def aspirate96(
     self,
-    resource: Resource,
-    pattern: List[List[bool]],
+    plate: Resource,
     volume: float,
+    flow_rate: Optional[float],
     **backend_kwargs
   ):
-    print(f"Dispensing {volume} to {resource}.")
+    print(f"Aspirating {volume} from {plate}.")
+
+  def dispense96(
+    self,
+    plate: Resource,
+    volume: float,
+    flow_rate: Optional[float],
+    **backend_kwargs
+  ):
+    print(f"Dispensing {volume} to {plate}.")
 
   def move_plate(self, plate: Plate, to: Union[Resource, Coordinate], **backend_kwargs):
     print(f"Moving plate {plate} to {to}.")

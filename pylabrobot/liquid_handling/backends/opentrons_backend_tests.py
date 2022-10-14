@@ -129,6 +129,22 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     self.test_tip_pick_up()
     self.lh.dispense(self.tip_rack["A1"], vols=[10], liquid_classes=None)
 
+  def test_pick_up_tips96(self):
+    with self.assertRaises(NotImplementedError):
+      self.lh.pick_up_tips96(self.plate)
+
+  def test_discard_tips96(self):
+    with self.assertRaises(NotImplementedError):
+      self.lh.discard_tips96(self.plate)
+
+  def test_aspirate96(self):
+    with self.assertRaises(NotImplementedError):
+      self.lh.aspirate_plate(self.plate, volume=100)
+
+  def test_dispense96(self):
+    with self.assertRaises(NotImplementedError):
+      self.lh.dispense_plate(self.plate, volume=100)
+
 
 if __name__ == "__main__":
   unittest.main()

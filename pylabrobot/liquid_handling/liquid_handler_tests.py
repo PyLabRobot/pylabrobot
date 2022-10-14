@@ -8,7 +8,6 @@ import os
 import unittest
 import unittest.mock
 from typing import Optional
-from pylabrobot.liquid_handling import liquid_classes
 
 from pylabrobot.liquid_handling.resources.abstract import Tip, Well, create_equally_spaced
 
@@ -443,6 +442,21 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     # target_vols and ratios specified
     with self.assertRaises(TypeError):
       self.lh.transfer(self.plate["A1"], self.plate["A1:H1"], ratios=[1]*8, target_vols=vols)
+
+  def test_stamp(self):
+    # Simple transfer
+    self.lh.stamp(self.plate, self.plate, volume=10,
+      aspiration_liquid_class=None, dispense_liquid_class=None)
+
+    self.assertEqual(self.get_first_command("aspirate96"), {
+      "command": "aspirate96",
+      "args": (),
+      "kwargs": {"plate": self.plate, "volume": 10, "flow_rate": None}})
+    self.assertEqual(self.get_first_command("dispense96"), {
+      "command": "dispense96",
+      "args": (),
+      "kwargs": {"plate": self.plate, "volume": 10, "flow_rate": None}})
+    self.lh.backend.clear()
 
 
 if __name__ == "__main__":
