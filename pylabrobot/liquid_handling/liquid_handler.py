@@ -544,6 +544,7 @@ class LiquidHandler:
     self,
     wells: Iterable[Well],
     vols: Union[Iterable[float], numbers.Rational],
+    flow_rates: Optional[Union[float, List[float]]] = None,
     liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
     end_delay: float = 0,
     offsets_z: Union[float, List[float]] = 0,
@@ -569,7 +570,7 @@ class LiquidHandler:
       >>> lh.aspirate(plate["A1"] + plate2["A1"] + plate3["A1"], 50)
 
     Args:
-      channels: A list of channels to aspirate liquid from. Use `None` to skip a channel.
+      wells: A list of wells to aspirate liquid from. Use `None` to skip a channel.
       vols: A list of volumes to aspirate, one for each channel. Note that the `None` values must
         be in the same position in both lists. If `vols` is a single number, then all channels
         will aspirate that volume.
@@ -588,20 +589,29 @@ class LiquidHandler:
     if len(wells) == 0:
       raise ValueError("No channels specified")
 
+    self._assert_resources_exist(wells)
+
     if isinstance(vols, numbers.Rational):
       vols = [vols] * len(wells)
 
     if isinstance(liquid_class, LiquidClass):
       liquid_class = [liquid_class] * len(wells)
+    elif liquid_class is None:
+      liquid_class = [None] * len(wells)
 
     if isinstance(offsets_z, numbers.Rational):
       offsets_z = [offsets_z] * len(wells)
 
-    self._assert_resources_exist(wells)
+    if isinstance(flow_rates, float):
+      flow_rates = [flow_rates] * len(wells)
+    elif flow_rates is None:
+      flow_rates = [None] * len(wells)
+
+    assert len(vols) == len(liquid_class) == len(offsets_z) == len(flow_rates)
 
     aspirations = [
-      (Aspiration(c, v, offset_z=offset_z) if c is not None else None)
-      for c, v, offset_z in zip(wells, vols, offsets_z)]
+      (Aspiration(c, v, offset_z=offset_z, flow_rate=fr) if c is not None else None)
+      for c, v, offset_z, fr in zip(wells, vols, offsets_z, flow_rates)]
 
     self.backend.aspirate(*aspirations, **backend_kwargs)
 
@@ -612,7 +622,8 @@ class LiquidHandler:
   def dispense(
     self,
     wells: Iterable[Well],
-    vols: List[float] = None,
+    vols: List[float],
+    flow_rates: Optional[Union[float, List[float]]] = None,
     liquid_class: Union[LiquidClass, List[LiquidClass]] = None,
     end_delay: float = 0,
     offsets_z: Union[float, List[float]] = 0,
@@ -638,7 +649,7 @@ class LiquidHandler:
       >>> lh.dispense((plate["A1"], 50), (plate2["A1"], 50), (plate3["A1"], 50))
 
     Args:
-      channels: A list of channels to dispense liquid to. If channels is a well or a list of
+      wells: A list of wells to dispense liquid to. If channels is a well or a list of
         wells, then vols must be a list of volumes, otherwise vols must be None. If channels is a
         list of tuples, they must be of length 2, and the first element must be a well or a list of
         wells, and the second element must be a volume or a list of volumes. When a single volume is
@@ -663,15 +674,24 @@ class LiquidHandler:
 
     if isinstance(liquid_class, LiquidClass):
       liquid_class = [liquid_class] * len(wells)
+    elif liquid_class is None:
+      liquid_class = [None] * len(wells)
 
     if isinstance(offsets_z, numbers.Rational):
       offsets_z = [offsets_z] * len(wells)
 
+    if isinstance(flow_rates, float):
+      flow_rates = [flow_rates] * len(wells)
+    elif flow_rates is None:
+      flow_rates = [None] * len(wells)
+
     self._assert_resources_exist(wells)
 
+    assert len(vols) == len(liquid_class) == len(offsets_z) == len(flow_rates)
+
     dispenses = [
-      (Dispense(c, v, offset_z=offset_z) if c is not None else None)
-      for c, v, offset_z in zip(wells, vols, offsets_z)]
+      (Dispense(c, v, offset_z=offset_z, flow_rate=fr) if c is not None else None)
+      for c, v, offset_z, fr in zip(wells, vols, offsets_z, flow_rates)]
 
     self.backend.dispense(*dispenses, **backend_kwargs)
 
@@ -685,6 +705,8 @@ class LiquidHandler:
     source_vol: Optional[float] = None,
     ratios: Optional[List[float]] = None,
     target_vols: Optional[List[float]] = None,
+    aspiration_flow_rate: Optional[float] = None,
+    dispense_flow_rates: Optional[Union[float, List[float]]] = None,
     liquid_class: LiquidClass = None,
     **backend_kwargs
   ):
@@ -725,6 +747,9 @@ class LiquidHandler:
     if isinstance(targets, Well):
       targets = [targets]
 
+    if isinstance(dispense_flow_rates, float):
+      dispense_flow_rates = [dispense_flow_rates] * len(targets)
+
     if target_vols is not None:
       if ratios is not None:
         raise TypeError("Cannot specify ratios and target_vols at the same time")
@@ -736,8 +761,18 @@ class LiquidHandler:
 
       target_vols = [source_vol * r / sum(ratios) for r in ratios]
 
-    self.aspirate(source, vols=[sum(target_vols)], liquid_class=liquid_class, **backend_kwargs)
-    self.dispense(targets, target_vols, liquid_class=liquid_class, **backend_kwargs)
+    self.aspirate(
+      wells=source,
+      vols=[sum(target_vols)],
+      liquid_class=liquid_class,
+      flow_rates=aspiration_flow_rate,
+      **backend_kwargs)
+    self.dispense(
+      wells=targets,
+      vols=target_vols,
+      liquid_class=liquid_class,
+      flow_rates=dispense_flow_rates,
+      **backend_kwargs)
 
   def pick_up_tips96(self, resource: Union[str, Resource], **backend_kwargs):
     """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
@@ -813,6 +848,7 @@ class LiquidHandler:
     self,
     resource: Union[str, Resource],
     volume: float,
+    flow_rate: Optional[float] = None,
     pattern: Optional[Union[List[List[bool]], str]] = None,
     end_delay: float = 0,
     liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
@@ -862,7 +898,13 @@ class LiquidHandler:
 
     utils.assert_shape(pattern, (8, 12))
 
-    self.backend.aspirate96(resource, pattern, volume, liquid_class=liquid_class, **backend_kwargs)
+    self.backend.aspirate96(
+      resource=resource,
+      pattern=pattern,
+      volume=volume,
+      liquid_class=liquid_class,
+      flow_rate=flow_rate,
+      **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -872,6 +914,7 @@ class LiquidHandler:
     resource: Union[str, Resource],
     volume: float,
     pattern: Optional[Union[List[List[bool]], str]] = None,
+    flow_rate: Optional[float] = None,
     liquid_class: LiquidClass = StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     end_delay: float = 0,
     **backend_kwargs
@@ -920,7 +963,13 @@ class LiquidHandler:
 
     utils.assert_shape(pattern, (8, 12))
 
-    self.backend.dispense96(resource, pattern, volume, liquid_class, **backend_kwargs)
+    self.backend.dispense96(
+      resource=resource,
+      pattern=pattern,
+      volume=volume,
+      liquid_class=liquid_class,
+      flow_rate=flow_rate,
+      **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
