@@ -61,6 +61,7 @@ setup(
     long_description_content_type='text/markdown',
     install_requires=[],
     url='https://github.com/pylabrobot/pylabrobot.git',
+    package_data={'pylabrobot': ['liquid_handling/backends/simulation/simulator/*']},
     extras_require={
         'testing': extras_testing,
         'docs': extras_docs,
