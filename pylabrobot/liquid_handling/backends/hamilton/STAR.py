@@ -90,7 +90,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       elif type(v) is list:
         if type(v[0]) is bool: # convert bool list to int list
           v = [int(x) for x in v]
-        v = " ".join([str(e) for e in v]) + ("&" if len(v) < 8 else "")
+        v = " ".join([str(e) for e in v]) + ("&" if len(v) < self.num_channels else "")
       if k.endswith("_"): # workaround for kwargs named in, as, ...
         k = k[:-1]
       cmd += f"{k}{v}"
@@ -294,7 +294,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       for module_name, error in he.items():
         if error.message == "Unknown parameter":
           vp = self.send_command(module=error.raw_module, command="VP", fmt="vp&&")
-          module[module_name] += f" ({vp})"
+          he[module_name] += f" ({vp})"
 
       raise he
 
