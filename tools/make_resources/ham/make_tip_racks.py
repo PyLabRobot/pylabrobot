@@ -64,6 +64,6 @@ if __name__ == "__main__":
   make(
     base_dir=BASE_DIR,
     out_file=OUT_FILE,
-    pattern=r'[\S]+TF?_L\.rck',
+    pattern=r'[\S]+TF?_[LP]\.rck',
     make_from_file=make_from_file
   )
