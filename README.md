@@ -23,8 +23,8 @@ lh.setup()
 lh.load_layout("hamilton-layout.json")
 
 lh.pickup_tips(lh.get_resource("tips")["A1:H8"])
-lh.aspirate(lh.get_resource("plate")["A1"], volume=100)
-lh.dispense(lh.get_resource("plate")["A2"], volume=100)
+lh.aspirate(lh.get_resource("plate")["A1"], vols=[100])
+lh.dispense(lh.get_resource("plate")["A2"], vols=[100])
 lh.return_tips()
 ```
 
