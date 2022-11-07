@@ -445,7 +445,7 @@ class LiquidHandler:
 
       Pick up tips on odd numbered rows.
 
-      >>> lh.pick_up_tips(channels=[
+      >>> lh.pick_up_tips(channels=tips_resource[
       ...   "A1",
       ...   None,
       ...   "C1",
