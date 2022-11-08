@@ -426,12 +426,12 @@ class LiquidHandler:
   ):
     """ Pick up tips from a resource.
 
-    Exampels:
+    Examples:
       Pick up all tips in the first column.
 
       >>> lh.pick_up_tips(tips_resource["A1":"H1"])
 
-      Pick up tips on odd numbered rows.
+      Pick up tips on odd numbered rows, skipping the other channels.
 
       >>> lh.pick_up_tips(channels=tips_resource[
       ...   "A1",
@@ -444,13 +444,20 @@ class LiquidHandler:
       ...   None,
       ... ])
 
-      Pick up tips from the diagonal:
-
-      >>> lh.pick_up_tips(tips_resource["A1":"H8"])
-
       Pick up tips from different tip resources:
 
       >>> lh.pick_up_tips(tips_resource1["A1"] + tips_resource2["B2"] + tips_resource3["C3"])
+
+      Picking up tips with different offsets:
+
+      >>> lh.pick_up_tips(
+      ...   channels=tips_resource["A1":"C1"],
+      ...   offsets=[
+      ...     Coordinate(0, 0, 0), # A1
+      ...     Coordinate(1, 1, 1), # B1
+      ...     Coordinate.zero() # C1
+      ...   ]
+      ... )
 
     Args:
       channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
@@ -499,6 +506,22 @@ class LiquidHandler:
     **backend_kwargs
   ):
     """ Discard tips to a resource.
+
+    Examples:
+      Discarding tips to the first column.
+
+      >>> lh.pick_up_tips(tip_rack["A1:H1"])
+
+      Discarding tips with different offsets:
+
+      >>> lh.discard_tips(
+      ...   channels=tips_resource["A1":"C1"],
+      ...   offsets=[
+      ...     Coordinate(0, 0, 0), # A1
+      ...     Coordinate(1, 1, 1), # B1
+      ...     Coordinate.zero() # C1
+      ...   ]
+      ... )
 
     Args:
       channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
@@ -586,6 +609,10 @@ class LiquidHandler:
       Aspirate liquid from wells in different plates:
 
       >>> lh.aspirate(plate["A1"] + plate2["A1"] + plate3["A1"], 50)
+
+      Aspirating with a 10mm z-offset:
+
+      >>> lh.aspirate(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
 
     Args:
       wells: A list of wells to aspirate liquid from. Use `None` to skip a channel.
@@ -678,6 +705,10 @@ class LiquidHandler:
       Dispense liquid to wells in different plates:
 
       >>> lh.dispense((plate["A1"], 50), (plate2["A1"], 50), (plate3["A1"], 50))
+
+      Dispensing with a 10mm z-offset:
+
+      >>> lh.dispense(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
 
     Args:
       wells: A list of wells to dispense liquid to. If channels is a well or a list of
