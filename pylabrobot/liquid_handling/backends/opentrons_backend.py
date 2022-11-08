@@ -222,12 +222,13 @@ class OpentronsBackend(LiquidHandlerBackend):
     assert len(channels) == 1, "only one channel supported for now"
     channel = channels[0] # for channel in channels
 
-    labware_id = self.defined_labware[channel.parent.name]
-    pipette_id = self.select_tip_pipette(channel.tip_type.maximal_volume, with_tip=False)
+    labware_id = self.defined_labware[channel.resource.parent.name]
+    pipette_id = self.select_tip_pipette(channel.resource.tip_type.maximal_volume, with_tip=False)
     if not pipette_id:
       raise NoTipError("No pipette channel of right type with no tip available.")
 
-    ot_api.lh.pick_up_tip(labware_id, well_name=channel.name, pipette_id=pipette_id)
+    ot_api.lh.pick_up_tip(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
+      offset_x=channel.offset.x, offset_y=channel.offset.y, offset_z=channel.offset.z)
 
     if pipette_id == self.left_pipette["pipetteId"]:
       self.left_pipette_has_tip = True
@@ -240,12 +241,13 @@ class OpentronsBackend(LiquidHandlerBackend):
     assert len(channels) == 1 # only one channel supported for now
     channel = channels[0] # for channel in channels
 
-    labware_id = self.defined_labware[channel.parent.name]
-    pipette_id = self.select_tip_pipette(channel.tip_type.maximal_volume, with_tip=True)
+    labware_id = self.defined_labware[channel.resource.parent.name]
+    pipette_id = self.select_tip_pipette(channel.resource.tip_type.maximal_volume, with_tip=True)
     if not pipette_id:
       raise NoTipError("No pipette channel of right type with tip available.")
 
-    ot_api.lh.drop_tip(labware_id, well_name=channel.name, pipette_id=pipette_id)
+    ot_api.lh.drop_tip(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
+      offset_x=channel.offset.x, offset_y=channel.offset.y, offset_z=channel.offset.z)
 
     if pipette_id == self.left_pipette["pipetteId"]:
       self.left_pipette_has_tip = False
@@ -336,7 +338,8 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.aspirate(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=channel.flow_rate, offset_z=channel.offset_z)
+      volume=volume, flow_rate=channel.flow_rate, offset_x=channel.offset.x,
+       offset_y=channel.offset.y, offset_z=channel.offset.z)
 
   def _get_default_dispense_flow_rate(self, pipette_name: str) -> float:
     """ Get the default dispense flow rate for the specified pipette.
@@ -384,7 +387,8 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.dispense(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=channel.flow_rate, offset_z=channel.offset_z)
+      volume=volume, flow_rate=channel.flow_rate, offset_x=channel.offset.x,
+       offset_y=channel.offset.y, offset_z=channel.offset.z)
 
   def pick_up_tips96(self, resource: Resource, **backend_kwargs):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")

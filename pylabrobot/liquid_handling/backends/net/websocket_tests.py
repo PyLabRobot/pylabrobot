@@ -184,7 +184,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "size_z": 9,
             "type": "Well"
           },
-          "offset_z": 0,
+          "offset": {"x": 0, "y": 0, "z": 0},
           "volume": 100,
           "flow_rate": None,
         },
@@ -200,7 +200,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "size_z": 9,
             "type": "Well"
           },
-          "offset_z": 0,
+          "offset": {"x": 0, "y": 0, "z": 0},
           "volume": 100,
           "flow_rate": None,
         }
@@ -225,7 +225,7 @@ class WebSocketBackendCommandTests(unittest.TestCase):
             "type": "Well"
           },
           "volume": 100,
-          "offset_z": 0,
+          "offset": {"x": 0, "y": 0, "z": 0},
           "flow_rate": None
         }
       ],

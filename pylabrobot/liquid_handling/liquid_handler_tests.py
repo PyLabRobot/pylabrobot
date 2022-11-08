@@ -27,7 +27,7 @@ from .resources import (
 )
 from .resources.hamilton import STARLetDeck
 from .resources.ml_star import STF_L, HTF_L
-from .standard import Aspiration, Dispense
+from .standard import Pickup, Discard, Aspiration, Dispense
 
 
 class TestLiquidHandlerLayout(unittest.TestCase):
@@ -353,6 +353,34 @@ class TestLiquidHandlerCommands(unittest.TestCase):
         return sent_command
     return None
 
+  def test_offsets_tips(self):
+    tips = self.tip_rack["A1"]
+    self.lh.pick_up_tips(tips, offsets=Coordinate(x=1, y=1, z=1))
+    self.lh.discard_tips(tips, offsets=Coordinate(x=1, y=1, z=1))
+
+    self.assertEqual(self.get_first_command("pick_up_tips"), {
+      "command": "pick_up_tips",
+      "args": (Pickup(tips[0], Coordinate(x=1, y=1, z=1)),),
+      "kwargs": {}})
+    self.assertEqual(self.get_first_command("discard_tips"), {
+      "command": "discard_tips",
+      "args": (Discard(tips[0], Coordinate(x=1, y=1, z=1)),),
+      "kwargs": {}})
+
+  def test_offsets_asp_disp(self):
+    well = self.plate["A1"]
+    self.lh.aspirate(well, vols=10, offsets=Coordinate(x=1, y=1, z=1), liquid_classes=None)
+    self.lh.dispense(well, vols=10, offsets=Coordinate(x=1, y=1, z=1), liquid_classes=None)
+
+    self.assertEqual(self.get_first_command("aspirate"), {
+      "command": "aspirate",
+      "args": (Aspiration(resource=well[0], volume=10, offset=Coordinate(x=1, y=1, z=1)),),
+      "kwargs": {}})
+    self.assertEqual(self.get_first_command("dispense"), {
+      "command": "dispense",
+      "args": (Dispense(resource=well[0], volume=10, offset=Coordinate(x=1, y=1, z=1)),),
+      "kwargs": {}})
+
   def test_return_tips(self):
     tips = self.tip_rack["A1"]
     self.lh.pick_up_tips(tips)
@@ -360,7 +388,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
     self.assertEqual(self.get_first_command("discard_tips"), {
       "command": "discard_tips",
-      "args": (tips[0],),
+      "args": (Discard(tips[0]),),
       "kwargs": {}})
 
     with self.assertRaises(RuntimeError):
@@ -380,7 +408,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_transfer(self):
     # Simple transfer
-    self.lh.transfer(self.plate["A1"], self.plate["A2"], 10,
+    self.lh.transfer(self.plate["A1"], self.plate["A2"], source_vol=10,
       aspiration_liquid_class=None, dispense_liquid_classes=None)
 
     self.assertEqual(self.get_first_command("aspirate"), {
