@@ -2,20 +2,63 @@
 
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, ABCMeta
 from typing import Optional
 
-from pylabrobot.liquid_handling.resources import Resource
+from pylabrobot.liquid_handling.resources import Coordinate, Resource
 
 
-class LiquidHandlingOp(ABC):
+class PipettingOp(ABC):
+  """ Some atomic pipetting operation. """
+
+  def __init__(self, resource: Resource, offset: Coordinate = Coordinate.zero()):
+    self.resource = resource
+    self.offset = offset
+
+  def get_absolute_location(self) -> Coordinate:
+    """ Returns the absolute location of the resource. """
+    return self.resource.get_absolute_location() + self.offset
+
+  def __eq__(self, other: PipettingOp) -> bool:
+    return (
+      isinstance(other, PipettingOp) and
+      self.resource == other.resource and
+      self.offset == other.offset
+    )
+
+  def __hash__(self) -> int:
+    return hash((self.resource, self.offset))
+
+  def __repr__(self) -> str:
+    return f"{self.__class__.__name__}(tip={self.resource}, offset={self.offset})"
+
+  def serialize(self) -> dict:
+    return {
+      "resource": self.resource.serialize(),
+      "offset": self.offset.serialize()
+    }
+
+
+class TipOp(PipettingOp, metaclass=ABCMeta):
+  """ Abstract base class for tip operations. """
+
+
+class Pickup(TipOp):
+  """ A pickup operation. """
+
+
+class Discard(TipOp):
+  """ A discard operation. """
+
+
+class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
   """ Abstract base class for liquid handling operations.
 
   Attributes:
     resource: The resource that will be used in the operation.
     volume: The volume of the liquid that is being handled.
     flow_rate: The flow rate with which to perform this operation.
-    offset_z: The offset in the z direction.
+    offset: The offset in the z direction.
   """
 
   def __init__(
@@ -23,7 +66,7 @@ class LiquidHandlingOp(ABC):
     resource: Resource,
     volume: float,
     flow_rate: Optional[float] = None,
-    offset_z: float = 0
+    offset: Coordinate = Coordinate.zero()
   ):
     """ Initialize the operation.
 
@@ -31,30 +74,30 @@ class LiquidHandlingOp(ABC):
       resource: The resource that will be used in the operation.
       volume: The volume of the liquid that is being handled. In ul.
       flow_rate: The flow rate. None is default for the Machine. In ul/s.
-      offset_z: The offset in the z direction. In mm.
+      offset: The offset in the z direction. In mm.
     """
 
-    self.resource = resource
+    super().__init__(resource, offset)
+
     self.volume = volume
     self.flow_rate = flow_rate
-    self.offset_z = offset_z
 
   def __eq__(self, other: LiquidHandlingOp) -> bool:
-    return (
+    return super().__eq__(other) and (
       isinstance(other, LiquidHandlingOp) and
       self.resource == other.resource and
       self.volume == other.volume and
       self.flow_rate == other.flow_rate and
-      self.offset_z == other.offset_z
+      self.offset == other.offset
     )
 
   def __hash__(self) -> int:
-    return hash((self.resource, self.volume, self.flow_rate, self.offset_z))
+    return hash((self.resource, self.volume, self.flow_rate, self.offset))
 
   def __repr__(self) -> str:
     return (
       f"{self.__class__.__name__}(resource={repr(self.resource)}, volume={repr(self.volume)}, "
-      f"flow_rate={self.flow_rate}, offset_z={self.offset_z})"
+      f"flow_rate={self.flow_rate}, offset={self.offset})"
     )
 
   def get_corrected_volume(self) -> float:
@@ -77,10 +120,9 @@ class LiquidHandlingOp(ABC):
     """
 
     return {
-      "resource": self.resource.serialize(),
+      **super().serialize(),
       "volume": self.volume,
       "flow_rate": self.flow_rate,
-      "offset_z": self.offset_z,
     }
 
 

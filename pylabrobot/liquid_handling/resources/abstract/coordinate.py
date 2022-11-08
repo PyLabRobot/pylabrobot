@@ -14,6 +14,10 @@ class Coordinate:
     self.y = round(y, 4) if y is not None else None
     self.z = round(z, 4) if z is not None else None
 
+  @classmethod
+  def zero(cls) -> Coordinate:
+    return Coordinate(0, 0, 0)
+
   def __add__(self, other) -> Coordinate:
     return Coordinate(
       x=(self.x or 0) + (other.x or 0),

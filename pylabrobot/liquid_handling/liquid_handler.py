@@ -1,4 +1,5 @@
 """ Defines LiquidHandler class, the coordinator for liquid handling operations. """
+
 import functools
 import inspect
 import json
@@ -29,7 +30,12 @@ from .resources import (
   TipRack,
   Well
 )
-from .standard import Aspiration, Dispense
+from .standard import (
+  Pickup,
+  Discard,
+  Aspiration,
+  Dispense
+)
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
 
@@ -411,29 +417,11 @@ class LiquidHandler:
       if resource not in self.deck.get_all_resources():
         raise ValueError(f"Resource named '{resource.name}' not found on deck.")
 
-  def _channels_to_standard_tip_form(
-    self,
-    *channels: Union[Optional[Tip], List[Optional[Tip]]]
-  ) -> List[Optional[Tip]]:
-    """ Converts channel parameters to standard tip form.
-
-    This will flatten the list of channels into a single list of tips.
-    """
-
-    tips = []
-    for channel in channels:
-      if channel is None:
-        tips.append(None)
-      elif isinstance(channel, Tip):
-        tips.append(channel)
-      else:
-        tips.extend(channel)
-    return tips
-
   @need_setup_finished
   def pick_up_tips(
     self,
-    *channels: Union[Tip, List[Tip]],
+    channels: List[Tip],
+    offsets: Union[Coordinate, List[Optional[Coordinate]]] = None,
     **backend_kwargs
   ):
     """ Pick up tips from a resource.
@@ -462,12 +450,14 @@ class LiquidHandler:
 
       Pick up tips from different tip resources:
 
-      >>> lh.pick_up_tips(tips_resource1["A1"], tips_resource2["B2"], tips_resource3["C3"])
+      >>> lh.pick_up_tips(tips_resource1["A1"] + tips_resource2["B2"] + tips_resource3["C3"])
 
     Args:
       channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
         :class:`Tip` objects. This list will be flattened automatically. Use `None` to indicate
         that no tips should be picked up by this channel.
+      offsets: List of offsets for each channel, a translation that will be applied to the tip
+        discard location. If `None`, no offset will be applied.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -479,12 +469,24 @@ class LiquidHandler:
       ValueError: If the positions are not unique.
     """
 
-    channels = self._channels_to_standard_tip_form(*channels)
+    if offsets is None:
+      offsets = [None] * len(channels)
+    elif isinstance(offsets, Coordinate):
+      offsets = [offsets] * len(channels)
+
+    # Replace None values with 0 coordinates.
+    offsets = [Coordinate.zero() if offset is None else offset for offset in offsets]
+
+    assert len(channels) == len(offsets), "Number of channels and offsets must be equal."
+
+    tips = [(Pickup(tip, offset) if tip is not None else None)
+            for tip, offset in zip(channels, offsets)]
+
     if not any(channel is not None for channel in channels):
       raise ValueError("Must specify at least one channel to pick up tips with.")
     self._assert_resources_exist(channels)
 
-    self.backend.pick_up_tips(*channels, **backend_kwargs)
+    self.backend.pick_up_tips(*tips, **backend_kwargs)
 
     # Save the tips that are currently picked up.
     self._picked_up_tips = channels
@@ -492,7 +494,8 @@ class LiquidHandler:
   @need_setup_finished
   def discard_tips(
     self,
-    *channels: Union[Tip, List[Tip]],
+    channels: List[Tip],
+    offsets: Union[Coordinate, List[Optional[Coordinate]]] = None,
     **backend_kwargs
   ):
     """ Discard tips to a resource.
@@ -501,6 +504,8 @@ class LiquidHandler:
       channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
         :class:`Tip` objects. This list will be flattened automatically. Use `None` to indicate
         that no tips should be discarded up by this channel.
+      offsets: List of offsets for each channel, a translation that will be applied to the tip
+        pickup location. If `None`, no offset will be applied.
       kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -512,12 +517,24 @@ class LiquidHandler:
       ValueError: If the positions are not unique.
     """
 
-    channels = self._channels_to_standard_tip_form(*channels)
+    if offsets is None:
+      offsets = [None] * len(channels)
+    elif isinstance(offsets, Coordinate):
+      offsets = [offsets] * len(channels)
+
+    # Replace None values with 0 coordinates.
+    offsets = [Coordinate.zero() if offset is None else offset for offset in offsets]
+
+    assert len(channels) == len(offsets), "Number of channels and offsets must be equal."
+
+    tips = [(Discard(tip, offset) if tip is not None else None)
+            for tip, offset in zip(channels, offsets)]
+
     if not any(channel is not None for channel in channels):
-      raise ValueError("Must specify at least one channel to discard tips from.")
+      raise ValueError("Must specify at least one channel to pick up tips with.")
     self._assert_resources_exist(channels)
 
-    self.backend.discard_tips(*channels, **backend_kwargs)
+    self.backend.discard_tips(*tips, **backend_kwargs)
 
     self._picked_up_tips = None
 
@@ -527,7 +544,7 @@ class LiquidHandler:
     Examples:
       Return the tips on the head to the tip rack where they were picked up:
 
-      >>> lh.pick_up_tips("plate_01")
+      >>> lh.pick_up_tips(tip_rack["A1"])
       >>> lh.return_tips()
 
     Raises:
@@ -537,7 +554,7 @@ class LiquidHandler:
     if self._picked_up_tips is None:
       raise RuntimeError("No tips are currently picked up.")
 
-    self.discard_tips(*self._picked_up_tips)
+    self.discard_tips(self._picked_up_tips)
 
   @need_setup_finished
   def aspirate(
@@ -548,7 +565,7 @@ class LiquidHandler:
     liquid_classes: Optional[Union[LiquidClass, List[LiquidClass]]] =
       StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     end_delay: float = 0,
-    offsets_z: Union[float, List[float]] = 0,
+    offsets: Optional[List[Optional[Coordinate]]] = None,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified wells.
@@ -580,6 +597,8 @@ class LiquidHandler:
         values for parameters flow_rate, and soon others.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
+      offsets: List of offsets for each channel, a translation that will be applied to the
+        aspiration location. If `None`, no offset will be applied.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -601,8 +620,12 @@ class LiquidHandler:
     elif liquid_classes is None:
       liquid_classes = [None] * len(wells)
 
-    if isinstance(offsets_z, numbers.Rational):
-      offsets_z = [offsets_z] * len(wells)
+    if offsets is None:
+      offsets = [Coordinate.zero()] * len(wells)
+    elif isinstance(offsets, Coordinate):
+      offsets = [offsets] * len(wells)
+    # Replace None values with 0 coordinates.
+    offsets = [Coordinate.zero() if offset is None else offset for offset in offsets]
 
     if flow_rates is None:
       flow_rates = [(lc.flow_rate[0] if lc is not None else None) for lc in liquid_classes]
@@ -614,11 +637,11 @@ class LiquidHandler:
       if lc is not None:
         vols[i] = lc.compute_corrected_volume(vols[i])
 
-    assert len(vols) == len(offsets_z) == len(flow_rates)
+    assert len(vols) == len(offsets) == len(flow_rates)
 
     aspirations = [
-      (Aspiration(c, v, offset_z=offset_z, flow_rate=fr) if c is not None else None)
-      for c, v, offset_z, fr in zip(wells, vols, offsets_z, flow_rates)]
+      (Aspiration(c, v, offset=offset, flow_rate=fr) if c is not None else None)
+      for c, v, offset, fr in zip(wells, vols, offsets, flow_rates)]
 
     self.backend.aspirate(*aspirations, **backend_kwargs)
 
@@ -634,7 +657,7 @@ class LiquidHandler:
     liquid_classes: Union[LiquidClass, List[LiquidClass]] =
       StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     end_delay: float = 0,
-    offsets_z: Union[float, List[float]] = 0,
+    offsets: Union[float, List[float]] = None,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
@@ -667,6 +690,8 @@ class LiquidHandler:
         values for parameters flow_rate, and soon others.
       end_delay: The delay after the last dispense in seconds, optional. This is useful for when
         the tips used in the dispense are dripping.
+      offsets: List of offsets for each channel, a translation that will be applied to the
+        dispense location. If `None`, no offset will be applied.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -688,8 +713,12 @@ class LiquidHandler:
     elif liquid_classes is None:
       liquid_classes = [None] * len(wells)
 
-    if isinstance(offsets_z, numbers.Rational):
-      offsets_z = [offsets_z] * len(wells)
+    if offsets is None:
+      offsets = [Coordinate.zero()] * len(wells)
+    elif isinstance(offsets, Coordinate):
+      offsets = [offsets] * len(wells)
+    # Replace None values with 0 coordinates.
+    offsets = [Coordinate.zero() if offset is None else offset for offset in offsets]
 
     if flow_rates is None:
       flow_rates = [(lc.flow_rate[1] if lc is not None else None) for lc in liquid_classes]
@@ -703,11 +732,11 @@ class LiquidHandler:
 
     self._assert_resources_exist(wells)
 
-    assert len(vols) == len(offsets_z) == len(flow_rates)
+    assert len(vols) == len(offsets) == len(flow_rates)
 
     dispenses = [
-      (Dispense(c, v, offset_z=offset_z, flow_rate=fr) if c is not None else None)
-      for c, v, offset_z, fr in zip(wells, vols, offsets_z, flow_rates)]
+      (Dispense(c, v, offset=offset, flow_rate=fr) if c is not None else None)
+      for c, v, offset, fr in zip(wells, vols, offsets, flow_rates)]
 
     self.backend.dispense(*dispenses, **backend_kwargs)
 
