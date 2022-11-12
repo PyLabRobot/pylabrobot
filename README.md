@@ -11,6 +11,8 @@ PyLabRobot is a hardware agnostic, pure Python library for liquid handling robot
 
 PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton and Opentrons robots, but we will soon have drivers for many more. The two Hamilton drivers are Venus, which is derived from the [PyHamilton library](https://github.com/dgretton/pyhamilton), and STAR, which is a low-level firmware interface. The Opentrons driver is based on [Opentrons Python API](https://github.com/rickwierenga/opentrons-python-api). We also provide a simulator which plays the role of a device driver but renders commands in a browser-based deck visualization.
 
+**Disclaimer:** PyLabRobot is not officially endorsed or supported by any robot manufacturer. If you use a firmware driver such as the STAR driver provided here, you do so at your own risk. Usage of a firmware driver such as STAR may invalidate your warranty. Please contact us with any questions.
+
 Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on Hamilton STAR (this will work with any operating system!):
 
 ```python
