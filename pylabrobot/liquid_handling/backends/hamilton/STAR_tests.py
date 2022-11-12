@@ -14,6 +14,8 @@ from pylabrobot.liquid_handling.resources import (
 from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
 from pylabrobot.liquid_handling.resources.ml_star import STF_L
 
+from tests.usb import MockDev, MockEndpoint
+
 from .STAR import STAR
 from .errors import (
   CommandSyntaxError,
@@ -106,6 +108,35 @@ class TestSTARResponseParsing(unittest.TestCase):
     self.assertIn("Pipetting channel 1", e)
     self.assertIsInstance(e["Pipetting channel 1"], UnknownHamiltonError)
     self.assertEqual(e["Pipetting channel 1"].message, "Unknown command")
+
+
+class STARUSBCommsMocker(STAR):
+  """ Mocks PyUSB """
+
+  def setup(self, send_response):
+    self.dev = MockDev(send_response)
+    self.read_endpoint = MockEndpoint()
+    self.write_endpoint = MockEndpoint()
+
+
+class TestSTARUSBComms(unittest.TestCase):
+  def test_send_command_correct_response(self):
+    star = STARUSBCommsMocker()
+    star.setup(send_response="C0QMid0001") # correct response
+    resp = star.send_command("C0", command="QM", fmt="")
+    self.assertEqual(resp, {"id": 1})
+
+  def test_send_command_wrong_id(self):
+    star = STARUSBCommsMocker()
+    star.setup(send_response="C0QMid0000") # wrong response
+    with self.assertRaises(TimeoutError):
+      star.send_command("C0", command="QM")
+
+  def test_send_command_plaintext_response(self):
+    star = STARUSBCommsMocker()
+    star.setup(send_response="this is plain text") # wrong response
+    with self.assertRaises(TimeoutError):
+      star.send_command("C0", command="QM")
 
 
 class STARCommandCatcher(STAR):
@@ -254,6 +285,21 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self._assert_command_sent_once(
       "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp1931&ch000&zl1881&"
       "zx1831&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
+      "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
+      "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
+      fmt="at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
+      "ip#### (n)it# (n)fp#### (n)av#### (n)as#### (n)ta### (n)ba#### (n)oa### (n)lm# (n)ll# (n)"
+      "lv# (n)ld## (n)de#### (n)wt## (n)mv##### (n)mc## (n)mp### (n)ms#### (n)gi### (n)gj#gk#"
+      "zu#### (n)zr#### (n)mh#### (n)zo### (n)po#### (n)lk# (n)ik#### (n)sd#### (n)se#### (n)"
+      "sz#### (n)io#### (n)il##### (n)in#### (n)")
+
+  def test_single_channel_aspiration_offset(self):
+    self.lh.aspirate(self.plt_car[0].resource["A1"], vols=[100], offsets=Coordinate(0, 0, 10))
+
+    # This passes the test, but is not the real command.
+    self._assert_command_sent_once(
+      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2021&ch000&zl1971&"
+      "zx1921&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
       "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
       "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
       fmt="at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"

@@ -347,30 +347,37 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     # approximately equal to the (number of attempts to read packets) * (self.read_timeout).
     attempts = 0
     while attempts < (timeout // self.read_timeout):
-      res = self._read_packet()
-      if res is None:
+      attempts += 1
+
+      # read response from endpoint, and keep reading until the packet is smaller than the max
+      # packet size: if the packet is that size, it means that there may be more data to read.
+      resp = self._read_packet()
+      if resp is None:
         continue
 
-      # Parse preliminary response, there may be more data to read, but the first packet of the
-      # response will definitely contain the id of the command we sent. If we find it, we read
-      # the rest of the response, if it is not contained in a single packet.
-      parsed_response = self.parse_fw_string(res)
+      last_packet = resp
+      while len(last_packet) == self.read_endpoint.wMaxPacketSize:
+        last_packet = self._read_packet()
+        resp += last_packet
+
+      logger.debug("Received data: %s", resp)
+
+      # Parse response.
+      try:
+        parsed_response = self.parse_fw_string(resp)
+        logger.info("Received response: %s", resp)
+      except ValueError:
+        logger.warning("Could not parse response: %s", resp)
+        continue
+
+      # Check if the response is the one we are looking for.
       if "id" in parsed_response and f"{parsed_response['id']:04}" == id_:
-        # While length of response is the maximum length, there may be more data to read.
-        last_packet = res
-        while last_packet is not None and len(last_packet) == self.read_endpoint.wMaxPacketSize:
-          last_packet = self._read_packet()
-          if last_packet is not None:
-            res += last_packet
-
-        logger.info("Received response: %s", res)
-
         # If `fmt` is None, return the raw response.
         if fmt is None:
-          return res
-        return self.parse_response(res, fmt)
+          return resp
+        return self.parse_response(resp, fmt)
 
-      attempts += 1
+    raise TimeoutError(f"Timeout while waiting for response to command {cmd}.")
 
 class STAR(HamiltonLiquidHandler):
   """
