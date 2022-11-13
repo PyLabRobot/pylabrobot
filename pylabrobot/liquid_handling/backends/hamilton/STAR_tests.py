@@ -13,6 +13,7 @@ from pylabrobot.liquid_handling.resources import (
 )
 from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
 from pylabrobot.liquid_handling.resources.ml_star import STF_L
+from pylabrobot.liquid_handling.standard import Move
 
 from tests.usb import MockDev, MockEndpoint
 
@@ -405,23 +406,21 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     plate = self.lh.get_resource("plate_01")
 
     self.lh.move_plate(plate, plate_reader, pickup_distance_from_top=12.2,
-      get_open_gripper_position=1320, get_grip_direction=1,
-      put_grip_direction=4, put_open_gripper_position=1320)
+      get_direction=Move.Direction.FRONT, put_direction=Move.Direction.LEFT)
     self._assert_command_sent_once(
-      "C0PPid0003xs03475xd0yj1145yd0zj1884zd0gr1th2840te2840gw4go1320gb1237gt20ga0gc1",
+      "C0PPid0003xs03475xd0yj1145yd0zj1884zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0004xs10430xd0yj3282yd0zj2023zd0th2840te2840gr4go1320ga0",
+      "C0PRid0004xs10430xd0yj3282yd0zj2023zd0th2840te2840gr4go1300ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
     self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0], pickup_distance_from_top=14.2,
-      get_open_gripper_position=1320, get_grip_direction=4,
-      put_grip_direction=1, put_open_gripper_position=1320)
+      get_direction=Move.Direction.LEFT, put_direction=Move.Direction.FRONT)
     self._assert_command_sent_once(
-      "C0PPid0005xs10430xd0yj3282yd0zj2003zd0gr4th2840te2840gw4go1320gb1237gt20ga0gc1",
+      "C0PPid0005xs10430xd0yj3282yd0zj2003zd0gr4th2840te2840gw4go1300gb1237gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0006xs03475xd0yj1145yd0zj1864zd0th2840te2840gr1go1320ga0",
+      "C0PRid0006xs03475xd0yj1145yd0zj1864zd0th2840te2840gr1go1300ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
   def test_iswap_move_lid(self):

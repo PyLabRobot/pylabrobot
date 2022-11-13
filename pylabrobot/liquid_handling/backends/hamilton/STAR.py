@@ -1063,10 +1063,7 @@ class STAR(HamiltonLiquidHandler):
   def move_resource(
     self,
     move: Move,
-    get_grip_direction: int = 1,
-    get_open_gripper_position: int = 1300,
-    put_grip_direction: int = 1,
-    put_open_gripper_position: int = 1300,
+    plate_width: float = 127,
   ):
     """ Move a resource to a new position. """
 
@@ -1076,20 +1073,6 @@ class STAR(HamiltonLiquidHandler):
     grip_height = move.get_absolute_from_location().z + move.resource.get_size_z() - \
       move.pickup_distance_from_top
 
-    get_cmd_kwargs = dict(
-      grip_direction=get_grip_direction,
-      minimum_traverse_height_at_beginning_of_a_command = 2840,
-      z_position_at_the_command_end = 2840,
-      grip_strength = 4,
-      open_gripper_position = get_open_gripper_position,
-      plate_width = 1237, # 127?
-      plate_width_tolerance = 20,
-      collision_control_level = 0,
-      acceleration_index_high_acc = 4,
-      acceleration_index_low_acc = 1,
-      fold_up_sequence_at_the_end_of_process = True
-    )
-
     self.get_plate(
       x_position=int(x * 10),
       x_direction=0,
@@ -1097,21 +1080,28 @@ class STAR(HamiltonLiquidHandler):
       y_direction=0,
       z_position=int(grip_height * 10),
       z_direction=0,
-      **get_cmd_kwargs
+      grip_direction={
+        Move.Direction.FRONT: 1,
+        Move.Direction.RIGHT: 2,
+        Move.Direction.BACK: 3,
+        Move.Direction.LEFT: 4,
+      }[move.get_direction],
+      minimum_traverse_height_at_beginning_of_a_command = 2840,
+      z_position_at_the_command_end = 2840,
+      grip_strength = 4,
+      open_gripper_position = int(plate_width*10) + 30,
+      plate_width = int(plate_width * 10) - 33,
+      plate_width_tolerance = 20,
+      collision_control_level = 0,
+      acceleration_index_high_acc = 4,
+      acceleration_index_low_acc = 1,
+      fold_up_sequence_at_the_end_of_process = True
     )
 
     # Get the center of the plate in the destination, which is what STAR expects.
     to_x = move.to.x + move.resource.get_size_x()/2
     to_y = move.to.y + move.resource.get_size_y()/2
     grip_height = move.to.z + move.resource.get_size_z() - move.pickup_distance_from_top
-
-    put_cmd_kwargs = dict(
-      grip_direction=put_grip_direction,
-      minimum_traverse_height_at_beginning_of_a_command=2840,
-      z_position_at_the_command_end=2840,
-      open_gripper_position=put_open_gripper_position, # 127?
-      collision_control_level=0,
-    )
 
     self.put_plate(
       x_position=int(to_x * 10),
@@ -1120,7 +1110,16 @@ class STAR(HamiltonLiquidHandler):
       y_direction=0,
       z_position=int(grip_height * 10),
       z_direction=0,
-      **put_cmd_kwargs
+      grip_direction={
+        Move.Direction.FRONT: 1,
+        Move.Direction.RIGHT: 2,
+        Move.Direction.BACK: 3,
+        Move.Direction.LEFT: 4,
+      }[move.put_direction],
+      minimum_traverse_height_at_beginning_of_a_command=2840,
+      z_position_at_the_command_end=2840,
+      open_gripper_position = int(plate_width*10) + 30,
+      collision_control_level=0,
     )
 
   # ============== Firmware Commands ==============

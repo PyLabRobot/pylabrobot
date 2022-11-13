@@ -1056,6 +1056,8 @@ class LiquidHandler:
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
+    get_direction: Move.Direction = Move.Direction.FRONT,
+    put_direction: Move.Direction = Move.Direction.FRONT,
     **backend_kwargs
   ):
     """ Move a resource to a new location.
@@ -1066,11 +1068,13 @@ class LiquidHandler:
       >>> lh.move_resource(plate, to=Coordinate(100, 100, 100))
 
     Args:
-      resource: Resource name or resource object.
+      resource: The Resource object.
       to: The absolute coordinate (meaning relative to deck) to move the resource to.
       resource_offset: The offset from the resource's origin, optional (rarely necessary).
       to_offset: The offset from the location's origin, optional (rarely necessary).
       pickup_distance_from_top: The distance from the top of the resource to pick up from.
+      get_direction: The direction from which to pick up the resource.
+      put_direction: The direction from which to put down the resource.
     """
 
     return self.backend.move_resource(Move(
@@ -1078,7 +1082,9 @@ class LiquidHandler:
       to=to,
       resource_offset=resource_offset,
       to_offset=to_offset,
-      pickup_distance_from_top=pickup_distance_from_top),
+      pickup_distance_from_top=pickup_distance_from_top,
+      get_direction=get_direction,
+      put_direction=put_direction),
       **backend_kwargs)
 
   def move_lid(
@@ -1087,6 +1093,8 @@ class LiquidHandler:
     to: Union[Plate, Hotel, Coordinate],
     resource_offset: Optional[Coordinate] = Coordinate.zero(),
     to_offset: Optional[Coordinate] = Coordinate.zero(),
+    get_direction: Move.Direction = Move.Direction.FRONT,
+    put_direction: Move.Direction = Move.Direction.FRONT,
     **backend_kwargs
   ):
     """ Move a lid to a new location.
@@ -1097,6 +1105,11 @@ class LiquidHandler:
       Move a lid to the :class:`~resources.Hotel`:
 
       >>> lh.move_lid(plate.lid, hotel)
+
+      Move a lid to the hotel and back, grabbing it from the left side:
+
+      >>> lh.move_lid(plate.lid, hotel, get_direction=Move.Direction.LEFT)
+      >>> lh.move_lid(hotel.get_top_item(), plate, put_direction=Move.Direction.LEFT)
 
     Args:
       lid: The lid to move. Can be either a Plate object or a Lid object.
@@ -1131,6 +1144,8 @@ class LiquidHandler:
       pickup_distance_from_top=backend_kwargs.pop("pickup_distance_from_top", 5.7),
       resource_offset=resource_offset,
       to_offset=to_offset,
+      get_direction=get_direction,
+      put_direction=put_direction,
       **backend_kwargs)
 
     lid.unassign()
@@ -1146,6 +1161,8 @@ class LiquidHandler:
     to: Union[Hotel, CarrierSite, Coordinate],
     resource_offset: Optional[Coordinate] = Coordinate.zero(),
     to_offset: Optional[Coordinate] = Coordinate.zero(),
+    put_direction: Move.Direction = Move.Direction.FRONT,
+    get_direction: Move.Direction = Move.Direction.FRONT,
     **backend_kwargs
   ):
     """ Move a plate to a new location.
@@ -1160,6 +1177,11 @@ class LiquidHandler:
       Move a plate to an absolute location:
 
       >>> lh.move_plate(plate_01, Coordinate(100, 100, 100))
+
+      Move a lid to another carrier spot, grabbing it from the left side:
+
+      >>> lh.move_plate(plate, plt_car[1], get_direction=Move.Direction.LEFT)
+      >>> lh.move_plate(plate, plt_car[0], put_direction=Move.Direction.LEFT)
 
     Args:
       plate: The plate to move. Can be either a Plate object or a CarrierSite object.
@@ -1185,6 +1207,8 @@ class LiquidHandler:
       pickup_distance_from_top=backend_kwargs.pop("pickup_distance_from_top", 13.2),
       resource_offset=resource_offset,
       to_offset=to_offset,
+      get_direction=get_direction,
+      put_direction=put_direction,
       **backend_kwargs)
 
     plate.unassign()
