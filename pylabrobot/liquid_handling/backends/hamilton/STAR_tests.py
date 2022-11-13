@@ -120,6 +120,7 @@ class STARUSBCommsMocker(STAR):
 
 
 class TestSTARUSBComms(unittest.TestCase):
+  """ Test that USB data is parsed correctly. """
   def test_send_command_correct_response(self):
     star = STARUSBCommsMocker()
     star.setup(send_response="C0QMid0001") # correct response
@@ -388,7 +389,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "cw************************pp####")
 
   def test_iswap(self):
-    self.lh.move_plate(self.plt_car[0], self.plt_car[2])
+    plate = self.lh.get_resource("plate_01")
+    self.lh.move_plate(plate, self.plt_car[2])
     self._assert_command_sent_once(
       "C0PPid0011xs03475xd0yj1145yd0zj1874zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
@@ -400,8 +402,9 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     plate_reader = PlateReader(name="plate_reader")
     self.lh.deck.assign_child_resource(plate_reader,
       location=Coordinate(979.5, 285.2-63, 200 - 100))
+    plate = self.lh.get_resource("plate_01")
 
-    self.lh.move_plate(self.plt_car[0], plate_reader, pickup_distance_from_top=12.2,
+    self.lh.move_plate(plate, plate_reader, pickup_distance_from_top=12.2,
       get_open_gripper_position=1320, get_grip_direction=1,
       put_grip_direction=4, put_open_gripper_position=1320)
     self._assert_command_sent_once(
@@ -421,23 +424,68 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "C0PRid0006xs03475xd0yj1145yd0zj1864zd0th2840te2840gr1go1320ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
-  def test_iswap_hotel(self):
-    hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=0)
-    # for some reason it was like this at some point
-    # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
-    self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100))
+  def test_iswap_move_lid(self):
+    plate = self.lh.get_resource("plate_01")
+    other_plate = self.lh.get_resource("plate_02")
+    other_plate.lid.unassign() # remove lid from plate
+    self.lh.move_lid(plate.lid, other_plate)
 
     get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
     put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
 
-    self.lh.move_lid(self.plt_car[0].resource.lid, hotel)
+    self._assert_command_sent_once(
+      "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+      get_plate_fmt)
+    self._assert_command_sent_once( # zj sent = 1849
+      "C0PRid0003xs03475xd0yj2105yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+
+  def test_iswap_hotel(self):
+    hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=0)
+    # for some reason it was like this at some point
+    # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
+    # self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
+    self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 226.2 - 100))
+
+    plate = self.lh.get_resource("plate_01")
+
+    get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
+    put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
+
+    self.lh.move_lid(plate.lid, hotel)
     self._assert_command_sent_once(
       "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
         get_plate_fmt)
     self._assert_command_sent_once(
       "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
-    self.lh.move_lid(self.plt_car[1].resource.lid, hotel)
+    # Move lids back (reverse order)
+    self.lh.move_lid(hotel.get_top_item(), plate)
+    self._assert_command_sent_once(
+      "C0PPid0004xs00695xd0yj4570yd0zj2305zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+      get_plate_fmt)
+    self._assert_command_sent_once(
+      "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+
+  def test_iswap_hotel_2lids(self):
+    hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=0)
+    # for some reason it was like this at some point
+    # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
+    self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 226.2 - 100))
+
+    plate = self.lh.get_resource("plate_01")
+    other_plate = self.lh.get_resource("plate_02")
+
+    get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
+    put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
+
+    self.lh.move_lid(plate.lid, hotel)
+    self._assert_command_sent_once(
+      "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+        get_plate_fmt)
+    self._assert_command_sent_once(
+      "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+
+    self.lh.move_lid(other_plate.lid, hotel)
     self._assert_command_sent_once(
       "C0PPid0004xs03475xd0yj2105yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
         get_plate_fmt)
@@ -445,14 +493,14 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "C0PRid0005xs00695xd0yj4570yd0zj2405zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
     # Move lids back (reverse order)
-    self.lh.move_lid(hotel.get_top_item(), self.plt_car[0].resource)
+    self.lh.move_lid(hotel.get_top_item(), plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2405zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       get_plate_fmt)
     self._assert_command_sent_once(
       "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
-    self.lh.move_lid(hotel.get_top_item(), self.plt_car[1].resource)
+    self.lh.move_lid(hotel.get_top_item(), other_plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2305zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       get_plate_fmt)

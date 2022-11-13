@@ -1,17 +1,16 @@
 from abc import ABCMeta, abstractmethod
-from typing import  Union, Optional
+from typing import Optional
 
 from pylabrobot.liquid_handling.resources import (
-  Coordinate,
   Plate,
   Resource,
-  Lid,
 )
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Discard,
   Aspiration,
-  Dispense
+  Dispense,
+  Move,
 )
 
 
@@ -119,11 +118,6 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def move_plate(self, plate: Plate, to: Union[Resource, Coordinate], **backend_kwargs):
-    """ Move the specified plate within the robot. """
-    pass
-
-  @abstractmethod
-  def move_lid(self, lid: Lid, to: Union[Resource, Coordinate], **backend_kwargs):
-    """ Move the specified lid within the robot. """
+  def move_resource(self, move: Move, **backend_kwargs):
+    """ Move a resource to a new location. """
     pass

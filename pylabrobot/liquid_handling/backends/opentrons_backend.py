@@ -1,18 +1,17 @@
-from typing import List, Union, Optional, cast
+from typing import List, Optional, cast
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import (
-  Coordinate,
   Plate,
   Resource,
-  Lid,
   Tip,
 )
 from pylabrobot.liquid_handling.resources.abstract.tip_rack import TipRack
 from pylabrobot.liquid_handling.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
-  Dispense
+  Dispense,
+  Move
 )
 from pylabrobot import utils
 
@@ -412,10 +411,6 @@ class OpentronsBackend(LiquidHandlerBackend):
   ):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def move_plate(self, plate: Plate, to: Union[Resource, Coordinate], **backend_kwargs):
-    """ Move the specified plate within the robot. """
-    raise NotImplementedError("Moving plates in Opentrons is not implemented yet.")
-
-  def move_lid(self, lid: Lid, to: Union[Resource, Coordinate], **backend_kwargs):
+  def move_resource(self, move: Move, **backend_kwargs):
     """ Move the specified lid within the robot. """
-    raise NotImplementedError("The Opentrons backend does not support the move lid feature.")
+    raise NotImplementedError("Moving resources in Opentrons is not implemented yet.")

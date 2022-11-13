@@ -10,13 +10,11 @@ import functools
 import logging
 import re
 import typing
-from typing import Callable, Union, List, Optional
+from typing import Callable, List, Optional
 
 from pylabrobot import utils
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
-  Hotel,
-  Lid,
   Resource,
   Plate,
   Tip,
@@ -29,7 +27,8 @@ from pylabrobot.liquid_handling.standard import (
   Pickup,
   Discard,
   Aspiration,
-  Dispense
+  Dispense,
+  Move
 )
 
 from .errors import (
@@ -1062,103 +1061,21 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
-  def move_plate(
+  def move_resource(
     self,
-    plate: Union[Coordinate, Plate],
-    to: Union[Coordinate, Resource],
-    pickup_distance_from_top: float = 13.2,
-    **backend_kwargs
-  ):
-    assert isinstance(plate, Plate)
-
-    # Get center of source plate.
-    x = plate.get_absolute_location().x + plate.get_size_x()/2
-    y = plate.get_absolute_location().y + plate.get_size_y()/2
-
-    # Get the grip height for the plate.
-    # grip_height = plate.get_absolute_location().z + plate.one_dot_max - \
-    #               plate.dz - pickup_distance_from_top
-    grip_height = plate.get_absolute_location().z + plate.get_size_z() - pickup_distance_from_top
-    grip_height = int(grip_height * 10)
-    x = int(x * 10)
-    y = int(y * 10)
-
-    get_cmd_kwargs = dict(
-      grip_direction=backend_kwargs.pop("get_grip_direction", 1),
-      minimum_traverse_height_at_beginning_of_a_command = 2840,
-      z_position_at_the_command_end = 2840,
-      grip_strength = 4,
-      open_gripper_position = backend_kwargs.pop("get_open_gripper_position", 1300),
-      plate_width = 1237, # 127?
-      plate_width_tolerance = 20,
-      collision_control_level = 0,
-      acceleration_index_high_acc = 4,
-      acceleration_index_low_acc = 1,
-      fold_up_sequence_at_the_end_of_process = True
-    )
-
-    self.get_plate(
-      x_position=x,
-      x_direction=0,
-      y_position=y,
-      y_direction=0,
-      z_position=grip_height,
-      z_direction=0,
-      **get_cmd_kwargs
-    )
-
-    # Move to the destination.
-    if isinstance(to, Coordinate):
-      to_location = to
-    else:
-      to_location = to.get_absolute_location()
-      to_location = Coordinate(
-        x=to_location.x + plate.get_size_x()/2,
-        y=to_location.y + plate.get_size_y()/2,
-        z=to_location.z + plate.get_size_z() - pickup_distance_from_top
-      )
-
-    put_cmd_kwargs = dict(
-      grip_direction=backend_kwargs.pop("put_grip_direction", 1),
-      minimum_traverse_height_at_beginning_of_a_command=2840,
-      z_position_at_the_command_end=2840,
-      open_gripper_position=backend_kwargs.get("put_open_gripper_position", 1300), # 127?
-      collision_control_level=0,
-    )
-
-    self.put_plate(
-      x_position=int(to_location.x * 10),
-      x_direction=0,
-      y_position=int(to_location.y * 10),
-      y_direction=0,
-      z_position=int(to_location.z * 10),
-      z_direction=0,
-      **put_cmd_kwargs
-    )
-
-  def move_lid(
-    self,
-    lid: Lid,
-    to: typing.Union[Plate, Hotel],
+    move: Move,
     get_grip_direction: int = 1,
     get_open_gripper_position: int = 1300,
-    pickup_distance_from_top: float = 1.2,
     put_grip_direction: int = 1,
     put_open_gripper_position: int = 1300,
-    **backend_kwargs
   ):
-    assert isinstance(lid, Lid), "lid must be a Lid"
+    """ Move a resource to a new position. """
 
-    # Get center of source lid.
-    x = lid.get_absolute_location().x + lid.get_size_x()/2
-    y = lid.get_absolute_location().y + lid.get_size_y()/2
-
-    # Get the grip height for the plate.
-    grip_height = lid.get_absolute_location().z - pickup_distance_from_top
-
-    x = int(x * 10)
-    y = int(y * 10)
-    grip_height = int(grip_height * 10)
+    # Get center of source plate. Also gripping height.
+    x = move.get_absolute_from_location().x + move.resource.get_size_x()/2
+    y = move.get_absolute_from_location().y + move.resource.get_size_y()/2
+    grip_height = move.get_absolute_from_location().z + move.resource.get_size_z() - \
+      move.pickup_distance_from_top
 
     get_cmd_kwargs = dict(
       grip_direction=get_grip_direction,
@@ -1175,37 +1092,19 @@ class STAR(HamiltonLiquidHandler):
     )
 
     self.get_plate(
-      x_position=x,
+      x_position=int(x * 10),
       x_direction=0,
-      y_position=y,
+      y_position=int(y * 10),
       y_direction=0,
-      z_position=grip_height,
+      z_position=int(grip_height * 10),
       z_direction=0,
       **get_cmd_kwargs
     )
 
-    # Move to the destination.
-    if isinstance(to, Coordinate):
-      to_location = to
-    else:
-      to_location = to.get_absolute_location()
-      to_location = Coordinate(
-        x=to_location.x + lid.get_size_x()/2,
-        y=to_location.y + lid.get_size_y()/2,
-        z=to_location.z - pickup_distance_from_top
-      )
-
-      # We're gonna place the lid on top of the to resource.
-      to_location.z += to.get_size_z()
-
-      try:
-        if isinstance(lid.parent, Hotel):
-          to_location.z += lid.get_size_z() # beacause it was removed by hotel when location changed
-          to_location.z -= to.get_size_z() # the lid.get_size_z() is the height of the lid,
-                                               # which will fit on top of the plate, so no need to
-                                               # factor in the height of the plate.
-      except AttributeError:
-        pass
+    # Get the center of the plate in the destination, which is what STAR expects.
+    to_x = move.to.x + move.resource.get_size_x()/2
+    to_y = move.to.y + move.resource.get_size_y()/2
+    grip_height = move.to.z + move.resource.get_size_z() - move.pickup_distance_from_top
 
     put_cmd_kwargs = dict(
       grip_direction=put_grip_direction,
@@ -1216,15 +1115,14 @@ class STAR(HamiltonLiquidHandler):
     )
 
     self.put_plate(
-      x_position=int(to_location.x * 10),
+      x_position=int(to_x * 10),
       x_direction=0,
-      y_position=int(to_location.y * 10),
+      y_position=int(to_y * 10),
       y_direction=0,
-      z_position=int(to_location.z * 10),
+      z_position=int(grip_height * 10),
       z_direction=0,
       **put_cmd_kwargs
     )
-
 
   # ============== Firmware Commands ==============
 

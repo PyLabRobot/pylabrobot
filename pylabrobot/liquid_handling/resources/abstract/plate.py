@@ -30,7 +30,7 @@ class Lid(Resource):
       location: Location of the lid.
     """
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
-      location=location + Coordinate(0, 0, size_z), category="lid")
+      location=location, category="lid")
 
 
 class Plate(ItemizedResource[Well]):
@@ -84,8 +84,7 @@ class Plate(ItemizedResource[Well]):
     if with_lid:
       assert lid_height > 0, "Lid height must be greater than 0 if with_lid == True."
 
-      # TODO: Coordinate(0, 0, size_z)
-      lid = Lid(name + "_lid", location=Coordinate(0, 0, 0),
+      lid = Lid(name + "_lid", location=Coordinate(0, 0, self.get_size_z() - lid_height),
         size_x=size_x, size_y=size_y, size_z=lid_height)
       self.assign_child_resource(lid)
 

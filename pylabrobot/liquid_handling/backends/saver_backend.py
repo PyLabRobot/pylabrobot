@@ -51,8 +51,5 @@ class SaverBackend(LiquidHandlerBackend):
   def dispense96(self, *args, **kwargs):
     self.commands_received.append(dict(command="dispense96", args=args, kwargs=kwargs))
 
-  def move_plate(self, *args, **kwargs):
-    self.commands_received.append(dict(command="move_plate", args=args, kwargs=kwargs))
-
-  def move_lid(self, *args, **kwargs):
-    self.commands_received.append(dict(command="move_lid", args=args, kwargs=kwargs))
+  def move_resource(self, *args, **kwargs):
+    self.commands_received.append(dict(command="move_resource", args=args, kwargs=kwargs))
