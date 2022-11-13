@@ -166,20 +166,39 @@ class Move():
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: Optional[float] = None,
-    # direction: Move.Direction = Direction.FRONT,
+    get_direction: Move.Direction = Direction.FRONT,
+    put_direction: Move.Direction = Direction.FRONT
   ):
+    """ Initialize the move operation.
+
+    Args:
+      resource: The resource to move.
+      to: The destination of the move.
+      resource_offset: The offset of the resource.
+      to_offset: The offset of the destination.
+      pickup_distance_from_top: The distance from the top of the resource to pick up from.
+      get_direction: The direction from which to grab the resource.
+      put_direction: The direction from which to put the resource.
+    """
+
     self.resource = resource
     self.to = to
     self.resource_offset = resource_offset
     self.to_offset = to_offset
     self.pickup_distance_from_top = pickup_distance_from_top
-    # self.direction = direction
+    self.get_direction = get_direction
+    self.put_direction = put_direction
 
   def __eq__(self, other: Move) -> bool:
     return (
       isinstance(other, Move) and
       self.resource == other.resource and
-      self.to == other.to
+      self.to == other.to and
+      self.resource_offset == other.resource_offset and
+      self.to_offset == other.to_offset and
+      self.pickup_distance_from_top == other.pickup_distance_from_top and
+      self.get_direction == other.get_direction and
+      self.put_direction == other.put_direction
     )
 
   def __hash__(self) -> int:
@@ -191,7 +210,12 @@ class Move():
   def serialize(self) -> dict:
     return {
       "resource": self.resource.serialize(),
-      "to": self.to.serialize()
+      "to": self.to.serialize(),
+      "resource_offset": self.resource_offset.serialize(),
+      "to_offset": self.to_offset.serialize(),
+      "pickup_distance_from_top": self.pickup_distance_from_top,
+      "get_direction": self.get_direction.name,
+      "put_direction": self.put_direction.name,
     }
 
   def get_absolute_from_location(self) -> Coordinate:
