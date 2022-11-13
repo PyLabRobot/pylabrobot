@@ -1053,8 +1053,8 @@ class LiquidHandler:
     self,
     resource: Resource,
     to: Coordinate,
-    resource_offset: Optional[Coordinate] = Coordinate.zero(),
-    location_offset: Optional[Coordinate] = Coordinate.zero(),
+    resource_offset: Coordinate = Coordinate.zero(),
+    to_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
     **backend_kwargs
   ):
@@ -1069,7 +1069,7 @@ class LiquidHandler:
       resource: Resource name or resource object.
       to: The absolute coordinate (meaning relative to deck) to move the resource to.
       resource_offset: The offset from the resource's origin, optional (rarely necessary).
-      location_offset: The offset from the location's origin, optional (rarely necessary).
+      to_offset: The offset from the location's origin, optional (rarely necessary).
       pickup_distance_from_top: The distance from the top of the resource to pick up from.
     """
 
@@ -1077,7 +1077,7 @@ class LiquidHandler:
       resource=resource,
       to=to,
       resource_offset=resource_offset,
-      to_offset=location_offset,
+      to_offset=to_offset,
       pickup_distance_from_top=pickup_distance_from_top),
       **backend_kwargs)
 
@@ -1085,6 +1085,8 @@ class LiquidHandler:
     self,
     lid: Lid,
     to: Union[Plate, Hotel, Coordinate],
+    resource_offset: Optional[Coordinate] = Coordinate.zero(),
+    to_offset: Optional[Coordinate] = Coordinate.zero(),
     **backend_kwargs
   ):
     """ Move a lid to a new location.
@@ -1099,6 +1101,8 @@ class LiquidHandler:
     Args:
       lid: The lid to move. Can be either a Plate object or a Lid object.
       to: The location to move the lid to, either a plate, Hotel or a Coordinate.
+      resource_offset: The offset from the resource's origin, optional (rarely necessary).
+      to_offset: The offset from the location's origin, optional (rarely necessary).
 
     Raises:
       ValueError: If the lid is not assigned to a resource.
@@ -1121,7 +1125,13 @@ class LiquidHandler:
     else:
       raise ValueError(f"Cannot move lid to {to}")
 
-    self.move_resource(lid, to=to_location, pickup_distance_from_top=1.2 + 4.5, **backend_kwargs)
+    self.move_resource(
+      lid,
+      to=to_location,
+      pickup_distance_from_top=backend_kwargs.pop("pickup_distance_from_top", 5.7),
+      resource_offset=resource_offset,
+      to_offset=to_offset,
+      **backend_kwargs)
 
     lid.unassign()
     if isinstance(to, Coordinate):
@@ -1134,6 +1144,8 @@ class LiquidHandler:
     self,
     plate: Plate,
     to: Union[Hotel, CarrierSite, Coordinate],
+    resource_offset: Optional[Coordinate] = Coordinate.zero(),
+    to_offset: Optional[Coordinate] = Coordinate.zero(),
     **backend_kwargs
   ):
     """ Move a plate to a new location.
@@ -1152,6 +1164,8 @@ class LiquidHandler:
     Args:
       plate: The plate to move. Can be either a Plate object or a CarrierSite object.
       to: The location to move the plate to, either a plate, CarrierSite or a Coordinate.
+      resource_offset: The offset from the resource's origin, optional (rarely necessary).
+      to_offset: The offset from the location's origin, optional (rarely necessary).
     """
 
     if isinstance(to, Hotel):
@@ -1169,6 +1183,8 @@ class LiquidHandler:
       plate,
       to=to_location,
       pickup_distance_from_top=backend_kwargs.pop("pickup_distance_from_top", 13.2),
+      resource_offset=resource_offset,
+      to_offset=to_offset,
       **backend_kwargs)
 
     plate.unassign()

@@ -14,7 +14,6 @@ from typing import Callable, List, Optional
 
 from pylabrobot import utils
 from pylabrobot.liquid_handling.resources import (
-  Coordinate,
   Resource,
   Plate,
   Tip,
