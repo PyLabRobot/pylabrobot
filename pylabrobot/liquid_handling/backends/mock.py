@@ -18,5 +18,4 @@ class Mock(LiquidHandlerBackend):
   def aspirate96(self, *args, **kwargs): pass
   def dispense96(self, *args, **kwargs): pass
 
-  def move_plate(self, *args, **kwargs): pass
-  def move_lid(self, *args, **kwargs): pass
+  def move_resource(self, *args, **kwargs): pass

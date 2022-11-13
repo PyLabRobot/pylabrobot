@@ -10,7 +10,7 @@ from .plate import Plate, Lid, Well
 
 class TestLid(unittest.TestCase):
   def test_initialize_with_lid(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=10,
+    plate = Plate("plate", size_x=1, size_y=1, size_z=15, one_dot_max=1, lid_height=10,
       items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
         num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1),
       with_lid=True)
@@ -19,7 +19,7 @@ class TestLid(unittest.TestCase):
     self.assertEqual(plate.lid.name, "plate_lid")
     self.assertEqual(plate.lid.get_size_x(), 1)
     # fix Coordinate(0, 0, 1) ?
-    self.assertEqual(plate.lid.get_absolute_location(), Coordinate(0, 0, 10))
+    self.assertEqual(plate.lid.get_absolute_location(), Coordinate(0, 0, 5))
 
   def test_add_lid(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=10,

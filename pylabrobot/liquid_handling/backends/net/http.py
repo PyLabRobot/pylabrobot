@@ -1,18 +1,13 @@
 import json
-from typing import Optional, List, Union
+from typing import Optional, List
 import urllib.parse
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.resources import (
-  Coordinate,
-  Lid,
-  Plate,
-  Resource,
-  Tip,
-)
+from pylabrobot.liquid_handling.resources import Tip
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
   Dispense,
+  Move
 )
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 
@@ -139,10 +134,5 @@ class HTTPBackend(LiquidHandlerBackend):
     self.send_event(event="dispense96", resource=plate.serialize(),
       volume=volume, flow_rate=flow_rate)
 
-  def move_plate(self, plate: Plate, to: Union[Resource, Coordinate], **backend_kwargs):
-    self.send_event(event="move_plate", plate=plate.serialize(), to=to.serialize(),
-      **backend_kwargs)
-
-  def move_lid(self, lid: Lid, to: Union[Resource, Coordinate], **backend_kwargs):
-    self.send_event(event="move_lid", lid=lid.serialize(), to=to.serialize(),
-      **backend_kwargs)
+  def move_resource(self, move: Move, **backend_kwargs):
+    self.send_event(event="move", move=move.serialize(), **backend_kwargs)

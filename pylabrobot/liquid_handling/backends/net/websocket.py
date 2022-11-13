@@ -14,15 +14,12 @@ except ImportError:
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import (
-  Coordinate,
-  Lid,
-  Plate,
-  Resource,
   Tip,
 )
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
   Dispense,
+  Move
 )
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 
@@ -292,8 +289,5 @@ class WebSocketBackend(LiquidHandlerBackend):
     self.send_event(event="dispense96", plate=plate.serialize(),
       flow_rate=flow_rate, volume=volume, wait_for_response=True)
 
-  def move_plate(self, plate: Plate, to: Coordinate, **backend_kwargs):
-    raise NotImplementedError("This method is not implemented in the simulator.")
-
-  def move_lid(self, lid: Lid, to: typing.Union[Resource, Coordinate], **backend_kwargs):
+  def move_resource(self, move: Move, **backend_kwargs):
     raise NotImplementedError("This method is not implemented in the simulator.")

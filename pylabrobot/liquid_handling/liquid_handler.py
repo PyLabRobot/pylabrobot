@@ -34,7 +34,8 @@ from .standard import (
   Pickup,
   Discard,
   Aspiration,
-  Dispense
+  Dispense,
+  Move
 )
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
@@ -1048,66 +1049,47 @@ class LiquidHandler:
       flow_rate=dispense_flow_rate,
       liquid_class=dispense_liquid_class)
 
-  def move_plate(
+  def move_resource(
     self,
-    plate: Union[Plate, CarrierSite],
-    target: Union[Resource, Coordinate],
+    resource: Resource,
+    to: Coordinate,
+    resource_offset: Optional[Coordinate] = Coordinate.zero(),
+    location_offset: Optional[Coordinate] = Coordinate.zero(),
+    pickup_distance_from_top: float = 0,
     **backend_kwargs
   ):
-    """ Move a plate to a new location.
+    """ Move a resource to a new location.
 
     Examples:
-      Move a plate to a new location within the same carrier:
+      Move a plate to a new location:
 
-      >>> lh.move_plate(plt_car[0], plt_car[1])
-
-      Move a plate to a new location within a different carrier:
-
-      >>> lh.move_plate(plt_car[0], plt_car2[0])
-
-      Move a plate to an absolute location:
-
-      >>> lh.move_plate(plate_01, Coordinate(100, 100, 100))
+      >>> lh.move_resource(plate, to=Coordinate(100, 100, 100))
 
     Args:
-      plate: The plate to move. Can be either a Plate object or a CarrierSite object.
-      target: The location to move the plate to, either a CarrierSite object or a Coordinate.
+      resource: Resource name or resource object.
+      to: The absolute coordinate (meaning relative to deck) to move the resource to.
+      resource_offset: The offset from the resource's origin, optional (rarely necessary).
+      location_offset: The offset from the location's origin, optional (rarely necessary).
+      pickup_distance_from_top: The distance from the top of the resource to pick up from.
     """
 
-    # Get plate from `plate` param. # (this could be a `Resource` too)
-    if isinstance(plate, CarrierSite):
-      if plate.resource is None:
-        raise ValueError(f"No resource found at CarrierSite '{plate}'.")
-      plate = plate.resource
-    elif isinstance(plate, str):
-      plate = self.get_resource(plate)
-      if not plate:
-        raise ValueError(f"Resource with name '{plate}' not found.")
-
-    if isinstance(target, CarrierSite):
-      if target.resource is not None:
-        raise ValueError(f"There already exists a resource at {target}.")
-
-    # Try to move the physical plate first.
-    self.backend.move_plate(plate, target, **backend_kwargs)
-
-    # Move the resource in the layout manager.
-    plate.unassign()
-    if isinstance(target, Resource):
-      target.assign_child_resource(plate)
-    elif isinstance(target, Coordinate):
-      plate.location = target
-      self.deck.assign_child_resource(plate) # Assign "free" objects directly to the deck.
-    else:
-      raise TypeError(f"Invalid location type: {type(target)}")
+    return self.backend.move_resource(Move(
+      resource=resource,
+      to=to,
+      resource_offset=resource_offset,
+      to_offset=location_offset,
+      pickup_distance_from_top=pickup_distance_from_top),
+      **backend_kwargs)
 
   def move_lid(
     self,
     lid: Lid,
-    target: Union[Plate, Hotel, CarrierSite],
+    to: Union[Plate, Hotel, Coordinate],
     **backend_kwargs
   ):
     """ Move a lid to a new location.
+
+    A convenience method for :meth:`move_resource`.
 
     Examples:
       Move a lid to the :class:`~resources.Hotel`:
@@ -1116,24 +1098,82 @@ class LiquidHandler:
 
     Args:
       lid: The lid to move. Can be either a Plate object or a Lid object.
-      to: The location to move the lid to, either a Resource object or a Coordinate.
+      to: The location to move the lid to, either a plate, Hotel or a Coordinate.
 
     Raises:
       ValueError: If the lid is not assigned to a resource.
     """
 
-    if isinstance(target, CarrierSite):
-      if target.resource is None:
-        raise ValueError(f"No plate exists at {target}.")
-
-    self.backend.move_lid(lid, target, **backend_kwargs)
-
-    # Move the resource in the layout manager.
-    lid.unassign()
-    if isinstance(target, Resource):
-      target.assign_child_resource(lid)
-    elif isinstance(target, Coordinate):
-      lid.location = target
-      self.deck.assign_child_resource(lid) # Assign "free" objects directly to the deck.
+    if isinstance(to, Plate):
+      to_location = to.get_absolute_location()
+      to_location = Coordinate(
+        x=to_location.x,
+        y=to_location.y,
+        z=to_location.z  + to.get_size_z() - lid.get_size_z())
+    elif isinstance(to, Hotel):
+      to_location = to.get_absolute_location()
+      to_location = Coordinate(
+        x=to_location.x,
+        y=to_location.y,
+        z=to_location.z  + to.get_size_z())
+    elif isinstance(to, Coordinate):
+      to_location = to
     else:
-      raise TypeError(f"Invalid location type: {type(target)}")
+      raise ValueError(f"Cannot move lid to {to}")
+
+    self.move_resource(lid, to=to_location, pickup_distance_from_top=1.2 + 4.5, **backend_kwargs)
+
+    lid.unassign()
+    if isinstance(to, Coordinate):
+      lid.location = to
+      self.deck.assign_child_resource(lid)
+    else:
+      to.assign_child_resource(lid)
+
+  def move_plate(
+    self,
+    plate: Plate,
+    to: Union[Hotel, CarrierSite, Coordinate],
+    **backend_kwargs
+  ):
+    """ Move a plate to a new location.
+
+    A convenience method for :meth:`move_resource`.
+
+    Examples:
+      Move a plate to into a carrier spot:
+
+      >>> lh.move_plate(plate, plt_car[1])
+
+      Move a plate to an absolute location:
+
+      >>> lh.move_plate(plate_01, Coordinate(100, 100, 100))
+
+    Args:
+      plate: The plate to move. Can be either a Plate object or a CarrierSite object.
+      to: The location to move the plate to, either a plate, CarrierSite or a Coordinate.
+    """
+
+    if isinstance(to, Hotel):
+      to_location = to.get_absolute_location()
+      to_location = Coordinate(
+        x=to_location.x,
+        y=to_location.y,
+        z=to_location.z  + to.get_size_z())
+    elif isinstance(to, Coordinate):
+      to_location = to
+    else:
+      to_location = to.get_absolute_location()
+
+    self.move_resource(
+      plate,
+      to=to_location,
+      pickup_distance_from_top=backend_kwargs.pop("pickup_distance_from_top", 13.2),
+      **backend_kwargs)
+
+    plate.unassign()
+    if isinstance(to, Coordinate):
+      plate.location = to
+      self.deck.assign_child_resource(plate)
+    else:
+      to.assign_child_resource(plate)

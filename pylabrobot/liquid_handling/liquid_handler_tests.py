@@ -312,27 +312,25 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
   def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cos_96_DW_1mL(name="plate")
+    plt_car[0] = plate = Cos_96_DW_1mL(name="plate")
     self.lh.deck.assign_child_resource(plt_car, rails=21)
 
-    self.lh.move_plate(plt_car[0], plt_car[2])
+    self.lh.move_plate(plate, plt_car[2])
     self.assertIsNotNone(plt_car[2].resource)
     self.assertIsNone(plt_car[0].resource)
     self.assertEqual(plt_car[2].resource, self.lh.get_resource("plate"))
-    self.assertEqual(plt_car[2].resource.get_item("A1").get_absolute_location(),
+    self.assertEqual(plate.get_item("A1").get_absolute_location(),
                      Coordinate(568.000, 338.000, 187.150))
 
   def test_move_plate_free(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cos_96_DW_1mL(name="plate")
+    plt_car[0] = plate = Cos_96_DW_1mL(name="plate")
     self.lh.deck.assign_child_resource(plt_car, rails=1)
 
-    self.lh.move_plate(plt_car[0], Coordinate(1000, 1000, 1000))
+    self.lh.move_plate(plate, Coordinate(1000, 1000, 1000))
     self.assertIsNotNone(self.lh.get_resource("plate"))
     self.assertIsNone(plt_car[0].resource)
-    # TODO: will probably update this test some time, when we make the deck universal and not just
-    # star.
-    self.assertEqual(self.lh.get_resource("plate").get_absolute_location(),
+    self.assertEqual(plate.get_absolute_location(),
       Coordinate(1000, 1000+63, 1000+100))
 
 

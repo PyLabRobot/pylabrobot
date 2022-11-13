@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, ABCMeta
+import enum
 from typing import Optional
 
 from pylabrobot.liquid_handling.resources import Coordinate, Resource
@@ -146,3 +147,59 @@ class Dispense(LiquidHandlingOp):
   """
 
   pass
+
+
+class Move():
+  """ A move operation. """
+
+  class Direction(enum.Enum):
+    """ A direction from which to grab the resource. """
+    FRONT = enum.auto()
+    BACK = enum.auto()
+    LEFT = enum.auto()
+    RIGHT = enum.auto()
+
+  def __init__(
+    self,
+    resource: Resource,
+    to: Coordinate,
+    resource_offset: Coordinate = Coordinate.zero(),
+    to_offset: Coordinate = Coordinate.zero(),
+    pickup_distance_from_top: Optional[float] = None,
+    # direction: Move.Direction = Direction.FRONT,
+  ):
+    self.resource = resource
+    self.to = to
+    self.resource_offset = resource_offset
+    self.to_offset = to_offset
+    self.pickup_distance_from_top = pickup_distance_from_top
+    # self.direction = direction
+
+  def __eq__(self, other: Move) -> bool:
+    return (
+      isinstance(other, Move) and
+      self.resource == other.resource and
+      self.to == other.to
+    )
+
+  def __hash__(self) -> int:
+    return hash((self.resource, self.to))
+
+  def __repr__(self) -> str:
+    return f"{self.__class__.__name__}(resource={repr(self.resource)}, to={self.to})"
+
+  def serialize(self) -> dict:
+    return {
+      "resource": self.resource.serialize(),
+      "to": self.to.serialize()
+    }
+
+  def get_absolute_from_location(self) -> Coordinate:
+    """ Returns the absolute location of the resource. """
+
+    return self.resource.get_absolute_location() + self.resource_offset
+
+  def get_absolute_to_location(self) -> Coordinate:
+    """ Returns the absolute location of the resource. """
+
+    return self.to.get_absolute_location() + self.to_offset
