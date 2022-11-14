@@ -5,6 +5,8 @@ import urllib.parse
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import Tip
 from pylabrobot.liquid_handling.standard import (
+  Pickup,
+  Discard,
   Aspiration,
   Dispense,
   Move
@@ -104,11 +106,11 @@ class HTTPBackend(LiquidHandlerBackend):
   def unassigned_resource_callback(self, name):
     self.send_event(event="resource_unassigned", resource_name=name)
 
-  def pick_up_tips(self, *channels: List[Optional[Tip]]):
+  def pick_up_tips(self, *channels: Optional[Pickup]):
     channels = [channel.serialize() if channel is not None else None for channel in channels]
     self.send_event(event="pick_up_tips", channels=channels)
 
-  def discard_tips(self, *channels: List[Optional[Tip]]):
+  def discard_tips(self, *channels: Optional[Discard]):
     channels = [channel.serialize() if channel is not None else None for channel in channels]
     self.send_event(event="discard_tips", channels=channels)
 
