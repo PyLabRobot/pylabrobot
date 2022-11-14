@@ -10,6 +10,8 @@ from pylabrobot.liquid_handling.resources import (
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
   Dispense,
+  Pickup,
+  Discard,
   Move
 )
 
@@ -37,10 +39,10 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def unassigned_resource_callback(self, name: str):
     print(f"Resource {name} was unassigned from the robot.")
 
-  def pick_up_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
+  def pick_up_tips(self, *channels: Optional[Pickup], **backend_kwargs):
     print(f"Picking up tips {channels}.")
 
-  def discard_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
+  def discard_tips(self, *channels: Optional[Discard], **backend_kwargs):
     print(f"Discarding tips {channels}.")
 
   def aspirate(self, *channels: Optional[Aspiration], **backend_kwargs):

@@ -9,6 +9,8 @@ from pylabrobot.liquid_handling.resources import (
 from pylabrobot.liquid_handling.resources.abstract.tip_rack import TipRack
 from pylabrobot.liquid_handling.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
+  Pickup,
+  Discard,
   Aspiration,
   Dispense,
   Move
@@ -215,7 +217,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     return None
 
-  def pick_up_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
+  def pick_up_tips(self, *channels: Optional[Pickup]):
     """ Pick up tips from the specified resource. """
 
     assert len(channels) == 1, "only one channel supported for now"
@@ -234,7 +236,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     else:
       self.right_pipette_has_tip = True
 
-  def discard_tips(self, *channels: List[Optional[Tip]], **backend_kwargs):
+  def discard_tips(self, *channels: Optional[Discard]):
     """ Discard tips from the specified resource. """
 
     assert len(channels) == 1 # only one channel supported for now
