@@ -105,3 +105,17 @@ class Deck(Resource):
   def get_all_resources(self) -> List[Resource]:
     """ Returns a list of all resources in the deck. """
     return list(self.resources.values())
+
+  def clear(self):
+    """ Removes all resources from the deck.
+
+    Examples:
+
+      Clearing all resources on a liquid handler deck:
+
+      >>> lh.deck.clear()
+    """
+
+    all_resources = list(self.resources.values()) # can't change size during iteration
+    for resource in all_resources:
+      resource.unassign()
