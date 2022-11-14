@@ -4,12 +4,13 @@ from wtforms import StringField, DecimalField, FieldList, FormField
 from wtforms.validators import DataRequired, AnyOf
 
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends import Mock
+from pylabrobot.liquid_handling.backends import SaverBackend
+from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
 
 
 lh_api = Blueprint("liquid handling", __name__, url_prefix="/api/v1/liquid_handling")
 
-lh = LiquidHandler(backend=Mock())
+lh = LiquidHandler(backend=SaverBackend(), deck=STARLetDeck())
 
 
 class KWArg(Form):

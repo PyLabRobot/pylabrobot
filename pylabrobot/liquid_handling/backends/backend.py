@@ -1,10 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from typing import Optional
 
-from pylabrobot.liquid_handling.resources import (
-  Plate,
-  Resource,
-)
+from pylabrobot.liquid_handling.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Discard,
@@ -96,24 +93,12 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def aspirate96(
-    self,
-    plate: Plate,
-    volume: float,
-    flow_rate: Optional[float],
-    **backend_kwargs
-  ):
+  def aspirate96(self, aspiration: Aspiration, **backend_kwargs):
     """ Aspirate from all wells in 96 well plate. """
     pass
 
   @abstractmethod
-  def dispense96(
-    self,
-    plate: Plate,
-    volume: float,
-    flow_rate: Optional[float],
-    **backend_kwargs
-  ):
+  def dispense96(self, dispense: Dispense, **backend_kwargs):
     """ Dispense to all wells in 96 well plate. """
     pass
 

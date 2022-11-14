@@ -15,7 +15,6 @@ from typing import Callable, List, Optional
 from pylabrobot import utils
 from pylabrobot.liquid_handling.resources import (
   Resource,
-  Plate,
   Tip,
   TipRack,
   TipType,
@@ -906,21 +905,19 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def aspirate96(
     self,
-    plate: Plate,
-    volume: float,
-    flow_rate: Optional[float],
+    aspiration: Aspiration,
     blow_out_air_volume: float = 0,
     use_lld: bool = False,
     liquid_height: float = 2,
     air_transport_retract_dist: float = 10,
     **backend_kwargs
   ):
-    position = plate.get_item("A1").get_absolute_location()
+    position = aspiration.resource.get_item("A1").get_absolute_location()
 
-    liquid_height = plate.get_absolute_location().z + liquid_height
+    liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
 
-    if flow_rate is None:
-      flow_rate = 250
+    if aspiration.flow_rate is None:
+      aspiration.flow_rate = 250
 
     cmd_kwargs = dict(
       x_position=int(position.x * 10),
@@ -939,8 +936,8 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth=0,
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_aspiration=0,
-      aspiration_volumes=int(volume*10),
-      aspiration_speed=int(flow_rate * 10),
+      aspiration_volumes=int(aspiration.volume*10),
+      aspiration_speed=int(aspiration.flow_rate * 10),
       transport_air_volume=50,
       blow_out_air_volume=0,
       pre_wetting_volume=50,
@@ -979,9 +976,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def dispense96(
     self,
-    plate: Plate,
-    volume: float,
-    flow_rate: Optional[float],
+    dispense: Dispense,
     mix_cycles=0,
     mix_volume=0,
     jet=False,
@@ -991,12 +986,12 @@ class STAR(HamiltonLiquidHandler):
     air_transport_retract_dist=10,
     blow_out_air_volume: float = 0,
   ):
-    position = plate.get_item("A1").get_absolute_location()
+    position = dispense.resource.get_item("A1").get_absolute_location()
 
-    liquid_height = plate.get_absolute_location().z + liquid_height
+    liquid_height = dispense.resource.get_absolute_location().z + liquid_height
 
-    if flow_rate is None:
-      flow_rate = 120
+    if dispense.flow_rate is None:
+      dispense.flow_rate = 120
 
     dispense_mode = {
       (True, False): 0,
@@ -1022,8 +1017,8 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth=0,
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_dispense=0,
-      dispense_volume=int(volume*10),
-      dispense_speed=int(flow_rate * 10),
+      dispense_volume=int(dispense.volume*10),
+      dispense_speed=int(dispense.flow_rate * 10),
       transport_air_volume=50,
       blow_out_air_volume=0,
       lld_mode=False,

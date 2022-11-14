@@ -1,12 +1,10 @@
+from typing import Any, Dict, List
+
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 
 
 class SaverBackend(LiquidHandlerBackend):
-  """ A backend that saves all commands received in a list, for testing purposes.
-
-  TODO: This class is suspiciously similar to the WebSocketBackendEventCatcher, we should probably
-  merge them.
-  """
+  """ A backend that saves all commands received in a list, for testing purposes. """
 
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
@@ -16,8 +14,8 @@ class SaverBackend(LiquidHandlerBackend):
     super().setup()
     self.commands_received = []
 
-  def clear(self):
-    self.commands_received = []
+  def send_command(self, command: str, data: Dict[str, Any]):
+    self.commands_received.append(dict(command=command, data=data))
 
   def assigned_resource_callback(self, *args, **kwargs):
     self.commands_received.append(
@@ -53,3 +51,11 @@ class SaverBackend(LiquidHandlerBackend):
 
   def move_resource(self, *args, **kwargs):
     self.commands_received.append(dict(command="move_resource", args=args, kwargs=kwargs))
+
+  # Saver specific methods
+
+  def clear(self):
+    self.commands_received = []
+
+  def get_commands_for_event(self, event: str) -> List[Dict[str, Any]]:
+    return [command for command in self.commands_received if command["command"] == event]

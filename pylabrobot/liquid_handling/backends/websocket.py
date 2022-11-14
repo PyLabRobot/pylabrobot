@@ -3,7 +3,6 @@ import json
 import logging
 import threading
 import time
-import typing
 from typing import Optional
 
 try:
@@ -12,21 +11,14 @@ try:
 except ImportError:
   HAS_WEBSOCKETS = False
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  Discard,
-  Aspiration,
-  Dispense,
-  Move
-)
+from pylabrobot.liquid_handling.backends import SerializingBackend
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
 
 
-class WebSocketBackend(LiquidHandlerBackend):
+class WebSocketBackend(SerializingBackend):
   """ A backend that hosts a websocket server and sends commands over it. """
 
   def __init__(
@@ -108,11 +100,11 @@ class WebSocketBackend(LiquidHandlerBackend):
       else:
         logger.warning("Unhandled message: %s", message)
 
-  def _assemble_command(self, event: str, **kwargs) -> str:
+  def _assemble_command(self, event: str, data) -> str:
     """ Assemble a command into standard JSON form. """
     id_ = self._generate_id()
-    data = dict(event=event, id=id_, version=STANDARD_FORM_JSON_VERSION, **kwargs)
-    return json.dumps(data), id_
+    command_data = dict(event=event, id=id_, version=STANDARD_FORM_JSON_VERSION, **data)
+    return json.dumps(command_data), id_
 
   def has_connection(self) -> bool:
     """ Return `True` if a websocket connection has been established. """
@@ -130,12 +122,12 @@ class WebSocketBackend(LiquidHandlerBackend):
     while not self.has_connection():
       time.sleep(0.1)
 
-  def send_event(
+  def send_command(
     self,
-    event: str,
+    command: str,
+    data: dict = None,
     wait_for_response: bool = True,
-    **kwargs
-  )-> typing.Optional[dict]:
+  )-> Optional[dict]:
     """ Send an event to the browser.
 
     If a websocket connection has not been established, the event will be saved and sent when it is
@@ -153,7 +145,10 @@ class WebSocketBackend(LiquidHandlerBackend):
       The response from the browser, if `wait_for_response` is `True`, otherwise `None`.
     """
 
-    data, id_ = self._assemble_command(event, **kwargs)
+    if data is None:
+      data = {}
+
+    data, id_ = self._assemble_command(command, data)
     self._sent_messages.append(data)
 
     # Run and save if the websocket connection has been established, otherwise just save.
@@ -173,7 +168,7 @@ class WebSocketBackend(LiquidHandlerBackend):
 
         if not message["success"]:
           error = message.get("error", "unknown error")
-          raise ValueError(f"Error during event {event}: " + error)
+          raise ValueError(f"Error during event {command}: " + error)
 
         return message
 
@@ -194,8 +189,6 @@ class WebSocketBackend(LiquidHandlerBackend):
 
     if not HAS_WEBSOCKETS:
       raise RuntimeError("The simulator requires websockets to be installed.")
-
-    super().setup()
 
     async def run_server():
       self.stop_ = self.loop.create_future()
@@ -229,13 +222,11 @@ class WebSocketBackend(LiquidHandlerBackend):
   def stop(self):
     """ Stop the simulation. """
 
-    super().stop()
-
     if self.loop is None:
       raise ValueError("Cannot stop simulation when it has not been started.")
 
     # send stop event to the browser
-    self.send_event("stop", wait_for_response=False)
+    self.send_command("stop", wait_for_response=False)
 
     # must be thread safe, because event loop is running in a separate thread
     self.loop.call_soon_threadsafe(self.stop_.set_result, "done")
@@ -247,46 +238,3 @@ class WebSocketBackend(LiquidHandlerBackend):
     self.loop = None
     self.t = None
     self.stop_ = None
-
-  def assigned_resource_callback(self, resource):
-    self.send_event(event="resource_assigned", resource=resource.serialize(),
-      parent_name=(resource.parent.name if resource.parent else None),
-      wait_for_response=False)
-
-  def unassigned_resource_callback(self, name):
-    self.send_event(event="resource_unassigned", resource_name=name, wait_for_response=False)
-
-  def pick_up_tips(self, *channels: Optional[Pickup]):
-    channels = [channel.serialize() if channel is not None else None for channel in channels]
-    self.send_event(event="pick_up_tips", channels=channels,
-      wait_for_response=True)
-
-  def discard_tips(self, *channels: Optional[Discard]):
-    channels = [channel.serialize() if channel is not None else None for channel in channels]
-    self.send_event(event="discard_tips", channels=channels, wait_for_response=True)
-
-  def aspirate(self, *channels: Optional[Aspiration]):
-    channels = [channel.serialize() for channel in channels]
-    self.send_event(event="aspirate", channels=channels, wait_for_response=True)
-
-  def dispense(self, *channels: Optional[Dispense]):
-    channels = [channel.serialize() for channel in channels]
-    self.send_event(event="dispense", channels=channels, wait_for_response=True)
-
-  def pick_up_tips96(self, resource):
-    self.send_event(event="pick_up_tips96", resource=resource.serialize(), wait_for_response=True)
-
-  def discard_tips96(self, resource):
-    self.send_event(event="discard_tips96", resource=resource.serialize(),
-      wait_for_response=True)
-
-  def aspirate96(self, plate, volume, flow_rate):
-    self.send_event(event="aspirate96", plate=plate.serialize(),
-      flow_rate=flow_rate, volume=volume, wait_for_response=True)
-
-  def dispense96(self, plate, volume, flow_rate):
-    self.send_event(event="dispense96", plate=plate.serialize(),
-      flow_rate=flow_rate, volume=volume, wait_for_response=True)
-
-  def move_resource(self, move: Move, **backend_kwargs):
-    raise NotImplementedError("This method is not implemented in the simulator.")

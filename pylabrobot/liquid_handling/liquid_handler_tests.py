@@ -32,7 +32,7 @@ from .standard import Pickup, Discard, Aspiration, Dispense
 
 class TestLiquidHandlerLayout(unittest.TestCase):
   def setUp(self):
-    star = backends.Mock()
+    star = backends.SaverBackend()
     self.lh = LiquidHandler(star, deck=STARLetDeck())
 
   def test_resource_assignment(self):
@@ -272,7 +272,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     fn = os.path.join(tmp_dir, "layout.json")
     self.lh.save(fn)
 
-    be = backends.Mock()
+    be = backends.SaverBackend()
     recovered = LiquidHandler(be, deck=STARLetDeck())
     recovered.load_from_json(fn)
 
@@ -477,11 +477,11 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     self.assertEqual(self.get_first_command("aspirate96"), {
       "command": "aspirate96",
       "args": (),
-      "kwargs": {"plate": self.plate, "volume": 10, "flow_rate": None}})
+      "kwargs": {"aspiration": Aspiration(resource=self.plate, volume=10.0)}})
     self.assertEqual(self.get_first_command("dispense96"), {
       "command": "dispense96",
       "args": (),
-      "kwargs": {"plate": self.plate, "volume": 10, "flow_rate": None}})
+      "kwargs": {"dispense": Dispense(resource=self.plate, volume=10.0)}})
     self.lh.backend.clear()
 
 
