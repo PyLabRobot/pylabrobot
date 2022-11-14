@@ -956,10 +956,10 @@ class LiquidHandler:
       volume = liquid_class.compute_corrected_volume(volume)
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
-      self.backend.aspirate96(
-        plate=plate,
+      self.backend.aspirate96(aspiration=Aspiration(
+        resource=plate,
         volume=volume,
-        flow_rate=flow_rate,
+        flow_rate=flow_rate),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
@@ -999,10 +999,10 @@ class LiquidHandler:
       volume = liquid_class.compute_corrected_volume(volume)
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
-      self.backend.dispense96(
-        plate=plate,
+      self.backend.dispense96(dispense=Dispense(
+        resource=plate,
         volume=volume,
-        flow_rate=flow_rate,
+        flow_rate=flow_rate),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "

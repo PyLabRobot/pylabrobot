@@ -8,12 +8,16 @@ import pytest
 import requests
 import websockets
 
-from pylabrobot.liquid_handling.backends.net.websocket_tests import (
-  WebSocketBackendCommandTests,
-  WebSocketBackendEventCatcher
-)
-from pylabrobot.liquid_handling.backends.simulation import SimulatorBackend
+from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.liquid_handling.backends import SerializingSavingBackend, SimulatorBackend
 from pylabrobot.utils.testing import async_test
+from pylabrobot.liquid_handling.resources import STARLetDeck
+from pylabrobot.liquid_handling.resources import (
+  TIP_CAR_480_A00,
+  PLT_CAR_L5AC_A00,
+  Cos_96_EZWash,
+  STF_L,
+)
 
 
 class SimulatorBackendSetupStopTests(unittest.TestCase):
@@ -81,57 +85,63 @@ class SimulatorBackendServerTests(unittest.TestCase):
     response = await self.client.recv()
     self.assertEqual(response, '{"event": "ready"}')
 
-    self.backend.send_event("test", wait_for_response=False)
+    self.backend.send_command("test", wait_for_response=False)
     recv = await self.client.recv()
     data = json.loads(recv)
     self.assertEqual(data["event"], "test")
 
 
-class SimulatorBackendEventCatcher(WebSocketBackendEventCatcher, SimulatorBackend):
+class SimulatorBackendEventCatcher(SerializingSavingBackend, SimulatorBackend):
   """ Catches events that would be sent over the websocket for easy testing.
 
   This class inherits from SimulatorBackend to get the same functionality as the
   SimulatorBackend class.
   """
 
-  pass
 
-class SimulatorBackendCommandTests(WebSocketBackendCommandTests):
+class SimulatorBackendCommandTests(unittest.TestCase):
   """ Tests for command sending using the simulator backend. """
 
   def setUp(self):
     super().setUp()
 
-    # hot swap the backend to use the simulator event catcher
-    backend = SimulatorBackendEventCatcher()
-    self.lh.backend = backend
-    backend.setup()
-    backend.sent_datas = self.backend.sent_datas
-    self.backend = backend
+    self.backend = SimulatorBackendEventCatcher(open_browser=False)
+    self.lh = LiquidHandler(backend=self.backend, deck=STARLetDeck())
+    self.lh.setup()
 
-  def test_send_simple_command(self):
-    self.backend.send_event("test", test=True)
-    self.assert_event_sent_n("test", times=1)
-    self.assertEqual(self.backend.get_commands("test")[0],
-      {"event": "test", "test": True, "id": "0001", "version": "0.1.0"})
-    self.assert_command_equal(self.backend.get_commands("test")[0],
-      {"event": "test", "test": True, "id": 0000, "version": "0.1.0"})
+    self.tip_car = TIP_CAR_480_A00(name="tip carrier")
+    self.tip_car[0] = self.tips = STF_L(name="tips_01")
+    self.lh.deck.assign_child_resource(self.tip_car, rails=1)
+
+    self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=True)
+    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
+    self.lh.deck.assign_child_resource(self.plt_car, rails=9)
+
+    self.maxDiff = None
+
+    self.backend.clear()
 
   def test_adjust_volume(self):
     self.backend.adjust_well_volume(self.plt_car[0].resource, [[100]*12]*8)
-    self.assert_event_sent_n("adjust_well_volume", times=1)
+    self.assertEqual(len(self.lh.backend.sent_commands), 1)
+    self.assertEqual(self.lh.backend.sent_commands[0]["command"], "adjust_well_volume")
 
   def test_edit_tips(self):
     self.backend.edit_tips(self.tip_car[0].resource, [[True]*12]*8)
-    self.assert_event_sent_n("edit_tips", times=1)
+    self.assertEqual(len(self.lh.backend.sent_commands), 1)
+    self.assertEqual(self.lh.backend.sent_commands[0]["command"], "edit_tips")
 
   def test_fill_tip_rack(self):
     self.backend.fill_tip_rack(self.tip_car[0].resource)
-    self.assert_event_sent_n("edit_tips", times=1)
+    self.assertEqual(len(self.lh.backend.sent_commands), 1)
+    self.assertEqual(self.lh.backend.sent_commands[0]["command"], "edit_tips")
 
   def test_clear_tips(self):
     self.backend.clear_tips(self.tip_car[0].resource)
-    self.assert_event_sent_n("edit_tips", times=1)
+    self.assertEqual(len(self.lh.backend.sent_commands), 1)
+    self.assertEqual(self.lh.backend.sent_commands[0]["command"], "edit_tips")
+
 
 if __name__ == "__main__":
   unittest.main()

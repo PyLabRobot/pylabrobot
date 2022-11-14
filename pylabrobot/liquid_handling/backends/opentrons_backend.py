@@ -1,10 +1,9 @@
-from typing import List, Optional, cast
+from typing import Optional, cast
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import (
   Plate,
   Resource,
-  Tip,
 )
 from pylabrobot.liquid_handling.resources.abstract.tip_rack import TipRack
 from pylabrobot.liquid_handling.resources.opentrons import OTDeck
@@ -318,10 +317,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6
     }[pipette_name]
 
-  def aspirate(
-    self,
-    *channels: Optional[Aspiration],
-  ):
+  def aspirate(self, *channels: Optional[Aspiration]):
     """ Aspirate liquid from the specified resource using pip. """
 
     assert len(channels) == 1, "only one channel supported for now"
@@ -367,10 +363,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6
     }[pipette_name]
 
-  def dispense(
-    self,
-    *channels: Optional[Dispense],
-  ):
+  def dispense(self, *channels: Optional[Dispense]):
     """ Dispense liquid from the specified resource using pip. """
 
     assert len(channels) == 1, "only one channel supported for now"
@@ -391,28 +384,18 @@ class OpentronsBackend(LiquidHandlerBackend):
       volume=volume, flow_rate=channel.flow_rate, offset_x=channel.offset.x,
        offset_y=channel.offset.y, offset_z=channel.offset.z)
 
-  def pick_up_tips96(self, resource: Resource, **backend_kwargs):
+  def pick_up_tips96(self, resource: Resource):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def discard_tips96(self, resource: Resource, **backend_kwargs):
+  def discard_tips96(self, resource: Resource):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def aspirate96(
-    self,
-    plate: Plate,
-    volume: float,
-    **backend_kwargs
-  ):
+  def aspirate96(self, aspiration: Aspiration):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def dispense96(
-    self,
-    plate: Plate,
-    volume: float,
-    **backend_kwargs
-  ):
+  def dispense96(self, dispense: Dispense):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def move_resource(self, move: Move, **backend_kwargs):
+  def move_resource(self, move: Move):
     """ Move the specified lid within the robot. """
     raise NotImplementedError("Moving resources in Opentrons is not implemented yet.")

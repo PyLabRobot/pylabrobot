@@ -7,19 +7,20 @@ import threading
 import typing
 import webbrowser
 
-from pylabrobot.liquid_handling.backends.net import WebSocketBackend
+from pylabrobot.liquid_handling.backends import WebSocketBackend
 from pylabrobot.liquid_handling.resources import (
   Plate,
   Resource,
   TipRack,
 )
+from pylabrobot.liquid_handling.standard import Move
 
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
 
 
 class SimulatorBackend(WebSocketBackend):
-  """ Based on the :class:`~pylabrobot.liquid_handling.backends.net.websocket.WebSocketBackend`,
+  """ Based on the :class:`~pylabrobot.liquid_handling.backends.websocket.WebSocketBackend`,
   the simulator backend can be used to simulate robot methods and inspect the results in a browser.
 
   You can view the simulation at `http://localhost:1337 <http://localhost:1337>`_, where
@@ -52,7 +53,7 @@ class SimulatorBackend(WebSocketBackend):
     INFO:pyhamilton.liquid_handling.backends.simulation.simulation:File server started at
       http://127.0.0.1:1337
     >>> lh.edit_tips(tips, pattern=[[True]*12]*8)
-    >>> lh.pick_up_tips(locations)
+    >>> lh.pick_up_tips(tips["A1:H1"])
   """
 
   def __init__(
@@ -152,6 +153,9 @@ class SimulatorBackend(WebSocketBackend):
     self.httpd = None
     self.fst = None
 
+  def move_resource(self, move: Move, **backend_kwargs):
+    raise NotImplementedError("This method is not implemented in the simulator.")
+
   def adjust_well_volume(self, plate: Plate, pattern: typing.List[typing.List[float]]):
     """ Fill a resource with liquid (**simulator only**).
 
@@ -165,7 +169,7 @@ class SimulatorBackend(WebSocketBackend):
       RuntimeError: if this method is called before :func:`~setup`.
     """
 
-    # Check if set up has been run, else raise a ValueError.
+    # Check if set up has been run, else raise a RuntimeError.
     if not self.setup_finished:
       raise RuntimeError("The setup has not been finished.")
 
@@ -179,8 +183,7 @@ class SimulatorBackend(WebSocketBackend):
           "volume": vol
         })
 
-    self.send_event(event="adjust_well_volume", pattern=serialized_pattern,
-      wait_for_response=True)
+    self.send_command(command="adjust_well_volume", data=dict(pattern=serialized_pattern))
 
   def edit_tips(self, tips_resource: TipRack, pattern: typing.List[typing.List[bool]]):
     """ Place and/or remove tips on the robot (**simulator only**).
@@ -210,8 +213,7 @@ class SimulatorBackend(WebSocketBackend):
           "has_one": has_one
         })
 
-    self.send_event(event="edit_tips", pattern=serialized_pattern,
-      wait_for_response=True)
+    self.send_command(command="edit_tips", data=dict(pattern=serialized_pattern))
 
   def fill_tip_rack(self, resource: TipRack):
     """ Completely fill a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource

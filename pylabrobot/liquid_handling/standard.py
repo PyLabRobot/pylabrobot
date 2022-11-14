@@ -67,7 +67,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     resource: Resource,
     volume: float,
     flow_rate: Optional[float] = None,
-    offset: Coordinate = Coordinate.zero()
+    offset: Coordinate = Coordinate.zero(),
   ):
     """ Initialize the operation.
 
@@ -165,7 +165,7 @@ class Move():
     to: Coordinate,
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
-    pickup_distance_from_top: Optional[float] = None,
+    pickup_distance_from_top: float = 0,
     get_direction: Move.Direction = Direction.FRONT,
     put_direction: Move.Direction = Direction.FRONT
   ):

@@ -1,12 +1,9 @@
 # pylint: disable=unused-argument
 
-from typing import List, Optional
+from typing import Optional
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.resources import (
-  Resource,
-  Tip,
-)
+from pylabrobot.liquid_handling.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
   Dispense,
@@ -57,23 +54,11 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def discard_tips96(self, resource: Resource, **backend_kwargs):
     print(f"Discarding tips to {resource}.")
 
-  def aspirate96(
-    self,
-    plate: Resource,
-    volume: float,
-    flow_rate: Optional[float],
-    **backend_kwargs
-  ):
-    print(f"Aspirating {volume} from {plate}.")
+  def aspirate96(self, aspiration: Aspiration):
+    print(f"Aspirating {aspiration.volume} from {aspiration.resource}.")
 
-  def dispense96(
-    self,
-    plate: Resource,
-    volume: float,
-    flow_rate: Optional[float],
-    **backend_kwargs
-  ):
-    print(f"Dispensing {volume} to {plate}.")
+  def dispense96(self, dispense: Dispense):
+    print(f"Dispensing {dispense.volume} to {dispense.resource}.")
 
   def move_resource(self, move: Move, **backend_kwargs):
     print(f"Moving {move}.")
