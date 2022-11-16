@@ -24,7 +24,7 @@ lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
 lh.setup()
 lh.load_layout("hamilton-layout.json")
 
-lh.pickup_tips(lh.get_resource("tips")["A1:H8"])
+lh.pickup_tips(lh.get_resource("tips")["A1:H1"])
 lh.aspirate(lh.get_resource("plate")["A1"], vols=[100])
 lh.dispense(lh.get_resource("plate")["A2"], vols=[100])
 lh.return_tips()
