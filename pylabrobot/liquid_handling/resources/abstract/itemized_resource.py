@@ -388,7 +388,7 @@ def create_equally_spaced(
         size_y=item_size_y,
         **kwargs
       )
-      item.location=Coordinate( x=dx + i * item_size_x, y=dy + (num_items_y-j-1) * item_size_y, z=dz)
+      item.location=Coordinate(x=dx + i * item_size_x, y=dy + (num_items_y-j-1) * item_size_y, z=dz)
       items[i].append(item)
 
   return items
