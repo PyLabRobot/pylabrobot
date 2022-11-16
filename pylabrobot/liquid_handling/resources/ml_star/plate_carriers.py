@@ -21,7 +21,6 @@ PLT_CAR_L5FLEX_MD = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -37,7 +36,6 @@ PLT_CAR_P3AC_A00 = partial(PlateCarrier,
   ],
   site_size_x=86.0,
   site_size_y=127.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -53,7 +51,6 @@ PLT_CAR_P3AC_A01 = partial(PlateCarrier,
   ],
   site_size_x=86.0,
   site_size_y=127.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -71,7 +68,6 @@ PLT_CAR_L5FLEX_AC = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -89,7 +85,6 @@ PLT_CAR_L5FLEX_MD_A00 = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -106,7 +101,6 @@ PLT_CAR_L4HD = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -122,7 +116,6 @@ PLT_CAR_P3HD = partial(PlateCarrier,
   ],
   site_size_x=86.0,
   site_size_y=127.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -140,7 +133,6 @@ PLT_CAR_L5AC_A00 = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -158,7 +150,6 @@ PLT_CAR_L5MD_A00 = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -176,7 +167,6 @@ PLT_CAR_L5MD = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -194,7 +184,6 @@ PLT_CAR_L5AC = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -212,7 +201,6 @@ PLT_CAR_L5FLEX_AC_A00 = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -230,7 +218,6 @@ PLT_CAR_L5PCR = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -246,7 +233,6 @@ PLT_CAR_P3MD = partial(PlateCarrier,
   ],
   site_size_x=86.0,
   site_size_y=127.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -264,7 +250,6 @@ PLT_CAR_L5PCR_A00 = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -282,7 +267,6 @@ PLT_CAR_L5PCR_A01 = partial(PlateCarrier,
   ],
   site_size_x=127.0,
   site_size_y=86.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -298,7 +282,6 @@ PLT_CAR_P3MD_A01 = partial(PlateCarrier,
   ],
   site_size_x=86.0,
   site_size_y=127.0,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -314,5 +297,4 @@ PLT_CAR_P3MD_A00 = partial(PlateCarrier,
   ],
   site_size_x=86.0,
   site_size_y=127.0,
-  location=Coordinate(0, 0, 0)
 )

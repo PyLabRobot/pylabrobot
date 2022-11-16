@@ -26,6 +26,7 @@ from .resources import (
   CarrierSite,
   Lid,
   Plate,
+  PlateReader,
   Tip,
   TipRack,
   Well
@@ -70,6 +71,7 @@ class LiquidHandler:
 
     Args:
       backend: Backend to use.
+      deck: Deck to use.
     """
 
     self.backend = backend
@@ -352,7 +354,9 @@ class LiquidHandler:
         resource = klass.deserialize(dict_resource)
         for child_dict in dict_resource["children"]:
           child_resource = deserialize_resource(child_dict)
-          resource.assign_child_resource(child_resource)
+          child_location = child_dict.pop("location")
+          child_location = Coordinate.deserialize(child_location)
+          resource.assign_child_resource(child_resource, location=child_location)
         return resource
       else:
         raise ValueError(f"Resource with classname {class_name} not found.")
@@ -1151,10 +1155,11 @@ class LiquidHandler:
 
     lid.unassign()
     if isinstance(to, Coordinate):
-      lid.location = to
-      self.deck.assign_child_resource(lid)
-    else:
+      self.deck.assign_child_resource(lid, location=to_location)
+    elif isinstance(to, ResourceStack): # manage its own resources
       to.assign_child_resource(lid)
+    else:
+      to.assign_child_resource(lid, location=to_location)
 
   def move_plate(
     self,
@@ -1215,7 +1220,10 @@ class LiquidHandler:
 
     plate.unassign()
     if isinstance(to, Coordinate):
-      plate.location = to
-      self.deck.assign_child_resource(plate)
-    else:
+      self.deck.assign_child_resource(plate, location=to_location)
+    elif isinstance(to, CarrierSite): # .zero() resources
+      to.assign_child_resource(plate, location=Coordinate.zero())
+    elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       to.assign_child_resource(plate)
+    else:
+      to.assign_child_resource(plate, location=to_location)

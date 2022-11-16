@@ -28,8 +28,8 @@ class Deck(Resource):
         function is called with the resource as an argument.
     """
 
-    super().__init__(name="deck", size_x=size_x, size_y=size_y, size_z=size_z,
-      location=origin, category="deck")
+    super().__init__(name="deck", size_x=size_x, size_y=size_y, size_z=size_z, category="deck")
+    self.location = origin
     self.resources = {}
     self.resource_assigned_callback_callback = resource_assigned_callback
     self.resource_unassigned_callback_callback = resource_unassigned_callback

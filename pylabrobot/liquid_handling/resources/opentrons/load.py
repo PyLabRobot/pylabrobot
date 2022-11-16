@@ -59,13 +59,14 @@ def ot_definition_to_resource(data: dict, name: str) -> Union[Plate, TipRack]:
 
         location=Coordinate(x=well_data["x"], y=well_data["y"], z=well_data["z"])
         if display_category == "wellPlate":
-          wells[i].append(Well(
+          well = Well(
             name=item,
             size_x=well_size_x,
             size_y=well_size_y,
             size_z=well_size_z,
-            location=location
-          ))
+          )
+          well.location = location
+          wells[i].append(well)
         else:
           tip_type = TipType(
             has_filter="Filter" in data["metadata"]["displayName"],
@@ -74,13 +75,14 @@ def ot_definition_to_resource(data: dict, name: str) -> Union[Plate, TipRack]:
             tip_type_id=None,
             pick_up_method=None,
           )
-          wells[i].append(Tip(
+          tip = Tip(
             name=item,
             size_x=well_size_x,
             size_y=well_size_y,
-            location=location,
             tip_type=tip_type
-          ))
+          )
+          tip.location = location
+          wells[i].append(tip)
 
     if display_category == "wellPlate":
       return Plate(

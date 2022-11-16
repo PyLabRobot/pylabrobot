@@ -49,7 +49,7 @@ class CarrierTests(unittest.TestCase):
 
     self.tip_car = TipCarrier(
       "tip_car",
-      size_x=135.0, size_y=497.0, size_z=13.0, location=Coordinate(0, 0, 0),
+      size_x=135.0, size_y=497.0, size_z=13.0,
       sites=[
         Coordinate(10,   20, 30),
         Coordinate(10,   50, 30),
@@ -62,11 +62,11 @@ class CarrierTests(unittest.TestCase):
 
   def test_assign_in_order(self):
     carrier = Carrier(
-      name="carrier", location=Coordinate(10, 10, 10),
+      name="carrier",
       size_x=200, size_y=200, size_z=50,
       sites=[Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10
     )
-    plate = Resource("plate", location=Coordinate(5, 5, 5), size_x=10, size_y=10, size_z=10)
+    plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_child_resource(plate, spot=0)
 
     self.assertEqual(carrier.get_resource("plate"), plate)
@@ -76,15 +76,15 @@ class CarrierTests(unittest.TestCase):
 
   def test_assign_build_carrier_first(self):
     carrier = Carrier(
-      name="carrier", location=Coordinate(10, 10, 10),
+      name="carrier",
       size_x=200, size_y=200, size_z=50,
       sites=[Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10
     )
-    plate = Resource("plate", location=Coordinate(5, 5, 5), size_x=10, size_y=10, size_z=10)
+    plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_child_resource(plate, spot=0)
 
     deck = Deck()
-    deck.assign_child_resource(carrier)
+    deck.assign_child_resource(carrier, location=Coordinate.zero())
 
     self.assertEqual(deck.get_resource("carrier"), carrier)
     self.assertEqual(deck.get_resource("plate"), plate)
@@ -92,15 +92,15 @@ class CarrierTests(unittest.TestCase):
 
   def test_unassign_child(self):
     carrier = Carrier(
-      name="carrier", location=Coordinate(10, 10, 10),
+      name="carrier",
       size_x=200, size_y=200, size_z=50,
       sites=[Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10
     )
-    plate = Resource("plate", location=Coordinate(5, 5, 5), size_x=10, size_y=10, size_z=10)
+    plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_child_resource(plate, spot=0)
     carrier.unassign_child_resource(plate)
     deck = Deck()
-    deck.assign_child_resource(carrier)
+    deck.assign_child_resource(carrier, location=Coordinate.zero())
 
     self.assertIsNone(plate.parent)
     self.assertIsNone(carrier.get_resource("plate"))
@@ -108,20 +108,21 @@ class CarrierTests(unittest.TestCase):
 
   def test_assign_index_error(self):
     carrier = Carrier(
-      name="carrier", location=Coordinate(10, 10, 10),
+      name="carrier",
       size_x=200, size_y=200, size_z=50,
       sites=[Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10
     )
-    plate = Resource("plate", location=Coordinate(5, 5, 5), size_x=10, size_y=10, size_z=10)
+    plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     with self.assertRaises(IndexError):
       carrier.assign_child_resource(plate, spot=3)
 
   def test_absolute_location(self):
     carrier = Carrier(
-      name="carrier", location=Coordinate(10, 10, 10),
+      name="carrier",
       size_x=200, size_y=200, size_z=50,
       sites=[Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10
     )
+    carrier.location = Coordinate(10, 10, 10)
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_child_resource(plate, spot=0)
 
@@ -186,11 +187,7 @@ class CarrierTests(unittest.TestCase):
       "size_x": 135.0,
       "size_y": 497.0,
       "size_z": 13.0,
-      "location": {
-        "x": 0,
-        "y": 0,
-        "z": 0
-      },
+      "location": None,
       "category": "tip_carrier",
       "parent_name": None,
       "children": [
@@ -286,7 +283,7 @@ class CarrierTests(unittest.TestCase):
     self.maxDiff = None
     tip_car = TipCarrier(
       "tip_car",
-      size_x=135.0, size_y=497.0, size_z=13.0, location=Coordinate(0, 0, 0),
+      size_x=135.0, size_y=497.0, size_z=13.0,
       sites=[], # sites are not deserialized here
       site_size_x=10, site_size_y=10
     )

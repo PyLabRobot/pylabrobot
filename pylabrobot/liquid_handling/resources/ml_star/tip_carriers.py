@@ -19,7 +19,6 @@ TIP_CAR_288_TIP_50ul_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -35,7 +34,6 @@ TIP_CAR_288_HTF_B00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -53,7 +51,6 @@ TIP_CAR_120BC_4mlTF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -71,7 +68,6 @@ TIP_CAR_NTR_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -87,7 +83,6 @@ TIP_CAR_288_ST_B00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -104,7 +99,6 @@ TIP_CAR_384_TIP_50ul_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -121,7 +115,6 @@ TIP_CAR_384BC_HT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -138,7 +131,6 @@ TIP_CAR_384BC_HTF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -156,7 +148,6 @@ TIP_CAR_480BC_LT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -174,7 +165,6 @@ TIP_CAR_480BC_ST_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -192,7 +182,6 @@ TIP_CAR_480BC_HTF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -209,7 +198,6 @@ TIP_CAR_384_LTF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -226,7 +214,6 @@ TIP_CAR_384BC_TIP_50ulF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -244,7 +231,6 @@ TIP_CAR_480BC_PiercingTips_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -262,7 +248,6 @@ TIP_CAR_480BC_PiercingTip150ulFilter_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -280,7 +265,6 @@ TIP_CAR_480_HTF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -297,7 +281,6 @@ TIP_CAR_384_HT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -313,7 +296,6 @@ TIP_CAR_288_LT_B00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -331,7 +313,6 @@ TIP_CAR_480BC_SlimTips300ulFilter_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -348,7 +329,6 @@ TIP_CAR_96BC_4mlTF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -364,7 +344,6 @@ TIP_CAR_288_ST_A00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -382,7 +361,6 @@ TIP_CAR_480_ST_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -398,7 +376,6 @@ TIP_CAR_288_HTF_A00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -415,7 +392,6 @@ TIP_CAR_384_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -431,7 +407,6 @@ TIP_CAR_288_HTF_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -448,7 +423,6 @@ TIP_CAR_384_STF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -465,7 +439,6 @@ TIP_CAR_96BC_5mlT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -481,7 +454,6 @@ TIP_CAR_288_ST_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -497,7 +469,6 @@ TIP_CAR_288_TIP_50ulF_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -513,7 +484,6 @@ TIP_CAR_288_LT_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -531,7 +501,6 @@ TIP_CAR_480_LT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -547,7 +516,6 @@ TIP_CAR_72_5mlT_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -563,7 +531,6 @@ TIP_CAR_288_LT_A00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -581,7 +548,6 @@ TIP_CAR_480BC_LTF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -598,7 +564,6 @@ TIP_CAR_384BC_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -614,7 +579,6 @@ TIP_CAR_288_STF_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -632,7 +596,6 @@ TIP_CAR_480_LTF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -648,7 +611,6 @@ TIP_CAR_288_STF_A00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -664,7 +626,6 @@ TIP_CAR_288_LTF_B00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -682,7 +643,6 @@ TIP_CAR_480_HT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -700,7 +660,6 @@ TIP_CAR_480_TIP_50ul_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -716,7 +675,6 @@ TIP_CAR_288_B00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -733,7 +691,6 @@ TIP_CAR_384_TIP_50ulF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -749,7 +706,6 @@ TIP_CAR_288_HT_A00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -767,7 +723,6 @@ TIP_CAR_480_TIP_50ulF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -783,7 +738,6 @@ TIP_CAR_288_HT_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -800,7 +754,6 @@ TIP_CAR_384BC_LTF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -817,7 +770,6 @@ TIP_CAR_384BC_STF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -834,7 +786,6 @@ TIP_CAR_384BC_LT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -852,7 +803,6 @@ TIP_CAR_480BC_HT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -868,7 +818,6 @@ TIP_CAR_288_STF_B00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -885,7 +834,6 @@ TIP_CAR_384BC_TIP_50ul_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -901,7 +849,6 @@ TIP_CAR_72_4mlTF_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -919,7 +866,6 @@ TIP_CAR_480BC_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -937,7 +883,6 @@ TIP_CAR_480BC_TIP_50ul_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -954,7 +899,6 @@ TIP_CAR_384_ST_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -972,7 +916,6 @@ TIP_CAR_480 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -990,7 +933,6 @@ TIP_CAR_480BC_TIP_50ulF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1008,7 +950,6 @@ TIP_CAR_480_STF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1024,7 +965,6 @@ TIP_CAR_288_HT_B00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1040,7 +980,6 @@ TIP_CAR_288_A00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1057,7 +996,6 @@ TIP_CAR_384_LT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1075,7 +1013,6 @@ TIP_CAR_480_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1091,7 +1028,6 @@ TIP_CAR_288_LTF_A00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1109,7 +1045,6 @@ TIP_CAR_120BC_5mlT_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1125,7 +1060,6 @@ TIP_CAR_288_LTF_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1143,7 +1077,6 @@ TIP_CAR_480BC_STF_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1161,7 +1094,6 @@ TIP_CAR_480BC_SlimTips_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1177,7 +1109,6 @@ TIP_CAR_288_C00 = partial(TipCarrier,
   ],
   site_size_x=82.6,
   site_size_y=122.4,
-  location=Coordinate(0, 0, 0)
 )
 
 
@@ -1194,5 +1125,4 @@ TIP_CAR_384BC_ST_A00 = partial(TipCarrier,
   ],
   site_size_x=122.4,
   site_size_y=82.6,
-  location=Coordinate(0, 0, 0)
 )

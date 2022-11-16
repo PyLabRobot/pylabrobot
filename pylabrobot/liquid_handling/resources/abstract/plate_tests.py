@@ -13,7 +13,8 @@ class TestLid(unittest.TestCase):
     plate = Plate("plate", size_x=1, size_y=1, size_z=15, one_dot_max=1, lid_height=10,
       items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
         num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1),
-      with_lid=True, location=Coordinate.zero())
+      with_lid=True)
+    plate.location = Coordinate.zero()
 
     self.assertIsNotNone(plate.lid)
     self.assertEqual(plate.lid.name, "plate_lid")
@@ -26,16 +27,16 @@ class TestLid(unittest.TestCase):
       items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
         num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1))
     lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
-      size_z=plate.get_size_z(), location=Coordinate(0, 0, 0))
-    plate.assign_child_resource(lid)
+      size_z=plate.get_size_z())
+    plate.assign_child_resource(lid, location=Coordinate(0, 0, 0))
     return plate
 
   def test_add_lid_with_existing_lid(self):
     plate = self.test_add_lid()
     another_lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
-    size_z=plate.get_size_z(), location=Coordinate(0, 0, 0))
+    size_z=plate.get_size_z())
     with self.assertRaises(ValueError):
-      plate.assign_child_resource(another_lid)
+      plate.assign_child_resource(another_lid, location=Coordinate(0, 0, 0))
 
     plate = self.test_add_lid()
     plate.unassign_child_resource(plate.lid)

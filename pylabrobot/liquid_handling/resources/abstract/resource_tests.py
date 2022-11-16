@@ -11,10 +11,10 @@ from .resource import Resource
 class TestResource(unittest.TestCase):
   def test_assign_in_order(self):
     deck = Deck()
-    parent = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
-    deck.assign_child_resource(parent)
-    child = Resource("child", location=Coordinate(5, 5, 5), size_x=10, size_y=10, size_z=10)
-    parent.assign_child_resource(child)
+    parent = Resource("parent", size_x=10, size_y=10, size_z=10)
+    deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
+    child = Resource("child", size_x=10, size_y=10, size_z=10)
+    parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
     self.assertEqual(deck.get_resource("parent"), parent)
     self.assertEqual(deck.get_resource("child"), child)
@@ -23,12 +23,12 @@ class TestResource(unittest.TestCase):
     self.assertIsNone(deck.parent)
 
   def test_assign_build_carrier_first(self):
-    parent = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
-    child = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
-    parent.assign_child_resource(child)
+    parent = Resource("parent", size_x=10, size_y=10, size_z=10)
+    child = Resource("child", size_x=5, size_y=5, size_z=5)
+    parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
     deck = Deck()
-    deck.assign_child_resource(parent)
+    deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
 
     self.assertEqual(deck.get_resource("parent"), parent)
     self.assertEqual(deck.get_resource("child"), child)
@@ -38,31 +38,31 @@ class TestResource(unittest.TestCase):
 
   def test_assign_name_taken(self):
     deck = Deck()
-    parent = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
-    deck.assign_child_resource(parent)
-    child = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
-    parent.assign_child_resource(child)
+    parent = Resource("parent", size_x=10, size_y=10, size_z=10)
+    deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
+    child = Resource("child", size_x=5, size_y=5, size_z=5)
+    parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
     with self.assertRaises(ValueError):
-      other_child = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
-      deck.assign_child_resource(other_child)
+      other_child = Resource("child", size_x=5, size_y=5, size_z=5)
+      deck.assign_child_resource(other_child, location=Coordinate(5, 5, 5))
 
   def test_absolute_location(self):
     deck = Deck()
-    parent = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
-    deck.assign_child_resource(parent)
-    child = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
-    parent.assign_child_resource(child)
+    parent = Resource("parent", size_x=10, size_y=10, size_z=10)
+    deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
+    child = Resource("child", size_x=5, size_y=5, size_z=5)
+    parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
     self.assertEqual(deck.get_resource("parent").get_absolute_location(), Coordinate(10, 10, 10))
     self.assertEqual(deck.get_resource("child").get_absolute_location(), Coordinate(15, 15, 15))
 
   def test_unassign_child(self):
     deck = Deck()
-    parent = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
-    deck.assign_child_resource(parent)
-    child = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
-    parent.assign_child_resource(child)
+    parent = Resource("parent", size_x=10, size_y=10, size_z=10)
+    deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
+    child = Resource("child", size_x=5, size_y=5, size_z=5)
+    parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
     parent.unassign_child_resource(child)
 
     self.assertIsNone(child.parent)
@@ -71,19 +71,19 @@ class TestResource(unittest.TestCase):
 
   def test_get_all_children(self):
     deck = Deck()
-    parent = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
-    deck.assign_child_resource(parent)
-    child = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
-    parent.assign_child_resource(child)
+    parent = Resource("parent", size_x=10, size_y=10, size_z=10)
+    deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
+    child = Resource("child", size_x=5, size_y=5, size_z=5)
+    parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
     self.assertEqual(deck.get_all_children(), [parent, child])
 
   def test_get_resource(self):
     deck = Deck()
-    parent = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
-    deck.assign_child_resource(parent)
-    child = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
-    parent.assign_child_resource(child)
+    parent = Resource("parent", size_x=10, size_y=10, size_z=10)
+    deck.assign_child_resource(parent, location=Coordinate(10, 10, 10))
+    child = Resource("child", size_x=5, size_y=5, size_z=5)
+    parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
     self.assertEqual(deck.get_resource("parent"), parent)
     self.assertEqual(deck.get_resource("child"), child)
@@ -93,23 +93,19 @@ class TestResource(unittest.TestCase):
     deck2 = Deck()
     self.assertEqual(deck1, deck2)
 
-    parent1 = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
-    parent2 = Resource("parent", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
+    parent1 = Resource("parent", size_x=10, size_y=10, size_z=10)
+    parent2 = Resource("parent", size_x=10, size_y=10, size_z=10)
     self.assertEqual(parent1, parent2)
 
-    child1 = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
-    child2 = Resource("child", location=Coordinate(5, 5, 5), size_x=5, size_y=5, size_z=5)
+    child1 = Resource("child", size_x=5, size_y=5, size_z=5)
+    child2 = Resource("child", size_x=5, size_y=5, size_z=5)
     self.assertEqual(child1, child2)
 
   def test_serialize(self):
-    r = Resource("test", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
+    r = Resource("test", size_x=10, size_y=10, size_z=10)
     self.assertEqual(r.serialize(), {
       "name": "test",
-      "location": {
-        "x": 10,
-        "y": 10,
-        "z": 10
-      },
+      "location": None,
       "size_x": 10,
       "size_y": 10,
       "size_z": 10,
@@ -120,7 +116,7 @@ class TestResource(unittest.TestCase):
     })
 
   def test_deserialize(self):
-    r = Resource("test", location=Coordinate(10, 10, 10), size_x=10, size_y=10, size_z=10)
+    r = Resource("test", size_x=10, size_y=10, size_z=10)
     self.assertEqual(Resource.deserialize(r.serialize()), r)
 
 
