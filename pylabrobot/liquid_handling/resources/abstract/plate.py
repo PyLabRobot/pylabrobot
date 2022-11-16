@@ -18,7 +18,7 @@ class Lid(Resource):
     size_x: float,
     size_y: float,
     size_z: float,
-    location: Coordinate = Coordinate(None, None, None),
+    location: Coordinate = None,
   ):
     """ Create a lid for a plate.
 
@@ -47,7 +47,7 @@ class Plate(ItemizedResource[Well]):
     num_items_y: Optional[int] = None,
     one_dot_max: float = 0,
     category: str = "plate",
-    location: Coordinate = Coordinate(None, None, None),
+    location: Coordinate = None,
     lid_height: float = 0,
     with_lid: bool = False,
     compute_volume_from_height: Optional[Callable[[float], float]] = None

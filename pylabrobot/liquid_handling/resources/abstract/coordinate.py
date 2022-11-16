@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-from typing import Optional
-
 
 class Coordinate:
   """ Represents coordinates. This is often used to represent the location of a :class:`~Resource`,
   relative to its parent resource.
   """
 
-  def __init__(self, x: Optional[float], y: Optional[float], z: Optional[float]):
-    # Round to 4 decimal places to prevent floating point errors
-    self.x = round(x, 4) if x is not None else None
-    self.y = round(y, 4) if y is not None else None
-    self.z = round(z, 4) if z is not None else None
+  def __init__(self, x: float, y: float, z: float):
+    # Round to 4 decimal places to minimize floating point errors (100nm)
+    self.x = round(x, 4)
+    self.y = round(y, 4)
+    self.z = round(z, 4)
 
   @classmethod
   def zero(cls) -> Coordinate:

@@ -13,7 +13,7 @@ class TestLid(unittest.TestCase):
     plate = Plate("plate", size_x=1, size_y=1, size_z=15, one_dot_max=1, lid_height=10,
       items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
         num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1),
-      with_lid=True)
+      with_lid=True, location=Coordinate.zero())
 
     self.assertIsNotNone(plate.lid)
     self.assertEqual(plate.lid.name, "plate_lid")

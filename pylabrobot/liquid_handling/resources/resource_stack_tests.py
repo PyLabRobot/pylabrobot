@@ -19,7 +19,7 @@ class ResourceStackTests(unittest.TestCase):
     stack = ResourceStack("stack", "z", [
       Resource("A", size_x=10, size_y=10, size_z=10),
       Resource("B", size_x=10, size_y=10, size_z=10),
-    ])
+    ], location=Coordinate.zero())
     self.assertEqual(len(stack.children), 2)
 
   def test_create_x(self):

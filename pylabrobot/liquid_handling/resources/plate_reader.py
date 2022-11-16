@@ -8,7 +8,7 @@ from pylabrobot.liquid_handling.resources.abstract import Coordinate, Resource
 class PlateReader(Resource):
   """ A base for plate readers. """
 
-  def __init__(self, name: str, location: Coordinate = Coordinate(None, None, None)):
+  def __init__(self, name: str, location: Coordinate = None):
     super().__init__(name=name, size_x=0, size_y=0, size_z=0,
       location=location, category="plate_reader")
 
