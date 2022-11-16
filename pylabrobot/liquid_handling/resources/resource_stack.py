@@ -6,9 +6,10 @@ from pylabrobot.liquid_handling.resources.abstract.coordinate import Coordinate
 
 class ResourceStack(Resource):
   """ ResourceStack represent a group of resources that are stacked together and act as a single
-  unit. Stacks can grow be configured to be able to grow in x, y, or z direction.  Stacks growing
+  unit. Stacks can grow be configured to be able to grow in x, y, or z direction. Stacks growing
   in the x direction are from left to right. Stacks growing in the y direction are from front to
-  back. Stacks growing in the z direction are from top to bottom.
+  back. Stacks growing in the z direction are from bottom to top, and function as the
+  `stack data type <https://en.wikipedia.org/wiki/Stack_(abstract_data_type)>`.
 
   Attributes:
     name: The name of the resource group.
@@ -21,13 +22,26 @@ class ResourceStack(Resource):
     Making a resource group containing a plate on top of a lid:
 
     >>> stack = ResourceStack(“patched_plate”, "z", [
-    ...   Resource("plate", size_x=1, size_y=1, size_z=10, location=Coordinate(0, 0, 0)),
-    ...   Resource("lid", size_x=1, size_y=1, size_z=20, location=Coordinate(0, 0, 1))
+    ...   Resource("lid", size_x=1, size_y=1, size_z=20),
+    ...   Resource("plate", size_x=1, size_y=1, size_z=10),
     ... ])
     >>> stack.get_size_x()
     1
     >>> stack.get_size_z()
     30
+
+    :meth:`Moving <pyhamilton.liquid_handling.LiquidHandler.move_plate>` a plate to the a stacking
+    area.
+
+    >>> lh.move_plate(plate, stacking_area)
+
+    :meth:`Moving <pyhamilton.liquid_handling.LiquidHandler.move_lid>` a lid to the stacking area.
+
+    >>> lh.move_lid(plate.lid, stacking_area)
+
+    Getting a plate from the stacking area and moving it to a :class:`~abstract.PlateCarrier`.
+
+    >>> lh.move_plate(stacking_area.get_top_item(), plt_car[0])
   """
 
   def __init__(
@@ -41,7 +55,10 @@ class ResourceStack(Resource):
       location=location, category="resource_group")
     assert direction in ["x", "y", "z"], "Direction must be one of 'x', 'y', or 'z'"
     self.direction = direction
-    for resource in (resources or []):
+    resources = resources or []
+    if direction == "z": # top to bottom
+      resources = reversed(resources)
+    for resource in resources:
       self.assign_child_resource(resource)
 
   def __str__(self) -> str:
@@ -51,28 +68,23 @@ class ResourceStack(Resource):
     if len(self.children) == 0:
       return 0
     if self.direction == "x":
-      smallest_x = min(resource.location.x for resource in self.children)
-      largest_x = max(resource.location.x + resource.get_size_x() for resource in self.children)
-      return largest_x - smallest_x
+      return sum(child.get_size_x() for child in self.children)
     return max(resource.get_size_x() for resource in self.children)
 
   def get_size_y(self) -> float:
     if len(self.children) == 0:
       return 0
     if self.direction == "y":
-      smallest_y = min(resource.location.y for resource in self.children)
-      largest_y = max(resource.location.y + resource.get_size_y() for resource in self.children)
-      return largest_y - smallest_y
+      return sum(child.get_size_y() for child in self.children)
     return max(resource.get_size_y() for resource in self.children)
 
   def get_size_z(self) -> float:
     if len(self.children) == 0:
       return 0
     if self.direction == "z":
-      smallest_z = min(resource.location.z for resource in self.children)
-      largest_z = max(resource.location.z + resource.get_size_z() for resource in self.children)
-      return largest_z - smallest_z
-    return max(resource.get_size_z() for resource in self.children)
+      return sum(child.get_size_z() for child in self.children) - \
+              sum(child.stack_height for child in self.children if hasattr(child, "stack_height"))
+    return max(child.get_size_z() for child in self.children)
 
   def assign_child_resource(self, resource, **kwargs):
     # update child location (relative to self): we place the child after the last child in the stack
@@ -81,10 +93,22 @@ class ResourceStack(Resource):
     elif self.direction == "y":
       resource.location += Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
-      # top z > bottom z, so we need to move the resources down
-      # TODO: better workaround for when location is None, None, None
-      resource.location += Coordinate(0, 0, 0)
-      for r in self.children:
-        r.location.z += resource.get_size_z()
+      resource.location = Coordinate(0, 0, self.get_size_z())
 
     super().assign_child_resource(resource, **kwargs)
+
+  def unassign_child_resource(self, resource: Resource):
+    if self.direction == "z" and resource != self.children[-1]: # no floating resources
+      raise ValueError("Resource is not the top item in this z-growing stack, cannot unassign")
+    return super().unassign_child_resource(resource)
+
+  def get_top_item(self) -> Optional[Resource]:
+    """ Get the top item in the stack.
+
+    For stacks growing in the x, y or z direction, this is the rightmost, frontmost, or topmost
+    item in the stack, respectively.
+    """
+
+    if len(self.children) > 0:
+      return self.children[-1]
+    return None

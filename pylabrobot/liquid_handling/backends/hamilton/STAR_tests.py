@@ -9,7 +9,7 @@ from pylabrobot.liquid_handling.resources import (
   Cos_96_EZWash,
   Coordinate,
   PlateReader,
-  Hotel,
+  ResourceStack,
 )
 from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
 from pylabrobot.liquid_handling.resources.ml_star import STF_L
@@ -438,19 +438,19 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self._assert_command_sent_once( # zj sent = 1849
       "C0PRid0003xs03475xd0yj2105yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
-  def test_iswap_hotel(self):
-    hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=0)
+  def test_iswap_stacking_area(self):
+    stacking_area = ResourceStack("stacking_area", direction="z")
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
     # self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
-    self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 226.2 - 100))
+    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414-63, 226.2 - 100))
 
     plate = self.lh.get_resource("plate_01")
 
     get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
     put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
 
-    self.lh.move_lid(plate.lid, hotel)
+    self.lh.move_lid(plate.lid, stacking_area)
     self._assert_command_sent_once(
       "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
         get_plate_fmt)
@@ -458,18 +458,18 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
     # Move lids back (reverse order)
-    self.lh.move_lid(hotel.get_top_item(), plate)
+    self.lh.move_lid(stacking_area.get_top_item(), plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2305zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       get_plate_fmt)
     self._assert_command_sent_once(
       "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
-  def test_iswap_hotel_2lids(self):
-    hotel = Hotel("hotel", size_x=35.0, size_y=35.0, size_z=0)
+  def test_iswap_stacking_area_2lids(self):
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
-    self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 226.2 - 100))
+    stacking_area = ResourceStack("stacking_area", direction="z")
+    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414-63, 226.2 - 100))
 
     plate = self.lh.get_resource("plate_01")
     other_plate = self.lh.get_resource("plate_02")
@@ -477,14 +477,14 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
     put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
 
-    self.lh.move_lid(plate.lid, hotel)
+    self.lh.move_lid(plate.lid, stacking_area)
     self._assert_command_sent_once(
       "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
         get_plate_fmt)
     self._assert_command_sent_once(
       "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
-    self.lh.move_lid(other_plate.lid, hotel)
+    self.lh.move_lid(other_plate.lid, stacking_area)
     self._assert_command_sent_once(
       "C0PPid0004xs03475xd0yj2105yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
         get_plate_fmt)
@@ -492,14 +492,14 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "C0PRid0005xs00695xd0yj4570yd0zj2405zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
     # Move lids back (reverse order)
-    self.lh.move_lid(hotel.get_top_item(), plate)
+    self.lh.move_lid(stacking_area.get_top_item(), plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2405zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       get_plate_fmt)
     self._assert_command_sent_once(
       "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
-    self.lh.move_lid(hotel.get_top_item(), other_plate)
+    self.lh.move_lid(stacking_area.get_top_item(), other_plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2305zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       get_plate_fmt)
