@@ -597,15 +597,15 @@ class LiquidHandler:
     Examples:
       Aspirate a constant amount of liquid from the first column:
 
-      >>> lh.aspirate(plate["A1":"H8"], 50)
+      >>> lh.aspirate(plate["A1:H1"], 50)
 
       Aspirate an linearly increasing amount of liquid from the first column:
 
-      >>> lh.aspirate(plate["A1":"H8"], range(0, 500, 50))
+      >>> lh.aspirate(plate["A1:H1"], range(0, 500, 50))
 
       Aspirate a arbitrary amounts of liquid from the first column:
 
-      >>> lh.aspirate(plate["A1":"H8"], [0, 40, 10, 50, 100, 200, 300, 400])
+      >>> lh.aspirate(plate["A1:H1"], [0, 40, 10, 50, 100, 200, 300, 400])
 
       Aspirate liquid from wells in different plates:
 
@@ -693,15 +693,15 @@ class LiquidHandler:
     Examples:
       Dispense a constant amount of liquid to the first column:
 
-      >>> lh.dispense(plate["A1":"H8"], 50)
+      >>> lh.dispense(plate["A1:H1"], 50)
 
       Dispense an linearly increasing amount of liquid to the first column:
 
-      >>> lh.dispense(plate["A1":"H8"], range(0, 500, 50))
+      >>> lh.dispense(plate["A1:H1"], range(0, 500, 50))
 
       Dispense a arbitrary amounts of liquid to the first column:
 
-      >>> lh.dispense(plate["A1":"H8"], [0, 40, 10, 50, 100, 200, 300, 400])
+      >>> lh.dispense(plate["A1:H1"], [0, 40, 10, 50, 100, 200, 300, 400])
 
       Dispense liquid to wells in different plates:
 
