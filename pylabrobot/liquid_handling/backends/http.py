@@ -64,7 +64,7 @@ class HTTPBackend(SerializingBackend):
 
     Args:
       event: The event identifier.
-      **kwargs: The event arguments, which must be serializable by `json.dumps`.
+      data: The event arguments, which must be serializable by `json.dumps`.
 
     Returns:
       The response from the browser, if `wait_for_response` is `True`, otherwise `None`.
