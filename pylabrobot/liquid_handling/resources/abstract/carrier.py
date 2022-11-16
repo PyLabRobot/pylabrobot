@@ -204,7 +204,7 @@ class TipCarrier(Carrier):
   """ Base class for tip carriers. """
   def __init__(self, name: str, size_x, size_y, size_z,
     sites: List[Coordinate], site_size_x, site_size_y,
-    location: Coordinate = Coordinate(None, None, None), category="tip_carrier"):
+    location: Coordinate = None, category="tip_carrier"):
     super().__init__(name, size_x, size_y, size_z, location,
       sites, site_size_x, site_size_y, category=category)
 
@@ -212,6 +212,6 @@ class PlateCarrier(Carrier):
   """ Base class for plate carriers. """
   def __init__(self, name: str, size_x, size_y, size_z,
     sites: List[Coordinate], site_size_x, site_size_y,
-    location: Coordinate = Coordinate(None, None, None), category="plate_carrier"):
+    location: Coordinate = None, category="plate_carrier"):
     super().__init__(name, size_x, size_y, size_z, location,
       sites, site_size_x, site_size_y, category=category)

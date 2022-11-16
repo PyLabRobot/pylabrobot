@@ -31,7 +31,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
                 items: List[List[T]] = None,
                 num_items_x: Optional[int] = None,
                 num_items_y: Optional[int] = None,
-                location: Coordinate = Coordinate(None, None, None),
+                location: Coordinate = None,
                 category: Optional[str] = None,
                 ):
     """ Initialize an itemized resource

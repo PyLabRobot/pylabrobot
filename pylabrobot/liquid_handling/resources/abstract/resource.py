@@ -23,7 +23,7 @@ class Resource:
     size_x: float,
     size_y: float,
     size_z: float,
-    location: Coordinate = Coordinate(None, None, None),
+    location: Coordinate = None,
     category: Optional[str] = None,
     model: Optional[str] = None
   ):

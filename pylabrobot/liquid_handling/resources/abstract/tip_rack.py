@@ -46,7 +46,7 @@ class TipRack(ItemizedResource[Tip], metaclass=ABCMeta):
     items: List[List[Tip]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
-    location: Coordinate = Coordinate(None, None, None),
+    location: Coordinate = None,
     category: str = "tip_rack",
   ):
     super().__init__(name, size_x, size_y, size_z, location=location,

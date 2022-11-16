@@ -17,7 +17,7 @@ class TestItemizedResource(unittest.TestCase):
       items=create_equally_spaced(Well,
       num_items_x=12, num_items_y=8,
       dx=0, dy=0, dz=0,
-      item_size_x=9, item_size_y=9))
+      item_size_x=9, item_size_y=9), location=Coordinate.zero())
     return super().setUp()
 
   def test_initialize_with_wells(self):

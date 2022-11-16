@@ -49,7 +49,7 @@ class ResourceStack(Resource):
     name: str,
     direction: str,
     resources: Optional[List[Resource]] = None,
-    location: Coordinate = Coordinate(None, None, None),
+    location: Coordinate = None,
   ):
     super().__init__(name, size_x=0, size_y=0, size_z=0,
       location=location, category="resource_group")
@@ -89,9 +89,9 @@ class ResourceStack(Resource):
   def assign_child_resource(self, resource, **kwargs):
     # update child location (relative to self): we place the child after the last child in the stack
     if self.direction == "x":
-      resource.location += Coordinate(self.get_size_x(), 0, 0)
+      resource.location = Coordinate(self.get_size_x(), 0, 0)
     elif self.direction == "y":
-      resource.location += Coordinate(0, self.get_size_y(), 0)
+      resource.location = Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
       resource.location = Coordinate(0, 0, self.get_size_z())
 
