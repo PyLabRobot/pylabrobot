@@ -139,7 +139,7 @@ class WebSocketBackend(SerializingBackend):
         `False`, it is not guaranteed that the response will be available for reading at a later
         time. This is useful for sending events that do not require a response. When `True`, a
         `ValueError` will be raised if the response `"success"` field is not `True`.
-      **kwargs: The event arguments, which must be serializable by `json.dumps`.
+      data: The event arguments, which must be serializable by `json.dumps`.
 
     Returns:
       The response from the browser, if `wait_for_response` is `True`, otherwise `None`.
