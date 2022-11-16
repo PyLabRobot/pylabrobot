@@ -44,8 +44,8 @@ class HamiltonDeck(Deck):
   def assign_child_resource(
     self,
     resource: Resource,
-    rails: Optional[int] = None,
     location: Optional[Coordinate] = None,
+    rails: Optional[int] = None,
     replace=False
   ):
     """ Assign a new deck resource.

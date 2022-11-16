@@ -122,8 +122,8 @@ class Carrier(Resource):
   def assign_child_resource(
     self,
     resource,
-    spot: Optional[int] = None,
-    location: Optional[Coordinate] = None
+    location: Optional[Coordinate] = None,
+    spot: Optional[int] = None
   ):
     """ Assign a resource to this carrier.
 
@@ -153,9 +153,9 @@ class Carrier(Resource):
         super().assign_child_resource(resource, location=location)
       else:
         # find site with matching location
-        for spot, site in enumerate(self.sites):
+        for i, site in enumerate(self.sites):
           if site.location == location:
-            self.assign_child_resource(resource, spot=spot)
+            self.assign_child_resource(resource, spot=i)
             return
         raise ValueError(f"Invalid location {location}")
       return
