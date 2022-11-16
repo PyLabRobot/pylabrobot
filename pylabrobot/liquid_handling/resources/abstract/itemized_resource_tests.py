@@ -17,7 +17,8 @@ class TestItemizedResource(unittest.TestCase):
       items=create_equally_spaced(Well,
       num_items_x=12, num_items_y=8,
       dx=0, dy=0, dz=0,
-      item_size_x=9, item_size_y=9), location=Coordinate.zero())
+      item_size_x=9, item_size_y=9))
+    self.plate.location = Coordinate.zero()
     return super().setUp()
 
   def test_initialize_with_wells(self):
@@ -181,20 +182,29 @@ class TestCreateEquallySpaced(unittest.TestCase):
     self.assertEqual(len(equally_spaced[0]), 2)
     self.assertEqual(len(equally_spaced[1]), 2)
     self.assertEqual(len(equally_spaced[2]), 2)
-    self.assertEqual(equally_spaced, [
+
+    correct_items = [
       [
-        Well("well_0_0", size_x=9, size_y=9, location=Coordinate(0, 9, 0)),
-        Well("well_0_1", size_x=9, size_y=9, location=Coordinate(0, 0, 0)),
+        Well("well_0_0", size_x=9, size_y=9),
+        Well("well_0_1", size_x=9, size_y=9),
       ],
       [
-        Well("well_1_0", size_x=9, size_y=9, location=Coordinate(9, 9, 0)),
-        Well("well_1_1", size_x=9, size_y=9, location=Coordinate(9, 0, 0)),
+        Well("well_1_0", size_x=9, size_y=9),
+        Well("well_1_1", size_x=9, size_y=9),
       ],
       [
-        Well("well_2_0", size_x=9, size_y=9, location=Coordinate(18, 9, 0)),
-        Well("well_2_1", size_x=9, size_y=9, location=Coordinate(18, 0, 0)),
+        Well("well_2_0", size_x=9, size_y=9),
+        Well("well_2_1", size_x=9, size_y=9),
       ],
-    ])
+    ]
+    correct_items[0][0].location = Coordinate( 0, 9, 0)
+    correct_items[0][1].location = Coordinate( 0, 0, 0)
+    correct_items[1][0].location = Coordinate( 9, 9, 0)
+    correct_items[1][1].location = Coordinate( 9, 0, 0)
+    correct_items[2][0].location = Coordinate(18, 9, 0)
+    correct_items[2][1].location = Coordinate(18, 0, 0)
+
+    self.assertEqual(equally_spaced, correct_items)
 
 
 if __name__ == "__main__":

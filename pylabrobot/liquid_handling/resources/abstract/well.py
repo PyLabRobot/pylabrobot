@@ -1,4 +1,3 @@
-from .coordinate import Coordinate
 from .resource import Resource
 
 
@@ -10,8 +9,7 @@ class Well(Resource):
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float = 9,
-    location: Coordinate = None, category: str = "well"):
-    super().__init__(name, size_x=size_x, size_y=size_y, size_z=size_z,
-      location=location, category=category)
+    category: str = "well"):
+    super().__init__(name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
     # TODO: max_volume: float,
     # self.max_volume = max_volume

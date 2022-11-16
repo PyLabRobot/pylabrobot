@@ -18,7 +18,6 @@ class Lid(Resource):
     size_x: float,
     size_y: float,
     size_z: float,
-    location: Coordinate = None,
   ):
     """ Create a lid for a plate.
 
@@ -27,10 +26,8 @@ class Lid(Resource):
       size_x: Size of the lid in x-direction.
       size_y: Size of the lid in y-direction.
       size_z: Size of the lid in z-direction.
-      location: Location of the lid.
     """
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
-      location=location, category="lid")
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category="lid")
 
 
 class Plate(ItemizedResource[Well]):
@@ -47,7 +44,6 @@ class Plate(ItemizedResource[Well]):
     num_items_y: Optional[int] = None,
     one_dot_max: float = 0,
     category: str = "plate",
-    location: Coordinate = None,
     lid_height: float = 0,
     with_lid: bool = False,
     compute_volume_from_height: Optional[Callable[[float], float]] = None
@@ -70,12 +66,11 @@ class Plate(ItemizedResource[Well]):
       well_size_x: Size of the wells in the x direction.
       well_size_y: Size of the wells in the y direction.
       one_dot_max: I don't know. Hamilton specific.
-      location: Coordinate of the plate.
       lid_height: Height of the lid in mm, only used if `with_lid` is True.
       with_lid: Whether the plate has a lid.
     """
 
-    super().__init__(name, size_x, size_y, size_z, location=location, items=items,
+    super().__init__(name, size_x, size_y, size_z, items=items,
                      num_items_x=num_items_x, num_items_y=num_items_y, category=category)
     self.one_dot_max = one_dot_max
     self.lid: Optional[Lid] = None
@@ -84,9 +79,8 @@ class Plate(ItemizedResource[Well]):
     if with_lid:
       assert lid_height > 0, "Lid height must be greater than 0 if with_lid == True."
 
-      lid = Lid(name + "_lid", location=Coordinate(0, 0, self.get_size_z() - lid_height),
-        size_x=size_x, size_y=size_y, size_z=lid_height)
-      self.assign_child_resource(lid)
+      lid = Lid(name + "_lid", size_x=size_x, size_y=size_y, size_z=lid_height)
+      self.assign_child_resource(lid, location=Coordinate(0, 0, self.get_size_z() - lid_height))
 
   def compute_volume_from_height(self, height: float) -> float:
     """ Compute the volume of liquid in a well from the height of the liquid.
@@ -106,17 +100,17 @@ class Plate(ItemizedResource[Well]):
 
     return self._compute_volume_from_height(height)
 
-  def assign_child_resource(self, resource, **kwargs):
+  def assign_child_resource(self, resource: Resource, location: Coordinate):
     if isinstance(resource, Lid):
       if self.lid is not None:
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self.lid = resource
-    return super().assign_child_resource(resource, **kwargs)
+    return super().assign_child_resource(resource, location=location)
 
-  def unassign_child_resource(self, resource, **kwargs):
+  def unassign_child_resource(self, resource):
     if isinstance(resource, Lid) and self.lid is not None:
       self.lid = None
-    return super().unassign_child_resource(resource, **kwargs)
+    return super().unassign_child_resource(resource)
 
   def serialize(self):
     return dict(
@@ -134,7 +128,6 @@ class Plate(ItemizedResource[Well]):
       size_z=data["size_z"],
       items=[], # will be filled in by LiquidHandler
       one_dot_max=data["one_dot_max"],
-      location=Coordinate.deserialize(data["location"]),
       lid_height=data["lid"]["size_z"] if "lid" in data else 0,
       with_lid="lid" in data,
       compute_volume_from_height=None, # TODO: deserialize this, probably deserialize for well.

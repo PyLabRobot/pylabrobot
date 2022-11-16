@@ -31,7 +31,8 @@ class Coordinate:
     )
 
   def __eq__(self, other) -> bool:
-    return self.x == other.x and self.y == other.y and self.z == other.z
+    return (isinstance(other, Coordinate) and \
+            self.x == other.x and self.y == other.y and self.z == other.z)
 
   def __str__(self) -> str:
     if self.x is not None and self.y is not None and self.z is not None:

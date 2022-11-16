@@ -13,7 +13,8 @@ class Resource:
     size_x: The size of the resource in the x-direction.
     size_y: The size of the resource in the y-direction.
     size_z: The size of the resource in the z-direction.
-    location: The location of the resource.
+    location: The location of the resource, relative to its parent.
+      (see :meth:`get_absolute_location`)
     category: The category of the resource, e.g. `tips`, `plate_carrier`, etc.
   """
 
@@ -23,7 +24,6 @@ class Resource:
     size_x: float,
     size_y: float,
     size_z: float,
-    location: Coordinate = None,
     category: Optional[str] = None,
     model: Optional[str] = None
   ):
@@ -31,10 +31,10 @@ class Resource:
     self._size_x = size_x
     self._size_y = size_y
     self._size_z = size_z
-    self.location = location
     self.category = category
     self.model = model
 
+    self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
 
@@ -46,7 +46,7 @@ class Resource:
       size_x=self._size_x,
       size_y=self._size_y,
       size_z=self._size_z,
-      location=self.location.serialize(),
+      location=self.location.serialize() if self.location is not None else None,
       category=self.category,
       children=[child.serialize() for child in self.children],
       parent_name=self.parent.name if self.parent is not None else None
@@ -58,9 +58,8 @@ class Resource:
 
     data_copy = data.copy()
     # remove keys that are already present in the definition or that we added in the serialization
-    for key in ["type", "children", "parent_name"]:
-      data_copy.pop(key, [])
-    data_copy["location"] = Coordinate.deserialize(data_copy["location"])
+    for key in ["type", "children", "parent_name", "location"]:
+      del data_copy[key]
     return cls(**data_copy)
 
   def __eq__(self, other):
@@ -102,7 +101,7 @@ class Resource:
     """ Get the size of this resource in the z-direction. """
     return self._size_z
 
-  def assign_child_resource(self, resource: Resource):
+  def assign_child_resource(self, resource: Resource, location: Coordinate):
     """ Assign a child resource to this resource.
 
     Will use :meth:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
@@ -111,10 +110,12 @@ class Resource:
     """
 
     resource.parent = self
+    resource.location = location
     try:
       self.resource_assigned_callback(resource) # call callbacks first.
     except Exception as e:
       resource.parent = None
+      resource.location = None
       raise e
 
     self.children.append(resource)

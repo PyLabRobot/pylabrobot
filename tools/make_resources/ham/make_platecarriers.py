@@ -49,7 +49,6 @@ def make_from_file(fn, o):
   o.write(f'  ],\n')
   o.write(f'  site_size_x={site_width},\n')
   o.write(f'  site_size_y={site_height},\n')
-  o.write(f'  location={repr(Coordinate(0, 0, 0))}\n')
   o.write(f')\n')
 
 

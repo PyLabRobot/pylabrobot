@@ -41,9 +41,8 @@ class OTDeck(Deck):
     if self.slots[slot-1] is not None:
       raise ValueError(f"Spot {slot} is already occupied")
 
-    resource.location = self.slot_locations[slot-1]
     self.slots[slot-1] = resource
-    super().assign_child_resource(resource)
+    super().assign_child_resource(resource, location=self.slot_locations[slot-1])
 
   def unassign_child_resource(self, resource: Resource):
     if resource not in self.slots:

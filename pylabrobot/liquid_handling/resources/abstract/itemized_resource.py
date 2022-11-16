@@ -31,7 +31,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
                 items: List[List[T]] = None,
                 num_items_x: Optional[int] = None,
                 num_items_y: Optional[int] = None,
-                location: Coordinate = None,
                 category: Optional[str] = None,
                 ):
     """ Initialize an itemized resource
@@ -69,8 +68,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         ...   items=[[Well("well", size_x=1, size_y=1, size_z=1)]])
     """
 
-
-    super().__init__(name, size_x, size_y, size_z, location=location, category=category)
+    super().__init__(name, size_x, size_y, size_z, category=category)
 
     if items is None:
       if num_items_x is None or num_items_y is None:
@@ -84,7 +82,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     for row in (items or []):
       for item in row:
         item.name = f"{self.name}_{item.name}"
-        self.assign_child_resource(item)
+        self.assign_child_resource(item, location=item.location)
 
   def __getitem__(self, identifier: Union[str, List[int], slice]) -> List[T]:
     """ Get the items with the given identifier.
@@ -386,14 +384,11 @@ def create_equally_spaced(
       name = f"{klass.__name__.lower()}_{i}_{j}"
       item = klass(
         name=name,
-        location=Coordinate(
-          x=dx + i * item_size_x,
-          y=dy + (num_items_y-j-1) * item_size_y,
-          z=dz),
         size_x=item_size_x,
         size_y=item_size_y,
         **kwargs
       )
+      item.location=Coordinate( x=dx + i * item_size_x, y=dy + (num_items_y-j-1) * item_size_y, z=dz)
       items[i].append(item)
 
   return items

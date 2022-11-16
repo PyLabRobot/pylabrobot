@@ -86,44 +86,41 @@ class HamiltonDeck(Deck):
       else:
         raise ValueError(f"Resource with name '{resource.name}' already defined.")
 
-    if rails is not None and location is not None:
+    if rails is not None:
+      resource_location = Coordinate(x=self._x_coordinate_for_rails(rails), y=0, z=0)
+    elif location is not None:
+      resource_location = location
+    else:
       raise ValueError("At least one of rails and location must be None.")
 
-    if rails is not None:
-      resource.location = Coordinate(x=self._x_coordinate_for_rails(rails), y=0, z=0)
-    elif location is not None:
-      resource.location = location
-
-
-    if resource.location.x + resource.get_size_x() > \
+    if resource_location.x + resource.get_size_x() > \
         self._x_coordinate_for_rails(self.num_rails) and \
       rails is not None:
       raise ValueError(f"Resource with width {resource.get_size_x()} does not "
                        f"fit at rails {rails}.")
 
-    resource.parent = self
+    # Set parent so that we can get absolute location, not really necessary: we could just use
+    # use the relative location of each resource since they share the same parent (origin).
+    # resource.parent = self
 
-    # Check collision
-    # # Check if there is space for this new resource.
+    # Check if there is space for this new resource.
     for og_resource in self.children:
-      og_x = og_resource.get_absolute_location().x
-      og_y = og_resource.get_absolute_location().y
+      og_x = og_resource.location.x
+      og_y = og_resource.location.y
 
       # A resource is not allowed to overlap with another resource. Resources overlap when a corner
       # of one resource is inside the boundaries other resource.
-      if (og_x <= resource.get_absolute_location().x < og_x + og_resource.get_size_x() or \
-         og_x <= resource.get_absolute_location().x + resource.get_size_x() <
+      if (og_x <= resource_location.x < og_x + og_resource.get_size_x() or \
+         og_x <= resource_location.x + resource.get_size_x() <
            og_x + og_resource.get_size_x()) and \
-          (og_y <= resource.get_absolute_location().y < og_y + og_resource.get_size_y() or \
-            og_y <= resource.get_absolute_location().y + resource.get_size_y() <
+          (og_y <= resource_location.y < og_y + og_resource.get_size_y() or \
+            og_y <= resource_location.y + resource.get_size_y() <
                og_y + og_resource.get_size_y()):
-        tried_location = resource.location
-        resource.location = None # Revert location.
-        resource.parent = None # Revert parent.
-        raise ValueError(f"Location {tried_location} is already occupied by resource "
+        # resource.parent = None # Revert parent.
+        raise ValueError(f"Location {resource_location} is already occupied by resource "
                           f"'{og_resource.name}'.")
 
-    return super().assign_child_resource(resource)
+    return super().assign_child_resource(resource, location=resource_location)
 
   def _x_coordinate_for_rails(self, rails: int):
     """ Convert a rail identifier to an x coordinate. """

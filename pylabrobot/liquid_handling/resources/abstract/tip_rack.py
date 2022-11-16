@@ -5,7 +5,7 @@ from abc import ABCMeta
 from typing import List, Union, Optional
 
 from .itemized_resource import ItemizedResource
-from .resource import Resource, Coordinate
+from .resource import Resource
 from .tip_type import TipType
 
 
@@ -13,9 +13,9 @@ class Tip(Resource):
   """ A single Tip resource. """
 
   def __init__(self, name: str, size_x: float, size_y: float, tip_type: TipType,
-    location: Coordinate = None, category: str = "tip"):
+    category: str = "tip"):
     super().__init__(name, size_x=size_y, size_y=size_x, size_z=tip_type.tip_length,
-      location=location, category=category)
+      category=category)
     self.tip_type = tip_type
 
   def serialize(self) -> dict:
@@ -46,11 +46,10 @@ class TipRack(ItemizedResource[Tip], metaclass=ABCMeta):
     items: List[List[Tip]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
-    location: Coordinate = None,
     category: str = "tip_rack",
   ):
-    super().__init__(name, size_x, size_y, size_z, location=location,
-      items=items, num_items_x=num_items_x, num_items_y=num_items_y, category=category)
+    super().__init__(name, size_x, size_y, size_z, items=items,
+                     num_items_x=num_items_x, num_items_y=num_items_y, category=category)
     self.tip_type = tip_type
 
   def serialize(self):

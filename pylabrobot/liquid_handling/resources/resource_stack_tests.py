@@ -19,7 +19,7 @@ class ResourceStackTests(unittest.TestCase):
     stack = ResourceStack("stack", "z", [
       Resource("A", size_x=10, size_y=10, size_z=10),
       Resource("B", size_x=10, size_y=10, size_z=10),
-    ], location=Coordinate.zero())
+    ])
     self.assertEqual(len(stack.children), 2)
 
   def test_create_x(self):
@@ -70,20 +70,17 @@ class ResourceStackTests(unittest.TestCase):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1,
       items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
         num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1))
-
-    stacking_area = ResourceStack("stacking_area", "z", location=Coordinate(0, 0, 0))
+    stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.assign_child_resource(plate)
-
     self.assertEqual(stacking_area.get_top_item(), plate)
 
   def test_get_absolute_location_plate(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1,
       items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
         num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1))
-
-    stacking_area = ResourceStack("stacking_area", "z", location=Coordinate(0, 0, 0))
+    stacking_area = ResourceStack("stacking_area", "z")
+    stacking_area.location = Coordinate.zero()
     stacking_area.assign_child_resource(plate)
-
     self.assertEqual(plate.get_absolute_location(), Coordinate(0, 0, 0))
 
   def test_get_absolute_location_lid(self):
@@ -91,10 +88,9 @@ class ResourceStackTests(unittest.TestCase):
       items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
         num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1),
       with_lid=True)
-
-    stacking_area = ResourceStack("stacking_area", "z", location=Coordinate(0, 0, 0))
+    stacking_area = ResourceStack("stacking_area", "z")
+    stacking_area.location = Coordinate.zero()
     stacking_area.assign_child_resource(plate.lid)
-
     self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
 
   def test_get_absolute_location_stack_height(self):
@@ -107,7 +103,8 @@ class ResourceStackTests(unittest.TestCase):
         num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1),
       with_lid=True)
 
-    stacking_area = ResourceStack("stacking_area", "z", location=Coordinate(0, 0, 0))
+    stacking_area = ResourceStack("stacking_area", "z")
+    stacking_area.location = Coordinate.zero()
     stacking_area.assign_child_resource(plate.lid)
     self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
 

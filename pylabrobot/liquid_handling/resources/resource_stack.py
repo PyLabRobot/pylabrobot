@@ -49,10 +49,8 @@ class ResourceStack(Resource):
     name: str,
     direction: str,
     resources: Optional[List[Resource]] = None,
-    location: Coordinate = None,
   ):
-    super().__init__(name, size_x=0, size_y=0, size_z=0,
-      location=location, category="resource_group")
+    super().__init__(name, size_x=0, size_y=0, size_z=0, category="resource_group")
     assert direction in ["x", "y", "z"], "Direction must be one of 'x', 'y', or 'z'"
     self.direction = direction
     resources = resources or []
@@ -86,16 +84,16 @@ class ResourceStack(Resource):
               sum(child.stack_height for child in self.children if hasattr(child, "stack_height"))
     return max(child.get_size_z() for child in self.children)
 
-  def assign_child_resource(self, resource, **kwargs):
+  def assign_child_resource(self, resource):
     # update child location (relative to self): we place the child after the last child in the stack
     if self.direction == "x":
-      resource.location = Coordinate(self.get_size_x(), 0, 0)
+      resource_location = Coordinate(self.get_size_x(), 0, 0)
     elif self.direction == "y":
-      resource.location = Coordinate(0, self.get_size_y(), 0)
+      resource_location = Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
-      resource.location = Coordinate(0, 0, self.get_size_z())
+      resource_location = Coordinate(0, 0, self.get_size_z())
 
-    super().assign_child_resource(resource, **kwargs)
+    super().assign_child_resource(resource, location=resource_location)
 
   def unassign_child_resource(self, resource: Resource):
     if self.direction == "z" and resource != self.children[-1]: # no floating resources
