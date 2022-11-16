@@ -55,7 +55,6 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     self.send_command(command="discard_tips96", data=dict(resource=resource.serialize()))
 
   def aspirate96(self, aspiration: Aspiration):
-    print("aspirate96", aspiration)
     self.send_command(command="aspirate96", data=dict(aspiration=aspiration.serialize()))
 
   def dispense96(self, dispense: Dispense):
