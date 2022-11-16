@@ -20,10 +20,10 @@ from .liquid_classes import (
 )
 from .resources import (
   Resource,
+  ResourceStack,
   Coordinate,
   Carrier,
   CarrierSite,
-  Hotel,
   Lid,
   Plate,
   Tip,
@@ -1090,7 +1090,7 @@ class LiquidHandler:
   def move_lid(
     self,
     lid: Lid,
-    to: Union[Plate, Hotel, Coordinate],
+    to: Union[Plate, ResourceStack, Coordinate],
     resource_offset: Optional[Coordinate] = Coordinate.zero(),
     to_offset: Optional[Coordinate] = Coordinate.zero(),
     get_direction: Move.Direction = Move.Direction.FRONT,
@@ -1102,18 +1102,18 @@ class LiquidHandler:
     A convenience method for :meth:`move_resource`.
 
     Examples:
-      Move a lid to the :class:`~resources.Hotel`:
+      Move a lid to the :class:`~resources.ResourceStack`:
 
-      >>> lh.move_lid(plate.lid, hotel)
+      >>> lh.move_lid(plate.lid, stacking_area)
 
-      Move a lid to the hotel and back, grabbing it from the left side:
+      Move a lid to the stacking area and back, grabbing it from the left side:
 
-      >>> lh.move_lid(plate.lid, hotel, get_direction=Move.Direction.LEFT)
-      >>> lh.move_lid(hotel.get_top_item(), plate, put_direction=Move.Direction.LEFT)
+      >>> lh.move_lid(plate.lid, stacking_area, get_direction=Move.Direction.LEFT)
+      >>> lh.move_lid(stacking_area.get_top_item(), plate, put_direction=Move.Direction.LEFT)
 
     Args:
       lid: The lid to move. Can be either a Plate object or a Lid object.
-      to: The location to move the lid to, either a plate, Hotel or a Coordinate.
+      to: The location to move the lid to, either a plate, ResourceStack or a Coordinate.
       resource_offset: The offset from the resource's origin, optional (rarely necessary).
       to_offset: The offset from the location's origin, optional (rarely necessary).
 
@@ -1127,7 +1127,8 @@ class LiquidHandler:
         x=to_location.x,
         y=to_location.y,
         z=to_location.z  + to.get_size_z() - lid.get_size_z())
-    elif isinstance(to, Hotel):
+    elif isinstance(to, ResourceStack):
+      assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
       to_location = to.get_absolute_location()
       to_location = Coordinate(
         x=to_location.x,
@@ -1158,7 +1159,7 @@ class LiquidHandler:
   def move_plate(
     self,
     plate: Plate,
-    to: Union[Hotel, CarrierSite, Coordinate],
+    to: Union[ResourceStack, CarrierSite, Coordinate],
     resource_offset: Optional[Coordinate] = Coordinate.zero(),
     to_offset: Optional[Coordinate] = Coordinate.zero(),
     put_direction: Move.Direction = Move.Direction.FRONT,
@@ -1190,7 +1191,8 @@ class LiquidHandler:
       to_offset: The offset from the location's origin, optional (rarely necessary).
     """
 
-    if isinstance(to, Hotel):
+    if isinstance(to, ResourceStack):
+      assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
       to_location = to.get_absolute_location()
       to_location = Coordinate(
         x=to_location.x,
