@@ -196,7 +196,6 @@ class WebSocketBackend(SerializingBackend):
         try:
           async with websockets.serve(self._socket_handler, self.ws_host, self.ws_port):
             print(f"Simulation server started at http://{self.ws_host}:{self.ws_port}")
-            # logger.info("Simulation server started at http://%s:%s", self.ws_host, self.ws_port)
             lock.release()
             await self.stop_
             break
@@ -218,6 +217,8 @@ class WebSocketBackend(SerializingBackend):
 
     while lock.locked():
       time.sleep(0.001)
+
+    self.setup_finished = True
 
   def stop(self):
     """ Stop the simulation. """
