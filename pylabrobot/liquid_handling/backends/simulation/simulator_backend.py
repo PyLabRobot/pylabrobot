@@ -127,7 +127,8 @@ class SimulatorBackend(WebSocketBackend):
         try:
           self.httpd = http.server.HTTPServer((self.fs_host, self.fs_port),
             QuietSimpleHTTPRequestHandler)
-          logger.info("File server started at http://%s:%s", self.fs_host, self.fs_port)
+          print(f"File server started at http://{self.fs_host}:{self.fs_port}. "
+                 "Open this URL in your browser.")
           break
         except OSError:
           self.fs_port += 1

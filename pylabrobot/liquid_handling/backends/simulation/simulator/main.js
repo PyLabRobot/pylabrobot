@@ -224,7 +224,7 @@ function checkCoreHeadReachable(x) {
 // Returns error message if there is a problem, otherwise returns null.
 function pickUpTips(channels) {
   for (var i = 0; i < channels.length; i++) {
-    var tip = channels[i];
+    var tip = channels[i].resource;
     if (tip === null || tip === undefined) {
       continue;
     }
@@ -255,7 +255,7 @@ function pickUpTips(channels) {
 // Returns error message if there is a problem, otherwise returns null.
 function discardTips(channels) {
   for (let i = 0; i < channels.length; i++) {
-    var tip = channels[i];
+    var tip = channels[i].resource;
     if (tip === null || tip === undefined) {
       continue;
     }
@@ -363,7 +363,7 @@ function pickupTips96(resource) {
   // Validate there are enough tips first, and that there are no tips in the head.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      const tip_name = resource.children[i * resource.num_items_x + j].name;
+      const tip_name = resource.children[i + resource.num_items_y * j].name;
       const tip = resources[tip_name];
       if (!tip.info.has_tip) {
         return `There is no tip at (${i},${j}) in ${resource.name}.`;
@@ -384,7 +384,7 @@ function pickupTips96(resource) {
   // Then pick up the tips.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      const tip_name = resource.children[i * resource.num_items_x + j].name;
+      const tip_name = resource.children[i + resource.num_items_y * j].name;
       const tip = resources[tip_name];
       tip.info.has_tip = false;
       tip.shape.fill(COLORS["noTipsColor"]);
@@ -444,7 +444,7 @@ function aspirate96(resource, volume) {
       const well_name = resource.children[i * resource.num_items_x + j].name;
       const well = resources[well_name];
       if (well.info.volume < volume) {
-        return `Not enough volume in well: ${well.volume}uL.`;
+        return `Not enough volume in well: ${well.info.volume}uL.`;
       }
       if (CoRe96Head[i][j].volume + volume > CoRe96Head[i][j].maxVolume) {
         return `Aspirated volume (${volume}uL) + volume of tip (${CoRe96Head[i][j].volume}uL) > maximal volume of tip (${CoRe96Head[i][j].maxVolume}uL).`;
@@ -582,12 +582,16 @@ async function handleEvent(event, data) {
 
     case "aspirate96":
       await sleep(config.core_aspiration_duration);
-      ret.error = aspirate96(resource, data.volume);
+      resource = data.aspiration.resource;
+      var volume = data.aspiration.volume;
+      ret.error = aspirate96(resource, volume);
       break;
 
     case "dispense96":
       await sleep(config.core_dispense_duration);
-      ret.error = dispense96(resource, data.volume);
+      resource = data.dispense.resource;
+      var volume = data.dispense.volume;
+      ret.error = dispense96(resource, volume);
       break;
 
     default:
