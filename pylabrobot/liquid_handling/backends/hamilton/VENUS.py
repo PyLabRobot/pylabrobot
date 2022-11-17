@@ -254,14 +254,14 @@ class VENUS(LiquidHandlerBackend):
 
     venus_utils.dispense(self.ham_int, pos_tuples, volumes, **backend_kwargs)
 
-  def pickup_tips96(self, resource, **backend_kwargs):
+  def pickup_tips96(self, tip_rack, **backend_kwargs):
     """ Pick up tips from the specified resource using CoRe 96. """
-    venus_resource = self._get_venus_resource(resource)
+    venus_resource = self._get_venus_resource(tip_rack)
     venus_utils.tip_pick_up_96(self.ham_int, venus_resource, **backend_kwargs)
 
-  def discard_tips96(self, resource, **backend_kwargs):
+  def discard_tips96(self, tip_rack, **backend_kwargs):
     """ Discard tips to the specified resource using CoRe 96. """
-    venus_resource = self._get_venus_resource(resource)
+    venus_resource = self._get_venus_resource(tip_rack)
     venus_utils.tip_eject_96(self.ham_int, venus_resource, **backend_kwargs)
 
   def aspirate96(self, plate, volume, flow_rate, **backend_kwargs):

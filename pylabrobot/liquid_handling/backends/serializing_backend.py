@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Dict, Optional
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Discard,
@@ -25,11 +26,11 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   def stop(self):
     self.send_command(command="stop")
 
-  def assigned_resource_callback(self, resource):
+  def assigned_resource_callback(self, resource: Resource):
     self.send_command(command="resource_assigned", data=dict(resource=resource.serialize(),
       parent_name=(resource.parent.name if resource.parent else None)))
 
-  def unassigned_resource_callback(self, name):
+  def unassigned_resource_callback(self, name: str):
     self.send_command(command="resource_unassigned", data=dict(resource_name=name))
 
   def pick_up_tips(self, *channels: Optional[Pickup]):
@@ -48,11 +49,11 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     channels = [channel.serialize() for channel in channels]
     self.send_command(command="dispense", data=dict(channels=channels))
 
-  def pick_up_tips96(self, resource):
-    self.send_command(command="pick_up_tips96", data=dict(resource=resource.serialize()))
+  def pick_up_tips96(self, tip_rack: TipRack):
+    self.send_command(command="pick_up_tips96", data=dict(resource=tip_rack.serialize()))
 
-  def discard_tips96(self, resource):
-    self.send_command(command="discard_tips96", data=dict(resource=resource.serialize()))
+  def discard_tips96(self, tip_rack: TipRack):
+    self.send_command(command="discard_tips96", data=dict(resource=tip_rack.serialize()))
 
   def aspirate96(self, aspiration: Aspiration):
     self.send_command(command="aspirate96", data=dict(aspiration=aspiration.serialize()))

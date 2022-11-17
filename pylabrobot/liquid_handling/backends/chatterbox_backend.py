@@ -3,7 +3,7 @@
 from typing import Optional
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.resources import Resource
+from pylabrobot.liquid_handling.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
   Dispense,
@@ -48,11 +48,11 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def dispense(self, *channels: Optional[Dispense], **backend_kwargs):
     print(f"Dispensing {channels}.")
 
-  def pick_up_tips96(self, resource: Resource, **backend_kwargs):
-    print(f"Picking up tips from {resource}.")
+  def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
+    print(f"Picking up tips from {tip_rack}.")
 
-  def discard_tips96(self, resource: Resource, **backend_kwargs):
-    print(f"Discarding tips to {resource}.")
+  def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
+    print(f"Discarding tips to {tip_rack}.")
 
   def aspirate96(self, aspiration: Aspiration):
     print(f"Aspirating {aspiration.volume} from {aspiration.resource}.")
