@@ -28,7 +28,7 @@ class SerializingBackendTests(unittest.TestCase):
     self.lh.setup()
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
-    self.tip_car[0] = self.tips = STF_L(name="tips_01")
+    self.tip_car[0] = self.tips = STF_L(name="tip_rack_01")
     self.lh.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")

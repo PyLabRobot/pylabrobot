@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from typing import Optional
 
-from pylabrobot.liquid_handling.resources import Resource
+from pylabrobot.liquid_handling.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Discard,
@@ -83,12 +83,12 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def pick_up_tips96(self, resource: Resource, **backend_kwargs):
+  def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
     """ Pick up tips from the specified resource using CoRe 96. """
     pass
 
   @abstractmethod
-  def discard_tips96(self, resource: Resource, **backend_kwargs):
+  def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
     """ Discard tips to the specified resource using CoRe 96. """
     pass
 

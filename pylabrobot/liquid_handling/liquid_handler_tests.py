@@ -37,9 +37,9 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
   def test_resource_assignment(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="tips_01")
-    tip_car[1] = STF_L(name="tips_02")
-    tip_car[3] = HTF_L("tips_04")
+    tip_car[0] = STF_L(name="tip_rack_01")
+    tip_car[1] = STF_L(name="tip_rack_02")
+    tip_car[3] = HTF_L("tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
@@ -88,7 +88,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
   def test_get_resource(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="tips_01")
+    tip_car[0] = STF_L(name="tip_rack_01")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
     self.lh.deck.assign_child_resource(tip_car, rails=1)
@@ -99,7 +99,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertEqual(self.lh.get_resource("plate carrier").name, "plate carrier")
 
     # Get subresource.
-    self.assertEqual(self.lh.get_resource("tips_01").name, "tips_01")
+    self.assertEqual(self.lh.get_resource("tip_rack_01").name, "tip_rack_01")
     self.assertEqual(self.lh.get_resource("aspiration plate").name, "aspiration plate")
 
     # Get unknown resource.
@@ -107,8 +107,8 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
   def test_subcoordinates(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="tips_01")
-    tip_car[3] = HTF_L(name="tips_04")
+    tip_car[0] = STF_L(name="tip_rack_01")
+    tip_car[3] = HTF_L(name="tip_rack_04")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
     plt_car[2] = Cos_96_DW_500ul(name="dispense plate")
@@ -127,9 +127,9 @@ class TestLiquidHandlerLayout(unittest.TestCase):
                      Coordinate(302.5, 63.0, 100.0))
 
     # Subresources.
-    self.assertEqual(self.lh.get_resource("tips_01").get_item("A1").get_absolute_location(),
+    self.assertEqual(self.lh.get_resource("tip_rack_01").get_item("A1").get_absolute_location(),
                      Coordinate(117.900, 145.800, 164.450))
-    self.assertEqual(self.lh.get_resource("tips_04").get_item("A1").get_absolute_location(),
+    self.assertEqual(self.lh.get_resource("tip_rack_04").get_item("A1").get_absolute_location(),
                      Coordinate(117.900, 433.800, 131.450))
 
     self.assertEqual(self.lh.get_resource("dispense plate").get_item("A1").get_absolute_location(),
@@ -163,9 +163,9 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
   def build_layout(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="tips_01")
-    tip_car[1] = STF_L(name="tips_02")
-    tip_car[3] = HTF_L(name="tips_04")
+    tip_car[0] = STF_L(name="tip_rack_01")
+    tip_car[1] = STF_L(name="tip_rack_02")
+    tip_car[3] = HTF_L(name="tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
@@ -185,10 +185,10 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     Rail     Resource                   Type                Coordinates (mm)
     ===============================================================================================
     (1)  ├── tip_carrier                TipCarrier          (100.000, 063.000, 100.000)
-         │   ├── tips_01                TipRack             (117.900, 145.800, 164.450)
-         │   ├── tips_02                TipRack             (117.900, 241.800, 164.450)
+         │   ├── tip_rack_01            TipRack             (117.900, 145.800, 164.450)
+         │   ├── tip_rack_02            TipRack             (117.900, 241.800, 164.450)
          │   ├── <empty>
-         │   ├── tips_04                TipRack             (117.900, 433.800, 131.450)
+         │   ├── tip_rack_04            TipRack             (117.900, 433.800, 131.450)
          │   ├── <empty>
          │
     (21) ├── plate carrier              PlateCarrier        (550.000, 063.000, 100.000)

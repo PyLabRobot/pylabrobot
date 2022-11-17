@@ -169,7 +169,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh = LiquidHandler(self.mockSTAR, deck=STARLetDeck())
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
-    self.tip_car[1] = STF_L(name="tips_01")
+    self.tip_car[1] = STF_L(name="tip_rack_01")
     self.lh.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
@@ -231,7 +231,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_channel_positions_to_fw_positions(self):
     """ Convert channel positions to firmware positions. """
     # pylint: disable=protected-access
-    resource = self.lh.get_resource("tips_01")
+    resource = self.lh.get_resource("tip_rack_01")
     self.assertEqual(
       self.mockSTAR._channel_positions_to_fw_positions(resource["A1"]),
       ([1179, 0], [2418, 0], [True, False])
@@ -354,14 +354,16 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
 
   def test_core_96_tip_pickup(self):
-    self.lh.pick_up_tips96("tips_01")
+    tip_rack = self.lh.get_resource("tip_rack_01")
+    self.lh.pick_up_tips96(tip_rack)
 
     self._assert_command_sent_once(
       "C0EPid0208xs01179xd0yh2418tt01wu0za2164zh2450ze2450",
                 "xs#####xd#yh####tt##wu#za####zh####ze####")
 
   def test_core_96_tip_discard(self):
-    self.lh.discard_tips96("tips_01")
+    tip_rack = self.lh.get_resource("tip_rack_01")
+    self.lh.discard_tips96(tip_rack)
 
     self._assert_command_sent_once(
       "C0ERid0213xs01179xd0yh2418za2164zh2450ze2450",

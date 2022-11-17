@@ -4,8 +4,8 @@ from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import (
   Plate,
   Resource,
+  TipRack,
 )
-from pylabrobot.liquid_handling.resources.abstract.tip_rack import TipRack
 from pylabrobot.liquid_handling.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
   Pickup,
@@ -384,10 +384,10 @@ class OpentronsBackend(LiquidHandlerBackend):
       volume=volume, flow_rate=channel.flow_rate, offset_x=channel.offset.x,
        offset_y=channel.offset.y, offset_z=channel.offset.z)
 
-  def pick_up_tips96(self, resource: Resource):
+  def pick_up_tips96(self, tip_rack: TipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def discard_tips96(self, resource: Resource):
+  def discard_tips96(self, tip_rack: TipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
   def aspirate96(self, aspiration: Aspiration):

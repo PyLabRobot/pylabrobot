@@ -866,9 +866,9 @@ class STAR(HamiltonLiquidHandler):
     return ret
 
   @need_iswap_parked
-  def pick_up_tips96(self, resource: TipRack, **backend_kwargs):
-    ttti = self.get_or_assign_tip_type_index(resource.tip_type)
-    position = resource.get_item("A1").get_absolute_location()
+  def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
+    ttti = self.get_or_assign_tip_type_index(tip_rack.tip_type)
+    position = tip_rack.get_item("A1").get_absolute_location()
 
     cmd_kwargs = dict(
       x_position=int(position.x * 10),
@@ -886,8 +886,8 @@ class STAR(HamiltonLiquidHandler):
     return self.pick_up_tips_core96(**cmd_kwargs)
 
   @need_iswap_parked
-  def discard_tips96(self, resource: Resource, **backend_kwargs):
-    position = resource.get_item("A1").get_absolute_location()
+  def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
+    position = tip_rack.get_item("A1").get_absolute_location()
 
     cmd_kwargs = dict(
       x_position=int(position.x * 10),

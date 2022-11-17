@@ -76,8 +76,8 @@ class LiquidHandler:
 
     self.backend = backend
     self.setup_finished = False
-    self._picked_up_tips = None
-    self._picked_up_tips96 = None
+    self._picked_up_tips: Optional[List[Tip]] = None
+    self._picked_up_tips96: Optional[TipRack] = None
 
     self.deck = deck
     self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
@@ -179,7 +179,7 @@ class LiquidHandler:
       Rail     Resource                   Type                Coordinates (mm)
       ==============================================================================================
       (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
-          │   ├── tips_01                STF_L               (x: 117.900, y: 240.000, z: 100.000)
+          │   ├── tip_rack_01            STF_L               (x: 117.900, y: 240.000, z: 100.000)
     """
 
     if len(self.deck.get_all_resources()) == 0:
@@ -858,65 +858,48 @@ class LiquidHandler:
       liquid_classes=dispense_liquid_classes,
       **backend_kwargs)
 
-  def pick_up_tips96(self, resource: Union[str, Resource], **backend_kwargs):
+  def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
     """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
 
     Examples:
-      Pick up tips from an entire 96 tips plate:
+      Pick up tips from a 96-tip tiprack:
 
-      >>> lh.pick_up_tips96("plate_01")
-
-      Pick up tips from the left half of a 96 well plate:
-
-      >>> lh.pick_up_tips96("plate_01")
+      >>> lh.pick_up_tips96(my_tiprack)
 
     Args:
-      resource: Resource name or resource object.
+      tip_rack: The tip rack to pick up tips from.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    if isinstance(resource, str):
-      resource = self.get_resource(resource)
-
-    if not resource:
-      raise ValueError(f"Resource with name {resource} not found.")
-
-    self.backend.pick_up_tips96(resource, **backend_kwargs)
+    self.backend.pick_up_tips96(tip_rack, **backend_kwargs)
 
     # Save the tips as picked up.
-    self._picked_up_tips96 = resource
+    self._picked_up_tips96 = tip_rack
 
-  def discard_tips96(self, resource: Union[str, Resource], **backend_kwargs):
+  def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
     """ Discard tips using the CoRe 96 head. This will discard 96 tips.
 
     Examples:
-      Discard tips to an entire 96 tips plate:
+      Discard tips to a 96-tip tiprack:
 
-      >>> lh.discard_tips96("plate_01")
+      >>> lh.discard_tips96(my_tiprack)
 
     Args:
-      resource: Resource name or resource object.
+      tip_rack: The tip rack to discard tips to.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    # Get resource using `get_resource` to adjust location.
-    if isinstance(resource, str):
-      resource = self.get_resource(resource)
-
-    if not resource:
-      raise ValueError(f"Resource with name {resource} not found.")
-
-    self.backend.discard_tips96(resource, **backend_kwargs)
+    self.backend.discard_tips96(tip_rack, **backend_kwargs)
 
     self._picked_up_tips96 = None
 
   def return_tips96(self):
-    """ Return the tips on the 96 head to the tip rack where they were picked up.]
+    """ Return the tips on the 96 head to the tip rack where they were picked up.
 
     Examples:
       Return the tips on the 96 head to the tip rack where they were picked up:
 
-      >>> lh.pick_up_tips96("plate_01")
+      >>> lh.pick_up_tips96(my_tiprack)
       >>> lh.return_tips96()
 
     Raises:
