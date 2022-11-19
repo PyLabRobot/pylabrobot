@@ -66,7 +66,7 @@ low_volume_tip_with_filter = TipType(
 #: High volume tip without a filter (`tt04` in venus)
 high_volume_tip_no_filter = TipType(
   has_filter=False,
-  total_tip_length=59.9,
+  total_tip_length=95.1,
   maximal_volume=1000,
   tip_type_id=TIP_TYPE_HIGH_VOLUME,
   pick_up_method=0
