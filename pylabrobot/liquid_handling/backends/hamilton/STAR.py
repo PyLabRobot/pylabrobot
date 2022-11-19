@@ -309,7 +309,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self,
     module: str,
     command: str,
-    timeout: int = 16,
+    timeout: int = 100,
     fmt: typing.Optional[str]=None,
     wait = True,
     **kwargs
