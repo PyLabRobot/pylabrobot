@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, cast
 
 from pylabrobot.liquid_handling.resources import Coordinate, Deck, Resource
 
@@ -82,7 +82,7 @@ class HamiltonDeck(Deck):
     if self.has_resource(resource.name):
       if replace:
         # unassign first, so we don't have problems with location checking later.
-        self.get_resource(resource.name).unassign()
+        cast(Resource, self.get_resource(resource.name)).unassign()
       else:
         raise ValueError(f"Resource with name '{resource.name}' already defined.")
 
@@ -105,8 +105,8 @@ class HamiltonDeck(Deck):
 
     # Check if there is space for this new resource.
     for og_resource in self.children:
-      og_x = og_resource.location.x
-      og_y = og_resource.location.y
+      og_x = cast(Coordinate, og_resource.location).x
+      og_y = cast(Coordinate, og_resource.location).y
 
       # A resource is not allowed to overlap with another resource. Resources overlap when a corner
       # of one resource is inside the boundaries other resource.

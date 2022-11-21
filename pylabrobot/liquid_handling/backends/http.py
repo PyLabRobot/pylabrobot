@@ -1,5 +1,5 @@
 import json
-from typing import Optional
+from typing import Optional, Dict, Any, cast
 import urllib.parse
 
 from pylabrobot.liquid_handling.backends import SerializingBackend
@@ -44,8 +44,7 @@ class HTTPBackend(SerializingBackend):
       raise RuntimeError("The http backend requires the requests module.")
 
     super().__init__()
-    self._resources = {}
-    self.websocket = None
+    self.session: Optional[requests.Session] = None
 
     self.host = host
     self.port = port
@@ -59,7 +58,7 @@ class HTTPBackend(SerializingBackend):
     self._id += 1
     return f"{self._id % 10000:04}"
 
-  def send_command(self, command: str, data: dict)-> Optional[dict]:
+  def send_command(self, command: str, data: Optional[Dict[str, Any]] = None) -> Optional[dict]:
     """ Send an event to the server.
 
     Args:
@@ -70,19 +69,23 @@ class HTTPBackend(SerializingBackend):
       The response from the browser, if `wait_for_response` is `True`, otherwise `None`.
     """
 
-    url = urllib.parse.urlparse(self.url, command)
+    url = urllib.parse.urljoin(self.url, command)
 
     id_ = self._generate_id()
-    data = dict(event=command, id=id_, version=STANDARD_FORM_JSON_VERSION, **data)
-    data = json.dumps(data)
-    self.session.post(url, data=data)
+    cmd_data = dict(event=command, id=id_, version=STANDARD_FORM_JSON_VERSION)
+    if data is not None:
+      cmd_data.update(data)
+    if self.session is None:
+      raise RuntimeError("The backend is not running. Did you call `setup()`?")
+    resp = self.session.post(url, data=json.dumps(cmd_data))
+    return cast(dict, resp.json())
 
   def setup(self):
     self.session = requests.Session()
     self._id = 0
-    self.send_event(event="setup")
+    self.send_command(command="setup")
 
   def stop(self):
     super().stop()
     self.session = None
-    self.send_event(event="stop")
+    self.send_command(command="stop")

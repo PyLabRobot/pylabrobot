@@ -1,5 +1,6 @@
 """ Tests for Hamilton backend. """
 
+from typing import cast
 import unittest
 
 from pylabrobot.liquid_handling.liquid_handler import LiquidHandler
@@ -10,10 +11,11 @@ from pylabrobot.liquid_handling.resources import (
   Coordinate,
   PlateReader,
   ResourceStack,
+  Lid
 )
 from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
 from pylabrobot.liquid_handling.resources.ml_star import STF_L
-from pylabrobot.liquid_handling.standard import Move
+from pylabrobot.liquid_handling.standard import Move, Pickup
 
 from tests.usb import MockDev, MockEndpoint
 
@@ -166,16 +168,17 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def setUp(self):
     # pylint: disable=invalid-name
     self.mockSTAR = STARCommandCatcher()
-    self.lh = LiquidHandler(self.mockSTAR, deck=STARLetDeck())
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(self.mockSTAR, deck=self.deck)
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
-    self.tip_car[1] = STF_L(name="tip_rack_01")
-    self.lh.deck.assign_child_resource(self.tip_car, rails=1)
+    self.tip_car[1] = self.tip_rack = STF_L(name="tip_rack_01")
+    self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = Cos_96_EZWash(name="plate_01", with_lid=True)
-    self.plt_car[1] = Cos_96_EZWash(name="plate_02", with_lid=True)
-    self.lh.deck.assign_child_resource(self.plt_car, rails=9)
+    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=True)
+    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
+    self.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.maxDiff = None
 
@@ -231,15 +234,22 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_channel_positions_to_fw_positions(self):
     """ Convert channel positions to firmware positions. """
     # pylint: disable=protected-access
-    resource = self.lh.get_resource("tip_rack_01")
+    op = Pickup(resource=self.tip_rack["A1"][0])
     self.assertEqual(
-      self.mockSTAR._channel_positions_to_fw_positions(resource["A1"]),
+      self.mockSTAR._channel_positions_to_fw_positions((op,), use_channels=[0]),
       ([1179, 0], [2418, 0], [True, False])
     )
 
+    ops = (Pickup(resource=self.tip_rack["A1"][0]), Pickup(resource=self.tip_rack["F1"][0]))
     self.assertEqual(
-      self.mockSTAR._channel_positions_to_fw_positions(resource["A1", "F1"]),
+      self.mockSTAR._channel_positions_to_fw_positions(ops, use_channels=[0, 1]),
       ([1179, 1179, 0], [2418, 1968, 0], [True, True, False])
+    )
+
+    ops = (Pickup(resource=self.tip_rack["A1"][0]), Pickup(resource=self.tip_rack["F1"][0]))
+    self.assertEqual(
+      self.mockSTAR._channel_positions_to_fw_positions(ops, use_channels=[1, 2]),
+      ([0, 1179, 1179, 0], [0, 2418, 1968, 0], [False, True, True, False])
     )
 
   def _assert_command_sent_once(self, cmd: str, fmt: str):
@@ -251,21 +261,20 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     pass
 
   def test_tip_pickup_01(self):
-    self.lh.pick_up_tips(self.tip_car[1].resource["A1", "B1"])
+    self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
       "C0TPid0000xp01179 01179 00000&yp2418 2328 0000tm1 1 0&tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_56(self):
-    self.lh.pick_up_tips([None] * 4 + self.tip_car[1].resource["E1", "F1"])
+    self.lh.pick_up_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
     self._assert_command_sent_once(
       "C0TPid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
       "0000&tm0 0 0 0 1 1 0 &tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_15(self):
-    tips = self.tip_car[1].resource
-    self.lh.pick_up_tips(tips["A1"] + [None] * 3 + tips["F1"])
+    self.lh.pick_up_tips(self.tip_rack["A1", "F1"], use_channels=[0, 4])
     self._assert_command_sent_once(
       "C0TPid0000xp01179 00000 00000 00000 01179 00000&yp2418 0000 0000 0000 1968 0000 "
       "&tm1 0 0 0 1 0&tt01tp2244tz2164th2450td0",
@@ -273,15 +282,14 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_tip_discard_56(self):
     self.test_tip_pickup_56() # pick up tips first
-    tips = self.tip_car[1].resource
-    self.lh.discard_tips([None] * 4 + tips["E1", "F1"])
+    self.lh.discard_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
     self._assert_command_sent_once(
       "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
       "0000&tm0 0 0 0 1 1 0&tt01tp1314tz1414th2450ti0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####ti#")
 
   def test_single_channel_aspiration(self):
-    self.lh.aspirate(self.plt_car[0].resource["A1"], vols=[100])
+    self.lh.aspirate(self.plate["A1"], vols=[100])
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -296,7 +304,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "sz#### (n)io#### (n)il##### (n)in#### (n)")
 
   def test_single_channel_aspiration_offset(self):
-    self.lh.aspirate(self.plt_car[0].resource["A1"], vols=[100], offsets=Coordinate(0, 0, 10))
+    self.lh.aspirate(self.plate["A1"], vols=[100], offsets=Coordinate(0, 0, 10))
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -311,7 +319,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "sz#### (n)io#### (n)il##### (n)in#### (n)")
 
   def test_multi_channel_aspiration(self):
-    self.lh.aspirate(self.plt_car[0].resource["A1:B1"], vols=100)
+    self.lh.aspirate(self.plate["A1:B1"], vols=100)
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -328,7 +336,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "sz#### (n)io#### (n)il##### (n)in#### (n)")
 
   def test_single_channel_dispense(self):
-    self.lh.dispense(self.plt_car[0].resource["A1"], vols=[100])
+    self.lh.dispense(self.plate["A1"], vols=[100])
     self._assert_command_sent_once(
       "C0DSid0000dm2&tm1 0&xp02980 00000&yp1460 0000&zx1871&lp2321&zl1881&"
       "ip0000&it0&fp0000&th2450te2450dv01072&ds1200&ss0050&rv000&ta000&ba0000&lm0&zo000&ll1&"
@@ -340,7 +348,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
 
   def test_multi_channel_dispense(self):
-    self.lh.dispense(self.plt_car[0].resource["A1:B1"], vols=100)
+    self.lh.dispense(self.plate["A1:B1"], vols=100)
 
     self._assert_command_sent_once(
       "C0DSid0317dm2 2&tm1 1 0&dv01072 01072&xp02980 02980 00000&yp1460 1370 0000&"
@@ -354,23 +362,21 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
 
   def test_core_96_tip_pickup(self):
-    tip_rack = self.lh.get_resource("tip_rack_01")
-    self.lh.pick_up_tips96(tip_rack)
+    self.lh.pick_up_tips96(self.tip_rack)
 
     self._assert_command_sent_once(
       "C0EPid0208xs01179xd0yh2418tt01wu0za2164zh2450ze2450",
                 "xs#####xd#yh####tt##wu#za####zh####ze####")
 
   def test_core_96_tip_discard(self):
-    tip_rack = self.lh.get_resource("tip_rack_01")
-    self.lh.discard_tips96(tip_rack)
+    self.lh.discard_tips96(self.tip_rack)
 
     self._assert_command_sent_once(
       "C0ERid0213xs01179xd0yh2418za2164zh2450ze2450",
                 "xs#####xd#yh####za####zh####ze####")
 
   def test_core_96_aspirate(self):
-    self.lh.aspirate_plate(self.lh.get_resource("plate_01"), 100)
+    self.lh.aspirate_plate(self.plate, 100)
 
     self._assert_command_sent_once(
       "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01072ag2500vt050"
@@ -381,7 +387,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "cw************************pp####")
 
   def test_core_96_dispense(self):
-    self.lh.dispense_plate(self.lh.get_resource("plate_01"), 100)
+    self.lh.dispense_plate(self.plate, 100)
 
     self._assert_command_sent_once(
       "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01072dg1200vt050"
@@ -392,8 +398,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "cw************************pp####")
 
   def test_iswap(self):
-    plate = self.lh.get_resource("plate_01")
-    self.lh.move_plate(plate, self.plt_car[2])
+    self.lh.move_plate(self.plate, self.plt_car[2])
     self._assert_command_sent_once(
       "C0PPid0011xs03475xd0yj1145yd0zj1874zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
@@ -405,9 +410,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     plate_reader = PlateReader(name="plate_reader")
     self.lh.deck.assign_child_resource(plate_reader,
       location=Coordinate(979.5, 285.2-63, 200 - 100))
-    plate = self.lh.get_resource("plate_01")
 
-    self.lh.move_plate(plate, plate_reader, pickup_distance_from_top=12.2,
+    self.lh.move_plate(self.plate, plate_reader, pickup_distance_from_top=12.2,
       get_direction=Move.Direction.FRONT, put_direction=Move.Direction.LEFT)
     self._assert_command_sent_once(
       "C0PPid0003xs03475xd0yj1145yd0zj1884zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
@@ -426,10 +430,9 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
   def test_iswap_move_lid(self):
-    plate = self.lh.get_resource("plate_01")
-    other_plate = self.lh.get_resource("plate_02")
-    other_plate.lid.unassign() # remove lid from plate
-    self.lh.move_lid(plate.lid, other_plate)
+    assert self.plate.lid is not None and self.other_plate.lid is not None
+    self.other_plate.lid.unassign() # remove lid from plate
+    self.lh.move_lid(self.plate.lid, self.other_plate)
 
     get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
     put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
@@ -447,12 +450,11 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     # self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
     self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414-63, 226.2 - 100))
 
-    plate = self.lh.get_resource("plate_01")
-
     get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
     put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
 
-    self.lh.move_lid(plate.lid, stacking_area)
+    assert self.plate.lid is not None
+    self.lh.move_lid(self.plate.lid, stacking_area)
     self._assert_command_sent_once(
       "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
         get_plate_fmt)
@@ -460,7 +462,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
     # Move lids back (reverse order)
-    self.lh.move_lid(stacking_area.get_top_item(), plate)
+    self.lh.move_lid(cast(Lid, stacking_area.get_top_item()), self.plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2305zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       get_plate_fmt)
@@ -473,20 +475,19 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     stacking_area = ResourceStack("stacking_area", direction="z")
     self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414-63, 226.2 - 100))
 
-    plate = self.lh.get_resource("plate_01")
-    other_plate = self.lh.get_resource("plate_02")
-
     get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
     put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
 
-    self.lh.move_lid(plate.lid, stacking_area)
+    assert self.plate.lid is not None and self.other_plate.lid is not None
+
+    self.lh.move_lid(self.plate.lid, stacking_area)
     self._assert_command_sent_once(
       "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
         get_plate_fmt)
     self._assert_command_sent_once(
       "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
-    self.lh.move_lid(other_plate.lid, stacking_area)
+    self.lh.move_lid(self.other_plate.lid, stacking_area)
     self._assert_command_sent_once(
       "C0PPid0004xs03475xd0yj2105yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
         get_plate_fmt)
@@ -494,14 +495,18 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "C0PRid0005xs00695xd0yj4570yd0zj2405zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
     # Move lids back (reverse order)
-    self.lh.move_lid(stacking_area.get_top_item(), plate)
+    top_item = stacking_area.get_top_item()
+    assert isinstance(top_item, Lid)
+    self.lh.move_lid(top_item, self.plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2405zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       get_plate_fmt)
     self._assert_command_sent_once(
       "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
 
-    self.lh.move_lid(stacking_area.get_top_item(), other_plate)
+    top_item = stacking_area.get_top_item()
+    assert isinstance(top_item, Lid)
+    self.lh.move_lid(top_item, self.other_plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2305zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
       get_plate_fmt)

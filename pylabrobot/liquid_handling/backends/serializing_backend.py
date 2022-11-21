@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List, TypedDict
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import Resource, TipRack
@@ -17,7 +17,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   processing. The implementation of `send_command` is left to the subclasses. """
 
   @abstractmethod
-  def send_command(self, command: str, data: Dict[str, Any] = None):
+  def send_command(self, command: str, data: Optional[Dict[str, Any]] = None) -> Optional[dict]:
     raise NotImplementedError
 
   def setup(self):
@@ -33,21 +33,29 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   def unassigned_resource_callback(self, name: str):
     self.send_command(command="resource_unassigned", data=dict(resource_name=name))
 
-  def pick_up_tips(self, *channels: Optional[Pickup]):
-    channels = [channel.serialize() if channel is not None else None for channel in channels]
-    self.send_command(command="pick_up_tips", data=dict(channels=channels))
+  def pick_up_tips(self, *channels: Pickup, use_channels: List[int]):
+    serialized = [channel.serialize() if channel is not None else None for channel in channels]
+    self.send_command(
+      command="pick_up_tips",
+      data=dict(channels=serialized, use_channels=use_channels))
 
-  def discard_tips(self, *channels: Optional[Discard]):
-    channels = [channel.serialize() if channel is not None else None for channel in channels]
-    self.send_command(command="discard_tips", data=dict(channels=channels))
+  def discard_tips(self, *channels: Discard, use_channels: List[int]):
+    serialized = [channel.serialize() if channel is not None else None for channel in channels]
+    self.send_command(
+      command="discard_tips",
+      data=dict(channels=serialized, use_channels=use_channels))
 
-  def aspirate(self, *channels: Optional[Aspiration]):
-    channels = [channel.serialize() for channel in channels]
-    self.send_command(command="aspirate", data=dict(channels=channels))
+  def aspirate(self, *channels: Aspiration, use_channels: List[int]):
+    serialized = [(channel.serialize() if channel is not None else None) for channel in channels]
+    self.send_command(
+      command="aspirate",
+      data=dict(channels=serialized, use_channels=use_channels))
 
-  def dispense(self, *channels: Optional[Dispense]):
-    channels = [channel.serialize() for channel in channels]
-    self.send_command(command="dispense", data=dict(channels=channels))
+  def dispense(self, *channels: Dispense, use_channels: List[int]):
+    serialized = [(channel.serialize() if channel is not None else None) for channel in channels]
+    self.send_command(
+      command="dispense",
+      data=dict(channels=serialized, use_channels=use_channels))
 
   def pick_up_tips96(self, tip_rack: TipRack):
     self.send_command(command="pick_up_tips96", data=dict(resource=tip_rack.serialize()))
@@ -68,20 +76,24 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 class SerializingSavingBackend(SerializingBackend):
   """ A backend that saves all serialized commands in `self.sent_commands`, wrote for testing. """
 
+  class Command(TypedDict):
+    command: str
+    data: Optional[Dict[str, Any]]
+
   def setup(self):
-    self.sent_commands = []
+    self.sent_commands: List[SerializingSavingBackend.Command] = []
     self.setup_finished = True
 
   def stop(self):
     self.setup_finished = False
 
-  def send_command(self, command: str, data: Dict[str, Any] = None):
+  def send_command(self, command: str, data: Optional[Dict[str, Any]] = None):
     self.sent_commands.append(dict(command=command, data=data))
 
   def clear(self):
     self.sent_commands = []
 
-  def get_first_data_for_command(self, command: str):
+  def get_first_data_for_command(self, command: str) -> Optional[Dict[str, Any]]:
     for sent_command in self.sent_commands:
       if sent_command["command"] == command:
         return sent_command["data"]

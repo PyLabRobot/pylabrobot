@@ -1,4 +1,4 @@
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Dict
 
 from .coordinate import Coordinate
 from .resource import Resource
@@ -30,7 +30,7 @@ class Deck(Resource):
 
     super().__init__(name="deck", size_x=size_x, size_y=size_y, size_z=size_z, category="deck")
     self.location = origin
-    self.resources = {}
+    self.resources: Dict[str, Resource] = {}
     self.resource_assigned_callback_callback = resource_assigned_callback
     self.resource_unassigned_callback_callback = resource_unassigned_callback
 
@@ -93,10 +93,15 @@ class Deck(Resource):
     if self.resource_unassigned_callback_callback is not None:
       self.resource_unassigned_callback_callback(resource)
 
-  def get_resource(self, name: str) -> Optional[Resource]:
-    """ Returns the resource with the given name. """
-    # override = faster, because we have kept the resources in a dictionary.
-    return self.resources.get(name)
+  def get_resource(self, name: str) -> Resource:
+    """ Returns the resource with the given name.
+
+    Raises:
+      ValueError: If the resource is not found.
+    """
+    if not self.has_resource(name):
+      raise ValueError(f"Resource '{name}' not found")
+    return self.resources[name]
 
   def has_resource(self, name: str) -> bool:
     """ Returns True if the deck has a resource with the given name. """

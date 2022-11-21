@@ -1,10 +1,13 @@
-from typing import Optional, cast
+from typing import Dict, Optional, List, cast
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import (
+  Coordinate,
+  ItemizedResource,
   Plate,
   Resource,
   TipRack,
+  Well
 )
 from pylabrobot.liquid_handling.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
@@ -23,7 +26,11 @@ except ImportError:
   USE_OT = False
 
 
-class NoTipError(Exception): # TODO: this error should be shared.
+class NoTipError(Exception): # TODO: this error should be shared with all of liquid_handling
+  pass
+
+
+class NoChannelError(Exception): # TODO: this error should be shared with all of liquid_handling
   pass
 
 
@@ -56,7 +63,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.set_host(host)
     ot_api.set_port(port)
 
-    self.defined_labware = {}
+    self.defined_labware: Dict[str, str] = {}
 
   def setup(self):
     super().setup()
@@ -84,35 +91,37 @@ class OpentronsBackend(LiquidHandlerBackend):
     well_names = [well.name for well in wells]
     ordering = utils.reshape_2d(well_names, (resource.num_items_x, resource.num_items_y))
 
-    def _get_volume(well):
+    def _get_volume(well: Well) -> float:
       """ Temporary hack to get the volume of the well (in ul), TODO: store in resource. """
       return well.get_size_x() * well.get_size_y() * well.get_size_z()
 
     display_category = {
-      "tip_rack": "tipRack",
-      "plate": "wellPlate",
-    }[resource.category]
+      TipRack: "tipRack",
+      Plate: "wellPlate",
+    }[type(resource)]
 
     well_definitions = {
       well.name: {
         "depth": well.get_size_z(),
-        "x": well.location.x,
-        "y": well.location.y,
-        "z": well.location.z,
-        "totalLiquidVolume": _get_volume(well),
+        "x": cast(Coordinate, well.location).x,
+        "y": cast(Coordinate, well.location).y,
+        "z": cast(Coordinate, well.location).z,
 
         "shape": "circular",
         "diameter": well.get_size_x(),# inscribed circle has diameter equal to the width of the well
       } for well in wells
     }
 
-    format_ = None # Property to determine compatibility with multichannel pipette
-    if resource.num_items_x * resource.num_items_y == 96:
-      format_ = "96Standard"
-    elif resource.num_items_x * resource.num_items_y == 384:
-      format_ = "384Standard"
-    else:
-      format_ = "irregular"
+    if isinstance(resource, Plate):
+      for i, v in enumerate(well_definitions.values()):
+        v["totalLiquidVolume"] = _get_volume(utils.force_unwrap(resource.get_well(i)))
+
+    format_ = "irregular" # Property to determine compatibility with multichannel pipette
+    if isinstance(resource, ItemizedResource):
+      if resource.num_items_x * resource.num_items_y == 96:
+        format_ = "96Standard"
+      elif resource.num_items_x * resource.num_items_y == 384:
+        format_ = "384Standard"
 
     lw = {
       "schemaVersion": 2,
@@ -208,24 +217,28 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     if left_volume is not None and left_volume == tip_max_volume and \
       with_tip == self.left_pipette_has_tip:
-      return self.left_pipette["pipetteId"]
+      return cast(str, self.left_pipette["pipetteId"])
 
     if right_volume is not None and right_volume == tip_max_volume and \
       with_tip == self.right_pipette_has_tip:
-      return self.right_pipette["pipetteId"]
+      return cast(str, self.right_pipette["pipetteId"])
 
     return None
 
-  def pick_up_tips(self, *channels: Optional[Pickup]):
+  def pick_up_tips(self, *channels: Pickup, use_channels: List[int]):
     """ Pick up tips from the specified resource. """
 
     assert len(channels) == 1, "only one channel supported for now"
+    assert use_channels == [0], "manual channel selection not supported on OT for now"
     channel = channels[0] # for channel in channels
+    assert channel is not None, "channel must be specified"
+    # this feels wrong, why should backends check?
+    assert channel.resource.parent is not None, "must not be a floating resource"
 
     labware_id = self.defined_labware[channel.resource.parent.name]
     pipette_id = self.select_tip_pipette(channel.resource.tip_type.maximal_volume, with_tip=False)
     if not pipette_id:
-      raise NoTipError("No pipette channel of right type with no tip available.")
+      raise NoChannelError("No pipette channel of right type with no tip available.")
 
     ot_api.lh.pick_up_tip(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
       offset_x=channel.offset.x, offset_y=channel.offset.y, offset_z=channel.offset.z)
@@ -235,16 +248,20 @@ class OpentronsBackend(LiquidHandlerBackend):
     else:
       self.right_pipette_has_tip = True
 
-  def discard_tips(self, *channels: Optional[Discard]):
+  def discard_tips(self, *channels: Discard, use_channels: List[int]):
     """ Discard tips from the specified resource. """
 
     assert len(channels) == 1 # only one channel supported for now
+    assert use_channels == [0], "manual channel selection not supported on OT for now"
     channel = channels[0] # for channel in channels
+    assert channel is not None, "channel must be specified"
+    # this feels wrong, why should backends check?
+    assert channel.resource.parent is not None, "must not be a floating resource"
 
     labware_id = self.defined_labware[channel.resource.parent.name]
     pipette_id = self.select_tip_pipette(channel.resource.tip_type.maximal_volume, with_tip=True)
     if not pipette_id:
-      raise NoTipError("No pipette channel of right type with tip available.")
+      raise NoChannelError("No pipette channel of right type with tip available.")
 
     ot_api.lh.drop_tip(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
       offset_x=channel.offset.x, offset_y=channel.offset.y, offset_z=channel.offset.z)
@@ -276,10 +293,10 @@ class OpentronsBackend(LiquidHandlerBackend):
       right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
 
     if left_volume is not None and left_volume >= volume and self.left_pipette_has_tip:
-      return self.left_pipette["pipetteId"]
+      return cast(str, self.left_pipette["pipetteId"])
 
     if right_volume is not None and right_volume >= volume and self.right_pipette_has_tip:
-      return self.right_pipette["pipetteId"]
+      return cast(str, self.right_pipette["pipetteId"])
 
     return None
 
@@ -287,9 +304,9 @@ class OpentronsBackend(LiquidHandlerBackend):
     """ Get the name of a pipette from its id. """
 
     if pipette_id == self.left_pipette["pipetteId"]:
-      return self.left_pipette["name"]
-    elif pipette_id == self.right_pipette["pipetteId"]:
-      return self.right_pipette["name"]
+      return cast(str, self.left_pipette["name"])
+    if pipette_id == self.right_pipette["pipetteId"]:
+      return cast(str, self.right_pipette["name"])
     raise ValueError(f"Unknown pipette id: {pipette_id}")
 
   def _get_default_aspiration_flow_rate(self, pipette_name: str) -> float:
@@ -317,22 +334,27 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6
     }[pipette_name]
 
-  def aspirate(self, *channels: Optional[Aspiration]):
+  def aspirate(self, *channels: Aspiration, use_channels: List[int]):
     """ Aspirate liquid from the specified resource using pip. """
 
     assert len(channels) == 1, "only one channel supported for now"
-
+    assert use_channels == [0], "manual channel selection not supported on OT for now"
     channel = channels[0] # for channel in channels
+    assert channel is not None, "channel must be specified"
+    # this feels wrong, why should backends check?
+    assert channel.resource.parent is not None, "must not be a floating resource"
+
     volume  = channel.volume
 
     pipette_id   = self.select_liquid_pipette(volume)
+    if pipette_id is None:
+      raise NoChannelError("No pipette channel of right type with tip available.")
+
     pipette_name = self.get_pipette_name(pipette_id)
     if channel.flow_rate is None:
       channel.flow_rate = self._get_default_aspiration_flow_rate(pipette_name)
 
     labware_id = self.defined_labware[channel.resource.parent.name]
-    if pipette_id is None:
-      raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.aspirate(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=channel.flow_rate, offset_x=channel.offset.x,
@@ -363,22 +385,27 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6
     }[pipette_name]
 
-  def dispense(self, *channels: Optional[Dispense]):
+  def dispense(self, *channels: Dispense, use_channels: List[int]):
     """ Dispense liquid from the specified resource using pip. """
 
     assert len(channels) == 1, "only one channel supported for now"
-
+    assert use_channels == [0], "manual channel selection not supported on OT for now"
     channel = channels[0] # for channel in channels
+    assert channel is not None, "channel must be specified"
+    # this feels wrong, why should backends check?
+    assert channel.resource.parent is not None, "must not be a floating resource"
+
     volume  = channel.volume
 
-    pipette_id   = self.select_liquid_pipette(volume)
+    pipette_id = self.select_liquid_pipette(volume)
+    if pipette_id is None:
+      raise NoChannelError("No pipette channel of right type with tip available.")
+
     pipette_name = self.get_pipette_name(pipette_id)
     if channel.flow_rate is None:
       channel.flow_rate = self._get_default_dispense_flow_rate(pipette_name)
 
     labware_id = self.defined_labware[channel.resource.parent.name]
-    if pipette_id is None:
-      raise NoTipError("No pipette channel of right type with tip available.")
 
     ot_api.lh.dispense(labware_id, well_name=channel.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=channel.flow_rate, offset_x=channel.offset.x,

@@ -27,3 +27,6 @@ env3.7:
 
 test3.7:
 	$(BIN3.7)python3 -m pytest -s -v
+
+typecheck:
+	$(BIN)python -m mypy pylabrobot --check-untyped-defs

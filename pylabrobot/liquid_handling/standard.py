@@ -6,7 +6,7 @@ from abc import ABC, ABCMeta
 import enum
 from typing import Optional
 
-from pylabrobot.liquid_handling.resources import Coordinate, Resource
+from pylabrobot.liquid_handling.resources import Coordinate, Resource, Tip
 
 
 class PipettingOp(ABC):
@@ -20,7 +20,7 @@ class PipettingOp(ABC):
     """ Returns the absolute location of the resource. """
     return self.resource.get_absolute_location() + self.offset
 
-  def __eq__(self, other: PipettingOp) -> bool:
+  def __eq__(self, other: object) -> bool:
     return (
       isinstance(other, PipettingOp) and
       self.resource == other.resource and
@@ -42,6 +42,10 @@ class PipettingOp(ABC):
 
 class TipOp(PipettingOp, metaclass=ABCMeta):
   """ Abstract base class for tip operations. """
+
+  def __init__(self, resource: Tip, offset: Coordinate = Coordinate.zero()):
+    super().__init__(resource, offset)
+    self.resource: Tip = resource # fix type hint
 
 
 class Pickup(TipOp):
@@ -83,7 +87,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     self.volume = volume
     self.flow_rate = flow_rate
 
-  def __eq__(self, other: LiquidHandlingOp) -> bool:
+  def __eq__(self, other: object) -> bool:
     return super().__eq__(other) and (
       isinstance(other, LiquidHandlingOp) and
       self.resource == other.resource and
@@ -100,18 +104,6 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       f"{self.__class__.__name__}(resource={repr(self.resource)}, volume={repr(self.volume)}, "
       f"flow_rate={self.flow_rate}, offset={self.offset})"
     )
-
-  def get_corrected_volume(self) -> float:
-    """ Get the corrected volume.
-
-    The corrected volume is computed based on various properties of a liquid, as defined by the
-    :class:`pylabrobot.liquid_handling.liquid_classes.LiquidClass` object.
-
-    Returns:
-      The corrected volume.
-    """
-
-    return self.liquid_class.compute_corrected_volume(self.volume)
 
   def serialize(self) -> dict:
     """ Serialize the operation.
@@ -189,7 +181,7 @@ class Move():
     self.get_direction = get_direction
     self.put_direction = put_direction
 
-  def __eq__(self, other: Move) -> bool:
+  def __eq__(self, other: object) -> bool:
     return (
       isinstance(other, Move) and
       self.resource == other.resource and
@@ -226,4 +218,4 @@ class Move():
   def get_absolute_to_location(self) -> Coordinate:
     """ Returns the absolute location of the resource. """
 
-    return self.to.get_absolute_location() + self.to_offset
+    return self.to + self.to_offset

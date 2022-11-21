@@ -1,21 +1,33 @@
 import math
 import json
-from typing import Union
+from typing import Union, List, cast
 
 try:
   import opentrons_shared_data.labware
+  from opentrons_shared_data.labware.dev_types import LabwareDefinition
   USE_OT = True
 except ImportError:
   USE_OT = False
 
-from pylabrobot.liquid_handling.resources import Coordinate, Plate, TipRack, Well, Tip, TipType
+from pylabrobot.liquid_handling.resources import (
+  Coordinate,
+  Plate,
+  TipRack,
+  Well,
+  Tip,
+  TipType,
+  TipSize,
+  TipPickupMethod
+)
 
 
 class UnknownResourceType(Exception):
   pass
 
 
-def ot_definition_to_resource(data: dict, name: str) -> Union[Plate, TipRack]:
+def ot_definition_to_resource(
+  data: LabwareDefinition,
+  name: str) -> Union[Plate, TipRack]:
   """ Convert an Opentrons definition file to a PyLabRobot resource file. """
 
   if not USE_OT:
@@ -30,7 +42,7 @@ def ot_definition_to_resource(data: dict, name: str) -> Union[Plate, TipRack]:
 
   if display_category in ["wellPlate", "tipRack"]:
     items = data["ordering"]
-    wells = []
+    wells: List[List[Union[Tip, Well]]] = [] # TODO: can we use TypeGuard?
 
     def volume_from_name(name: str) -> float:
       # like "Opentrons 96 Filter Tip Rack 200 µL"
@@ -72,8 +84,8 @@ def ot_definition_to_resource(data: dict, name: str) -> Union[Plate, TipRack]:
             has_filter="Filter" in data["metadata"]["displayName"],
             total_tip_length=well_size_z,
             maximal_volume=volume_from_name(data["metadata"]["displayName"]),
-            tip_type_id=None,
-            pick_up_method=None,
+            tip_size=TipSize.UNDEFINED,
+            pick_up_method=TipPickupMethod.OUT_OF_RACK,
           )
           tip = Tip(
             name=item,
@@ -90,7 +102,7 @@ def ot_definition_to_resource(data: dict, name: str) -> Union[Plate, TipRack]:
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        items=wells,
+        items=cast(List[List[Well]], wells),
         one_dot_max=None
       )
     elif display_category == "tipRack":
@@ -99,11 +111,10 @@ def ot_definition_to_resource(data: dict, name: str) -> Union[Plate, TipRack]:
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        items=wells,
+        items=cast(List[List[Tip]], wells),
         tip_type=tip_type
       )
-  else:
-    raise UnknownResourceType(f"Unknown resource type '{display_category}'.")
+  raise UnknownResourceType(f"Unknown resource type '{display_category}'.")
 
 
 def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack]:

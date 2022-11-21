@@ -15,6 +15,7 @@ class MockDev():
   def write(self, endpoint, data, timeout=None):
     return len(data)
 
+
 class MockEndpoint():
   def __init__(self):
     self.wMaxPacketSize = 64

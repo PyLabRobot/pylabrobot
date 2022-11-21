@@ -10,7 +10,9 @@
     "pylabrobot",
     "pytest",
     "subresource",
-    "tiprack"
+    "tiprack",
+    "usascientific",
+    "websockets"
   ],
   "python.linting.pylintEnabled": true,
   "python.testing.pytestArgs": ["."],
@@ -30,5 +32,8 @@
   "[restructuredtext]": {
     "editor.wordWrap": "bounded",
     "editor.wordWrapColumn": 100
-  }
+  },
+  "python.linting.mypyEnabled": true,
+  "python.linting.enabled": true,
+  "mypy.runUsingActiveInterpreter": true
 }

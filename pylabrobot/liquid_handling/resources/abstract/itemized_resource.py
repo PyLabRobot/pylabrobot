@@ -1,34 +1,38 @@
 
 from abc import ABCMeta
-from typing import Union, TypeVar, Generic, List, Optional, Generator
-try:
-  from typing import Literal
-except ImportError:
-  from typing_extensions import Literal
+import sys
+from typing import Union, TypeVar, Generic, List, Optional, Generator, Type, Sequence, cast
 
 import pylabrobot.utils
 
 from .coordinate import Coordinate
 from .resource import Resource
 
+if sys.version_info >= (3, 8):
+  from typing import Literal
+else:
+  from typing_extensions import Literal
 
-T = TypeVar("T")
+
+T = TypeVar("T", bound=Resource)
 
 
 class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   """ Base class for Itemized resources.
 
+  This class provides utilities for getting child resources by an identifier. It also restricts the
+  child resources to instances of the generic type `T`, specified by the subclass. For example, a
+  :class:`pylabrobot.liquid_handling.resources.plate.Plate` can only have child resources of type
+  :class:`pylabrobot.liquid_handling.resources.well.Well`.
+
   .. note::
     This class is not meant to be used directly, but rather to be subclassed, most commonly by
     :class:`pylabrobot.liquid_handling.resources.abstract.Plate` and
     :class:`pylabrobot.liquid_handling.resources.abstract.Tips`.
-
-  Subclasses are items that have a number of equally spaced child resources, e.g. a plate with
-  wells or a tip resource with tips.
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
-                items: List[List[T]] = None,
+                items: Optional[List[List[T]]] = None,
                 num_items_x: Optional[int] = None,
                 num_items_y: Optional[int] = None,
                 category: Optional[str] = None,
@@ -42,7 +46,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       size_z: The size of the resource in the z direction.
       items: The items on the resource. See
         :func:`pylabrobot.liquid_handling.resources.abstract.create_equally_spaced`. Note that items
-        names will be prefixed with the resource name.
+        names will be prefixed with the resource name. Defaults to `[]`.
       num_items_x: The number of items in the x direction. This method can only and must be used if
         `items` is not specified.
       num_items_y: The number of items in the y direction. This method can only and must be used if
@@ -82,9 +86,14 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     for row in (items or []):
       for item in row:
         item.name = f"{self.name}_{item.name}"
+        assert item.location is not None, \
+          "Item location must be specified if supplied at initialization."
         self.assign_child_resource(item, location=item.location)
 
-  def __getitem__(self, identifier: Union[str, List[int], slice]) -> List[T]:
+  def __getitem__(
+    self,
+    identifier: Union[str, int, Sequence[int], Sequence[str], slice, range]
+    ) -> List[T]:
     """ Get the items with the given identifier.
 
     This is a convenience method for getting the items with the given identifier. It is equivalent
@@ -119,24 +128,31 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """
 
     if isinstance(identifier, str):
-      if ":" in identifier:
-        identifier = pylabrobot.utils.string_to_indices(identifier, num_rows=self.num_items_y)
-      else:
-        identifier = [pylabrobot.utils.string_to_index(identifier, num_rows=self.num_items_y)]
-    elif isinstance(identifier, int):
-      identifier = [identifier]
-    elif isinstance(identifier, slice):
+      if ":" in identifier: # multiple # TODO: deprecate this, use `"A1":"E1"` instead (slice)
+        return self.get_items(identifier)
+
+      return [self.get_item(identifier)] # single
+
+    if isinstance(identifier, int):
+      return [self.get_item(identifier)]
+
+    if isinstance(identifier, (slice, range)):
+      start, stop = identifier.start, identifier.stop
       if isinstance(identifier.start, str):
-        identifier.start = \
+        start = \
           pylabrobot.utils.string_to_index(identifier.start, num_rows=self.num_items_y)
       if isinstance(identifier.stop, str):
-        identifier.stop = \
+        stop = \
           pylabrobot.utils.string_to_index(identifier.stop, num_rows=self.num_items_y)
-      identifier = range(identifier.start, identifier.stop)
+      identifier = list(range(start, stop))
+      return self.get_items(identifier)
 
-    return self.get_items(identifier)
+    if isinstance(identifier, (list, tuple)):
+      return self.get_items(identifier)
 
-  def get_item(self, identifier: Optional[Union[str, int]]) -> Optional[T]:
+    raise TypeError(f"Invalid identifier type: {type(identifier)}")
+
+  def get_item(self, identifier: Union[str, int]) -> T:
     """ Get the item with the given identifier.
 
     Args:
@@ -150,12 +166,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     Raises:
       IndexError: If the identifier is out of range. The range is 0 to (num_items_x * num_items_y -
-        1).
+        1). Strings are converted to integer indices first.
     """
 
-    if identifier is None:
-      return None
-    elif isinstance(identifier, str):
+    if isinstance(identifier, str):
       row, column = pylabrobot.utils.string_to_position(identifier)
       identifier = row + column * self.num_items_y
 
@@ -163,9 +177,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       raise IndexError(f"Item with identifier '{identifier}' does not exist on "
                        f"plate '{self.name}'.")
 
-    return self.children[identifier]
+    # Cast child to item type. Children will always be `T`, but the type checker doesn't know that.
+    return cast(T, self.children[identifier])
 
-  def get_items(self, identifier: Union[Optional[str], List[Optional[int]]]) -> List[Optional[T]]:
+  def get_items(self, identifier: Union[str, Sequence[int]]) -> List[T]:
     """ Get the items with the given identifier.
 
     Args:
@@ -193,7 +208,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """
 
     if isinstance(identifier, str):
-      identifier = pylabrobot.utils.string_to_indices(identifier, num_rows=self.num_items_y)
+      assert ":" in identifier, \
+        "If identifier is a string, it must be a range of items, e.g. 'A1:E1'."
+      identifier = list(pylabrobot.utils.string_to_indices(identifier, num_rows=self.num_items_y))
     elif identifier is None:
       return [None]
 
@@ -202,6 +219,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   @property
   def num_items(self) -> int:
     """ The number of items on this resource. """
+
     return self.num_items_x * self.num_items_y
 
   def traverse(
@@ -210,7 +228,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     direction: Literal["up", "down", "right", "left",
                        "snake_up", "snake_down", "snake_left", "snake_right"],
     repeat: bool = False,
-  ) -> Generator[T, None, None]:
+  ) -> Generator[List[T], None, None]:
     """ Traverse the items in the plate.
 
     Directions `"down"`, `"snake_down"`, `"right"`, and `"snake_right"` start at the top left item
@@ -254,7 +272,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         [[<Item A1>, <Item A2>, <Item A3>], [<Item A4>, <Item A5>, <Item A6>], ...]
     """
 
-    def make_generator(indices, batch_size, repeat):
+    def make_generator(indices, batch_size, repeat) -> Generator[List[T], None, None]:
       """ Make a generator from a list, that returns items in batches, optionally repeating """
 
       # If we're repeating, we need to make a copy of the indices
@@ -347,9 +365,17 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       "num_items_y": self.num_items_y,
     }
 
+  def index_of_item(self, item: T) -> Optional[int]:
+    """ Return the index of the given item in the plate, or `None` if the resource was not found.
+    """
+    for i, i_item in enumerate(self.children):
+      if i_item == item:
+        return i
+    return None
+
 
 def create_equally_spaced(
-    klass: T,
+    klass: Type[T],
     num_items_x: int, num_items_y: int,
     dx: float, dy: float, dz: float,
     item_size_x: float, item_size_y: float,
@@ -377,7 +403,7 @@ def create_equally_spaced(
 
   # TODO: It probably makes more sense to transpose this.
 
-  items = []
+  items: List[List[T]] = []
   for i in range(num_items_x):
     items.append([])
     for j in range(num_items_y):

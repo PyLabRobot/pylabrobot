@@ -8,11 +8,7 @@ import typing
 import webbrowser
 
 from pylabrobot.liquid_handling.backends import WebSocketBackend
-from pylabrobot.liquid_handling.resources import (
-  Plate,
-  Resource,
-  TipRack,
-)
+from pylabrobot.liquid_handling.resources import Plate, TipRack
 from pylabrobot.liquid_handling.standard import Move
 
 
@@ -80,13 +76,14 @@ class SimulatorBackend(WebSocketBackend):
     """
 
     super().__init__(ws_host=ws_host, ws_port=ws_port)
-    self._resources = {}
-    self.websocket = None
 
     self.simulate_delay = simulate_delay
     self.fs_host = fs_host
     self.fs_port = fs_port
     self.open_browser = open_browser
+
+    self._httpd: typing.Optional[http.server.HTTPServer] = None
+    self._fst: typing.Optional[threading.Thread] = None
 
     self._sent_messages = []
     self.received = []
@@ -94,6 +91,20 @@ class SimulatorBackend(WebSocketBackend):
     self.stop_event = None
 
     self._id = 0
+
+  @property
+  def httpd(self) -> http.server.HTTPServer:
+    """ The HTTP server. """
+    if self._httpd is None:
+      raise RuntimeError("The HTTP server has not been started yet.")
+    return self._httpd
+
+  @property
+  def fst(self) -> threading.Thread:
+    """ The file server thread. """
+    if self._fst is None:
+      raise RuntimeError("The file server thread has not been started yet.")
+    return self._fst
 
   def setup(self):
     """ Setup the simulation.
@@ -125,7 +136,7 @@ class SimulatorBackend(WebSocketBackend):
 
       while True:
         try:
-          self.httpd = http.server.HTTPServer((self.fs_host, self.fs_port),
+          self._httpd = http.server.HTTPServer((self.fs_host, self.fs_port),
             QuietSimpleHTTPRequestHandler)
           print(f"File server started at http://{self.fs_host}:{self.fs_port}. "
                  "Open this URL in your browser.")
@@ -135,7 +146,7 @@ class SimulatorBackend(WebSocketBackend):
 
       self.httpd.serve_forever()
 
-    self.fst = threading.Thread(name="simulation_fs", target=start_server, daemon=True)
+    self._fst = threading.Thread(name="simulation_fs", target=start_server, daemon=True)
     self.fst.start()
 
     if self.open_browser:
@@ -151,8 +162,8 @@ class SimulatorBackend(WebSocketBackend):
     self.httpd.server_close()
 
     # Clear all relevant attributes.
-    self.httpd = None
-    self.fst = None
+    self._httpd = None
+    self._fst = None
 
   def move_resource(self, move: Move, **backend_kwargs):
     raise NotImplementedError("This method is not implemented in the simulator.")
@@ -179,14 +190,17 @@ class SimulatorBackend(WebSocketBackend):
     for i, row in enumerate(pattern):
       for j, vol in enumerate(row):
         idx = i + j * 8
+        well = plate.get_item(idx)
+        if well is None:
+          raise RuntimeError(f"Could not find well {idx} in plate {plate.name}.")
         serialized_pattern.append({
-          "well": plate.get_item(idx).serialize(),
+          "well": well.serialize(),
           "volume": vol
         })
 
     self.send_command(command="adjust_well_volume", data=dict(pattern=serialized_pattern))
 
-  def edit_tips(self, tips_resource: TipRack, pattern: typing.List[typing.List[bool]]):
+  def edit_tips(self, tip_rack: TipRack, pattern: typing.List[typing.List[bool]]):
     """ Place and/or remove tips on the robot (**simulator only**).
 
     Simulator method to place tips on the robot, for testing of tip pickup/discarding. Unlike,
@@ -209,8 +223,11 @@ class SimulatorBackend(WebSocketBackend):
     for i, row in enumerate(pattern):
       for j, has_one in enumerate(row):
         idx = i + j * 8
+        tip = tip_rack.get_item(idx)
+        if tip is None:
+          raise RuntimeError(f"Could not find tip {idx} in tip rack {tip_rack.name}.")
         serialized_pattern.append({
-          "tip": tips_resource.get_item(idx).serialize(),
+          "tip": tip.serialize(),
           "has_one": has_one
         })
 
@@ -226,12 +243,12 @@ class SimulatorBackend(WebSocketBackend):
 
     self.edit_tips(resource, [[True] * 12] * 8)
 
-  def clear_tips(self, resource: Resource):
+  def clear_tips(self, tip_rack: TipRack):
     """ Completely clear a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource.
     (**simulator only**).
 
     Args:
-      resource: The resource where all tips should be removed.
+      tip_rack: The resource where all tips should be removed.
     """
 
-    self.edit_tips(resource, [[True] * 12] * 8)
+    self.edit_tips(tip_rack, [[True] * 12] * 8)

@@ -19,6 +19,7 @@ Some VSCode Extensions I'd recommend:
 - [Python](https://marketplace.visualstudio.com/items?itemName=ms-python.python)
 - [Pylint](https://github.com/microsoft/vscode-pylint)
 - [Code Spell Checker](https://marketplace.visualstudio.com/items?itemName=streetsidesoftware.code-spell-checker)
+- [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
 
 ## Testing
 
@@ -30,10 +31,16 @@ make test3.7 # run tests on Python 3.7, use make env3.7 to create the environmen
 make test # run test on the latest version
 ```
 
-In addition, `pylint` is used to enforce code style. The rc file is `/.pylintrc`. As mentioned above, it is very helpful to have an editor do style checking as you're writing code.
+`pylint` is used to enforce code style. The rc file is `/.pylintrc`. As mentioned above, it is very helpful to have an editor do style checking as you're writing code.
 
 ```bash
 make lint
+```
+
+`mypy` is used to enforce type checking.
+
+```bash
+make typecheck
 ```
 
 ## Writing documentation

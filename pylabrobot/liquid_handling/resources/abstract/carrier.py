@@ -16,8 +16,7 @@ class CarrierSite(Resource):
   def __init__(self, name: str, size_x, size_y, size_z, spot):
     super().__init__(name=name, size_x=size_x, size_y=size_y,
       size_z=size_z, category="carrier_site")
-    self.resource: Resource = None
-    self.parent: Carrier = None # will be set after Carrier.assign_child_resource
+    self.resource: Optional[Resource] = None
     self.spot: int = spot
 
   def assign_child_resource(self, resource: Resource, location: Coordinate):
@@ -121,9 +120,8 @@ class Carrier(Resource):
 
   def assign_child_resource(
     self,
-    resource,
-    location: Optional[Coordinate] = None,
-    spot: Optional[int] = None
+    resource, # TODO: only allow CarrierSite to be assigned
+    location: Coordinate
   ):
     """ Assign a resource to this carrier.
 
@@ -144,22 +142,12 @@ class Carrier(Resource):
       ValueError: If the resource is already assigned to this carrier.
     """
 
-    assert (spot is None) != (location is None), \
-      "Exactly one of spot and location must be specified"
+    if not isinstance(resource, CarrierSite):
+      raise ValueError(f"Invalid location {location}")
+    self.sites.append(resource)
+    super().assign_child_resource(resource, location=location)
 
-    if spot is None:
-      if isinstance(resource, CarrierSite):
-        self.sites.append(resource)
-        super().assign_child_resource(resource, location=location)
-      else:
-        # find site with matching location
-        for i, site in enumerate(self.sites):
-          if site.location == location:
-            self.assign_child_resource(resource, spot=i)
-            return
-        raise ValueError(f"Invalid location {location}")
-      return
-
+  def assign_resource_to_site(self, resource: Resource, spot: int):
     if spot < 0 or spot >= self.capacity:
       raise IndexError(f"Invalid spot {spot}")
     if self.sites[spot].resource is not None:
@@ -180,7 +168,7 @@ class Carrier(Resource):
 
     self.sites[resource.parent.spot].unassign_child_resource(resource)
 
-  def __getitem__(self, idx) -> CarrierSite:
+  def __getitem__(self, idx: int) -> CarrierSite:
     """ Get a site by index. """
     if not 0 <= idx < self.capacity:
       raise IndexError(f"Invalid index {idx}")
@@ -192,7 +180,7 @@ class Carrier(Resource):
       if self[idx].resource is not None:
         self.unassign_child_resource(self[idx].resource)
     else:
-      self.assign_child_resource(resource, spot=idx)
+      self.assign_resource_to_site(resource, spot=idx)
 
   def __delitem__(self, idx):
     """ Unassign a resource from this carrier. See :meth:`~Carrier.unassign_child_resource` """

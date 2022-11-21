@@ -5,6 +5,7 @@ import unittest
 
 import pytest
 import websockets
+import websockets.client
 
 from pylabrobot.liquid_handling.backends import WebSocketBackend
 from pylabrobot.utils.testing import async_test
@@ -23,7 +24,7 @@ class WebSocketBackendSetupStopTests(unittest.TestCase):
       backend.setup()
       self.assertIsNotNone(backend.loop)
       backend.stop()
-      self.assertIsNone(backend.websocket)
+      self.assertFalse(backend.has_connection())
 
     # setup and stop twice to ensure that everything is recycled correctly
     setup_stop_single()
@@ -44,7 +45,7 @@ class WebSocketBackendServerTests(unittest.TestCase):
   async def asyncSetUp(self):
     ws_port = self.backend.ws_port # port may change if port is already in use
     self.uri = f"ws://localhost:{ws_port}"
-    self.client = await websockets.connect(self.uri)
+    self.client = await websockets.client.connect(self.uri)
 
   def tearDown(self):
     super().tearDown()

@@ -1,36 +1,12 @@
-""" Abstract base class for Tips resources. """
+""" Abstract base class for tip rack resources. """
 
 from abc import ABCMeta
 
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Sequence
 
 from .itemized_resource import ItemizedResource
-from .resource import Resource
+from .tip import Tip
 from .tip_type import TipType
-
-
-class Tip(Resource):
-  """ A single Tip resource. """
-
-  def __init__(self, name: str, size_x: float, size_y: float, tip_type: TipType,
-    category: str = "tip"):
-    super().__init__(name, size_x=size_y, size_y=size_x, size_z=tip_type.tip_length,
-      category=category)
-    self.tip_type = tip_type
-
-  def serialize(self) -> dict:
-    serialized_parent = super().serialize()
-    serialized_parent.pop("size_z") # tip_length is already in tip_type
-
-    return {
-      **serialized_parent,
-      "tip_type": self.tip_type.serialize()
-    }
-
-  @classmethod
-  def deserialize(cls, data):
-    data["tip_type"] = TipType.deserialize(data["tip_type"])
-    return super().deserialize(data)
 
 
 class TipRack(ItemizedResource[Tip], metaclass=ABCMeta):
@@ -43,7 +19,7 @@ class TipRack(ItemizedResource[Tip], metaclass=ABCMeta):
     size_y: float,
     size_z: float,
     tip_type: TipType,
-    items: List[List[Tip]] = None,
+    items: Optional[List[List[Tip]]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
     category: str = "tip_rack",
@@ -76,7 +52,7 @@ class TipRack(ItemizedResource[Tip], metaclass=ABCMeta):
 
     return super().get_item(identifier)
 
-  def get_tips(self, identifier: Union[str, List[int]]) -> List[Tip]:
+  def get_tips(self, identifier: Union[str, Sequence[int]]) -> List[Tip]:
     """ Get the tips with the given identifier.
 
     See :meth:`~.get_items` for more information.

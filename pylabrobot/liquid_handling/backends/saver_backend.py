@@ -8,7 +8,7 @@ class SaverBackend(LiquidHandlerBackend):
 
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
-    self.commands_received = []
+    self.commands_received: List[Dict[str, Any]] = []
 
   def setup(self):
     super().setup()

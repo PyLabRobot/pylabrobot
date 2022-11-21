@@ -16,10 +16,9 @@ class TestLid(unittest.TestCase):
       with_lid=True)
     plate.location = Coordinate.zero()
 
-    self.assertIsNotNone(plate.lid)
+    assert plate.lid is not None
     self.assertEqual(plate.lid.name, "plate_lid")
     self.assertEqual(plate.lid.get_size_x(), 1)
-    # fix Coordinate(0, 0, 1) ?
     self.assertEqual(plate.lid.get_absolute_location(), Coordinate(0, 0, 5))
 
   def test_add_lid(self):

@@ -85,6 +85,7 @@ class Resource:
   def get_absolute_location(self) -> Coordinate:
     """ Get the absolute location of this resource, probably within the
     :class:`pylabrobot.liquid_handling.resources.abstract.Deck`. """
+    assert self.location is not None, "Resource has no location."
     if self.parent is None:
       return self.location
     return self.parent.get_absolute_location() + self.location
@@ -175,17 +176,26 @@ class Resource:
       children += child.get_all_children()
     return children
 
-  def get_resource(self, name: str) -> Optional[Resource]:
-    """ Get a resource by name. """
+  def get_resource(self, name: str) -> Resource:
+    """ Get a resource by name.
+
+    Args:
+      name: The name of the resource to get.
+
+    Returns:
+      The resource with the given name.
+
+    Raises:
+      ValueError: If no resource with the given name exists.
+    """
+
     if self.name == name:
       return self
 
     for child in self.children:
-      if child.name == name:
-        return child
+      try:
+        return child.get_resource(name)
+      except ValueError:
+        pass
 
-      resource = child.get_resource(name)
-      if resource is not None:
-        return resource
-
-    return None
+    raise ValueError(f"Resource with name '{name}' does not exist.")

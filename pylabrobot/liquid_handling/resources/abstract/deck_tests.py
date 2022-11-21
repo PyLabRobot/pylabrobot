@@ -24,4 +24,5 @@ class DeckTests(unittest.TestCase):
     resource = Resource(name="resource", size_x=1, size_y=1, size_z=1)
     deck.assign_child_resource(resource, location=Coordinate.zero())
     deck.clear()
-    self.assertEqual(deck.get_resource("resource"), None)
+    with self.assertRaises(ValueError):
+      deck.get_resource("resource")

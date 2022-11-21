@@ -101,8 +101,8 @@ def string_to_pattern(position_range_string: str) -> typing.List[typing.List[boo
   """
 
   # Split the position string into a list of position strings
-  start, end = position_range_string.split(":")
-  start, end = string_to_position(start), string_to_position(end)
+  start_str, end_str = position_range_string.split(":")
+  start, end = string_to_position(start_str), string_to_position(end_str)
   positions = [[False for _ in range(12)] for _ in range(8)]
   for row, column in itertools.product(range(start[0], end[0] + 1), range(start[1], end[1] + 1)):
     positions[row][column] = True

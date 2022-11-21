@@ -106,10 +106,14 @@ class ResourceStackTests(unittest.TestCase):
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.location = Coordinate.zero()
     stacking_area.assign_child_resource(plate.lid)
-    self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
+    top_item = stacking_area.get_top_item()
+    assert top_item is not None
+    self.assertEqual(top_item.get_absolute_location(), Coordinate(0, 0, 0))
 
     stacking_area.assign_child_resource(plate2.lid)
-    self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 1))
+    top_item = stacking_area.get_top_item()
+    assert top_item is not None
+    self.assertEqual(top_item.get_absolute_location(), Coordinate(0, 0, 1))
 
 
 if __name__ == "__main__":
