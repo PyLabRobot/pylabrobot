@@ -47,7 +47,7 @@ extras_testing = [
     'requests',
     'pylint',
     'mypy'
-] + extras_simulation + extras_opentrons + extras_server
+] + extras_simulation + extras_opentrons + extras_server + extras_http
 
 extras_dev = extras_docs + extras_simulation + extras_http + extras_websockets + extras_testing + \
               extras_server + extras_fw + extras_opentrons
