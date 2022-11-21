@@ -1,4 +1,5 @@
-from typing import List, Literal
+import sys
+from typing import List
 import unittest
 
 from pylabrobot.liquid_handling.resources.abstract import (
@@ -7,6 +8,11 @@ from pylabrobot.liquid_handling.resources.abstract import (
   Well,
   create_equally_spaced
 )
+
+if sys.version_info >= (3, 8):
+  from typing import Literal
+else:
+  from typing_extensions import Literal
 
 
 class TestItemizedResource(unittest.TestCase):
