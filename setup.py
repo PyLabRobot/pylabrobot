@@ -2,7 +2,8 @@ from setuptools import setup, find_packages
 
 from pylabrobot.__version__ import __version__
 
-long_description = open('README.md', encoding='utf-8').read()
+with open('README.md', 'r', encoding='utf-8') as f:
+    long_description = f.read()
 
 extras_docs = [
     'sphinx_book_theme',
@@ -37,7 +38,8 @@ extras_testing = [
     'pytest',
     'pytest-timeout',
     'requests',
-    'pylint'
+    'pylint',
+    'mypy'
 ] + extras_simulation + extras_opentrons
 
 extras_server = [

@@ -5,7 +5,7 @@ from .serializing_backend import SerializingBackend, SerializingSavingBackend # 
 from .websocket import WebSocketBackend # simulation relies on websocket backend
 
 from .hamilton.errors import HamiltonError
-from .hamilton import STAR
+from .hamilton.STAR import STAR
 from .http import HTTPBackend
 from .opentrons_backend import OpentronsBackend
 from .saver_backend import SaverBackend

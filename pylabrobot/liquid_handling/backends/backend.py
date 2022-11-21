@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Optional
+from typing import List
 
 from pylabrobot.liquid_handling.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
@@ -63,46 +63,46 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def pick_up_tips(self, *channels: Optional[Pickup], **backend_kwargs):
+  def pick_up_tips(self, *channels: Pickup, use_channels: List[int]):
     """ Pick up tips from the specified resource. """
     pass
 
   @abstractmethod
-  def discard_tips(self, *channels: Optional[Discard], **backend_kwargs):
+  def discard_tips(self, *channels: Discard, use_channels: List[int]):
     """ Discard tips from the specified resource. """
     pass
 
   @abstractmethod
-  def aspirate(self, *channels: Optional[Aspiration], **backend_kwargs):
+  def aspirate(self, *channels: Aspiration, use_channels: List[int]):
     """ Aspirate liquid from the specified resource using pip. """
     pass
 
   @abstractmethod
-  def dispense(self, *channels: Optional[Dispense], **backend_kwargs):
+  def dispense(self, *channels: Dispense, use_channels: List[int]):
     """ Dispense liquid from the specified resource using pip. """
     pass
 
   @abstractmethod
-  def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
+  def pick_up_tips96(self, tip_rack: TipRack):
     """ Pick up tips from the specified resource using CoRe 96. """
     pass
 
   @abstractmethod
-  def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
+  def discard_tips96(self, tip_rack: TipRack):
     """ Discard tips to the specified resource using CoRe 96. """
     pass
 
   @abstractmethod
-  def aspirate96(self, aspiration: Aspiration, **backend_kwargs):
+  def aspirate96(self, aspiration: Aspiration):
     """ Aspirate from all wells in 96 well plate. """
     pass
 
   @abstractmethod
-  def dispense96(self, dispense: Dispense, **backend_kwargs):
+  def dispense96(self, dispense: Dispense):
     """ Dispense to all wells in 96 well plate. """
     pass
 
   @abstractmethod
-  def move_resource(self, move: Move, **backend_kwargs):
+  def move_resource(self, move: Move):
     """ Move a resource to a new location. """
     pass

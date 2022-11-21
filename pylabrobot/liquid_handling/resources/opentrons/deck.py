@@ -1,4 +1,4 @@
-from typing import Optional, Callable
+from typing import Optional, Callable, List
 
 from pylabrobot.liquid_handling.resources.abstract import Coordinate, Deck, Resource
 
@@ -17,7 +17,7 @@ class OTDeck(Deck):
      resource_unassigned_callback=resource_unassigned_callback,
      origin=origin)
 
-    self.slots = [None] * 12
+    self.slots: List[Optional[Resource]] = [None] * 12
 
     self.slot_locations = [
       Coordinate(x=0.0,   y=0.0,   z=0.0),
@@ -34,7 +34,16 @@ class OTDeck(Deck):
       Coordinate(x=265.0, y=271.5, z=0.0)
     ]
 
-  def assign_child_resource(self, resource: Resource, slot: int):
+  def assign_child_resource(self, resource: Resource, location: Coordinate):
+    """ Assign a resource to a slot.
+
+    ..warning:: This method exists only for deserialization. You should use
+    :meth:`assign_child_at_slot` instead.
+    """
+    slot = self.slot_locations.index(location)
+    self.assign_child_at_slot(resource, slot)
+
+  def assign_child_at_slot(self, resource: Resource, slot: int):
     # pylint: disable=arguments-renamed
     if slot not in range(1, 13):
       raise ValueError("slot must be between 1 and 12")

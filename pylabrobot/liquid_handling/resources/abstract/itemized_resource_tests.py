@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Literal
 import unittest
 
 from pylabrobot.liquid_handling.resources.abstract import (
@@ -13,7 +13,7 @@ class TestItemizedResource(unittest.TestCase):
   """ Tests for ItemizedResource """
 
   def setUp(self) -> None:
-    self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=None,
+    self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=10,
       items=create_equally_spaced(Well,
       num_items_x=12, num_items_y=8,
       dx=0, dy=0, dz=0,
@@ -36,11 +36,16 @@ class TestItemizedResource(unittest.TestCase):
     self.assertEqual(self.plate.get_item("A2").name, "plate_well_1_0")
 
   def test_well_get_absolute_location(self):
-    self.assertEqual(self.plate.get_item(0).get_absolute_location(), Coordinate(0, 63, 0))
-    self.assertEqual(self.plate.get_item(7).get_absolute_location(), Coordinate(0, 0, 0))
-    self.assertEqual(self.plate.get_item(8).get_absolute_location(), Coordinate(9, 63, 0))
-    self.assertEqual(self.plate.get_item(17).get_absolute_location(), Coordinate(18, 54, 0))
-    self.assertEqual(self.plate.get_item(95).get_absolute_location(), Coordinate(99, 0, 0))
+    self.assertEqual(self.plate.get_item(0).get_absolute_location(),
+      Coordinate(0, 63, 0))
+    self.assertEqual(self.plate.get_item(7).get_absolute_location(),
+      Coordinate(0, 0, 0))
+    self.assertEqual(self.plate.get_item(8).get_absolute_location(),
+      Coordinate(9, 63, 0))
+    self.assertEqual(self.plate.get_item(17).get_absolute_location(),
+      Coordinate(18, 54, 0))
+    self.assertEqual(self.plate.get_item(95).get_absolute_location(),
+      Coordinate(99, 0, 0))
 
   def test_getitem_int(self):
     self.assertEqual(self.plate[0][0].name, "plate_well_0_0")
@@ -50,34 +55,40 @@ class TestItemizedResource(unittest.TestCase):
     self.assertEqual(self.plate["B2"][0].name, "plate_well_1_1")
 
   def test_getitem_slice(self):
-    self.assertEqual([w.name for w in self.plate[0:7]], ["plate_well_0_0", "plate_well_0_1",
-      "plate_well_0_2", "plate_well_0_3", "plate_well_0_4", "plate_well_0_5", "plate_well_0_6"])
+    self.assertEqual([w.name for w in self.plate[0:7]],
+      ["plate_well_0_0", "plate_well_0_1", "plate_well_0_2", "plate_well_0_3",
+        "plate_well_0_4", "plate_well_0_5", "plate_well_0_6"])
 
   def test_getitem_range(self):
-    self.assertEqual([w.name for w in self.plate[range(7)]], ["plate_well_0_0", "plate_well_0_1",
-      "plate_well_0_2", "plate_well_0_3", "plate_well_0_4", "plate_well_0_5", "plate_well_0_6"])
+    self.assertEqual([w.name for w in self.plate[range(7)]],
+      ["plate_well_0_0", "plate_well_0_1", "plate_well_0_2", "plate_well_0_3",
+        "plate_well_0_4", "plate_well_0_5", "plate_well_0_6"])
 
   def test_getitem_str_range(self):
-    self.assertEqual([w.name for w in self.plate["A1:B2"]], ["plate_well_0_0", "plate_well_1_0",
-      "plate_well_0_1", "plate_well_1_1"])
+    self.assertEqual([w.name for w in self.plate["A1:B2"]],
+      ["plate_well_0_0", "plate_well_1_0", "plate_well_0_1", "plate_well_1_1"])
 
   def test_getitem_tuple_int(self):
-    self.assertEqual([w.name for w in self.plate[0, 4, 1]], ["plate_well_0_0", "plate_well_0_4",
-      "plate_well_0_1"])
+    self.assertEqual([w.name for w in self.plate[0, 4, 1]],
+      ["plate_well_0_0", "plate_well_0_4", "plate_well_0_1"])
 
   def test_getitem_tuple_str(self):
-    self.assertEqual([w.name for w in self.plate["A1", "B2", "A2"]], ["plate_well_0_0",
-      "plate_well_1_1", "plate_well_1_0"])
+    self.assertEqual([w.name for w in self.plate["A1", "B2", "A2"]],
+      ["plate_well_0_0", "plate_well_1_1", "plate_well_1_0"])
 
-  def _traverse_test(self, direction: str, pattern: List[int]):
-    items = []
+  def _traverse_test(
+    self,
+    direction: Literal["up", "down", "right", "left",
+                       "snake_up", "snake_down", "snake_left", "snake_right"],
+    pattern: List[int]):
+    items: List[Well] = []
     for wells in self.plate.traverse(batch_size=2, direction=direction, repeat=False):
       self.assertEqual(len(wells), 2)
       items.extend(wells)
 
     self.assertEqual(len(items), len(pattern))
     for w, idx in zip(items, pattern):
-      self.assertEqual(w.name, self.plate.get_item(idx).name)
+      self.assertEqual(w, self.plate.get_well(idx))
 
   def test_traverse_down(self):
     pattern = list(range(self.plate.num_items))
@@ -155,13 +166,6 @@ class TestItemizedResource(unittest.TestCase):
       self.assertEqual(len(wells), 5)
       num_batches += 1
     self.assertEqual(len(items), self.plate.num_items*num_rounds)
-
-  def test_get_item_none(self):
-    self.assertIsNone(self.plate.get_item(None))
-
-  def test_get_items_none(self):
-    self.assertEqual(self.plate.get_items(None), [None])
-    self.assertEqual(self.plate.get_items([None, 0]), [None, self.plate.get_item(0)])
 
 
 class TestCreateEquallySpaced(unittest.TestCase):

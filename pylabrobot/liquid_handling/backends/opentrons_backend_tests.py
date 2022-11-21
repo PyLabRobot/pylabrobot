@@ -39,7 +39,8 @@ class OpentronsBackendDefinitionTests(unittest.TestCase):
     mock_create.return_value = "run-id"
     mock_add_mounted_pipettes.return_value = ("left-pipette-id", "right-pipette-id")
     self.backend = OpentronsBackend(host="localhost", port=1338)
-    self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
+    self.deck = OTDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.lh.setup()
 
   @patch("ot_api.labware.define")
@@ -49,10 +50,10 @@ class OpentronsBackendDefinitionTests(unittest.TestCase):
     mock_define.side_effect = _mock_define
 
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
-    self.lh.deck.assign_child_resource(self.tip_rack, slot=1)
+    self.deck.assign_child_at_slot(self.tip_rack, slot=1)
 
     self.plate = usascientific_96_wellplate_2point4ml_deep(name="plate")
-    self.lh.deck.assign_child_resource(self.plate, slot=11)
+    self.deck.assign_child_at_slot(self.plate, slot=11)
 
 
 class OpentronsBackendCommandTests(unittest.TestCase):
@@ -71,13 +72,14 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     mock_create.return_value = "run-id"
 
     self.backend = OpentronsBackend(host="localhost", port=1338)
-    self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
+    self.deck = OTDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.lh.setup()
 
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
-    self.lh.deck.assign_child_resource(self.tip_rack, slot=1)
+    self.deck.assign_child_at_slot(self.tip_rack, slot=1)
     self.plate = usascientific_96_wellplate_2point4ml_deep(name="plate")
-    self.lh.deck.assign_child_resource(self.plate, slot=11)
+    self.deck.assign_child_at_slot(self.plate, slot=11)
 
   @patch("ot_api.lh.pick_up_tip")
   def test_tip_pick_up(self, mock_pick_up_tip=None):
@@ -143,11 +145,11 @@ class OpentronsBackendCommandTests(unittest.TestCase):
 
   def test_pick_up_tips96(self):
     with self.assertRaises(NotImplementedError):
-      self.lh.pick_up_tips96(self.plate)
+      self.lh.pick_up_tips96(self.tip_rack)
 
   def test_discard_tips96(self):
     with self.assertRaises(NotImplementedError):
-      self.lh.discard_tips96(self.plate)
+      self.lh.discard_tips96(self.tip_rack)
 
   def test_aspirate96(self):
     with self.assertRaises(NotImplementedError):

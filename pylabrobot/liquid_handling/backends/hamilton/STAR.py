@@ -9,15 +9,18 @@ import enum
 import functools
 import logging
 import re
-import typing
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple, Dict, Any, Union, cast
 
 from pylabrobot import utils
 from pylabrobot.liquid_handling.resources import (
+  Plate,
   Resource,
   Tip,
+  TipPickupMethod,
   TipRack,
   TipType,
+  TipSize,
+  Well
 )
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import (
@@ -43,17 +46,35 @@ except ImportError:
   USE_USB = False
 
 
+def need_iswap_parked(method: Callable):
+  """Ensure that the iSWAP is in parked position before running command.
+
+  If the iSWAP is not parked, it get's parked before running the command.
+  """
+
+  @functools.wraps(method)
+  def wrapper(self, *args, **kwargs):
+    if not self.iswap_parked:
+      self.park_iswap()
+
+    result = method(self, *args, **kwargs) # pylint: disable=not-callable
+
+    return result
+  return wrapper
+
+
 class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
   """
 
   @abstractmethod
-  def __init__(self, read_timeout=5):
+  def __init__(self, read_timeout=5, num_channels=8):
     """
 
     Args:
       read_timeout: The timeout for reading packets from the Hamilton machine in seconds.
+      num_channels: the number of pipette channels present on the robot.
     """
 
     super().__init__()
@@ -61,12 +82,18 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self.read_timeout = read_timeout
     self.id_ = 0
 
-  def _generate_id(self):
+    self.num_channels = num_channels
+
+    self.dev: Optional[usb.core.Device] = None # TODO: make this a property
+    self.read_endpoint: Optional[usb.core.Endpoint] = None
+    self.write_endpoint: Optional[usb.core.Endpoint] = None
+
+  def _generate_id(self) -> str:
     """ continuously generate unique ids 0 <= x < 10000. """
     self.id_ += 1
     return f"{self.id_ % 10000:04}"
 
-  def _assemble_command(self, module, command, **kwargs) -> str:
+  def _assemble_command(self, module, command, **kwargs) -> Tuple[str, str]:
     """ Assemble a firmware command to the Hamilton machine.
 
     Args:
@@ -100,12 +127,14 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     return cmd, id
 
-  def _read_packet(self) -> typing.Optional[str]:
+  def _read_packet(self) -> Optional[str]:
     """ Read a packet from the Hamilton machine.
 
     Returns:
       A string containing the decoded packet, or None if no packet was received.
     """
+
+    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
 
     try:
       res = self.dev.read(
@@ -113,15 +142,15 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         self.read_endpoint.wMaxPacketSize,
         timeout=int(self.read_timeout * 1000) # timeout in ms
       )
+
+      if res is not None:
+        return bytearray(res).decode("utf-8") # convert res into text
+      return None
     except usb.core.USBError:
       # No data available (yet), this will give a timeout error. Don't reraise.
       return None
-    if res is not None:
-      res = bytearray(res).decode("utf-8") # convert res into text
-      return res
-    return None
 
-  def parse_fw_string(self, resp: str, fmt: str = "") -> typing.Optional[dict]:
+  def parse_fw_string(self, resp: str, fmt: str = "") -> dict:
     """ Parse a machine command or response string according to a format string.
 
     The format contains names of parameters (always length 2),
@@ -244,7 +273,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     return info
 
-  def parse_response(self, resp: str, fmt: str) -> typing.Tuple[dict, dict]:
+  def parse_response(self, resp: str, fmt: str) -> dict:
     """ Parse a response from the Hamilton machine.
 
     This method uses the `parse_fw_string` method to get the info from the response string.
@@ -283,14 +312,14 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       errors = re.search(exp, resp)
 
     if errors is not None:
-      errors = errors.groupdict()
-      errors = {k:v for k,v in errors.items() if v is not None} # filter None elements
+      # filter None elements
+      errors_dict = {k:v for k,v in errors.groupdict().items() if v is not None}
       # filter 00 and 00/00 elements, which mean no error.
-      errors = {k:v for k,v in errors.items() if v not in ["00", "00/00"]}
+      errors_dict = {k:v for k,v in errors_dict.items() if v not in ["00", "00/00"]}
 
-    has_error = not (errors is None or len(errors) == 0)
+    has_error = not (errors is None or len(errors_dict) == 0)
     if has_error:
-      he = HamiltonFirmwareError(errors, raw_response=resp)
+      he = HamiltonFirmwareError(errors_dict, raw_response=resp)
 
       # If there is a faulty parameter error, request which parameter that is.
       # TODO: does this work?
@@ -302,7 +331,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       raise he
 
     info = self.parse_fw_string(resp, fmt)
-
     return info
 
   def send_command(
@@ -310,7 +338,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     module: str,
     command: str,
     timeout: int = 16,
-    fmt: typing.Optional[str]=None,
+    fmt: Optional[str]=None,
     wait = True,
     **kwargs
   ):
@@ -330,6 +358,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     Returns:
       A dictionary containing the parsed response, or None if no response was read within `timeout`.
     """
+
+    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
 
     cmd, id_ = self._assemble_command(module, command, **kwargs)
 
@@ -352,10 +382,13 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       if resp is None:
         continue
 
-      last_packet = resp
-      while len(last_packet) == self.read_endpoint.wMaxPacketSize:
+      last_packet: Optional[str] = resp
+      while True: # read while we have data, and while the last packet is the max size.
         last_packet = self._read_packet()
-        resp += last_packet
+        if last_packet is not None:
+          resp += last_packet
+        if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
+          break
 
       logger.debug("Received data: %s", resp)
 
@@ -376,6 +409,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     raise TimeoutError(f"Timeout while waiting for response to command {cmd}.")
 
+
 class STAR(HamiltonLiquidHandler):
   """
   Interface for the Hamilton STAR.
@@ -386,12 +420,12 @@ class STAR(HamiltonLiquidHandler):
 
     Args:
       read_timeout: the timeout in seconds for reading packets.
+      num_channels: the number of pipette channels present on the robot.
     """
 
-    super().__init__(read_timeout=read_timeout, **kwargs)
+    super().__init__(read_timeout=read_timeout, num_channels=num_channels, **kwargs)
     self.dev: Optional[usb.core.Device] = None
-    self._tip_types: dict[str, int] = {}
-    self.num_channels = num_channels
+    self._tip_types: dict[TipType, int] = {}
     self._iswap_parked: Optional[bool] = None
 
     self.read_endpoint: Optional[usb.core.Endpoint] = None
@@ -399,23 +433,7 @@ class STAR(HamiltonLiquidHandler):
 
   @property
   def iswap_parked(self) -> bool:
-    return self._iswap_parked
-
-  def need_iswap_parked(method: Callable): # pylint: disable=no-self-argument
-    """Ensure that the iSWAP is in parked position before running command.
-
-    If the iSWAP is not parked, it get's parked before running the command.
-    """
-
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-      if not self.iswap_parked:
-        self.park_iswap()
-
-      result = method(self, *args, **kwargs) # pylint: disable=not-callable
-
-      return result
-    return wrapper
+    return self._iswap_parked is True
 
   def setup(self):
     """ setup
@@ -462,6 +480,10 @@ class STAR(HamiltonLiquidHandler):
     logger.info("Found endpoints. \nWrite:\n %s \nRead:\n %s", self.write_endpoint,
       self.read_endpoint)
 
+    # Empty the read buffer.
+    while self._read_packet() is not None:
+      pass
+
     initialized = self.request_instrument_initialization_status()
     if not initialized:
       logger.info("Running backend initialization procedure.")
@@ -480,7 +502,7 @@ class STAR(HamiltonLiquidHandler):
         begin_of_tip_deposit_process=2450,
         end_of_tip_deposit_process=1220,
         z_position_at_end_of_a_command=3600,
-        tip_pattern=[1], # [1] * 8
+        tip_pattern=[True], # [True] * 8
         tip_type=4, # TODO: get from tip types
         discarding_method=0
       )
@@ -529,7 +551,7 @@ class STAR(HamiltonLiquidHandler):
       filter=tip_type.has_filter,
       tip_length=int(tip_type.tip_length * 10), # in 0.1mm
       maximum_tip_volume=int(tip_type.maximal_volume * 10), # in 0.1ul
-      tip_type=tip_type.tip_type_id,
+      tip_size=tip_type.tip_size,
       pick_up_method=tip_type.pick_up_method
     )
     self._tip_types[tip_type] = ttti
@@ -555,7 +577,7 @@ class STAR(HamiltonLiquidHandler):
       tip_type: Tip type.
 
     Returns:
-      Tip type IDliquid_handling.
+      Tip type ID.
     """
 
     if tip_type not in self._tip_types:
@@ -569,14 +591,26 @@ class STAR(HamiltonLiquidHandler):
       if resource.tip_type not in self._tip_types:
         self.define_tip_type(resource.tip_type)
 
-  def _channel_positions_to_fw_positions(self, channels: List[Optional[PipettingOp]]) -> \
-    typing.Tuple[typing.List[int], typing.List[int], typing.List[bool]]:
+  def _channel_positions_to_fw_positions(
+    self,
+    channels: Tuple[PipettingOp, ...],
+    use_channels: List[int]
+  ) -> Tuple[List[int], List[int], List[bool]]:
+    """ use_channels is a list of channels to use. STAR expects this in one-hot encoding. This is
+    method converts that, and creates a matching list of x and y positions. """
+    assert use_channels == sorted(use_channels), "Channels must be sorted."
 
-    x_positions = [(int(channel.get_absolute_location().x*10) if channel is not None else 0)
-                    for channel in channels]
-    y_positions = [(int(channel.get_absolute_location().y*10) if channel is not None else 0)
-                    for channel in channels]
-    channels_involved = [r is not None for r in channels]
+    x_positions: List[int] = []
+    y_positions: List[int] = []
+    channels_involved: List[bool] = []
+    for i, channel in enumerate(use_channels):
+      while channel > len(channels_involved):
+        channels_involved.append(False)
+        x_positions.append(0)
+        y_positions.append(0)
+      channels_involved.append(True)
+      x_positions.append(int(channels[i].get_absolute_location().x*10))
+      y_positions.append(int(channels[i].get_absolute_location().y*10))
 
     if len(channels) > self.num_channels:
       raise ValueError(f"Too many channels specified: {len(channels)} > {self.num_channels}")
@@ -590,31 +624,36 @@ class STAR(HamiltonLiquidHandler):
 
     return x_positions, y_positions, channels_involved
 
-  def get_ttti(self, tips: List[Optional[Tip]]):
-    """ Get tip type table index for a list of tips. """
+  def get_ttti(self, tips: List[Optional[Tip]]) -> int:
+    """ Get tip type table index for a list of tips.
 
-    # Remove None values
-    tips = [tip for tip in tips if tip is not None]
+    Ensure that for all non-None tips, they have the same tip type, and return the tip type table
+    index for that tip type.
+    """
 
-    # Checks that all tips are of the same type
-    tip_types = set(tip.tip_type for tip in tips)
-    if len(tip_types) != 1:
-      raise ValueError("All tips must be of the same type.")
-
+    tip_types = set(tip.tip_type for tip in tips if tip is not None)
+    if len(tip_types) > 1:
+      raise ValueError("Cannot mix tips with different tip types.")
+    if len(tip_types) == 0:
+      raise ValueError("No tips specified.")
     return self.get_or_assign_tip_type_index(tip_types.pop())
 
   @need_iswap_parked
   def pick_up_tips(
     self,
-    *channels: List[Optional[Pickup]],
+    *channels: Pickup,
+    use_channels: List[int],
     **backend_kwargs
   ):
     """ Pick up tips from a resource. """
 
-    x_positions, y_positions, channels_involved = self._channel_positions_to_fw_positions(channels)
-    ttti = self.get_ttti([(c.resource if c is not None else None) for c in channels])
+    # TODO: channels involved
+    x_positions, y_positions, channels_involed = \
+      self._channel_positions_to_fw_positions(channels, use_channels)
 
-    params = {
+    ttti = self.get_ttti([c.resource for c in channels])
+
+    params: Dict[str, Any] = {
       "begin_tip_pick_up_process": 2244,
       "end_tip_pick_up_process": 2164,
       "minimum_traverse_height_at_beginning_of_a_command": 2450,
@@ -625,24 +664,26 @@ class STAR(HamiltonLiquidHandler):
     return self.pick_up_tip(
       x_positions=x_positions,
       y_positions=y_positions,
-      tip_pattern=channels_involved,
-      tip_type=ttti,
+      tip_pattern=channels_involed,
+      tip_type_idx=ttti,
       **params
     )
 
   @need_iswap_parked
   def discard_tips(
     self,
-    *channels: List[Optional[Discard]],
+    *channels: Discard,
+    use_channels: List[int],
     **backend_kwargs
   ):
     """ Discard tips from a resource. """
 
-    x_positions, y_positions, channels_involved = self._channel_positions_to_fw_positions(channels)
+    x_positions, y_positions, channels_involed = \
+      self._channel_positions_to_fw_positions(channels, use_channels)
     ttti = self.get_ttti([(c.resource if c is not None else None) for c in channels])
 
     # TODO: should depend on tip carrier/type?
-    params = {
+    params: Dict[str, Any] = {
       "begin_tip_deposit_process": 1314, #1744, #1970, #2244,
       "end_tip_deposit_process": 1414, # 1644, #1870, #2164,
       "minimum_traverse_height_at_beginning_of_a_command": 2450,
@@ -653,22 +694,27 @@ class STAR(HamiltonLiquidHandler):
     return self.discard_tip(
       x_positions=x_positions,
       y_positions=y_positions,
-      tip_pattern=channels_involved,
-      tip_type=ttti,
+      tip_pattern=channels_involed,
+      tip_type_idx=ttti,
       **params
     )
+
+  def default_aspiration_flow_rate(self) -> float:
+    return 1
 
   @need_iswap_parked
   def aspirate(
     self,
     *channels: Aspiration,
-    blow_out_air_volume: float = 0,
+    use_channels: List[int],
+    blow_out_air_volumes: Union[float, List[float]] = 0,
     air_transport_retract_dist: float = 10,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified channels. """
 
-    x_positions, y_positions, channels_involved = self._channel_positions_to_fw_positions(channels)
+    x_positions, y_positions, channels_involved = \
+      self._channel_positions_to_fw_positions(channels, use_channels)
 
     params = []
 
@@ -724,7 +770,7 @@ class STAR(HamiltonLiquidHandler):
         "immersion_depth_2nd_section": 0
       })
 
-    cmd_kwargs = {
+    cmd_kwargs: Dict[str, Any] = {
       "minimum_traverse_height_at_beginning_of_a_command": 2450,
       "min_z_endpos": 2450,
     }
@@ -742,14 +788,20 @@ class STAR(HamiltonLiquidHandler):
 
     # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
     # manually.
-    if blow_out_air_volume is not None and blow_out_air_volume > 0:
+    if isinstance(blow_out_air_volumes, list):
+      boavs = [int(boav*10) for boav in blow_out_air_volumes if boav is not None and boav > 0]#0.1ul
+    elif blow_out_air_volumes is not None and blow_out_air_volumes > 0:
+      boavs = [int(blow_out_air_volumes*10) for _ in range(8)] # 0.1ul
+    else:
+      boavs = []
+    if len(boavs) > 0:
       self.aspirate_pip(
         tip_pattern=channels_involved,
         x_positions=x_positions,
         y_positions=y_positions,
-        lld_mode=0,
-        liquid_surface_no_lld=50,
-        aspiration_volumes=blow_out_air_volume
+        lld_mode=[0] * len(boavs),
+        liquid_surface_no_lld=[50] * len(boavs),
+        aspiration_volumes=boavs
       )
 
     # Also filter each cmd_kwarg that is a list
@@ -768,13 +820,15 @@ class STAR(HamiltonLiquidHandler):
   def dispense(
     self,
     *channels: Dispense,
-    blow_out_air_volumes: float = 0,
+    use_channels: List[int],
+    blow_out_air_volumes: Union[float, List[float]] = 0,
     air_transport_retract_dist: float = 10,
     **backend_kwargs
   ):
     """ Dispense liquid from the specified channels. """
 
-    x_positions, y_positions, channels_involved = self._channel_positions_to_fw_positions(channels)
+    x_positions, y_positions, channels_involved = \
+      self._channel_positions_to_fw_positions(channels, use_channels)
 
     params = []
 
@@ -819,7 +873,7 @@ class STAR(HamiltonLiquidHandler):
         "limit_curve_index": 0
       })
 
-    cmd_kwargs = {
+    cmd_kwargs: Dict[str, Any] = {
       "minimum_traverse_height_at_beginning_of_a_command": 2450,
       "min_z_endpos": 2450,
       "side_touch_off_distance": 0,
@@ -847,9 +901,9 @@ class STAR(HamiltonLiquidHandler):
     # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we dispense air
     # manually.
     if isinstance(blow_out_air_volumes, list):
-      boavs = [boav*10 for boav in blow_out_air_volumes if boav is not None and boav > 0] # 0.1ul
+      boavs = [int(boav*10) for boav in blow_out_air_volumes if boav is not None and boav > 0]#0.1ul
     elif blow_out_air_volumes is not None and blow_out_air_volumes > 0:
-      boavs = [blow_out_air_volumes*10 for _ in range(8)] # 0.1ul
+      boavs = [int(blow_out_air_volumes*10) for _ in range(8)] # 0.1ul
     else:
       boavs = []
     if len(boavs) > 0:
@@ -857,9 +911,9 @@ class STAR(HamiltonLiquidHandler):
         tip_pattern=channels_involved,
         x_positions=x_positions,
         y_positions=y_positions,
-        lld_mode=0,
+        lld_mode=[0] * len(boavs),
         # units of 0.1mm, 1cm above
-        liquid_surface_no_lld=[int((channels[0][0].get_absolute_location().z + 10) * 10)] * 8,
+        liquid_surface_no_lld=[int((channels[0].get_absolute_location().z + 10) * 10)] * 8,
         dispense_volumes=boavs
       )
 
@@ -868,13 +922,13 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
     ttti = self.get_or_assign_tip_type_index(tip_rack.tip_type)
-    position = tip_rack.get_item("A1").get_absolute_location()
+    position = cast(Tip, tip_rack.get_item("A1")).get_absolute_location()
 
-    cmd_kwargs = dict(
+    cmd_kwargs: Dict[str, Any] = dict(
       x_position=int(position.x * 10),
       x_direction=0,
       y_position=int(position.y * 10),
-      tip_type=ttti,
+      tip_type_idx=ttti,
       tip_pick_up_method=0,
       z_deposit_position=2164,
       minimum_height_command_end=2450,
@@ -887,9 +941,9 @@ class STAR(HamiltonLiquidHandler):
 
   @need_iswap_parked
   def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
-    position = tip_rack.get_item("A1").get_absolute_location()
+    position = cast(Tip, tip_rack.get_item("A1")).get_absolute_location()
 
-    cmd_kwargs = dict(
+    cmd_kwargs: Dict[str, Any] = dict(
       x_position=int(position.x * 10),
       x_direction=0,
       y_position=int(position.y * 10),
@@ -912,14 +966,16 @@ class STAR(HamiltonLiquidHandler):
     air_transport_retract_dist: float = 10,
     **backend_kwargs
   ):
-    position = aspiration.resource.get_item("A1").get_absolute_location()
+    assert isinstance(aspiration.resource, Plate), "Only ItemizedResource is supported."
+    well_a1 = cast(Well, aspiration.resource.get_item("A1"))
+    position = well_a1.get_absolute_location()
 
     liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
 
     if aspiration.flow_rate is None:
       aspiration.flow_rate = 250
 
-    cmd_kwargs = dict(
+    cmd_kwargs: Dict[str, Any] = dict(
       x_position=int(position.x * 10),
       x_direction=0,
       y_positions=int(position.y * 10),
@@ -986,7 +1042,9 @@ class STAR(HamiltonLiquidHandler):
     air_transport_retract_dist=10,
     blow_out_air_volume: float = 0,
   ):
-    position = dispense.resource.get_item("A1").get_absolute_location()
+    assert isinstance(dispense.resource, Plate), "Only ItemizedResource is supported."
+    well_a1 = cast(Well, dispense.resource.get_item("A1"))
+    position = well_a1.get_absolute_location()
 
     liquid_height = dispense.resource.get_absolute_location().z + liquid_height
 
@@ -1094,9 +1152,10 @@ class STAR(HamiltonLiquidHandler):
     )
 
     # Get the center of the plate in the destination, which is what STAR expects.
-    to_x = move.to.x + move.resource.get_size_x()/2
-    to_y = move.to.y + move.resource.get_size_y()/2
-    grip_height = move.to.z + move.resource.get_size_z() - move.pickup_distance_from_top
+    to_x = move.get_absolute_to_location().x + move.resource.get_size_x()/2
+    to_y = move.get_absolute_to_location().y + move.resource.get_size_y()/2
+    grip_height = move.get_absolute_to_location().z + move.resource.get_size_z() - \
+      move.pickup_distance_from_top
 
     self.put_plate(
       x_position=int(to_x * 10),
@@ -1126,32 +1185,16 @@ class STAR(HamiltonLiquidHandler):
     resp = self.send_command(module="C0", command="VI")
     return self.parse_response(resp, "")
 
-  class FirmwareTipType(enum.Enum):
-    """ Tip type """
-    UNDEFINED=0
-    LOW_VOLUME=1
-    STANDARD_VOLUME=2
-    HIGH_VOLUME=3
-    CORE_384_HEAD_TIP=4
-    XL=5
-
-  class PickUpMethod(enum.Enum):
-    """ Tip pick up method """
-    OUT_OF_RACK=0
-    OUT_OF_WASH_LIQUID=1
-
   def define_tip_needle(
     self,
-    tip_type_table_index: int = 4,
-    filter: bool = False,
-    tip_length: int = 1950,
-    maximum_tip_volume: int = 3500,
-    tip_type: FirmwareTipType = FirmwareTipType.STANDARD_VOLUME,
-    pick_up_method: PickUpMethod = PickUpMethod.OUT_OF_RACK
+    tip_type_table_index: int,
+    filter: bool,
+    tip_length: int,
+    maximum_tip_volume: int,
+    tip_size: TipSize,
+    pick_up_method: TipPickupMethod
   ):
     """ Tip/needle definition.
-
-    TODO: Define default values for type/application/filter.
 
     Args:
       tip_type_table_index: tip_table_index
@@ -1162,13 +1205,12 @@ class STAR(HamiltonLiquidHandler):
       tip_type: Type of tip collar (Tip type identification)
       pick_up_method: pick up method.
                       Attention! The values set here are temporary and apply only until
-                      power OFF or RESET. After power ON the default val- ues apply. (see Table 3)
+                      power OFF or RESET. After power ON the default values apply. (see Table 3)
     """
 
     # pylint: disable=redefined-builtin
 
     utils.assert_clamp(tip_type_table_index, 0, 99, "tip_type_table_index")
-    filter = 1 if filter else 0
     utils.assert_clamp(tip_length, 1, 1999, "tip_length")
     utils.assert_clamp(maximum_tip_volume, 1, 56000, "maximum_tip_volume")
 
@@ -1179,7 +1221,7 @@ class STAR(HamiltonLiquidHandler):
       tf=filter,
       tl=f"{tip_length:04}",
       tv=f"{maximum_tip_volume:05}",
-      tg=tip_type,
+      tg=tip_size.value,
       tu=pick_up_method
     )
 
@@ -1374,7 +1416,7 @@ class STAR(HamiltonLiquidHandler):
     self,
     verification_subject: int = 0,
     date: datetime.datetime = datetime.datetime.now(),
-    verification_status: bool = None
+    verification_status: bool = False
   ):
     """ Store verification data
 
@@ -1474,9 +1516,9 @@ class STAR(HamiltonLiquidHandler):
 
   def set_instrument_configuration(
     self,
-    configuration_data_1: str = None, # TODO: configuration byte
-    configuration_data_2: str = None, # TODO: configuration byte
-    configuration_data_3: str = None, # TODO: configuration byte
+    configuration_data_1: Optional[str] = None, # TODO: configuration byte
+    configuration_data_2: Optional[str] = None, # TODO: configuration byte
+    configuration_data_3: Optional[str] = None, # TODO: configuration byte
     instrument_size_in_slots_x_range: int = 54,
     auto_load_size_in_slots: int = 54,
     tip_waste_x_position: int = 13400,
@@ -1567,30 +1609,30 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(right_arm_minimal_y_position, 0, 9999, "right_arm_minimal_y_position")
 
     return self.send_command(
-        module="C0",
-        command="AK",
-        kb=configuration_data_1,
-        ka=configuration_data_2,
-        ke=configuration_data_3,
-        xt=instrument_size_in_slots_x_range,
-        xa=auto_load_size_in_slots,
-        xw=tip_waste_x_position,
-        xr=right_x_drive_configuration_byte_1,
-        xo=right_x_drive_configuration_byte_2,
-        xm=minimal_iswap_collision_free_position,
-        xx=maximal_iswap_collision_free_position,
-        xu=left_x_arm_width,
-        xv=right_x_arm_width,
-        kp=num_pip_channels,
-        kc=num_xl_channels,
-        kr=num_robotic_channels,
-        ys=minimal_raster_pitch_of_pip_channels,
-        kl=minimal_raster_pitch_of_xl_channels,
-        km=minimal_raster_pitch_of_robotic_channels,
-        ym=pip_maximal_y_position,
-        yu=left_arm_minimal_y_position,
-        yx=right_arm_minimal_y_position,
-      )
+      module="C0",
+      command="AK",
+      kb=configuration_data_1,
+      ka=configuration_data_2,
+      ke=configuration_data_3,
+      xt=instrument_size_in_slots_x_range,
+      xa=auto_load_size_in_slots,
+      xw=tip_waste_x_position,
+      xr=right_x_drive_configuration_byte_1,
+      xo=right_x_drive_configuration_byte_2,
+      xm=minimal_iswap_collision_free_position,
+      xx=maximal_iswap_collision_free_position,
+      xu=left_x_arm_width,
+      xv=right_x_arm_width,
+      kp=num_pip_channels,
+      kc=num_xl_channels,
+      kr=num_robotic_channels,
+      ys=minimal_raster_pitch_of_pip_channels,
+      kl=minimal_raster_pitch_of_xl_channels,
+      km=minimal_raster_pitch_of_robotic_channels,
+      ym=pip_maximal_y_position,
+      yu=left_arm_minimal_y_position,
+      yx=right_arm_minimal_y_position,
+    )
 
   def save_pip_channel_validation_status(
     self,
@@ -1935,7 +1977,7 @@ class STAR(HamiltonLiquidHandler):
 
     resp = self.send_command(module="C0", command="XR")
     parsed = self.parse_response(resp, "xq#")
-    return parsed["xq"] == 1
+    return cast(int, parsed["xq"]) == 1
 
   # -------------- 3.5 Pipetting channel commands --------------
 
@@ -1943,12 +1985,12 @@ class STAR(HamiltonLiquidHandler):
 
   def initialize_pipetting_channels(
     self,
-    x_positions: typing.List[int] = [0],
-    y_positions: typing.List[int] = [0],
+    x_positions: List[int] = [0],
+    y_positions: List[int] = [0],
     begin_of_tip_deposit_process: int = 0,
     end_of_tip_deposit_process: int = 0,
     z_position_at_end_of_a_command: int = 3600,
-    tip_pattern: typing.List[bool] = [True],
+    tip_pattern: List[bool] = [True],
     tip_type: int = 16,
     discarding_method: int = 1
   ):
@@ -1997,10 +2039,10 @@ class STAR(HamiltonLiquidHandler):
 
   def pick_up_tip(
     self,
-    x_positions: int = 0, # TODO: these are probably lists.
-    y_positions: int = 0, # TODO: these are probably lists.
-    tip_pattern: bool = True,
-    tip_type: FirmwareTipType = FirmwareTipType.STANDARD_VOLUME,
+    x_positions: List[int], # TODO: these are probably lists.
+    y_positions: List[int], # TODO: these are probably lists.
+    tip_pattern: List[bool],
+    tip_type_idx: int,
     begin_tip_pick_up_process: int = 0,
     end_tip_pick_up_process: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
@@ -2012,7 +2054,7 @@ class STAR(HamiltonLiquidHandler):
       x_positions: x positions [0.1mm]. Must be between 0 and 25000. Default 0.
       y_positions: y positions [0.1mm]. Must be between 0 and 6500. Default 0.
       tip_pattern: Tip pattern (channels involved).
-      tip_type: Tip type.
+      tip_type_idx: Tip type.
       begin_tip_pick_up_process: Begin of tip picking up process (Z- range) [0.1mm]. Must be
           between 0 and 3600. Default 0.
       end_tip_pick_up_process: End of tip picking up process (Z- range) [0.1mm]. Must be
@@ -2038,7 +2080,7 @@ class STAR(HamiltonLiquidHandler):
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
-      tt=f"{tip_type:02}",
+      tt=f"{tip_type_idx:02}",
       tp=f"{begin_tip_pick_up_process:04}",
       tz=f"{end_tip_pick_up_process:04}",
       th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
@@ -2052,13 +2094,13 @@ class STAR(HamiltonLiquidHandler):
 
   def discard_tip(
     self,
-    x_positions: int = 0, # TODO: these are probably lists.
-    y_positions: int = 0, # TODO: these are probably lists.
-    tip_pattern: bool = True,
-    tip_type: FirmwareTipType = FirmwareTipType.STANDARD_VOLUME,
+    x_positions: List[int],
+    y_positions: List[int],
+    tip_pattern: List[bool],
+    tip_type_idx: int,
     begin_tip_deposit_process: int = 0,
-    end_tip_deposit_process: int = None,
-    minimum_traverse_height_at_beginning_of_a_command: int = None,
+    end_tip_deposit_process: int = 0,
+    minimum_traverse_height_at_beginning_of_a_command: int = 3600,
     discarding_method: DiscardingMethod = DiscardingMethod.DROP
   ):
     """ discard tip
@@ -2067,7 +2109,7 @@ class STAR(HamiltonLiquidHandler):
       x_positions: x positions [0.1mm]. Must be between 0 and 25000. Default 0.
       y_positions: y positions [0.1mm]. Must be between 0 and 6500. Default 0.
       tip_pattern: Tip pattern (channels involved). Must be between 0 and 1. Default 1.
-      tip_type: Tip type. Must be between 0 and 99. Default 4.
+      tip_type_idx: Tip type table index
       begin_tip_deposit_process: Begin of tip deposit process (Z- range) [0.1mm]. Must be between
           0 and 3600. Default 0.
       end_tip_deposit_process: End of tip deposit process (Z- range) [0.1mm]. Must be between 0
@@ -2097,7 +2139,7 @@ class STAR(HamiltonLiquidHandler):
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
-      tt=f"{tip_type:02}",
+      tt=f"{tip_type_idx:02}",
       tp=begin_tip_deposit_process,
       tz=end_tip_deposit_process,
       th=minimum_traverse_height_at_beginning_of_a_command,
@@ -2112,52 +2154,52 @@ class STAR(HamiltonLiquidHandler):
 
   def aspirate_pip(
     self,
-    aspiration_type: typing.List[int] = [0],
-    tip_pattern: typing.List[bool] = [True],
-    x_positions: typing.List[int] = [0],
-    y_positions: typing.List[int] = [0],
+    aspiration_type: List[int] = [0],
+    tip_pattern: List[bool] = [True],
+    x_positions: List[int] = [0],
+    y_positions: List[int] = [0],
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
     min_z_endpos: int = 3600,
-    lld_search_height: typing.List[int] = [0],
-    clot_detection_height: typing.List[int] = [60],
-    liquid_surface_no_lld: typing.List[int] = [3600],
-    pull_out_distance_transport_air: typing.List[int] = [50],
-    second_section_height: typing.List[int] = [0],
-    second_section_ratio: typing.List[int] = [0],
-    minimum_height: typing.List[int] = [3600],
-    immersion_depth: typing.List[int] = [0],
-    immersion_depth_direction: typing.List[int] = [0],
-    surface_following_distance: typing.List[int] = [0],
-    aspiration_volumes: typing.List[int] = [0],
-    aspiration_speed: typing.List[int] = [500],
-    transport_air_volume: typing.List[int] = [0],
-    blow_out_air_volume: typing.List[int] = [200],
-    pre_wetting_volume: typing.List[int] = [0],
-    lld_mode: typing.List[int] = [1],
-    gamma_lld_sensitivity: typing.List[int] = [1],
-    dp_lld_sensitivity: typing.List[int] = [1],
-    aspirate_position_above_z_touch_off: typing.List[int] = [5],
-    detection_height_difference_for_dual_lld: typing.List[int] = [0],
-    swap_speed: typing.List[int] = [100],
-    settling_time: typing.List[int] = [5],
-    homogenization_volume: typing.List[int] = [0],
-    homogenization_cycles: typing.List[int] = [0],
-    homogenization_position_from_liquid_surface: typing.List[int] = [250],
-    homogenization_speed: typing.List[int] = [500],
-    homogenization_surface_following_distance: typing.List[int] = [0],
-    limit_curve_index: typing.List[int] = [0],
+    lld_search_height: List[int] = [0],
+    clot_detection_height: List[int] = [60],
+    liquid_surface_no_lld: List[int] = [3600],
+    pull_out_distance_transport_air: List[int] = [50],
+    second_section_height: List[int] = [0],
+    second_section_ratio: List[int] = [0],
+    minimum_height: List[int] = [3600],
+    immersion_depth: List[int] = [0],
+    immersion_depth_direction: List[int] = [0],
+    surface_following_distance: List[int] = [0],
+    aspiration_volumes: List[int] = [0],
+    aspiration_speed: List[int] = [500],
+    transport_air_volume: List[int] = [0],
+    blow_out_air_volume: List[int] = [200],
+    pre_wetting_volume: List[int] = [0],
+    lld_mode: List[int] = [1],
+    gamma_lld_sensitivity: List[int] = [1],
+    dp_lld_sensitivity: List[int] = [1],
+    aspirate_position_above_z_touch_off: List[int] = [5],
+    detection_height_difference_for_dual_lld: List[int] = [0],
+    swap_speed: List[int] = [100],
+    settling_time: List[int] = [5],
+    homogenization_volume: List[int] = [0],
+    homogenization_cycles: List[int] = [0],
+    homogenization_position_from_liquid_surface: List[int] = [250],
+    homogenization_speed: List[int] = [500],
+    homogenization_surface_following_distance: List[int] = [0],
+    limit_curve_index: List[int] = [0],
     tadm_algorithm: bool = False,
     recording_mode: int = 0,
 
     # For second section aspiration only
-    use_2nd_section_aspiration: typing.List[bool] = [False],
-    retract_height_over_2nd_section_to_empty_tip: typing.List[int] = [60],
-    dispensation_speed_during_emptying_tip: typing.List[int] = [468],
-    dosing_drive_speed_during_2nd_section_search: typing.List[int] = [468],
-    z_drive_speed_during_2nd_section_search: typing.List[int] = [215],
-    cup_upper_edge: typing.List[int] = [3600],
-    ratio_liquid_rise_to_tip_deep_in: typing.List[int] = [16246],
-    immersion_depth_2nd_section: typing.List[int] = [30]
+    use_2nd_section_aspiration: List[bool] = [False],
+    retract_height_over_2nd_section_to_empty_tip: List[int] = [60],
+    dispensation_speed_during_emptying_tip: List[int] = [468],
+    dosing_drive_speed_during_2nd_section_search: List[int] = [468],
+    z_drive_speed_during_2nd_section_search: List[int] = [215],
+    cup_upper_edge: List[int] = [3600],
+    ratio_liquid_rise_to_tip_deep_in: List[int] = [16246],
+    immersion_depth_2nd_section: List[int] = [30]
   ):
     """ aspirate pip
 
@@ -2353,40 +2395,40 @@ class STAR(HamiltonLiquidHandler):
 
   def dispense_pip(
     self,
-    dispensing_mode: typing.List[int] = [0],
-    tip_pattern: typing.List[bool] = True,
-    x_positions: typing.List[int] = [0],
-    y_positions: typing.List[int] = [0],
-    minimum_height: typing.List[int] = [3600],
-    lld_search_height: typing.List[int] = [0],
-    liquid_surface_no_lld: typing.List[int] = [3600],
-    pull_out_distance_transport_air: typing.List[int] = [50],
-    immersion_depth: typing.List[int] = [0],
-    immersion_depth_direction: typing.List[int] = [0],
-    surface_following_distance: typing.List[int] = [0],
-    second_section_height: typing.List[int] = [0],
-    second_section_ratio: typing.List[int] = [0],
+    tip_pattern: List[bool],
+    dispensing_mode: List[int] = [0],
+    x_positions: List[int] = [0],
+    y_positions: List[int] = [0],
+    minimum_height: List[int] = [3600],
+    lld_search_height: List[int] = [0],
+    liquid_surface_no_lld: List[int] = [3600],
+    pull_out_distance_transport_air: List[int] = [50],
+    immersion_depth: List[int] = [0],
+    immersion_depth_direction: List[int] = [0],
+    surface_following_distance: List[int] = [0],
+    second_section_height: List[int] = [0],
+    second_section_ratio: List[int] = [0],
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
     min_z_endpos: int = 3600, #
-    dispense_volumes: typing.List[int] = [0],
-    dispense_speed: typing.List[int] = [500],
-    cut_off_speed: typing.List[int] = [250],
-    stop_back_volume: typing.List[int] = [0],
-    transport_air_volume: typing.List[int] = [0],
-    blow_out_air_volume: typing.List[int] = [200],
-    lld_mode: typing.List[int] = [1],
+    dispense_volumes: List[int] = [0],
+    dispense_speed: List[int] = [500],
+    cut_off_speed: List[int] = [250],
+    stop_back_volume: List[int] = [0],
+    transport_air_volume: List[int] = [0],
+    blow_out_air_volume: List[int] = [200],
+    lld_mode: List[int] = [1],
     side_touch_off_distance: int = 1,
-    dispense_position_above_z_touch_off: typing.List[int] = [5],
-    gamma_lld_sensitivity: typing.List[int] = [1],
-    dp_lld_sensitivity: typing.List[int] = [1],
-    swap_speed: typing.List[int] = [100],
-    settling_time: typing.List[int] = [5],
-    mix_volume: typing.List[int] = [0],
-    mix_cycles: typing.List[int] = [0],
-    mix_position_from_liquid_surface: typing.List[int] = [250],
-    mix_speed: typing.List[int] = [500],
-    mix_surface_following_distance: typing.List[int] = [0],
-    limit_curve_index: typing.List[int] = [0],
+    dispense_position_above_z_touch_off: List[int] = [5],
+    gamma_lld_sensitivity: List[int] = [1],
+    dp_lld_sensitivity: List[int] = [1],
+    swap_speed: List[int] = [100],
+    settling_time: List[int] = [5],
+    mix_volume: List[int] = [0],
+    mix_cycles: List[int] = [0],
+    mix_position_from_liquid_surface: List[int] = [250],
+    mix_speed: List[int] = [500],
+    mix_surface_following_distance: List[int] = [0],
+    limit_curve_index: List[int] = [0],
     tadm_algorithm: bool = False,
     recording_mode: int = 0
   ):
@@ -2934,10 +2976,10 @@ class STAR(HamiltonLiquidHandler):
 
   def pick_up_tips_core96(
     self,
-    x_position: int = 0,
-    x_direction: int = 0,
-    y_position: int = 5600,
-    tip_type: FirmwareTipType = FirmwareTipType.STANDARD_VOLUME,
+    x_position: int,
+    x_direction: int,
+    y_position: int,
+    tip_type_idx: int,
     tip_pick_up_method: int = 2,
     z_deposit_position: int = 3425,
     minimum_traverse_height_at_beginning_of_a_command: int = 3425,
@@ -2949,7 +2991,7 @@ class STAR(HamiltonLiquidHandler):
       x_position: x position [0.1mm]. Must be between 0 and 30000. Default 0.
       x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
       y_position: y position [0.1mm]. Must be between 1080 and 5600. Default 5600.
-      tip_type: Tip type.
+      tip_size: Tip type.
       tip_pick_up_method: Tip pick up method. 0 = pick up from rack. 1 = pick up from C0Re 96 tip
                           wash station. 2 = pick up with " full volume blow out"
       z_deposit_position: Z- deposit position [0.1mm] (collar bearing position) Must bet between
@@ -2974,7 +3016,7 @@ class STAR(HamiltonLiquidHandler):
       xs=f"{x_position:05}",
       xd=x_direction,
       yh=f"{y_position:04}",
-      tt=f"{tip_type:02}",
+      tt=f"{tip_type_idx:02}",
       wu=tip_pick_up_method,
       za=f"{z_deposit_position:04}",
       zh=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
@@ -2983,9 +3025,9 @@ class STAR(HamiltonLiquidHandler):
 
   def discard_tips_core96(
     self,
-    x_position: int = 0,
-    x_direction: int = 0,
-    y_position: int = 5600,
+    x_position: int,
+    x_direction: int,
+    y_position: int,
     z_deposit_position: int = 3425,
     minimum_traverse_height_at_beginning_of_a_command: int = 3425,
     minimum_height_command_end: int = 3425
@@ -3059,7 +3101,7 @@ class STAR(HamiltonLiquidHandler):
     homogenization_position_from_liquid_surface: int = 250,
     surface_following_distance_during_homogenization: int = 0,
     speed_of_homogenization: int = 1000,
-    channel_pattern: typing.List[bool] = [True] * 96,
+    channel_pattern: List[bool] = [True] * 96,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
     recording_mode: int = 0
@@ -3163,8 +3205,8 @@ class STAR(HamiltonLiquidHandler):
 
     # Convert bool list to hex string
     assert len(channel_pattern) == 96, "channel_pattern must be a list of 96 boolean values"
-    channel_pattern = ["1" if x else "0" for x in channel_pattern]
-    channel_pattern = hex(int("".join(channel_pattern), 2)).upper()[2:]
+    channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
+    channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
     return self.send_command(
       module="C0",
@@ -3199,7 +3241,7 @@ class STAR(HamiltonLiquidHandler):
       hp=f"{homogenization_position_from_liquid_surface:03}",
       mj=f"{surface_following_distance_during_homogenization:03}",
       hs=f"{speed_of_homogenization:04}",
-      cw=channel_pattern,
+      cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
       cx=recording_mode,
@@ -3238,7 +3280,7 @@ class STAR(HamiltonLiquidHandler):
     mixing_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mixing: int = 0,
     speed_of_mixing: int = 1000,
-    channel_pattern: typing.List[bool] = [[True]*12]*8,
+    channel_pattern: List[List[bool]] = [[True]*12]*8,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
     recording_mode: int = 0
@@ -3345,8 +3387,8 @@ class STAR(HamiltonLiquidHandler):
 
     # Convert bool list to hex string
     assert len(channel_pattern) == 96, "channel_pattern must be a list of 96 boolean values"
-    channel_pattern = ["1" if x else "0" for x in channel_pattern]
-    channel_pattern = hex(int("".join(channel_pattern), 2)).upper()[2:]
+    channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
+    channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
     return self.send_command(
       module="C0",
@@ -3383,7 +3425,7 @@ class STAR(HamiltonLiquidHandler):
       hp=f"{mixing_position_from_liquid_surface:03}",
       mj=f"{surface_following_distance_during_mixing:03}",
       hs=f"{speed_of_mixing:04}",
-      cw=channel_pattern,
+      cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
       cx=recording_mode,
@@ -3585,8 +3627,8 @@ class STAR(HamiltonLiquidHandler):
 
   def set_loading_indicators(
     self,
-    bit_pattern: typing.List[bool],
-    blink_pattern: typing.List[bool]
+    bit_pattern: List[bool],
+    blink_pattern: List[bool]
   ):
     """ Set loading indicators (LEDs)
 
@@ -3600,14 +3642,14 @@ class STAR(HamiltonLiquidHandler):
     assert len(bit_pattern) == 54, "bit pattern must be length 54"
     assert len(blink_pattern) == 54, "bit pattern must be length 54"
 
-    bit_pattern   = hex(int("".join(["1" if x else "0" for x in bit_pattern]), base=2))
-    blink_pattern = hex(int("".join(["1" if x else "0" for x in blink_pattern]), base=2))
+    bit_pattern_hex   = hex(int("".join(["1" if x else "0" for x in bit_pattern]), base=2))
+    blink_pattern_hex = hex(int("".join(["1" if x else "0" for x in blink_pattern]), base=2))
 
     resp = self.send_command(
       module="C0",
       command="CP",
-      cl=bit_pattern,
-      cb=blink_pattern
+      cl=bit_pattern_hex,
+      cb=blink_pattern_hex
     )
     return self.parse_response(resp, "")
 
@@ -3643,12 +3685,12 @@ class STAR(HamiltonLiquidHandler):
       bt += "1" if t else "0"
 
     # Convert bit pattern to hex.
-    bt = hex(int(bt), base=2)
+    bt_hex = hex(int(bt, base=2))
 
     resp = self.send_command(
       module="C0",
       command="CB",
-      bt=bt
+      bt=bt_hex
     )
     return self.parse_response(resp, "")
 
@@ -4442,4 +4484,4 @@ class STAR(HamiltonLiquidHandler):
     """
 
     resp = self.send_command(module="R0", command="QW", fmt="qw#")
-    return resp["qw"] == 1
+    return cast(int, resp["qw"]) == 1

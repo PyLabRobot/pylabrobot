@@ -1,8 +1,10 @@
+# type: ignore
+
 """ VENUS backend runs through the VENUS program (Windows only) """
 
 import logging
 import re
-import typing
+from typing import List
 
 try:
   from pyhamilton.deckresource import (
@@ -23,12 +25,15 @@ try:
 except (ImportError, ModuleNotFoundError):
   USE_VENUS = False
 
-from pylabrobot.utils.positions import string_to_position
-
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
-from pylabrobot.liquid_handling.resources.abstract import Resource
-from pylabrobot.liquid_handling.liquid_handler import AspirationInfo, DispenseInfo
+from pylabrobot.liquid_handling.resources.abstract import Resource, TipRack
 import pylabrobot.utils.file_parsing as file_parser
+from pylabrobot.liquid_handling.standard import (
+  Pickup,
+  Discard,
+  Aspiration,
+  Dispense,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -54,7 +59,7 @@ class VENUS(LiquidHandlerBackend):
     self.layout_file = layout_file
     self.lmgr = LayoutManager(layout_file)
 
-    self._venus_resources = {}
+    self._venus_resources: dict[str, ResourceType] = {}
 
   def setup(self):
     if not USE_VENUS:
@@ -68,7 +73,7 @@ class VENUS(LiquidHandlerBackend):
     self.ham_int.start()
     self.ham_int.wait_on_response(self.ham_int.send_command(INITIALIZE))
 
-  def _load_resources_from_layfile(self) -> typing.List[Resource]:
+  def _load_resources_from_layfile(self) -> List[Resource]:
     """ Loads the resources from the given layfile.  """
 
     with open(self.layout_file, "r", encoding="ISO-8859-1") as f:
@@ -121,33 +126,21 @@ class VENUS(LiquidHandlerBackend):
   def unassigned_resource_callback(self, name: str):
     raise RuntimeError("VENUS backend does not support assigning resources.")
 
-  def _get_venus_resource(self, resource: typing.Union[str, Resource]) -> DeckResource:
-    name = resource if isinstance(resource, str) else resource.name
-    return self._venus_resources[name]
+  def _get_venus_resource(self, resource: Resource) -> DeckResource:
+    return self._venus_resources[resource.name]
 
-  def pickup_tips(
-    self,
-    resource: typing.Union[Resource, str],
-    channel_1: typing.Optional[str] = None,
-    channel_2: typing.Optional[str] = None,
-    channel_3: typing.Optional[str] = None,
-    channel_4: typing.Optional[str] = None,
-    channel_5: typing.Optional[str] = None,
-    channel_6: typing.Optional[str] = None,
-    channel_7: typing.Optional[str] = None,
-    channel_8: typing.Optional[str] = None,
-    **backend_kwargs
-  ):
+  def pick_up_tips(self, *channels: Pickup, **backend_kwargs):
     """ Pick up tips from the specified resource. """
 
-    venus_resource = self._get_venus_resource(resource)
     pos_tuples = []
     last_column = None
 
-    for channel in [channel_1, channel_2, channel_3, channel_4,
-                    channel_5, channel_6, channel_7, channel_8]:
+    for channel in channels:
       if channel is not None:
-        column = string_to_position(channel_1)[1]
+        venus_resource = self._get_venus_resource(channel.resource)
+        tip_rack = channel.resource.parent
+        resource_idx = tip_rack.index_of_item(channel.resource)
+        column = resource_idx // tip_rack.num_items_y
         if last_column and column < last_column:
           raise ValueError("With this backend, tips must be picked up in ascending column order.")
         pos_tuples.append((venus_resource, column))
@@ -156,94 +149,64 @@ class VENUS(LiquidHandlerBackend):
 
     venus_utils.tip_pick_up(self.ham_int, pos_tuples, **backend_kwargs)
 
-  def discard_tips(
-    self,
-    resource: typing.Union[Resource, str],
-    channel_1: typing.Optional[str] = None,
-    channel_2: typing.Optional[str] = None,
-    channel_3: typing.Optional[str] = None,
-    channel_4: typing.Optional[str] = None,
-    channel_5: typing.Optional[str] = None,
-    channel_6: typing.Optional[str] = None,
-    channel_7: typing.Optional[str] = None,
-    channel_8: typing.Optional[str] = None,
-    **backend_kwargs
-  ):
+  def discard_tips(self, *channels: Discard, **backend_kwargs):
     """ Discard tips from the specified resource. """
-    venus_resource = self._get_venus_resource(resource)
     pos_tuples = []
     last_column = None
 
-    for channel in [channel_1, channel_2, channel_3, channel_4,
-                    channel_5, channel_6, channel_7, channel_8]:
+    for channel in channels:
       if channel is not None:
-        column = string_to_position(channel_1)[1]
+        venus_resource = self._get_venus_resource(channel.resource)
+        tip_rack = channel.resource.parent
+        resource_idx = tip_rack.index_of_item(channel.resource)
+        column = resource_idx // tip_rack.num_items_y
         if last_column and column < last_column:
-          raise ValueError("With this backend, tips must be picked up in ascending column order.")
+          raise ValueError("With this backend, tips must be discarded in ascending column order.")
         pos_tuples.append((venus_resource, column))
       else:
         pos_tuples.append(None)
 
     venus_utils.tip_eject(self.ham_int, pos_tuples, **backend_kwargs)
 
-  def aspirate(
-    self,
-    resource: typing.Union[Resource, str],
-    channel_1: typing.Optional[AspirationInfo] = None,
-    channel_2: typing.Optional[AspirationInfo] = None,
-    channel_3: typing.Optional[AspirationInfo] = None,
-    channel_4: typing.Optional[AspirationInfo] = None,
-    channel_5: typing.Optional[AspirationInfo] = None,
-    channel_6: typing.Optional[AspirationInfo] = None,
-    channel_7: typing.Optional[AspirationInfo] = None,
-    channel_8: typing.Optional[AspirationInfo] = None,
-    liquid_height: typing.Optional[float] = None,
-    **backend_kwargs
-  ):
+  def aspirate(self, *channels: Aspiration, **backend_kwargs):
     """ Aspirate liquid from the specified resource using pip. """
-    venus_resource = self._get_venus_resource(resource)
     pos_tuples = []
     volumes = []
     last_column = None
 
-    for channel in [channel_1, channel_2, channel_3, channel_4,
-                    channel_5, channel_6, channel_7, channel_8]:
+    for channel in channels:
       if channel is not None:
-        column = string_to_position(channel_1.position)[1]
+        venus_resource = self._get_venus_resource(channel.resource)
+        tip_rack = channel.resource.parent
+        resource_idx = tip_rack.index_of_item(channel.resource)
+        column = resource_idx // tip_rack.num_items_y
         if last_column and column < last_column:
-          raise ValueError("With this backend, tips must be picked up in ascending column order.")
+          raise ValueError("With this backend, aspirations must be in ascending column order.")
         pos_tuples.append((venus_resource, column))
         volumes.append(channel.volume)
       else:
         pos_tuples.append(None)
         volumes.append(None)
 
+    # get first non-None channel
+    channel = next(c for c in channels if c is not None)
+    liquid_height = channel.offset.z # can only get one in this backend
+
     venus_utils.aspirate(self.ham_int, pos_tuples, volumes, liquidHeight=liquid_height,
       **backend_kwargs)
 
-  def dispense(
-    self,
-    resource: typing.Union[Resource, str],
-    channel_1: typing.Optional[DispenseInfo] = None,
-    channel_2: typing.Optional[DispenseInfo] = None,
-    channel_3: typing.Optional[DispenseInfo] = None,
-    channel_4: typing.Optional[DispenseInfo] = None,
-    channel_5: typing.Optional[DispenseInfo] = None,
-    channel_6: typing.Optional[DispenseInfo] = None,
-    channel_7: typing.Optional[DispenseInfo] = None,
-    channel_8: typing.Optional[DispenseInfo] = None,
-    **backend_kwargs
-  ):
+  def dispense(self, *channels: Dispense, **backend_kwargs):
     """ Dispense liquid from the specified resource using pip. """
-    venus_resource = self._get_venus_resource(resource)
     pos_tuples = []
     volumes = []
     last_column = None
 
-    for channel in [channel_1, channel_2, channel_3, channel_4,
-                    channel_5, channel_6, channel_7, channel_8]:
+    for channel in channels:
       if channel is not None:
-        column = string_to_position(channel_1.position)[1]
+        venus_resource = self._get_venus_resource(channel.resource)
+        tip_rack = channel.resource.parent
+        resource_idx = tip_rack.index_of_item(channel.resource)
+        column = resource_idx // tip_rack.num_items_y
         if last_column and column < last_column:
           raise ValueError("With this backend, tips must be picked up in ascending column order.")
         pos_tuples.append((venus_resource, column))
@@ -254,24 +217,24 @@ class VENUS(LiquidHandlerBackend):
 
     venus_utils.dispense(self.ham_int, pos_tuples, volumes, **backend_kwargs)
 
-  def pickup_tips96(self, tip_rack, **backend_kwargs):
+  def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
     """ Pick up tips from the specified resource using CoRe 96. """
     venus_resource = self._get_venus_resource(tip_rack)
     venus_utils.tip_pick_up_96(self.ham_int, venus_resource, **backend_kwargs)
 
-  def discard_tips96(self, tip_rack, **backend_kwargs):
+  def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
     """ Discard tips to the specified resource using CoRe 96. """
     venus_resource = self._get_venus_resource(tip_rack)
     venus_utils.tip_eject_96(self.ham_int, venus_resource, **backend_kwargs)
 
-  def aspirate96(self, plate, volume, flow_rate, **backend_kwargs):
+  def aspirate96(self, aspiration: Aspiration, **backend_kwargs):
     """ Aspirate liquid from the specified resource using CoRe 96. """
-    venus_resource = self._get_venus_resource(plate)
-    venus_utils.aspirate_96(self.ham_int, venus_resource, volume,
-      aspiration_speed=flow_rate, **backend_kwargs)
+    venus_resource = self._get_venus_resource(aspiration.resource)
+    venus_utils.aspirate_96(self.ham_int, venus_resource, aspiration.volume,
+      aspiration_speed=aspiration.flow_rate, **backend_kwargs)
 
-  def dispense96(self, plate, volume, flow_rate, **backend_kwargs):
+  def dispense96(self, dispense: Dispense, **backend_kwargs):
     """ Dispense liquid to the specified resource using CoRe 96. """
-    venus_resource = self._get_venus_resource(plate)
-    venus_utils.dispense_96(self.ham_int, venus_resource, volume,
-      dispense_speed=flow_rate, **backend_kwargs)
+    venus_resource = self._get_venus_resource(dispense.resource)
+    venus_utils.dispense_96(self.ham_int, venus_resource, dispense.volume,
+      dispense_speed=dispense.flow_rate, **backend_kwargs)

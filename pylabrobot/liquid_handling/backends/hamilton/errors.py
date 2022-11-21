@@ -1,7 +1,7 @@
 """ Hamilton backend errors """
 
 from abc import ABCMeta
-import typing
+from typing import Optional, Type
 
 
 class HamiltonModuleError(Exception, metaclass=ABCMeta):
@@ -10,8 +10,8 @@ class HamiltonModuleError(Exception, metaclass=ABCMeta):
   def __init__(
     self,
     message: str,
-    raw_response: typing.Optional[str] = None,
-    raw_module: typing.Optional[str] = None
+    raw_response: Optional[str] = None,
+    raw_module: Optional[str] = None
   ):
     super().__init__(message)
     self.message = message
@@ -611,7 +611,7 @@ def _module_id_to_module_name(id_):
   }[id_]
 
 
-def error_code_to_exception(code: int) -> HamiltonModuleError:
+def error_code_to_exception(code: int) -> Type[HamiltonModuleError]:
   """ Convert an error code to an exception. """
   codes = {
     1: CommandSyntaxError,

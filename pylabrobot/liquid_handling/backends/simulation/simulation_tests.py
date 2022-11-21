@@ -1,12 +1,12 @@
 """ Tests for the simulation backend. """
 
 import json
-import time
 import unittest
 
 import pytest
 import requests
 import websockets
+import websockets.client
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import SerializingSavingBackend, SimulatorBackend
@@ -28,17 +28,16 @@ class SimulatorBackendSetupStopTests(unittest.TestCase):
     """ Test that the thread is started and stopped correctly. """
 
     backend = SimulatorBackend(open_browser=False)
-    backend.setup()
-    time.sleep(2)
-    self.assertIsNotNone(backend.loop)
-    backend.stop()
-    self.assertIsNone(backend.websocket)
 
-    backend.setup()
-    time.sleep(2)
-    self.assertIsNotNone(backend.loop)
-    backend.stop()
-    self.assertIsNone(backend.websocket)
+    def setup_stop_single():
+      backend.setup()
+      self.assertIsNotNone(backend.loop)
+      backend.stop()
+      self.assertFalse(backend.has_connection())
+
+    # setup and stop twice to ensure that everything is recycled correctly
+    setup_stop_single()
+    setup_stop_single()
 
 
 class SimulatorBackendServerTests(unittest.TestCase):
@@ -55,7 +54,7 @@ class SimulatorBackendServerTests(unittest.TestCase):
   async def asyncSetUp(self):
     ws_port = self.backend.ws_port # port may change if port is already in use
     self.uri = f"ws://localhost:{ws_port}"
-    self.client = await websockets.connect(self.uri)
+    self.client = await websockets.client.connect(self.uri)
 
   def tearDown(self):
     super().tearDown()
@@ -91,7 +90,7 @@ class SimulatorBackendServerTests(unittest.TestCase):
     self.assertEqual(data["event"], "test")
 
 
-class SimulatorBackendEventCatcher(SerializingSavingBackend, SimulatorBackend):
+class SimulatorBackendEventCatcher(SerializingSavingBackend, SimulatorBackend): # type: ignore
   """ Catches events that would be sent over the websocket for easy testing.
 
   This class inherits from SimulatorBackend to get the same functionality as the
@@ -106,41 +105,41 @@ class SimulatorBackendCommandTests(unittest.TestCase):
     super().setUp()
 
     self.backend = SimulatorBackendEventCatcher(open_browser=False)
-    self.lh = LiquidHandler(backend=self.backend, deck=STARLetDeck())
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.lh.setup()
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
-    self.tip_car[0] = self.tips = STF_L(name="tip_rack_01")
-    self.lh.deck.assign_child_resource(self.tip_car, rails=1)
+    self.tip_car[0] = self.tip_rack = STF_L(name="tip_rack_01")
+    self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=True)
-    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
-    self.lh.deck.assign_child_resource(self.plt_car, rails=9)
+    self.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.maxDiff = None
 
     self.backend.clear()
 
   def test_adjust_volume(self):
-    self.backend.adjust_well_volume(self.plt_car[0].resource, [[100]*12]*8)
-    self.assertEqual(len(self.lh.backend.sent_commands), 1)
-    self.assertEqual(self.lh.backend.sent_commands[0]["command"], "adjust_well_volume")
+    self.backend.adjust_well_volume(self.plate, [[100]*12]*8)
+    self.assertEqual(len(self.backend.sent_commands), 1)
+    self.assertEqual(self.backend.sent_commands[0]["command"], "adjust_well_volume")
 
   def test_edit_tips(self):
-    self.backend.edit_tips(self.tip_car[0].resource, [[True]*12]*8)
-    self.assertEqual(len(self.lh.backend.sent_commands), 1)
-    self.assertEqual(self.lh.backend.sent_commands[0]["command"], "edit_tips")
+    self.backend.edit_tips(self.tip_rack, [[True]*12]*8)
+    self.assertEqual(len(self.backend.sent_commands), 1)
+    self.assertEqual(self.backend.sent_commands[0]["command"], "edit_tips")
 
   def test_fill_tip_rack(self):
-    self.backend.fill_tip_rack(self.tip_car[0].resource)
-    self.assertEqual(len(self.lh.backend.sent_commands), 1)
-    self.assertEqual(self.lh.backend.sent_commands[0]["command"], "edit_tips")
+    self.backend.fill_tip_rack(self.tip_rack)
+    self.assertEqual(len(self.backend.sent_commands), 1)
+    self.assertEqual(self.backend.sent_commands[0]["command"], "edit_tips")
 
   def test_clear_tips(self):
-    self.backend.clear_tips(self.tip_car[0].resource)
-    self.assertEqual(len(self.lh.backend.sent_commands), 1)
-    self.assertEqual(self.lh.backend.sent_commands[0]["command"], "edit_tips")
+    self.backend.fill_tip_rack(self.tip_rack)
+    self.assertEqual(len(self.backend.sent_commands), 1)
+    self.assertEqual(self.backend.sent_commands[0]["command"], "edit_tips")
 
 
 if __name__ == "__main__":

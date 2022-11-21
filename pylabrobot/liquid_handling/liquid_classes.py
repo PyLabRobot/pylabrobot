@@ -2,7 +2,7 @@
 such as correction curves for volumes, preferred tip types, air transport volumes, etc. """
 
 import enum
-import typing
+from typing import List, Dict, Tuple
 
 __all__ = [
  "HighVolumeFilter_Water_DispenseJet_Empty_with_transport_vol",
@@ -49,36 +49,27 @@ class TipType(enum.Enum):
   TIP_5mL = 25
 
 
-class CorrectionCurvePoint:
-  """ TypedDict for points on a correction curve.
-
-  See `LiquidClass` and `compute_corrected_volume`. """
-
-  target: float
-  correct: float
-
-
 class LiquidClass:
   """ Liquid classes are a collection of parameters for liquid handling operations. """
 
   def __init__(
     self,
-    device: typing.List[LiquidDevice],
+    device: List[LiquidDevice],
     tip_type: TipType,
     dispense_mode: int,
     pressure_lld: int,
     max_height_difference: int,
-    flow_rate: typing.Tuple[int, int],
-    mix_flow_rate: typing.Tuple[int, int],
-    air_transport_volume: typing.Tuple[int, int],
-    blowout_volume: typing.Tuple[int, int],
-    swap_speed: typing.Tuple[int, int],
-    settling_time: typing.Tuple[int, int],
+    flow_rate: Tuple[int, int],
+    mix_flow_rate: Tuple[int, int],
+    air_transport_volume: Tuple[int, int],
+    blowout_volume: Tuple[int, int],
+    swap_speed: Tuple[int, int],
+    settling_time: Tuple[int, int],
     over_aspirate_volume: int,
     clot_retract_height: int,
     stop_flow_rate: int,
     stop_back_volume: int,
-    correction_curve: CorrectionCurvePoint
+    correction_curve: Dict[float, float],
   ):
     """ Initialize a new liquid class.
 
@@ -103,7 +94,7 @@ class LiquidClass:
       stop_back_volume: ul, dispense only
       correction_curve: series of data points matching target values (keys) to
         corrected values (values), which are actually used for dispensation/aspiration commands. If
-        length > 0, (0, 0) will automatically be added (possibly overriding).
+        length > 0, (0, 0) will automatically be added (possibly overriding the current value for 0)
     """
 
     self.device = device
@@ -122,7 +113,7 @@ class LiquidClass:
     self.stop_flow_rate = stop_flow_rate
     self.stop_back_volume = stop_back_volume
     self.correction_curve = correction_curve
-    if len(correction_curve):
+    if len(correction_curve) > 0:
       self.correction_curve.update({0: 0})
 
   def compute_corrected_volume(self, target_volume: float) -> float:
@@ -161,6 +152,8 @@ class LiquidClass:
       if pt < target_volume < t:
         return (self.correction_curve[t]-self.correction_curve[pt])/(t-pt) * \
                (target_volume - t) + self.correction_curve[t] # (y = slope * (x-x1) + y1)
+
+    assert False, "Should never reach this point. Please file an issue."
 
   @property
   def aspirate_kwargs(self):

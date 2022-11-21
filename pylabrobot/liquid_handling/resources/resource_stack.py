@@ -55,7 +55,7 @@ class ResourceStack(Resource):
     self.direction = direction
     resources = resources or []
     if direction == "z": # top to bottom
-      resources = reversed(resources)
+      resources = list(reversed(resources))
     for resource in resources:
       self.assign_child_resource(resource)
 
@@ -80,8 +80,7 @@ class ResourceStack(Resource):
     if len(self.children) == 0:
       return 0
     if self.direction == "z":
-      return sum(child.get_size_z() for child in self.children) - \
-              sum(child.stack_height for child in self.children if hasattr(child, "stack_height"))
+      return sum(child.get_size_z() for child in self.children)
     return max(child.get_size_z() for child in self.children)
 
   def assign_child_resource(self, resource):
@@ -100,13 +99,20 @@ class ResourceStack(Resource):
       raise ValueError("Resource is not the top item in this z-growing stack, cannot unassign")
     return super().unassign_child_resource(resource)
 
-  def get_top_item(self) -> Optional[Resource]:
+  def get_top_item(self) -> Resource:
     """ Get the top item in the stack.
 
     For stacks growing in the x, y or z direction, this is the rightmost, frontmost, or topmost
     item in the stack, respectively.
+
+    Returns:
+      The top item in the stack.
+
+    Raises:
+      ValueError: If the stack is empty.
     """
 
-    if len(self.children) > 0:
-      return self.children[-1]
-    return None
+    if len(self.children) == 0:
+      raise ValueError("Stack is empty")
+
+    return self.children[-1]

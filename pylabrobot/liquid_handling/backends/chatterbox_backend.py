@@ -1,7 +1,5 @@
 # pylint: disable=unused-argument
 
-from typing import Optional
-
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
@@ -36,16 +34,16 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def unassigned_resource_callback(self, name: str):
     print(f"Resource {name} was unassigned from the robot.")
 
-  def pick_up_tips(self, *channels: Optional[Pickup], **backend_kwargs):
+  def pick_up_tips(self, *channels: Pickup, **backend_kwargs):
     print(f"Picking up tips {channels}.")
 
-  def discard_tips(self, *channels: Optional[Discard], **backend_kwargs):
+  def discard_tips(self, *channels: Discard, **backend_kwargs):
     print(f"Discarding tips {channels}.")
 
-  def aspirate(self, *channels: Optional[Aspiration], **backend_kwargs):
+  def aspirate(self, *channels: Aspiration, **backend_kwargs):
     print(f"Aspirating {channels}.")
 
-  def dispense(self, *channels: Optional[Dispense], **backend_kwargs):
+  def dispense(self, *channels: Dispense, **backend_kwargs):
     print(f"Dispensing {channels}.")
 
   def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):

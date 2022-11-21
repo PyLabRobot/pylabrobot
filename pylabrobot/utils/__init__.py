@@ -5,6 +5,7 @@ from .list import (
 from .numbers import (
   assert_clamp
 )
+from .optionals import force_unwrap
 from .positions import (
   string_to_position,
   string_to_index,

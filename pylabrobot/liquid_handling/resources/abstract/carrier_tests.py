@@ -10,7 +10,7 @@ from .coordinate import Coordinate
 from .deck import Deck
 from .resource import Resource
 from .tip_rack import TipRack, Tip
-from .tip_type import TipType, TIP_TYPE_STANDARD_VOLUME
+from .tip_type import TipPickupMethod, TipType, TipSize
 
 
 class CarrierTests(unittest.TestCase):
@@ -19,8 +19,8 @@ class CarrierTests(unittest.TestCase):
       has_filter=False,
       total_tip_length=100,
       maximal_volume=400,
-      tip_type_id=TIP_TYPE_STANDARD_VOLUME,
-      pick_up_method=0
+      tip_size=TipSize.STANDARD_VOLUME,
+      pick_up_method=TipPickupMethod.OUT_OF_RACK
     )
 
     self.A = TipRack( # pylint: disable=invalid-name
@@ -67,9 +67,10 @@ class CarrierTests(unittest.TestCase):
       sites=[Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10
     )
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
-    carrier.assign_child_resource(plate, spot=0)
+    carrier.assign_resource_to_site(plate, spot=0)
 
     self.assertEqual(carrier.get_resource("plate"), plate)
+    assert plate.parent is not None
     self.assertEqual(plate.parent, carrier[0])
     self.assertEqual(plate.parent.parent, carrier)
     self.assertEqual(carrier.parent, None)
@@ -81,7 +82,7 @@ class CarrierTests(unittest.TestCase):
       sites=[Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10
     )
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
-    carrier.assign_child_resource(plate, spot=0)
+    carrier.assign_resource_to_site(plate, spot=0)
 
     deck = Deck()
     deck.assign_child_resource(carrier, location=Coordinate.zero())
@@ -97,14 +98,16 @@ class CarrierTests(unittest.TestCase):
       sites=[Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10
     )
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
-    carrier.assign_child_resource(plate, spot=0)
+    carrier.assign_resource_to_site(plate, spot=0)
     carrier.unassign_child_resource(plate)
     deck = Deck()
     deck.assign_child_resource(carrier, location=Coordinate.zero())
 
     self.assertIsNone(plate.parent)
-    self.assertIsNone(carrier.get_resource("plate"))
-    self.assertIsNone(deck.get_resource("plate"))
+    with self.assertRaises(ValueError):
+      carrier.get_resource("plate")
+    with self.assertRaises(ValueError):
+      deck.get_resource("plate")
 
   def test_assign_index_error(self):
     carrier = Carrier(
@@ -114,7 +117,7 @@ class CarrierTests(unittest.TestCase):
     )
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     with self.assertRaises(IndexError):
-      carrier.assign_child_resource(plate, spot=3)
+      carrier.assign_resource_to_site(plate, spot=3)
 
   def test_absolute_location(self):
     carrier = Carrier(
@@ -124,7 +127,7 @@ class CarrierTests(unittest.TestCase):
     )
     carrier.location = Coordinate(10, 10, 10)
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
-    carrier.assign_child_resource(plate, spot=0)
+    carrier.assign_resource_to_site(plate, spot=0)
 
     self.assertEqual(carrier.get_resource("plate").get_absolute_location(), Coordinate(15, 15, 15))
 
@@ -139,7 +142,9 @@ class CarrierTests(unittest.TestCase):
     self.tip_car[0] = self.A
     self.tip_car[1] = self.B
 
+    assert self.tip_car[0].resource is not None
     self.assertEqual(self.tip_car[0].resource.name, "A")
+    assert self.tip_car[1].resource is not None
     self.assertEqual(self.tip_car[1].resource.name, "B")
     self.assertIsNone(self.tip_car[2].resource)
     self.assertIsNone(self.tip_car[3].resource)

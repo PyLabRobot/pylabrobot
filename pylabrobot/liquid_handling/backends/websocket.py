@@ -3,10 +3,14 @@ import json
 import logging
 import threading
 import time
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
   import websockets
+  import websockets.exceptions
+  import websockets.legacy
+  import websockets.legacy.server
+  import websockets.server
   HAS_WEBSOCKETS = True
 except ImportError:
   HAS_WEBSOCKETS = False
@@ -38,18 +42,48 @@ class WebSocketBackend(SerializingBackend):
       raise RuntimeError("The simulator requires websockets to be installed.")
 
     super().__init__()
-    self._resources = {}
-    self.websocket = None
+    self._websocket: Optional[websockets.legacy.server.WebSocketServerProtocol] = None
+    self._loop: Optional[asyncio.AbstractEventLoop] = None
+    self._t: Optional[threading.Thread] = None
+    self._stop_: Optional[asyncio.Future] = None
 
     self.ws_host = ws_host
     self.ws_port = ws_port
 
-    self._sent_messages = []
-    self.received = []
+    self._sent_messages: List[str] = []
+    self.received: List[dict] = []
 
     self.stop_event = None
 
     self._id = 0
+
+  @property
+  def websocket(self) -> websockets.legacy.server.WebSocketServerProtocol:
+    """ The websocket connection. """
+    if self._websocket is None:
+      raise ValueError("No websocket connection has been established.")
+    return self._websocket
+
+  @property
+  def loop(self) -> asyncio.AbstractEventLoop:
+    """ The event loop. """
+    if self._loop is None:
+      raise ValueError("Event loop has not been started.")
+    return self._loop
+
+  @property
+  def t(self) -> threading.Thread:
+    """ The thread that runs the event loop. """
+    if self._t is None:
+      raise ValueError("Event loop has not been started.")
+    return self._t
+
+  @property
+  def stop_(self) -> asyncio.Future:
+    """ The future that is set when the simulation is stopped. """
+    if self._stop_ is None:
+      raise ValueError("Event loop has not been started.")
+    return self._stop_
 
   def _generate_id(self):
     """ continuously generate unique ids 0 <= x < 10000. """
@@ -72,14 +106,14 @@ class WebSocketBackend(SerializingBackend):
     if event == "ping":
       await self.websocket.send(json.dumps({"event": "pong"}))
 
-  async def _socket_handler(self, websocket):
+  async def _socket_handler(self, websocket: websockets.legacy.server.WebSocketServerProtocol):
     """ Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`. """
 
     while True:
       try:
         message = await websocket.recv()
-      except websockets.ConnectionClosed:
+      except websockets.exceptions.ConnectionClosed:
         return
       except asyncio.CancelledError:
         return
@@ -89,7 +123,7 @@ class WebSocketBackend(SerializingBackend):
 
       # If the event is "ready", then we can save the connection and send the saved messages.
       if data.get("event") == "ready":
-        self.websocket = websocket
+        self._websocket = websocket
         await self._replay()
 
         # Echo command
@@ -100,7 +134,7 @@ class WebSocketBackend(SerializingBackend):
       else:
         logger.warning("Unhandled message: %s", message)
 
-  def _assemble_command(self, event: str, data) -> str:
+  def _assemble_command(self, event: str, data) -> Tuple[str, str]:
     """ Assemble a command into standard JSON form. """
     id_ = self._generate_id()
     command_data = dict(event=event, id=id_, version=STANDARD_FORM_JSON_VERSION, **data)
@@ -109,7 +143,7 @@ class WebSocketBackend(SerializingBackend):
   def has_connection(self) -> bool:
     """ Return `True` if a websocket connection has been established. """
     # Since the websocket connection is saved in self.websocket, we can just check if it is `None`.
-    return self.websocket is not None
+    return self._websocket is not None
 
   def wait_for_connection(self):
     """ Wait for a websocket connection to be established.
@@ -125,7 +159,7 @@ class WebSocketBackend(SerializingBackend):
   def send_command(
     self,
     command: str,
-    data: dict = None,
+    data: Optional[Dict[str, Any]] = None,
     wait_for_response: bool = True,
   )-> Optional[dict]:
     """ Send an event to the browser.
@@ -148,15 +182,15 @@ class WebSocketBackend(SerializingBackend):
     if data is None:
       data = {}
 
-    data, id_ = self._assemble_command(command, data)
-    self._sent_messages.append(data)
+    serialized_data, id_ = self._assemble_command(command, data)
+    self._sent_messages.append(serialized_data)
 
     # Run and save if the websocket connection has been established, otherwise just save.
     if wait_for_response and not self.has_connection():
       raise ValueError("Cannot wait for response when no websocket connection is established.")
 
     if self.has_connection():
-      asyncio.run_coroutine_threadsafe(self.websocket.send(data), self.loop)
+      asyncio.run_coroutine_threadsafe(self.websocket.send(serialized_data), self.loop)
 
       if wait_for_response:
         while True:
@@ -171,6 +205,8 @@ class WebSocketBackend(SerializingBackend):
           raise ValueError(f"Error during event {command}: " + error)
 
         return message
+
+    return None
 
   async def _replay(self):
     """ Send all sent messages.
@@ -191,10 +227,10 @@ class WebSocketBackend(SerializingBackend):
       raise RuntimeError("The simulator requires websockets to be installed.")
 
     async def run_server():
-      self.stop_ = self.loop.create_future()
+      self._stop_ = self.loop.create_future()
       while True:
         try:
-          async with websockets.serve(self._socket_handler, self.ws_host, self.ws_port):
+          async with websockets.server.serve(self._socket_handler, self.ws_host, self.ws_port):
             print(f"Simulation server started at http://{self.ws_host}:{self.ws_port}")
             lock.release()
             await self.stop_
@@ -211,8 +247,8 @@ class WebSocketBackend(SerializingBackend):
     # Acquire a lock to prevent setup from returning until the server is running.
     lock = threading.Lock()
     lock.acquire() # pylint: disable=consider-using-with
-    self.loop = asyncio.new_event_loop()
-    self.t = threading.Thread(target=start_loop)
+    self._loop = asyncio.new_event_loop()
+    self._t = threading.Thread(target=start_loop)
     self.t.start()
 
     while lock.locked():
@@ -235,7 +271,7 @@ class WebSocketBackend(SerializingBackend):
     # Clear all relevant attributes.
     self._sent_messages.clear()
     self.received.clear()
-    self.websocket = None
-    self.loop = None
-    self.t = None
-    self.stop_ = None
+    self._websocket = None
+    self._loop = None
+    self._t = None
+    self._stop_ = None

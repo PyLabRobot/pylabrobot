@@ -14,9 +14,9 @@ lh = LiquidHandler(backend=SaverBackend(), deck=STARLetDeck())
 
 
 class KWArg(Form):
-  field = StringField('name', validators=[DataRequired()])
-  value = StringField('value', validators=[DataRequired()])
-  type = StringField('type', validators=[DataRequired(), AnyOf(['int', 'float', 'str'])])
+  field = StringField("name", validators=[DataRequired()])
+  value = StringField("value", validators=[DataRequired()])
+  type = StringField("type", validators=[DataRequired(), AnyOf(["int", "float", "str"])])
 
 
 @lh_api.route("/")
@@ -35,7 +35,7 @@ def stop():
   return jsonify({"status": "stopped"})
 
 @lh_api.route("/status", methods=["GET"])
-def status():
+def get_status():
   status = "running" if lh.setup_finished else "stopped"
   return jsonify({"status": status})
 
@@ -43,6 +43,8 @@ def status():
 @lh_api.route("/labware", methods=["POST"])
 def define_labware():
   data = request.get_json()
+  if not isinstance(data, dict):
+    return jsonify({"error": "json data must be a dict"}), 400
   lh.load_from_json(content=data)
   return jsonify({"status": "ok"})
 
@@ -53,6 +55,8 @@ class TipForm(Form):
 @lh_api.route("/pick-up-tips", methods=["POST"])
 def pick_up_tips():
   data = request.get_json()
+  if not isinstance(data, dict):
+    return jsonify({"error": "json data must be a dict"}), 400
   form = TipForm.from_json(data)
 
   if not form.validate():
@@ -72,6 +76,8 @@ def pick_up_tips():
 @lh_api.route("/discard-tips", methods=["POST"])
 def discard_tips():
   data = request.get_json()
+  if not isinstance(data, dict):
+    return jsonify({"error": "json data must be a dict"}), 400
   form = TipForm.from_json(data)
 
   if not form.validate():
@@ -89,8 +95,8 @@ def discard_tips():
   return "OK"
 
 class AspirationSingleChannelForm(Form):
-  well = StringField('well', validators=[DataRequired()])
-  volume = DecimalField('volume', validators=[DataRequired()])
+  well = StringField("well", validators=[DataRequired()])
+  volume = DecimalField("volume", validators=[DataRequired()])
 
 class AspirationForm(Form):
   resource = StringField("resource", validators=[DataRequired()])
@@ -100,6 +106,8 @@ class AspirationForm(Form):
 @lh_api.route("/aspirate", methods=["POST"])
 def aspirate():
   data = request.get_json()
+  if not isinstance(data, dict):
+    return jsonify({"error": "json data must be a dict"}), 400
   form = AspirationForm.from_json(data)
 
   if not form.validate():
@@ -117,8 +125,8 @@ def aspirate():
   return "OK"
 
 class DispenseSingleChannelForm(Form):
-  well = StringField('well', validators=[DataRequired()])
-  volume = DecimalField('volume', validators=[DataRequired()])
+  well = StringField("well", validators=[DataRequired()])
+  volume = DecimalField("volume", validators=[DataRequired()])
 
 class DispenseForm(Form):
   resource = StringField("resource", validators=[DataRequired()])
@@ -128,6 +136,8 @@ class DispenseForm(Form):
 @lh_api.route("/dispense", methods=["POST"])
 def dispense():
   data = request.get_json()
+  if not isinstance(data, dict):
+    return jsonify({"error": "json data must be a dict"}), 400
   form = DispenseForm.from_json(data)
 
   if not form.validate():

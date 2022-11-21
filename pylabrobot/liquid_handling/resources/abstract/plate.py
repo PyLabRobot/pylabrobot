@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Union, List
+from typing import Callable, Optional, Union, List, Sequence
 
 from .resource import Resource, Coordinate
 from .well import Well
@@ -39,10 +39,10 @@ class Plate(ItemizedResource[Well]):
     size_x: float,
     size_y: float,
     size_z: float,
-    items: List[List[Well]] = None,
+    items: Optional[List[List[Well]]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
-    one_dot_max: float = 0,
+    one_dot_max: Optional[float] = 0,
     category: str = "plate",
     lid_height: float = 0,
     with_lid: bool = False,
@@ -120,7 +120,6 @@ class Plate(ItemizedResource[Well]):
 
   @classmethod
   def deserialize(cls, data):
-    # first_well = data["children"][0]
     out = cls(
       name=data["name"],
       size_x=data["size_x"],
@@ -146,7 +145,8 @@ class Plate(ItemizedResource[Well]):
 
     return super().get_item(identifier)
 
-  def get_wells(self, identifier: Union[str, List[int]]) -> List[Well]:
+  def get_wells(self,
+    identifier: Union[str, Sequence[int]]) -> List[Well]:
     """ Get the wells with the given identifier.
 
     See :meth:`~.get_items` for more information.

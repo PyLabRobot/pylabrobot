@@ -16,7 +16,7 @@ class TestListUtils(unittest.TestCase):
     assert_shape([[1, 2], [3, 4]], (2, 2))
 
     with self.assertRaises(ValueError):
-      assert_shape([[1, 2, 3]], (2,))
+      assert_shape([[1, 2, 3]], (2, 1))
     with self.assertRaises(ValueError):
       assert_shape([[1, 2], [3, 4]], (2, 3))
 
