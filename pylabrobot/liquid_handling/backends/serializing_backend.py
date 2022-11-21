@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
-from typing import Any, Dict, Optional, List, TypedDict
+import sys
+from typing import Any, Dict, Optional, List
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import Resource, TipRack
@@ -10,6 +11,11 @@ from pylabrobot.liquid_handling.standard import (
   Dispense,
   Move,
 )
+
+if sys.version_info >= (3, 8):
+  from typing import TypedDict
+else:
+  from typing_extensions import TypedDict
 
 
 class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
