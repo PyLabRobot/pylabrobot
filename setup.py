@@ -17,6 +17,7 @@ extras_fw = [
 
 extras_http = [
     'requests',
+    'types-requests'
 ]
 
 extras_websockets = [
@@ -34,19 +35,19 @@ extras_opentrons = [
     'opentrons-shared-data'
 ]
 
+extras_server = [
+    'flask',
+    'wtforms',
+    'wtforms_json'
+]
+
 extras_testing = [
     'pytest',
     'pytest-timeout',
     'requests',
     'pylint',
     'mypy'
-] + extras_simulation + extras_opentrons
-
-extras_server = [
-    'flask',
-    'wtforms',
-    'wtforms_json'
-]
+] + extras_simulation + extras_opentrons + extras_server
 
 extras_dev = extras_docs + extras_simulation + extras_http + extras_websockets + extras_testing + \
               extras_server + extras_fw + extras_opentrons
