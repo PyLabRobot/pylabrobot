@@ -1,6 +1,7 @@
 """ Tests for the simulation backend. """
 
 import json
+import time
 import unittest
 
 import pytest
@@ -32,6 +33,8 @@ class SimulatorBackendSetupStopTests(unittest.TestCase):
     def setup_stop_single():
       backend.setup()
       self.assertIsNotNone(backend.loop)
+      # wait for the server to start
+      time.sleep(1)
       backend.stop()
       self.assertFalse(backend.has_connection())
 
