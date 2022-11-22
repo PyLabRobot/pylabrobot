@@ -378,11 +378,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
       # read response from endpoint, and keep reading until the packet is smaller than the max
       # packet size: if the packet is that size, it means that there may be more data to read.
-      resp = self._read_packet()
-      if resp is None:
-        continue
 
-      last_packet: Optional[str] = resp
+      resp = ""
+      last_packet: Optional[str] = None
       while True: # read while we have data, and while the last packet is the max size.
         last_packet = self._read_packet()
         if last_packet is not None:
@@ -1217,12 +1215,13 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="TT",
+      fmt="",
       tt=f"{tip_type_table_index:02}",
       tf=filter,
       tl=f"{tip_length:04}",
       tv=f"{maximum_tip_volume:05}",
       tg=tip_size.value,
-      tu=pick_up_method
+      tu=pick_up_method.value
     )
 
   # -------------- 3.2.1 System query --------------
