@@ -63,22 +63,22 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  def pick_up_tips(self, *channels: Pickup, use_channels: List[int]):
+  def pick_up_tips(self, channels: List[Pickup], use_channels: List[int]):
     """ Pick up tips from the specified resource. """
     pass
 
   @abstractmethod
-  def discard_tips(self, *channels: Discard, use_channels: List[int]):
+  def discard_tips(self, channels: List[Discard], use_channels: List[int]):
     """ Discard tips from the specified resource. """
     pass
 
   @abstractmethod
-  def aspirate(self, *channels: Aspiration, use_channels: List[int]):
+  def aspirate(self, channels: List[Aspiration], use_channels: List[int]):
     """ Aspirate liquid from the specified resource using pip. """
     pass
 
   @abstractmethod
-  def dispense(self, *channels: Dispense, use_channels: List[int]):
+  def dispense(self, channels: List[Dispense], use_channels: List[int]):
     """ Dispense liquid from the specified resource using pip. """
     pass
 

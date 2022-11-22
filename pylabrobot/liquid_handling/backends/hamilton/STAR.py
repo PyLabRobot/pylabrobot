@@ -9,7 +9,7 @@ import enum
 import functools
 import logging
 import re
-from typing import Callable, List, Optional, Tuple, Dict, Any, Union, cast
+from typing import Callable, List, Optional, Tuple, Dict, Any, Union, Sequence, cast
 
 from pylabrobot import utils
 from pylabrobot.liquid_handling.errors import (
@@ -593,7 +593,7 @@ class STAR(HamiltonLiquidHandler):
 
   def _channel_positions_to_fw_positions(
     self,
-    channels: Tuple[PipettingOp, ...],
+    channels: Sequence[PipettingOp],
     use_channels: List[int]
   ) -> Tuple[List[int], List[int], List[bool]]:
     """ use_channels is a list of channels to use. STAR expects this in one-hot encoding. This is
@@ -641,7 +641,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def pick_up_tips(
     self,
-    *channels: Pickup,
+    channels: List[Pickup],
     use_channels: List[int],
     **backend_kwargs
   ):
@@ -683,7 +683,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def discard_tips(
     self,
-    *channels: Discard,
+    channels: List[Discard],
     use_channels: List[int],
     **backend_kwargs
   ):
@@ -725,7 +725,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def aspirate(
     self,
-    *channels: Aspiration,
+    channels: List[Aspiration],
     use_channels: List[int],
     blow_out_air_volumes: Union[float, List[float]] = 0,
     air_transport_retract_dist: float = 10,
@@ -860,7 +860,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def dispense(
     self,
-    *channels: Dispense,
+    channels: List[Dispense],
     use_channels: List[int],
     blow_out_air_volumes: Union[float, List[float]] = 0,
     air_transport_retract_dist: float = 10,

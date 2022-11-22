@@ -39,25 +39,25 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   def unassigned_resource_callback(self, name: str):
     self.send_command(command="resource_unassigned", data=dict(resource_name=name))
 
-  def pick_up_tips(self, *channels: Pickup, use_channels: List[int]):
+  def pick_up_tips(self, channels: List[Pickup], use_channels: List[int]):
     serialized = [channel.serialize() for channel in channels]
     self.send_command(
       command="pick_up_tips",
       data=dict(channels=serialized, use_channels=use_channels))
 
-  def discard_tips(self, *channels: Discard, use_channels: List[int]):
+  def discard_tips(self, channels: List[Discard], use_channels: List[int]):
     serialized = [channel.serialize() for channel in channels]
     self.send_command(
       command="discard_tips",
       data=dict(channels=serialized, use_channels=use_channels))
 
-  def aspirate(self, *channels: Aspiration, use_channels: List[int]):
+  def aspirate(self, channels: List[Aspiration], use_channels: List[int]):
     serialized = [(channel.serialize()) for channel in channels]
     self.send_command(
       command="aspirate",
       data=dict(channels=serialized, use_channels=use_channels))
 
-  def dispense(self, *channels: Dispense, use_channels: List[int]):
+  def dispense(self, channels: List[Dispense], use_channels: List[int]):
     serialized = [(channel.serialize()) for channel in channels]
     self.send_command(
       command="dispense",

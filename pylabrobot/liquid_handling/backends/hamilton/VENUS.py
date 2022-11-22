@@ -129,7 +129,7 @@ class VENUS(LiquidHandlerBackend):
   def _get_venus_resource(self, resource: Resource) -> DeckResource:
     return self._venus_resources[resource.name]
 
-  def pick_up_tips(self, *channels: Pickup, **backend_kwargs):
+  def pick_up_tips(self, channels: List[Pickup], **backend_kwargs):
     """ Pick up tips from the specified resource. """
 
     pos_tuples = []
@@ -149,7 +149,7 @@ class VENUS(LiquidHandlerBackend):
 
     venus_utils.tip_pick_up(self.ham_int, pos_tuples, **backend_kwargs)
 
-  def discard_tips(self, *channels: Discard, **backend_kwargs):
+  def discard_tips(self, channels: List[Discard], **backend_kwargs):
     """ Discard tips from the specified resource. """
     pos_tuples = []
     last_column = None
@@ -168,7 +168,7 @@ class VENUS(LiquidHandlerBackend):
 
     venus_utils.tip_eject(self.ham_int, pos_tuples, **backend_kwargs)
 
-  def aspirate(self, *channels: Aspiration, **backend_kwargs):
+  def aspirate(self, channels: List[Aspiration], **backend_kwargs):
     """ Aspirate liquid from the specified resource using pip. """
     pos_tuples = []
     volumes = []
@@ -195,7 +195,7 @@ class VENUS(LiquidHandlerBackend):
     venus_utils.aspirate(self.ham_int, pos_tuples, volumes, liquidHeight=liquid_height,
       **backend_kwargs)
 
-  def dispense(self, *channels: Dispense, **backend_kwargs):
+  def dispense(self, channels: List[Dispense], **backend_kwargs):
     """ Dispense liquid from the specified resource using pip. """
     pos_tuples = []
     volumes = []
