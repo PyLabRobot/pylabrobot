@@ -4,6 +4,7 @@ import functools
 import inspect
 import json
 import logging
+import numbers
 import time
 from typing import Union, Optional, List, Callable, Sequence, cast
 
@@ -659,7 +660,7 @@ class LiquidHandler:
 
     if flow_rates is None:
       flow_rates = [(lc.flow_rate[0] if lc is not None else None) for lc in liquid_classes]
-    elif isinstance(flow_rates, float):
+    elif isinstance(flow_rates, (numbers.Rational, float)):
       flow_rates = [flow_rates] * len(wells)
 
     # Correct volumes using the liquid class' correction curve
@@ -754,7 +755,7 @@ class LiquidHandler:
 
     if flow_rates is None:
       flow_rates = [(lc.flow_rate[1] if lc is not None else None) for lc in liquid_classes]
-    elif isinstance(flow_rates, float):
+    elif isinstance(flow_rates, (numbers.Rational, float)):
       flow_rates = [flow_rates] * len(wells)
 
     # Correct volumes using the liquid class' correction curve
@@ -829,7 +830,7 @@ class LiquidHandler:
     if isinstance(targets, Well):
       targets = [targets]
 
-    if isinstance(dispense_flow_rates, float):
+    if isinstance(dispense_flow_rates, numbers.Rational):
       dispense_flow_rates = [dispense_flow_rates] * len(targets)
 
     if target_vols is not None:
