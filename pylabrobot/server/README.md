@@ -94,8 +94,8 @@ Post a JSON object that was generatated by calling `serialize()` on `lh`.
 
 ```json
 {
-  "resource": "tips",
-  "channels": ["A1", "B1", "C1"]
+  "resource_name": "tiprack_tip_0_0",
+  "offset": { "x": 0, "y": 0, "z": 0 }
 }
 ```
 
@@ -115,8 +115,8 @@ Post a JSON object that was generatated by calling `serialize()` on `lh`.
 
 ```json
 {
-  "resource": "tips",
-  "channels": ["A1", "B1", "C1"]
+  "resource_name": "tiprack_tip_0_0",
+  "offset": { "x": 0, "y": 0, "z": 0 }
 }
 ```
 
@@ -136,20 +136,10 @@ Post a JSON object that was generatated by calling `serialize()` on `lh`.
 
 ```json
 {
-  "resource": "plate",
-  "channels": [
-    {
-      "well": "A1",
-      "volume": "10"
-    },
-    {
-      "well": "A2",
-      "volume": "10"
-    }
-  ],
-  "kwargs": [
-    "speed": 10
-  ]
+  "resource_name": "plate_well_0_0",
+  "offset": { "x": 0, "y": 0, "z": 0 },
+  "volume": 100,
+  "flow_rate": null
 }
 ```
 
@@ -169,18 +159,10 @@ Post a JSON object that was generatated by calling `serialize()` on `lh`.
 
 ```json
 {
-  "resource": "other_plate",
-  "channels": [
-    {
-      "well": "A1",
-      "volume": "10"
-    },
-    {
-      "channel": "A2",
-      "volume": "20",
-      "speed": "10"
-    }
-  ]
+  "resource_name": "plate_well_0_0",
+  "offset": { "x": 0, "y": 0, "z": 0 },
+  "volume": 100,
+  "flow_rate": null
 }
 ```
 

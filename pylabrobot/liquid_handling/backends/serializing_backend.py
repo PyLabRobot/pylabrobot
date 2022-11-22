@@ -40,25 +40,25 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     self.send_command(command="resource_unassigned", data=dict(resource_name=name))
 
   def pick_up_tips(self, *channels: Pickup, use_channels: List[int]):
-    serialized = [channel.serialize() if channel is not None else None for channel in channels]
+    serialized = [channel.serialize() for channel in channels]
     self.send_command(
       command="pick_up_tips",
       data=dict(channels=serialized, use_channels=use_channels))
 
   def discard_tips(self, *channels: Discard, use_channels: List[int]):
-    serialized = [channel.serialize() if channel is not None else None for channel in channels]
+    serialized = [channel.serialize() for channel in channels]
     self.send_command(
       command="discard_tips",
       data=dict(channels=serialized, use_channels=use_channels))
 
   def aspirate(self, *channels: Aspiration, use_channels: List[int]):
-    serialized = [(channel.serialize() if channel is not None else None) for channel in channels]
+    serialized = [(channel.serialize()) for channel in channels]
     self.send_command(
       command="aspirate",
       data=dict(channels=serialized, use_channels=use_channels))
 
   def dispense(self, *channels: Dispense, use_channels: List[int]):
-    serialized = [(channel.serialize() if channel is not None else None) for channel in channels]
+    serialized = [(channel.serialize()) for channel in channels]
     self.send_command(
       command="dispense",
       data=dict(channels=serialized, use_channels=use_channels))
