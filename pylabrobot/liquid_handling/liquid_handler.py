@@ -1,21 +1,18 @@
 """ Defines LiquidHandler class, the coordinator for liquid handling operations. """
 
 import functools
-import inspect
-import json
 import logging
 import numbers
 import time
-from typing import Union, Optional, List, Callable, Sequence, cast
+from typing import Union, Optional, List, Callable, Sequence
 
 from pylabrobot import utils
 # from pylabrobot.default import DEFAULT
 from pylabrobot.utils.list import expand
-import pylabrobot.utils.file_parsing as file_parser
 from pylabrobot.liquid_handling.resources.abstract import Deck
+from pylabrobot.liquid_handling.errors import NoTipError
 
 from .backends import LiquidHandlerBackend
-from . import resources as resources_module
 from .liquid_classes import (
   LiquidClass,
   StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
@@ -228,182 +225,6 @@ class LiquidHandler:
       print("     │")
       print_resource(resource)
 
-  def load_from_lay_file(self, fn: str): # TODO: this can probably become STARLet specific method.
-    """ Parse a .lay file (legacy layout definition) and build the layout on this liquid handler.
-
-    Args:
-      fn: Filename of .lay file.
-
-    Examples:
-
-      Loading from a lay file:
-
-      >>> from pylabrobot.liquid_handling.backends import STAR
-      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
-      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
-      >>> lh.load_from_lay_file("deck.lay")
-    """
-
-    c = None
-    with open(fn, "r", encoding="ISO-8859-1") as f:
-      c = f.read()
-
-    # Get class names of all defined resources.
-    resource_classes = [c[0] for c in inspect.getmembers(resources_module)]
-
-    # Get number of items on deck.
-    num_items = file_parser.find_int("Labware.Cnt", c)
-
-    # Collect all items on deck.
-
-    containers = {}
-    children = {}
-
-    for i in range(1, num_items+1):
-      name = file_parser.find_string(f"Labware.{i}.Id", c)
-
-      # get class name (generated from file name)
-      file_name = file_parser.find_string(f"Labware.{i}.File", c).split("\\")[-1]
-      class_name = None
-      if ".rck" in file_name:
-        class_name = file_name.split(".rck")[0]
-      elif ".tml" in file_name:
-        class_name = file_name.split(".tml")[0]
-
-      if class_name in resource_classes:
-        klass = getattr(resources_module, class_name)
-        resource = klass(name=name)
-      else:
-        logger.warning(
-          "Resource with classname %s not found. Please file an issue at "
-          "https://github.com/pylabrobot/pylabrobot/issues/new?assignees=&labels="
-          "&title=Deserialization%%3A%%20Class%%20%s%%20not%%20found", class_name, class_name)
-        continue
-
-      # get location props
-      # 'default' template means resource are placed directly on the deck, otherwise it
-      # contains the name of the containing resource.
-      if file_parser.find_string(f"Labware.{i}.Template", c) == "default":
-        x = file_parser.find_float(f"Labware.{i}.TForm.3.X", c)
-        y = file_parser.find_float(f"Labware.{i}.TForm.3.Y", c)
-        z = file_parser.find_float(f"Labware.{i}.ZTrans", c)
-        resource.location = Coordinate(x=x, y=y, z=z)
-        containers[name] = resource
-      else:
-        children[name] = {
-          "container": file_parser.find_string(f"Labware.{i}.Template", c),
-          "site": file_parser.find_int(f"Labware.{i}.SiteId", c),
-          "resource": resource}
-
-    # Assign child resources to their parents.
-    for child in children.values():
-      cont = containers[child["container"]]
-      cont[5 - child["site"]] = child["resource"]
-
-    # Assign all resources to self.
-    for cont in containers.values():
-      # TODO(63) fix
-      self.deck.assign_child_resource(cont, location=cont.location - Coordinate(0, 63.0, 100))
-
-  def save(self, fn: str, indent: Optional[int] = None):
-    """ Save a deck layout to a JSON file.
-
-    Args:
-      fn: File name. Caution: file will be overwritten.
-      indent: Same as `json.dump`'s `indent` argument (for json pretty printing).
-
-    Examples:
-
-      Loading from a json file:
-
-      >>> from pylabrobot.liquid_handling.backends import STAR
-      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
-      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
-      >>> lh.load_from_lay_file("deck.json")
-    """
-
-    serialized = self.deck.serialize()
-
-    serialized = dict(deck=serialized)
-
-    with open(fn, "w", encoding="utf-8") as f:
-      json.dump(serialized, f, indent=indent)
-
-  def load_from_json(self, fn: Optional[str] = None, content: Optional[dict] = None):
-    """ Load deck layout serialized in JSON. Contents can either be in a layout file or in a
-    dictionary.
-
-    Args:
-      fn: File name.
-      content: Dictionary containing serialized deck layout.
-    """
-
-    assert (fn is not None) != (content is not None), "Either fn or content must be provided."
-
-    if self.setup_finished:
-      raise RuntimeError("Cannot load from json after setup has been finished.")
-
-    if content is None:
-      with open(cast(str, fn), "r", encoding="utf-8") as f:
-        content = json.load(f)
-
-    # Get class names of all defined resources.
-    resource_classes = [c[0] for c in inspect.getmembers(resources_module)]
-
-    def deserialize_resource(dict_resource):
-      """ Deserialize a single resource. """
-
-      # Get class name.
-      class_name = dict_resource["type"]
-      if class_name in resource_classes:
-        klass = getattr(resources_module, class_name)
-        resource = klass.deserialize(dict_resource)
-        for child_dict in dict_resource["children"]:
-          child_resource = deserialize_resource(child_dict)
-          child_location = child_dict.pop("location")
-          child_location = Coordinate.deserialize(child_location)
-          resource.assign_child_resource(child_resource, location=child_location)
-        return resource
-      else:
-        raise ValueError(f"Resource with classname {class_name} not found.")
-
-    deck_dict = content["deck"]
-    self.deck = deserialize_resource(deck_dict)
-    self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
-    self.deck.resource_unassigned_callback_callback = self.resource_unassigned_callback
-
-  def load(self, fn: str, file_format: Optional[str] = None):
-    """ Load deck layout serialized in a file, either from a .lay or .json file.
-
-    Args:
-      fn: Filename for serialized model file.
-      format: file format (`json` or `lay`). If None, file format will be inferred from file name.
-
-    Examples:
-
-      Loading from a .lay file:
-
-      >>> from pylabrobot.liquid_handling.backends import STAR
-      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
-      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
-      >>> lh.load_from_lay_file("deck.lay")
-
-      Loading from a .json file:
-
-      >>> from pylabrobot.liquid_handling.backends import STAR
-      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
-      >>> lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
-      >>> lh.load_from_lay_file("deck.json")
-    """
-
-    extension = "." + (file_format or fn.split(".")[-1])
-    if extension == ".json":
-      self.load_from_json(fn)
-    elif extension == ".lay":
-      self.load_from_lay_file(fn)
-    else:
-      raise ValueError(f"Unsupported file extension: {extension}")
-
   def _assert_positions_unique(self, positions: List[str]):
     """ Returns whether all items in `positions` are unique where they are not `None`.
 
@@ -589,7 +410,7 @@ class LiquidHandler:
     """
 
     if self._picked_up_tips is None:
-      raise RuntimeError("No tips are currently picked up.")
+      raise NoTipError("No tips are currently picked up.")
 
     self.discard_tips(self._picked_up_tips)
 
@@ -914,7 +735,7 @@ class LiquidHandler:
     """
 
     if self._picked_up_tips96 is None:
-      raise RuntimeError("No tips picked up.")
+      raise NoTipError("No tips have been picked up with the 96 head")
 
     self.discard_tips96(self._picked_up_tips96)
 

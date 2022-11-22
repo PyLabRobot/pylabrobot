@@ -1,6 +1,15 @@
+from __future__ import annotations
+
+import inspect
+import logging
 from typing import Callable, Optional, cast
 
 from pylabrobot.liquid_handling.resources import Coordinate, Deck, Resource
+import pylabrobot.utils.file_parsing as file_parser
+import pylabrobot.liquid_handling.resources as resources_module
+
+
+logger = logging.getLogger(__name__)
 
 
 _RAILS_WIDTH = 22.5 # space between rails (mm)
@@ -99,10 +108,6 @@ class HamiltonDeck(Deck):
       raise ValueError(f"Resource with width {resource.get_size_x()} does not "
                        f"fit at rails {rails}.")
 
-    # Set parent so that we can get absolute location, not really necessary: we could just use
-    # use the relative location of each resource since they share the same parent (origin).
-    # resource.parent = self
-
     # Check if there is space for this new resource.
     for og_resource in self.children:
       og_x = cast(Coordinate, og_resource.location).x
@@ -116,7 +121,6 @@ class HamiltonDeck(Deck):
           (og_y <= resource_location.y < og_y + og_resource.get_size_y() or \
             og_y <= resource_location.y + resource.get_size_y() <
                og_y + og_resource.get_size_y()):
-        # resource.parent = None # Revert parent.
         raise ValueError(f"Location {resource_location} is already occupied by resource "
                           f"'{og_resource.name}'.")
 
@@ -125,6 +129,91 @@ class HamiltonDeck(Deck):
   def _x_coordinate_for_rails(self, rails: int):
     """ Convert a rail identifier to an x coordinate. """
     return 100.0 + (rails - 1) * _RAILS_WIDTH
+
+  @classmethod
+  def load_from_lay_file(cls, fn: str) -> HamiltonDeck:
+    """ Parse a .lay file (legacy layout definition) and build the layout on this deck.
+
+    Args:
+      fn: Filename of .lay file.
+
+    Examples:
+
+      Loading from a lay file:
+
+      >>> from pylabrobot.liquid_handling.resources.hamilton import HamiltonDeck
+      >>> deck = HamiltonDeck.load_from_lay_file("deck.lay")
+    """
+
+    deck = cls(num_rails=-1, # TODO: base on lay file
+        size_x=1900,
+        size_y=653.5,
+        size_z=900,
+        resource_assigned_callback=None,
+        resource_unassigned_callback=None,
+        origin=Coordinate.zero())
+
+    c = None
+    with open(fn, "r", encoding="ISO-8859-1") as f:
+      c = f.read()
+
+    # Get class names of all defined resources.
+    resource_classes = [c[0] for c in inspect.getmembers(resources_module)]
+
+    # Get number of items on deck.
+    num_items = file_parser.find_int("Labware.Cnt", c)
+
+    # Collect all items on deck.
+
+    containers = {}
+    children = {}
+
+    for i in range(1, num_items+1):
+      name = file_parser.find_string(f"Labware.{i}.Id", c)
+
+      # get class name (generated from file name)
+      file_name = file_parser.find_string(f"Labware.{i}.File", c).split("\\")[-1]
+      class_name = None
+      if ".rck" in file_name:
+        class_name = file_name.split(".rck")[0]
+      elif ".tml" in file_name:
+        class_name = file_name.split(".tml")[0]
+
+      if class_name in resource_classes:
+        klass = getattr(resources_module, class_name)
+        resource = klass(name=name)
+      else:
+        logger.warning(
+          "Resource with classname %s not found. Please file an issue at "
+          "https://github.com/pylabrobot/pylabrobot/issues/new?assignees=&labels="
+          "&title=Deserialization%%3A%%20Class%%20%s%%20not%%20found", class_name, class_name)
+        continue
+
+      # get location props
+      # 'default' template means resource are placed directly on the deck, otherwise it
+      # contains the name of the containing resource.
+      if file_parser.find_string(f"Labware.{i}.Template", c) == "default":
+        x = file_parser.find_float(f"Labware.{i}.TForm.3.X", c)
+        y = file_parser.find_float(f"Labware.{i}.TForm.3.Y", c)
+        z = file_parser.find_float(f"Labware.{i}.ZTrans", c)
+        resource.location = Coordinate(x=x, y=y, z=z)
+        containers[name] = resource
+      else:
+        children[name] = {
+          "container": file_parser.find_string(f"Labware.{i}.Template", c),
+          "site": file_parser.find_int(f"Labware.{i}.SiteId", c),
+          "resource": resource}
+
+    # Assign all containers to the deck.
+    for cont in containers.values():
+      deck.assign_child_resource(cont, location=cont.location)
+
+    # Assign child resources to their parents.
+    for child in children.values():
+      cont = containers[child["container"]]
+      cont[5 - child["site"]] = child["resource"]
+
+    return deck
 
 
 def STARLetDeck(
