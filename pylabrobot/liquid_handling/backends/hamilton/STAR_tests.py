@@ -5,6 +5,7 @@ import unittest
 
 from pylabrobot.liquid_handling.liquid_handler import LiquidHandler
 from pylabrobot.liquid_handling.resources import (
+  Resource,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
   Cos_96_EZWash,
@@ -26,6 +27,21 @@ from .errors import (
   NoTipError,
   HardwareError,
   UnknownHamiltonError
+)
+
+
+ASPIRATION_RESPONSE_FORMAT = (
+  "at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
+  "ip#### (n)it# (n)fp#### (n)av#### (n)as#### (n)ta### (n)ba#### (n)oa### (n)lm# (n)ll# (n)"
+  "lv# (n)ld## (n)de#### (n)wt## (n)mv##### (n)mc## (n)mp### (n)ms#### (n)gi### (n)gj#gk#"
+  "zu#### (n)zr#### (n)mh#### (n)zo### (n)po#### (n)lk# (n)ik#### (n)sd#### (n)se#### (n)"
+  "sz#### (n)io#### (n)il##### (n)in#### (n)"
+)
+DISPENSE_RESPONSE_FORMAT = (
+  "dm# (n)tm# (n)xp##### (n)yp#### (n)zx#### (n)lp#### (n)zl#### (n)ip#### (n)it# (n)fp#### (n)"
+  "th####te####dv##### (n)ds#### (n)ss#### (n)rv### (n)ta### (n)ba#### (n)lm# (n)zo### (n)"
+  "ll# (n)lv# (n)de#### (n)mv##### (n)mc## (n)mp### (n)ms#### (n)wt## (n)gi### (n)gj#gk#"
+  "zu#### (n)zr##### (n)mh#### (n)po#### (n)"
 )
 
 
@@ -180,6 +196,12 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
+    class BlueBucket(Resource):
+      def __init__(self, name: str):
+        super().__init__(name, size_x=123, size_y=82, size_z=75, category="bucket")
+    self.bb = BlueBucket(name="blue bucket")
+    self.deck.assign_child_resource(self.bb, location=Coordinate(425, 78.5, 20))
+
     self.maxDiff = None
 
     self.lh.setup()
@@ -297,11 +319,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "zx1831&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
       "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
       "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
-      fmt="at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
-      "ip#### (n)it# (n)fp#### (n)av#### (n)as#### (n)ta### (n)ba#### (n)oa### (n)lm# (n)ll# (n)"
-      "lv# (n)ld## (n)de#### (n)wt## (n)mv##### (n)mc## (n)mp### (n)ms#### (n)gi### (n)gj#gk#"
-      "zu#### (n)zr#### (n)mh#### (n)zo### (n)po#### (n)lk# (n)ik#### (n)sd#### (n)se#### (n)"
-      "sz#### (n)io#### (n)il##### (n)in#### (n)")
+      fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_single_channel_aspiration_offset(self):
     self.lh.aspirate(self.plate["A1"], vols=[100], offsets=Coordinate(0, 0, 10))
@@ -312,11 +330,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "zx1921&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
       "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
       "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
-      fmt="at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
-      "ip#### (n)it# (n)fp#### (n)av#### (n)as#### (n)ta### (n)ba#### (n)oa### (n)lm# (n)ll# (n)"
-      "lv# (n)ld## (n)de#### (n)wt## (n)mv##### (n)mc## (n)mp### (n)ms#### (n)gi### (n)gj#gk#"
-      "zu#### (n)zr#### (n)mh#### (n)zo### (n)po#### (n)lk# (n)ik#### (n)sd#### (n)se#### (n)"
-      "sz#### (n)io#### (n)il##### (n)in#### (n)")
+      fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_multi_channel_aspiration(self):
     self.lh.aspirate(self.plate["A1:B1"], vols=100)
@@ -329,11 +343,37 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&gi000 000&gj0gk0"
       "zu0032 0032&zr06180 06180&mh0000 0000&zo000 000&po0100 0100&lk0 0&ik0000 0000&"
       "sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&il00000 00000&in0000 0000&",
-      fmt="at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
-      "ip#### (n)it# (n)fp#### (n)av#### (n)as#### (n)ta### (n)ba#### (n)oa### (n)lm# (n)ll# (n)"
-      "lv# (n)ld## (n)de#### (n)wt## (n)mv##### (n)mc## (n)mp### (n)ms#### (n)gi### (n)gj#gk#"
-      "zu#### (n)zr#### (n)mh#### (n)zo### (n)po#### (n)lk# (n)ik#### (n)sd#### (n)se#### (n)"
-      "sz#### (n)io#### (n)il##### (n)in#### (n)")
+      fmt=ASPIRATION_RESPONSE_FORMAT)
+
+  def test_aspirate_single_resource(self):
+    self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_classes=None)
+    self._assert_command_sent_once(
+      "C0ASid0009at0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 1688 "
+      "1551 0000&th2450te2450lp1260 1260 1260 1260 1260&ch000 000 000 000 000&zl1210 1210 1210 "
+      "1210 1210&po0100 0100 0100 0100 0100&zu0032 0032 0032 0032 0032&zr06180 06180 06180 06180 "
+      "06180&zx1160 1160 1160 1160 1160&ip0000 0000 0000 0000 0000&it0 0 0 0 0&fp0000 0000 0000 "
+      "0000 0000&av00100 00100 00100 00100 00100&as1000 1000 1000 1000 1000&ta000 000 000 000 000&"
+      "ba0000 0000 0000 0000 0000&oa000 000 000 000 000&lm0 0 0 0 0&ll1 1 1 1 1&lv1 1 1 1 1&zo000 "
+      "000 000 000 000&ld00 00 00 00 00&de0020 0020 0020 0020 0020&wt10 10 10 10 10&mv00000 00000 "
+      "00000 00000 00000&mc00 00 00 00 00&mp000 000 000 000 000&ms1000 1000 1000 1000 1000&mh0000 "
+      "0000 0000 0000 0000&gi000 000 000 000 000&gj0gk0lk0 0 0 0 0&ik0000 0000 0000 0000 0000&"
+      "sd0500 0500 0500 0500 0500&se0500 0500 0500 0500 0500&sz0300 0300 0300 0300 0300&io0000 0000"
+      " 0000 0000 0000&il00000 00000 00000 00000 00000&in0000 0000 0000 0000 0000&",
+      fmt=ASPIRATION_RESPONSE_FORMAT)
+
+  def test_dispense_single_resource(self):
+    self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_classes=None)
+    self._assert_command_sent_once(
+      "C0DSid0010dm2 2 2 2 2&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 "
+      "1688 1551 0000&zx1871 1871 1871 1871 1871&lp2321 2321 2321 2321 2321&zl1210 1210 1210 1210 "
+      "1210&po0100 0100 0100 0100 0100&ip0000 0000 0000 0000 0000&it0 0 0 0 0&fp0000 0000 0000 0000"
+      " 0000&zu0032 0032 0032 0032 0032&zr06180 06180 06180 06180 06180&th2450te2450dv00100 00100 "
+      "00100 00100 00100&ds1200 1200 1200 1200 1200&ss0050 0050 0050 0050 0050&rv000 000 000 000 "
+      "000&ta000 000 000 000 000&ba0000 0000 0000 0000 0000&lm0 0 0 0 0&dj00zo000 000 000 000 000&"
+      "ll1 1 1 1 1&lv1 1 1 1 1&de0020 0020 0020 0020 0020&wt00 00 00 00 00&mv00000 00000 00000 "
+      "00000 00000&mc00 00 00 00 00&mp000 000 000 000 000&ms0010 0010 0010 0010 0010&mh0000 0000 "
+      "0000 0000 0000&gi000 000 000 000 000&gj0gk0",
+      fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_single_channel_dispense(self):
     self.lh.dispense(self.plate["A1"], vols=[100])
@@ -342,10 +382,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "ip0000&it0&fp0000&th2450te2450dv01072&ds1200&ss0050&rv000&ta000&ba0000&lm0&zo000&ll1&"
       "lv1&de0020&mv00000&mc00&mp000&ms0010&wt00&gi000&gj0gk0zu0032&dj00zr06180&"
       " mh0000&po0100&",
-      "dm# (n)tm# (n)xp##### (n)yp#### (n)zx#### (n)lp#### (n)zl#### (n)ip#### (n)it# (n)fp#### (n)"
-      "th####te####dv##### (n)ds#### (n)ss#### (n)rv### (n)ta### (n)ba#### (n)lm# (n)zo### (n)"
-      "ll# (n)lv# (n)de#### (n)mv##### (n)mc## (n)mp### (n)ms#### (n)wt## (n)gi### (n)gj#gk#"
-      "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
+      fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_multi_channel_dispense(self):
     self.lh.dispense(self.plate["A1:B1"], vols=100)
@@ -356,10 +393,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "te2450ds1200 1200&ss0050 0050&rv000 000&ta000 000&ba0000 0000&lm0 0&zo000 000&ll1 1&"
       "lv1 1&de0020 0020&mv00000 00000&mc00 00&mp000 000&ms0010 0010&wt00 00&gi000 000&gj0gk0"
       "zu0032 0032&dj00zr06180 06180&mh0000 0000&po0100 0100&",
-      "dm# (n)tm# (n)xp##### (n)yp#### (n)zx#### (n)lp#### (n)zl#### (n)ip#### (n)it# (n)fp#### (n)"
-      "th####te####dv##### (n)ds#### (n)ss#### (n)rv### (n)ta### (n)ba#### (n)lm# (n)zo### (n)"
-      "ll# (n)lv# (n)de#### (n)mv##### (n)mc## (n)mp### (n)ms#### (n)wt## (n)gi### (n)gj#gk#"
-      "zu#### (n)zr##### (n)mh#### (n)po#### (n)")
+      fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_core_96_tip_pickup(self):
     self.lh.pick_up_tips96(self.tip_rack)
