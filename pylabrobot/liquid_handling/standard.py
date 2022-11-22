@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, ABCMeta
+from abc import ABC, ABCMeta, abstractmethod
 import enum
 from typing import Optional
 
@@ -35,9 +35,14 @@ class PipettingOp(ABC):
 
   def serialize(self) -> dict:
     return {
-      "resource": self.resource.serialize(),
+      "resource_name": self.resource.name,
       "offset": self.offset.serialize()
     }
+
+  @classmethod
+  @abstractmethod
+  def deserialize(cls, data: dict, resource: Resource) -> PipettingOp:
+    pass
 
 
 class TipOp(PipettingOp, metaclass=ABCMeta):
@@ -51,9 +56,27 @@ class TipOp(PipettingOp, metaclass=ABCMeta):
 class Pickup(TipOp):
   """ A pickup operation. """
 
+  @classmethod
+  def deserialize(cls, data: dict, resource: Resource) -> Pickup:
+    assert resource.name == data["resource_name"]
+    assert isinstance(resource, Tip)
+    return Pickup(
+      resource=resource,
+      offset=Coordinate.deserialize(data["offset"])
+    )
+
 
 class Discard(TipOp):
   """ A discard operation. """
+
+  @classmethod
+  def deserialize(cls, data: dict, resource: Resource) -> Discard:
+    assert resource.name == data["resource_name"]
+    assert isinstance(resource, Tip)
+    return Discard(
+      resource=resource,
+      offset=Coordinate.deserialize(data["offset"])
+    )
 
 
 class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
@@ -118,6 +141,24 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       "flow_rate": self.flow_rate,
     }
 
+  @classmethod
+  def deserialize(cls, data: dict, resource: Resource) -> LiquidHandlingOp:
+    """ Deserialize the operation.
+
+    Args:
+      data: The serialized operation.
+
+    Returns:
+      The deserialized operation.
+    """
+
+    return cls(
+      resource=resource,
+      volume=data["volume"],
+      flow_rate=data["flow_rate"],
+      offset=Coordinate.deserialize(data["offset"])
+    )
+
 
 class Aspiration(LiquidHandlingOp):
   """ Aspiration is a class that contains information about an aspiration.
@@ -127,7 +168,15 @@ class Aspiration(LiquidHandlingOp):
   about the aspiration for each individual channel.
   """
 
-  pass
+  @classmethod
+  def deserialize(cls, data: dict, resource: Resource) -> Aspiration:
+    assert resource.name == data["resource_name"]
+    return Aspiration(
+      resource=resource,
+      volume=data["volume"],
+      flow_rate=data["flow_rate"],
+      offset=Coordinate.deserialize(data["offset"])
+    )
 
 
 class Dispense(LiquidHandlingOp):
@@ -138,7 +187,15 @@ class Dispense(LiquidHandlingOp):
   about the dispense for each individual channel.
   """
 
-  pass
+  @classmethod
+  def deserialize(cls, data: dict, resource: Resource) -> Dispense:
+    assert resource.name == data["resource_name"]
+    return Dispense(
+      resource=resource,
+      volume=data["volume"],
+      flow_rate=data["flow_rate"],
+      offset=Coordinate.deserialize(data["offset"])
+    )
 
 
 class Move():

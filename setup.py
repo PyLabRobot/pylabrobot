@@ -37,8 +37,6 @@ extras_opentrons = [
 
 extras_server = [
     'flask',
-    'wtforms',
-    'wtforms_json'
 ]
 
 extras_testing = [
