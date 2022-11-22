@@ -126,6 +126,7 @@ class SimulatorBackend(WebSocketBackend):
 
     def start_server():
       # try to start the server. If the port is in use, try with another port until it succeeds.
+      og_path = os.getcwd()
       os.chdir(path) # only within thread.
 
       class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -145,6 +146,8 @@ class SimulatorBackend(WebSocketBackend):
           self.fs_port += 1
 
       self.httpd.serve_forever()
+
+      os.chdir(og_path)
 
     self._fst = threading.Thread(name="simulation_fs", target=start_server, daemon=True)
     self.fst.start()
