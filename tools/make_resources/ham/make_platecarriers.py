@@ -2,13 +2,10 @@
 # pylint: skip-file
 
 import os
-import sys
-from maker import make
-
-sys.path.insert(0, '..')
 
 from pylabrobot.liquid_handling.resources.abstract import Coordinate
-from pylabrobot.utils.file_parsing import find_int, find_float, find_string
+from pylabrobot.utils.file_parsing import find_float, find_string
+from tools.make_resources.maker import make
 
 
 BASE_DIR = "./LabWare/ML_STAR"
@@ -38,18 +35,20 @@ def make_from_file(fn, o):
   cname = os.path.basename(fn).split('.')[0]
 
   o.write(f'\n\n')
-  o.write(f"#: {description}\n")
-  o.write(f"{cname} = partial({BASE_CLASS},\n")
-  o.write(f'  size_x={size_x},\n')
-  o.write(f'  size_y={size_y},\n')
-  o.write(f'  size_z={size_z},\n')
-  o.write(f'  sites=[\n')
+  o.write(f"def {cname}(name: str) -> {BASE_CLASS}:\n")
+  o.write(f'  """ {description} """\n')
+  o.write(f'  return {BASE_CLASS}(\n')
+  o.write(f'    name=name,\n')
+  o.write(f'    size_x={size_x},\n')
+  o.write(f'    size_y={size_y},\n')
+  o.write(f'    size_z={size_z},\n')
+  o.write(f'    sites=[\n')
   for i, site in enumerate(sites):
-    o.write(f'    {repr(site)}' + ('' if i == len(sites) - 1 else ',') + '\n')
-  o.write(f'  ],\n')
-  o.write(f'  site_size_x={site_width},\n')
-  o.write(f'  site_size_y={site_height},\n')
-  o.write(f')\n')
+    o.write(f'      {repr(site)}' + ('' if i == len(sites) - 1 else ',') + '\n')
+  o.write(f'    ],\n')
+  o.write(f'    site_size_x={site_width},\n')
+  o.write(f'    site_size_y={site_height}\n')
+  o.write(f'  )\n')
 
 
 if __name__ == "__main__":
