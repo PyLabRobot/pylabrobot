@@ -106,7 +106,7 @@ def pick_up_tips():
 
   try:
     current_app.lh.pick_up_tips(
-      channels=[p.resource for p in pickups],
+      tips=[p.resource for p in pickups],
       offsets=[p.offset for p in pickups],
       use_channels=use_channels
     )
@@ -123,7 +123,7 @@ def discard_tips():
 
   try:
     current_app.lh.discard_tips(
-      channels=[p.resource for p in discards],
+      tips=[p.resource for p in discards],
       offsets=[p.offset for p in discards],
       use_channels=use_channels
     )

@@ -253,24 +253,24 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     elif not should_be and found:
       self.fail(f"Command {cmd} was found in sent commands: {self.mockSTAR.commands}")
 
-  def test_channel_positions_to_fw_positions(self):
+  def test_ops_to_fw_positions(self):
     """ Convert channel positions to firmware positions. """
     # pylint: disable=protected-access
     op = Pickup(resource=self.tip_rack["A1"][0])
     self.assertEqual(
-      self.mockSTAR._channel_positions_to_fw_positions((op,), use_channels=[0]),
+      self.mockSTAR._ops_to_fw_positions((op,), use_channels=[0]),
       ([1179, 0], [2418, 0], [True, False])
     )
 
     ops = (Pickup(resource=self.tip_rack["A1"][0]), Pickup(resource=self.tip_rack["F1"][0]))
     self.assertEqual(
-      self.mockSTAR._channel_positions_to_fw_positions(ops, use_channels=[0, 1]),
+      self.mockSTAR._ops_to_fw_positions(ops, use_channels=[0, 1]),
       ([1179, 1179, 0], [2418, 1968, 0], [True, True, False])
     )
 
     ops = (Pickup(resource=self.tip_rack["A1"][0]), Pickup(resource=self.tip_rack["F1"][0]))
     self.assertEqual(
-      self.mockSTAR._channel_positions_to_fw_positions(ops, use_channels=[1, 2]),
+      self.mockSTAR._ops_to_fw_positions(ops, use_channels=[1, 2]),
       ([0, 1179, 1179, 0], [0, 2418, 1968, 0], [False, True, True, False])
     )
 
