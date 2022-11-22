@@ -1,6 +1,6 @@
 """ Utilities for working with lists. """
 
-from typing import List, Tuple, TypeVar
+from typing import List, Tuple, TypeVar, Union
 
 
 T = TypeVar("T")
@@ -43,3 +43,13 @@ def reshape_2d(list_: List[T], shape: Tuple[int, int]) -> List[List[T]]:
       new_list[i].append(list_[i * shape[1] + j])
 
   return new_list
+
+
+def expand(list_or_item: Union[List[T], T], n: int) -> List[T]:
+  if n <= 0:
+    raise ValueError(f"Cannot expand list {list_or_item} by {n}.")
+  if isinstance(list_or_item, list):
+    if len(list_or_item) != n:
+      raise ValueError(f"Expected list of length {n}, got {len(list_or_item)}.")
+    return list_or_item
+  return [list_or_item] * n
