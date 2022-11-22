@@ -120,30 +120,21 @@ class Carrier(Resource):
 
   def assign_child_resource(
     self,
-    resource, # TODO: only allow CarrierSite to be assigned
+    resource: Resource, # Liskov substitution principle
     location: Coordinate
   ):
     """ Assign a resource to this carrier.
 
-    NOTE: currently this method is ambiguous: with spot = None, we assign a resource to self,
-    otherwise we assign a resource to a site. This was done for deserialization. Will probably
-    rename this method to `assign_resource_to_site` or something.
+    For a carrier, the only valid resource is a :class:`CarrierSite`.
 
     Also see :meth:`~Resource.assign_child_resource`
 
-    Args:
-      resource: The resource to assign.
-      spot: The index of the site to assign the resource to.
-      location: The location of the resource within the carrier. This must match one of the spots.
-        It is recommended to use the `spot` argument instead. Exactly one of `spot` and `location`
-        must be specified.
-
     Raises:
-      ValueError: If the resource is already assigned to this carrier.
+      TypeError: If the resource is not a :class:`CarrierSite`.
     """
 
     if not isinstance(resource, CarrierSite):
-      raise ValueError(f"Invalid location {location}")
+      raise TypeError(f"Invalid location {location}")
     self.sites.append(resource)
     super().assign_child_resource(resource, location=location)
 
