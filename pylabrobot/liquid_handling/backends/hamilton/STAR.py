@@ -591,9 +591,9 @@ class STAR(HamiltonLiquidHandler):
       if resource.tip_type not in self._tip_types:
         self.define_tip_type(resource.tip_type)
 
-  def _channel_positions_to_fw_positions(
+  def _ops_to_fw_positions(
     self,
-    channels: Sequence[PipettingOp],
+    ops: Sequence[PipettingOp],
     use_channels: List[int]
   ) -> Tuple[List[int], List[int], List[bool]]:
     """ use_channels is a list of channels to use. STAR expects this in one-hot encoding. This is
@@ -609,11 +609,11 @@ class STAR(HamiltonLiquidHandler):
         x_positions.append(0)
         y_positions.append(0)
       channels_involved.append(True)
-      x_positions.append(int(channels[i].get_absolute_location().x*10))
-      y_positions.append(int(channels[i].get_absolute_location().y*10))
+      x_positions.append(int(ops[i].get_absolute_location().x*10))
+      y_positions.append(int(ops[i].get_absolute_location().y*10))
 
-    if len(channels) > self.num_channels:
-      raise ValueError(f"Too many channels specified: {len(channels)} > {self.num_channels}")
+    if len(ops) > self.num_channels:
+      raise ValueError(f"Too many channels specified: {len(ops)} > {self.num_channels}")
 
     if len(x_positions) < self.num_channels:
       # We do want to have a trailing zero on x_positions, y_positions, and channels_involved, for
@@ -624,7 +624,7 @@ class STAR(HamiltonLiquidHandler):
 
     return x_positions, y_positions, channels_involved
 
-  def get_ttti(self, tips: List[Optional[Tip]]) -> int:
+  def get_ttti(self, tips: List[Tip]) -> int:
     """ Get tip type table index for a list of tips.
 
     Ensure that for all non-None tips, they have the same tip type, and return the tip type table
@@ -641,7 +641,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def pick_up_tips(
     self,
-    channels: List[Pickup],
+    ops: List[Pickup],
     use_channels: List[int],
     **backend_kwargs
   ):
@@ -649,9 +649,9 @@ class STAR(HamiltonLiquidHandler):
 
     # TODO: channels involved
     x_positions, y_positions, channels_involved = \
-      self._channel_positions_to_fw_positions(channels, use_channels)
+      self._ops_to_fw_positions(ops, use_channels)
 
-    ttti = self.get_ttti([c.resource for c in channels])
+    ttti = self.get_ttti([op.resource for op in ops])
 
     params: Dict[str, Any] = {
       "begin_tip_pick_up_process": 2244,
@@ -683,15 +683,15 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def discard_tips(
     self,
-    channels: List[Discard],
+    ops: List[Discard],
     use_channels: List[int],
     **backend_kwargs
   ):
     """ Discard tips from a resource. """
 
     x_positions, y_positions, channels_involved = \
-      self._channel_positions_to_fw_positions(channels, use_channels)
-    ttti = self.get_ttti([(c.resource if c is not None else None) for c in channels])
+      self._ops_to_fw_positions(ops, use_channels)
+    ttti = self.get_ttti([op.resource for op in ops])
 
     # TODO: should depend on tip carrier/type?
     params: Dict[str, Any] = {
@@ -725,7 +725,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def aspirate(
     self,
-    channels: List[Aspiration],
+    ops: List[Aspiration],
     use_channels: List[int],
     blow_out_air_volumes: Union[float, List[float]] = 0,
     air_transport_retract_dist: float = 10,
@@ -734,24 +734,24 @@ class STAR(HamiltonLiquidHandler):
     """ Aspirate liquid from the specified channels. """
 
     x_positions, y_positions, channels_involved = \
-      self._channel_positions_to_fw_positions(channels, use_channels)
+      self._ops_to_fw_positions(ops, use_channels)
 
     params = []
 
     # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL. Also get
     # all other aspiration parameters.
-    for channel in channels:
-      liquid_surface_no_lld = channel.get_absolute_location().z
-      if channel.offset.z == 0: # default offset_z is 1
+    for op in ops:
+      liquid_surface_no_lld = op.get_absolute_location().z
+      if op.offset.z == 0: # default offset_z is 1
         liquid_surface_no_lld += 1
 
-      if channel.flow_rate is not None:
-        flow_rate = channel.flow_rate
+      if op.flow_rate is not None:
+        flow_rate = op.flow_rate
       else:
         flow_rate = 100
 
       params.append({
-        "aspiration_volumes": int(channel.volume*10) if channel is not None else 0,
+        "aspiration_volumes": int(op.volume*10),
         "lld_search_height": int((liquid_surface_no_lld+5) * 10), #2321,
         "clot_detection_height": 0,
         "liquid_surface_no_lld": int(liquid_surface_no_lld * 10), #1881,
@@ -860,7 +860,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def dispense(
     self,
-    channels: List[Dispense],
+    ops: List[Dispense],
     use_channels: List[int],
     blow_out_air_volumes: Union[float, List[float]] = 0,
     air_transport_retract_dist: float = 10,
@@ -869,23 +869,23 @@ class STAR(HamiltonLiquidHandler):
     """ Dispense liquid from the specified channels. """
 
     x_positions, y_positions, channels_involved = \
-      self._channel_positions_to_fw_positions(channels, use_channels)
+      self._ops_to_fw_positions(ops, use_channels)
 
     params = []
 
-    for channel in channels:
-      liquid_surface_no_lld = channel.get_absolute_location().z
-      if channel.offset.z == 0: # default offset_z is 1
+    for op in ops:
+      liquid_surface_no_lld = op.get_absolute_location().z
+      if op.offset.z == 0: # default offset_z is 1
         liquid_surface_no_lld += 1
 
-      if channel.flow_rate is not None:
-        flow_rate = channel.flow_rate
+      if op.flow_rate is not None:
+        flow_rate = op.flow_rate
       else:
         flow_rate = 120
 
       params.append({
         "dispensing_mode": 2,
-        "dispense_volumes": int(channel.volume*10) if channel is not None else 0,
+        "dispense_volumes": int(op.volume*10),
         "lld_search_height": 2321,
         "liquid_surface_no_lld": int(liquid_surface_no_lld * 10), #1881,
         "pull_out_distance_transport_air": int(air_transport_retract_dist * 10),
@@ -969,7 +969,7 @@ class STAR(HamiltonLiquidHandler):
         y_positions=y_positions,
         lld_mode=[0] * len(boavs),
         # units of 0.1mm, 1cm above
-        liquid_surface_no_lld=[int((channels[0].get_absolute_location().z + 10) * 10)] * 8,
+        liquid_surface_no_lld=[int((ops[0].get_absolute_location().z + 10) * 10)] * 8,
         dispense_volumes=boavs
       )
 

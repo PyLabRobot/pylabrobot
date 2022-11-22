@@ -256,7 +256,7 @@ class LiquidHandler:
   @need_setup_finished
   def pick_up_tips(
     self,
-    channels: List[Tip],
+    tips: List[Tip],
     use_channels: Optional[List[int]] = None,
     offsets: Union[Coordinate, List[Coordinate]] = Coordinate.zero(),
     **backend_kwargs
@@ -293,9 +293,7 @@ class LiquidHandler:
       ... )
 
     Args:
-      channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
-        :class:`Tip` objects. This list will be flattened automatically. Use `None` to indicate
-        that no tips should be picked up by this channel.
+      tips: Tips to pick up.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the tip
@@ -312,28 +310,28 @@ class LiquidHandler:
       HasTipError: If one or more channels already have a tip.
     """
 
-    offsets = expand(offsets, len(channels))
+    offsets = expand(offsets, len(tips))
 
     if use_channels is None:
-      use_channels = list(range(len(channels)))
+      use_channels = list(range(len(tips)))
 
-    assert len(channels) == len(offsets) == len(use_channels), \
-      "Number of channels and offsets and use_channels must be equal."
+    assert len(tips) == len(offsets) == len(use_channels), \
+      "Number of tips and offsets and use_channels must be equal."
 
-    tips = [(Pickup(tip, offset) if tip is not None else None)
-            for tip, offset in zip(channels, offsets)]
+    pickups = [(Pickup(tip, offset) if tip is not None else None)
+            for tip, offset in zip(tips, offsets)]
 
-    self._assert_resources_exist(channels)
+    self._assert_resources_exist(tips)
 
-    self.backend.pick_up_tips(channels=tips, use_channels=use_channels, **backend_kwargs)
+    self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
 
     # Save the tips that are currently picked up.
-    self._picked_up_tips = channels
+    self._picked_up_tips = tips
 
   @need_setup_finished
   def discard_tips(
     self,
-    channels: List[Tip],
+    tips: List[Tip],
     use_channels: Optional[List[int]] = None,
     offsets: Union[Coordinate, List[Coordinate]] = Coordinate.zero(),
     **backend_kwargs
@@ -357,9 +355,7 @@ class LiquidHandler:
       ... )
 
     Args:
-      channels: Channel parameters. Each channel can be a :class:`Tip` object, a list of
-        :class:`Tip` objects. This list will be flattened automatically. Use `None` to indicate
-        that no tips should be discarded up by this channel.
+      tips: Tip resource locations to discard to.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the tip
@@ -379,20 +375,20 @@ class LiquidHandler:
       HasTipError: If a tip already exists at one or more specified positions.
     """
 
-    offsets = expand(offsets, len(channels))
+    offsets = expand(offsets, len(tips))
 
     if use_channels is None:
-      use_channels = list(range(len(channels)))
+      use_channels = list(range(len(tips)))
 
-    assert len(channels) == len(offsets) == len(use_channels), \
+    assert len(tips) == len(offsets) == len(use_channels), \
       "Number of channels and offsets and use_channels must be equal."
 
-    tips = [(Discard(tip, offset) if tip is not None else None)
-            for tip, offset in zip(channels, offsets)]
+    discards = [(Discard(tip, offset) if tip is not None else None)
+            for tip, offset in zip(tips, offsets)]
 
-    self._assert_resources_exist(channels)
+    self._assert_resources_exist(tips)
 
-    self.backend.discard_tips(channels=tips, use_channels=use_channels, **backend_kwargs)
+    self.backend.discard_tips(ops=discards, use_channels=use_channels, **backend_kwargs)
 
     self._picked_up_tips = None
 
@@ -533,7 +529,7 @@ class LiquidHandler:
     aspirations = [Aspiration(r, v, offset=offset, flow_rate=fr)
                    for r, v, offset, fr in zip(resources, vols, offsets, flow_rates)]
 
-    self.backend.aspirate(channels=aspirations, use_channels=use_channels, **backend_kwargs)
+    self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -659,7 +655,7 @@ class LiquidHandler:
     dispenses = [Dispense(r, v, offset=offset, flow_rate=fr)
                    for r, v, offset, fr in zip(resources, vols, offsets, flow_rates)]
 
-    self.backend.dispense(channels=dispenses, use_channels=use_channels, **backend_kwargs)
+    self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
