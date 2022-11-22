@@ -425,7 +425,10 @@ class LiquidHandler:
     """
 
     for resource in resources:
-      if resource not in self.deck.get_all_resources():
+      # see of top parent of resource is the deck (i.e. resource is assigned to deck)
+      while resource.parent is not None:
+        resource = resource.parent
+      if resource != self.deck:
         raise ValueError(f"Resource named '{resource.name}' not found on deck.")
 
   @need_setup_finished
