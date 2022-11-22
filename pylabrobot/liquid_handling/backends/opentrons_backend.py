@@ -1,6 +1,7 @@
 from typing import Dict, Optional, List, cast
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
   ItemizedResource,
@@ -24,14 +25,6 @@ try:
   USE_OT = True
 except ImportError:
   USE_OT = False
-
-
-class NoTipError(Exception): # TODO: this error should be shared with all of liquid_handling
-  pass
-
-
-class NoChannelError(Exception): # TODO: this error should be shared with all of liquid_handling
-  pass
 
 
 class OpentronsBackend(LiquidHandlerBackend):

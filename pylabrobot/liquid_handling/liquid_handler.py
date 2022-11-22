@@ -484,10 +484,11 @@ class LiquidHandler:
     Raises:
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
 
-      ValueError: If no channel will pick up a tip, in other words, if all channels are `None` or
-        if the list of channels is empty.
-
       ValueError: If the positions are not unique.
+
+      NoTipError: If no tip could be find at one or more specified positions.
+
+      HasTipError: If one or more channels already have a tip.
     """
 
     offsets = expand(offsets, len(channels))
@@ -551,6 +552,10 @@ class LiquidHandler:
         if the list of channels is empty.
 
       ValueError: If the positions are not unique.
+
+      NoTipError: If one or more channels do not have a tip.
+
+      HasTipError: If a tip already exists at one or more specified positions.
     """
 
     offsets = expand(offsets, len(channels))

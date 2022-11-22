@@ -78,7 +78,7 @@ class TestSTARResponseParsing(unittest.TestCase):
       self.star.parse_response("C0QMid1111 er01/30", "")
     e = ctx.exception
     self.assertEqual(len(e), 1)
-    self.assertIn("Master", e)
+    assert "Master" in e
     self.assertIsInstance(e["Master"], CommandSyntaxError)
     self.assertEqual(e["Master"].message, "Unknown command")
 
@@ -87,8 +87,8 @@ class TestSTARResponseParsing(unittest.TestCase):
       self.star.parse_response("C0QMid1111 er99/00 P100/00 P235/00 P402/98 PG08/76", "")
     e = ctx.exception
     self.assertEqual(len(e), 3)
-    self.assertNotIn("Master", e)
-    self.assertNotIn("Pipetting channel 1", e)
+    assert "Master" not in e
+    assert "Pipetting channel 1" not in e
     self.assertEqual(e["Pipetting channel 2"].raw_response, "35/00")
     self.assertEqual(e["Pipetting channel 4"].raw_response, "02/98")
     self.assertEqual(e["Pipetting channel 16"].raw_response, "08/76")
@@ -107,8 +107,8 @@ class TestSTARResponseParsing(unittest.TestCase):
 
     e = ctx.exception
     self.assertEqual(len(e), 1)
-    self.assertNotIn("Master", e)
-    self.assertIn("Pipetting channel 1", e)
+    assert "Master" not in e
+    assert "Pipetting channel 1" in e
     self.assertIsInstance(e["Pipetting channel 1"], UnknownHamiltonError)
     self.assertEqual(e["Pipetting channel 1"].message, "Unknown command")
 

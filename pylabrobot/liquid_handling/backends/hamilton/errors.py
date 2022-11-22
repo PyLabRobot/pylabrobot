@@ -1,7 +1,7 @@
 """ Hamilton backend errors """
 
 from abc import ABCMeta
-from typing import Optional, Type
+from typing import Optional, Type, Dict, ItemsView
 
 
 class HamiltonModuleError(Exception, metaclass=ABCMeta):
@@ -10,11 +10,13 @@ class HamiltonModuleError(Exception, metaclass=ABCMeta):
   def __init__(
     self,
     message: str,
-    raw_response: Optional[str] = None,
-    raw_module: Optional[str] = None
+    trace_information: int,
+    raw_response: str,
+    raw_module: str,
   ):
     super().__init__(message)
     self.message = message
+    self.trace_information = trace_information
     self.raw_response = raw_response
     self.raw_module = raw_module
 
@@ -684,23 +686,23 @@ class HamiltonFirmwareError(HamiltonError):
     ... except HamiltonError as e:
     ...   print(e)
     HamiltonFirmwareError({
-      'Pipetting Channel 1': NoTipError('Tip already picked up'),
-      'Pipetting Channel 3': NoTipError('Tip already picked up'),
+      'Pipetting channel 1': NoTipError('Tip already picked up'),
+      'Pipetting channel 3': NoTipError('Tip already picked up'),
     })
 
     >>> try:
     ...   lh.pick_up_tips([True, False, True])
     ... except HamiltonError as e:
-    ...   if 'Pipetting Channel 1' in e:
-    ...     print('Pipetting Channel 1 error: ', e['Pipetting Channel 1'], e.error_code)
-    Pipetting Channel 1 error:  NoTipError('Tip already picked up'), '08/76'
+    ...   if 'Pipetting channel 1' in e:
+    ...     print('Pipetting channel 1 error: ', e['Pipetting channel 1'], e.error_code)
+    Pipetting channel 1 error:  NoTipError('Tip already picked up'), '08/76'
   """
 
   def __init__(self, errors, raw_response=None):
     self.raw_response = raw_response
 
     # Convert error codes to error objects
-    self.errors = {}
+    self.errors: Dict[str, HamiltonModuleError] = {}
     for module_id, error in errors.items():
       module_name = _module_id_to_module_name(module_id)
       if "/" in error:
@@ -717,6 +719,7 @@ class HamiltonFirmwareError(HamiltonError):
       error_description = HamiltonFirmwareError.trace_information_to_string(
         module_identifier=module_id, trace_information=trace_information)
       self.errors[module_name] = error_class(error_description,
+                                             trace_information=trace_information,
                                              raw_response=error,
                                              raw_module=module_id)
 
@@ -726,20 +729,29 @@ class HamiltonFirmwareError(HamiltonError):
 
     super().__init__(str(self.errors))
 
-  def __len__(self):
+  def __len__(self) -> int:
     return len(self.errors)
 
-  def __getitem__(self, key):
+  def __getitem__(self, key: str):
     return self.errors[key]
 
-  def __setitem__(self, key, value):
+  def __setitem__(self, key: str, value: HamiltonModuleError):
     self.errors[key] = value
 
-  def __contains__(self, key):
+  def __contains__(self, key: str) -> bool:
     return key in self.errors
 
-  def items(self):
+  def items(self) -> ItemsView[str, HamiltonModuleError]:
     return self.errors.items()
+
+  def error_for_channel(self, channel: int) -> Optional[HamiltonModuleError]:
+    """ Return the error for a given channel.
+
+    .. warning::
+      Channel here is 1-indexed, like the firmware API, but STAR uses 0-indexed channels.
+    """
+
+    return self.errors.get(f"Pipetting channel {channel}")
 
   @staticmethod
   def trace_information_to_string(module_identifier: str, trace_information: int) -> str:
@@ -910,4 +922,3 @@ class VENUSError(HamiltonError):
   """ VENUS error """
 
   pass
-

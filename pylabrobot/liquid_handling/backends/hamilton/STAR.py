@@ -12,6 +12,12 @@ import re
 from typing import Callable, List, Optional, Tuple, Dict, Any, Union, cast
 
 from pylabrobot import utils
+from pylabrobot.liquid_handling.errors import (
+  NoTipError,
+  HasTipError,
+  TooLittleLiquidError,
+  TooLittleVolumeError,
+)
 from pylabrobot.liquid_handling.resources import (
   Plate,
   Resource,
@@ -32,9 +38,8 @@ from pylabrobot.liquid_handling.standard import (
   Move
 )
 
-from .errors import (
-  HamiltonFirmwareError
-)
+import pylabrobot.liquid_handling.backends.hamilton.errors as herrors
+from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
 
 logger = logging.getLogger(__name__)
 
@@ -229,9 +234,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       # Match response against regex, save results in right datatype.
       r = re.search(regex, resp)
       if r is None:
-        # Don't raise an error if we are looking for the id parameter.
-        # if name == "id":
-          # return None
         raise ValueError(f"could not find matches for parameter {name}")
 
       g = r.groups()
@@ -646,7 +648,7 @@ class STAR(HamiltonLiquidHandler):
     """ Pick up tips from a resource. """
 
     # TODO: channels involved
-    x_positions, y_positions, channels_involed = \
+    x_positions, y_positions, channels_involved = \
       self._channel_positions_to_fw_positions(channels, use_channels)
 
     ttti = self.get_ttti([c.resource for c in channels])
@@ -659,13 +661,24 @@ class STAR(HamiltonLiquidHandler):
     }
     params.update(backend_kwargs)
 
-    return self.pick_up_tip(
-      x_positions=x_positions,
-      y_positions=y_positions,
-      tip_pattern=channels_involed,
-      tip_type_idx=ttti,
-      **params
-    )
+    try:
+      return self.pick_up_tip(
+        x_positions=x_positions,
+        y_positions=y_positions,
+        tip_pattern=channels_involved,
+        tip_type_idx=ttti,
+        **params
+      )
+    except HamiltonFirmwareError as e:
+      tip_errors: List[int] = []
+      for i in range(1, self.num_channels+1):
+        channel_error = e.error_for_channel(i)
+        if isinstance(channel_error, herrors.TipAlreadyFittedError):
+          tip_errors.append(i-1)
+      if len(tip_errors) > 0:
+        raise HasTipError(f"Tip already fitted on channels {tip_errors}") from e
+
+      raise e
 
   @need_iswap_parked
   def discard_tips(
@@ -676,7 +689,7 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ Discard tips from a resource. """
 
-    x_positions, y_positions, channels_involed = \
+    x_positions, y_positions, channels_involved = \
       self._channel_positions_to_fw_positions(channels, use_channels)
     ttti = self.get_ttti([(c.resource if c is not None else None) for c in channels])
 
@@ -689,16 +702,25 @@ class STAR(HamiltonLiquidHandler):
     }
     params.update(backend_kwargs)
 
-    return self.discard_tip(
-      x_positions=x_positions,
-      y_positions=y_positions,
-      tip_pattern=channels_involed,
-      tip_type_idx=ttti,
-      **params
-    )
+    try:
+      return self.discard_tip(
+        x_positions=x_positions,
+        y_positions=y_positions,
+        tip_pattern=channels_involved,
+        tip_type_idx=ttti,
+        **params
+      )
+    except HamiltonFirmwareError as e:
+      tip_errors: List[int] = []
+      for i in range(1, self.num_channels+1):
+        channel_error = e.error_for_channel(i)
+        if isinstance(channel_error, herrors.NoTipError):
+          tip_errors.append(i-1)
 
-  def default_aspiration_flow_rate(self) -> float:
-    return 1
+      if len(tip_errors) > 0:
+        raise NoTipError(f"No tip present on channels {tip_errors}") from e
+
+      raise e
 
   @need_iswap_parked
   def aspirate(
@@ -807,12 +829,33 @@ class STAR(HamiltonLiquidHandler):
       if isinstance(value, list):
         cmd_kwargs[key] = [v for i, v in enumerate(value) if channels_involved[i]]
 
-    return self.aspirate_pip(
-      tip_pattern=channels_involved,
-      x_positions=x_positions,
-      y_positions=y_positions,
-      **cmd_kwargs,
-    )
+    try:
+      return self.aspirate_pip(
+        tip_pattern=channels_involved,
+        x_positions=x_positions,
+        y_positions=y_positions,
+        **cmd_kwargs,
+      )
+    except HamiltonFirmwareError as e:
+      tll: List[int] = []
+      tlv: List[int] = []
+      for i in range(1, self.num_channels+1):
+        channel_error = e.error_for_channel(i)
+        if channel_error is None:
+          continue
+        if channel_error.trace_information in [70, 71]: # too little / no liquid
+          tll.append(i-1)
+        elif channel_error.trace_information in [54]: # "Position out of permitted area" = too much
+          tlv.append(i-1)
+
+      if len(tll) > 0:
+        raise TooLittleLiquidError(f"There is not enough liquid in containers where the following"
+                                   f"channels were trying to aspirate: {tll}") from e
+      if len(tlv) > 0:
+        raise TooLittleVolumeError(f"There is too much liquid in the following channels: {tlv}") \
+          from e
+
+      raise e
 
   @need_iswap_parked
   def dispense(
@@ -889,12 +932,27 @@ class STAR(HamiltonLiquidHandler):
     cmd_kwargs.update(backend_kwargs)
 
     # Do normal dispense first, then blow out air (maybe).
-    ret = self.dispense_pip(
-      tip_pattern=channels_involved,
-      x_positions=x_positions,
-      y_positions=y_positions,
-      **cmd_kwargs
-    )
+    try:
+      ret =  self.dispense_pip(
+        tip_pattern=channels_involved,
+        x_positions=x_positions,
+        y_positions=y_positions,
+        **cmd_kwargs,
+      )
+    except HamiltonFirmwareError as e:
+      tll: List[int] = []
+      for i in range(1, self.num_channels+1):
+        channel_error = e.error_for_channel(i)
+        if channel_error is None:
+          continue
+        if channel_error.trace_information in [54]: # "Position out of permitted area" = too little
+          tll.append(i-1)
+
+      if len(tll) > 0:
+        raise TooLittleLiquidError(f"There is not enough liquid in the following channels: {tll}") \
+            from e
+
+      raise e
 
     # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we dispense air
     # manually.
