@@ -504,7 +504,7 @@ class LiquidHandler:
 
     self._assert_resources_exist(channels)
 
-    self.backend.pick_up_tips(*tips, use_channels=use_channels, **backend_kwargs)
+    self.backend.pick_up_tips(channels=tips, use_channels=use_channels, **backend_kwargs)
 
     # Save the tips that are currently picked up.
     self._picked_up_tips = channels
@@ -571,7 +571,7 @@ class LiquidHandler:
 
     self._assert_resources_exist(channels)
 
-    self.backend.discard_tips(*tips, use_channels=use_channels, **backend_kwargs)
+    self.backend.discard_tips(channels=tips, use_channels=use_channels, **backend_kwargs)
 
     self._picked_up_tips = None
 
@@ -679,7 +679,7 @@ class LiquidHandler:
       (Aspiration(c, v, offset=offset, flow_rate=fr) if c is not None else None)
       for c, v, offset, fr in zip(wells, vols, offsets, flow_rates)]
 
-    self.backend.aspirate(*aspirations, use_channels=use_channels, **backend_kwargs)
+    self.backend.aspirate(channels=aspirations, use_channels=use_channels, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -778,7 +778,7 @@ class LiquidHandler:
       (Dispense(c, v, offset=offset, flow_rate=fr) if c is not None else None)
       for c, v, offset, fr in zip(wells, vols, offsets, flow_rates)]
 
-    self.backend.dispense(*dispenses, use_channels=use_channels, **backend_kwargs)
+    self.backend.dispense(channels=dispenses, use_channels=use_channels, **backend_kwargs)
 
     if end_delay > 0:
       time.sleep(end_delay)

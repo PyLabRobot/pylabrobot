@@ -218,7 +218,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     return None
 
-  def pick_up_tips(self, *channels: Pickup, use_channels: List[int]):
+  def pick_up_tips(self, channels: List[Pickup], use_channels: List[int]):
     """ Pick up tips from the specified resource. """
 
     assert len(channels) == 1, "only one channel supported for now"
@@ -241,7 +241,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     else:
       self.right_pipette_has_tip = True
 
-  def discard_tips(self, *channels: Discard, use_channels: List[int]):
+  def discard_tips(self, channels: List[Discard], use_channels: List[int]):
     """ Discard tips from the specified resource. """
 
     assert len(channels) == 1 # only one channel supported for now
@@ -327,7 +327,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6
     }[pipette_name]
 
-  def aspirate(self, *channels: Aspiration, use_channels: List[int]):
+  def aspirate(self, channels: List[Aspiration], use_channels: List[int]):
     """ Aspirate liquid from the specified resource using pip. """
 
     assert len(channels) == 1, "only one channel supported for now"
@@ -378,7 +378,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6
     }[pipette_name]
 
-  def dispense(self, *channels: Dispense, use_channels: List[int]):
+  def dispense(self, channels: List[Dispense], use_channels: List[int]):
     """ Dispense liquid from the specified resource using pip. """
 
     assert len(channels) == 1, "only one channel supported for now"

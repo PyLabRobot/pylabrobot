@@ -385,12 +385,15 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
     self.assertEqual(self.get_first_command("pick_up_tips"), {
       "command": "pick_up_tips",
-      "args": (Pickup(tip_rack[0], Coordinate(x=1, y=1, z=1)),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0],
+        "channels": [Pickup(tip_rack[0], Coordinate(x=1, y=1, z=1))]}})
     self.assertEqual(self.get_first_command("discard_tips"), {
       "command": "discard_tips",
-      "args": (Discard(tip_rack[0], Coordinate(x=1, y=1, z=1)),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0], "channels": [Discard(tip_rack[0], Coordinate(x=1, y=1, z=1))]}})
 
   def test_offsets_asp_disp(self):
     well = self.plate["A1"]
@@ -399,12 +402,16 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
-      "args": (Aspiration(resource=well[0], volume=10, offset=Coordinate(x=1, y=1, z=1)),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0],
+        "channels": [Aspiration(resource=well[0], volume=10, offset=Coordinate(x=1, y=1, z=1))]}})
     self.assertEqual(self.get_first_command("dispense"), {
       "command": "dispense",
-      "args": (Dispense(resource=well[0], volume=10, offset=Coordinate(x=1, y=1, z=1)),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0],
+        "channels": [Dispense(resource=well[0], volume=10, offset=Coordinate(x=1, y=1, z=1))]}})
 
   def test_return_tips(self):
     tips = self.tip_rack["A1"]
@@ -413,8 +420,10 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
     self.assertEqual(self.get_first_command("discard_tips"), {
       "command": "discard_tips",
-      "args": (Discard(tips[0]),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0],
+        "channels": [Discard(tips[0])]}})
 
     with self.assertRaises(RuntimeError):
       self.lh.return_tips()
@@ -438,12 +447,16 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
-      "args": (Aspiration(resource=self.plate.get_item("A1"), volume=10.0),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0],
+        "channels": [Aspiration(resource=self.plate.get_item("A1"), volume=10.0)]}})
     self.assertEqual(self.get_first_command("dispense"), {
       "command": "dispense",
-      "args": (Dispense(resource=self.plate.get_item("A2"), volume=10.0),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0],
+        "channels": [Dispense(resource=self.plate.get_item("A2"), volume=10.0)]}})
     self.backend.clear()
 
     # Transfer to multiple wells
@@ -451,12 +464,16 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       aspiration_liquid_class=None, dispense_liquid_classes=None)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
-      "args": (Aspiration(resource=self.plate.get_item("A1"), volume=80.0),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0],
+        "channels": [Aspiration(resource=self.plate.get_item("A1"), volume=80.0)]}})
     self.assertEqual(self.get_first_command("dispense"), {
       "command": "dispense",
-      "args": tuple(Dispense(resource=well, volume=10.0) for well in self.plate["A1:H1"]),
-      "kwargs": {"use_channels": [0, 1, 2, 3, 4, 5, 6, 7]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0, 1, 2, 3, 4, 5, 6, 7],
+        "channels": [Dispense(resource=well, volume=10.0) for well in self.plate["A1:H1"]]}})
     self.backend.clear()
 
     # Transfer with ratios
@@ -464,13 +481,17 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       aspiration_liquid_class=None, dispense_liquid_classes=None)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
-      "args": (Aspiration(resource=self.plate.get_item("A1"), volume=60.0),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0],
+        "channels": [Aspiration(resource=self.plate.get_item("A1"), volume=60.0)]}})
     self.assertEqual(self.get_first_command("dispense"), {
       "command": "dispense",
-      "args": (Dispense(resource=self.plate.get_item("B1"), volume=40.0),
-               Dispense(resource=self.plate.get_item("C1"), volume=20.0)),
-      "kwargs": {"use_channels": [0, 1]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0, 1],
+        "channels": [Dispense(resource=self.plate.get_item("B1"), volume=40.0),
+                     Dispense(resource=self.plate.get_item("C1"), volume=20.0)]}})
     self.backend.clear()
 
     # Transfer with target_vols
@@ -479,13 +500,17 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       aspiration_liquid_class=None, dispense_liquid_classes=None)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
-      "args": (Aspiration(resource=self.plate.get_well("A1"), volume=sum(vols)),),
-      "kwargs": {"use_channels": [0]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0],
+        "channels": [Aspiration(resource=self.plate.get_well("A1"), volume=sum(vols))]}})
     self.assertEqual(self.get_first_command("dispense"), {
       "command": "dispense",
-      "args":
-        tuple(Dispense(resource=well, volume=vol) for well, vol in zip(self.plate["A1:H1"], vols)),
-      "kwargs": {"use_channels": [0, 1, 2, 3, 4, 5, 6, 7]}})
+      "args": (),
+      "kwargs": {
+        "use_channels": [0, 1, 2, 3, 4, 5, 6, 7],
+        "channels":
+          [Dispense(resource=well, volume=vol) for well, vol in zip(self.plate["A1:H1"], vols)]}})
     self.backend.clear()
 
     # target_vols and source_vol specified
