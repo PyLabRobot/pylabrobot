@@ -417,14 +417,14 @@ class LiquidHandler:
   @need_setup_finished
   def aspirate(
     self,
-    wells: Sequence[Well],
+    resources: Union[Sequence[Resource], Resource],
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
     liquid_classes: Optional[Union[LiquidClass, List[Optional[LiquidClass]]]] =
       StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     end_delay: float = 0,
-    offsets: Union[Coordinate, List[Coordinate]] = Coordinate.zero(),
+    offsets: Optional[Union[Coordinate, List[Coordinate]]] = None,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified wells.
@@ -450,13 +450,19 @@ class LiquidHandler:
 
       >>> lh.aspirate(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
 
+      Aspirate from a blue bucket (big container), with the first 4 channels (which will be
+      spaced equally apart):
+
+      >>> lh.aspirate(blue_bucket, vols=50, use_channels=[0, 1, 2, 3])
+
     Args:
-      wells: A list of wells to aspirate liquid from. Use `None` to skip a channel.
-      vols: A list of volumes to aspirate, one for each channel. Note that the `None` values must
-        be in the same position in both lists. If `vols` is a single number, then all channels
-        will aspirate that volume.
+      resources: A list of wells to aspirate liquid from. Can be a single resource, or a list of
+        resources. If a single resource is specified, all channels will aspirate from the same
+        resource.
+      vols: A list of volumes to aspirate, one for each channel. If `vols` is a single number, then
+        all channels will aspirate that volume.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
-        `len(channels)` channels will be used.
+        `len(wells)` channels will be used.
       flow_rates: the aspiration speed. In ul/s.
       liquid_classes: the liquid class with which to perform the aspirations. It provides default
         values for parameters flow_rate, and soon others.
@@ -472,22 +478,50 @@ class LiquidHandler:
       ValueError: If all channels are `None`.
     """
 
-    if len(wells) == 0:
-      raise ValueError("No channels specified")
+    # Start with computing the locations of the aspirations. Can either be a single resource, in
+    # which case all channels will aspirate from there, or a list of resources.
+    if isinstance(resources, Resource): # if single resource, space channels evenly
+      if use_channels is None:
+        use_channels = [0]
 
-    self._assert_resources_exist(wells)
+      n = len(use_channels)
 
-    if use_channels is None:
-      use_channels = list(range(len(wells)))
+      # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
+      # format, raise an error. If it is not supplied, make it a list of the correct length by
+      # spreading channels across the resource evenly.
+      if offsets is not None:
+        if not isinstance(offsets, list) or len(offsets) != n:
+          raise ValueError("Number of offsets must match number of channels used when aspirating "
+                          "from a resource.")
+      else:
+        dx = resources.get_size_x() / 2
+        dy = resources.get_size_y() / (n+1)
+        if dy < 9:
+          raise ValueError(f"Resource is too small to space {n} channels evenly.")
+        offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
+        offsets = list(reversed(offsets)) # reverse so that first channel is at the front
 
-    vols = expand(vols, len(wells))
-    liquid_classes = expand(liquid_classes, len(wells))
-    offsets = expand(offsets, len(wells))
+      resources = [resources] * n
+    else:
+      if len(resources) == 0:
+        raise ValueError("No channels specified")
+      self._assert_resources_exist(resources)
+      n = len(resources)
+
+      if use_channels is None:
+        use_channels = list(range(len(resources)))
+
+      if offsets is None:
+        offsets = Coordinate.zero()
+      offsets = expand(offsets, n)
+
+    vols = expand(vols, n)
+    liquid_classes = expand(liquid_classes, n)
 
     if flow_rates is None:
       flow_rates = [(lc.flow_rate[0] if lc is not None else None) for lc in liquid_classes]
     elif isinstance(flow_rates, (numbers.Rational, float)):
-      flow_rates = [flow_rates] * len(wells)
+      flow_rates = [flow_rates] * n
 
     # Correct volumes using the liquid class' correction curve
     for i, lc in enumerate(liquid_classes):
@@ -496,9 +530,8 @@ class LiquidHandler:
 
     assert len(vols) == len(offsets) == len(flow_rates)
 
-    aspirations = [
-      (Aspiration(c, v, offset=offset, flow_rate=fr) if c is not None else None)
-      for c, v, offset, fr in zip(wells, vols, offsets, flow_rates)]
+    aspirations = [Aspiration(r, v, offset=offset, flow_rate=fr)
+                   for r, v, offset, fr in zip(resources, vols, offsets, flow_rates)]
 
     self.backend.aspirate(channels=aspirations, use_channels=use_channels, **backend_kwargs)
 
@@ -508,14 +541,14 @@ class LiquidHandler:
   @need_setup_finished
   def dispense(
     self,
-    wells: Sequence[Well],
+    resources: Union[Resource, Sequence[Resource]],
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
     liquid_classes: Union[LiquidClass, List[LiquidClass]] =
       StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     end_delay: float = 0,
-    offsets: Union[Coordinate, List[Coordinate]] = Coordinate.zero(),
+    offsets: Optional[Union[Coordinate, List[Coordinate]]] = None,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
@@ -541,12 +574,14 @@ class LiquidHandler:
 
       >>> lh.dispense(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
 
+      Dispense a blue bucket (big container), with the first 4 channels (which will be spaced
+      equally apart):
+
+      >>> lh.dispense(blue_bucket, vols=50, use_channels=[0, 1, 2, 3])
+
     Args:
-      wells: A list of wells to dispense liquid to. If channels is a well or a list of
-        wells, then vols must be a list of volumes, otherwise vols must be None. If channels is a
-        list of tuples, they must be of length 2, and the first element must be a well or a list of
-        wells, and the second element must be a volume or a list of volumes. When a single volume is
-        passed with a list of wells, it is used for all wells in the list.
+      wells: A list of resources to dispense liquid to. Can be a list of resources, or a single
+        resource, in which case all channels will dispense to that resource.
       vols: A list of volumes to dispense, one for each channel, or a single volume to dispense to
         all channels. If `vols` is a single number, then all channels will dispense that volume. In
         units of ul.
@@ -569,35 +604,60 @@ class LiquidHandler:
       ValueError: If all channels are `None`.
     """
 
-    if len(wells) == 0:
-      raise ValueError("No channels specified")
+    # Start with computing the locations of the dispenses. Can either be a single resource, in
+    # which case all channels will dispense to there, or a list of resources.
+    if isinstance(resources, Resource): # if single resource, space channels evenly
+      if use_channels is None:
+        use_channels = [0]
 
-    if use_channels is None:
-      use_channels = list(range(len(wells)))
+      n = len(use_channels)
 
-    vols = expand(vols, len(wells))
-    liquid_classes = expand(liquid_classes, len(wells))
-    offsets = expand(offsets, len(wells))
+      # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
+      # format, raise an error. If it is not supplied, make it a list of the correct length by
+      # spreading channels across the resource evenly.
+      if offsets is not None:
+        if not isinstance(offsets, list) or len(offsets) != n:
+          raise ValueError("Number of offsets must match number of channels used when dispensing "
+                          "to a resource.")
+      else:
+        dx = resources.get_size_x() / 2
+        dy = resources.get_size_y() / (n+1)
+        if dy < 9:
+          raise ValueError(f"Resource is too small to space {n} channels evenly.")
+        offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
+        offsets = list(reversed(offsets)) # reverse so that first channel is at the front
+
+      resources = [resources] * n
+    else:
+      if len(resources) == 0:
+        raise ValueError("No channels specified")
+      self._assert_resources_exist(resources)
+      n = len(resources)
+
+      if use_channels is None:
+        use_channels = list(range(len(resources)))
+
+      if offsets is None:
+        offsets = Coordinate.zero()
+      offsets = expand(offsets, n)
+
+    vols = expand(vols, n)
+    liquid_classes = expand(liquid_classes, n)
 
     if flow_rates is None:
       flow_rates = [(lc.flow_rate[1] if lc is not None else None) for lc in liquid_classes]
     elif isinstance(flow_rates, (numbers.Rational, float)):
-      flow_rates = [flow_rates] * len(wells)
+      flow_rates = [flow_rates] * n
 
     # Correct volumes using the liquid class' correction curve
     for i, lc in enumerate(liquid_classes):
       if lc is not None:
         vols[i] = lc.compute_corrected_volume(vols[i])
 
-    self._assert_resources_exist(wells)
+    assert len(vols) == len(offsets) == len(flow_rates)
 
-    assert len(wells) == len(vols) == len(offsets) == len(flow_rates) == len(use_channels), \
-      f"len(wells) = {len(wells)}, len(vols) = {len(vols)}, len(offsets) = {len(offsets)}, " \
-      f"len(flow_rates) = {len(flow_rates)}, len(use_channels) = {len(use_channels)}"
-
-    dispenses = [
-      (Dispense(c, v, offset=offset, flow_rate=fr) if c is not None else None)
-      for c, v, offset, fr in zip(wells, vols, offsets, flow_rates)]
+    dispenses = [Dispense(r, v, offset=offset, flow_rate=fr)
+                   for r, v, offset, fr in zip(resources, vols, offsets, flow_rates)]
 
     self.backend.dispense(channels=dispenses, use_channels=use_channels, **backend_kwargs)
 
@@ -674,13 +734,13 @@ class LiquidHandler:
       target_vols = [source_vol * r / sum(ratios) for r in ratios]
 
     self.aspirate(
-      wells=[source],
+      resources=[source],
       vols=[sum(target_vols)],
       flow_rates=aspiration_flow_rate,
       liquid_classes=aspiration_liquid_class,
       **backend_kwargs)
     self.dispense(
-      wells=targets,
+      resources=targets,
       vols=target_vols,
       flow_rates=dispense_flow_rates,
       liquid_classes=dispense_liquid_classes,

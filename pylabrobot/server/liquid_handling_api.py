@@ -140,7 +140,7 @@ def aspirate():
 
   try:
     current_app.lh.aspirate(
-      wells=[a.resource for a in aspirations],
+      resources=[a.resource for a in aspirations],
       vols=[a.volume for a in aspirations],
       offsets=[a.offset for a in aspirations],
       flow_rates=[a.flow_rate for a in aspirations],
@@ -159,7 +159,7 @@ def dispense():
 
   try:
     current_app.lh.dispense(
-      wells=[d.resource for d in dispenses],
+      resources=[d.resource for d in dispenses],
       vols=[d.volume for d in dispenses],
       offsets=[d.offset for d in dispenses],
       flow_rates=[d.flow_rate for d in dispenses],
