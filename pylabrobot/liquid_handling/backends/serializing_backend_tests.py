@@ -30,7 +30,7 @@ class SerializingBackendTests(unittest.TestCase):
     self.lh.setup()
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
-    self.tip_car[0] = self.tips = STF_L(name="tip_rack_01")
+    self.tip_car[0] = self.tip_rack = STF_L(name="tip_rack_01")
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
@@ -43,7 +43,7 @@ class SerializingBackendTests(unittest.TestCase):
     self.maxDiff = None
 
   def test_pick_up_tips(self):
-    tips = self.tips["A1"]
+    tips = self.tip_rack["A1"]
     self.lh.pick_up_tips(tips)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "pick_up_tips")
@@ -51,7 +51,7 @@ class SerializingBackendTests(unittest.TestCase):
       channels=[Pickup(resource=tips[0]).serialize()], use_channels=[0]))
 
   def test_discard_tips(self):
-    tips = self.tips["A1"]
+    tips = self.tip_rack["A1"]
     self.lh.discard_tips(tips)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "discard_tips")
@@ -75,16 +75,16 @@ class SerializingBackendTests(unittest.TestCase):
       channels=[Dispense(resource=wells[0], volume=10).serialize()], use_channels=[0]))
 
   def test_pick_up_tips96(self):
-    self.lh.pick_up_tips96(self.tips)
+    self.lh.pick_up_tips96(self.tip_rack)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "pick_up_tips96")
-    self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource=self.tips.serialize()))
+    self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource_name=self.tip_rack.name))
 
   def test_discard_tips96(self):
-    self.lh.discard_tips96(self.tips)
+    self.lh.discard_tips96(self.tip_rack)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "discard_tips96")
-    self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource=self.tips.serialize()))
+    self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource_name=self.tip_rack.name))
 
   def test_aspirate96(self):
     self.lh.aspirate_plate(self.plate, volume=10, liquid_class=None)
