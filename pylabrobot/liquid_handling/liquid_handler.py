@@ -5,10 +5,11 @@ import inspect
 import json
 import logging
 import time
-from typing import Union, Optional, List, Callable, Sequence, TypeVar, cast
+from typing import Union, Optional, List, Callable, Sequence, cast
 
 from pylabrobot import utils
 # from pylabrobot.default import DEFAULT
+from pylabrobot.utils.list import expand
 import pylabrobot.utils.file_parsing as file_parser
 from pylabrobot.liquid_handling.resources.abstract import Deck
 
@@ -57,16 +58,6 @@ def need_setup_finished(func: Callable): # pylint: disable=no-self-argument
       raise RuntimeError("The setup has not finished. See `LiquidHandler.setup`.")
     func(self, *args, **kwargs) # pylint: disable=not-callable
   return wrapper
-
-
-# probably move to utils
-T = TypeVar("T")
-def expand(list_or_item: Union[List[T], T], n: int) -> List[T]:
-  if isinstance(list_or_item, list):
-    if len(list_or_item) != n:
-      raise ValueError(f"Expected list of length {n}, got {len(list_or_item)}.")
-    return list_or_item
-  return [list_or_item] * n
 
 
 class LiquidHandler:

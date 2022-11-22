@@ -4,7 +4,8 @@ import unittest
 
 from pylabrobot.utils import (
   assert_shape,
-  reshape_2d
+  reshape_2d,
+  expand
 )
 
 
@@ -28,6 +29,16 @@ class TestListUtils(unittest.TestCase):
       reshape_2d([1, 2, 3, 4], (2, 3))
     with self.assertRaises(ValueError):
       reshape_2d([1, 2, 3, 4, 5, 6], (2, 2))
+
+  def test_expand(self):
+    self.assertEqual(expand(1, n=3), [1, 1, 1])
+    self.assertEqual(expand([1, 2, 3], n=3), [1, 2, 3])
+    self.assertEqual(expand("test", n=3), ["test", "test", "test"])
+
+    with self.assertRaises(ValueError):
+      expand(1, n=0)
+    with self.assertRaises(ValueError):
+      expand(1, n=-1)
 
 
 if __name__ == "__main__":
