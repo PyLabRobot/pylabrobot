@@ -414,16 +414,17 @@ class LiquidHandler:
     if len(not_none) != len(set(not_none)):
       raise ValueError("Positions must be unique.")
 
-  def _assert_resources_exist(self, resources: Sequence[Optional[Resource]]):
-    """ Checks that each resource in `resources` is assigned to the deck. None values are ignored.
+  def _assert_resources_exist(self, resources: Sequence[Resource]):
+    """ Checks that each resource in `resources` is assigned to the deck.
 
     Args:
       resources: List of resources.
+
+    Raises:
+      ValueError: If a resource is not assigned to the deck.
     """
 
     for resource in resources:
-      if resource is None:
-        continue
       if resource not in self.deck.get_all_resources():
         raise ValueError(f"Resource named '{resource.name}' not found on deck.")
 
