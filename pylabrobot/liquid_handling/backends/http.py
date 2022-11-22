@@ -1,4 +1,3 @@
-import json
 from typing import Optional, Dict, Any, cast
 import urllib.parse
 
@@ -51,12 +50,7 @@ class HTTPBackend(SerializingBackend):
     assert protocol in ["http", "https"]
     self.protocol = protocol
     self.base_path = base_path
-    self.url = f"{self.protocol}://{self.host}:{self.port}/{self.base_path}"
-
-  def _generate_id(self):
-    """ continuously generate unique ids 0 <= x < 10000. """
-    self._id += 1
-    return f"{self._id % 10000:04}"
+    self.url = f"{self.protocol}://{self.host}:{self.port}/{self.base_path}/"
 
   def send_command(self, command: str, data: Optional[Dict[str, Any]] = None) -> Optional[dict]:
     """ Send an event to the server.
@@ -69,23 +63,24 @@ class HTTPBackend(SerializingBackend):
       The response from the browser, if `wait_for_response` is `True`, otherwise `None`.
     """
 
-    url = urllib.parse.urljoin(self.url, command)
-
-    id_ = self._generate_id()
-    cmd_data = dict(event=command, id=id_, version=STANDARD_FORM_JSON_VERSION)
-    if data is not None:
-      cmd_data.update(data)
     if self.session is None:
       raise RuntimeError("The backend is not running. Did you call `setup()`?")
-    resp = self.session.post(url, data=json.dumps(cmd_data))
+
+    command = command.replace("_", "-")
+    url = urllib.parse.urljoin(self.url, command)
+
+    resp = self.session.post(
+      url,
+      json=data,
+      headers={
+        "User-Agent": f"pylabrobot/{STANDARD_FORM_JSON_VERSION}",
+      })
     return cast(dict, resp.json())
 
   def setup(self):
     self.session = requests.Session()
-    self._id = 0
-    self.send_command(command="setup")
+    super().setup()
 
   def stop(self):
     super().stop()
     self.session = None
-    self.send_command(command="stop")

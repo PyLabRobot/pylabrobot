@@ -42,9 +42,9 @@ extras_server = [
 extras_testing = [
     'pytest',
     'pytest-timeout',
-    'requests',
     'pylint',
-    'mypy'
+    'mypy',
+    'responses'
 ] + extras_simulation + extras_opentrons + extras_server + extras_http
 
 extras_dev = extras_docs + extras_simulation + extras_http + extras_websockets + extras_testing + \

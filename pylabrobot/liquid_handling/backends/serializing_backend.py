@@ -64,10 +64,10 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       data=dict(channels=serialized, use_channels=use_channels))
 
   def pick_up_tips96(self, tip_rack: TipRack):
-    self.send_command(command="pick_up_tips96", data=dict(resource=tip_rack.serialize()))
+    self.send_command(command="pick_up_tips96", data=dict(resource_name=tip_rack.name))
 
   def discard_tips96(self, tip_rack: TipRack):
-    self.send_command(command="discard_tips96", data=dict(resource=tip_rack.serialize()))
+    self.send_command(command="discard_tips96", data=dict(resource_name=tip_rack.name))
 
   def aspirate96(self, aspiration: Aspiration):
     self.send_command(command="aspirate96", data=dict(aspiration=aspiration.serialize()))
