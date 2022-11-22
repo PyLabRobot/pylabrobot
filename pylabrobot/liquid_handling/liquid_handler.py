@@ -348,6 +348,9 @@ class LiquidHandler:
 
     assert (fn is not None) != (content is not None), "Either fn or content must be provided."
 
+    if self.setup_finished:
+      raise RuntimeError("Cannot load from json after setup has been finished.")
+
     if content is None:
       with open(cast(str, fn), "r", encoding="utf-8") as f:
         content = json.load(f)
