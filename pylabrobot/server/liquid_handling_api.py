@@ -5,6 +5,7 @@ from typing import List, Tuple, Type, TypeVar, cast
 from flask import Blueprint, request, jsonify, current_app
 import werkzeug
 
+from pylabrobot.liquid_handling.resources import Deck
 from pylabrobot.liquid_handling.standard import (
   PipettingOp,
   Pickup,
@@ -48,7 +49,8 @@ def define_labware():
     return jsonify({"error": "json data must be a dict"}), 400
 
   try:
-    current_app.lh.load_from_json(content=data)
+    deck = Deck.load_from_json(content=data)
+    current_app.lh.deck = deck
   except KeyError as e:
     return jsonify({"error": "missing key in json data: " + str(e)}), 400
 
@@ -97,9 +99,6 @@ def deserialize_liquid_handling_op_from_request(
 
 @lh_api.route("/pick-up-tips", methods=["POST"])
 def pick_up_tips():
-  # return "true" if current_app.lh.setup_finished else "false"
-  print(current_app.lh, current_app.lh.deck.children, current_app.lh.deck.children[0].children[0].resource, current_app.lh.deck.children[1].children[0].resource)
-
   try:
     pickups, use_channels = deserialize_liquid_handling_op_from_request(Pickup)
   except ErrorResponse as e:

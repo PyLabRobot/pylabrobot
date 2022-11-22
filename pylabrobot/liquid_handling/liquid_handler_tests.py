@@ -2,14 +2,12 @@
 # pylint: disable=missing-class-docstring
 
 import io
-import tempfile
 import textwrap
-import os
+from typing import Any, Dict, List, Optional, cast
 import unittest
 import unittest.mock
-from typing import Any, Dict, List, Optional, cast
 
-from pylabrobot.liquid_handling.resources.abstract import Tip, Well, create_equally_spaced
+from pylabrobot.liquid_handling.errors import NoTipError
 
 from . import backends
 from .liquid_handler import LiquidHandler
@@ -20,10 +18,6 @@ from .resources import (
   Cos_96_DW_1mL,
   Cos_96_DW_500ul,
   TipRack,
-  TipCarrier,
-  Plate,
-  PlateCarrier,
-  standard_volume_tip_with_filter
 )
 from .resources.hamilton import STARLetDeck
 from .resources.ml_star import STF_L, HTF_L
@@ -203,136 +197,9 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.lh.summary()
     self.assertEqual(out.getvalue(), expected_out)
 
-  def test_parse_lay_file(self):
-    fn = "./pylabrobot/testing/test_data/test_deck.lay"
-    self.lh.load_from_lay_file(fn)
-
-    tip_car = self.lh.get_resource("TIP_CAR_480_A00_0001")
-    assert isinstance(tip_car, TipCarrier)
-
-    self.assertEqual(tip_car.get_absolute_location(), \
-                     Coordinate(122.500, 63.000, 100.000))
-    self.assertEqual(
-      cast(TipRack, self.lh.get_resource("tips_01")).get_item("A1").get_absolute_location(), \
-      Coordinate(140.400, 145.800, 164.450))
-    self.assertEqual(
-      cast(TipRack, self.lh.get_resource("STF_L_0001")).get_item("A1").get_absolute_location(), \
-      Coordinate(140.400, 241.800, 164.450))
-    self.assertEqual(
-      cast(TipRack, self.lh.get_resource("tips_04")).get_item("A1").get_absolute_location(), \
-      Coordinate(140.400, 433.800, 131.450))
-
-    assert tip_car[0].resource is not None
-    self.assertEqual(tip_car[0].resource.name, "tips_01")
-    assert tip_car[1].resource is not None
-    self.assertEqual(tip_car[1].resource.name, "STF_L_0001")
-    self.assertIsNone(tip_car[2].resource)
-    assert tip_car[3].resource is not None
-    self.assertEqual(tip_car[3].resource.name, "tips_04")
-    self.assertIsNone(tip_car[4].resource)
-
-    self.assertEqual(
-      cast(TipRack, self.lh.get_resource("PLT_CAR_L5AC_A00_0001")).get_absolute_location(), \
-      Coordinate(302.500, 63.000, 100.000))
-    self.assertEqual(
-      cast(TipRack, self.lh.get_resource("Cos_96_DW_1mL_0001")).get_item("A1") \
-        .get_absolute_location(), Coordinate(320.500, 146.000, 187.150))
-    self.assertEqual(
-      cast(TipRack, self.lh.get_resource("Cos_96_DW_500ul_0001")).get_item("A1") \
-        .get_absolute_location(), Coordinate(320.500, 338.000, 188.150))
-    self.assertEqual(
-      cast(TipRack, self.lh.get_resource("Cos_96_DW_1mL_0002")).get_item("A1") \
-        .get_absolute_location(), Coordinate(320.500, 434.000, 187.150))
-    self.assertEqual(
-      cast(TipRack, self.lh.get_resource("Cos_96_DW_2mL_0001")).get_item("A1") \
-        .get_absolute_location(), Coordinate(320.500, 530.000, 187.150))
-
-    plt_car1 = self.lh.get_resource("PLT_CAR_L5AC_A00_0001")
-    assert isinstance(plt_car1, PlateCarrier)
-    assert plt_car1[0].resource is not None
-    self.assertEqual(plt_car1[0].resource.name, "Cos_96_DW_1mL_0001")
-    self.assertIsNone(plt_car1[1].resource)
-    assert plt_car1[2].resource is not None
-    self.assertEqual(plt_car1[2].resource.name, "Cos_96_DW_500ul_0001")
-    assert plt_car1[3].resource is not None
-    self.assertEqual(plt_car1[3].resource.name, "Cos_96_DW_1mL_0002")
-    assert plt_car1[4].resource is not None
-    self.assertEqual(plt_car1[4].resource.name, "Cos_96_DW_2mL_0001")
-
-    self.assertEqual(
-      cast(Plate, self.lh.get_resource("PLT_CAR_L5AC_A00_0002")).get_absolute_location(), \
-      Coordinate(482.500, 63.000, 100.000))
-    self.assertEqual(
-      cast(Plate, self.lh.get_resource("Cos_96_DW_1mL_0003")).get_item("A1") \
-      .get_absolute_location(), Coordinate(500.500, 146.000, 187.150))
-    self.assertEqual(
-      cast(Plate, self.lh.get_resource("Cos_96_DW_500ul_0003")).get_item("A1") \
-      .get_absolute_location(), Coordinate(500.500, 242.000, 188.150))
-    self.assertEqual(
-      cast(Plate, self.lh.get_resource("Cos_96_PCR_0001")).get_item("A1") \
-      .get_absolute_location(), Coordinate(500.500, 434.000, 186.650))
-
-    plt_car2 = self.lh.get_resource("PLT_CAR_L5AC_A00_0002")
-    assert isinstance(plt_car2, PlateCarrier)
-    assert plt_car2[0].resource is not None
-    self.assertEqual(plt_car2[0].resource.name, "Cos_96_DW_1mL_0003")
-    assert plt_car2[1].resource is not None
-    self.assertEqual(plt_car2[1].resource.name, "Cos_96_DW_500ul_0003")
-    self.assertIsNone(plt_car2[2].resource)
-    assert plt_car2[3].resource is not None
-    self.assertEqual(plt_car2[3].resource.name, "Cos_96_PCR_0001")
-    self.assertIsNone(plt_car2[4].resource)
-
   def assert_same(self, lh1, lh2):
     """ Assert two liquid handler decks are the same. """
     self.assertEqual(lh1.deck.get_all_resources(), lh2.deck.get_all_resources())
-
-  def test_json_serialization(self):
-    self.maxDiff = None
-
-    # test with standard resource classes
-    self.build_layout()
-    tmp_dir = tempfile.gettempdir()
-    fn = os.path.join(tmp_dir, "layout.json")
-    self.lh.save(fn)
-
-    be = backends.SaverBackend()
-    recovered = LiquidHandler(be, deck=STARLetDeck())
-    recovered.load_from_json(fn)
-
-    self.assert_same(self.lh, recovered)
-
-    # test with custom classes
-    custom_1 = LiquidHandler(be, deck=STARLetDeck()) # TODO: Deck is what should be deserialized...
-    tc = TipCarrier("tc", 200, 200, 200, sites=[
-      Coordinate(10, 20, 30)
-    ], site_size_x=10, site_size_y=10)
-
-    tc[0] = TipRack("tips", 10, 20, 30, tip_type=standard_volume_tip_with_filter,
-      items=create_equally_spaced(Tip,
-        num_items_x=1, num_items_y=1,
-        dx=-1, dy=-1, dz=-1,
-        item_size_x=1, item_size_y=1, tip_type=standard_volume_tip_with_filter))
-    pc = PlateCarrier("pc", 100, 100, 100, sites=[
-      Coordinate(10, 20, 30)
-    ], site_size_x=10, site_size_y=10)
-    pc[0] = Plate("plate", 10, 20, 30,
-      items=create_equally_spaced(Well,
-        num_items_x=1, num_items_y=1,
-        dx=-1, dy=-1, dz=-1,
-        item_size_x=1, item_size_y=1))
-
-    fn = os.path.join(tmp_dir, "layout.json")
-    custom_1.save(fn)
-    custom_recover = LiquidHandler(be, deck=STARLetDeck())
-    custom_recover.load(fn)
-
-    self.assertEqual(custom_1.deck,
-                     custom_recover.deck)
-
-    # unsupported format
-    with self.assertRaises(ValueError):
-      custom_recover.load(fn + ".unsupported")
 
   def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
@@ -425,7 +292,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
         "use_channels": [0],
         "channels": [Discard(tips[0])]}})
 
-    with self.assertRaises(RuntimeError):
+    with self.assertRaises(NoTipError):
       self.lh.return_tips()
 
   def test_return_tips96(self):
@@ -437,7 +304,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       "args": (self.tip_rack,),
       "kwargs": {}})
 
-    with self.assertRaises(RuntimeError):
+    with self.assertRaises(NoTipError):
       self.lh.return_tips()
 
   def test_transfer(self):
