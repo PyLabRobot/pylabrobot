@@ -9,23 +9,24 @@ class NoChannelError(Exception):
   - when trying to pick up a tip with no empty channels
   """
 
+class ChannelHasTipError(Exception):
+  """ Raised when a channel has a tip, e.g. when trying to pick up a tip with a channel that already
+  has a tip. """
 
-class NoTipError(Exception):
-  """ Raised when a tip is not present while it is required.
 
-  Examples:
-  - when trying to aspirate liquid
-  - when trying to discard
-  - when trying to pick up a tip, but no tip is present in the tip rack
-  """
+class ChannelHasNoTipError(Exception):
+  """ Raised when a channel has no tip, e.g. when trying to discard a tip with a channel that does
+  not have a tip. """
 
-class HasTipError(Exception):
-  """ Raised when a tip is present while it is not required.
 
-  Examples:
-  - when trying to pick up a tip with a tip already present
-  - when to discard a tip to a location in a tip rack where a tip is already present
-  """
+class TipSpotHasTipError(Exception):
+  """ Raised when a tip spot has a tip, e.g. when trying to discard a tip with a tip spot that has a
+  tip. """
+
+
+class TipSpotHasNoTipError(Exception):
+  """ Raised when a tip spot has no tip, e.g. when trying to pick up a tip with a tip spot that does
+  not have a tip. """
 
 
 class TooLittleVolumeError(Exception):

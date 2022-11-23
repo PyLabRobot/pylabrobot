@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from abc import ABC, ABCMeta, abstractmethod
 import enum
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from pylabrobot.liquid_handling.resources import Coordinate, Resource, Tip
+from .resources.abstract.coordinate import Coordinate
+if TYPE_CHECKING:
+  from pylabrobot.liquid_handling.resources import Resource, Tip
 
 
 class PipettingOp(ABC):
@@ -39,12 +41,6 @@ class PipettingOp(ABC):
       "offset": self.offset.serialize()
     }
 
-  @classmethod
-  @abstractmethod
-  def deserialize(cls, data: dict, resource: Resource) -> PipettingOp:
-    pass
-
-
 class TipOp(PipettingOp, metaclass=ABCMeta):
   """ Abstract base class for tip operations. """
 
@@ -52,14 +48,18 @@ class TipOp(PipettingOp, metaclass=ABCMeta):
     super().__init__(resource, offset)
     self.resource: Tip = resource # fix type hint
 
+  @classmethod
+  @abstractmethod
+  def deserialize(cls, data: dict, resource: Tip) -> PipettingOp:
+    pass
+
 
 class Pickup(TipOp):
   """ A pickup operation. """
 
   @classmethod
-  def deserialize(cls, data: dict, resource: Resource) -> Pickup:
+  def deserialize(cls, data: dict, resource: Tip) -> Pickup:
     assert resource.name == data["resource_name"]
-    assert isinstance(resource, Tip)
     return Pickup(
       resource=resource,
       offset=Coordinate.deserialize(data["offset"])
@@ -70,9 +70,8 @@ class Discard(TipOp):
   """ A discard operation. """
 
   @classmethod
-  def deserialize(cls, data: dict, resource: Resource) -> Discard:
+  def deserialize(cls, data: dict, resource: Tip) -> Discard:
     assert resource.name == data["resource_name"]
-    assert isinstance(resource, Tip)
     return Discard(
       resource=resource,
       offset=Coordinate.deserialize(data["offset"])

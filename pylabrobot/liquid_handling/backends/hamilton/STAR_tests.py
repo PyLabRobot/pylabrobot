@@ -1,6 +1,6 @@
 """ Tests for Hamilton backend. """
 
-from typing import cast
+from typing import List, cast
 import unittest
 
 from pylabrobot.liquid_handling.liquid_handler import LiquidHandler
@@ -176,6 +176,9 @@ class STARCommandCatcher(STAR):
 
   def stop(self):
     self.stop_finished = True
+
+  def request_tip_presence(self) -> List[int]:
+    return [0] * 8
 
 
 class TestSTARLiquidHandlerCommands(unittest.TestCase):

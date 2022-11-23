@@ -54,6 +54,7 @@ class SimulatorBackend(WebSocketBackend):
 
   def __init__(
     self,
+    num_channels: int = 8,
     simulate_delay: bool = False,
     ws_host: str = "127.0.0.1",
     ws_port: int = 2121,
@@ -75,7 +76,7 @@ class SimulatorBackend(WebSocketBackend):
       open_browser: If `True`, the simulation will open a browser window when it is started.
     """
 
-    super().__init__(ws_host=ws_host, ws_port=ws_port)
+    super().__init__(ws_host=ws_host, ws_port=ws_port, num_channels=num_channels)
 
     self.simulate_delay = simulate_delay
     self.fs_host = fs_host

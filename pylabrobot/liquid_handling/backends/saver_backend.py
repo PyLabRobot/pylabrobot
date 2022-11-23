@@ -6,9 +6,14 @@ from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 class SaverBackend(LiquidHandlerBackend):
   """ A backend that saves all commands received in a list, for testing purposes. """
 
-  def __init__(self, *args, **kwargs):
+  def __init__(self, num_channels: int, *args, **kwargs):
     super().__init__(*args, **kwargs)
     self.commands_received: List[Dict[str, Any]] = []
+    self._num_channels = num_channels
+
+  @property
+  def num_channels(self) -> int:
+    return self._num_channels
 
   def setup(self):
     super().setup()

@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking
 from pylabrobot.liquid_handling.backends.serializing_backend import SerializingSavingBackend
 from pylabrobot.liquid_handling.resources import STARLetDeck
 from pylabrobot.liquid_handling.standard import (
@@ -24,7 +24,7 @@ class SerializingBackendTests(unittest.TestCase):
   """ Tests for the serializing backend """
 
   def setUp(self) -> None:
-    self.backend = SerializingSavingBackend()
+    self.backend = SerializingSavingBackend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
     self.lh.setup()
@@ -52,7 +52,8 @@ class SerializingBackendTests(unittest.TestCase):
 
   def test_discard_tips(self):
     tips = self.tip_rack["A1"]
-    self.lh.discard_tips(tips)
+    with no_tip_tracking():
+      self.lh.discard_tips(tips)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "discard_tips")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(

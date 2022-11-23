@@ -27,6 +27,7 @@ class WebSocketBackend(SerializingBackend):
 
   def __init__(
     self,
+    num_channels: int,
     ws_host: str = "127.0.0.1",
     ws_port: int = 2121,
   ):
@@ -41,7 +42,7 @@ class WebSocketBackend(SerializingBackend):
     if not HAS_WEBSOCKETS:
       raise RuntimeError("The simulator requires websockets to be installed.")
 
-    super().__init__()
+    super().__init__(num_channels=num_channels)
     self._websocket: Optional[websockets.legacy.server.WebSocketServerProtocol] = None
     self._loop: Optional[asyncio.AbstractEventLoop] = None
     self._t: Optional[threading.Thread] = None

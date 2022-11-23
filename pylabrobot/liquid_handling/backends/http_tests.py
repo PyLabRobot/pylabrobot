@@ -3,7 +3,7 @@ import unittest
 import responses
 from responses import matchers
 
-from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking
 from pylabrobot.liquid_handling.backends import HTTPBackend
 from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
 from pylabrobot.liquid_handling.resources import (
@@ -15,11 +15,12 @@ from pylabrobot.liquid_handling.resources import (
 
 header_match = matchers.header_matcher({"User-Agent": "pylabrobot/0.1.0"})
 
+
 class TestHTTPBackendCom(unittest.TestCase):
   """ Tests for setup and stop """
   def setUp(self) -> None:
     self.deck = STARLetDeck()
-    self.backend = HTTPBackend("localhost", 8080)
+    self.backend = HTTPBackend("localhost", 8080, num_channels=8)
     self.lh = LiquidHandler(self.backend, deck=self.deck)
 
   @responses.activate
@@ -62,7 +63,7 @@ class TestHTTPBackendOps(unittest.TestCase):
     self.deck.assign_child_resource(self.tip_carrier, rails=3)
     self.deck.assign_child_resource(self.plate_carrier, rails=15)
 
-    self.backend = HTTPBackend("localhost", 8080)
+    self.backend = HTTPBackend("localhost", 8080, num_channels=8)
     self.lh = LiquidHandler(self.backend, deck=self.deck)
 
     self.lh.setup()
@@ -123,7 +124,8 @@ class TestHTTPBackendOps(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
-    self.lh.discard_tips(self.tip_rack["A1"])
+    with no_tip_tracking():
+      self.lh.discard_tips(self.tip_rack["A1"])
 
   @responses.activate
   def test_aspirate(self):
