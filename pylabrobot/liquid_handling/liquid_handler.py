@@ -4,13 +4,13 @@ import functools
 import logging
 import numbers
 import time
-from typing import Union, Optional, List, Callable, Sequence
+from typing import Dict, Union, Optional, List, Callable, Sequence
 
 from pylabrobot import utils
 # from pylabrobot.default import DEFAULT
-from pylabrobot.utils.list import expand
 from pylabrobot.liquid_handling.resources.abstract import Deck
-from pylabrobot.liquid_handling.errors import NoTipError
+from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, does_tip_tracking
+from pylabrobot.utils.list import expand
 
 from .backends import LiquidHandlerBackend
 from .liquid_classes import (
@@ -99,6 +99,8 @@ class LiquidHandler:
     self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
     self.deck.resource_unassigned_callback_callback = self.resource_unassigned_callback
 
+    self.trackers: Dict[int, ChannelTipTracker] = {}
+
   def __del__(self):
     # If setup was finished, close automatically to prevent blocking the USB device.
     if self.setup_finished:
@@ -112,6 +114,9 @@ class LiquidHandler:
 
     self.backend.setup()
     self.setup_finished = True
+
+    for channel in range(self.backend.num_channels):
+      self.trackers[channel] = ChannelTipTracker()
 
   def stop(self):
     self.backend.stop()
@@ -305,10 +310,12 @@ class LiquidHandler:
 
       ValueError: If the positions are not unique.
 
-      NoTipError: If no tip could be find at one or more specified positions.
+      ChannelHasTipError: If a channel already has a tip.
 
-      HasTipError: If one or more channels already have a tip.
+      SpotHasNoTipError: If a spot does not have a tip.
     """
+
+    self._assert_resources_exist(tips)
 
     offsets = expand(offsets, len(tips))
 
@@ -321,12 +328,24 @@ class LiquidHandler:
     pickups = [(Pickup(tip, offset) if tip is not None else None)
             for tip, offset in zip(tips, offsets)]
 
-    self._assert_resources_exist(tips)
+    for channel, op in zip(use_channels, pickups):
+      if does_tip_tracking() and not op.resource.tracker.is_disabled:
+        op.resource.tracker.queue_op(op)
+        self.trackers[channel].queue_op(op)
 
-    self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
-
-    # Save the tips that are currently picked up.
-    self._picked_up_tips = tips
+    try:
+      self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
+    except:
+      for channel, op in zip(use_channels, pickups):
+        if does_tip_tracking() and not op.resource.tracker.is_disabled:
+          op.resource.tracker.rollback()
+          self.trackers[channel].rollback()
+      raise
+    else:
+      for channel, op in zip(use_channels, pickups):
+        if does_tip_tracking() and not op.resource.tracker.is_disabled:
+          op.resource.tracker.commit()
+          self.trackers[channel].commit()
 
   @need_setup_finished
   def discard_tips(
@@ -370,10 +389,12 @@ class LiquidHandler:
 
       ValueError: If the positions are not unique.
 
-      NoTipError: If one or more channels do not have a tip.
+      ChannelHasNoTipError: If a channel does not have a tip.
 
-      HasTipError: If a tip already exists at one or more specified positions.
+      SpotHasTipError: If a spot already has a tip.
     """
+
+    self._assert_resources_exist(tips)
 
     offsets = expand(offsets, len(tips))
 
@@ -386,11 +407,24 @@ class LiquidHandler:
     discards = [(Discard(tip, offset) if tip is not None else None)
             for tip, offset in zip(tips, offsets)]
 
-    self._assert_resources_exist(tips)
+    for channel, op in zip(use_channels, discards):
+      if does_tip_tracking() and not op.resource.tracker.is_disabled:
+        op.resource.tracker.queue_op(op)
+        self.trackers[channel].queue_op(op)
 
-    self.backend.discard_tips(ops=discards, use_channels=use_channels, **backend_kwargs)
-
-    self._picked_up_tips = None
+    try:
+      self.backend.discard_tips(ops=discards, use_channels=use_channels, **backend_kwargs)
+    except:
+      for channel, op in zip(use_channels, discards):
+        if does_tip_tracking() and not op.resource.tracker.is_disabled:
+          op.resource.tracker.rollback()
+          self.trackers[channel].rollback()
+      raise
+    else:
+      for channel, op in zip(use_channels, discards):
+        if does_tip_tracking() and not op.resource.tracker.is_disabled:
+          op.resource.tracker.commit()
+          self.trackers[channel].commit()
 
   def return_tips(self):
     """ Return all tips that are currently picked up to their original place.
@@ -405,10 +439,18 @@ class LiquidHandler:
       RuntimeError: If no tips have been picked up.
     """
 
-    if self._picked_up_tips is None:
-      raise NoTipError("No tips are currently picked up.")
+    tips: List[Tip] = []
+    channels: List[int] = []
 
-    self.discard_tips(self._picked_up_tips)
+    for channel, tracker in self.trackers.items():
+      if tracker.current_tip is not None:
+        tips.append(tracker.current_tip)
+        channels.append(channel)
+
+    if len(tips) == 0:
+      raise RuntimeError("No tips have been picked up.")
+
+    self.discard_tips(tips=tips, use_channels=channels)
 
   @need_setup_finished
   def aspirate(
@@ -791,7 +833,7 @@ class LiquidHandler:
     """
 
     if self._picked_up_tips96 is None:
-      raise NoTipError("No tips have been picked up with the 96 head")
+      raise RuntimeError("No tips have been picked up with the 96 head")
 
     self.discard_tips96(self._picked_up_tips96)
 

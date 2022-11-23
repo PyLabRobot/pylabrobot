@@ -7,7 +7,13 @@ from typing import Any, Dict, List, Optional, cast
 import unittest
 import unittest.mock
 
-from pylabrobot.liquid_handling.errors import NoTipError
+from pylabrobot.liquid_handling.errors import (
+  ChannelHasTipError,
+  ChannelHasNoTipError,
+  TipSpotHasTipError,
+  TipSpotHasNoTipError,
+)
+from pylabrobot.liquid_handling import no_tip_tracking, set_tip_tracking
 
 from . import backends
 from .liquid_handler import LiquidHandler
@@ -26,7 +32,7 @@ from .standard import Pickup, Discard, Aspiration, Dispense
 
 class TestLiquidHandlerLayout(unittest.TestCase):
   def setUp(self):
-    self.backend = backends.SaverBackend()
+    self.backend = backends.SaverBackend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.backend, deck=self.deck)
 
@@ -229,7 +235,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
   def setUp(self):
     self.maxDiff = None
 
-    self.backend = backends.SaverBackend()
+    self.backend = backends.SaverBackend(num_channels=8)
     self.deck =STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
@@ -292,7 +298,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
         "use_channels": [0],
         "ops": [Discard(tips[0])]}})
 
-    with self.assertRaises(NoTipError):
+    with self.assertRaises(RuntimeError):
       self.lh.return_tips()
 
   def test_return_tips96(self):
@@ -304,7 +310,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       "args": (self.tip_rack,),
       "kwargs": {}})
 
-    with self.assertRaises(NoTipError):
+    with self.assertRaises(RuntimeError):
       self.lh.return_tips()
 
   def test_transfer(self):
@@ -404,6 +410,55 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       "args": (),
       "kwargs": {"dispense": Dispense(resource=self.plate, volume=10.0)}})
     self.backend.clear()
+
+  def test_tip_tracking_double_pickup(self):
+    self.lh.pick_up_tips(self.tip_rack["A1"])
+
+    with self.assertRaises(ChannelHasTipError):
+      self.lh.pick_up_tips(self.tip_rack["A2"])
+
+  def test_tip_tracking_empty_discard(self):
+    self.tip_rack.get_item("A1").tracker.set_initial_state(has_tip=False)
+
+    with self.assertRaises(ChannelHasNoTipError):
+      self.lh.discard_tips(self.tip_rack["A1"])
+
+    self.lh.pick_up_tips(self.tip_rack["A2"])
+    self.lh.discard_tips(self.tip_rack["A2"])
+    with self.assertRaises(TipSpotHasTipError):
+      self.lh.discard_tips(self.tip_rack["A1"])
+
+  def test_tip_tracking_empty_pickup(self):
+    self.tip_rack.get_item("A1").tracker.set_initial_state(has_tip=False)
+
+    with self.assertRaises(TipSpotHasNoTipError):
+      self.lh.pick_up_tips(self.tip_rack["A1"])
+
+  def test_tip_tracking_full_spot(self):
+    self.lh.pick_up_tips(self.tip_rack["A1"])
+    with self.assertRaises(TipSpotHasTipError):
+      self.lh.discard_tips(self.tip_rack["A2"])
+
+  def test_tip_tracking_double_pickup_single_command(self):
+    with self.assertRaises(TipSpotHasNoTipError):
+      self.lh.pick_up_tips(self.tip_rack["A1", "A1"])
+
+  def test_disable_tip_tracking(self):
+    self.lh.pick_up_tips(self.tip_rack["A1"])
+
+    # Disable tip tracking globally with context manager
+    with no_tip_tracking():
+      self.lh.pick_up_tips(self.tip_rack["A1"])
+
+    # Disable tip tracking globally and manually
+    set_tip_tracking(enabled=False)
+    self.lh.pick_up_tips(self.tip_rack["A1"])
+    set_tip_tracking(enabled=True)
+
+    # Disable tip tracking for a single tip rack
+    self.tip_rack.get_item("A1").tracker.disable()
+    self.lh.pick_up_tips(self.tip_rack["A1"])
+    self.tip_rack.get_item("A1").tracker.enable()
 
 
 if __name__ == "__main__":

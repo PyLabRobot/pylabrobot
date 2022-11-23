@@ -70,6 +70,10 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     self.left_pipette_has_tip = self.right_pipette_has_tip = False
 
+  @property
+  def num_channels(self) -> int:
+    return len([p for p in [self.left_pipette, self.right_pipette] if p is not None])
+
   def stop(self):
     self.defined_labware = {}
     super().stop()

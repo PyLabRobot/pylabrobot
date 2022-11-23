@@ -13,8 +13,8 @@ from typing import Callable, List, Optional, Tuple, Dict, Any, Union, Sequence, 
 
 from pylabrobot import utils
 from pylabrobot.liquid_handling.errors import (
-  NoTipError,
-  HasTipError,
+  ChannelHasTipError,
+  ChannelHasNoTipError,
   TooLittleLiquidError,
   TooLittleVolumeError,
 )
@@ -74,7 +74,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
 
   @abstractmethod
-  def __init__(self, read_timeout=5, num_channels=8):
+  def __init__(self, read_timeout=5):
     """
 
     Args:
@@ -86,8 +86,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     self.read_timeout = read_timeout
     self.id_ = 0
-
-    self.num_channels = num_channels
 
     self.dev: Optional[usb.core.Device] = None # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
@@ -415,7 +413,7 @@ class STAR(HamiltonLiquidHandler):
   Interface for the Hamilton STAR.
   """
 
-  def __init__(self, num_channels: int = 8, read_timeout: int = 5, **kwargs):
+  def __init__(self, read_timeout: int = 5, **kwargs):
     """ Create a new STAR interface.
 
     Args:
@@ -423,13 +421,19 @@ class STAR(HamiltonLiquidHandler):
       num_channels: the number of pipette channels present on the robot.
     """
 
-    super().__init__(read_timeout=read_timeout, num_channels=num_channels, **kwargs)
+    super().__init__(read_timeout=read_timeout, **kwargs)
     self.dev: Optional[usb.core.Device] = None
     self._tip_types: dict[TipType, int] = {}
     self._iswap_parked: Optional[bool] = None
 
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
+
+  @property
+  def num_channels(self) -> int:
+    """ The number of pipette channels present on the robot. """
+    tip_presences = self.request_tip_presence()
+    return len(tip_presences)
 
   @property
   def iswap_parked(self) -> bool:
@@ -676,7 +680,7 @@ class STAR(HamiltonLiquidHandler):
         if isinstance(channel_error, herrors.TipAlreadyFittedError):
           tip_errors.append(i-1)
       if len(tip_errors) > 0:
-        raise HasTipError(f"Tip already fitted on channels {tip_errors}") from e
+        raise ChannelHasTipError(f"Tip already fitted on channels {tip_errors}") from e
 
       raise e
 
@@ -718,7 +722,7 @@ class STAR(HamiltonLiquidHandler):
           tip_errors.append(i-1)
 
       if len(tip_errors) > 0:
-        raise NoTipError(f"No tip present on channels {tip_errors}") from e
+        raise ChannelHasNoTipError(f"No tip present on channels {tip_errors}") from e
 
       raise e
 
@@ -2823,15 +2827,15 @@ class STAR(HamiltonLiquidHandler):
     )
     return self.parse_response(resp, "rd####")
 
-  def request_tip_presence(self):
+  def request_tip_presence(self) -> List[int]:
     """ Request query tip presence on each channel
 
     Returns:
       0 = no tip, 1 = Tip in gripper (for each channel)
     """
 
-    resp = self.send_command(module="C0", command="RT")
-    return self.parse_response(resp, "rt# (n)")
+    resp = self.send_command(module="C0", command="RT", fmt="rt# (n)")
+    return cast(List[int], resp.get("rt"))
 
   def request_pip_height_last_lld(self):
     """ Request PIP height of last LLD

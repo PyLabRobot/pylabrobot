@@ -18,7 +18,7 @@ class WebSocketBackendSetupStopTests(unittest.TestCase):
   def test_setup_stop(self):
     """ Test that the thread is started and stopped correctly. """
 
-    backend = WebSocketBackend()
+    backend = WebSocketBackend(num_channels=8)
 
     def setup_stop_single():
       backend.setup()
@@ -36,7 +36,7 @@ class WebSocketBackendServerTests(unittest.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.backend = WebSocketBackend()
+    self.backend = WebSocketBackend(num_channels=8)
     self.backend.setup()
 
     self.asyncSetUp()

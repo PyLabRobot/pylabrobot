@@ -26,6 +26,7 @@ class HTTPBackend(SerializingBackend):
     self,
     host: str,
     port: int,
+    num_channels: int,
     protocol: str = "http",
     base_path: str = "events",
   ):
@@ -42,7 +43,7 @@ class HTTPBackend(SerializingBackend):
     if not HAS_REQUESTS:
       raise RuntimeError("The http backend requires the requests module.")
 
-    super().__init__()
+    super().__init__(num_channels=num_channels)
     self.session: Optional[requests.Session] = None
 
     self.host = host

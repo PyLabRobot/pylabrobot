@@ -59,3 +59,12 @@ class TipRack(ItemizedResource[Tip], metaclass=ABCMeta):
     """
 
     return super().get_items(identifier)
+
+  def set_tip_state(self, tips: List[List[bool]]) -> None:
+    """ Set the initial tip tracking state of all tips in this tip rack. """
+
+    # flatten the list
+    has_tip = [item for sublist in tips for item in sublist]
+
+    for i in range(self.num_items):
+      self.get_item(i).tracker.set_initial_state(has_tip[i])

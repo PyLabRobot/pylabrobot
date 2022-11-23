@@ -19,7 +19,7 @@ def create_app(lh):
 
 
 if __name__ == '__main__':
-  lh = LiquidHandler(backend=SerializingSavingBackend(), deck=STARLetDeck())
+  lh = LiquidHandler(backend=SerializingSavingBackend(num_channels=8), deck=STARLetDeck())
   app = create_app(lh=lh)
 
   host = os.environ.get("HOST", "0.0.0.0")

@@ -22,6 +22,14 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   """ A backend that serializes all commands received, and sends them to `self.send_command` for
   processing. The implementation of `send_command` is left to the subclasses. """
 
+  def __init__(self, num_channels: int):
+    super().__init__()
+    self._num_channels = num_channels
+
+  @property
+  def num_channels(self) -> int:
+    return self._num_channels
+
   @abstractmethod
   def send_command(self, command: str, data: Optional[Dict[str, Any]] = None) -> Optional[dict]:
     raise NotImplementedError
