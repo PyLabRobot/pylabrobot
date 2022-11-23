@@ -96,7 +96,7 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     self.lh.pick_up_tips(self.tip_rack["A1"])
 
   @patch("ot_api.lh.drop_tip")
-  def test_tip_discard(self, mock_drop_tip):
+  def test_tip_drop(self, mock_drop_tip):
     def assert_parameters(labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
       self.assertEqual(labware_id, "tip_rack")
       self.assertEqual(well_name, "tip_rack_A1")
@@ -107,7 +107,7 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     mock_drop_tip.side_effect = assert_parameters
 
     self.test_tip_pick_up()
-    self.lh.discard_tips(self.tip_rack["A1"])
+    self.lh.drop_tips(self.tip_rack["A1"])
 
   @patch("ot_api.lh.aspirate")
   def test_aspirate(self, mock_aspirate):
@@ -147,9 +147,9 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     with self.assertRaises(NotImplementedError):
       self.lh.pick_up_tips96(self.tip_rack)
 
-  def test_discard_tips96(self):
+  def test_drop_tips96(self):
     with self.assertRaises(NotImplementedError):
-      self.lh.discard_tips96(self.tip_rack)
+      self.lh.drop_tips96(self.tip_rack)
 
   def test_aspirate96(self):
     with self.assertRaises(NotImplementedError):

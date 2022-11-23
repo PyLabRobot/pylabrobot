@@ -207,7 +207,7 @@ class SimulatorBackend(WebSocketBackend):
   def edit_tips(self, tip_rack: TipRack, pattern: typing.List[typing.List[bool]]):
     """ Place and/or remove tips on the robot (**simulator only**).
 
-    Simulator method to place tips on the robot, for testing of tip pickup/discarding. Unlike,
+    Simulator method to place tips on the robot, for testing of tip pickup/droping. Unlike,
     :func:`~Simulator.pick_up_tips`, this method does not raise an exception if tips are already
     present on the specified locations. Note that a
     :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource has to be assigned

@@ -32,7 +32,7 @@ from .resources import (
 )
 from .standard import (
   Pickup,
-  Discard,
+  Drop,
   Aspiration,
   Dispense,
   Move
@@ -302,7 +302,7 @@ class LiquidHandler:
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the tip
-        discard location. If `None`, no offset will be applied.
+        drop location. If `None`, no offset will be applied.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -348,23 +348,23 @@ class LiquidHandler:
           self.trackers[channel].commit()
 
   @need_setup_finished
-  def discard_tips(
+  def drop_tips(
     self,
     tips: List[Tip],
     use_channels: Optional[List[int]] = None,
     offsets: Union[Coordinate, List[Coordinate]] = Coordinate.zero(),
     **backend_kwargs
   ):
-    """ Discard tips to a resource.
+    """ Drop tips to a resource.
 
     Examples:
-      Discarding tips to the first column.
+      Droping tips to the first column.
 
       >>> lh.pick_up_tips(tip_rack["A1:H1"])
 
-      Discarding tips with different offsets:
+      Droping tips with different offsets:
 
-      >>> lh.discard_tips(
+      >>> lh.drop_tips(
       ...   channels=tips_resource["A1":"C1"],
       ...   offsets=[
       ...     Coordinate(0, 0, 0), # A1
@@ -374,7 +374,7 @@ class LiquidHandler:
       ... )
 
     Args:
-      tips: Tip resource locations to discard to.
+      tips: Tip resource locations to drop to.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the tip
@@ -404,24 +404,24 @@ class LiquidHandler:
     assert len(tips) == len(offsets) == len(use_channels), \
       "Number of channels and offsets and use_channels must be equal."
 
-    discards = [(Discard(tip, offset) if tip is not None else None)
+    drops = [(Drop(tip, offset) if tip is not None else None)
             for tip, offset in zip(tips, offsets)]
 
-    for channel, op in zip(use_channels, discards):
+    for channel, op in zip(use_channels, drops):
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
         op.resource.tracker.queue_op(op)
         self.trackers[channel].queue_op(op)
 
     try:
-      self.backend.discard_tips(ops=discards, use_channels=use_channels, **backend_kwargs)
+      self.backend.drop_tips(ops=drops, use_channels=use_channels, **backend_kwargs)
     except:
-      for channel, op in zip(use_channels, discards):
+      for channel, op in zip(use_channels, drops):
         if does_tip_tracking() and not op.resource.tracker.is_disabled:
           op.resource.tracker.rollback()
           self.trackers[channel].rollback()
       raise
     else:
-      for channel, op in zip(use_channels, discards):
+      for channel, op in zip(use_channels, drops):
         if does_tip_tracking() and not op.resource.tracker.is_disabled:
           op.resource.tracker.commit()
           self.trackers[channel].commit()
@@ -450,7 +450,7 @@ class LiquidHandler:
     if len(tips) == 0:
       raise RuntimeError("No tips have been picked up.")
 
-    self.discard_tips(tips=tips, use_channels=channels)
+    self.drop_tips(tips=tips, use_channels=channels)
 
   @need_setup_finished
   def aspirate(
@@ -802,20 +802,20 @@ class LiquidHandler:
     # Save the tips as picked up.
     self._picked_up_tips96 = tip_rack
 
-  def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
-    """ Discard tips using the CoRe 96 head. This will discard 96 tips.
+  def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
+    """ Drop tips using the CoRe 96 head. This will drop 96 tips.
 
     Examples:
-      Discard tips to a 96-tip tiprack:
+      Drop tips to a 96-tip tiprack:
 
-      >>> lh.discard_tips96(my_tiprack)
+      >>> lh.drop_tips96(my_tiprack)
 
     Args:
-      tip_rack: The tip rack to discard tips to.
+      tip_rack: The tip rack to drop tips to.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    self.backend.discard_tips96(tip_rack, **backend_kwargs)
+    self.backend.drop_tips96(tip_rack, **backend_kwargs)
 
     self._picked_up_tips96 = None
 
@@ -835,7 +835,7 @@ class LiquidHandler:
     if self._picked_up_tips96 is None:
       raise RuntimeError("No tips have been picked up with the 96 head")
 
-    self.discard_tips96(self._picked_up_tips96)
+    self.drop_tips96(self._picked_up_tips96)
 
   def aspirate_plate(
     self,

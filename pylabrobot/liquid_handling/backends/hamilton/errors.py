@@ -278,7 +278,7 @@ class ElementStillHoldingError(HamiltonModuleError):
   """Element still holding
 
   Possible cause(s):
-    "Get command" is sent twice or element is not discarded expected element is missing (lost)
+    "Get command" is sent twice or element is not droped expected element is missing (lost)
 
   Code: 22
   """
@@ -817,7 +817,7 @@ class HamiltonFirmwareError(HamiltonError):
             "below minimal access range)",
         75: "No tip picked up, possibly because no was present at specified position",
         76: "Tip already picked up",
-        77: "Tip not discarded",
+        77: "Tip not droped",
         78: "Wrong tip picked up",
         80: "Liquid not correctly aspirated",
         81: "Clot detected",

@@ -8,7 +8,7 @@ from pylabrobot.liquid_handling.standard import (
   Aspiration,
   Dispense,
   Pickup,
-  Discard,
+  Drop,
   Move
 )
 
@@ -39,8 +39,8 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
     print(f"Picking up tips {ops}.")
 
-  def discard_tips(self, ops: List[Discard], use_channels: List[int], **backend_kwargs):
-    print(f"Discarding tips {ops}.")
+  def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
+    print(f"Droping tips {ops}.")
 
   def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
     print(f"Aspirating {ops}.")
@@ -51,8 +51,8 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
     print(f"Picking up tips from {tip_rack}.")
 
-  def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
-    print(f"Discarding tips to {tip_rack}.")
+  def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
+    print(f"Droping tips to {tip_rack}.")
 
   def aspirate96(self, aspiration: Aspiration):
     print(f"Aspirating {aspiration.volume} from {aspiration.resource}.")

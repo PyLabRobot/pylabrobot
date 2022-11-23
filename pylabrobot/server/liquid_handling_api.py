@@ -11,7 +11,7 @@ from pylabrobot.liquid_handling.standard import (
   Pickup,
   Aspiration,
   Dispense,
-  Discard,
+  Drop,
 )
 
 
@@ -114,17 +114,17 @@ def pick_up_tips():
   except Exception as e: # pylint: disable=broad-except
     return jsonify({"error": str(e)}), 400
 
-@lh_api.route("/discard-tips", methods=["POST"])
-def discard_tips():
+@lh_api.route("/drop-tips", methods=["POST"])
+def drop_tips():
   try:
-    discards, use_channels = deserialize_liquid_handling_op_from_request(Discard)
+    drops, use_channels = deserialize_liquid_handling_op_from_request(Drop)
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
 
   try:
-    current_app.lh.discard_tips(
-      tips=[p.resource for p in discards],
-      offsets=[p.offset for p in discards],
+    current_app.lh.drop_tips(
+      tips=[p.resource for p in drops],
+      offsets=[p.offset for p in drops],
       use_channels=use_channels
     )
     return jsonify({"status": "ok"})

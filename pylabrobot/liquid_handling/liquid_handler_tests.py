@@ -27,7 +27,7 @@ from .resources import (
 )
 from .resources.hamilton import STARLetDeck
 from .resources.ml_star import STF_L, HTF_L
-from .standard import Pickup, Discard, Aspiration, Dispense
+from .standard import Pickup, Drop, Aspiration, Dispense
 
 
 class TestLiquidHandlerLayout(unittest.TestCase):
@@ -254,7 +254,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
   def test_offsets_tips(self):
     tip_rack = self.tip_rack["A1"]
     self.lh.pick_up_tips(tip_rack, offsets=Coordinate(x=1, y=1, z=1))
-    self.lh.discard_tips(tip_rack, offsets=Coordinate(x=1, y=1, z=1))
+    self.lh.drop_tips(tip_rack, offsets=Coordinate(x=1, y=1, z=1))
 
     self.assertEqual(self.get_first_command("pick_up_tips"), {
       "command": "pick_up_tips",
@@ -262,11 +262,11 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       "kwargs": {
         "use_channels": [0],
         "ops": [Pickup(tip_rack[0], Coordinate(x=1, y=1, z=1))]}})
-    self.assertEqual(self.get_first_command("discard_tips"), {
-      "command": "discard_tips",
+    self.assertEqual(self.get_first_command("drop_tips"), {
+      "command": "drop_tips",
       "args": (),
       "kwargs": {
-        "use_channels": [0], "ops": [Discard(tip_rack[0], Coordinate(x=1, y=1, z=1))]}})
+        "use_channels": [0], "ops": [Drop(tip_rack[0], Coordinate(x=1, y=1, z=1))]}})
 
   def test_offsets_asp_disp(self):
     well = self.plate["A1"]
@@ -291,12 +291,12 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     self.lh.pick_up_tips(tips)
     self.lh.return_tips()
 
-    self.assertEqual(self.get_first_command("discard_tips"), {
-      "command": "discard_tips",
+    self.assertEqual(self.get_first_command("drop_tips"), {
+      "command": "drop_tips",
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Discard(tips[0])]}})
+        "ops": [Drop(tips[0])]}})
 
     with self.assertRaises(RuntimeError):
       self.lh.return_tips()
@@ -305,8 +305,8 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     self.lh.pick_up_tips96(self.tip_rack)
     self.lh.return_tips96()
 
-    self.assertEqual(self.get_first_command("discard_tips96"), {
-      "command": "discard_tips96",
+    self.assertEqual(self.get_first_command("drop_tips96"), {
+      "command": "drop_tips96",
       "args": (self.tip_rack,),
       "kwargs": {}})
 
@@ -417,16 +417,16 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     with self.assertRaises(ChannelHasTipError):
       self.lh.pick_up_tips(self.tip_rack["A2"])
 
-  def test_tip_tracking_empty_discard(self):
+  def test_tip_tracking_empty_drop(self):
     self.tip_rack.get_item("A1").tracker.set_initial_state(has_tip=False)
 
     with self.assertRaises(ChannelHasNoTipError):
-      self.lh.discard_tips(self.tip_rack["A1"])
+      self.lh.drop_tips(self.tip_rack["A1"])
 
     self.lh.pick_up_tips(self.tip_rack["A2"])
-    self.lh.discard_tips(self.tip_rack["A2"])
+    self.lh.drop_tips(self.tip_rack["A2"])
     with self.assertRaises(TipSpotHasTipError):
-      self.lh.discard_tips(self.tip_rack["A1"])
+      self.lh.drop_tips(self.tip_rack["A1"])
 
   def test_tip_tracking_empty_pickup(self):
     self.tip_rack.get_item("A1").tracker.set_initial_state(has_tip=False)
@@ -437,7 +437,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
   def test_tip_tracking_full_spot(self):
     self.lh.pick_up_tips(self.tip_rack["A1"])
     with self.assertRaises(TipSpotHasTipError):
-      self.lh.discard_tips(self.tip_rack["A2"])
+      self.lh.drop_tips(self.tip_rack["A2"])
 
   def test_tip_tracking_double_pickup_single_command(self):
     with self.assertRaises(TipSpotHasNoTipError):

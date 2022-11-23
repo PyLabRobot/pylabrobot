@@ -3,7 +3,7 @@ import unittest
 from pylabrobot.liquid_handling.resources import HTF_L, Cos_96_EZWash
 from pylabrobot.liquid_handling.standard import (
   Pickup,
-  Discard,
+  Drop,
   Aspiration,
   Dispense,
 )
@@ -28,17 +28,17 @@ class TestStandard(unittest.TestCase):
       "offset": {"x": 0, "y": 0, "z": 0},
     }, resource=self.tip_rack.get_tip("A1")), Pickup(resource=self.tip_rack.get_tip("A1")))
 
-  def test_discard_serialize(self):
-    self.assertEqual(Discard(resource=self.tip_rack.get_tip("A1")).serialize(), {
+  def test_drop_serialize(self):
+    self.assertEqual(Drop(resource=self.tip_rack.get_tip("A1")).serialize(), {
       "resource_name": "tiprack_tip_0_0",
       "offset": {"x": 0, "y": 0, "z": 0},
     })
 
-  def test_discard_deserialize(self):
-    self.assertEqual(Discard.deserialize({
+  def test_drop_deserialize(self):
+    self.assertEqual(Drop.deserialize({
       "resource_name": "tiprack_tip_0_0",
       "offset": {"x": 0, "y": 0, "z": 0},
-    }, resource=self.tip_rack.get_tip("A1")), Discard(resource=self.tip_rack.get_tip("A1")))
+    }, resource=self.tip_rack.get_tip("A1")), Drop(resource=self.tip_rack.get_tip("A1")))
 
   def test_aspiration_serialize(self):
     self.assertEqual(Aspiration(resource=self.plate.get_well("A1"), volume=100).serialize(), {

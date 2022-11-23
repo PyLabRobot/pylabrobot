@@ -39,7 +39,7 @@
 # import pylabrobot.utils.file_parsing as file_parser
 # from pylabrobot.liquid_handling.standard import (
 #   Pickup,
-#   Discard,
+#   Drop,
 #   Aspiration,
 #   Dispense,
 # )
@@ -158,8 +158,8 @@
 
 #     venus_utils.tip_pick_up(self.ham_int, pos_tuples, **backend_kwargs)
 
-#   def discard_tips(self, ops: List[Discard], **backend_kwargs):
-#     """ Discard tips from the specified resource. """
+#   def drop_tips(self, ops: List[Drop], **backend_kwargs):
+#     """ Drop tips from the specified resource. """
 #     pos_tuples = []
 #     last_column = None
 
@@ -170,7 +170,7 @@
 #         resource_idx = tip_rack.index_of_item(channel.resource)
 #         column = resource_idx // tip_rack.num_items_y
 #         if last_column and column < last_column:
-#           raise ValueError("With this backend, tips must be discarded in ascending column order.")
+#           raise ValueError("With this backend, tips must be droped in ascending column order.")
 #         pos_tuples.append((venus_resource, column))
 #       else:
 #         pos_tuples.append(None)
@@ -227,8 +227,8 @@
 #     venus_resource = self._get_venus_resource(tip_rack)
 #     venus_utils.tip_pick_up_96(self.ham_int, venus_resource, **backend_kwargs)
 
-#   def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
-#     """ Discard tips to the specified resource using CoRe 96. """
+#   def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
+#     """ Drop tips to the specified resource using CoRe 96. """
 #     venus_resource = self._get_venus_resource(tip_rack)
 #     venus_utils.tip_eject_96(self.ham_int, venus_resource, **backend_kwargs)
 

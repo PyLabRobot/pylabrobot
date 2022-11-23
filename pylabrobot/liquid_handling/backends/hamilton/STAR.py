@@ -33,7 +33,7 @@ from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import (
   PipettingOp,
   Pickup,
-  Discard,
+  Drop,
   Aspiration,
   Dispense,
   Move
@@ -695,13 +695,13 @@ class STAR(HamiltonLiquidHandler):
       raise e
 
   @need_iswap_parked
-  def discard_tips(
+  def drop_tips(
     self,
-    ops: List[Discard],
+    ops: List[Drop],
     use_channels: List[int],
     **backend_kwargs
   ):
-    """ Discard tips from a resource. """
+    """ Drop tips from a resource. """
 
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
@@ -1010,7 +1010,7 @@ class STAR(HamiltonLiquidHandler):
     return self.pick_up_tips_core96(**cmd_kwargs)
 
   @need_iswap_parked
-  def discard_tips96(self, tip_rack: TipRack, **backend_kwargs):
+  def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
     position = cast(Tip, tip_rack.get_item("A1")).get_absolute_location()
 
     cmd_kwargs: Dict[str, Any] = dict(
@@ -2158,7 +2158,7 @@ class STAR(HamiltonLiquidHandler):
       td=pick_up_method,
     )
 
-  class DiscardingMethod(enum.Enum):
+  class DropingMethod(enum.Enum):
     """ Tip discarding method """
     PLACE_SHIFT = 0
     DROP = 1
@@ -2172,7 +2172,7 @@ class STAR(HamiltonLiquidHandler):
     begin_tip_deposit_process: int = 0,
     end_tip_deposit_process: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
-    discarding_method: DiscardingMethod = DiscardingMethod.DROP
+    discarding_method: DropingMethod = DropingMethod.DROP
   ):
     """ discard tip
 
@@ -3103,7 +3103,7 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 3425,
     minimum_height_command_end: int = 3425
   ):
-    """ Discard tips with CoRe 96 head
+    """ Drop tips with CoRe 96 head
 
     Args:
       x_position: x position [0.1mm]. Must be between 0 and 30000. Default 0.

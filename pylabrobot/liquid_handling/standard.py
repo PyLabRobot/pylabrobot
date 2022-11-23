@@ -66,13 +66,13 @@ class Pickup(TipOp):
     )
 
 
-class Discard(TipOp):
-  """ A discard operation. """
+class Drop(TipOp):
+  """ A drop operation. """
 
   @classmethod
-  def deserialize(cls, data: dict, resource: Tip) -> Discard:
+  def deserialize(cls, data: dict, resource: Tip) -> Drop:
     assert resource.name == data["resource_name"]
-    return Discard(
+    return Drop(
       resource=resource,
       offset=Coordinate.deserialize(data["offset"])
     )

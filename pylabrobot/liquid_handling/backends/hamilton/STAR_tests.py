@@ -305,9 +305,9 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "&tm1 0 0 0 1 0&tt01tp2244tz2164th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
-  def test_tip_discard_56(self):
+  def test_tip_drop_56(self):
     self.test_tip_pickup_56() # pick up tips first
-    self.lh.discard_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
+    self.lh.drop_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
     self._assert_command_sent_once(
       "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
       "0000&tm0 0 0 0 1 1 0&tt01tp1314tz1414th2450ti0",
@@ -405,8 +405,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "C0EPid0208xs01179xd0yh2418tt01wu0za2164zh2450ze2450",
                 "xs#####xd#yh####tt##wu#za####zh####ze####")
 
-  def test_core_96_tip_discard(self):
-    self.lh.discard_tips96(self.tip_rack)
+  def test_core_96_tip_drop(self):
+    self.lh.drop_tips96(self.tip_rack)
 
     self._assert_command_sent_once(
       "C0ERid0213xs01179xd0yh2418za2164zh2450ze2450",

@@ -4,7 +4,7 @@ from typing import List
 from pylabrobot.liquid_handling.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
   Pickup,
-  Discard,
+  Drop,
   Aspiration,
   Dispense,
   Move,
@@ -68,8 +68,8 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     """ Pick up tips from the specified resource. """
 
   @abstractmethod
-  def discard_tips(self, ops: List[Discard], use_channels: List[int]):
-    """ Discard tips from the specified resource. """
+  def drop_tips(self, ops: List[Drop], use_channels: List[int]):
+    """ Drop tips from the specified resource. """
 
   @abstractmethod
   def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
@@ -84,8 +84,8 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     """ Pick up tips from the specified resource using CoRe 96. """
 
   @abstractmethod
-  def discard_tips96(self, tip_rack: TipRack):
-    """ Discard tips to the specified resource using CoRe 96. """
+  def drop_tips96(self, tip_rack: TipRack):
+    """ Drop tips to the specified resource using CoRe 96. """
 
   @abstractmethod
   def aspirate96(self, aspiration: Aspiration):
