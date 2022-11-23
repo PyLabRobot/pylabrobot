@@ -14,6 +14,16 @@ logger = logging.getLogger(__name__)
 
 _RAILS_WIDTH = 22.5 # space between rails (mm)
 
+STARLET_NUM_RAILS=30
+STARLET_SIZE_X=1360
+STARLET_SIZE_Y=653.5
+STARLET_SIZE_Z=900
+
+STAR_NUM_RAILS=55
+STAR_SIZE_X=1900
+STAR_SIZE_Y=653.5
+STAR_SIZE_Z=900
+
 
 class HamiltonDeck(Deck):
   """ Hamilton decks. Currently only STARLet and STAR are supported. """
@@ -145,17 +155,22 @@ class HamiltonDeck(Deck):
       >>> deck = HamiltonDeck.load_from_lay_file("deck.lay")
     """
 
-    deck = cls(num_rails=-1, # TODO: base on lay file
-        size_x=1900,
-        size_y=653.5,
-        size_z=900,
-        resource_assigned_callback=None,
-        resource_unassigned_callback=None,
-        origin=Coordinate.zero())
-
     c = None
     with open(fn, "r", encoding="ISO-8859-1") as f:
       c = f.read()
+
+    deck_type = file_parser.find_string("Deck", c)
+
+    num_rails = {"ML_Starlet.dck": STARLET_NUM_RAILS, "ML_STAR2.deck": STAR_NUM_RAILS}[deck_type]
+    size_x = {"ML_Starlet.dck": STARLET_SIZE_X, "ML_STAR2.deck": STAR_SIZE_X}[deck_type]
+    size_y = {"ML_Starlet.dck": STARLET_SIZE_Y, "ML_STAR2.deck": STAR_SIZE_Y}[deck_type]
+    size_z = {"ML_Starlet.dck": STARLET_SIZE_Z, "ML_STAR2.deck": STAR_SIZE_Z}[deck_type]
+
+    deck = cls(num_rails=num_rails,
+      size_x=size_x, size_y=size_y, size_z=size_z,
+      resource_assigned_callback=None,
+      resource_unassigned_callback=None,
+      origin=Coordinate.zero())
 
     # Get class names of all defined resources.
     resource_classes = [c[0] for c in inspect.getmembers(resources_module)]
@@ -227,10 +242,10 @@ def STARLetDeck(
   """
 
   return HamiltonDeck(
-      num_rails=30,
-      size_x=1360,
-      size_y=653.5,
-      size_z=900,
+      num_rails=STARLET_NUM_RAILS,
+      size_x=STARLET_SIZE_X,
+      size_y=STARLET_SIZE_Y,
+      size_z=STARLET_SIZE_Z,
       resource_assigned_callback=resource_assigned_callback,
       resource_unassigned_callback=resource_unassigned_callback,
       origin=origin)
@@ -247,10 +262,10 @@ def STARDeck(
   """
 
   return HamiltonDeck(
-      num_rails=55,
-      size_x=1900,
-      size_y=653.5,
-      size_z=900,
+      num_rails=STAR_NUM_RAILS,
+      size_x=STAR_SIZE_X,
+      size_y=STAR_SIZE_Y,
+      size_z=STAR_SIZE_Z,
       resource_assigned_callback=resource_assigned_callback,
       resource_unassigned_callback=resource_unassigned_callback,
       origin=origin)
