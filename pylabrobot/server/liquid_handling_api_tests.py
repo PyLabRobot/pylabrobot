@@ -13,7 +13,7 @@ from pylabrobot.liquid_handling.resources import (
 from pylabrobot.liquid_handling.resources.hamilton import HamiltonDeck, STARLetDeck
 from pylabrobot.liquid_handling.standard import (
   Pickup,
-  Discard,
+  Drop,
   Aspiration,
   Dispense,
 )
@@ -126,15 +126,15 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       self.assertEqual(response.json, {"status": "ok"})
       self.assertEqual(response.status_code, 200)
 
-  def test_discard_tip(self):
+  def test_drop_tip(self):
     self.test_tip_pickup() # pick up a tip first
 
     with self.app.test_client() as client:
       tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_03")).get_tip("A1")
-      discard = Discard(resource=tip)
+      drop = Drop(resource=tip)
       response = client.post(
-        self.base_url + "/discard-tips",
-        json=dict(channels=[discard.serialize()], use_channels=[0]))
+        self.base_url + "/drop-tips",
+        json=dict(channels=[drop.serialize()], use_channels=[0]))
       self.assertEqual(response.json, {"status": "ok"})
       self.assertEqual(response.status_code, 200)
 

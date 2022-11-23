@@ -103,10 +103,10 @@ class TestHTTPBackendOps(unittest.TestCase):
     self.lh.pick_up_tips(self.tip_rack["A1"])
 
   @responses.activate
-  def test_tip_discard(self):
+  def test_tip_drop(self):
     responses.add(
       responses.POST,
-      "http://localhost:8080/events/discard-tips",
+      "http://localhost:8080/events/drop-tips",
       match=[
         header_match,
         matchers.json_params_matcher({
@@ -125,7 +125,7 @@ class TestHTTPBackendOps(unittest.TestCase):
       status=200,
     )
     with no_tip_tracking():
-      self.lh.discard_tips(self.tip_rack["A1"])
+      self.lh.drop_tips(self.tip_rack["A1"])
 
   @responses.activate
   def test_aspirate(self):
@@ -196,10 +196,10 @@ class TestHTTPBackendOps(unittest.TestCase):
     self.lh.pick_up_tips96(self.tip_rack)
 
   @responses.activate
-  def test_discard_tips96(self):
+  def test_drop_tips96(self):
     responses.add(
       responses.POST,
-      "http://localhost:8080/events/discard-tips96",
+      "http://localhost:8080/events/drop-tips96",
       match=[
         header_match,
         matchers.json_params_matcher({
@@ -209,7 +209,7 @@ class TestHTTPBackendOps(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
-    self.lh.discard_tips96(self.tip_rack)
+    self.lh.drop_tips96(self.tip_rack)
 
   @responses.activate
   def test_aspirate96(self):

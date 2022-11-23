@@ -6,7 +6,7 @@ from pylabrobot.liquid_handling.backends.serializing_backend import SerializingS
 from pylabrobot.liquid_handling.resources import STARLetDeck
 from pylabrobot.liquid_handling.standard import (
   Pickup,
-  Discard,
+  Drop,
   Aspiration,
   Dispense,
   Move,
@@ -50,14 +50,14 @@ class SerializingBackendTests(unittest.TestCase):
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
       channels=[Pickup(resource=tips[0]).serialize()], use_channels=[0]))
 
-  def test_discard_tips(self):
+  def test_drop_tips(self):
     tips = self.tip_rack["A1"]
     with no_tip_tracking():
-      self.lh.discard_tips(tips)
+      self.lh.drop_tips(tips)
     self.assertEqual(len(self.backend.sent_commands), 1)
-    self.assertEqual(self.backend.sent_commands[0]["command"], "discard_tips")
+    self.assertEqual(self.backend.sent_commands[0]["command"], "drop_tips")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
-      channels=[Discard(resource=tips[0]).serialize()], use_channels=[0]))
+      channels=[Drop(resource=tips[0]).serialize()], use_channels=[0]))
 
   def test_aspirate(self):
     wells = self.plate["A1"]
@@ -81,10 +81,10 @@ class SerializingBackendTests(unittest.TestCase):
     self.assertEqual(self.backend.sent_commands[0]["command"], "pick_up_tips96")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource_name=self.tip_rack.name))
 
-  def test_discard_tips96(self):
-    self.lh.discard_tips96(self.tip_rack)
+  def test_drop_tips96(self):
+    self.lh.drop_tips96(self.tip_rack)
     self.assertEqual(len(self.backend.sent_commands), 1)
-    self.assertEqual(self.backend.sent_commands[0]["command"], "discard_tips96")
+    self.assertEqual(self.backend.sent_commands[0]["command"], "drop_tips96")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource_name=self.tip_rack.name))
 
   def test_aspirate96(self):

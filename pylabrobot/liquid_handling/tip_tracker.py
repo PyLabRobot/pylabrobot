@@ -11,7 +11,7 @@ from pylabrobot.liquid_handling.errors import (
   TipSpotHasTipError,
   TipSpotHasNoTipError,
 )
-from pylabrobot.liquid_handling.standard import TipOp, Pickup, Discard
+from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
 if TYPE_CHECKING:
   from pylabrobot.liquid_handling.resources import Tip
 
@@ -134,12 +134,12 @@ class ChannelTipTracker(TipTracker):
     Raises:
       ChannelHasTipError: If trying to pickup a tip when the channel already has a tip.
 
-      ChannelHasNoTipError: If trying to discard a tip when the channel has no tip.
+      ChannelHasNoTipError: If trying to drop a tip when the channel has no tip.
     """
 
     if self.has_tip and isinstance(op, Pickup):
       raise ChannelHasTipError
-    if not self.has_tip and isinstance(op, Discard):
+    if not self.has_tip and isinstance(op, Drop):
       raise ChannelHasNoTipError
 
 
@@ -150,12 +150,12 @@ class SpotTipTracker(TipTracker):
   @property
   def current_tip(self) -> Optional["Tip"]:
     if len(self.pending) > 0:
-      if isinstance(self.pending[-1], Discard):
+      if isinstance(self.pending[-1], Drop):
         return self.pending[-1].resource
       return None
     if len(self.ops) == 0:
       return None
-    if isinstance(self.ops[-1], Discard):
+    if isinstance(self.ops[-1], Drop):
       return self.ops[-1].resource
     return None
 
@@ -168,10 +168,10 @@ class SpotTipTracker(TipTracker):
     Raises:
       TipSpotHasNoTipError: If trying to pickup a tip when the tip spot has no tip.
 
-      TipSpotHasTipError: If trying to discard a tip when the tip spot already has a tip.
+      TipSpotHasTipError: If trying to drop a tip when the tip spot already has a tip.
     """
 
     if not self.has_tip and isinstance(op, Pickup):
       raise TipSpotHasNoTipError
-    if self.has_tip and isinstance(op, Discard):
+    if self.has_tip and isinstance(op, Drop):
       raise TipSpotHasTipError

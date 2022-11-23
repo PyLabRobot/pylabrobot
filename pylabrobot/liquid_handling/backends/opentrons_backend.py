@@ -13,7 +13,7 @@ from pylabrobot.liquid_handling.resources import (
 from pylabrobot.liquid_handling.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
   Pickup,
-  Discard,
+  Drop,
   Aspiration,
   Dispense,
   Move
@@ -193,7 +193,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     del self.defined_labware[name]
 
   def select_tip_pipette(self, tip_max_volume: float, with_tip: bool) -> Optional[str]:
-    """ Select a pipette based on maximum tip volume for tip pick up or discard.
+    """ Select a pipette based on maximum tip volume for tip pick up or drop.
 
     The volume of the head must match the maximum tip volume. If both pipettes have the same
     maximum volume, the left pipette is selected.
@@ -244,8 +244,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     else:
       self.right_pipette_has_tip = True
 
-  def discard_tips(self, ops: List[Discard], use_channels: List[int]):
-    """ Discard tips from the specified resource. """
+  def drop_tips(self, ops: List[Drop], use_channels: List[int]):
+    """ Drop tips from the specified resource. """
 
     assert len(ops) == 1 # only one channel supported for now
     assert use_channels == [0], "manual channel selection not supported on OT for now"
@@ -407,7 +407,7 @@ class OpentronsBackend(LiquidHandlerBackend):
   def pick_up_tips96(self, tip_rack: TipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def discard_tips96(self, tip_rack: TipRack):
+  def drop_tips96(self, tip_rack: TipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
   def aspirate96(self, aspiration: Aspiration):

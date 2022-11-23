@@ -15,12 +15,12 @@ class ChannelHasTipError(Exception):
 
 
 class ChannelHasNoTipError(Exception):
-  """ Raised when a channel has no tip, e.g. when trying to discard a tip with a channel that does
+  """ Raised when a channel has no tip, e.g. when trying to drop a tip with a channel that does
   not have a tip. """
 
 
 class TipSpotHasTipError(Exception):
-  """ Raised when a tip spot has a tip, e.g. when trying to discard a tip with a tip spot that has a
+  """ Raised when a tip spot has a tip, e.g. when trying to drop a tip with a tip spot that has a
   tip. """
 
 

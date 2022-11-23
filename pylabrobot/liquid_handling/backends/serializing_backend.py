@@ -6,7 +6,7 @@ from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
   Pickup,
-  Discard,
+  Drop,
   Aspiration,
   Dispense,
   Move,
@@ -53,10 +53,10 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       command="pick_up_tips",
       data=dict(channels=serialized, use_channels=use_channels))
 
-  def discard_tips(self, ops: List[Discard], use_channels: List[int]):
+  def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     serialized = [op.serialize() for op in ops]
     self.send_command(
-      command="discard_tips",
+      command="drop_tips",
       data=dict(channels=serialized, use_channels=use_channels))
 
   def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
@@ -74,8 +74,8 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   def pick_up_tips96(self, tip_rack: TipRack):
     self.send_command(command="pick_up_tips96", data=dict(resource_name=tip_rack.name))
 
-  def discard_tips96(self, tip_rack: TipRack):
-    self.send_command(command="discard_tips96", data=dict(resource_name=tip_rack.name))
+  def drop_tips96(self, tip_rack: TipRack):
+    self.send_command(command="drop_tips96", data=dict(resource_name=tip_rack.name))
 
   def aspirate96(self, aspiration: Aspiration):
     self.send_command(command="aspirate96", data=dict(aspiration=aspiration.serialize()))

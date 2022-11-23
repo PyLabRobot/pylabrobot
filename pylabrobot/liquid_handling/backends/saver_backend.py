@@ -33,8 +33,8 @@ class SaverBackend(LiquidHandlerBackend):
   def pick_up_tips(self, *args, **kwargs):
     self.commands_received.append(dict(command="pick_up_tips", args=args, kwargs=kwargs))
 
-  def discard_tips(self, *args, **kwargs):
-    self.commands_received.append(dict(command="discard_tips", args=args, kwargs=kwargs))
+  def drop_tips(self, *args, **kwargs):
+    self.commands_received.append(dict(command="drop_tips", args=args, kwargs=kwargs))
 
   def aspirate(self, *args, **kwargs):
     self.commands_received.append(dict(command="aspirate", args=args, kwargs=kwargs))
@@ -45,8 +45,8 @@ class SaverBackend(LiquidHandlerBackend):
   def pick_up_tips96(self, *args, **kwargs):
     self.commands_received.append(dict(command="pick_up_tips96", args=args, kwargs=kwargs))
 
-  def discard_tips96(self, *args, **kwargs):
-    self.commands_received.append(dict(command="discard_tips96", args=args, kwargs=kwargs))
+  def drop_tips96(self, *args, **kwargs):
+    self.commands_received.append(dict(command="drop_tips96", args=args, kwargs=kwargs))
 
   def aspirate96(self, *args, **kwargs):
     self.commands_received.append(dict(command="aspirate96", args=args, kwargs=kwargs))
