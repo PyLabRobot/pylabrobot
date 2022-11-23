@@ -15,6 +15,7 @@ from pylabrobot import utils
 from pylabrobot.liquid_handling.errors import (
   ChannelHasTipError,
   ChannelHasNoTipError,
+  TipSpotHasNoTipError,
   TooLittleLiquidError,
   TooLittleVolumeError,
 )
@@ -674,13 +675,22 @@ class STAR(HamiltonLiquidHandler):
         **params
       )
     except HamiltonFirmwareError as e:
-      tip_errors: List[int] = []
+      tip_already_fitted_errors: List[int] = []
+      no_tip_present_errors: List[int] = []
       for i in range(1, self.num_channels+1):
         channel_error = e.error_for_channel(i)
+        if channel_error is None:
+          continue
         if isinstance(channel_error, herrors.TipAlreadyFittedError):
-          tip_errors.append(i-1)
-      if len(tip_errors) > 0:
-        raise ChannelHasTipError(f"Tip already fitted on channels {tip_errors}") from e
+          tip_already_fitted_errors.append(i-1)
+        elif channel_error.trace_information in [75]:
+          no_tip_present_errors.append(i-1)
+      if len(tip_already_fitted_errors) > 0:
+        raise ChannelHasTipError(f"Tip already fitted on channels {tip_already_fitted_errors}") \
+          from e
+      elif len(no_tip_present_errors) > 0:
+        raise TipSpotHasNoTipError("No tip present in locations for channels "
+                                  f"{no_tip_present_errors}") from e
 
       raise e
 
