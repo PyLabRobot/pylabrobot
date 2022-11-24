@@ -1,6 +1,6 @@
 """ Tests for Hamilton backend. """
 
-from typing import List, cast
+from typing import cast
 import unittest
 
 from pylabrobot.liquid_handling.liquid_handler import LiquidHandler
@@ -169,6 +169,7 @@ class STARCommandCatcher(STAR):
 
   def setup(self):
     self.setup_finished = True
+    self._num_channels = 8
 
   def send_command(self, module, command, fmt="", timeout=0, **kwargs):
     cmd, _ = self._assemble_command(module, command, **kwargs)
@@ -176,9 +177,6 @@ class STARCommandCatcher(STAR):
 
   def stop(self):
     self.stop_finished = True
-
-  def request_tip_presence(self) -> List[int]:
-    return [0] * 8
 
 
 class TestSTARLiquidHandlerCommands(unittest.TestCase):
@@ -288,21 +286,21 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_tip_pickup_01(self):
     self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
-      "C0TPid0000xp01179 01179 00000&yp2418 2328 0000tm1 1 0&tt01tp2244tz2164th2450td0",
+      "C0TPid0000xp01179 01179 00000&yp2418 2328 0000tm1 1 0&tt01tp2243tz2163th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_56(self):
     self.lh.pick_up_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
     self._assert_command_sent_once(
       "C0TPid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
-      "0000&tm0 0 0 0 1 1 0 &tt01tp2244tz2164th2450td0",
+      "0000&tm0 0 0 0 1 1 0 &tt01tp2243tz2163th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_pickup_15(self):
     self.lh.pick_up_tips(self.tip_rack["A1", "F1"], use_channels=[0, 4])
     self._assert_command_sent_once(
       "C0TPid0000xp01179 00000 00000 00000 01179 00000&yp2418 0000 0000 0000 1968 0000 "
-      "&tm1 0 0 0 1 0&tt01tp2244tz2164th2450td0",
+      "&tm1 0 0 0 1 0&tt01tp2243tz2163th2450td0",
       "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
 
   def test_tip_drop_56(self):
@@ -310,8 +308,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.drop_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
     self._assert_command_sent_once(
       "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
-      "0000&tm0 0 0 0 1 1 0&tt01tp1314tz1414th2450ti0",
-      "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####ti#")
+      "0000&tm0 0 0 0 1 1 0&tp2243tz2163th2450ti1",
+      "xp##### (n)yp#### (n)tm# (n)tp####tz####th####ti#")
 
   def test_single_channel_aspiration(self):
     self.lh.aspirate(self.plate["A1"], vols=[100])

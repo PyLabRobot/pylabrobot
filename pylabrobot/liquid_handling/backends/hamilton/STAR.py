@@ -23,6 +23,7 @@ from pylabrobot.liquid_handling.resources import (
   Plate,
   Resource,
   Tip,
+  TipDropMethod,
   TipPickupMethod,
   TipRack,
   TipType,
@@ -430,11 +431,14 @@ class STAR(HamiltonLiquidHandler):
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
+    self._num_channels: Optional[int] = None
+
   @property
   def num_channels(self) -> int:
     """ The number of pipette channels present on the robot. """
-    tip_presences = self.request_tip_presence()
-    return len(tip_presences)
+    if self._num_channels is None:
+      raise RuntimeError("has not loaded num_channels, forgot to call `setup`?")
+    return self._num_channels
 
   @property
   def iswap_parked(self) -> bool:
@@ -517,6 +521,9 @@ class STAR(HamiltonLiquidHandler):
 
     self.park_iswap()
     self._iswap_parked = True
+
+    tip_presences = self.request_tip_presence()
+    self._num_channels = len(tip_presences)
 
   def stop(self):
     if self.dev is None:
@@ -648,7 +655,6 @@ class STAR(HamiltonLiquidHandler):
     self,
     ops: List[Pickup],
     use_channels: List[int],
-    **backend_kwargs
   ):
     """ Pick up tips from a resource. """
 
@@ -658,13 +664,9 @@ class STAR(HamiltonLiquidHandler):
 
     ttti = self.get_ttti([op.resource for op in ops])
 
-    params: Dict[str, Any] = {
-      "begin_tip_pick_up_process": 2244,
-      "end_tip_pick_up_process": 2164,
-      "minimum_traverse_height_at_beginning_of_a_command": 2450,
-      "pick_up_method": 0
-    }
-    params.update(backend_kwargs)
+    max_z = max(op.get_absolute_location().z for op in ops)
+    max_total_tip_length = max(op.resource.tip_type.total_tip_length for op in ops)
+    max_tip_length = max(op.resource.tip_type.tip_length for op in ops)
 
     try:
       return self.pick_up_tip(
@@ -672,7 +674,10 @@ class STAR(HamiltonLiquidHandler):
         y_positions=y_positions,
         tip_pattern=channels_involved,
         tip_type_idx=ttti,
-        **params
+        begin_tip_pick_up_process=int((max_z + max_total_tip_length)*10),
+        end_tip_pick_up_process=int((max_z + max_tip_length)*10),
+        minimum_traverse_height_at_beginning_of_a_command=2450,
+        pick_up_method=ops[0].resource.tip_type.pick_up_method,
       )
     except HamiltonFirmwareError as e:
       tip_already_fitted_errors: List[int] = []
@@ -699,30 +704,28 @@ class STAR(HamiltonLiquidHandler):
     self,
     ops: List[Drop],
     use_channels: List[int],
-    **backend_kwargs
+    drop_method: TipDropMethod = TipDropMethod.DROP,
+    # ti: int
   ):
-    """ Drop tips from a resource. """
+    """ Drop tips to a resource. """
 
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
-    ttti = self.get_ttti([op.resource for op in ops])
 
-    # TODO: should depend on tip carrier/type?
-    params: Dict[str, Any] = {
-      "begin_tip_deposit_process": 1314, #1744, #1970, #2244,
-      "end_tip_deposit_process": 1414, # 1644, #1870, #2164,
-      "minimum_traverse_height_at_beginning_of_a_command": 2450,
-      "discarding_method": 0
-    }
-    params.update(backend_kwargs)
+    # get highest z position
+    max_z = max(op.get_absolute_location().z for op in ops)
+    max_total_tip_length = max(op.resource.tip_type.total_tip_length for op in ops)
+    max_tip_length = max(op.resource.tip_type.tip_length for op in ops)
 
     try:
       return self.discard_tip(
         x_positions=x_positions,
         y_positions=y_positions,
         tip_pattern=channels_involved,
-        tip_type_idx=ttti,
-        **params
+        begin_tip_deposit_process=int((max_z + max_total_tip_length)*10),
+        end_tip_deposit_process=int((max_z + max_tip_length)*10),
+        minimum_traverse_height_at_beginning_of_a_command=2450,
+        discarding_method=drop_method
       )
     except HamiltonFirmwareError as e:
       tip_errors: List[int] = []
@@ -2117,7 +2120,7 @@ class STAR(HamiltonLiquidHandler):
     begin_tip_pick_up_process: int = 0,
     end_tip_pick_up_process: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
-    pick_up_method: int=0 #PickUpMethod = PickUpMethod.OUT_OF_RACK
+    pick_up_method: TipPickupMethod = TipPickupMethod.OUT_OF_RACK
   ):
     """ Tip Pick-up
 
@@ -2155,24 +2158,18 @@ class STAR(HamiltonLiquidHandler):
       tp=f"{begin_tip_pick_up_process:04}",
       tz=f"{end_tip_pick_up_process:04}",
       th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
-      td=pick_up_method,
+      td=pick_up_method.value,
     )
-
-  class DropingMethod(enum.Enum):
-    """ Tip discarding method """
-    PLACE_SHIFT = 0
-    DROP = 1
 
   def discard_tip(
     self,
     x_positions: List[int],
     y_positions: List[int],
     tip_pattern: List[bool],
-    tip_type_idx: int,
     begin_tip_deposit_process: int = 0,
     end_tip_deposit_process: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
-    discarding_method: DropingMethod = DropingMethod.DROP
+    discarding_method: TipDropMethod = TipDropMethod.DROP
   ):
     """ discard tip
 
@@ -2180,7 +2177,6 @@ class STAR(HamiltonLiquidHandler):
       x_positions: x positions [0.1mm]. Must be between 0 and 25000. Default 0.
       y_positions: y positions [0.1mm]. Must be between 0 and 6500. Default 0.
       tip_pattern: Tip pattern (channels involved). Must be between 0 and 1. Default 1.
-      tip_type_idx: Tip type table index
       begin_tip_deposit_process: Begin of tip deposit process (Z- range) [0.1mm]. Must be between
           0 and 3600. Default 0.
       end_tip_deposit_process: End of tip deposit process (Z- range) [0.1mm]. Must be between 0
@@ -2210,11 +2206,10 @@ class STAR(HamiltonLiquidHandler):
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
-      tt=f"{tip_type_idx:02}",
       tp=begin_tip_deposit_process,
       tz=end_tip_deposit_process,
       th=minimum_traverse_height_at_beginning_of_a_command,
-      ti=discarding_method,
+      ti=discarding_method.value,
     )
 
   # TODO:(command:TW) Tip Pick-up for DC wash procedure
