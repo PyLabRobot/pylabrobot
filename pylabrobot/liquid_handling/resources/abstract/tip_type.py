@@ -22,6 +22,12 @@ class TipPickupMethod(enum.Enum):
   OUT_OF_WASH_LIQUID=1
 
 
+class TipDropMethod(enum.Enum):
+  """ Tip drop method """
+  PLACE_SHIFT=0
+  DROP=1
+
+
 class TipType(ABC):
   """ TipType class
 
