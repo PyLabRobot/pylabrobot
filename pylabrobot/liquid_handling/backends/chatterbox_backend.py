@@ -40,7 +40,7 @@ class ChatterBoxBackend(LiquidHandlerBackend):
     print(f"Picking up tips {ops}.")
 
   def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
-    print(f"Droping tips {ops}.")
+    print(f"Dropping tips {ops}.")
 
   def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
     print(f"Aspirating {ops}.")
@@ -52,7 +52,7 @@ class ChatterBoxBackend(LiquidHandlerBackend):
     print(f"Picking up tips from {tip_rack}.")
 
   def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
-    print(f"Droping tips to {tip_rack}.")
+    print(f"Dropping tips to {tip_rack}.")
 
   def aspirate96(self, aspiration: Aspiration):
     print(f"Aspirating {aspiration.volume} from {aspiration.resource}.")
