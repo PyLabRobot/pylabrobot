@@ -48,7 +48,8 @@ class SerializingBackendTests(unittest.TestCase):
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "pick_up_tips")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
-      channels=[Pickup(resource=tips[0]).serialize()], use_channels=[0]))
+      channels=[Pickup(resource=tips[0], tip_type=self.tip_rack.tip_type).serialize()],
+      use_channels=[0]))
 
   def test_drop_tips(self):
     tips = self.tip_rack["A1"]
@@ -57,7 +58,8 @@ class SerializingBackendTests(unittest.TestCase):
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "drop_tips")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
-      channels=[Drop(resource=tips[0]).serialize()], use_channels=[0]))
+      channels=[Drop(resource=tips[0], tip_type=self.tip_rack.tip_type).serialize()],
+      use_channels=[0]))
 
   def test_aspirate(self):
     wells = self.plate["A1"]
@@ -105,7 +107,6 @@ class SerializingBackendTests(unittest.TestCase):
     to = Coordinate(600, 200, 200)
     plate_before = copy.deepcopy(self.plate) # we need to copy the plate because it will be modified
     self.lh.move_plate(self.plate, to=to)
-    print([cmd["command"] for cmd in self.backend.sent_commands])
     self.assertEqual(len(self.backend.sent_commands), 3)
     self.assertEqual(self.backend.sent_commands[0]["command"], "move")
     self.assertEqual(self.backend.get_first_data_for_command("move"), dict(move=

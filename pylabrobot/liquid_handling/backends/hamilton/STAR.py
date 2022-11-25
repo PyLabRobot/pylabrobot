@@ -22,13 +22,14 @@ from pylabrobot.liquid_handling.errors import (
 from pylabrobot.liquid_handling.resources import (
   Plate,
   Resource,
-  Tip,
+  TipRack,
+  TipSpot,
+)
+from pylabrobot.liquid_handling.resources.ml_star import (
+  HamiltonTipType,
   TipDropMethod,
   TipPickupMethod,
-  TipRack,
-  TipType,
   TipSize,
-  Well
 )
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import (
@@ -364,9 +365,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
 
     cmd, id_ = self._assemble_command(module, command, **kwargs)
+    print("sending command", cmd)
 
     # write command to endpoint
     self.dev.write(self.write_endpoint, cmd)
+    print("sent")
     logger.info("Sent command: %s", cmd)
 
     if not wait:
@@ -425,7 +428,7 @@ class STAR(HamiltonLiquidHandler):
 
     super().__init__(read_timeout=read_timeout, **kwargs)
     self.dev: Optional[usb.core.Device] = None
-    self._tip_types: dict[TipType, int] = {}
+    self._tip_types: dict[HamiltonTipType, int] = {}
     self._iswap_parked: Optional[bool] = None
 
     self.read_endpoint: Optional[usb.core.Endpoint] = None
@@ -534,7 +537,7 @@ class STAR(HamiltonLiquidHandler):
 
   # ============== Tip Types ==============
 
-  def define_tip_type(self, tip_type: TipType):
+  def define_tip_type(self, tip_type: HamiltonTipType):
     """ Define a new tip type.
 
     Sends a command to the robot to define a new tip type and save the tip type table index for
@@ -561,15 +564,15 @@ class STAR(HamiltonLiquidHandler):
     self.define_tip_needle(
       tip_type_table_index=ttti,
       filter=tip_type.has_filter,
-      tip_length=int(tip_type.tip_length * 10), # in 0.1mm
+      tip_length=int((tip_type.total_tip_length - tip_type.fitting_depth) * 10), # in 0.1mm
       maximum_tip_volume=int(tip_type.maximal_volume * 10), # in 0.1ul
       tip_size=tip_type.tip_size,
-      pick_up_method=tip_type.pick_up_method
+      pickup_method=tip_type.pickup_method
     )
     self._tip_types[tip_type] = ttti
     return ttti
 
-  def get_tip_type_table_index(self, tip_type: TipType) -> int:
+  def get_tip_type_table_index(self, tip_type: HamiltonTipType) -> int:
     """ Get tip type table index.
 
     Args:
@@ -581,7 +584,7 @@ class STAR(HamiltonLiquidHandler):
 
     return self._tip_types[tip_type]
 
-  def get_or_assign_tip_type_index(self, tip_type: TipType) -> int:
+  def get_or_assign_tip_type_index(self, tip_type: HamiltonTipType) -> int:
     """ Get a tip type table index for the tip_type if it is defined, otherwise define it and then
     return it.
 
@@ -600,6 +603,8 @@ class STAR(HamiltonLiquidHandler):
 
   def assigned_resource_callback(self, resource: Resource):
     if isinstance(resource, TipRack):
+      if not isinstance(resource.tip_type, HamiltonTipType):
+        raise ValueError(f"TipRack {resource} has unsupported tip type {resource.tip_type}.")
       if resource.tip_type not in self._tip_types:
         self.define_tip_type(resource.tip_type)
 
@@ -636,7 +641,7 @@ class STAR(HamiltonLiquidHandler):
 
     return x_positions, y_positions, channels_involved
 
-  def get_ttti(self, tips: List[Tip]) -> int:
+  def get_ttti(self, tips: List[TipSpot]) -> int:
     """ Get tip type table index for a list of tips.
 
     Ensure that for all non-None tips, they have the same tip type, and return the tip type table
@@ -648,7 +653,10 @@ class STAR(HamiltonLiquidHandler):
       raise ValueError("Cannot mix tips with different tip types.")
     if len(tip_types) == 0:
       raise ValueError("No tips specified.")
-    return self.get_or_assign_tip_type_index(tip_types.pop())
+    tip_type = tip_types.pop()
+    if not isinstance(tip_type, HamiltonTipType):
+      raise ValueError(f"Tip type {tip_type} is not a HamiltonTipType.")
+    return self.get_or_assign_tip_type_index(tip_type)
 
   @need_iswap_parked
   def pick_up_tips(
@@ -665,10 +673,12 @@ class STAR(HamiltonLiquidHandler):
     ttti = self.get_ttti([op.resource for op in ops])
 
     max_z = max(op.get_absolute_location().z for op in ops)
-    max_total_tip_length = max(op.resource.tip_type.total_tip_length for op in ops)
-    max_tip_length = max(op.resource.tip_type.tip_length for op in ops)
+    max_total_tip_length = max(op.tip_type.total_tip_length for op in ops)
+    max_tip_length = max((op.tip_type.total_tip_length-op.tip_type.fitting_depth) for op in ops)
 
     try:
+      tip_type = ops[0].resource.tip_type
+      assert isinstance(tip_type, HamiltonTipType), "Tip type must be HamiltonTipType."
       return self.pick_up_tip(
         x_positions=x_positions,
         y_positions=y_positions,
@@ -677,7 +687,7 @@ class STAR(HamiltonLiquidHandler):
         begin_tip_pick_up_process=int((max_z + max_total_tip_length)*10),
         end_tip_pick_up_process=int((max_z + max_tip_length)*10),
         minimum_traverse_height_at_beginning_of_a_command=2450,
-        pick_up_method=ops[0].resource.tip_type.pick_up_method,
+        pickup_method=tip_type.pickup_method,
       )
     except HamiltonFirmwareError as e:
       tip_already_fitted_errors: List[int] = []
@@ -704,18 +714,29 @@ class STAR(HamiltonLiquidHandler):
     self,
     ops: List[Drop],
     use_channels: List[int],
-    drop_method: TipDropMethod = TipDropMethod.DROP,
-    # ti: int
+    drop_method: Optional[TipDropMethod] = None,
   ):
-    """ Drop tips to a resource. """
+    """ Drop tips to a resource.
+
+    Args:
+      drop_method: The method to use for dropping tips. If None, the default method for dropping to
+        tip spots is `DROP`, and everything else is `PLACE_SHIFT`. Note that `DROP` is only the
+        default if *all* tips are being dropped to a tip spot.
+    """
+
+    if drop_method is None:
+      if any(not isinstance(op.resource, TipSpot) for op in ops):
+        drop_method = TipDropMethod.PLACE_SHIFT
+      else:
+        drop_method = TipDropMethod.DROP
 
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
 
     # get highest z position
     max_z = max(op.get_absolute_location().z for op in ops)
-    max_total_tip_length = max(op.resource.tip_type.total_tip_length for op in ops)
-    max_tip_length = max(op.resource.tip_type.tip_length for op in ops)
+    max_total_tip_length = max(op.tip_type.total_tip_length for op in ops)
+    max_tip_length = max((op.tip_type.total_tip_length-op.tip_type.fitting_depth) for op in ops)
 
     try:
       return self.discard_tip(
@@ -994,15 +1015,16 @@ class STAR(HamiltonLiquidHandler):
 
   @need_iswap_parked
   def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
+    assert isinstance(tip_rack.tip_type, HamiltonTipType), "Tip type must be HamiltonTipType."
     ttti = self.get_or_assign_tip_type_index(tip_rack.tip_type)
-    position = cast(Tip, tip_rack.get_item("A1")).get_absolute_location()
+    position = tip_rack.get_item("A1").get_absolute_location()
 
     cmd_kwargs: Dict[str, Any] = dict(
       x_position=int(position.x * 10),
       x_direction=0,
       y_position=int(position.y * 10),
       tip_type_idx=ttti,
-      tip_pick_up_method=0,
+      tip_pickup_method=0,
       z_deposit_position=2164,
       minimum_height_command_end=2450,
       minimum_traverse_height_at_beginning_of_a_command=2450
@@ -1014,7 +1036,7 @@ class STAR(HamiltonLiquidHandler):
 
   @need_iswap_parked
   def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
-    position = cast(Tip, tip_rack.get_item("A1")).get_absolute_location()
+    position = tip_rack.get_item("A1").get_absolute_location()
 
     cmd_kwargs: Dict[str, Any] = dict(
       x_position=int(position.x * 10),
@@ -1040,7 +1062,7 @@ class STAR(HamiltonLiquidHandler):
     **backend_kwargs
   ):
     assert isinstance(aspiration.resource, Plate), "Only ItemizedResource is supported."
-    well_a1 = cast(Well, aspiration.resource.get_item("A1"))
+    well_a1 = aspiration.resource.get_item("A1")
     position = well_a1.get_absolute_location()
 
     liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
@@ -1116,7 +1138,7 @@ class STAR(HamiltonLiquidHandler):
     blow_out_air_volume: float = 0,
   ):
     assert isinstance(dispense.resource, Plate), "Only ItemizedResource is supported."
-    well_a1 = cast(Well, dispense.resource.get_item("A1"))
+    well_a1 = dispense.resource.get_item("A1")
     position = well_a1.get_absolute_location()
 
     liquid_height = dispense.resource.get_absolute_location().z + liquid_height
@@ -1265,7 +1287,7 @@ class STAR(HamiltonLiquidHandler):
     tip_length: int,
     maximum_tip_volume: int,
     tip_size: TipSize,
-    pick_up_method: TipPickupMethod
+    pickup_method: TipPickupMethod
   ):
     """ Tip/needle definition.
 
@@ -1276,7 +1298,7 @@ class STAR(HamiltonLiquidHandler):
       maximum_tip_volume: Maximum volume of tip [0.1ul]
                           Note! it's automatically limited to max. channel capacity
       tip_type: Type of tip collar (Tip type identification)
-      pick_up_method: pick up method.
+      pickup_method: pick up method.
                       Attention! The values set here are temporary and apply only until
                       power OFF or RESET. After power ON the default values apply. (see Table 3)
     """
@@ -1296,7 +1318,7 @@ class STAR(HamiltonLiquidHandler):
       tl=f"{tip_length:04}",
       tv=f"{maximum_tip_volume:05}",
       tg=tip_size.value,
-      tu=pick_up_method.value
+      tu=pickup_method.value
     )
 
   # -------------- 3.2.1 System query --------------
@@ -2120,7 +2142,7 @@ class STAR(HamiltonLiquidHandler):
     begin_tip_pick_up_process: int = 0,
     end_tip_pick_up_process: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
-    pick_up_method: TipPickupMethod = TipPickupMethod.OUT_OF_RACK
+    pickup_method: TipPickupMethod = TipPickupMethod.OUT_OF_RACK
   ):
     """ Tip Pick-up
 
@@ -2136,7 +2158,7 @@ class STAR(HamiltonLiquidHandler):
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning
           of a command 0.1mm] (refers to all channels independent of tip pattern parameter 'tm').
           Must be between 0 and 3600. Default 3600.
-      pick_up_method: Pick up method.
+      pickup_method: Pick up method.
     """
 
     utils.assert_clamp(x_positions, 0, 25000, "x_positions")
@@ -2158,7 +2180,7 @@ class STAR(HamiltonLiquidHandler):
       tp=f"{begin_tip_pick_up_process:04}",
       tz=f"{end_tip_pick_up_process:04}",
       th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
-      td=pick_up_method.value,
+      td=pickup_method.value,
     )
 
   def discard_tip(
@@ -3046,7 +3068,7 @@ class STAR(HamiltonLiquidHandler):
     x_direction: int,
     y_position: int,
     tip_type_idx: int,
-    tip_pick_up_method: int = 2,
+    tip_pickup_method: int = 2,
     z_deposit_position: int = 3425,
     minimum_traverse_height_at_beginning_of_a_command: int = 3425,
     minimum_height_command_end: int = 3425
@@ -3058,7 +3080,7 @@ class STAR(HamiltonLiquidHandler):
       x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
       y_position: y position [0.1mm]. Must be between 1080 and 5600. Default 5600.
       tip_size: Tip type.
-      tip_pick_up_method: Tip pick up method. 0 = pick up from rack. 1 = pick up from C0Re 96 tip
+      tip_pickup_method: Tip pick up method. 0 = pick up from rack. 1 = pick up from C0Re 96 tip
                           wash station. 2 = pick up with " full volume blow out"
       z_deposit_position: Z- deposit position [0.1mm] (collar bearing position) Must bet between
                           0 and 3425. Default 3425.
@@ -3083,7 +3105,7 @@ class STAR(HamiltonLiquidHandler):
       xd=x_direction,
       yh=f"{y_position:04}",
       tt=f"{tip_type_idx:02}",
-      wu=tip_pick_up_method,
+      wu=tip_pickup_method,
       za=f"{z_deposit_position:04}",
       zh=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
       ze=f"{minimum_height_command_end:04}",
@@ -3105,7 +3127,7 @@ class STAR(HamiltonLiquidHandler):
       x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
       y_position: y position [0.1mm]. Must be between 1080 and 5600. Default 5600.
       tip_type: Tip type.
-      tip_pick_up_method: Tip pick up method. 0 = pick up from rack. 1 = pick up from C0Re 96
+      tip_pickup_method: Tip pick up method. 0 = pick up from rack. 1 = pick up from C0Re 96
                           tip wash station. 2 = pick up with " full volume blow out"
       z_deposit_position: Z- deposit position [0.1mm] (collar bearing position) Must bet between
                           0 and 3425. Default 3425.

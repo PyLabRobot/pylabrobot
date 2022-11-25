@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, ABCMeta
 import enum
 from typing import Optional, TYPE_CHECKING
 
+from pylabrobot.liquid_handling.tip_type import TipType
 from .resources.abstract.coordinate import Coordinate
 if TYPE_CHECKING:
-  from pylabrobot.liquid_handling.resources import Resource, Tip
+  from pylabrobot.liquid_handling.resources import Resource
+  from .resources.abstract.tip_rack import TipSpot
 
 
 class PipettingOp(ABC):
@@ -41,28 +43,43 @@ class PipettingOp(ABC):
       "offset": self.offset.serialize()
     }
 
+
 class TipOp(PipettingOp, metaclass=ABCMeta):
   """ Abstract base class for tip operations. """
 
-  def __init__(self, resource: Tip, offset: Coordinate = Coordinate.zero()):
+  def __init__(self, resource: Resource, tip_type: TipType, offset: Coordinate = Coordinate.zero()):
     super().__init__(resource, offset)
-    self.resource: Tip = resource # fix type hint
+    self.tip_type = tip_type
 
-  @classmethod
-  @abstractmethod
-  def deserialize(cls, data: dict, resource: Tip) -> PipettingOp:
-    pass
+  def __eq__(self, other: object) -> bool:
+    return (
+      super().__eq__(other) and
+      isinstance(other, TipOp) and
+      self.tip_type == other.tip_type
+    )
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "tip_type": self.tip_type.serialize()
+    }
 
 
 class Pickup(TipOp):
   """ A pickup operation. """
 
+  def __init__(self, resource: TipSpot, tip_type: TipType, offset: Coordinate = Coordinate.zero()):
+    super().__init__(resource, tip_type, offset)
+    self.resource: TipSpot = resource # fix type
+
   @classmethod
-  def deserialize(cls, data: dict, resource: Tip) -> Pickup:
+  def deserialize(cls, data: dict, resource: TipSpot) -> Pickup:
     assert resource.name == data["resource_name"]
+    tip_type = TipType.deserialize(data.pop("tip_type"))
     return Pickup(
       resource=resource,
-      offset=Coordinate.deserialize(data["offset"])
+      offset=Coordinate.deserialize(data["offset"]),
+      tip_type=tip_type
     )
 
 
@@ -70,11 +87,13 @@ class Drop(TipOp):
   """ A drop operation. """
 
   @classmethod
-  def deserialize(cls, data: dict, resource: Tip) -> Drop:
+  def deserialize(cls, data: dict, resource: Resource) -> Drop:
     assert resource.name == data["resource_name"]
+    tip_type = TipType.deserialize(data.pop("tip_type"))
     return Drop(
       resource=resource,
-      offset=Coordinate.deserialize(data["offset"])
+      offset=Coordinate.deserialize(data["offset"]),
+      tip_type=tip_type
     )
 
 

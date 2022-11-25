@@ -25,8 +25,7 @@ def build_layout() -> HamiltonDeck:
   tip_car = TIP_CAR_480_A00(name="tip_carrier")
   tip_car[0] = HTF_L(name="tip_rack_01")
   tip_car[1] = HTF_L(name="tip_rack_02")
-  tip_car[3] = empty_tip_rack = HTF_L(name="tip_rack_03")
-  empty_tip_rack.set_tip_state([[False]*12]*8)
+  tip_car[3] = HTF_L(name="tip_rack_03")
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
   plt_car[0] = Cos_96_EZWash(name="aspiration plate")
@@ -94,8 +93,8 @@ class LiquidHandlingApiGeneralTests(unittest.TestCase):
       # Post with valid data
       deck = build_layout()
       response = client.post(self.base_url + "/labware", json=dict(deck=deck.serialize()))
-      self.assertEqual(response.status_code, 200)
       self.assertEqual(response.json, {"status": "ok"})
+      self.assertEqual(response.status_code, 200)
       self.assertEqual(self.lh.deck, deck)
 
 
@@ -118,8 +117,9 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
 
   def test_tip_pickup(self):
     with self.app.test_client() as client:
-      tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
-      pickup = Pickup(resource=tip)
+      tip_rack = cast(TipRack, self.lh.deck.get_resource("tip_rack_01"))
+      tip = tip_rack.get_tip("A1")
+      pickup = Pickup(resource=tip, tip_type=tip_rack.tip_type)
       response = client.post(
         self.base_url + "/pick-up-tips",
         json=dict(channels=[pickup.serialize()], use_channels=[0]))
@@ -130,8 +130,9 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
     self.test_tip_pickup() # pick up a tip first
 
     with self.app.test_client() as client:
-      tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_03")).get_tip("A1")
-      drop = Drop(resource=tip)
+      tip_rack = cast(TipRack, self.lh.deck.get_resource("tip_rack_01"))
+      tip = tip_rack.get_tip("A1")
+      drop = Drop(resource=tip, tip_type=tip_rack.tip_type)
       response = client.post(
         self.base_url + "/drop-tips",
         json=dict(channels=[drop.serialize()], use_channels=[0]))

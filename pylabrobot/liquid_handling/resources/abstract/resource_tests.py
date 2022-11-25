@@ -124,6 +124,11 @@ class TestResource(unittest.TestCase):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
     self.assertEqual(Resource.deserialize(r.serialize()), r)
 
+  def test_get_center_offsets(self):
+    r = Resource("test", size_x=10, size_y=120, size_z=10)
+    self.assertEqual(r.get_2d_center_offsets(), [Coordinate(5, 60, 0)])
+    self.assertEqual(r.get_2d_center_offsets(n=2), [Coordinate(5, 40, 0), Coordinate(5, 80, 0)])
+
 
 if __name__ == "__main__":
   unittest.main()

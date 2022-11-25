@@ -4,47 +4,39 @@
 import unittest
 
 from pylabrobot.liquid_handling.resources.abstract.itemized_resource import create_equally_spaced
+from pylabrobot.liquid_handling.resources.ml_star.tips import standard_volume_tip_with_filter
 
 from .carrier import Carrier, TipCarrier
 from .coordinate import Coordinate
 from .deck import Deck
 from .resource import Resource
-from .tip_rack import TipRack, Tip
-from .tip_type import TipPickupMethod, TipType, TipSize
+from .tip_rack import TipRack, TipSpot
 
 
 class CarrierTests(unittest.TestCase):
   def setUp(self):
-    tip_type = TipType(
-      has_filter=False,
-      total_tip_length=100,
-      maximal_volume=400,
-      tip_size=TipSize.STANDARD_VOLUME,
-      pick_up_method=TipPickupMethod.OUT_OF_RACK
-    )
-
     self.A = TipRack( # pylint: disable=invalid-name
       name="A",
       size_x=5, size_y=5, size_z=5,
-      tip_type=tip_type,
-      items=create_equally_spaced(Tip,
-        dx=1, dy=1, dz=1, tip_type=tip_type,
+      tip_type=standard_volume_tip_with_filter,
+      items=create_equally_spaced(TipSpot,
+        dx=1, dy=1, dz=1,
         num_items_x=1, num_items_y=1, item_size_x=5, item_size_y=5))
 
     self.B = TipRack( # pylint: disable=invalid-name
       name="B",
       size_x=5, size_y=5, size_z=5,
-      tip_type=tip_type,
-      items=create_equally_spaced(Tip,
-        dx=1, dy=1, dz=1, tip_type=tip_type,
+      tip_type=standard_volume_tip_with_filter,
+      items=create_equally_spaced(TipSpot,
+        dx=1, dy=1, dz=1,
         num_items_x=1, num_items_y=1, item_size_x=5, item_size_y=5))
 
     self.alsoB = TipRack( # pylint: disable=invalid-name
       name="B",
       size_x=100, size_y=100, size_z=100,
-      tip_type=tip_type,
-      items=create_equally_spaced(Tip,
-        dx=1, dy=1, dz=1, tip_type=tip_type,
+      tip_type=standard_volume_tip_with_filter,
+      items=create_equally_spaced(TipSpot,
+        dx=1, dy=1, dz=1,
         num_items_x=1, num_items_y=1, item_size_x=5, item_size_y=5))
 
     self.tip_car = TipCarrier(

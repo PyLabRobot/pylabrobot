@@ -11,11 +11,16 @@ from pylabrobot.liquid_handling.resources.opentrons import (
 
 
 class OpentronsBackendSetupTests(unittest.TestCase):
+  """ Tests for setup and stop """
   @patch("ot_api.runs.create")
   @patch("ot_api.lh.add_mounted_pipettes")
-  def test_setup(self, mock_add_mounted_pipettes, mock_create):
+  @patch("ot_api.labware.add")
+  @patch("ot_api.labware.define")
+  def test_setup(self, mock_define, mock_add, mock_add_mounted_pipettes, mock_create):
     mock_create.return_value = "run-id"
     mock_add_mounted_pipettes.return_value = ("left-pipette-id", "right-pipette-id")
+    mock_add.side_effect = _mock_add
+    mock_define.side_effect = _mock_define
 
     self.backend = OpentronsBackend(host="localhost", port=1338)
     self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
@@ -35,9 +40,14 @@ class OpentronsBackendDefinitionTests(unittest.TestCase):
 
   @patch("ot_api.runs.create")
   @patch("ot_api.lh.add_mounted_pipettes")
-  def setUp(self, mock_add_mounted_pipettes, mock_create):
+  @patch("ot_api.labware.add")
+  @patch("ot_api.labware.define")
+  def setUp(self, mock_define, mock_add, mock_add_mounted_pipettes, mock_create):
     mock_create.return_value = "run-id"
     mock_add_mounted_pipettes.return_value = ("left-pipette-id", "right-pipette-id")
+    mock_add.side_effect = _mock_add
+    mock_define.side_effect = _mock_define
+
     self.backend = OpentronsBackend(host="localhost", port=1338)
     self.deck = OTDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)

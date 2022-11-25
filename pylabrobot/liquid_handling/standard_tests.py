@@ -17,28 +17,68 @@ class TestStandard(unittest.TestCase):
     self.plate = Cos_96_EZWash("plate")
 
   def test_pick_up_serialize(self):
-    self.assertEqual(Pickup(resource=self.tip_rack.get_tip("A1")).serialize(), {
-      "resource_name": "tiprack_tip_0_0",
+    self.assertEqual(
+      Pickup(
+        resource=self.tip_rack.get_tip("A1"),
+        tip_type=self.tip_rack.tip_type
+      ).serialize(),
+      {
+      "resource_name": "tiprack_tipspot_0_0",
       "offset": {"x": 0, "y": 0, "z": 0},
+      "tip_type": {
+        "has_filter": True,
+        "total_tip_length": 95.1,
+        "maximal_volume": 1250,
+        "fitting_depth": 8,
+      }
     })
 
   def test_pick_up_deserialize(self):
-    self.assertEqual(Pickup.deserialize({
-      "resource_name": "tiprack_tip_0_0",
-      "offset": {"x": 0, "y": 0, "z": 0},
-    }, resource=self.tip_rack.get_tip("A1")), Pickup(resource=self.tip_rack.get_tip("A1")))
+    self.assertEqual(
+        Pickup.deserialize({
+          "resource_name": "tiprack_tipspot_0_0",
+          "offset": {"x": 0, "y": 0, "z": 0},
+          "tip_type": {
+            "has_filter": True,
+            "total_tip_length": 95.1,
+            "maximal_volume": 1250,
+            "fitting_depth": 8,
+          }},
+          resource=self.tip_rack.get_tip("A1"),
+        ),
+        Pickup(
+          resource=self.tip_rack.get_tip("A1"),
+          tip_type=self.tip_rack.tip_type
+        )
+    )
 
   def test_drop_serialize(self):
-    self.assertEqual(Drop(resource=self.tip_rack.get_tip("A1")).serialize(), {
-      "resource_name": "tiprack_tip_0_0",
-      "offset": {"x": 0, "y": 0, "z": 0},
-    })
+    self.assertEqual(
+      Drop(resource=self.tip_rack.get_tip("A1"), tip_type=self.tip_rack.tip_type).serialize(),
+      {
+        "resource_name": "tiprack_tipspot_0_0",
+        "offset": {"x": 0, "y": 0, "z": 0},
+        "tip_type": {
+          "has_filter": True,
+          "total_tip_length": 95.1,
+          "maximal_volume": 1250,
+          "fitting_depth": 8,
+        }
+      })
 
   def test_drop_deserialize(self):
     self.assertEqual(Drop.deserialize({
-      "resource_name": "tiprack_tip_0_0",
-      "offset": {"x": 0, "y": 0, "z": 0},
-    }, resource=self.tip_rack.get_tip("A1")), Drop(resource=self.tip_rack.get_tip("A1")))
+        "resource_name": "tiprack_tipspot_0_0",
+        "offset": {"x": 0, "y": 0, "z": 0},
+        "tip_type": {
+          "has_filter": True,
+          "total_tip_length": 95.1,
+          "maximal_volume": 1250,
+          "fitting_depth": 8,
+        }},
+        resource=self.tip_rack.get_tip("A1"),
+      ),
+      Drop(resource=self.tip_rack.get_tip("A1"), tip_type=self.tip_rack.tip_type))
 
   def test_aspiration_serialize(self):
     self.assertEqual(Aspiration(resource=self.plate.get_well("A1"), volume=100).serialize(), {

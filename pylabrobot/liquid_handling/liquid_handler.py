@@ -26,13 +26,15 @@ from .resources import (
   Lid,
   Plate,
   PlateReader,
-  Tip,
   TipRack,
+  TipSpot,
+  TipType,
   Well
 )
 from .standard import (
   Pickup,
   Drop,
+  # Discard,
   Aspiration,
   Dispense,
   Move
@@ -92,7 +94,7 @@ class LiquidHandler:
 
     self.backend = backend
     self.setup_finished = False
-    self._picked_up_tips: Optional[List[Tip]] = None
+    self._picked_up_tips: Optional[List[TipSpot]] = None
     self._picked_up_tips96: Optional[TipRack] = None
 
     self.deck = deck
@@ -117,6 +119,9 @@ class LiquidHandler:
 
     for channel in range(self.backend.num_channels):
       self.trackers[channel] = ChannelTipTracker()
+
+    for resource in self.deck.children:
+      self.resource_assigned_callback(resource)
 
   def stop(self):
     self.backend.stop()
@@ -261,7 +266,7 @@ class LiquidHandler:
   @need_setup_finished
   def pick_up_tips(
     self,
-    tips: List[Tip],
+    tips: List[TipSpot],
     use_channels: Optional[List[int]] = None,
     offsets: Union[Coordinate, List[Coordinate]] = Coordinate.zero(),
     **backend_kwargs
@@ -275,12 +280,7 @@ class LiquidHandler:
 
       Pick up tips on odd numbered rows, skipping the other channels.
 
-      >>> lh.pick_up_tips(channels=tips_resource[
-      ...   "A1",
-      ...   "C1",
-      ...   "E1",
-      ...   "G1",
-      ... ], use_channels=[0, 2, 4, 6])
+      >>> lh.pick_up_tips(channels=tips_resource["A1", "C1", "E1", "G1"], use_channels=[0, 2, 4, 6])
 
       Pick up tips from different tip resources:
 
@@ -325,8 +325,8 @@ class LiquidHandler:
     assert len(tips) == len(offsets) == len(use_channels), \
       "Number of tips and offsets and use_channels must be equal."
 
-    pickups = [(Pickup(tip, offset) if tip is not None else None)
-            for tip, offset in zip(tips, offsets)]
+    pickups = [Pickup(resource=tip, tip_type=tip.tip_type, offset=offset)
+               for tip, offset in zip(tips, offsets)]
 
     for channel, op in zip(use_channels, pickups):
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
@@ -350,19 +350,20 @@ class LiquidHandler:
   @need_setup_finished
   def drop_tips(
     self,
-    tips: List[Tip],
+    tips: List[Union[TipSpot, Resource]],
     use_channels: Optional[List[int]] = None,
     offsets: Union[Coordinate, List[Coordinate]] = Coordinate.zero(),
+    tip_types: Optional[Union[List[TipType], TipType]] = None,
     **backend_kwargs
   ):
     """ Drop tips to a resource.
 
     Examples:
-      Droping tips to the first column.
+      Dropping tips to the first column.
 
       >>> lh.pick_up_tips(tip_rack["A1:H1"])
 
-      Droping tips with different offsets:
+      Dropping tips with different offsets:
 
       >>> lh.drop_tips(
       ...   channels=tips_resource["A1":"C1"],
@@ -379,7 +380,11 @@ class LiquidHandler:
         `len(channels)` channels will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the tip
         pickup location. If `None`, no offset will be applied.
-      kwargs: Additional keyword arguments for the backend, optional.
+      tip_types: List of tip types (or a single tip type) for tips to to discard. If `None`, the tip
+        types of the target spots will be used, if the targets are spots. Otherwise, if the targets
+        are not spots, the tip types of the currently picked up tips will be used, if tip tracking
+        is enabled. `None` is the default and recommended value.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
@@ -401,29 +406,49 @@ class LiquidHandler:
     if use_channels is None:
       use_channels = list(range(len(tips)))
 
-    assert len(tips) == len(offsets) == len(use_channels), \
-      "Number of channels and offsets and use_channels must be equal."
+    if tip_types is None:
+      tip_types = []
+      for i, channel in enumerate(use_channels):
+        target = tips[i]
+        if isinstance(target, TipSpot):
+          tip_types.append(target.tip_type)
+        else:
+          ctt = self.trackers[channel].current_tip_type
+          if ctt is None:
+            raise RuntimeError(f"Channel {channel} has no tip, the target is not a spot, and no tip"
+                                " type was specified.")
+          tip_types.append(ctt)
+    elif isinstance(tip_types, TipType):
+      tip_types = [tip_types] * len(use_channels)
+    elif len(tip_types) != len(use_channels):
+      raise ValueError("Number of channels and tip types must be equal.")
 
-    drops = [(Drop(tip, offset) if tip is not None else None)
-            for tip, offset in zip(tips, offsets)]
+    assert len(tips) == len(offsets) == len(use_channels) == len(tip_types), \
+      "Number of channels and offsets and use_channels and tip_types must be equal."
+
+    drops = [Drop(resource=tip, tip_type=tip_type, offset=offset)
+             for tip, tip_type, offset in zip(tips, tip_types, offsets)]
 
     for channel, op in zip(use_channels, drops):
-      if does_tip_tracking() and not op.resource.tracker.is_disabled:
-        op.resource.tracker.queue_op(op)
+      if does_tip_tracking():
+        if isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled:
+          op.resource.tracker.queue_op(op)
         self.trackers[channel].queue_op(op)
 
     try:
       self.backend.drop_tips(ops=drops, use_channels=use_channels, **backend_kwargs)
     except:
       for channel, op in zip(use_channels, drops):
-        if does_tip_tracking() and not op.resource.tracker.is_disabled:
+        if does_tip_tracking() and \
+          (isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled):
           op.resource.tracker.rollback()
           self.trackers[channel].rollback()
       raise
     else:
       for channel, op in zip(use_channels, drops):
-        if does_tip_tracking() and not op.resource.tracker.is_disabled:
-          op.resource.tracker.commit()
+        if does_tip_tracking():
+          if isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled:
+            op.resource.tracker.commit()
           self.trackers[channel].commit()
 
   def return_tips(self):
@@ -439,18 +464,61 @@ class LiquidHandler:
       RuntimeError: If no tips have been picked up.
     """
 
-    tips: List[Tip] = []
+    tips: List[TipSpot] = []
     channels: List[int] = []
 
     for channel, tracker in self.trackers.items():
-      if tracker.current_tip is not None:
-        tips.append(tracker.current_tip)
+      if tracker.current_tip_origin_spot is not None:
+        tips.append(tracker.current_tip_origin_spot)
         channels.append(channel)
 
     if len(tips) == 0:
       raise RuntimeError("No tips have been picked up.")
 
     self.drop_tips(tips=tips, use_channels=channels)
+
+  def discard_tips(
+    self,
+    use_channels: Optional[List[int]] = None,
+    tip_types: Optional[Union[List[TipType], TipType]] = None,
+    **backend_kwargs
+  ):
+    """ Permanently discard tips.
+
+    Examples:
+      Discarding the tips on channels 1 and 2:
+
+      >>> lh.discard_tips(use_channels=[0, 1])
+
+      Discarding all tips currently picked up:
+
+      >>> lh.discard_tips()
+
+    Args:
+      use_channels: List of channels to use. Index from front to back. If `None`, all that have
+        tips will be used.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
+    """
+
+    # Different default value from drop_tips: here we factor in the tip tracking.
+    if use_channels is None:
+      use_channels = [c for c, t in self.trackers.items() if t.has_tip]
+
+    n = len(use_channels)
+
+    if n == 0:
+      raise RuntimeError("No tips have been picked up and no channels were specified.")
+
+    trash = self.deck.get_trash_area()
+    offsets = trash.get_2d_center_offsets(n=n)
+    offsets = list(reversed(offsets))
+
+    return self.drop_tips(
+        tips=[trash]*n,
+        use_channels=use_channels,
+        tip_types=tip_types,
+        offsets=offsets,
+        **backend_kwargs)
 
   @need_setup_finished
   def aspirate(
@@ -532,12 +600,8 @@ class LiquidHandler:
           raise ValueError("Number of offsets must match number of channels used when aspirating "
                           "from a resource.")
       else:
-        dx = resources.get_size_x() / 2
-        dy = resources.get_size_y() / (n+1)
-        if dy < 9:
-          raise ValueError(f"Resource is too small to space {n} channels evenly.")
-        offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
-        offsets = list(reversed(offsets)) # reverse so that first channel is at the front
+        offsets = resources.get_2d_center_offsets(n=n)
+        offsets = list(reversed(offsets))
 
       resources = [resources] * n
     else:
@@ -658,12 +722,8 @@ class LiquidHandler:
           raise ValueError("Number of offsets must match number of channels used when dispensing "
                           "to a resource.")
       else:
-        dx = resources.get_size_x() / 2
-        dy = resources.get_size_y() / (n+1)
-        if dy < 9:
-          raise ValueError(f"Resource is too small to space {n} channels evenly.")
-        offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
-        offsets = list(reversed(offsets)) # reverse so that first channel is at the front
+        offsets = resources.get_2d_center_offsets(n=n)
+        offsets = list(reversed(offsets))
 
       resources = [resources] * n
     else:

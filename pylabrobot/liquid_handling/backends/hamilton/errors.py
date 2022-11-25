@@ -226,11 +226,11 @@ class AspirationError(HamiltonModuleError):
 
 
 class WashFluidOrWasteError(HamiltonModuleError):
-  """Wash fluid or waste error
+  """Wash fluid or trash error
 
   Possible cause(s):
     1. missing wash fluid
-    2. waste of particular washer is full
+    2. trash of particular washer is full
 
   Code: 18
   """
