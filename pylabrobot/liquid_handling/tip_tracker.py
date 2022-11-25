@@ -12,8 +12,10 @@ from pylabrobot.liquid_handling.errors import (
   TipSpotHasNoTipError,
 )
 from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
+
 if TYPE_CHECKING:
-  from pylabrobot.liquid_handling.resources import Tip
+  from pylabrobot.liquid_handling.resources import TipSpot
+  from pylabrobot.liquid_handling.tip_type import TipType
 
 
 this = sys.modules[__name__]
@@ -76,15 +78,8 @@ class TipTracker(ABC):
 
   @property
   @abstractmethod
-  def current_tip(self) -> Optional["Tip"]:
-    """ The current tip. """
-
-  @property
   def has_tip(self) -> bool:
     """ Whether the tip tracker has a tip. Note that this does include pending operations. """
-    if self.in_initial_state:
-      return self.start_with_tip
-    return self.current_tip is not None
 
   def queue_op(self, op: TipOp) -> None:
     """ Check if the operation is valid given the current state. """
@@ -110,20 +105,33 @@ class TipTracker(ABC):
     assert not self.is_disabled, "Tip tracker is disabled. Call `enable()`."
     self.pending = []
 
+
 class ChannelTipTracker(TipTracker):
   """ A channel tip tracker tracks and validates tip operations for a single channel. """
 
   @property
-  def current_tip(self) -> Optional["Tip"]:
-    if len(self.pending) > 0:
-      if isinstance(self.pending[-1], Pickup):
-        return self.pending[-1].resource
-      return None
-    if len(self.ops) == 0:
-      return None
-    if isinstance(self.ops[-1], Pickup):
-      return self.ops[-1].resource
+  def _last_pickup(self) -> Optional[Pickup]:
+    if len(self.pending) > 0 and isinstance(self.pending[-1], Pickup):
+      return self.pending[-1]
+    if len(self.ops) > 0 and isinstance(self.ops[-1], Pickup):
+      return self.ops[-1]
     return None
+
+  @property
+  def current_tip_type(self) -> Optional["TipType"]:
+    """ The current tip type. """
+    return self._last_pickup.tip_type if self._last_pickup is not None else None
+
+  @property
+  def current_tip_origin_spot(self) -> Optional["TipSpot"]:
+    """ The current tip type. """
+    return self._last_pickup.resource if self._last_pickup is not None else None
+
+  @property
+  def has_tip(self) -> bool:
+    if self.in_initial_state:
+      return self.start_with_tip
+    return self._last_pickup is not None
 
   def validate(self, op: TipOp):
     """ Validate a tip operation.
@@ -148,16 +156,12 @@ class SpotTipTracker(TipTracker):
   location where tips are stored.  """
 
   @property
-  def current_tip(self) -> Optional["Tip"]:
+  def has_tip(self) -> bool:
     if len(self.pending) > 0:
-      if isinstance(self.pending[-1], Drop):
-        return self.pending[-1].resource
-      return None
-    if len(self.ops) == 0:
-      return None
-    if isinstance(self.ops[-1], Drop):
-      return self.ops[-1].resource
-    return None
+      return isinstance(self.pending[-1], Drop)
+    if len(self.ops) > 0:
+      return isinstance(self.ops[-1], Drop)
+    return self.start_with_tip
 
   def validate(self, op: TipOp):
     """ Validate a tip operation.

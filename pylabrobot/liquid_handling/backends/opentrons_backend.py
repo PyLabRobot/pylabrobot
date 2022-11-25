@@ -8,7 +8,6 @@ from pylabrobot.liquid_handling.resources import (
   Plate,
   Resource,
   TipRack,
-  Well
 )
 from pylabrobot.liquid_handling.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
@@ -79,39 +78,48 @@ class OpentronsBackend(LiquidHandlerBackend):
     super().stop()
 
   def assigned_resource_callback(self, resource: Resource):
+    """ Called when a resource is assigned to a backend.
+
+    Note that for Opentrons, all children to all resources on the deck are named "wells". They also
+    have well-like attributes such as `displayVolumeUnits` and `totalLiquidVolume`. These seem to
+    be ignored when they are not used for aspirating/dispensing.
+    """
+
     super().assigned_resource_callback(resource)
 
-    if not isinstance(resource, (TipRack, Plate)):
-      raise RuntimeError(f"Resource {resource} is not supported by the Opentrons backend.")
+    well_names = [well.name for well in resource.children]
+    if isinstance(resource, ItemizedResource):
+      ordering = utils.reshape_2d(well_names, (resource.num_items_x, resource.num_items_y))
+    else:
+      ordering = [well_names]
 
-    wells = resource.children
-    well_names = [well.name for well in wells]
-    ordering = utils.reshape_2d(well_names, (resource.num_items_x, resource.num_items_y))
-
-    def _get_volume(well: Well) -> float:
+    def _get_volume(well: Resource) -> float:
       """ Temporary hack to get the volume of the well (in ul), TODO: store in resource. """
       return well.get_size_x() * well.get_size_y() * well.get_size_z()
 
-    display_category = {
-      TipRack: "tipRack",
-      Plate: "wellPlate",
-    }[type(resource)]
+    # try to stick to opentrons' naming convention
+    if isinstance(resource, Plate):
+      display_category = "wellPlate"
+    elif isinstance(resource, TipRack):
+      display_category = "tipRack"
+    else:
+      display_category = "other"
 
     well_definitions = {
-      well.name: {
-        "depth": well.get_size_z(),
-        "x": cast(Coordinate, well.location).x,
-        "y": cast(Coordinate, well.location).y,
-        "z": cast(Coordinate, well.location).z,
-
+      child.name: {
+        "depth": child.get_size_z(),
+        "x": cast(Coordinate, child.location).x,
+        "y": cast(Coordinate, child.location).y,
+        "z": cast(Coordinate, child.location).z,
         "shape": "circular",
-        "diameter": well.get_size_x(),# inscribed circle has diameter equal to the width of the well
-      } for well in wells
-    }
 
-    if isinstance(resource, Plate):
-      for i, v in enumerate(well_definitions.values()):
-        v["totalLiquidVolume"] = _get_volume(utils.force_unwrap(resource.get_well(i)))
+        # inscribed circle has diameter equal to the width of the well
+        "diameter": child.get_size_x(),
+
+        # Opentrons requires `totalLiquidVolume`, even for tip racks!
+        "totalLiquidVolume": _get_volume(child)
+      } for child in resource.children
+    }
 
     format_ = "irregular" # Property to determine compatibility with multichannel pipette
     if isinstance(resource, ItemizedResource):
@@ -119,6 +127,13 @@ class OpentronsBackend(LiquidHandlerBackend):
         format_ = "96Standard"
       elif resource.num_items_x * resource.num_items_y == 384:
         format_ = "384Standard"
+
+    # Again, use default values and only set the real ones if applicable...
+    tip_overlap: float = 0
+    total_tip_length: float = 0
+    if isinstance(resource, TipRack):
+      tip_overlap = resource.tip_type.fitting_depth
+      total_tip_length = resource.tip_type.total_tip_length
 
     lw = {
       "schemaVersion": 2,
@@ -136,11 +151,8 @@ class OpentronsBackend(LiquidHandlerBackend):
         "format": format_,
         "isTiprack": isinstance(resource, TipRack),
         # should we get the tip length from calibration on the robot? /calibration/tip_length
-        "tipLength":
-          resource.tip_type.total_tip_length if isinstance(resource, TipRack) else None,
-        # TODO: we need to fetch this. - specifies the length of the area of the tip that overlaps
-        # the nozzle of the pipette
-        "tipOverlap": 0,
+        "tipLength": total_tip_length,
+        "tipOverlap": tip_overlap,
         "loadName": resource.name,
         "isMagneticModuleCompatible": False, # do we really care? If yes, store.
       },
@@ -231,8 +243,10 @@ class OpentronsBackend(LiquidHandlerBackend):
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
 
-    labware_id = self.defined_labware[op.resource.parent.name]
-    pipette_id = self.select_tip_pipette(op.resource.tip_type.maximal_volume, with_tip=False)
+    # labware_id = self.defined_labware[op.resource.parent.parent.name] # get name of tip rack
+    labware_id = self.defined_labware[op.resource.parent.name] # get name of tip rack
+    tip_max_volume = 20 # op.resource.maximal_volume
+    pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=False)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
 
@@ -247,14 +261,18 @@ class OpentronsBackend(LiquidHandlerBackend):
   def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     """ Drop tips from the specified resource. """
 
+    # right now we get the tip rack, and then identifier within that tip rack?
+    # how do we do that with trash, assuming we don't want to have a child for the trash?
+
     assert len(ops) == 1 # only one channel supported for now
     assert use_channels == [0], "manual channel selection not supported on OT for now"
     op = ops[0] # for channel in channels
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
 
-    labware_id = self.defined_labware[op.resource.parent.name]
-    pipette_id = self.select_tip_pipette(op.resource.tip_type.maximal_volume, with_tip=True)
+    labware_id = self.defined_labware[op.resource.parent.name] # get name of tip rack
+    tip_max_volume = 20 # op.resource.maximal_volume
+    pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=True)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
 

@@ -39,6 +39,13 @@ class TestHTTPBackendCom(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
+    responses.add(
+      responses.POST,
+      "http://localhost:8080/events/resource-assigned",
+      match=[header_match],
+      json={"status": "ok"},
+      status=200,
+    )
     self.lh.setup()
     self.lh.stop()
 
@@ -51,6 +58,13 @@ class TestHTTPBackendOps(unittest.TestCase):
     responses.add(
       responses.POST,
       "http://localhost:8080/events/setup",
+      json={"status": "ok"},
+      status=200,
+    )
+    responses.add(
+      responses.POST,
+      "http://localhost:8080/events/resource-assigned",
+      match=[header_match],
       json={"status": "ok"},
       status=200,
     )
@@ -92,7 +106,13 @@ class TestHTTPBackendOps(unittest.TestCase):
               "y": 0,
               "z": 0
             },
-            "resource_name": "tiprack_tip_0_0",
+            "resource_name": "tiprack_tipspot_0_0",
+            "tip_type": {
+              "has_filter": True,
+              "total_tip_length": 95.1,
+              "maximal_volume": 1250,
+              "fitting_depth": 8
+            }
           }],
           "use_channels": [0]
         })
@@ -116,7 +136,13 @@ class TestHTTPBackendOps(unittest.TestCase):
               "y": 0,
               "z": 0
             },
-            "resource_name": "tiprack_tip_0_0",
+            "resource_name": "tiprack_tipspot_0_0",
+            "tip_type": {
+              "has_filter": True,
+              "total_tip_length": 95.1,
+              "maximal_volume": 1250,
+              "fitting_depth": 8
+            }
           }],
           "use_channels": [0]
         })

@@ -14,10 +14,8 @@ from pylabrobot.liquid_handling.resources import (
   Plate,
   TipRack,
   Well,
-  Tip,
+  TipSpot,
   TipType,
-  TipSize,
-  TipPickupMethod
 )
 
 
@@ -42,7 +40,7 @@ def ot_definition_to_resource(
 
   if display_category in ["wellPlate", "tipRack"]:
     items = data["ordering"]
-    wells: List[List[Union[Tip, Well]]] = [] # TODO: can we use TypeGuard?
+    wells: List[List[Union[TipSpot, Well]]] = [] # TODO: can we use TypeGuard?
 
     def volume_from_name(name: str) -> float:
       # like "Opentrons 96 Filter Tip Rack 200 µL"
@@ -80,21 +78,13 @@ def ot_definition_to_resource(
           well.location = location
           wells[i].append(well)
         else:
-          tip_type = TipType(
-            has_filter="Filter" in data["metadata"]["displayName"],
-            total_tip_length=well_size_z,
-            maximal_volume=volume_from_name(data["metadata"]["displayName"]),
-            tip_size=TipSize.UNDEFINED,
-            pick_up_method=TipPickupMethod.OUT_OF_RACK,
-          )
-          tip = Tip(
+          tip_spot = TipSpot(
             name=item,
             size_x=well_size_x,
             size_y=well_size_y,
-            tip_type=tip_type
           )
-          tip.location = location
-          wells[i].append(tip)
+          tip_spot.location = location
+          wells[i].append(tip_spot)
 
     if display_category == "wellPlate":
       return Plate(
@@ -106,12 +96,21 @@ def ot_definition_to_resource(
         one_dot_max=None
       )
     elif display_category == "tipRack":
+      first_well_data = data["wells"][wells[0][0].name]
+      total_tip_length = first_well_data["depth"]
+      tip_type = TipType(
+        total_tip_length=total_tip_length,
+        has_filter="Filter" in data["metadata"]["displayName"],
+        maximal_volume=volume_from_name(data["metadata"]["displayName"]),
+        fitting_depth=data["parameters"]["tipOverlap"]
+      )
+
       return TipRack(
         name=name,
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        items=cast(List[List[Tip]], wells),
+        items=cast(List[List[TipSpot]], wells),
         tip_type=tip_type
       )
   raise UnknownResourceType(f"Unknown resource type '{display_category}'.")

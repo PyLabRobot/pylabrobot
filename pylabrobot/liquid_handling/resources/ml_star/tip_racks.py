@@ -4,8 +4,8 @@
 
 from pylabrobot.liquid_handling.resources.abstract import TipRack
 from pylabrobot.liquid_handling.resources.abstract.itemized_resource import create_equally_spaced
-from pylabrobot.liquid_handling.resources.abstract.tip_rack import Tip
-from .tip_types import (
+from pylabrobot.liquid_handling.resources.abstract.tip_rack import TipSpot
+from .tips import (
   low_volume_tip_no_filter,
   low_volume_tip_with_filter,
   standard_volume_tip_no_filter,
@@ -25,7 +25,7 @@ def STF_P(name: str) -> TipRack:
     size_y=122.4,
     size_z=20.0,
     tip_type=standard_volume_tip_with_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=8,
       num_items_y=12,
       dx=9.8,
@@ -33,7 +33,6 @@ def STF_P(name: str) -> TipRack:
       dz=-50.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=standard_volume_tip_with_filter,
     ),
   )
 
@@ -46,7 +45,7 @@ def FourmlTF_L(name: str) -> TipRack:
     size_y=82.6,
     size_z=7.0,
     tip_type=four_ml_tip_with_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=6,
       num_items_y=4,
       dx=16.3,
@@ -54,7 +53,6 @@ def FourmlTF_L(name: str) -> TipRack:
       dz=-93.2,
       item_size_x=18.0,
       item_size_y=18.0,
-      tip_type=four_ml_tip_with_filter,
     ),
   )
 
@@ -67,7 +65,7 @@ def ST_P(name: str) -> TipRack:
     size_y=122.4,
     size_z=20.0,
     tip_type=standard_volume_tip_no_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=8,
       num_items_y=12,
       dx=9.8,
@@ -75,7 +73,6 @@ def ST_P(name: str) -> TipRack:
       dz=-50.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=standard_volume_tip_no_filter,
     ),
   )
 
@@ -88,7 +85,7 @@ def LT_L(name: str) -> TipRack:
     size_y=82.6,
     size_z=20.0,
     tip_type=low_volume_tip_no_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=11.7,
@@ -96,7 +93,6 @@ def LT_L(name: str) -> TipRack:
       dz=-22.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=low_volume_tip_no_filter,
     ),
   )
 
@@ -109,7 +105,7 @@ def LTF_P(name: str) -> TipRack:
     size_y=122.4,
     size_z=20.0,
     tip_type=low_volume_tip_with_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=8,
       num_items_y=12,
       dx=9.8,
@@ -117,7 +113,6 @@ def LTF_P(name: str) -> TipRack:
       dz=-22.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=low_volume_tip_with_filter,
     ),
   )
 
@@ -130,7 +125,7 @@ def HTF_L(name: str) -> TipRack:
     size_y=82.6,
     size_z=20.0,
     tip_type=high_volume_tip_with_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=11.7,
@@ -138,7 +133,6 @@ def HTF_L(name: str) -> TipRack:
       dz=-83.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=high_volume_tip_with_filter,
     ),
   )
 
@@ -151,7 +145,7 @@ def HT_L(name: str) -> TipRack:
     size_y=82.6,
     size_z=20.0,
     tip_type=high_volume_tip_no_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=11.7,
@@ -159,7 +153,6 @@ def HT_L(name: str) -> TipRack:
       dz=-83.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=high_volume_tip_no_filter,
     ),
   )
 
@@ -172,7 +165,7 @@ def FivemlT_P(name: str) -> TipRack:
     size_y=122.4,
     size_z=7.0,
     tip_type=five_ml_tip,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=4,
       num_items_y=6,
       dx=14.2,
@@ -180,7 +173,6 @@ def FivemlT_P(name: str) -> TipRack:
       dz=-93.2,
       item_size_x=18.0,
       item_size_y=18.0,
-      tip_type=five_ml_tip,
     ),
   )
 
@@ -193,7 +185,7 @@ def HT_P(name: str) -> TipRack:
     size_y=122.4,
     size_z=20.0,
     tip_type=high_volume_tip_no_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=8,
       num_items_y=12,
       dx=9.8,
@@ -201,7 +193,6 @@ def HT_P(name: str) -> TipRack:
       dz=-83.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=high_volume_tip_no_filter,
     ),
   )
 
@@ -214,7 +205,7 @@ def HTF_P(name: str) -> TipRack:
     size_y=122.4,
     size_z=20.0,
     tip_type=high_volume_tip_with_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=8,
       num_items_y=12,
       dx=9.8,
@@ -222,7 +213,6 @@ def HTF_P(name: str) -> TipRack:
       dz=-83.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=high_volume_tip_with_filter,
     ),
   )
 
@@ -235,7 +225,7 @@ def LTF_L(name: str) -> TipRack:
     size_y=82.6,
     size_z=20.0,
     tip_type=low_volume_tip_with_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=11.7,
@@ -243,7 +233,6 @@ def LTF_L(name: str) -> TipRack:
       dz=-22.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=low_volume_tip_with_filter,
     ),
   )
 
@@ -256,7 +245,7 @@ def FivemlT_L(name: str) -> TipRack:
     size_y=82.6,
     size_z=7.0,
     tip_type=five_ml_tip,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=6,
       num_items_y=4,
       dx=16.3,
@@ -264,7 +253,6 @@ def FivemlT_L(name: str) -> TipRack:
       dz=-93.2,
       item_size_x=18.0,
       item_size_y=18.0,
-      tip_type=five_ml_tip,
     ),
   )
 
@@ -277,7 +265,7 @@ def STF_L(name: str) -> TipRack:
     size_y=82.6,
     size_z=20.0,
     tip_type=standard_volume_tip_with_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=11.7,
@@ -285,7 +273,6 @@ def STF_L(name: str) -> TipRack:
       dz=-50.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=standard_volume_tip_with_filter,
     ),
   )
 
@@ -298,7 +285,7 @@ def LT_P(name: str) -> TipRack:
     size_y=122.4,
     size_z=20.0,
     tip_type=low_volume_tip_no_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=8,
       num_items_y=12,
       dx=9.8,
@@ -306,7 +293,6 @@ def LT_P(name: str) -> TipRack:
       dz=-22.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=low_volume_tip_no_filter,
     ),
   )
 
@@ -319,7 +305,7 @@ def ST_L(name: str) -> TipRack:
     size_y=82.6,
     size_z=20.0,
     tip_type=standard_volume_tip_no_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=11.7,
@@ -327,7 +313,6 @@ def ST_L(name: str) -> TipRack:
       dz=-50.5,
       item_size_x=9.0,
       item_size_y=9.0,
-      tip_type=standard_volume_tip_no_filter,
     ),
   )
 
@@ -340,7 +325,7 @@ def FourmlTF_P(name: str) -> TipRack:
     size_y=122.4,
     size_z=7.0,
     tip_type=four_ml_tip_with_filter,
-    items=create_equally_spaced(Tip,
+    items=create_equally_spaced(TipSpot,
       num_items_x=4,
       num_items_y=6,
       dx=14.2,
@@ -348,6 +333,5 @@ def FourmlTF_P(name: str) -> TipRack:
       dz=-93.2,
       item_size_x=18.0,
       item_size_y=18.0,
-      tip_type=four_ml_tip_with_filter,
     ),
   )

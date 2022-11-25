@@ -30,6 +30,7 @@ from .errors import (
 )
 
 
+DROP_TIP_FORMAT = "xp##### (n)yp#### (n)tm# (n)tp####tz####th####ti#"
 ASPIRATION_RESPONSE_FORMAT = (
   "at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
   "ip#### (n)it# (n)fp#### (n)av#### (n)as#### (n)ta### (n)ba#### (n)oa### (n)lm# (n)ll# (n)"
@@ -257,19 +258,23 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_ops_to_fw_positions(self):
     """ Convert channel positions to firmware positions. """
     # pylint: disable=protected-access
-    op = Pickup(resource=self.tip_rack["A1"][0])
+    tip_a1 = self.tip_rack.get_item("A1")
+    tip_f1 = self.tip_rack.get_item("F1")
+    tip_type = self.tip_rack.tip_type
+
+    op = Pickup(resource=tip_a1, tip_type=tip_type)
     self.assertEqual(
       self.mockSTAR._ops_to_fw_positions((op,), use_channels=[0]),
       ([1179, 0], [2418, 0], [True, False])
     )
 
-    ops = (Pickup(resource=self.tip_rack["A1"][0]), Pickup(resource=self.tip_rack["F1"][0]))
+    ops = (Pickup(resource=tip_a1, tip_type=tip_type), Pickup(resource=tip_f1, tip_type=tip_type))
     self.assertEqual(
       self.mockSTAR._ops_to_fw_positions(ops, use_channels=[0, 1]),
       ([1179, 1179, 0], [2418, 1968, 0], [True, True, False])
     )
 
-    ops = (Pickup(resource=self.tip_rack["A1"][0]), Pickup(resource=self.tip_rack["F1"][0]))
+    ops = (Pickup(resource=tip_a1, tip_type=tip_type), Pickup(resource=tip_f1, tip_type=tip_type))
     self.assertEqual(
       self.mockSTAR._ops_to_fw_positions(ops, use_channels=[1, 2]),
       ([0, 1179, 1179, 0], [0, 2418, 1968, 0], [False, True, True, False])
@@ -308,8 +313,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.drop_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
     self._assert_command_sent_once(
       "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
-      "0000&tm0 0 0 0 1 1 0&tp2243tz2163th2450ti1",
-      "xp##### (n)yp#### (n)tm# (n)tp####tz####th####ti#")
+      "0000&tm0 0 0 0 1 1 0&tp2243tz2163th2450ti1", DROP_TIP_FORMAT)
 
   def test_single_channel_aspiration(self):
     self.lh.aspirate(self.plate["A1"], vols=[100])
@@ -547,6 +551,15 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       get_plate_fmt)
     self._assert_command_sent_once(
       "C0PRid0005xs03475xd0yj2105yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+
+  def test_discard_tips(self):
+    self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    self.lh.discard_tips()
+    self._assert_command_sent_once(
+     "C0TRid0206xp08000 08000 08000 08000 08000 08000 08000 08000yp4050 3782 3514 3246 2978 2710 "
+     "2442 2174tp1970tz1890th2450te2450tm1 1 1 1 1 1 1 1ti0",
+     DROP_TIP_FORMAT)
+
 
 
 if __name__ == "__main__":

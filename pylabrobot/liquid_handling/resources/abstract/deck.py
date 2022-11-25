@@ -5,9 +5,11 @@ import json
 from typing import Optional, Callable, List, Dict, cast
 
 import pylabrobot.liquid_handling.resources as resources_module
+from pylabrobot.liquid_handling.resources.errors import ResourceNotFoundError
 
 from .coordinate import Coordinate
 from .resource import Resource
+from .trash import Trash
 
 
 class Deck(Resource):
@@ -210,3 +212,9 @@ class Deck(Resource):
       content = json.load(f)
 
     return cls.load_from_json(content)
+
+  def get_trash_area(self) -> Trash:
+    """ Returns the trash area resource. """
+    if not self.has_resource("trash"):
+      raise ResourceNotFoundError("Trash area not found")
+    return cast(Trash, self.get_resource("trash"))

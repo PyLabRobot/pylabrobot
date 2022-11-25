@@ -8,9 +8,9 @@ from pylabrobot.liquid_handling.resources import (
   Plate,
   PlateCarrier,
   Resource,
-  Tip,
   TipCarrier,
   TipRack,
+  TipSpot,
   Well,
   create_equally_spaced,
   standard_volume_tip_with_filter
@@ -51,11 +51,12 @@ class DeckTests(unittest.TestCase):
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)
 
-    tc[0] = TipRack("tips", 10, 20, 30, tip_type=standard_volume_tip_with_filter,
-      items=create_equally_spaced(Tip,
+    tc[0] = TipRack("tips", 10, 20, 30,
+      tip_type=standard_volume_tip_with_filter,
+      items=create_equally_spaced(TipSpot,
         num_items_x=1, num_items_y=1,
         dx=-1, dy=-1, dz=-1,
-        item_size_x=1, item_size_y=1, tip_type=standard_volume_tip_with_filter))
+        item_size_x=1, item_size_y=1))
     pc = PlateCarrier("pc", 100, 100, 100, sites=[
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)

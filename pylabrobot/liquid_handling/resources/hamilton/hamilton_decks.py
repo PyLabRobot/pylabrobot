@@ -4,7 +4,7 @@ import inspect
 import logging
 from typing import Callable, Optional, cast
 
-from pylabrobot.liquid_handling.resources import Coordinate, Deck, Resource
+from pylabrobot.liquid_handling.resources import Coordinate, Deck, Resource, Trash
 import pylabrobot.utils.file_parsing as file_parser
 import pylabrobot.liquid_handling.resources as resources_module
 
@@ -37,10 +37,19 @@ class HamiltonDeck(Deck):
     resource_assigned_callback: Optional[Callable] = None,
     resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 63, 100),
+    no_trash: bool = False,
   ):
     super().__init__(size_x, size_y, size_z,
       resource_assigned_callback, resource_unassigned_callback, origin)
     self.num_rails = num_rails
+
+    # assign trash area
+    if not no_trash:
+      trash_x = size_x - 560 # only tested on STARLet, assume STAR is same distance from right max..
+
+      self.assign_child_resource(
+        resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
+        location=Coordinate(x=trash_x, y=190.6-63, z=37.1)) # z I am not sure about
 
   def serialize(self) -> dict:
     """ Serialize this deck. """
@@ -58,6 +67,7 @@ class HamiltonDeck(Deck):
       size_y=data["size_y"],
       size_z=data["size_z"],
       origin=Coordinate.deserialize(data["location"]),
+      no_trash=True # will be added back in by the deserializer
     )
 
   def assign_child_resource(

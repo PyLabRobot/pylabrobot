@@ -43,9 +43,7 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     """ Called when a new resource was assigned to the robot.
 
     This callback will also be called immediately after the setup method has been called for any
-    resources that were assigned to the robot before it was set up. Note that this callback
-    will also be called for resources that were assigned but not unassigned to the robot before it
-    was set up, but in those cases `unassigned_resource_callback` will be also be called.
+    resources that were assigned to the robot before it was set up.
 
     Args:
       resource: The resource that was assigned to the robot.
