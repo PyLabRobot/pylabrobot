@@ -1,6 +1,6 @@
 """ Liquid handling module for PyLabRobot """
 
-from .backends import LiquidHandlerBackend, STAR
+from .backends import STAR, SerializingSavingBackend
 from .liquid_handler import LiquidHandler
 from .resources import Resource, Coordinate, Plate, TipRack, PlateCarrier, TipCarrier
 

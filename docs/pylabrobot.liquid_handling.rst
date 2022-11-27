@@ -46,3 +46,20 @@ Liquid classes
   :maxdepth: 2
 
   pylabrobot.liquid_handling.liquid_classes
+
+
+Tip trackers
+------------
+
+See :doc:`Using tip trackers <using-tip-trackers>` for a tutorial.
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+  pylabrobot.liquid_handling.no_tip_tracking
+  pylabrobot.liquid_handling.set_tip_tracking
+  pylabrobot.liquid_handling.tip_tracker.TipTracker
+  pylabrobot.liquid_handling.tip_tracker.ChannelTipTracker
+  pylabrobot.liquid_handling.tip_tracker.SpotTipTracker
