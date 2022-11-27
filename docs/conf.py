@@ -82,7 +82,7 @@ html_theme_options = {
   'repository_url': 'https://github.com/pylabrobot/pylabrobot',
   'use_repository_button': False,
   'use_edit_page_button': True,
-  'repository_branch': 'usb',
+  'repository_branch': 'main',
   'path_to_docs': 'docs',
   'use_issues_button': False,
 }
