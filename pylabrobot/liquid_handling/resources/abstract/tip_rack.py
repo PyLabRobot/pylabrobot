@@ -50,10 +50,17 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
     category: str = "tip_rack",
+    with_tips: bool = True,
   ):
     super().__init__(name, size_x, size_y, size_z, items=items,
                      num_items_x=num_items_x, num_items_y=num_items_y, category=category)
     self.tip_type = tip_type
+
+    if items is not None and len(items) > 0:
+      if with_tips:
+        self.fill()
+      else:
+        self.empty()
 
   def serialize(self):
     return dict(
@@ -94,3 +101,13 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
     for i in range(self.num_items):
       self.get_item(i).tracker.set_initial_state(has_tip[i])
+
+  def empty(self):
+    """ Empty the tip rack. This is useful when tip tracking is enabled and you are modifying
+    the state manually (without the robot). """
+    self.set_tip_state([[False] * self.num_items_x] * self.num_items_y)
+
+  def fill(self):
+    """ Fill the tip rack. This is useful when tip tracking is enabled and you are modifying
+    the state manually (without the robot). """
+    self.set_tip_state([[True] * self.num_items_x] * self.num_items_y)

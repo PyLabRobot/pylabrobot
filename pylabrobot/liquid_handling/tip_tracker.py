@@ -146,9 +146,9 @@ class ChannelTipTracker(TipTracker):
     """
 
     if self.has_tip and isinstance(op, Pickup):
-      raise ChannelHasTipError
+      raise ChannelHasTipError("Channel already has tip.")
     if not self.has_tip and isinstance(op, Drop):
-      raise ChannelHasNoTipError
+      raise ChannelHasNoTipError("Channel has no tip.")
 
 
 class SpotTipTracker(TipTracker):
@@ -176,6 +176,6 @@ class SpotTipTracker(TipTracker):
     """
 
     if not self.has_tip and isinstance(op, Pickup):
-      raise TipSpotHasNoTipError
+      raise TipSpotHasNoTipError(f"Tip spot {op.resource.name} has no tip.")
     if self.has_tip and isinstance(op, Drop):
-      raise TipSpotHasTipError
+      raise TipSpotHasTipError(f"Tip spot {op.resource.name} already has a tip.")

@@ -18,7 +18,7 @@ from .tips import (
 
 
 #: Rack with 96 300ul Standard Volume Tip with filter (portrait)
-def STF_P(name: str) -> TipRack:
+def STF_P(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=82.6,
@@ -34,11 +34,12 @@ def STF_P(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Tip Rack 24x 4ml Tip with Filter landscape oriented
-def FourmlTF_L(name: str) -> TipRack:
+def FourmlTF_L(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=122.4,
@@ -54,11 +55,12 @@ def FourmlTF_L(name: str) -> TipRack:
       item_size_x=18.0,
       item_size_y=18.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 300ul Standard Volume Tip (portrait)
-def ST_P(name: str) -> TipRack:
+def ST_P(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=82.6,
@@ -74,11 +76,12 @@ def ST_P(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 10ul Low Volume Tip
-def LT_L(name: str) -> TipRack:
+def LT_L(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=122.4,
@@ -94,11 +97,12 @@ def LT_L(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 10ul Low Volume Tip with filter (portrait)
-def LTF_P(name: str) -> TipRack:
+def LTF_P(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=82.6,
@@ -114,11 +118,12 @@ def LTF_P(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 1000ul High Volume Tip with filter
-def HTF_L(name: str) -> TipRack:
+def HTF_L(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=122.4,
@@ -134,11 +139,12 @@ def HTF_L(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 1000ul High Volume Tip
-def HT_L(name: str) -> TipRack:
+def HT_L(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=122.4,
@@ -154,11 +160,12 @@ def HT_L(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Tip Rack 24x 5ml Tip portrait oriented
-def FivemlT_P(name: str) -> TipRack:
+def FivemlT_P(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=82.6,
@@ -174,11 +181,12 @@ def FivemlT_P(name: str) -> TipRack:
       item_size_x=18.0,
       item_size_y=18.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 1000ul High Volume Tip (portrait)
-def HT_P(name: str) -> TipRack:
+def HT_P(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=82.6,
@@ -194,11 +202,12 @@ def HT_P(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 1000ul High Volume Tip with filter (portrait)
-def HTF_P(name: str) -> TipRack:
+def HTF_P(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=82.6,
@@ -214,11 +223,12 @@ def HTF_P(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 10ul Low Volume Tip with filter
-def LTF_L(name: str) -> TipRack:
+def LTF_L(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=122.4,
@@ -234,11 +244,12 @@ def LTF_L(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Tip Rack 24x 5ml Tip landscape oriented
-def FivemlT_L(name: str) -> TipRack:
+def FivemlT_L(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=122.4,
@@ -254,11 +265,12 @@ def FivemlT_L(name: str) -> TipRack:
       item_size_x=18.0,
       item_size_y=18.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 300ul Standard Volume Tip with filter
-def STF_L(name: str) -> TipRack:
+def STF_L(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=122.4,
@@ -274,11 +286,12 @@ def STF_L(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 10ul Low Volume Tip (portrait)
-def LT_P(name: str) -> TipRack:
+def LT_P(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=82.6,
@@ -294,11 +307,12 @@ def LT_P(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Rack with 96 300ul Standard Volume Tip
-def ST_L(name: str) -> TipRack:
+def ST_L(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=122.4,
@@ -314,11 +328,12 @@ def ST_L(name: str) -> TipRack:
       item_size_x=9.0,
       item_size_y=9.0,
     ),
+    with_tips=with_tips
   )
 
 
 #: Tip Rack 24x 4ml Tip with Filter portrait oriented
-def FourmlTF_P(name: str) -> TipRack:
+def FourmlTF_P(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=82.6,
@@ -334,4 +349,5 @@ def FourmlTF_P(name: str) -> TipRack:
       item_size_x=18.0,
       item_size_y=18.0,
     ),
+    with_tips=with_tips
   )
