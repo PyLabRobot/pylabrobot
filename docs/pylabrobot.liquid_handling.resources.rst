@@ -20,8 +20,9 @@ Abstract
     pylabrobot.liquid_handling.resources.abstract.create_equally_spaced
     pylabrobot.liquid_handling.resources.abstract.Lid
     pylabrobot.liquid_handling.resources.abstract.Resource
+    pylabrobot.liquid_handling.resources.ResourceStack
     pylabrobot.liquid_handling.resources.abstract.TipRack
-    pylabrobot.liquid_handling.resources.abstract.TipType
+    pylabrobot.liquid_handling.resources.TipType
     pylabrobot.liquid_handling.resources.abstract.Plate
     pylabrobot.liquid_handling.resources.abstract.Carrier
     pylabrobot.liquid_handling.resources.abstract.TipCarrier
@@ -38,7 +39,6 @@ Resources that are not abstract, but also not tied to a specific liquid handling
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.resources.Hotel
     pylabrobot.liquid_handling.resources.PlateReader
 
 ML Star resources

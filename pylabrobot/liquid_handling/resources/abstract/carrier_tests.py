@@ -4,7 +4,7 @@
 import unittest
 
 from pylabrobot.liquid_handling.resources.abstract.itemized_resource import create_equally_spaced
-from pylabrobot.liquid_handling.resources.ml_star.tips import standard_volume_tip_with_filter
+from pylabrobot.liquid_handling.resources.ml_star.tip_types import standard_volume_tip_with_filter
 
 from .carrier import Carrier, TipCarrier
 from .coordinate import Coordinate

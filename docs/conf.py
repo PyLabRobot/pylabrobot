@@ -35,7 +35,8 @@ extensions = [
   'sphinx.ext.intersphinx',
   'sphinx.ext.mathjax',
   'myst_nb',
-  'sphinx_copybutton'
+  'sphinx_copybutton',
+  'IPython.sphinxext.ipython_console_highlighting'
 ]
 
 intersphinx_mapping = {
