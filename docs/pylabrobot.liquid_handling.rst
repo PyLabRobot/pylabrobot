@@ -16,7 +16,7 @@ be run on practically all supported hardware.
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.LiquidHandler
+    pylabrobot.liquid_handling.liquid_handler.LiquidHandler
 
 
 Backends
@@ -37,15 +37,6 @@ The subpackage :code:`resources` contains all resources used by the liquid handl
   :maxdepth: 2
 
   pylabrobot.liquid_handling.resources
-
-
-Liquid classes
---------------
-
-.. toctree::
-  :maxdepth: 2
-
-  pylabrobot.liquid_handling.liquid_classes
 
 
 Tip trackers

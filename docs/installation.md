@@ -2,7 +2,7 @@
 
 These instructions describe how to install PyLabRobot.
 
-Note that there are additional installation steps for using the firmware (universal) interface to Hamiltons, see [below](#using-the-firmware-interface-with-hamilton-robots).
+Note that there are additional installation steps for using the firmware (universal) interface to Hamiltons, see {ref}`below <using-the-firmware-interface-with-hamilton-robots>`.
 
 ## Installing PyLabRobot
 
@@ -69,6 +69,8 @@ pip install -e '.[dev]'
 
 See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
 
+(using-the-firmware-interface-with-hamilton-robots)=
+
 ## Using the firmware interface with Hamilton robots
 
 If you want to use the firmware version of the Hamilton driver, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions [here](https://github.com/pyusb/pyusb#requirements-and-platform-support). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
@@ -93,7 +95,7 @@ brew install libusb
 
 ### On Windows
 
-#### Installation
+#### Installing
 
 1. Download and install [Zadig](https://zadig.akeo.ie).
 
@@ -119,7 +121,7 @@ brew install libusb
 
 ![](./img/installation/install-5.png)
 
-#### Uninstallation
+#### Uninstalling
 
 _These instructions only apply if you are using VENUS on your computer!_
 

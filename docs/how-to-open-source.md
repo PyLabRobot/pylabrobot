@@ -4,7 +4,7 @@ This is a general guide on how to contribute to open source projects, like PyLab
 
 Before we start, I recommend you use a git gui, like [GitHub Desktop](https://desktop.github.com/), [Tower](https://www.git-tower.com), or the one built into [VSCode](https://code.visualstudio.com). **While command line commands are included in this guide, it is generally much easier to just use the gui.** This guide will use GitHub Desktop as an example, so if you have never contributed to open source before, start by installing [GitHub Desktop](https://desktop.github.com).
 
-_If you just want to make a small changes, like fixing a typo, check out [this section](#quick-changes)._
+_If you just want to make a small changes, like fixing a typo, check out {ref}`this section <quick-changes>`._
 
 ## Prerequisites
 
@@ -97,6 +97,8 @@ Please write a short description of your changes and click "Create pull request"
 ### 8. Code Review
 
 After you submit a pull request, the project maintainers will review your code. They may ask you to make changes, or they may merge your pull request. Go to step 4 and repeat the process until the merge!
+
+(quick-changes)=
 
 ## Quick changes
 

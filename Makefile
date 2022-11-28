@@ -13,7 +13,7 @@ endif
 docs:
 	rm -rf docs/build
 	rm -rf docs/_autosummary
-	sphinx-build -b html docs docs/build/ -j auto
+	sphinx-build -b html docs docs/build/ -j auto -W
 
 lint:
 	$(BIN)python -m pylint pylabrobot

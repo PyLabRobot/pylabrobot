@@ -5,7 +5,7 @@
 from pylabrobot.liquid_handling.resources.abstract import TipRack
 from pylabrobot.liquid_handling.resources.abstract.itemized_resource import create_equally_spaced
 from pylabrobot.liquid_handling.resources.abstract.tip_rack import TipSpot
-from .tips import (
+from .tip_types import (
   low_volume_tip_no_filter,
   low_volume_tip_with_filter,
   standard_volume_tip_no_filter,

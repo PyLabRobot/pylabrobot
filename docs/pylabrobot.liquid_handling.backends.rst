@@ -3,9 +3,7 @@
 pylabrobot.liquid_handling.backends package
 ===========================================
 
-Backends are used to communicate with liquid handling devices on a low level. This can be useful
-when you want to have very low level control over the liquid handling device or want to use a
-feature that is not yet implemented in the front end.
+Backends are used to communicate with liquid handling devices on a low level. Using them directly can be useful when you want to have very low level control over the liquid handling device or want to use a feature that is not yet implemented in the front end.
 
 Abstract
 --------
@@ -15,7 +13,8 @@ Abstract
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.backends.LiquidHandlerBackend
+    pylabrobot.liquid_handling.backends.backend.LiquidHandlerBackend
+    pylabrobot.liquid_handling.backends.serializing_backend.SerializingBackend
 
 Hardware
 --------
@@ -25,8 +24,8 @@ Hardware
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.backends.hamilton.HamiltonLiquidHandler
-    pylabrobot.liquid_handling.backends.hamilton.STAR
+    pylabrobot.liquid_handling.backends.hamilton.STAR.HamiltonLiquidHandler
+    pylabrobot.liquid_handling.backends.hamilton.STAR.STAR
     pylabrobot.liquid_handling.backends.opentrons_backend.OpentronsBackend
 
 Net
@@ -39,8 +38,8 @@ Net backends can be used to communicate with servers that manage liquid handling
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.backends.net.HTTPBackend
-    pylabrobot.liquid_handling.backends.net.WebSocketBackend
+    pylabrobot.liquid_handling.backends.http.HTTPBackend
+    pylabrobot.liquid_handling.backends.websocket.WebSocketBackend
 
 Simulator
 ---------

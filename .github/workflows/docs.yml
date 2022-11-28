@@ -24,7 +24,7 @@ jobs:
           python-version: 3.9
 
       - name: Install Dependencies
-        run: pip install -e '.[docs]'
+        run: pip install -e '.[dev]'
 
       - name: Remove old documentation
         run: |
