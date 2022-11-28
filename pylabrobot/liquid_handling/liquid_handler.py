@@ -6,7 +6,6 @@ import numbers
 import time
 from typing import Dict, Union, Optional, List, Callable, Sequence
 
-from pylabrobot import utils
 # from pylabrobot.default import DEFAULT
 from pylabrobot.liquid_handling.resources.abstract import Deck
 from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, does_tip_tracking
@@ -21,7 +20,6 @@ from .resources import (
   Resource,
   ResourceStack,
   Coordinate,
-  Carrier,
   CarrierSite,
   Lid,
   Plate,
@@ -34,7 +32,6 @@ from .resources import (
 from .standard import (
   Pickup,
   Drop,
-  # Discard,
   Aspiration,
   Dispense,
   Move
@@ -135,14 +132,6 @@ class LiquidHandler:
     self.stop()
     return False
 
-  # TODO: artifact until we move .summary() to STARLetDeck
-  @staticmethod
-  def _rails_for_x_coordinate(x: int):
-    """ Convert an x coordinate to a rail identifier (1-30 for STARLet, max 54 for STAR). """
-    # pylint: disable=invalid-name
-    _RAILS_WIDTH = 22.5 # TODO: this entire function is gonna be removed.
-    return int((x - 100.0) / _RAILS_WIDTH) + 1
-
   def resource_assigned_callback(self, resource: Resource):
     self.backend.assigned_resource_callback(resource)
 
@@ -180,60 +169,9 @@ class LiquidHandler:
     return self.deck.get_resource(name)
 
   def summary(self):
-    """ Prints a string summary of the deck layout.
+    """ Prints a string summary of the deck layout.  """
 
-    Example:
-      Printing a summary of the deck layout:
-
-      >>> lh.summary()
-      Rail     Resource                   Type                Coordinates (mm)
-      ==============================================================================================
-      (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
-          │   ├── tip_rack_01            STF_L               (x: 117.900, y: 240.000, z: 100.000)
-    """
-
-    if len(self.deck.get_all_resources()) == 0:
-      raise ValueError(
-          "This liquid editor does not have any resources yet. "
-          "Build a layout first by calling `assign_resource()`. "
-          "See the documentation for details. (TODO: link)"
-      )
-
-    # Print header.
-    print(utils.pad_string("Rail", 9) + utils.pad_string("Resource", 27) + \
-          utils.pad_string("Type", 20) + "Coordinates (mm)")
-    print("=" * 95)
-
-    def print_resource(resource):
-      # TODO: print something else if resource is not assigned to a rails.
-      rails = LiquidHandler._rails_for_x_coordinate(resource.location.x)
-      rail_label = utils.pad_string(f"({rails})", 4)
-      print(f"{rail_label} ├── {utils.pad_string(resource.name, 27)}"
-            f"{utils.pad_string(resource.__class__.__name__, 20)}"
-            f"{resource.get_absolute_location()}")
-
-      if isinstance(resource, Carrier):
-        for site in resource.get_sites():
-          if site.resource is None:
-            print("     │   ├── <empty>")
-          else:
-            subresource = site.resource
-            if isinstance(subresource, (TipRack, Plate)):
-              location = subresource.get_item("A1").get_absolute_location()
-            else:
-              location = subresource.get_absolute_location()
-            print(f"     │   ├── {utils.pad_string(subresource.name, 27-4)}"
-                  f"{utils.pad_string(subresource.__class__.__name__, 20)}"
-                  f"{location}")
-
-    # Sort resources by rails, left to right in reality.
-    sorted_resources = sorted(self.deck.children, key=lambda r: r.get_absolute_location().x)
-
-    # Print table body.
-    print_resource(sorted_resources[0])
-    for resource in sorted_resources[1:]:
-      print("     │")
-      print_resource(resource)
+    print(self.deck.summary())
 
   def _assert_positions_unique(self, positions: List[str]):
     """ Returns whether all items in `positions` are unique where they are not `None`.
