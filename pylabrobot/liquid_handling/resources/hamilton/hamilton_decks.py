@@ -4,9 +4,18 @@ import inspect
 import logging
 from typing import Callable, Optional, cast
 
-from pylabrobot.liquid_handling.resources import Coordinate, Deck, Resource, Trash
+from pylabrobot.liquid_handling.resources import (
+  Coordinate,
+  Carrier,
+  Deck,
+  Plate,
+  Resource,
+  TipRack,
+  Trash
+)
 import pylabrobot.utils.file_parsing as file_parser
 import pylabrobot.liquid_handling.resources as resources_module
+from pylabrobot import utils
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +32,10 @@ STAR_NUM_RAILS=55
 STAR_SIZE_X=1900
 STAR_SIZE_Y=653.5
 STAR_SIZE_Z=900
+
+def _rails_for_x_coordinate(x: int):
+  """ Convert an x coordinate to a rail identifier. """
+  return int((x - 100.0) / _RAILS_WIDTH) + 1
 
 
 class HamiltonDeck(Deck):
@@ -240,8 +253,67 @@ class HamiltonDeck(Deck):
 
     return deck
 
+  def summary(self) -> str:
+    """ Return a summary of the deck.
 
-def STARLetDeck(
+    Example:
+      Printing a summary of the deck layout:
+
+      >>> print(deck.summary())
+      Rail     Resource                   Type                Coordinates (mm)
+      ==============================================================================================
+      (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
+          │   ├── tip_rack_01            STF_L               (x: 117.900, y: 240.000, z: 100.000)
+    """
+
+    if len(self.get_all_resources()) == 0:
+      raise ValueError(
+          "This liquid editor does not have any resources yet. "
+          "Build a layout first by calling `assign_child_resource()`. "
+      )
+
+    # Print header.
+    summary_ = utils.pad_string("Rail", 9) + utils.pad_string("Resource", 27) + \
+                utils.pad_string("Type", 20) + "Coordinates (mm)\n"
+    summary_ += "=" * 95 + "\n"
+
+    def parse_resource(resource):
+      # TODO: print something else if resource is not assigned to a rails.
+      rails = _rails_for_x_coordinate(resource.location.x)
+      rail_label = utils.pad_string(f"({rails})", 4)
+      r_summary = f"{rail_label} ├── {utils.pad_string(resource.name, 27)}" + \
+            f"{utils.pad_string(resource.__class__.__name__, 20)}" + \
+            f"{resource.get_absolute_location()}\n"
+
+      if isinstance(resource, Carrier):
+        for site in resource.get_sites():
+          if site.resource is None:
+            r_summary += "     │   ├── <empty>\n"
+          else:
+            subresource = site.resource
+            if isinstance(subresource, (TipRack, Plate)):
+              location = subresource.get_item("A1").get_absolute_location()
+            else:
+              location = subresource.get_absolute_location()
+            r_summary += f"     │   ├── {utils.pad_string(subresource.name, 27-4)}" + \
+                  f"{utils.pad_string(subresource.__class__.__name__, 20)}" + \
+                  f"{location}\n"
+
+      return r_summary
+
+    # Sort resources by rails, left to right in reality.
+    sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
+
+    # Print table body.
+    summary_ += parse_resource(sorted_resources[0])
+    for resource in sorted_resources[1:]:
+      summary_ += "     │\n"
+      summary_ += parse_resource(resource)
+
+    return summary_
+
+
+def STARLetDeck( # pylint: disable=invalid-name
   resource_assigned_callback: Optional[Callable] = None,
   resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate(0, 63, 100),
@@ -261,7 +333,7 @@ def STARLetDeck(
       origin=origin)
 
 
-def STARDeck(
+def STARDeck( # pylint: disable=invalid-name
   resource_assigned_callback: Optional[Callable] = None,
   resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate(0, 63, 100),

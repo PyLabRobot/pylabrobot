@@ -1,3 +1,4 @@
+import textwrap
 from typing import Optional, Callable, List
 
 from pylabrobot.liquid_handling.resources.abstract import Coordinate, Deck, Resource, Trash
@@ -95,3 +96,64 @@ class OTDeck(Deck):
     if resource not in self.slots:
       return None
     return self.slots.index(resource) + 1
+
+  def summary(self) -> str:
+    """ Get a summary of the deck.
+
+    >>> print(deck.summary())
+
+    Deck: 624.3mm x 565.2mm
+
+    +-----------------+-----------------+-----------------+
+    |                 |                 |                 |
+    | 10: Empty       | 11: Empty       | 12: Trash       |
+    |                 |                 |                 |
+    +-----------------+-----------------+-----------------+
+    |                 |                 |                 |
+    |  7: tip_rack_1  |  8: tip_rack_2  |  9: tip_rack_3  |
+    |                 |                 |                 |
+    +-----------------+-----------------+-----------------+
+    |                 |                 |                 |
+    |  4: my_plate    |  5: my_other... |  6: Empty       |
+    |                 |                 |                 |
+    +-----------------+-----------------+-----------------+
+    |                 |                 |                 |
+    |  1: Empty       |  2: Empty       |  3: Empty       |
+    |                 |                 |                 |
+    +-----------------+-----------------+-----------------+
+    """
+
+    def _get_slot_name(slot: int) -> str:
+      """ Get slot name, or 'Empty' if slot is empty. If the name is too long, truncate it. """
+      length = 11
+      resource = self.slots[slot]
+      if resource is None:
+        return "Empty".ljust(length)
+      name = resource.name
+      if len(name) > 10:
+        name = name[:8] + "..."
+      return name.ljust(length)
+
+    summary_ = f"""
+      Deck: {self.get_size_x()}mm x {self.get_size_y()}mm
+
+      +-----------------+-----------------+-----------------+
+      |                 |                 |                 |
+      | 10: {_get_slot_name(9)} | 11: {_get_slot_name(10)} | 12: {_get_slot_name(11)} |
+      |                 |                 |                 |
+      +-----------------+-----------------+-----------------+
+      |                 |                 |                 |
+      |  7: {_get_slot_name(6)} |  8: {_get_slot_name(7)} |  9: {_get_slot_name(8)} |
+      |                 |                 |                 |
+      +-----------------+-----------------+-----------------+
+      |                 |                 |                 |
+      |  4: {_get_slot_name(3)} |  5: {_get_slot_name(4)} |  6: {_get_slot_name(5)} |
+      |                 |                 |                 |
+      +-----------------+-----------------+-----------------+
+      |                 |                 |                 |
+      |  1: {_get_slot_name(0)} |  2: {_get_slot_name(1)} |  3: {_get_slot_name(2)} |
+      |                 |                 |                 |
+      +-----------------+-----------------+-----------------+
+    """
+
+    return textwrap.dedent(summary_)

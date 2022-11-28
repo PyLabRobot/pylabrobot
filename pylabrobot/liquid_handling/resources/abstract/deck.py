@@ -218,3 +218,10 @@ class Deck(Resource):
     if not self.has_resource("trash"):
       raise ResourceNotFoundError("Trash area not found")
     return cast(Trash, self.get_resource("trash"))
+
+  def summary(self) -> str:
+    """ Returns a summary of the deck layout. """
+    summary_ = f"Deck: {self.get_size_x()} x {self.get_size_y()} mm\n\n"
+    for resource in self.children:
+      summary_ += f"{resource.name}: {resource}\n"
+    return summary_

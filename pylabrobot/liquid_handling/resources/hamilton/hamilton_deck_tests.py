@@ -1,3 +1,4 @@
+import textwrap
 from typing import cast
 import unittest
 
@@ -7,8 +8,14 @@ from pylabrobot.liquid_handling.resources import (
   TipCarrier,
   Plate,
   PlateCarrier,
+  STF_L,
+  HTF_L,
+  TIP_CAR_480_A00,
+  PLT_CAR_L5AC_A00,
+  Cos_96_DW_1mL,
+  Cos_96_DW_500ul,
 )
-from pylabrobot.liquid_handling.resources.hamilton import HamiltonDeck
+from pylabrobot.liquid_handling.resources.hamilton import HamiltonDeck, STARLetDeck
 
 
 class HamiltonDeckTests(unittest.TestCase):
@@ -92,3 +99,43 @@ class HamiltonDeckTests(unittest.TestCase):
     assert plt_car2[3].resource is not None
     self.assertEqual(plt_car2[3].resource.name, "Cos_96_PCR_0001")
     self.assertIsNone(plt_car2[4].resource)
+
+  def build_layout(self):
+    deck = STARLetDeck()
+
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
+    tip_car[0] = STF_L(name="tip_rack_01")
+    tip_car[1] = STF_L(name="tip_rack_02")
+    tip_car[3] = HTF_L(name="tip_rack_04")
+
+    plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    plt_car[0] = Cos_96_DW_1mL(name="aspiration plate")
+    plt_car[2] = Cos_96_DW_500ul(name="dispense plate")
+
+    deck.assign_child_resource(tip_car, rails=1)
+    deck.assign_child_resource(plt_car, rails=21)
+
+    return deck
+
+  def test_summary(self):
+    self.maxDiff = None
+    deck = self.build_layout()
+    self.assertEqual(deck.summary(), textwrap.dedent("""
+    Rail     Resource                   Type                Coordinates (mm)
+    ===============================================================================================
+    (1)  ├── tip_carrier                TipCarrier          (100.000, 063.000, 100.000)
+         │   ├── tip_rack_01            TipRack             (117.900, 145.800, 164.450)
+         │   ├── tip_rack_02            TipRack             (117.900, 241.800, 164.450)
+         │   ├── <empty>
+         │   ├── tip_rack_04            TipRack             (117.900, 433.800, 131.450)
+         │   ├── <empty>
+         │
+    (21) ├── plate carrier              PlateCarrier        (550.000, 063.000, 100.000)
+         │   ├── aspiration plate       Plate               (568.000, 146.000, 187.150)
+         │   ├── <empty>
+         │   ├── dispense plate         Plate               (568.000, 338.000, 188.150)
+         │   ├── <empty>
+         │   ├── <empty>
+         │
+    (32) ├── trash                      Trash               (800.000, 190.600, 137.100)
+    """[1:]))
