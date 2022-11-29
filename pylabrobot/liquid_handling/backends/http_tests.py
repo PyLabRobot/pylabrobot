@@ -169,7 +169,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             },
             "resource_name": "plate_well_0_0",
             "volume": 10,
-            "flow_rate": None
+            "flow_rate": "default"
           }],
           "use_channels": [0],
         })
@@ -177,7 +177,7 @@ class TestHTTPBackendOps(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
-    self.lh.aspirate(self.plate["A1"], 10, liquid_classes=None)
+    self.lh.aspirate(self.plate["A1"], 10)
 
   @responses.activate
   def test_dispense(self):
@@ -195,7 +195,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             },
             "resource_name": "plate_well_0_0",
             "volume": 10,
-            "flow_rate": None
+            "flow_rate": "default"
           }],
           "use_channels": [0],
         })
@@ -203,7 +203,7 @@ class TestHTTPBackendOps(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
-    self.lh.dispense(self.plate["A1"], 10, liquid_classes=None)
+    self.lh.dispense(self.plate["A1"], 10)
 
   @responses.activate
   def test_pick_up_tips96(self):
@@ -248,7 +248,7 @@ class TestHTTPBackendOps(unittest.TestCase):
           "aspiration": {
             "resource_name": "plate",
             "volume": 10,
-            "flow_rate": None,
+            "flow_rate": "default",
             "offset": {
               "x": 0,
               "y": 0,
@@ -260,7 +260,7 @@ class TestHTTPBackendOps(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
-    self.lh.aspirate_plate(self.plate, 10, liquid_class=None)
+    self.lh.aspirate_plate(self.plate, 10)
 
   @responses.activate
   def test_dispense96(self):
@@ -273,7 +273,7 @@ class TestHTTPBackendOps(unittest.TestCase):
           "dispense": {
             "resource_name": "plate",
             "volume": 10,
-            "flow_rate": None,
+            "flow_rate": "default",
             "offset": {
               "x": 0,
               "y": 0,
@@ -285,4 +285,4 @@ class TestHTTPBackendOps(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
-    self.lh.dispense_plate(self.plate, 10, liquid_class=None)
+    self.lh.dispense_plate(self.plate, 10)

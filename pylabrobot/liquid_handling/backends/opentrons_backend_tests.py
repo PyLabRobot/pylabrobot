@@ -134,7 +134,7 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     mock_aspirate.side_effect = assert_parameters
 
     self.test_tip_pick_up()
-    self.lh.aspirate(self.tip_rack["A1"], vols=[10], liquid_classes=None)
+    self.lh.aspirate(self.tip_rack["A1"], vols=[10])
 
   @patch("ot_api.lh.dispense")
   def test_dispense(self, mock_dispense):
@@ -151,7 +151,7 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     mock_dispense.side_effect = assert_parameters
 
     self.test_tip_pick_up()
-    self.lh.dispense(self.tip_rack["A1"], vols=[10], liquid_classes=None)
+    self.lh.dispense(self.tip_rack["A1"], vols=[10])
 
   def test_pick_up_tips96(self):
     with self.assertRaises(NotImplementedError):

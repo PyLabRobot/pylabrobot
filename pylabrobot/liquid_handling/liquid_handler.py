@@ -6,16 +6,12 @@ import numbers
 import time
 from typing import Dict, Union, Optional, List, Callable, Sequence
 
-# from pylabrobot.default import DEFAULT
+from pylabrobot.default import Defaultable, Default
 from pylabrobot.liquid_handling.resources.abstract import Deck
 from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, does_tip_tracking
 from pylabrobot.utils.list import expand
 
 from .backends import LiquidHandlerBackend
-from .liquid_classes import (
-  LiquidClass,
-  StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
-)
 from .resources import (
   Resource,
   ResourceStack,
@@ -464,9 +460,7 @@ class LiquidHandler:
     resources: Union[Sequence[Resource], Resource],
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
-    flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
-    liquid_classes: Optional[Union[LiquidClass, List[Optional[LiquidClass]]]] =
-      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
+    flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
     end_delay: float = 0,
     offsets: Optional[Union[Coordinate, List[Coordinate]]] = None,
     **backend_kwargs
@@ -507,9 +501,7 @@ class LiquidHandler:
         all channels will aspirate that volume.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(wells)` channels will be used.
-      flow_rates: the aspiration speed. In ul/s.
-      liquid_classes: the liquid class with which to perform the aspirations. It provides default
-        values for parameters flow_rate, and soon others.
+      flow_rates: the aspiration speed. In ul/s. If `Default`, the backend default will be used.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
@@ -556,17 +548,8 @@ class LiquidHandler:
       offsets = expand(offsets, n)
 
     vols = expand(vols, n)
-    liquid_classes = expand(liquid_classes, n)
 
-    if flow_rates is None:
-      flow_rates = [(lc.flow_rate[0] if lc is not None else None) for lc in liquid_classes]
-    elif isinstance(flow_rates, (numbers.Rational, float)):
-      flow_rates = [flow_rates] * n
-
-    # Correct volumes using the liquid class' correction curve
-    for i, lc in enumerate(liquid_classes):
-      if lc is not None:
-        vols[i] = lc.compute_corrected_volume(vols[i])
+    flow_rates = expand(flow_rates, n)
 
     assert len(vols) == len(offsets) == len(flow_rates)
 
@@ -584,9 +567,7 @@ class LiquidHandler:
     resources: Union[Resource, Sequence[Resource]],
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
-    flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
-    liquid_classes: Union[LiquidClass, List[LiquidClass]] =
-      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
+    flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
     end_delay: float = 0,
     offsets: Optional[Union[Coordinate, List[Coordinate]]] = None,
     **backend_kwargs
@@ -627,9 +608,7 @@ class LiquidHandler:
         units of ul.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
-      flow_rates: the flow rates, in ul/s
-      liquid_classes: the liquid class with which to perform the dispenses. It provides default
-        values for parameters flow_rate, and soon others.
+      flow_rates: the flow rates, in ul/s. If `Default`, the backend default will be used.
       end_delay: The delay after the last dispense in seconds, optional. This is useful for when
         the tips used in the dispense are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
@@ -678,17 +657,8 @@ class LiquidHandler:
       offsets = expand(offsets, n)
 
     vols = expand(vols, n)
-    liquid_classes = expand(liquid_classes, n)
 
-    if flow_rates is None:
-      flow_rates = [(lc.flow_rate[1] if lc is not None else None) for lc in liquid_classes]
-    elif isinstance(flow_rates, (numbers.Rational, float)):
-      flow_rates = [flow_rates] * n
-
-    # Correct volumes using the liquid class' correction curve
-    for i, lc in enumerate(liquid_classes):
-      if lc is not None:
-        vols[i] = lc.compute_corrected_volume(vols[i])
+    flow_rates = expand(flow_rates, n)
 
     assert len(vols) == len(offsets) == len(flow_rates)
 
@@ -707,12 +677,8 @@ class LiquidHandler:
     source_vol: Optional[float] = None,
     ratios: Optional[List[float]] = None,
     target_vols: Optional[List[float]] = None,
-    aspiration_flow_rate: Optional[float] = None,
-    aspiration_liquid_class: Optional[LiquidClass] =
-      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
-    dispense_flow_rates: Optional[Union[float, List[float]]] = None,
-    dispense_liquid_classes: Optional[Union[LiquidClass, List[LiquidClass]]] =
-      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
+    aspiration_flow_rate: Defaultable[float] = Default,
+    dispense_flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
     **backend_kwargs
   ):
     """Transfer liquid from one well to another.
@@ -743,7 +709,11 @@ class LiquidHandler:
         the volumes will be distributed equally.
       target_vols: The volumes to transfer to the target wells. If specified, `source_vols` and
         `ratios` must be `None`.
-      liquid_class: The liquid class to use for the transfer, optional.
+      aspiration_flow_rate: The flow rate to use when aspirating, in ul/s. If `Default`, the backend
+        default will be used.
+      dispense_flow_rates: The flow rates to use when dispensing, in ul/s. If `Default`, the backend
+        default will be used. Either a single flow rate for all channels, or a list of flow rates,
+        one for each target well.
 
     Raises:
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
@@ -773,13 +743,11 @@ class LiquidHandler:
       resources=[source],
       vols=[sum(target_vols)],
       flow_rates=aspiration_flow_rate,
-      liquid_classes=aspiration_liquid_class,
       **backend_kwargs)
     self.dispense(
       resources=targets,
       vols=target_vols,
       flow_rates=dispense_flow_rates,
-      liquid_classes=dispense_liquid_classes,
       **backend_kwargs)
 
   def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
@@ -839,10 +807,8 @@ class LiquidHandler:
     self,
     plate: Plate,
     volume: float,
-    flow_rate: Optional[float] = None,
+    flow_rate: Defaultable[float] = Default,
     end_delay: float = 0,
-    liquid_class: Optional[LiquidClass] =
-      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
     **backend_kwargs
   ):
     """ Aspirate from all wells in a plate.
@@ -857,14 +823,12 @@ class LiquidHandler:
       pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
         represent columns, or a string representing a range of positions. Default all.
       volume: The volume to aspirate from each well.
+      flow_rate: The flow rate to use when aspirating, in ul/s. If `Default`, the backend default
+        will be used.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
-
-    # Correct volume using the liquid class' correction curve.
-    if liquid_class is not None:
-      volume = liquid_class.compute_corrected_volume(volume)
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       self.backend.aspirate96(aspiration=Aspiration(
@@ -883,9 +847,7 @@ class LiquidHandler:
     self,
     plate: Plate,
     volume: float,
-    flow_rate: Optional[float] = None,
-    liquid_class: Optional[LiquidClass] =
-      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
+    flow_rate: Defaultable[float] = Default,
     end_delay: float = 0,
     **backend_kwargs
   ):
@@ -901,14 +863,12 @@ class LiquidHandler:
       pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
         represent columns, or a string representing a range of positions. Default all.
       volume: The volume to dispense to each well.
+      flow_rate: The flow rate to use when aspirating, in ul/s. If `Default`, the backend default
+        will be used.
       end_delay: The delay after the last dispense in seconds, optional. This is useful for when
         the tips used in the dispense are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
-
-    # Correct volume using the liquid class' correction curve.
-    if liquid_class is not None:
-      volume = liquid_class.compute_corrected_volume(volume)
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       self.backend.dispense96(dispense=Dispense(
@@ -928,12 +888,8 @@ class LiquidHandler:
     source: Plate,
     target: Plate,
     volume: float,
-    aspiration_flow_rate: Optional[float] = None,
-    aspiration_liquid_class: Optional[LiquidClass] =
-      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol,
-    dispense_flow_rate: Optional[float] = None,
-    dispense_liquid_class: Optional[LiquidClass] =
-      StandardVolumeFilter_Water_DispenseSurface_Part_no_transport_vol
+    aspiration_flow_rate: Defaultable[float] = Default,
+    dispense_flow_rate: Defaultable[float] = Default,
   ):
     """ Stamp (aspiration and dispense) one plate onto another.
 
@@ -941,10 +897,10 @@ class LiquidHandler:
       source: the source plate
       target: the target plate
       volume: the volume to be transported
-      aspiration_flow_rate: the flow rate for the aspiration, in ul/s
-      aspiration_liquid_class: the liquid class for the aspiration, in ul/s
-      dispense_flow_rate: the flow rate for the dispense, in ul/s
-      dispense_liquid_class: the liquid class for the dispense, in ul/s
+      aspiration_flow_rate: the flow rate for the aspiration, in ul/s. If `Default`, the backend
+        default will be used.
+      dispense_flow_rate: the flow rate for the dispense, in ul/s. If `Default`, the backend default
+        will be used.
     """
 
     assert (source.num_items_x, source.num_items_y) == (target.num_items_x, target.num_items_y), \
@@ -953,13 +909,11 @@ class LiquidHandler:
     self.aspirate_plate(
       plate=source,
       volume=volume,
-      flow_rate=aspiration_flow_rate,
-      liquid_class=aspiration_liquid_class)
+      flow_rate=aspiration_flow_rate)
     self.dispense_plate(
       plate=source,
       volume=volume,
-      flow_rate=dispense_flow_rate,
-      liquid_class=dispense_liquid_class)
+      flow_rate=dispense_flow_rate)
 
   def move_resource(
     self,
