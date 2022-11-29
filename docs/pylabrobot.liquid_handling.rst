@@ -54,3 +54,17 @@ See :doc:`Using tip trackers <using-tip-trackers>` for a tutorial.
   pylabrobot.liquid_handling.tip_tracker.TipTracker
   pylabrobot.liquid_handling.tip_tracker.ChannelTipTracker
   pylabrobot.liquid_handling.tip_tracker.SpotTipTracker
+
+
+Operations
+----------
+
+Operations are the main data holders used to transmit information from the liquid handler to a backend. They are the basis of "standard form".
+
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+  pylabrobot.liquid_handling.standard
