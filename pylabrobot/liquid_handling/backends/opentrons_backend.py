@@ -1,6 +1,7 @@
 from typing import Dict, Optional, List, cast
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.default import get_value
 from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
@@ -363,13 +364,12 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoChannelError("No pipette channel of right type with tip available.")
 
     pipette_name = self.get_pipette_name(pipette_id)
-    if op.flow_rate is None:
-      op.flow_rate = self._get_default_aspiration_flow_rate(pipette_name)
+    flow_rate = get_value(op.flow_rate, self._get_default_aspiration_flow_rate(pipette_name))
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
     ot_api.lh.aspirate(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=op.flow_rate, offset_x=op.offset.x,
+      volume=volume, flow_rate=flow_rate, offset_x=op.offset.x,
        offset_y=op.offset.y, offset_z=op.offset.z)
 
   def _get_default_dispense_flow_rate(self, pipette_name: str) -> float:
@@ -413,13 +413,12 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoChannelError("No pipette channel of right type with tip available.")
 
     pipette_name = self.get_pipette_name(pipette_id)
-    if op.flow_rate is None:
-      op.flow_rate = self._get_default_dispense_flow_rate(pipette_name)
+    flow_rate = get_value(op.flow_rate, self._get_default_dispense_flow_rate(pipette_name))
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
     ot_api.lh.dispense(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=op.flow_rate, offset_x=op.offset.x,
+      volume=volume, flow_rate=flow_rate, offset_x=op.offset.x,
        offset_y=op.offset.y, offset_z=op.offset.z)
 
   def pick_up_tips96(self, tip_rack: TipRack):

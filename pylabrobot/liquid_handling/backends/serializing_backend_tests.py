@@ -63,7 +63,7 @@ class SerializingBackendTests(unittest.TestCase):
 
   def test_aspirate(self):
     wells = self.plate["A1"]
-    self.lh.aspirate(wells, vols=10, liquid_classes=None)
+    self.lh.aspirate(wells, vols=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
@@ -71,7 +71,7 @@ class SerializingBackendTests(unittest.TestCase):
 
   def test_dispense(self):
     wells = self.plate["A1"]
-    self.lh.dispense(wells, vols=10, liquid_classes=None)
+    self.lh.dispense(wells, vols=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
@@ -90,14 +90,14 @@ class SerializingBackendTests(unittest.TestCase):
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource_name=self.tip_rack.name))
 
   def test_aspirate96(self):
-    self.lh.aspirate_plate(self.plate, volume=10, liquid_class=None)
+    self.lh.aspirate_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate96")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(aspiration=
       Aspiration(resource=self.plate, volume=10).serialize()))
 
   def test_dispense96(self):
-    self.lh.dispense_plate(self.plate, volume=10, liquid_class=None)
+    self.lh.dispense_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense96")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(dispense=

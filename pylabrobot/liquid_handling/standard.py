@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from abc import ABC, ABCMeta
 import enum
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
+from pylabrobot.default import Defaultable, Default, is_default
 from pylabrobot.liquid_handling.tip_type import TipType
 from .resources.abstract.coordinate import Coordinate
 if TYPE_CHECKING:
@@ -111,7 +112,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     self,
     resource: Resource,
     volume: float,
-    flow_rate: Optional[float] = None,
+    flow_rate: Defaultable[float] = Default,
     offset: Coordinate = Coordinate.zero(),
   ):
     """ Initialize the operation.
@@ -156,7 +157,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     return {
       **super().serialize(),
       "volume": self.volume,
-      "flow_rate": self.flow_rate,
+      "flow_rate": "default" if is_default(self.flow_rate) else self.flow_rate,
     }
 
   @classmethod
@@ -173,7 +174,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     return cls(
       resource=resource,
       volume=data["volume"],
-      flow_rate=data["flow_rate"],
+      flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
       offset=Coordinate.deserialize(data["offset"])
     )
 
@@ -192,7 +193,7 @@ class Aspiration(LiquidHandlingOp):
     return Aspiration(
       resource=resource,
       volume=data["volume"],
-      flow_rate=data["flow_rate"],
+      flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
       offset=Coordinate.deserialize(data["offset"])
     )
 
@@ -211,7 +212,7 @@ class Dispense(LiquidHandlingOp):
     return Dispense(
       resource=resource,
       volume=data["volume"],
-      flow_rate=data["flow_rate"],
+      flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
       offset=Coordinate.deserialize(data["offset"])
     )
 

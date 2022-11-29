@@ -13,6 +13,7 @@ import time
 from typing import Callable, List, Optional, Tuple, Dict, Any, Union, Sequence, cast
 
 from pylabrobot import utils
+from pylabrobot.default import get_value, Default
 from pylabrobot.liquid_handling.errors import (
   ChannelHasTipError,
   ChannelHasNoTipError,
@@ -790,10 +791,8 @@ class STAR(HamiltonLiquidHandler):
       if op.offset.z == 0: # default offset_z is 1
         liquid_surface_no_lld += 1
 
-      if op.flow_rate is not None:
-        flow_rate = op.flow_rate
-      else:
-        flow_rate = 100
+      flow_rate = get_value(op.flow_rate, default=100)
+      assert flow_rate is not Default, "Flow rate must be specified for Hamilton backend."
 
       params.append({
         "aspiration_volumes": int(op.volume*10),
@@ -923,10 +922,7 @@ class STAR(HamiltonLiquidHandler):
       if op.offset.z == 0: # default offset_z is 1
         liquid_surface_no_lld += 1
 
-      if op.flow_rate is not None:
-        flow_rate = op.flow_rate
-      else:
-        flow_rate = 120
+      flow_rate = get_value(op.flow_rate, 120)
 
       params.append({
         "dispensing_mode": 2,
@@ -1074,8 +1070,7 @@ class STAR(HamiltonLiquidHandler):
 
     liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
 
-    if aspiration.flow_rate is None:
-      aspiration.flow_rate = 250
+    flow_rate = get_value(aspiration.flow_rate, 250)
 
     cmd_kwargs: Dict[str, Any] = dict(
       x_position=int(position.x * 10),
@@ -1095,7 +1090,7 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_aspiration=0,
       aspiration_volumes=int(aspiration.volume*10),
-      aspiration_speed=int(aspiration.flow_rate * 10),
+      aspiration_speed=int(flow_rate * 10),
       transport_air_volume=50,
       blow_out_air_volume=0,
       pre_wetting_volume=50,
@@ -1150,15 +1145,14 @@ class STAR(HamiltonLiquidHandler):
 
     liquid_height = dispense.resource.get_absolute_location().z + liquid_height
 
-    if dispense.flow_rate is None:
-      dispense.flow_rate = 120
-
     dispense_mode = {
       (True, False): 0,
       (True, True): 1,
       (False, False): 2,
       (False, True): 3,
     }[(jet, blow_out)]
+
+    flow_rate = get_value(dispense.flow_rate, 120)
 
     cmd_kwargs = dict(
       dispensing_mode=dispense_mode,
@@ -1178,7 +1172,7 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth_direction=0,
       liquid_surface_sink_distance_at_the_end_of_dispense=0,
       dispense_volume=int(dispense.volume*10),
-      dispense_speed=int(dispense.flow_rate * 10),
+      dispense_speed=int(flow_rate * 10),
       transport_air_volume=50,
       blow_out_air_volume=0,
       lld_mode=False,

@@ -230,8 +230,8 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_offsets_asp_disp(self):
     well = self.plate["A1"]
-    self.lh.aspirate(well, vols=10, offsets=Coordinate(x=1, y=1, z=1), liquid_classes=None)
-    self.lh.dispense(well, vols=10, offsets=Coordinate(x=1, y=1, z=1), liquid_classes=None)
+    self.lh.aspirate(well, vols=10, offsets=Coordinate(x=1, y=1, z=1))
+    self.lh.dispense(well, vols=10, offsets=Coordinate(x=1, y=1, z=1))
 
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
@@ -275,8 +275,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_transfer(self):
     # Simple transfer
-    self.lh.transfer(self.plate.get_well("A1"), self.plate["A2"], source_vol=10,
-      aspiration_liquid_class=None, dispense_liquid_classes=None)
+    self.lh.transfer(self.plate.get_well("A1"), self.plate["A2"], source_vol=10)
 
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
@@ -293,8 +292,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     self.backend.clear()
 
     # Transfer to multiple wells
-    self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80,
-      aspiration_liquid_class=None, dispense_liquid_classes=None)
+    self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (),
@@ -310,8 +308,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     self.backend.clear()
 
     # Transfer with ratios
-    self.lh.transfer(self.plate.get_well("A1"), self.plate["B1:C1"], source_vol=60, ratios=[2, 1],
-      aspiration_liquid_class=None, dispense_liquid_classes=None)
+    self.lh.transfer(self.plate.get_well("A1"), self.plate["B1:C1"], source_vol=60, ratios=[2, 1])
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (),
@@ -329,8 +326,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
     # Transfer with target_vols
     vols: List[float] = [3, 1, 4, 1, 5, 9, 6, 2]
-    self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols,
-      aspiration_liquid_class=None, dispense_liquid_classes=None)
+    self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (),
@@ -358,8 +354,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_stamp(self):
     # Simple transfer
-    self.lh.stamp(self.plate, self.plate, volume=10,
-      aspiration_liquid_class=None, dispense_liquid_class=None)
+    self.lh.stamp(self.plate, self.plate, volume=10)
 
     self.assertEqual(self.get_first_command("aspirate96"), {
       "command": "aspirate96",

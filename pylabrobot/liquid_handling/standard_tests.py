@@ -85,7 +85,7 @@ class TestStandard(unittest.TestCase):
       "resource_name": "plate_well_0_0",
       "offset": {"x": 0, "y": 0, "z": 0},
       "volume": 100,
-      "flow_rate": None
+      "flow_rate": "default"
     })
 
   def test_aspiration_deserialize(self):
@@ -93,7 +93,7 @@ class TestStandard(unittest.TestCase):
       "resource_name": "plate_well_0_0",
       "offset": {"x": 0, "y": 0, "z": 0},
       "volume": 100,
-      "flow_rate": None}, resource=self.plate.get_well("A1")),
+      "flow_rate": "default"}, resource=self.plate.get_well("A1")),
       Aspiration(resource=self.plate.get_well("A1"), volume=100))
 
   def test_dispense_serialize(self):
@@ -101,7 +101,7 @@ class TestStandard(unittest.TestCase):
       "resource_name": "plate_well_0_0",
       "offset": {"x": 0, "y": 0, "z": 0},
       "volume": 100,
-      "flow_rate": None
+      "flow_rate": "default"
     })
 
   def test_dispense_deserialize(self):
@@ -109,5 +109,5 @@ class TestStandard(unittest.TestCase):
       "resource_name": "plate_well_0_0",
       "offset": {"x": 0, "y": 0, "z": 0},
       "volume": 100,
-      "flow_rate": None}, resource=self.plate.get_well("A1")),
+      "flow_rate": "default"}, resource=self.plate.get_well("A1")),
       Dispense(resource=self.plate.get_well("A1"), volume=100))

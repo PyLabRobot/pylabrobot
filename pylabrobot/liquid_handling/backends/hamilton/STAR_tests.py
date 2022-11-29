@@ -148,13 +148,13 @@ class TestSTARUSBComms(unittest.TestCase):
     self.assertEqual(resp, {"id": 1})
 
   def test_send_command_wrong_id(self):
-    star = STARUSBCommsMocker()
+    star = STARUSBCommsMocker(read_timeout=2, packet_read_timeout=1)
     star.setup(send_response="C0QMid0000") # wrong response
     with self.assertRaises(TimeoutError):
       star.send_command("C0", command="QM")
 
   def test_send_command_plaintext_response(self):
-    star = STARUSBCommsMocker()
+    star = STARUSBCommsMocker(read_timeout=2, packet_read_timeout=1)
     star.setup(send_response="this is plain text") # wrong response
     with self.assertRaises(TimeoutError):
       star.send_command("C0", command="QM")
@@ -316,7 +316,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "0000&tm0 0 0 0 1 1 0&tp2243tz2163th2450ti1", DROP_TIP_FORMAT)
 
   def test_single_channel_aspiration(self):
-    self.lh.aspirate(self.plate["A1"], vols=[100])
+    self.lh.aspirate(self.plate["A1"], vols=[100 * 1.072]) # TODO: Hamilton liquid classes
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -327,7 +327,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_single_channel_aspiration_offset(self):
-    self.lh.aspirate(self.plate["A1"], vols=[100], offsets=Coordinate(0, 0, 10))
+    # TODO: Hamilton liquid classes
+    self.lh.aspirate(self.plate["A1"], vols=[100*1.072], offsets=Coordinate(0, 0, 10))
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -338,7 +339,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_multi_channel_aspiration(self):
-    self.lh.aspirate(self.plate["A1:B1"], vols=100)
+    # TODO: Hamilton liquid classes
+    self.lh.aspirate(self.plate["A1:B1"], vols=100*1.072)
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -351,7 +353,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_aspirate_single_resource(self):
-    self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_classes=None)
+    self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4])
     self._assert_command_sent_once(
       "C0ASid0009at0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 1688 "
       "1551 0000&th2450te2450lp1260 1260 1260 1260 1260&ch000 000 000 000 000&zl1210 1210 1210 "
@@ -367,7 +369,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_dispense_single_resource(self):
-    self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_classes=None)
+    self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4])
     self._assert_command_sent_once(
       "C0DSid0010dm2 2 2 2 2&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 "
       "1688 1551 0000&zx1871 1871 1871 1871 1871&lp2321 2321 2321 2321 2321&zl1210 1210 1210 1210 "
@@ -381,7 +383,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_single_channel_dispense(self):
-    self.lh.dispense(self.plate["A1"], vols=[100])
+    # TODO: Hamilton liquid classes
+    self.lh.dispense(self.plate["A1"], vols=[100*1.072])
     self._assert_command_sent_once(
       "C0DSid0000dm2&tm1 0&xp02980 00000&yp1460 0000&zx1871&lp2321&zl1881&"
       "ip0000&it0&fp0000&th2450te2450dv01072&ds1200&ss0050&rv000&ta000&ba0000&lm0&zo000&ll1&"
@@ -390,7 +393,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_multi_channel_dispense(self):
-    self.lh.dispense(self.plate["A1:B1"], vols=100)
+    # TODO: Hamilton liquid classes
+    self.lh.dispense(self.plate["A1:B1"], vols=100*1.072)
 
     self._assert_command_sent_once(
       "C0DSid0317dm2 2&tm1 1 0&dv01072 01072&xp02980 02980 00000&yp1460 1370 0000&"
@@ -415,7 +419,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
                 "xs#####xd#yh####za####zh####ze####")
 
   def test_core_96_aspirate(self):
-    self.lh.aspirate_plate(self.plate, 100)
+    # TODO: Hamilton liquid classes
+    self.lh.aspirate_plate(self.plate, 100*1.072)
 
     self._assert_command_sent_once(
       "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01072ag2500vt050"
@@ -426,7 +431,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "cw************************pp####")
 
   def test_core_96_dispense(self):
-    self.lh.dispense_plate(self.plate, 100)
+    # TODO: Hamilton liquid classes
+    self.lh.dispense_plate(self.plate, 100*1.072)
 
     self._assert_command_sent_once(
       "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01072dg1200vt050"
