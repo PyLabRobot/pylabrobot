@@ -3,12 +3,12 @@
 
 import os
 import sys
-from maker import make
 
 sys.path.insert(0, '..')
 
 from pylabrobot.utils.file_parsing import find_int, find_float, find_string
 import tools.make_resources.writer as writer
+from tools.make_resources.maker import make
 
 
 BASE_DIR = "./LabWare/Corning-Costar"
@@ -50,25 +50,32 @@ def make_from_file(fn, o):
 
     one_dot_max = find_float('1.Max', c2)
 
-  writer.write_plate_with_create_equally_spaced(
-    o=o,
-    base_class=BASE_CLASS,
-    name=cname,
-    description=description,
-    size_x=size_x,
-    size_y=size_y,
-    size_z=size_z,
-    dx=dx,
-    dy=dy,
-    dz=dz,
-    num_items_x=num_items_x,
-    num_items_y=num_items_y,
-    well_size_x=well_size_x,
-    well_size_y=well_size_y,
-    one_dot_max=one_dot_max,
-    EqnOfVol=EqnOfVol,
-    lid_height=10
-  )
+  if fn.endswith("_L.rck"): # landscape mode
+    writer.write_landscape_plate(o=o, cname=cname, description=description)
+
+  elif fn.endswith("_P.rck"): # portrait mode
+    writer.write_portrait_plate(o=o, cname=cname, description=description)
+
+  else: # definition
+    writer.write_plate_with_create_equally_spaced(
+      o=o,
+      base_class=BASE_CLASS,
+      name=cname,
+      description=description,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      dx=dx,
+      dy=dy,
+      dz=dz,
+      num_items_x=num_items_x,
+      num_items_y=num_items_y,
+      well_size_x=well_size_x,
+      well_size_y=well_size_y,
+      one_dot_max=one_dot_max,
+      EqnOfVol=EqnOfVol,
+      lid_height=10
+    )
 
 
 if __name__ == "__main__":
