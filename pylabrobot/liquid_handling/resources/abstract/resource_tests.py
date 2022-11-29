@@ -129,6 +129,75 @@ class TestResource(unittest.TestCase):
     self.assertEqual(r.get_2d_center_offsets(), [Coordinate(5, 60, 0)])
     self.assertEqual(r.get_2d_center_offsets(n=2), [Coordinate(5, 40, 0), Coordinate(5, 80, 0)])
 
+  def test_rotation90(self):
+    r = Resource("parent", size_x=200, size_y=100, size_z=100)
+    c = Resource("child", size_x=10, size_y=20, size_z=10)
+    r.assign_child_resource(c, location=Coordinate(20, 10, 10))
+
+    r.rotate(90)
+    self.assertEqual(r.get_size_x(), 100)
+    self.assertEqual(r.get_size_y(), 200)
+    self.assertEqual(c.get_absolute_location(), Coordinate(70, 20, 10))
+    self.assertEqual(c.get_size_x(), 20)
+    self.assertEqual(c.get_size_y(), 10)
+
+  def test_rotation180(self):
+    r = Resource("parent", size_x=200, size_y=100, size_z=100)
+    c = Resource("child", size_x=10, size_y=20, size_z=10)
+    r.assign_child_resource(c, location=Coordinate(20, 10, 10))
+
+    r.rotate(180)
+    self.assertEqual(r.get_size_x(), 200)
+    self.assertEqual(r.get_size_y(), 100)
+    self.assertEqual(c.get_absolute_location(), Coordinate(170, 70, 10))
+    self.assertEqual(c.get_size_x(), 10)
+    self.assertEqual(c.get_size_y(), 20)
+
+  def test_rotation270(self):
+    r = Resource("parent", size_x=200, size_y=100, size_z=100)
+    c = Resource("child", size_x=10, size_y=20, size_z=10)
+    r.assign_child_resource(c, location=Coordinate(20, 10, 10))
+
+    r.rotate(270)
+    self.assertEqual(r.get_size_x(), 100)
+    self.assertEqual(r.get_size_y(), 200)
+    self.assertEqual(c.get_absolute_location(), Coordinate(10, 170, 10))
+    self.assertEqual(c.get_size_x(), 20)
+    self.assertEqual(c.get_size_y(), 10)
+
+  def test_rotation_invalid(self):
+    r = Resource("parent", size_x=200, size_y=100, size_z=100)
+
+    with self.assertRaises(ValueError):
+      r.rotate(45)
+
+    with self.assertRaises(ValueError):
+      r.rotate(360)
+
+    with self.assertRaises(ValueError):
+      r.rotate(0)
+
+  def test_multiple_rotations(self):
+    r = Resource("parent", size_x=200, size_y=100, size_z=100)
+    c = Resource("child", size_x=10, size_y=20, size_z=10)
+    r.assign_child_resource(c, location=Coordinate(20, 10, 10))
+
+    r.rotate(90)
+    r.rotate(90) # 180
+    self.assertEqual(r.get_size_x(), 200)
+    self.assertEqual(r.get_size_y(), 100)
+    self.assertEqual(c.get_absolute_location(), Coordinate(170, 70, 10))
+
+    r.rotate(90) # 270
+    self.assertEqual(r.get_size_x(), 100)
+    self.assertEqual(r.get_size_y(), 200)
+    self.assertEqual(c.get_absolute_location(), Coordinate(10, 170, 10))
+
+    r.rotate(90) # 0
+    self.assertEqual(r.get_size_x(), 200)
+    self.assertEqual(r.get_size_y(), 100)
+    self.assertEqual(c.get_absolute_location(), Coordinate(20, 10, 10))
+
 
 if __name__ == "__main__":
   unittest.main()

@@ -3,12 +3,12 @@
 
 import os
 import sys
-from maker import make
 
 sys.path.insert(0, '..')
 
 from pylabrobot.utils.file_parsing import find_int, find_float, find_string
 import tools.make_resources.writer as writer
+from tools.make_resources.maker import make
 
 
 BASE_DIR = "LabWare/ML_STAR"
@@ -57,7 +57,10 @@ def make_from_file(fn, o):
   elif cname[0] == '5': cname = 'Five' + cname[1:]
   description = find_string("Description", c)
 
-  writer.write_tip_rack_with_create_equally_spaced(o=o, base_class=BASE_CLASS, name=cname, description=description, size_x=size_x, size_y=size_y, size_z=size_z, tip_type=tip_type, dx=dx, dy=dy, dz=dz, tip_size_x=tip_size_x, tip_size_y=tip_size_y, num_items_x=num_items_x, num_items_y=num_items_y)
+  if cname.endswith("_P"):
+    writer.write_tip_rack_p(o=o, cname=cname, description=description)
+  else:
+    writer.write_tip_rack_with_create_equally_spaced(o=o, base_class=BASE_CLASS, name=cname, description=description, size_x=size_x, size_y=size_y, size_z=size_z, tip_type=tip_type, dx=dx, dy=dy, dz=dz, tip_size_x=tip_size_x, tip_size_y=tip_size_y, num_items_x=num_items_x, num_items_y=num_items_y)
 
 
 if __name__ == "__main__":

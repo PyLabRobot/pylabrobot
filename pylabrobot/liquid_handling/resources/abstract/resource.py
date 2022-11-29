@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import List, Optional
+import copy
+from typing import List, Optional, TypeVar
 
 from .coordinate import Coordinate
+
+Self = TypeVar("Self", bound="Resource")
 
 
 class Resource:
@@ -38,6 +41,8 @@ class Resource:
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
 
+    self.rotation = 0
+
   def serialize(self) -> dict:
     """ Serialize this resource. """
     return dict(
@@ -61,6 +66,13 @@ class Resource:
     for key in ["type", "children", "parent_name", "location"]:
       del data_copy[key]
     return cls(**data_copy)
+
+  def copy(self):
+    """ Copy this resource. """
+    if self.parent is not None:
+      raise ValueError("Cannot copy a resource that is assigned to another resource.")
+
+    return copy.deepcopy(self)
 
   def __eq__(self, other):
     return (
@@ -86,16 +98,18 @@ class Resource:
     """ Get the absolute location of this resource, probably within the
     :class:`pylabrobot.liquid_handling.resources.abstract.Deck`. """
     assert self.location is not None, "Resource has no location."
-    if self.parent is None:
+    if self.parent is None or self.parent.location is None:
       return self.location
     return self.parent.get_absolute_location() + self.location
 
   def get_size_x(self) -> float:
-    """ Get the size of this resource in the x-direction. """
+    if self.rotation in {90, 270}:
+      return self._size_y
     return self._size_x
 
   def get_size_y(self) -> float:
-    """ Get the size of this resource in the y-direction. """
+    if self.rotation in {90, 270}:
+      return self._size_x
     return self._size_y
 
   def get_size_z(self) -> float:
@@ -211,3 +225,44 @@ class Resource:
       raise ValueError(f"Resource is too small to space {n} channels evenly.")
     offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
     return offsets
+
+  def rotate(self, degrees: int):
+    """ Rotate counter clockwise by the given number of degrees.
+
+    Args:
+      degrees: must be a multiple of 90, but not also 360.
+    """
+
+    effective_degrees = degrees % 360
+
+    if effective_degrees == 0 or effective_degrees % 90 != 0:
+      raise ValueError(f"Invalid rotation: {degrees}")
+
+    for child in self.children:
+      assert child.location is not None, "child must have a location when it's assigned."
+
+      old_x = child.location.x
+
+      if effective_degrees == 90:
+        child.location.x = self.get_size_y() - child.location.y - child.get_size_y()
+        child.location.y = old_x
+      elif effective_degrees == 180:
+        child.location.x = self.get_size_x() - child.location.x - child.get_size_x()
+        child.location.y = self.get_size_y() - child.location.y - child.get_size_y()
+      elif effective_degrees == 270:
+        child.location.x = child.location.y
+        child.location.y = self.get_size_x() - old_x - child.get_size_x()
+      child.rotate(effective_degrees)
+
+    self.rotation = (self.rotation + degrees) % 360
+
+  def rotated(self: Self, degrees: int) -> Self:
+    """ Return a copy of this resource rotated by the given number of degrees.
+
+    Args:
+      degrees: must be a multiple of 90, but not also 360.
+    """
+
+    new_resource = copy.deepcopy(self)
+    new_resource.rotate(degrees)
+    return new_resource
