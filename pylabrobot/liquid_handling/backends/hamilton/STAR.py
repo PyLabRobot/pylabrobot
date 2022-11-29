@@ -9,6 +9,7 @@ import enum
 import functools
 import logging
 import re
+import time
 from typing import Callable, List, Optional, Tuple, Dict, Any, Union, Sequence, cast
 
 from pylabrobot import utils
@@ -77,16 +78,20 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
 
   @abstractmethod
-  def __init__(self, read_timeout=5):
+  def __init__(self, packet_read_timeout: int = 3, read_timeout: int = 30, **kwargs):
     """
 
     Args:
-      read_timeout: The timeout for reading packets from the Hamilton machine in seconds.
+      packet_read_timeout: The timeout for reading packets from the Hamilton machine in seconds.
+      read_timeout: The timeout for  from the Hamilton machine in seconds.
       num_channels: the number of pipette channels present on the robot.
     """
 
     super().__init__()
 
+    assert packet_read_timeout < read_timeout, \
+      "packet_read_timeout must be smaller than read_timeout."
+    self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
     self.id_ = 0
 
@@ -340,7 +345,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self,
     module: str,
     command: str,
-    timeout: int = 16,
+    timeout: Optional[int] = None,
     fmt: Optional[str]=None,
     wait = True,
     **kwargs
@@ -350,7 +355,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     Args:
       module: 2 character module identifier (C0 for master, ...)
       command: 2 character command identifier (QM for request status)
-      timeout: timeout in seconds.
+      timeout: timeout in seconds. If None, `self.read_timeout` is used.
       fmt: A string containing the format of the response. If None, the raw response is returned.
       kwargs: any named parameters. the parameter name should also be
               2 characters long. The value can be any size.
@@ -364,6 +369,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
 
+    if timeout is None:
+      timeout = self.read_timeout
+
     cmd, id_ = self._assemble_command(module, command, **kwargs)
     print("sending command", cmd)
 
@@ -375,12 +383,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     if not wait:
       return
 
-    # Attempt to read packets until timeout, or when we identify the right id. Timeout is
-    # approximately equal to the (number of attempts to read packets) * (self.read_timeout).
-    attempts = 0
-    while attempts < (timeout // self.read_timeout):
-      attempts += 1
+    # Attempt to read packets until timeout, or when we identify the right id.
+    timeout_time = time.time() + timeout
 
+    while time.time() < timeout_time:
       # read response from endpoint, and keep reading until the packet is smaller than the max
       # packet size: if the packet is that size, it means that there may be more data to read.
 
@@ -418,15 +424,16 @@ class STAR(HamiltonLiquidHandler):
   Interface for the Hamilton STAR.
   """
 
-  def __init__(self, read_timeout: int = 5, **kwargs):
+  def __init__(self, packet_read_timeout: int = 3, read_timeout: int = 30, **kwargs):
     """ Create a new STAR interface.
 
     Args:
-      read_timeout: the timeout in seconds for reading packets.
+      packet_read_timeout: timeout in seconds for reading a single packet.
+      read_timeout: timeout in seconds for reading a full response.
       num_channels: the number of pipette channels present on the robot.
     """
 
-    super().__init__(read_timeout=read_timeout, **kwargs)
+    super().__init__(packet_read_timeout=packet_read_timeout, read_timeout=read_timeout, **kwargs)
     self.dev: Optional[usb.core.Device] = None
     self._tip_types: dict[HamiltonTipType, int] = {}
     self._iswap_parked: Optional[bool] = None
