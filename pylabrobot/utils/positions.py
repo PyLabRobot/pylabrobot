@@ -53,7 +53,8 @@ def string_to_index(position_string: str, num_rows: int = 8) -> int:
   return row + column * num_rows
 
 
-def string_to_indices(position_range_string: str, num_rows: int = 8) -> typing.List[int]:
+def string_to_indices(position_range_string: str, num_rows: int, num_columns: int) \
+  -> typing.List[int]:
   """ Convert a position string to a list of indices.
 
   Args:
@@ -63,7 +64,7 @@ def string_to_indices(position_range_string: str, num_rows: int = 8) -> typing.L
     A list of indices.
   """
 
-  positions = string_to_pattern(position_range_string)
+  positions = string_to_pattern(position_range_string, num_rows, num_columns)
   indices = []
   for row_idx, row in enumerate(positions):
     for column_idx, column in enumerate(row):
@@ -72,7 +73,8 @@ def string_to_indices(position_range_string: str, num_rows: int = 8) -> typing.L
   return indices
 
 
-def string_to_pattern(position_range_string: str) -> typing.List[typing.List[bool]]:
+def string_to_pattern(position_range_string: str, num_rows: int, num_columns: int) \
+  -> typing.List[typing.List[bool]]:
   """ Convert a position string to a pattern.
 
   Args:
@@ -103,7 +105,7 @@ def string_to_pattern(position_range_string: str) -> typing.List[typing.List[boo
   # Split the position string into a list of position strings
   start_str, end_str = position_range_string.split(":")
   start, end = string_to_position(start_str), string_to_position(end_str)
-  positions = [[False for _ in range(12)] for _ in range(8)]
+  positions = [[False for _ in range(num_columns)] for _ in range(num_rows)]
   for row, column in itertools.product(range(start[0], end[0] + 1), range(start[1], end[1] + 1)):
     positions[row][column] = True
   return positions
