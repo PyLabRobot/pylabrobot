@@ -6,6 +6,7 @@ from typing import List, Union, Optional, Sequence
 
 from pylabrobot.liquid_handling.tip_tracker import SpotTipTracker
 from pylabrobot.liquid_handling.tip_type import TipType
+import pylabrobot.utils as utils
 
 from .itemized_resource import ItemizedResource
 from .resource import Resource
@@ -93,11 +94,25 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
     return super().get_items(identifier)
 
-  def set_tip_state(self, tips: List[List[bool]]) -> None:
-    """ Set the initial tip tracking state of all tips in this tip rack. """
+  def set_tip_state(self, tips: Union[List[List[bool]], str]) -> None:
+    """ Set the initial tip tracking state of all tips in this tip rack.
+
+    Examples:
+      Filling the left half of a 96-well tip rack:
+
+      >>> tip_rack.set_tip_state("A7:H12")
+
+      Filling the right half of a 96-well tip rack:
+
+      >>> tip_rack.set_tip_state([[True] * 6 + [False] * 6] * 8)
+    """
+
+    if isinstance(tips, str):
+      tips = utils.string_to_pattern(tips)
 
     # flatten the list
     has_tip = [item for sublist in tips for item in sublist]
+    assert len(has_tip) == self.num_items, "Invalid tip state."
 
     for i in range(self.num_items):
       self.get_item(i).tracker.set_initial_state(has_tip[i])
