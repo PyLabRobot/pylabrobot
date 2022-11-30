@@ -23,16 +23,21 @@ T = TypeVar("T")
 Defaultable = Union[T, _DefaultType]
 
 def is_default(value: Defaultable[T]) -> TypeGuard[_DefaultType]:
+  """ Returns True if the value is the default value. This serves as a typeguard. """
   return value is Default
 
 
-# Unfortunately this method is needed as the typeguard for is_default does not reveal to mypy that
-# the value is T.
 def is_not_default(value: Defaultable[T]) -> TypeGuard[T]:
+  """ Returns True if the value is not the default value. This serves as a typeguard.
+
+  Unfortunately this method is needed as the typeguard for is_default does not reveal to mypy that
+  the value is T.
+  """
   return not is_default(value)
 
 
 def get_value(value: Defaultable[T], default: T) -> T:
+  """ Returns the value if it is not the default value, otherwise returns the default value. """
   if is_not_default(value):
     return value
   return default
