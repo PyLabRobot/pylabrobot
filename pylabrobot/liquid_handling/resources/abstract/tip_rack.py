@@ -6,7 +6,7 @@ from typing import List, Union, Optional, Sequence
 
 from pylabrobot.liquid_handling.tip_tracker import SpotTipTracker
 from pylabrobot.liquid_handling.tip_type import TipType
-import pylabrobot.utils as utils
+from pylabrobot import utils
 
 from .itemized_resource import ItemizedResource
 from .resource import Resource
@@ -108,7 +108,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     """
 
     if isinstance(tips, str):
-      tips = utils.string_to_pattern(tips)
+      tips = utils.string_to_pattern(tips, num_rows=self.num_items_y, num_columns=self.num_items_x)
 
     # flatten the list
     has_tip = [item for sublist in tips for item in sublist]

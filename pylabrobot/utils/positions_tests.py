@@ -28,16 +28,17 @@ class TestPositions(unittest.TestCase):
     self.assertEqual(string_to_index("C1"), 2)
 
   def test_string_to_indices(self):
-    self.assertEqual(string_to_indices("A1:A3"), [0, 8, 16])
-    self.assertEqual(string_to_indices("A1:C1"), [0, 1, 2])
-    self.assertEqual(string_to_indices("A1:C3"), [0, 8, 16, 1, 9, 17, 2, 10, 18])
+    self.assertEqual(string_to_indices("A1:A3", num_rows=8, num_columns=12), [0, 8, 16])
+    self.assertEqual(string_to_indices("A1:C1", num_rows=8, num_columns=12), [0, 1, 2])
+    self.assertEqual(string_to_indices("A1:C3", num_rows=8, num_columns=12),
+      [0, 8, 16, 1, 9, 17, 2, 10, 18])
 
   def test_string_range_to_pattern(self):
-    self.assertEqual(string_to_pattern("A1:C3"),
+    self.assertEqual(string_to_pattern("A1:C3", num_rows=8, num_columns=12),
       [[True]*3 + [False]*9]*3 + [[False]*12]*5)
-    self.assertEqual(string_to_pattern("A1:A3"),
+    self.assertEqual(string_to_pattern("A1:A3", num_rows=8, num_columns=12),
       [[True]*3 + [False]*9] + [[False]*12]*7)
-    self.assertEqual(string_to_pattern("A1:C1"),
+    self.assertEqual(string_to_pattern("A1:C1", num_rows=8, num_columns=12),
       [[True] + [False] * 11]*3 + [[False]*12]*5)
 
   def test_num_rows(self):
