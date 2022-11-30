@@ -10,10 +10,10 @@ import functools
 import logging
 import re
 import time
-from typing import Callable, List, Optional, Tuple, Dict, Any, Union, Sequence, cast
+from typing import Callable, List, Optional, Tuple, Union, Sequence, TypeVar, cast
 
 from pylabrobot import utils
-from pylabrobot.default import get_value, Default
+from pylabrobot.default import get_value
 from pylabrobot.liquid_handling.errors import (
   ChannelHasTipError,
   ChannelHasNoTipError,
@@ -768,87 +768,185 @@ class STAR(HamiltonLiquidHandler):
 
       raise e
 
+  class LLDMode(enum.Enum):
+    OFF = 0
+    GAMMA = 1
+    DP = 2
+    DUAL = 3
+    Z_TOUCH_OFF = 4
+
   @need_iswap_parked
   def aspirate(
     self,
     ops: List[Aspiration],
     use_channels: List[int],
+
     blow_out_air_volumes: Union[float, List[float]] = 0,
-    air_transport_retract_dist: float = 10,
-    **backend_kwargs
+
+    lld_search_height: Optional[List[int]] = None,
+    clot_detection_height: Optional[List[int]] = None,
+    pull_out_distance_transport_air: Optional[List[int]] = None,
+    second_section_height: Optional[List[int]] = None,
+    second_section_ratio: Optional[List[int]] = None,
+    minimum_height: Optional[List[int]] = None,
+    immersion_depth: Optional[List[int]] = None,
+    immersion_depth_direction: Optional[List[int]] = None,
+    surface_following_distance: Optional[List[int]] = None,
+    transport_air_volume: Optional[List[int]] = None,
+    pre_wetting_volume: Optional[List[int]] = None,
+    lld_mode: Optional[List[LLDMode]] = None,
+    gamma_lld_sensitivity: Optional[List[int]] = None,
+    dp_lld_sensitivity: Optional[List[int]] = None,
+    aspirate_position_above_z_touch_off: Optional[List[int]] = None,
+    detection_height_difference_for_dual_lld: Optional[List[int]] = None,
+    swap_speed: Optional[List[int]] = None,
+    settling_time: Optional[List[int]] = None,
+    homogenization_volume: Optional[List[int]] = None,
+    homogenization_cycles: Optional[List[int]] = None,
+    homogenization_position_from_liquid_surface: Optional[List[int]] = None,
+    homogenization_speed: Optional[List[int]] = None,
+    homogenization_surface_following_distance: Optional[List[int]] = None,
+    limit_curve_index: Optional[List[int]] = None,
+
+    use_2nd_section_aspiration: Optional[List[bool]] = None,
+    retract_height_over_2nd_section_to_empty_tip: Optional[List[int]] = None,
+    dispensation_speed_during_emptying_tip: Optional[List[int]] = None,
+    dosing_drive_speed_during_2nd_section_search: Optional[List[int]] = None,
+    z_drive_speed_during_2nd_section_search: Optional[List[int]] = None,
+    cup_upper_edge: Optional[List[int]] = None,
+    ratio_liquid_rise_to_tip_deep_in: Optional[List[int]] = None,
+    immersion_depth_2nd_section: Optional[List[int]] = None,
+
+    minimum_traverse_height_at_beginning_of_a_command: int = 2450,
+    min_z_endpos: int = 2450
   ):
-    """ Aspirate liquid from the specified channels. """
+    """ Aspirate liquid from the specified channels.
+
+    For all parameters where `None` is the default value, STAR will use the default value, based on
+    the aspirations. For all list parameters, the length of the list must be equal to the number of
+    operations.
+
+    .. warning:: The parameters in this method, with the exception of `ops` and `use_channels`,
+      expect units of tenths of 'millimeters' (i.e. 10 = 1 mm), or tenths of 'microliters' (i.e. 10
+      = 1 ul), or tenths of seconds. Speeds are in 0.1ul/s. This is a deviation from the rest of the
+      API, which uses SI units. This is because the Hamilton API uses these units.
+
+    Args:
+      ops: The aspiration operations to perform.
+      use_channels: The channels to use for the operations.
+      blow_out_air_volumes: The amount of air to be blown out over all matching dispense operations.
+      lld_search_height: The height to start searching for the liquid level when using LLD.
+      clot_detection_height: Unknown, but probably the height to search for clots when doing LLD.
+      pull_out_distance_transport_air: The distance to pull out when aspirating air, if LLD is
+        disabled.
+      second_section_height: The height to start the second section of aspiration.
+      second_section_ratio: Unknown.
+      minimum_height: The minimum height to move to, this is the end of aspiration. The channel
+       will move linearly from the liquid surface to this height over the course of the aspiration.
+      immersion_depth: Unknown exactly, probably the depth to move into the liquid. Possibly below
+        the liquid surface.
+      immersion_depth_direction: Unknown.
+      surface_following_distance: The distance to follow the liquid surface (0 = go deeper, 1 = go
+        up out of liquid)
+      transport_air_volume: The volume of air to aspirate after the liquid.
+      pre_wetting_volume: The volume of liquid to use for pre-wetting.
+      lld_mode: The liquid level detection mode to use.
+      gamma_lld_sensitivity: The sensitivity of the gamma LLD.
+      dp_lld_sensitivity: The sensitivity of the DP LLD.
+      aspirate_position_above_z_touch_off: If the LLD mode is Z_TOUCH_OFF, this is the height above
+        the bottom of the well (presumably) to aspirate from.
+      detection_height_difference_for_dual_lld: Difference between the gamma and DP LLD heights if
+        the LLD mode is DUAL.
+      swap_speed: Unknown.
+      settling_time: The time to wait after homogenization.
+      homogenization_volume: The volume to aspirate for homogenization.
+      homogenization_cycles: The number of cycles to perform for homogenization.
+      homogenization_position_from_liquid_surface: The height to aspirate from for homogenization
+        (LLD or absolute terms).
+      homogenization_speed: The speed to aspirate at for homogenization.
+      homogenization_surface_following_distance: The distance to follow the liquid surface for
+        homogenization.
+      limit_curve_index: The index of the limit curve to use.
+
+      use_2nd_section_aspiration: Whether to use the second section of aspiration.
+      retract_height_over_2nd_section_to_empty_tip: Unknown.
+      dispensation_speed_during_emptying_tip: Unknown.
+      dosing_drive_speed_during_2nd_section_search: Unknown.
+      z_drive_speed_during_2nd_section_search: Unknown.
+      cup_upper_edge: Unknown.
+      ratio_liquid_rise_to_tip_deep_in: Unknown.
+      immersion_depth_2nd_section: The depth to move into the liquid for the second section of
+        aspiration.
+
+      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
+        starting an aspiration.
+      min_z_endpos: The minimum height to move to, this is the end of aspiration.
+    """
 
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
 
-    params = []
+    n = len(ops)
 
-    # Correct volumes for liquid class. Then multiply by 10 to get to units of 0.1uL. Also get
-    # all other aspiration parameters.
-    for op in ops:
-      liquid_surface_no_lld = op.get_absolute_location().z
-      if op.offset.z == 0: # default offset_z is 1
-        liquid_surface_no_lld += 1
+    T = TypeVar("T")
+    def _to_list(val: Optional[List[T]], default: List[T]) -> List[T]:
+      t = type(default[0])
+      if val is not None:
+        if len(val) != len(ops):
+          raise ValueError(f"Value length must match number of operations, but is {val}")
+        if not all(isinstance(v, t) for v in val):
+          raise ValueError(f"Value must be a list of {t}, but is {val}")
+        return val
+      return default
 
-      flow_rate = get_value(op.flow_rate, default=100)
-      assert flow_rate is not Default, "Flow rate must be specified for Hamilton backend."
+    liquid_surfaces_no_lld = [op.get_absolute_location().z for op in ops]
+    liquid_surfaces_no_lld = [ls + (1 if op.offset.z == 0 else 0) # default to 1 mm above
+                              for ls, op in zip(liquid_surfaces_no_lld, ops)]
 
-      params.append({
-        "aspiration_volumes": int(op.volume*10),
-        "lld_search_height": int((liquid_surface_no_lld+5) * 10), #2321,
-        "clot_detection_height": 0,
-        "liquid_surface_no_lld": int(liquid_surface_no_lld * 10), #1881,
-        "pull_out_distance_transport_air": int(air_transport_retract_dist * 10),
-        "second_section_height": 32,
-        "second_section_ratio": 6180,
-        "minimum_height": int((liquid_surface_no_lld-5) * 10), #1871,
-        "immersion_depth": 0,
-        "immersion_depth_direction": 0,
-        "surface_following_distance": 0,
-        "aspiration_speed": int(flow_rate*10),
-        "transport_air_volume": 0,
-        "blow_out_air_volume": 0, # blow out air volume is handled separately, see below.
-        "pre_wetting_volume": 0,
-        "lld_mode": 0,
-        "gamma_lld_sensitivity": 1,
-        "dp_lld_sensitivity": 1,
-        "aspirate_position_above_z_touch_off": 0,
-        "detection_height_difference_for_dual_lld": 0,
-        "swap_speed": 20,
-        "settling_time": 10,
-        "homogenization_volume": 0,
-        "homogenization_cycles": 0,
-        "homogenization_position_from_liquid_surface": 0,
-        "homogenization_speed": 1000,
-        "homogenization_surface_following_distance": 0,
-        "limit_curve_index": 0,
+    aspiration_volumes = [int(op.volume * 10) for op in ops]
+    lld_search_height = [int((ls+5) * 10) for ls in liquid_surfaces_no_lld]
+    clot_detection_height = _to_list(clot_detection_height, [0]*n)
+    pull_out_distance_transport_air = _to_list(pull_out_distance_transport_air, [100]*n)
+    second_section_height = _to_list(second_section_height, [32]*n)
+    second_section_ratio = _to_list(second_section_ratio, [6180]*n)
+    minimum_height = _to_list(minimum_height, [int((ls-5) * 10) for ls in liquid_surfaces_no_lld])
+    immersion_depth = _to_list(immersion_depth, [0]*n)
+    immersion_depth_direction = _to_list(immersion_depth_direction, [0]*n)
+    surface_following_distance = _to_list(surface_following_distance, [0]*n)
+    flow_rates = [get_value(op.flow_rate, default=100) for op in ops]
+    aspiration_speed = [int(fr * 10) for fr in flow_rates]
+    transport_air_volume = _to_list(transport_air_volume, [0]*n)
+    blow_out_air_volumes = [200]*n # blow out air is handled separately, see below
+    pre_wetting_volume = _to_list(pre_wetting_volume, [0]*n)
+    lld_mode = _to_list(lld_mode, [self.__class__.LLDMode.OFF]*n)
+    gamma_lld_sensitivity = _to_list(gamma_lld_sensitivity, [1]*n)
+    dp_lld_sensitivity = _to_list(dp_lld_sensitivity, [1]*n)
+    aspirate_position_above_z_touch_off = _to_list(aspirate_position_above_z_touch_off, [0]*n)
+    detection_height_difference_for_dual_lld = \
+      _to_list(detection_height_difference_for_dual_lld, [0]*n)
+    swap_speed = _to_list(swap_speed, [20]*n)
+    settling_time = _to_list(settling_time, [10]*n)
+    homogenization_volume = _to_list(homogenization_volume, [0]*n)
+    homogenization_cycles = _to_list(homogenization_cycles, [0]*n)
+    homogenization_position_from_liquid_surface = \
+      _to_list(homogenization_position_from_liquid_surface, [0]*n)
+    homogenization_speed = _to_list(homogenization_speed, [1000]*n)
+    homogenization_surface_following_distance = \
+      _to_list(homogenization_surface_following_distance, [0]*n)
+    limit_curve_index = _to_list(limit_curve_index, [0]*n)
 
-        "use_2nd_section_aspiration": 0,
-        "retract_height_over_2nd_section_to_empty_tip": 0,
-        "dispensation_speed_during_emptying_tip": 500,
-        "dosing_drive_speed_during_2nd_section_search": 500,
-        "z_drive_speed_during_2nd_section_search": 300,
-        "cup_upper_edge": 0,
-        "ratio_liquid_rise_to_tip_deep_in": 0,
-        "immersion_depth_2nd_section": 0
-      })
-
-    cmd_kwargs: Dict[str, Any] = {
-      "minimum_traverse_height_at_beginning_of_a_command": 2450,
-      "min_z_endpos": 2450,
-    }
-
-    # Convert the list of dictionaries to a single dictionary where all values for the same key are
-    # accumulated in a list with that key.
-    for kwargs in params:
-      for key, value in kwargs.items():
-        if key not in cmd_kwargs:
-          cmd_kwargs[key] = []
-        cmd_kwargs[key].append(value)
-
-    # Update kwargs with user properties.
-    cmd_kwargs.update(backend_kwargs)
+    use_2nd_section_aspiration = _to_list(use_2nd_section_aspiration, [False]*n)
+    retract_height_over_2nd_section_to_empty_tip = \
+      _to_list(retract_height_over_2nd_section_to_empty_tip, [0]*n)
+    dispensation_speed_during_emptying_tip = \
+      _to_list(dispensation_speed_during_emptying_tip, [500]*n)
+    dosing_drive_speed_during_2nd_section_search = \
+      _to_list(dosing_drive_speed_during_2nd_section_search, [500]*n)
+    z_drive_speed_during_2nd_section_search = \
+      _to_list(z_drive_speed_during_2nd_section_search, [300]*n)
+    cup_upper_edge = _to_list(cup_upper_edge, [0]*n)
+    ratio_liquid_rise_to_tip_deep_in = _to_list(ratio_liquid_rise_to_tip_deep_in, [0]*n)
+    immersion_depth_2nd_section = _to_list(immersion_depth_2nd_section, [0]*n)
 
     # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
     # manually.
@@ -868,17 +966,53 @@ class STAR(HamiltonLiquidHandler):
         aspiration_volumes=boavs
       )
 
-    # Also filter each cmd_kwarg that is a list
-    for key, value in cmd_kwargs.items():
-      if isinstance(value, list):
-        cmd_kwargs[key] = [v for i, v in enumerate(value) if channels_involved[i]]
-
     try:
       return self.aspirate_pip(
         tip_pattern=channels_involved,
         x_positions=x_positions,
         y_positions=y_positions,
-        **cmd_kwargs,
+
+        aspiration_volumes=aspiration_volumes,
+        lld_search_height=lld_search_height,
+        clot_detection_height=clot_detection_height,
+        liquid_surface_no_lld=[int(ls*10) for ls in liquid_surfaces_no_lld],
+        pull_out_distance_transport_air=pull_out_distance_transport_air,
+        second_section_height=second_section_height,
+        second_section_ratio=second_section_ratio,
+        minimum_height=minimum_height,
+        immersion_depth=immersion_depth,
+        immersion_depth_direction=immersion_depth_direction,
+        surface_following_distance=surface_following_distance,
+        aspiration_speed=aspiration_speed,
+        transport_air_volume=transport_air_volume,
+        blow_out_air_volume=[0]*n,
+        pre_wetting_volume=pre_wetting_volume,
+        lld_mode=[mode.value for mode in lld_mode],
+        gamma_lld_sensitivity=gamma_lld_sensitivity,
+        dp_lld_sensitivity=dp_lld_sensitivity,
+        aspirate_position_above_z_touch_off=aspirate_position_above_z_touch_off,
+        detection_height_difference_for_dual_lld=detection_height_difference_for_dual_lld,
+        swap_speed=swap_speed,
+        settling_time=settling_time,
+        homogenization_volume=homogenization_volume,
+        homogenization_cycles=homogenization_cycles,
+        homogenization_position_from_liquid_surface=homogenization_position_from_liquid_surface,
+        homogenization_speed=homogenization_speed,
+        homogenization_surface_following_distance=homogenization_surface_following_distance,
+        limit_curve_index=limit_curve_index,
+
+        use_2nd_section_aspiration=use_2nd_section_aspiration,
+        retract_height_over_2nd_section_to_empty_tip=retract_height_over_2nd_section_to_empty_tip,
+        dispensation_speed_during_emptying_tip=dispensation_speed_during_emptying_tip,
+        dosing_drive_speed_during_2nd_section_search=dosing_drive_speed_during_2nd_section_search,
+        z_drive_speed_during_2nd_section_search=z_drive_speed_during_2nd_section_search,
+        cup_upper_edge=cup_upper_edge,
+        ratio_liquid_rise_to_tip_deep_in=ratio_liquid_rise_to_tip_deep_in,
+        immersion_depth_2nd_section=immersion_depth_2nd_section,
+
+        minimum_traverse_height_at_beginning_of_a_command=\
+          minimum_traverse_height_at_beginning_of_a_command,
+        min_z_endpos=min_z_endpos,
       )
     except HamiltonFirmwareError as e:
       tll: List[int] = []
@@ -907,78 +1041,178 @@ class STAR(HamiltonLiquidHandler):
     ops: List[Dispense],
     use_channels: List[int],
     blow_out_air_volumes: Union[float, List[float]] = 0,
-    air_transport_retract_dist: float = 10,
-    **backend_kwargs
+
+    dispensing_mode: Optional[List[int]] = None,
+    lld_search_height: Optional[List[int]] = None,
+    pull_out_distance_transport_air: Optional[List[int]] = None,
+    second_section_height: Optional[List[int]] = None,
+    second_section_ratio: Optional[List[int]] = None,
+    minimum_height: Optional[List[int]] = None,
+    immersion_depth: Optional[List[int]] = None,
+    immersion_depth_direction: Optional[List[int]] = None,
+    surface_following_distance: Optional[List[int]] = None,
+    cut_off_speed: Optional[List[int]] = None,
+    stop_back_volume: Optional[List[int]] = None,
+    transport_air_volume: Optional[List[int]] = None,
+    blow_out_air_volume: Optional[List[int]] = None,
+    lld_mode: Optional[List[int]] = None,
+    dispense_position_above_z_touch_off: Optional[List[int]] = None,
+    gamma_lld_sensitivity: Optional[List[int]] = None,
+    dp_lld_sensitivity: Optional[List[int]] = None,
+    swap_speed: Optional[List[int]] = None,
+    settling_time: Optional[List[int]] = None,
+    mix_volume: Optional[List[int]] = None,
+    mix_cycles: Optional[List[int]] = None,
+    mix_position_from_liquid_surface: Optional[List[int]] = None,
+    mix_speed: Optional[List[int]] = None,
+    mix_surface_following_distance: Optional[List[int]] = None,
+    limit_curve_index: Optional[List[int]] = None,
+
+    minimum_traverse_height_at_beginning_of_a_command: int = 2450,
+    min_z_endpos: int = 2450,
+    side_touch_off_distance: int = 0,
   ):
-    """ Dispense liquid from the specified channels. """
+    """ Dispense liquid from the specified channels.
+
+    For all parameters where `None` is the default value, STAR will use the default value, based on
+    the dispenses. For all list parameters, the length of the list must be equal to the number of
+    operations.
+
+    .. warning:: The parameters in this method, with the exception of `ops` and `use_channels`,
+      expect units of tenths of 'millimeters' (i.e. 10 = 1 mm), or tenths of 'microliters' (i.e. 10
+      = 1 ul), or tenths of seconds. Speeds are in 0.1ul/s. This is a deviation from the rest of the
+      API, which uses SI units. This is because the Hamilton API uses these units.
+
+    Args:
+      ops: The dispense operations to perform.
+      use_channels: The channels to use for the dispense operations.
+      blow_out_air_volumes: The amount of air to blow out after dispensing. If a single value is
+        given, it will be used for all operations.
+      dispensing_mode: The dispensing mode to use for each operation.
+      lld_search_height: The height to start searching for the liquid level when using LLD.
+      pull_out_distance_transport_air: The distance to pull out the tip for aspirating transport air
+        if LLD is disabled.
+      second_section_height: Unknown.
+      second_section_ratio: Unknown.
+      minimum_height: The minimum height at the end of the dispense.
+      immersion_depth: The distance above or below to liquid level to start dispensing. See the
+        `immersion_depth_direction` parameter.
+      immersion_depth_direction: (0 = go deeper, 1 = go up out of liquid)
+      surface_following_distance: The distance to follow the liquid surface.
+      cut_off_speed: Unknown.
+      stop_back_volume: Unknown.
+      transport_air_volume: The volume of air to dispense before dispensing the liquid.
+      blow_out_air_volume: The volume of air to blow out after dispensing.
+      lld_mode: The liquid level detection mode to use.
+      dispense_position_above_z_touch_off: The height to move after LLD mode found the Z touch off
+        position.
+      gamma_lld_sensitivity: The gamma LLD sensitivity.
+      dp_lld_sensitivity: The dp LLD sensitivity.
+      swap_speed: The homogenization speed.
+      settling_time: The settling time.
+      mix_volume: The volume to use for homogenization.
+      mix_cycles: The number of homogenization cycles.
+      mix_position_from_liquid_surface: The height to move above the liquid surface for
+        homogenization.
+      mix_speed: The homogenization speed.
+      mix_surface_following_distance: The distance to follow the liquid surface for homogenization.
+      limit_curve_index: The limit curve to use for the dispense.
+      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
+        starting a dispense.
+      min_z_endpos: The minimum height to move to after a dispense.
+      side_touch_off_distance: The distance to move to the side from the well for a dispense.
+    """
 
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
 
-    params = []
+    n = len(ops)
 
-    for op in ops:
-      liquid_surface_no_lld = op.get_absolute_location().z
-      if op.offset.z == 0: # default offset_z is 1
-        liquid_surface_no_lld += 1
+    T = TypeVar("T")
+    def _to_list(val: Optional[List[T]], default: List[T]) -> List[T]:
+      t = type(default[0])
+      if val is not None:
+        if len(val) != len(ops):
+          raise ValueError(f"Value length must match number of operations, but is {val}")
+        if not all(isinstance(v, t) for v in val):
+          raise ValueError(f"Value must be a list of {t}, but is {val}")
+        return val
+      return default
 
-      flow_rate = get_value(op.flow_rate, 120)
+    liquid_surfaces_no_lld = [op.get_absolute_location().z for op in ops]
+    liquid_surfaces_no_lld = [ls + (1 if op.offset.z == 0 else 0) # default to 1 mm above
+                              for ls, op in zip(liquid_surfaces_no_lld, ops)]
 
-      params.append({
-        "dispensing_mode": 2,
-        "dispense_volumes": int(op.volume*10),
-        "lld_search_height": 2321,
-        "liquid_surface_no_lld": int(liquid_surface_no_lld * 10), #1881,
-        "pull_out_distance_transport_air": int(air_transport_retract_dist * 10),
-        "second_section_height": 32,
-        "second_section_ratio": 6180,
-        "minimum_height": 1871,
-        "immersion_depth": 0,
-        "immersion_depth_direction": 0,
-        "surface_following_distance": 0,
-        "dispense_speed": int(flow_rate*10),
-        "cut_off_speed": 50,
-        "stop_back_volume": 0,
-        "transport_air_volume": 0,
-        "blow_out_air_volume": 0, # blow out air volume is handled separately, see below.
-        "lld_mode": 0,
-        "dispense_position_above_z_touch_off": 0,
-        "gamma_lld_sensitivity": 1,
-        "dp_lld_sensitivity": 1,
-        "swap_speed": 20,
-        "settling_time": 0,
-        "mix_volume": 0,
-        "mix_cycles": 0,
-        "mix_position_from_liquid_surface": 0,
-        "mix_speed": 10,
-        "mix_surface_following_distance": 0,
-        "limit_curve_index": 0
-      })
-
-    cmd_kwargs: Dict[str, Any] = {
-      "minimum_traverse_height_at_beginning_of_a_command": 2450,
-      "min_z_endpos": 2450,
-      "side_touch_off_distance": 0,
-    }
-
-    # Convert the list of dictionaries to a single dictionary where all values for the same key are
-    # accumulated in a list with that key.
-    for kwargs in params:
-      for key, value in kwargs.items():
-        if key not in cmd_kwargs:
-          cmd_kwargs[key] = []
-        cmd_kwargs[key].append(value)
-
-    # Update kwargs with user properties.
-    cmd_kwargs.update(backend_kwargs)
+    dispensing_mode = _to_list(dispensing_mode, [2]*n)
+    dispense_volumes = [int(op.volume*10) for op in ops]
+    lld_search_height = _to_list(lld_search_height, [2321]*n)
+    pull_out_distance_transport_air = _to_list(pull_out_distance_transport_air, [100]*n)
+    second_section_height = _to_list(second_section_height, [32]*n)
+    second_section_ratio = _to_list(second_section_ratio, [6180]*n)
+    minimum_height = _to_list(minimum_height, [1871]*n)
+    immersion_depth = _to_list(immersion_depth, [0]*n)
+    immersion_depth_direction = _to_list(immersion_depth_direction, [0]*n)
+    surface_following_distance = _to_list(surface_following_distance, [0]*n)
+    flow_rates = [get_value(op.flow_rate, 120) for op in ops]
+    dispense_speed = [int(fr*10) for fr in flow_rates]
+    cut_off_speed = _to_list(cut_off_speed, [50]*n)
+    stop_back_volume = _to_list(stop_back_volume, [0]*n)
+    transport_air_volume = _to_list(transport_air_volume, [0]*n)
+    # blow out air volume is handled separately see below.
+    blow_out_air_volume = _to_list(blow_out_air_volume, [0]*n)
+    lld_mode = _to_list(lld_mode, [0]*n)
+    dispense_position_above_z_touch_off = _to_list(dispense_position_above_z_touch_off, [0]*n)
+    gamma_lld_sensitivity = _to_list(gamma_lld_sensitivity, [1]*n)
+    dp_lld_sensitivity = _to_list(dp_lld_sensitivity, [1]*n)
+    swap_speed = _to_list(swap_speed, [20]*n)
+    settling_time = _to_list(settling_time, [0]*n)
+    mix_volume = _to_list(mix_volume, [0]*n)
+    mix_cycles = _to_list(mix_cycles, [0]*n)
+    mix_position_from_liquid_surface = _to_list(mix_position_from_liquid_surface, [0]*n)
+    mix_speed = _to_list(mix_speed, [10]*n)
+    mix_surface_following_distance = _to_list(mix_surface_following_distance, [0]*n)
+    limit_curve_index =_to_list(limit_curve_index, [0]*n)
 
     # Do normal dispense first, then blow out air (maybe).
     try:
-      ret =  self.dispense_pip(
+      ret = self.dispense_pip(
         tip_pattern=channels_involved,
         x_positions=x_positions,
         y_positions=y_positions,
-        **cmd_kwargs,
+
+        dispensing_mode=dispensing_mode,
+        dispense_volumes=dispense_volumes,
+        lld_search_height=lld_search_height,
+        liquid_surface_no_lld=[int(ls*10) for ls in liquid_surfaces_no_lld],
+        pull_out_distance_transport_air=pull_out_distance_transport_air,
+        second_section_height=second_section_height,
+        second_section_ratio=second_section_ratio,
+        minimum_height=minimum_height,
+        immersion_depth=immersion_depth,
+        immersion_depth_direction=immersion_depth_direction,
+        surface_following_distance=surface_following_distance,
+        dispense_speed=dispense_speed,
+        cut_off_speed=cut_off_speed,
+        stop_back_volume=stop_back_volume,
+        transport_air_volume=transport_air_volume,
+        blow_out_air_volume=blow_out_air_volume,
+        lld_mode=lld_mode,
+        dispense_position_above_z_touch_off=dispense_position_above_z_touch_off,
+        gamma_lld_sensitivity=gamma_lld_sensitivity,
+        dp_lld_sensitivity=dp_lld_sensitivity,
+        swap_speed=swap_speed,
+        settling_time=settling_time,
+        mix_volume=mix_volume,
+        mix_cycles=mix_cycles,
+        mix_position_from_liquid_surface=mix_position_from_liquid_surface,
+        mix_speed=mix_speed,
+        mix_surface_following_distance=mix_surface_following_distance,
+        limit_curve_index=limit_curve_index,
+
+        minimum_traverse_height_at_beginning_of_a_command=
+          minimum_traverse_height_at_beginning_of_a_command,
+        min_z_endpos=min_z_endpos,
+        side_touch_off_distance=side_touch_off_distance,
       )
     except HamiltonFirmwareError as e:
       tll: List[int] = []
@@ -1017,42 +1251,49 @@ class STAR(HamiltonLiquidHandler):
     return ret
 
   @need_iswap_parked
-  def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
+  def pick_up_tips96(
+    self,
+    tip_rack: TipRack,
+    tip_pickup_method: int = 0,
+    z_deposit_position: int = 2164,
+    minimum_height_command_end: int = 2450,
+    minimum_traverse_height_at_beginning_of_a_command: int = 2450
+  ):
     assert isinstance(tip_rack.tip_type, HamiltonTipType), "Tip type must be HamiltonTipType."
     ttti = self.get_or_assign_tip_type_index(tip_rack.tip_type)
     position = tip_rack.get_item("A1").get_absolute_location()
 
-    cmd_kwargs: Dict[str, Any] = dict(
+    return self.pick_up_tips_core96(
       x_position=int(position.x * 10),
       x_direction=0,
       y_position=int(position.y * 10),
       tip_type_idx=ttti,
-      tip_pickup_method=0,
-      z_deposit_position=2164,
-      minimum_height_command_end=2450,
-      minimum_traverse_height_at_beginning_of_a_command=2450
+      tip_pickup_method=tip_pickup_method,
+      z_deposit_position=z_deposit_position,
+      minimum_height_command_end=minimum_height_command_end,
+      minimum_traverse_height_at_beginning_of_a_command=
+        minimum_traverse_height_at_beginning_of_a_command,
     )
 
-    cmd_kwargs.update(backend_kwargs)
-
-    return self.pick_up_tips_core96(**cmd_kwargs)
-
   @need_iswap_parked
-  def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
+  def drop_tips96(
+    self,
+    tip_rack: TipRack,
+    z_deposit_position: int = 2164,
+    minimum_height_command_end: int = 2450,
+    minimum_traverse_height_at_beginning_of_a_command: int = 2450
+  ):
     position = tip_rack.get_item("A1").get_absolute_location()
 
-    cmd_kwargs: Dict[str, Any] = dict(
+    return self.discard_tips_core96(
       x_position=int(position.x * 10),
       x_direction=0,
       y_position=int(position.y * 10),
-      z_deposit_position=2164,
-      minimum_height_command_end=2450,
-      minimum_traverse_height_at_beginning_of_a_command=2450
+      z_deposit_position=z_deposit_position,
+      minimum_height_command_end=minimum_height_command_end,
+      minimum_traverse_height_at_beginning_of_a_command=
+        minimum_traverse_height_at_beginning_of_a_command,
     )
-
-    cmd_kwargs.update(backend_kwargs)
-
-    return self.discard_tips_core96(**cmd_kwargs)
 
   @need_iswap_parked
   def aspirate96(
@@ -1062,83 +1303,216 @@ class STAR(HamiltonLiquidHandler):
     use_lld: bool = False,
     liquid_height: float = 2,
     air_transport_retract_dist: float = 10,
-    **backend_kwargs
+
+    aspiration_type: int = 0,
+    minimum_traverse_height_at_beginning_of_a_command: int = 2450,
+    minimal_end_height: int = 2450,
+    lld_search_height: int = 1999,
+    maximum_immersion_depth: int = 1269,
+    tube_2nd_section_height_measured_from_zm: int = 32,
+    tube_2nd_section_ratio: int = 6180,
+    immersion_depth: int = 0,
+    immersion_depth_direction: int = 0,
+    liquid_surface_sink_distance_at_the_end_of_aspiration: int = 0,
+    transport_air_volume: int = 50,
+    pre_wetting_volume: int = 50,
+    gamma_lld_sensitivity: int = 1,
+    swap_speed: int = 20,
+    settling_time: int = 10,
+    homogenization_volume: int = 0,
+    homogenization_cycles: int = 0,
+    homogenization_position_from_liquid_surface: int = 0,
+    surface_following_distance_during_homogenization: int = 0,
+    speed_of_homogenization: int = 1200,
+    limit_curve_index: int = 0,
   ):
+    """ Aspirate using the Core96 head.
+
+    .. warning:: The parameters in this method, with the exception of `ops` and `use_channels`,
+      expect units of tenths of 'millimeters' (i.e. 10 = 1 mm), or tenths of 'microliters' (i.e. 10
+      = 1 ul), or tenths of seconds. Speeds are in 0.1ul/s. This is a deviation from the rest of the
+      API, which uses SI units. This is because the Hamilton API uses these units.
+
+    Args:
+      aspiration: The aspiration to perform.
+      blow_out_air_volume: The volume of air to blow out after aspiration, in microliters.
+      use_lld: If True, use gamma liquid level detection. If False, use liquid height.
+      liquid_height: The height of the liquid above the bottom of the well, in millimeters.
+      air_transport_retract_dist: The distance to retract after aspirating, in millimeters.
+
+      aspiration_type: The type of aspiration to perform. (0 = simple; 1 = sequence; 2 = cup emptied
+        )
+      minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
+        starting the command.
+      minimal_end_height: The minimum height to move to after the command.
+      lld_search_height: The height to search for the liquid level.
+      maximum_immersion_depth: The maximum immersion depth.
+      tube_2nd_section_height_measured_from_zm: Unknown.
+      tube_2nd_section_ratio: Unknown.
+      immersion_depth: The immersion depth above or below the liquid level. See
+       `immersion_depth_direction`.
+      immersion_depth_direction: The direction of the immersion depth. (0 = deeper, 1 = out of
+        liquid)
+      transport_air_volume: The volume of air to aspirate after the liquid.
+      pre_wetting_volume: The volume of liquid to use for pre-wetting.
+      gamma_lld_sensitivity: The sensitivity of the gamma liquid level detection.
+      swap_speed: unknown.
+      settling_time: The time to wait after aspirating.
+      homogenization_volume: The volume of liquid to aspirate for homogenization.
+      homogenization_cycles: The number of cycles to perform for homogenization.
+      homogenization_position_from_liquid_surface: The position of the homogenization from the
+        liquid surface.
+      surface_following_distance_during_homogenization: The distance to follow the liquid surface
+        during homogenization.
+      speed_of_homogenization: The speed of homogenization.
+      limit_curve_index: The index of the limit curve to use.
+    """
+
     assert isinstance(aspiration.resource, Plate), "Only ItemizedResource is supported."
     well_a1 = aspiration.resource.get_item("A1")
     position = well_a1.get_absolute_location()
 
     liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
 
-    flow_rate = get_value(aspiration.flow_rate, 250)
+    flow_rate = int(get_value(aspiration.flow_rate, 250)*10)
 
-    cmd_kwargs: Dict[str, Any] = dict(
-      x_position=int(position.x * 10),
-      x_direction=0,
-      y_positions=int(position.y * 10),
-      aspiration_type=0,
-      minimum_traverse_height_at_beginning_of_a_command=2450,
-      minimal_end_height=2450,
-      lld_search_height=1999,
-      liquid_surface_at_function_without_lld=int(liquid_height * 10), # bleach: 1269, plate: 1879
-      pull_out_distance_to_take_transport_air_in_function_without_lld=
-        (air_transport_retract_dist * 10),
-      maximum_immersion_depth=1269,
-      tube_2nd_section_height_measured_from_zm=32,
-      tube_2nd_section_ratio=6180,
-      immersion_depth=0,
-      immersion_depth_direction=0,
-      liquid_surface_sink_distance_at_the_end_of_aspiration=0,
-      aspiration_volumes=int(aspiration.volume*10),
-      aspiration_speed=int(flow_rate * 10),
-      transport_air_volume=50,
-      blow_out_air_volume=0,
-      pre_wetting_volume=50,
-      lld_mode=use_lld,
-      gamma_lld_sensitivity=1,
-      swap_speed=20,
-      settling_time=10,
-      homogenization_volume=0,
-      homogenization_cycles=0,
-      homogenization_position_from_liquid_surface=0,
-      surface_following_distance_during_homogenization=0,
-      speed_of_homogenization=1200,
-      channel_pattern=[True]*12*8,
-      limit_curve_index=0,
-      tadm_algorithm=False,
-      recording_mode=0
-    )
+    aspiration_volumes = int(aspiration.volume * 10)
 
-    cmd_kwargs.update(backend_kwargs)
+    channel_pattern = [True]*12*8
+
+    liquid_surface_at_function_without_lld = int(liquid_height * 10)
+    pull_out_distance_to_take_transport_air_in_function_without_lld = \
+      int(air_transport_retract_dist * 10)
 
     # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
     # manually.
     if blow_out_air_volume is not None and blow_out_air_volume > 0:
-      aspirate_air_cmd_kwargs = cmd_kwargs.copy()
-      aspirate_air_cmd_kwargs.update(dict(
+      self.aspirate_core_96(
         x_position=int(position.x * 10),
         y_positions=int(position.y * 10),
         lld_mode=0,
         liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
         aspiration_volumes=int(blow_out_air_volume * 10)
-      ))
-      self.aspirate_core_96(**aspirate_air_cmd_kwargs)
+      )
 
-    return self.aspirate_core_96(**cmd_kwargs)
+    return self.aspirate_core_96(
+      x_position=int(position.x * 10),
+      x_direction=0,
+      y_positions=int(position.y * 10),
+      aspiration_type=aspiration_type,
+
+      minimum_traverse_height_at_beginning_of_a_command=
+       minimum_traverse_height_at_beginning_of_a_command,
+      minimal_end_height=minimal_end_height,
+      lld_search_height=lld_search_height,
+      liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld,
+      pull_out_distance_to_take_transport_air_in_function_without_lld=
+       pull_out_distance_to_take_transport_air_in_function_without_lld,
+      maximum_immersion_depth=maximum_immersion_depth,
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      immersion_depth=immersion_depth,
+      immersion_depth_direction=immersion_depth_direction,
+      liquid_surface_sink_distance_at_the_end_of_aspiration=
+       liquid_surface_sink_distance_at_the_end_of_aspiration,
+      aspiration_volumes=aspiration_volumes,
+      aspiration_speed=flow_rate,
+      transport_air_volume=transport_air_volume,
+      blow_out_air_volume=0,
+      pre_wetting_volume=pre_wetting_volume,
+      lld_mode=int(use_lld),
+      gamma_lld_sensitivity=gamma_lld_sensitivity,
+      swap_speed=swap_speed,
+      settling_time=settling_time,
+      homogenization_volume=homogenization_volume,
+      homogenization_cycles=homogenization_cycles,
+      homogenization_position_from_liquid_surface=
+       homogenization_position_from_liquid_surface,
+      surface_following_distance_during_homogenization=
+       surface_following_distance_during_homogenization,
+      speed_of_homogenization=speed_of_homogenization,
+      channel_pattern=channel_pattern,
+      limit_curve_index=limit_curve_index,
+      tadm_algorithm=False,
+      recording_mode=0,
+    )
 
   @need_iswap_parked
   def dispense96(
     self,
     dispense: Dispense,
-    mix_cycles=0,
-    mix_volume=0,
-    jet=False,
-    blow_out=True, # TODO: do we need this if we can just check if blow_out_air_volume > 0?
+    jet: bool = False,
+    blow_out: bool = True, # TODO: do we need this if we can just check if blow_out_air_volume > 0?
     liquid_height: float = 2,
     dispense_mode=3,
     air_transport_retract_dist=10,
-    blow_out_air_volume: float = 0,
+    blow_out_air_volume: Optional[float] = None,
+    use_lld: bool = False,
+
+    minimum_traverse_height_at_beginning_of_a_command: int = 2450,
+    minimal_end_height: int = 2450,
+    lld_search_height: int = 1999,
+    maximum_immersion_depth: int = 1869,
+    tube_2nd_section_height_measured_from_zm: int = 32,
+    tube_2nd_section_ratio: int = 6180,
+    immersion_depth: int = 0,
+    immersion_depth_direction: int = 0,
+    liquid_surface_sink_distance_at_the_end_of_dispense: int = 0,
+    transport_air_volume: int = 50,
+    gamma_lld_sensitivity: int = 1,
+    swap_speed: int = 20,
+    settling_time: int = 0,
+    mixing_volume: int = 0,
+    mixing_cycles: int = 0,
+    mixing_position_from_liquid_surface: int = 0,
+    surface_following_distance_during_mixing: int = 0,
+    speed_of_mixing: int = 1200,
+    limit_curve_index: int = 0,
+    cut_off_speed: int = 50,
+    stop_back_volume: int = 0,
   ):
+    """ Aspirate using the Core96 head.
+
+    .. warning:: The parameters in this method, with the exception of `ops` and `use_channels`,
+      expect units of tenths of 'millimeters' (i.e. 10 = 1 mm), or tenths of 'microliters' (i.e. 10
+      = 1 ul), or tenths of seconds. Speeds are in 0.1ul/s. This is a deviation from the rest of the
+      API, which uses SI units. This is because the Hamilton API uses these units.
+
+    Args:
+      dispense: The Dispense command to execute.
+      jet: Whether to use jet dispense mode.
+      blow_out: Whether to blow out after dispensing.
+      liquid_height: The height of the liquid in the well, in mm. Used if LLD is not used.
+      dispense_mode: The dispense mode to use. 0 = Partial volume in jet mode 1 = Blow out in jet
+        mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix position
+      air_transport_retract_dist: The distance to retract after dispensing, in mm.
+      blow_out_air_volume: The volume of air to blow out after dispensing, in ul.
+      use_lld: Whether to use gamma LLD.
+
+      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
+        command, in mm.
+      minimal_end_height: Minimal end height, in mm.
+      lld_search_height: LLD search height, in mm.
+      maximum_immersion_depth: Maximum immersion depth, in mm. Equals Minimum height during command.
+      tube_2nd_section_height_measured_from_zm: Unknown.
+      tube_2nd_section_ratio: Unknown.
+      immersion_depth: Immersion depth, in mm. See `immersion_depth_direction`.
+      immersion_depth_direction: Immersion depth direction. 0 = go deeper, 1 = go up out of liquid.
+      liquid_surface_sink_distance_at_the_end_of_dispense: Unknown.
+      transport_air_volume: Transport air volume, to dispense before aspiration.
+      gamma_lld_sensitivity: Gamma LLD sensitivity.
+      swap_speed: Unknown.
+      settling_time: Settling time, in 0.1 seconds.
+      mixing_volume: Mixing volume, in ul.
+      mixing_cycles: Mixing cycles.
+      mixing_position_from_liquid_surface: Mixing position from liquid surface, in mm.
+      surface_following_distance_during_mixing: Surface following distance during mixing, in mm.
+      speed_of_mixing: Speed of mixing, in 0.1 ul/s.
+      limit_curve_index: Limit curve index.
+      cut_off_speed: Unknown.
+      stop_back_volume: Unknown.
+    """
+
     assert isinstance(dispense.resource, Plate), "Only ItemizedResource is supported."
     well_a1 = dispense.resource.get_item("A1")
     position = well_a1.get_absolute_location()
@@ -1154,58 +1528,63 @@ class STAR(HamiltonLiquidHandler):
 
     flow_rate = get_value(dispense.flow_rate, 120)
 
-    cmd_kwargs = dict(
+    liquid_surface_at_function_without_lld: int = int(liquid_height*10)
+    pull_out_distance_to_take_transport_air_in_function_without_lld = air_transport_retract_dist*10
+
+    channel_pattern = [True]*12*8
+
+    ret = self.dispense_core_96(
       dispensing_mode=dispense_mode,
       x_position=int(position.x * 10),
       x_direction=0,
       y_position=int(position.y * 10),
-      minimum_traverse_height_at_beginning_of_a_command=2450,
-      minimal_end_height=2450,
-      lld_search_height=1999,
-      liquid_surface_at_function_without_lld=int(liquid_height*10), # in [0.1mm]
+
+      minimum_traverse_height_at_beginning_of_a_command=
+        minimum_traverse_height_at_beginning_of_a_command,
+      minimal_end_height=minimal_end_height,
+      lld_search_height=lld_search_height,
+      liquid_surface_at_function_without_lld=
+        liquid_surface_at_function_without_lld,
       pull_out_distance_to_take_transport_air_in_function_without_lld=
-        int(air_transport_retract_dist*10), # in [0.1mm]
-      maximum_immersion_depth=1869,
-      tube_2nd_section_height_measured_from_zm=32,
-      tube_2nd_section_ratio=6180,
-      immersion_depth=0,
-      immersion_depth_direction=0,
-      liquid_surface_sink_distance_at_the_end_of_dispense=0,
-      dispense_volume=int(dispense.volume*10),
+        pull_out_distance_to_take_transport_air_in_function_without_lld,
+      maximum_immersion_depth=maximum_immersion_depth,
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      immersion_depth=immersion_depth,
+      immersion_depth_direction=immersion_depth_direction,
+      liquid_surface_sink_distance_at_the_end_of_dispense=
+        liquid_surface_sink_distance_at_the_end_of_dispense,
+      dispense_volume=int(dispense.volume * 10),
       dispense_speed=int(flow_rate * 10),
-      transport_air_volume=50,
+      transport_air_volume=transport_air_volume,
       blow_out_air_volume=0,
-      lld_mode=False,
-      gamma_lld_sensitivity=1,
-      swap_speed=20,
-      settling_time=0,
-      mixing_volume=int(mix_volume*10), # in [0.1ul]
-      mixing_cycles=mix_cycles,
-      mixing_position_from_liquid_surface=0,
-      surface_following_distance_during_mixing=0,
-      speed_of_mixing=1200,
-      channel_pattern=[True]*12*8,
-      limit_curve_index=0,
+      lld_mode=int(use_lld),
+      gamma_lld_sensitivity=gamma_lld_sensitivity,
+      swap_speed=swap_speed,
+      settling_time=settling_time,
+      mixing_volume=mixing_volume,
+      mixing_cycles=mixing_cycles,
+      mixing_position_from_liquid_surface=mixing_position_from_liquid_surface,
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+      speed_of_mixing=speed_of_mixing,
+      channel_pattern=channel_pattern,
+      limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
       recording_mode=0,
-      cut_off_speed=50,
-      stop_back_volume=0,
+      cut_off_speed=cut_off_speed,
+      stop_back_volume=stop_back_volume,
     )
-
-    ret = self.dispense_core_96(**cmd_kwargs)
 
     # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we dispense air
     # manually.
     if blow_out_air_volume is not None and blow_out_air_volume > 0:
-      dispense_air_cmd_kwargs = cmd_kwargs.copy()
-      dispense_air_cmd_kwargs.update(dict(
+      self.dispense_core_96(
         x_position=int(position.x * 10),
         y_position=int(position.y * 10),
         lld_mode=0,
         liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
         dispense_volume=int(blow_out_air_volume * 10),
-      ))
-      self.dispense_core_96(**dispense_air_cmd_kwargs)
+      )
 
     return ret
 
@@ -3369,7 +3748,7 @@ class STAR(HamiltonLiquidHandler):
     mixing_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mixing: int = 0,
     speed_of_mixing: int = 1000,
-    channel_pattern: List[List[bool]] = [[True]*12]*8,
+    channel_pattern: List[bool] = [True]*12*8,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
     recording_mode: int = 0
