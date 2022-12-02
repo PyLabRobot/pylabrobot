@@ -504,6 +504,9 @@ class STAR(HamiltonLiquidHandler):
     while self._read_packet() is not None:
       pass
 
+    tip_presences = self.request_tip_presence()
+    self._num_channels = len(tip_presences)
+
     initialized = self.request_instrument_initialization_status()
     if not initialized:
       logger.info("Running backend initialization procedure.")
@@ -540,9 +543,6 @@ class STAR(HamiltonLiquidHandler):
 
       self.park_iswap()
       self._iswap_parked = True
-
-    tip_presences = self.request_tip_presence()
-    self._num_channels = len(tip_presences)
 
   def stop(self):
     if self.dev is None:
