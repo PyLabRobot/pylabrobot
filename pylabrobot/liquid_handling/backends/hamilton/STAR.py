@@ -152,7 +152,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       res = self.dev.read(
         self.read_endpoint,
         self.read_endpoint.wMaxPacketSize,
-        timeout=int(self.read_timeout * 1000) # timeout in ms
+        timeout=int(self.packet_read_timeout * 1000) # timeout in ms
       )
 
       if res is not None:
@@ -656,7 +656,7 @@ class STAR(HamiltonLiquidHandler):
     index for that tip type.
     """
 
-    tip_types = set(tip.tip_type for tip in tips if tip is not None)
+    tip_types = set(tip.tip_type for tip in tips)
     if len(tip_types) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
     if len(tip_types) == 0:
@@ -674,7 +674,6 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ Pick up tips from a resource. """
 
-    # TODO: channels involved
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
 
@@ -685,7 +684,7 @@ class STAR(HamiltonLiquidHandler):
     max_tip_length = max((op.tip_type.total_tip_length-op.tip_type.fitting_depth) for op in ops)
 
     try:
-      tip_type = ops[0].resource.tip_type
+      tip_type = ops[0].tip_type
       assert isinstance(tip_type, HamiltonTipType), "Tip type must be HamiltonTipType."
       return self.pick_up_tip(
         x_positions=x_positions,
