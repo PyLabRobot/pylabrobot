@@ -527,11 +527,19 @@ class STAR(HamiltonLiquidHandler):
         discarding_method=0
       )
 
-    if not self.request_iswap_initialization_status():
+    extended_conf = self.request_extended_configuration()
+    left_x_drive_configuration_byte_1 = bin(extended_conf["xl"])
+    left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1 + \
+      "0" * (16 - len(left_x_drive_configuration_byte_1))
+    left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1[2:]
+    self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
+    self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
+
+    if self.iswap_installed and not self.request_iswap_initialization_status():
       self.initialize_iswap()
 
-    self.park_iswap()
-    self._iswap_parked = True
+      self.park_iswap()
+      self._iswap_parked = True
 
     tip_presences = self.request_tip_presence()
     self._num_channels = len(tip_presences)
@@ -1258,6 +1266,7 @@ class STAR(HamiltonLiquidHandler):
     minimum_height_command_end: int = 2450,
     minimum_traverse_height_at_beginning_of_a_command: int = 2450
   ):
+    assert self.core96_head_installed, "96 head must be installed"
     assert isinstance(tip_rack.tip_type, HamiltonTipType), "Tip type must be HamiltonTipType."
     ttti = self.get_or_assign_tip_type_index(tip_rack.tip_type)
     position = tip_rack.get_item("A1").get_absolute_location()
@@ -1282,6 +1291,7 @@ class STAR(HamiltonLiquidHandler):
     minimum_height_command_end: int = 2450,
     minimum_traverse_height_at_beginning_of_a_command: int = 2450
   ):
+    assert self.core96_head_installed, "96 head must be installed"
     position = tip_rack.get_item("A1").get_absolute_location()
 
     return self.discard_tips_core96(
@@ -1366,6 +1376,8 @@ class STAR(HamiltonLiquidHandler):
       speed_of_homogenization: The speed of homogenization.
       limit_curve_index: The index of the limit curve to use.
     """
+
+    assert self.core96_head_installed, "96 head must be installed"
 
     assert isinstance(aspiration.resource, Plate), "Only ItemizedResource is supported."
     well_a1 = aspiration.resource.get_item("A1")
@@ -1512,6 +1524,8 @@ class STAR(HamiltonLiquidHandler):
       stop_back_volume: Unknown.
     """
 
+    assert self.core96_head_installed, "96 head must be installed"
+
     assert isinstance(dispense.resource, Plate), "Only ItemizedResource is supported."
     well_a1 = dispense.resource.get_item("A1")
     position = well_a1.get_absolute_location()
@@ -1593,6 +1607,8 @@ class STAR(HamiltonLiquidHandler):
     plate_width: float = 127,
   ):
     """ Move a resource to a new position. """
+
+    assert self.iswap_installed, "iswap must be installed"
 
     # Get center of source plate. Also gripping height.
     x = move.get_absolute_from_location().x + move.resource.get_size_x()/2
@@ -2236,7 +2252,7 @@ class STAR(HamiltonLiquidHandler):
     """ Request extended configuration """
 
     resp = self.send_command(module="C0", command="QM")
-    return self.parse_response(resp, fmt="QMid####ka******ke********xt##xa##xw#####xl**" + \
+    return self.parse_response(resp, fmt="ka******ke********xt##xa##xw#####xl**" + \
             "xn**xr**xo**xm#####xx#####xu####xv####kc#kr#ys###kl###km###ym####yu####yx####")
 
   def request_node_names(self):
