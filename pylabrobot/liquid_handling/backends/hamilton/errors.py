@@ -14,12 +14,13 @@ class HamiltonModuleError(Exception, metaclass=ABCMeta):
     raw_response: str,
     raw_module: str,
   ):
-    super().__init__(message)
     self.message = message
     self.trace_information = trace_information
     self.raw_response = raw_response
     self.raw_module = raw_module
 
+  def __repr__(self) -> str:
+    return f"{self.__class__.__name__}('{self.message}')"
 
 class CommandSyntaxError(HamiltonModuleError):
   """ Command syntax error
@@ -718,7 +719,7 @@ class HamiltonFirmwareError(HamiltonError):
         trace_information = int(error)
       error_description = HamiltonFirmwareError.trace_information_to_string(
         module_identifier=module_id, trace_information=trace_information)
-      self.errors[module_name] = error_class(error_description,
+      self.errors[module_name] = error_class(message=error_description,
                                              trace_information=trace_information,
                                              raw_response=error,
                                              raw_module=module_id)
@@ -727,7 +728,8 @@ class HamiltonFirmwareError(HamiltonError):
     if isinstance(self.errors.get("Master"), SlaveError):
       self.errors.pop("Master")
 
-    super().__init__(str(self.errors))
+  def __str__(self) -> str:
+    return f"HamiltonFirmwareError({{{self.errors.items()}}})"
 
   def __len__(self) -> int:
     return len(self.errors)

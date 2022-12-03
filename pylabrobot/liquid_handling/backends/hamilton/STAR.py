@@ -331,11 +331,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       he = HamiltonFirmwareError(errors_dict, raw_response=resp)
 
       # If there is a faulty parameter error, request which parameter that is.
-      # TODO: does this work?
       for module_name, error in he.items():
         if error.message == "Unknown parameter":
-          vp = self.send_command(module=error.raw_module, command="VP", fmt="vp&&")
-          he[module_name] += f" ({vp})"
+          vp = self.send_command(module=error.raw_module, command="VP", fmt="vp&&")["vp"]
+          he[module_name].message += f" ({vp})"
 
       raise he
 
