@@ -13,7 +13,7 @@ import time
 from typing import Callable, List, Optional, Tuple, Union, Sequence, TypeVar, cast
 
 from pylabrobot import utils
-from pylabrobot.default import get_value
+from pylabrobot.default import Default, get_value, is_default
 from pylabrobot.liquid_handling.errors import (
   ChannelHasTipError,
   ChannelHasNoTipError,
@@ -642,8 +642,15 @@ class STAR(HamiltonLiquidHandler):
         x_positions.append(0)
         y_positions.append(0)
       channels_involved.append(True)
-      x_positions.append(int(ops[i].get_absolute_location().x*10))
-      y_positions.append(int(ops[i].get_absolute_location().y*10))
+      x_pos = ops[i].get_absolute_location().x
+      if ops[i].offset is Default:
+        x_pos += ops[i].resource.center().x
+      x_positions.append(int(x_pos*10))
+
+      y_pos = ops[i].get_absolute_location().y
+      if ops[i].offset is Default:
+        y_pos += ops[i].resource.center().y
+      y_positions.append(int(y_pos*10))
 
     if len(ops) > self.num_channels:
       raise ValueError(f"Too many channels specified: {len(ops)} > {self.num_channels}")
@@ -907,7 +914,7 @@ class STAR(HamiltonLiquidHandler):
       return default
 
     liquid_surfaces_no_lld = [op.get_absolute_location().z for op in ops]
-    liquid_surfaces_no_lld = [ls + (1 if op.offset.z == 0 else 0) # default to 1 mm above
+    liquid_surfaces_no_lld = [ls + (1 if is_default(op.offset) else 0) + op.liquid_height
                               for ls, op in zip(liquid_surfaces_no_lld, ops)]
 
     aspiration_volumes = [int(op.volume * 10) for op in ops]
@@ -1147,7 +1154,7 @@ class STAR(HamiltonLiquidHandler):
       return default
 
     liquid_surfaces_no_lld = [op.get_absolute_location().z for op in ops]
-    liquid_surfaces_no_lld = [ls + (1 if op.offset.z == 0 else 0) # default to 1 mm above
+    liquid_surfaces_no_lld = [ls + (1 if is_default(op.offset) else 0) + op.liquid_height
                               for ls, op in zip(liquid_surfaces_no_lld, ops)]
 
     dispensing_mode = _to_list(dispensing_mode, [2]*n)
@@ -1269,7 +1276,8 @@ class STAR(HamiltonLiquidHandler):
     assert self.core96_head_installed, "96 head must be installed"
     assert isinstance(tip_rack.tip_type, HamiltonTipType), "Tip type must be HamiltonTipType."
     ttti = self.get_or_assign_tip_type_index(tip_rack.tip_type)
-    position = tip_rack.get_item("A1").get_absolute_location()
+    tip_a1 = tip_rack.get_item("A1")
+    position = tip_a1.get_absolute_location() + tip_a1.center()
 
     return self.pick_up_tips_core96(
       x_position=int(position.x * 10),
@@ -1292,7 +1300,8 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 2450
   ):
     assert self.core96_head_installed, "96 head must be installed"
-    position = tip_rack.get_item("A1").get_absolute_location()
+    tip_a1 = tip_rack.get_item("A1")
+    position = tip_a1.get_absolute_location() + tip_a1.center()
 
     return self.discard_tips_core96(
       x_position=int(position.x * 10),
@@ -1381,7 +1390,7 @@ class STAR(HamiltonLiquidHandler):
 
     assert isinstance(aspiration.resource, Plate), "Only ItemizedResource is supported."
     well_a1 = aspiration.resource.get_item("A1")
-    position = well_a1.get_absolute_location()
+    position = well_a1.get_absolute_location() + well_a1.center()
 
     liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
 
@@ -1528,7 +1537,7 @@ class STAR(HamiltonLiquidHandler):
 
     assert isinstance(dispense.resource, Plate), "Only ItemizedResource is supported."
     well_a1 = dispense.resource.get_item("A1")
-    position = well_a1.get_absolute_location()
+    position = well_a1.get_absolute_location() + well_a1.center()
 
     liquid_height = dispense.resource.get_absolute_location().z + liquid_height
 

@@ -292,7 +292,8 @@ class HamiltonDeck(Deck):
           else:
             subresource = site.resource
             if isinstance(subresource, (TipRack, Plate)):
-              location = subresource.get_item("A1").get_absolute_location()
+              location = subresource.get_item("A1").get_absolute_location() + \
+                subresource.get_item("A1").center()
             else:
               location = subresource.get_absolute_location()
             r_summary += f"     │   ├── {utils.pad_string(subresource.name, 27-4)}" + \

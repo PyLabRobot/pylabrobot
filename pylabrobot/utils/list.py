@@ -1,6 +1,7 @@
 """ Utilities for working with lists. """
 
-from typing import List, Tuple, TypeVar, Union
+import collections.abc
+from typing import List, Tuple, TypeVar, Union, Sequence, cast
 
 
 T = TypeVar("T")
@@ -45,11 +46,12 @@ def reshape_2d(list_: List[T], shape: Tuple[int, int]) -> List[List[T]]:
   return new_list
 
 
-def expand(list_or_item: Union[List[T], T], n: int) -> List[T]:
+def expand(list_or_item: Union[Sequence[T], T], n: int) -> List[T]:
   if n <= 0:
     raise ValueError(f"Cannot expand list {list_or_item} by {n}.")
-  if isinstance(list_or_item, list):
+  if isinstance(list_or_item, collections.abc.Sequence) and not isinstance(list_or_item, str):
     if len(list_or_item) != n:
       raise ValueError(f"Expected list of length {n}, got {len(list_or_item)}.")
-    return list_or_item
-  return [list_or_item] * n
+    return list(list_or_item)
+  # cast to T to avoid mypy error (thinks it's a string). This can probably be written better.
+  return [cast(T, list_or_item)] * n

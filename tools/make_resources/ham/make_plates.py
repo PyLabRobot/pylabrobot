@@ -29,8 +29,10 @@ def make_from_file(fn, o):
   well_size_x = find_float('Dx', c)
   well_size_y = find_float('Dy', c)
 
-  dx = find_float('BndryX', c) or 0
-  dy = find_float('BndryY', c) or 0
+  # rck files use the center of the well, but we want the bottom left corner.
+  dx = round(find_float('BndryX', c) - well_size_x/2, 4)
+  print(dx, find_float('BndryX', c), well_size_x/2)
+  dy = round(find_float('BndryY', c) - well_size_y/2, 4)
   dz = 0
 
   cname = os.path.basename(fn).split('.')[0]

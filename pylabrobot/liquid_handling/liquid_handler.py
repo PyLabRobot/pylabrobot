@@ -202,7 +202,7 @@ class LiquidHandler:
     self,
     tips: List[TipSpot],
     use_channels: Optional[List[int]] = None,
-    offsets: Union[Coordinate, List[Coordinate]] = Coordinate.zero(),
+    offsets: Defaultable[Union[Coordinate, List[Defaultable[Coordinate]]]] = Default,
     **backend_kwargs
   ):
     """ Pick up tips from a resource.
@@ -286,7 +286,7 @@ class LiquidHandler:
     self,
     tips: List[Union[TipSpot, Resource]],
     use_channels: Optional[List[int]] = None,
-    offsets: Union[Coordinate, List[Coordinate]] = Coordinate.zero(),
+    offsets: Defaultable[Union[Coordinate, List[Defaultable[Coordinate]]]] = Default,
     tip_types: Optional[Union[List[TipType], TipType]] = None,
     **backend_kwargs
   ):
@@ -462,7 +462,8 @@ class LiquidHandler:
     use_channels: Optional[List[int]] = None,
     flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
     end_delay: float = 0,
-    offsets: Optional[Union[Coordinate, List[Coordinate]]] = None,
+    offsets: Union[Defaultable[Coordinate], Sequence[Defaultable[Coordinate]]] = Default,
+    liquid_height: Union[float, List[float]] = 0,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified wells.
@@ -506,6 +507,7 @@ class LiquidHandler:
         the tips used in the aspiration are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
         aspiration location. If `None`, no offset will be applied.
+      liquid_height: The height of the liquid in the well, in mm.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -525,7 +527,7 @@ class LiquidHandler:
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
-      if offsets is not None:
+      if offsets is not Default:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when aspirating "
                           "from a resource.")
@@ -543,18 +545,16 @@ class LiquidHandler:
       if use_channels is None:
         use_channels = list(range(len(resources)))
 
-      if offsets is None:
-        offsets = Coordinate.zero()
       offsets = expand(offsets, n)
 
     vols = expand(vols, n)
-
     flow_rates = expand(flow_rates, n)
+    liquid_height = expand(liquid_height, n)
 
-    assert len(vols) == len(offsets) == len(flow_rates)
+    assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
-    aspirations = [Aspiration(r, v, offset=offset, flow_rate=fr)
-                   for r, v, offset, fr in zip(resources, vols, offsets, flow_rates)]
+    aspirations = [Aspiration(r, v, offset=o, flow_rate=fr, liquid_height=lh)
+                   for r, v, o, fr, lh in zip(resources, vols, offsets, flow_rates, liquid_height)]
 
     self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
 
@@ -569,7 +569,8 @@ class LiquidHandler:
     use_channels: Optional[List[int]] = None,
     flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
     end_delay: float = 0,
-    offsets: Optional[Union[Coordinate, List[Coordinate]]] = None,
+    offsets: Union[Defaultable[Coordinate], Sequence[Defaultable[Coordinate]]] = Default,
+    liquid_height: Union[float, List[float]] = 0,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
@@ -613,6 +614,7 @@ class LiquidHandler:
         the tips used in the dispense are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
         dispense location. If `None`, no offset will be applied.
+      liquid_height: The height of the liquid in the well, in mm.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -634,7 +636,7 @@ class LiquidHandler:
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
-      if offsets is not None:
+      if offsets is not Default:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when dispensing "
                           "to a resource.")
@@ -652,18 +654,16 @@ class LiquidHandler:
       if use_channels is None:
         use_channels = list(range(len(resources)))
 
-      if offsets is None:
-        offsets = Coordinate.zero()
       offsets = expand(offsets, n)
 
     vols = expand(vols, n)
-
     flow_rates = expand(flow_rates, n)
+    liquid_height = expand(liquid_height, n)
 
-    assert len(vols) == len(offsets) == len(flow_rates)
+    assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
-    dispenses = [Dispense(r, v, offset=offset, flow_rate=fr)
-                   for r, v, offset, fr in zip(resources, vols, offsets, flow_rates)]
+    dispenses = [Dispense(r, v, offset=o, flow_rate=fr, liquid_height=lh)
+                   for r, v, o, fr, lh in zip(resources, vols, offsets, flow_rates, liquid_height)]
 
     self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
 

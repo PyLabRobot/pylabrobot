@@ -43,12 +43,14 @@ def make_from_file(fn, o):
     tip_type = find_string("PropertyValue.4", c)
   tip_type = tip_table[tip_type]
 
-  dx = find_float('BndryX', c) or 0
-  dy = find_float('BndryY', c) or 0
-  dz = find_float('Cntr.1.base', c) or 0
-
   tip_size_x = find_float('Dx', c)
   tip_size_y = find_float('Dy', c)
+
+  # rck files use the center of the well, but we want the bottom left corner.
+  dx = round(find_float('BndryX', c) - tip_size_x/2, 4)
+  dy = round(find_float('BndryY', c) - tip_size_y/2, 4)
+  dz = find_float('Cntr.1.base', c)
+
   num_items_x = find_int("Columns", c)
   num_items_y = find_int("Rows", c)
 

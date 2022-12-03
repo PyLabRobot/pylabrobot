@@ -266,3 +266,8 @@ class Resource:
     new_resource = copy.deepcopy(self)
     new_resource.rotate(degrees)
     return new_resource
+
+  def center(self) -> Coordinate:
+    """ Get the center of this resource. """
+
+    return Coordinate(self.get_size_x() / 2, self.get_size_y() / 2, 0)
