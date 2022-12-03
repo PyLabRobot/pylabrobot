@@ -74,6 +74,12 @@ class TestItemizedResource(unittest.TestCase):
     self.assertEqual([w.name for w in self.plate["A1:B2"]],
       ["plate_well_0_0", "plate_well_1_0", "plate_well_0_1", "plate_well_1_1"])
 
+  def test_getitem_str_error(self):
+    with self.assertRaises(IndexError):
+      _ = self.plate["A13"]
+    with self.assertRaises(IndexError):
+      _ = self.plate["T1"]
+
   def test_getitem_tuple_int(self):
     self.assertEqual([w.name for w in self.plate[0, 4, 1]],
       ["plate_well_0_0", "plate_well_0_4", "plate_well_0_1"])

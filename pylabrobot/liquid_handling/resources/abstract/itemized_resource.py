@@ -171,6 +171,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     if isinstance(identifier, str):
       row, column = pylabrobot.utils.string_to_position(identifier)
+      if not 0 <= row < self.num_items_y or not 0 <= column < self.num_items_x:
+        raise IndexError(f"Identifier '{identifier}' out of range.")
       identifier = row + column * self.num_items_y
 
     if not 0 <= identifier < (self.num_items_x * self.num_items_y):
