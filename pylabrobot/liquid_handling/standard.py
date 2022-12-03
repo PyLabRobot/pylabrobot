@@ -6,7 +6,7 @@ from abc import ABC, ABCMeta
 import enum
 from typing import TYPE_CHECKING
 
-from pylabrobot.default import Defaultable, Default, is_default
+from pylabrobot.default import Defaultable, Default, is_not_default
 from pylabrobot.liquid_handling.tip_type import TipType
 from .resources.abstract.coordinate import Coordinate
 if TYPE_CHECKING:
@@ -17,13 +17,15 @@ if TYPE_CHECKING:
 class PipettingOp(ABC):
   """ Some atomic pipetting operation. """
 
-  def __init__(self, resource: Resource, offset: Coordinate = Coordinate.zero()):
+  def __init__(self, resource: Resource, offset: Defaultable[Coordinate] = Default):
     self.resource = resource
     self.offset = offset
 
   def get_absolute_location(self) -> Coordinate:
     """ Returns the absolute location of the resource. """
-    return self.resource.get_absolute_location() + self.offset
+    if is_not_default(self.offset):
+      return self.resource.get_absolute_location() + self.offset
+    return self.resource.get_absolute_location()
 
   def __eq__(self, other: object) -> bool:
     return (
@@ -41,14 +43,19 @@ class PipettingOp(ABC):
   def serialize(self) -> dict:
     return {
       "resource_name": self.resource.name,
-      "offset": self.offset.serialize()
+      "offset": self.offset.serialize() if is_not_default(self.offset) else "default"
     }
 
 
 class TipOp(PipettingOp, metaclass=ABCMeta):
   """ Abstract base class for tip operations. """
 
-  def __init__(self, resource: Resource, tip_type: TipType, offset: Coordinate = Coordinate.zero()):
+  def __init__(
+    self,
+    resource: Resource,
+    tip_type: TipType,
+    offset: Defaultable[Coordinate] = Default
+  ):
     super().__init__(resource, offset)
     self.tip_type = tip_type
 
@@ -69,7 +76,12 @@ class TipOp(PipettingOp, metaclass=ABCMeta):
 class Pickup(TipOp):
   """ A pickup operation. """
 
-  def __init__(self, resource: TipSpot, tip_type: TipType, offset: Coordinate = Coordinate.zero()):
+  def __init__(
+    self,
+    resource: TipSpot,
+    tip_type: TipType,
+    offset: Defaultable[Coordinate] = Default
+  ):
     super().__init__(resource, tip_type, offset)
     self.resource: TipSpot = resource # fix type
 
@@ -79,7 +91,7 @@ class Pickup(TipOp):
     tip_type = TipType.deserialize(data.pop("tip_type"))
     return Pickup(
       resource=resource,
-      offset=Coordinate.deserialize(data["offset"]),
+      offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
       tip_type=tip_type
     )
 
@@ -93,7 +105,7 @@ class Drop(TipOp):
     tip_type = TipType.deserialize(data.pop("tip_type"))
     return Drop(
       resource=resource,
-      offset=Coordinate.deserialize(data["offset"]),
+      offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
       tip_type=tip_type
     )
 
@@ -113,7 +125,8 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     resource: Resource,
     volume: float,
     flow_rate: Defaultable[float] = Default,
-    offset: Coordinate = Coordinate.zero(),
+    offset: Defaultable[Coordinate] = Default,
+    liquid_height: float = 0,
   ):
     """ Initialize the operation.
 
@@ -122,12 +135,14 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       volume: The volume of the liquid that is being handled. In ul.
       flow_rate: The flow rate. None is default for the Machine. In ul/s.
       offset: The offset in the z direction. In mm.
+      liquid_height: The height of the liquid in the well. In mm.
     """
 
     super().__init__(resource, offset)
 
     self.volume = volume
     self.flow_rate = flow_rate
+    self.liquid_height = liquid_height
 
   def __eq__(self, other: object) -> bool:
     return super().__eq__(other) and (
@@ -135,16 +150,17 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       self.resource == other.resource and
       self.volume == other.volume and
       self.flow_rate == other.flow_rate and
-      self.offset == other.offset
+      self.offset == other.offset and
+      self.liquid_height == other.liquid_height
     )
 
   def __hash__(self) -> int:
-    return hash((self.resource, self.volume, self.flow_rate, self.offset))
+    return hash((self.resource, self.volume, self.flow_rate, self.offset, self.liquid_height))
 
   def __repr__(self) -> str:
     return (
       f"{self.__class__.__name__}(resource={repr(self.resource)}, volume={repr(self.volume)}, "
-      f"flow_rate={self.flow_rate}, offset={self.offset})"
+      f"flow_rate={self.flow_rate}, offset={self.offset}, liquid_height={self.liquid_height})"
     )
 
   def serialize(self) -> dict:
@@ -157,7 +173,8 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     return {
       **super().serialize(),
       "volume": self.volume,
-      "flow_rate": "default" if is_default(self.flow_rate) else self.flow_rate,
+      "flow_rate": self.flow_rate if is_not_default(self.flow_rate) else "default",
+      "liquid_height": self.liquid_height
     }
 
   @classmethod
@@ -175,7 +192,8 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       resource=resource,
       volume=data["volume"],
       flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
-      offset=Coordinate.deserialize(data["offset"])
+      offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
+      liquid_height=data["liquid_height"]
     )
 
 
@@ -194,7 +212,8 @@ class Aspiration(LiquidHandlingOp):
       resource=resource,
       volume=data["volume"],
       flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
-      offset=Coordinate.deserialize(data["offset"])
+      offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
+      liquid_height=data["liquid_height"]
     )
 
 
@@ -213,7 +232,7 @@ class Dispense(LiquidHandlingOp):
       resource=resource,
       volume=data["volume"],
       flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
-      offset=Coordinate.deserialize(data["offset"])
+      offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
     )
 
 

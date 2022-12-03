@@ -128,15 +128,19 @@ class TestLiquidHandlerLayout(unittest.TestCase):
 
     # Subresources.
     self.assertEqual(
-      cast(TipRack, self.lh.get_resource("tip_rack_01")).get_item("A1").get_absolute_location(),
+      cast(TipRack, self.lh.get_resource("tip_rack_01")).get_item("A1").get_absolute_location() +
+      cast(TipRack, self.lh.get_resource("tip_rack_01")).get_item("A1").center(),
       Coordinate(117.900, 145.800, 164.450))
     self.assertEqual(
-      cast(TipRack, self.lh.get_resource("tip_rack_04")).get_item("A1").get_absolute_location(),
+      cast(TipRack, self.lh.get_resource("tip_rack_04")).get_item("A1").get_absolute_location() +
+      cast(TipRack, self.lh.get_resource("tip_rack_04")).get_item("A1").center(),
       Coordinate(117.900, 433.800, 131.450))
 
     self.assertEqual(
       cast(TipRack, self.lh.get_resource("aspiration plate")).get_item("A1")
-      .get_absolute_location(), Coordinate(320.500, 146.000, 187.150))
+        .get_absolute_location() +
+      cast(TipRack, self.lh.get_resource("aspiration plate")).get_item("A1").center(),
+        Coordinate(320.500, 146.000, 187.150))
 
   def test_illegal_subresource_assignment_before(self):
     # Test assigning subresource with the same name as another resource in another carrier. This
@@ -174,7 +178,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertIsNotNone(plt_car[2].resource)
     self.assertIsNone(plt_car[0].resource)
     self.assertEqual(plt_car[2].resource, self.lh.get_resource("plate"))
-    self.assertEqual(plate.get_item("A1").get_absolute_location(),
+    self.assertEqual(plate.get_item("A1").get_absolute_location() + plate.get_item("A1").center(),
                      Coordinate(568.000, 338.000, 187.150))
 
   def test_move_plate_free(self):

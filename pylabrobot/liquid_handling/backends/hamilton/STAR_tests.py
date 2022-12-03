@@ -328,9 +328,9 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
-  def test_single_channel_aspiration_offset(self):
+  def test_single_channel_aspiration_liquid_height(self):
     # TODO: Hamilton liquid classes
-    self.lh.aspirate(self.plate["A1"], vols=[100*1.072], offsets=Coordinate(0, 0, 10))
+    self.lh.aspirate(self.plate["A1"], vols=[100*1.072], liquid_height=9)
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -355,7 +355,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_aspirate_single_resource(self):
-    self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4])
+    self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
       "C0ASid0009at0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 1688 "
       "1551 0000&th2450te2450lp1260 1260 1260 1260 1260&ch000 000 000 000 000&zl1210 1210 1210 "
@@ -371,7 +371,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_dispense_single_resource(self):
-    self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4])
+    self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
       "C0DSid0010dm2 2 2 2 2&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 "
       "1688 1551 0000&zx1871 1871 1871 1871 1871&lp2321 2321 2321 2321 2321&zl1210 1210 1210 1210 "

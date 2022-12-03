@@ -1,7 +1,7 @@
 from typing import Dict, Optional, List, cast
 
+from pylabrobot.default import get_value, is_not_default
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.default import get_value
 from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
@@ -251,8 +251,14 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
 
+    offset = op.offset
+    if is_not_default(offset):
+      offset_x, offset_y, offset_z = offset.x, offset.y, offset.z
+    else:
+      offset_x = offset_y = offset_z = 0
+
     ot_api.lh.pick_up_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
-      offset_x=op.offset.x, offset_y=op.offset.y, offset_z=op.offset.z)
+      offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
     if pipette_id == self.left_pipette["pipetteId"]:
       self.left_pipette_has_tip = True
@@ -277,8 +283,14 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
 
+    offset = op.offset
+    if is_not_default(offset):
+      offset_x, offset_y, offset_z = offset.x, offset.y, offset.z
+    else:
+      offset_x = offset_y = offset_z = 0
+
     ot_api.lh.drop_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
-      offset_x=op.offset.x, offset_y=op.offset.y, offset_z=op.offset.z)
+      offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
     if pipette_id == self.left_pipette["pipetteId"]:
       self.left_pipette_has_tip = False
@@ -368,9 +380,14 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
+    offset = op.offset
+    if is_not_default(offset):
+      offset_x, offset_y, offset_z = offset.x, offset.y, offset.z
+    else:
+      offset_x = offset_y = offset_z = 0
+
     ot_api.lh.aspirate(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=flow_rate, offset_x=op.offset.x,
-       offset_y=op.offset.y, offset_z=op.offset.z)
+      volume=volume, flow_rate=flow_rate, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
   def _get_default_dispense_flow_rate(self, pipette_name: str) -> float:
     """ Get the default dispense flow rate for the specified pipette.
@@ -417,9 +434,14 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
+    offset = op.offset
+    if is_not_default(offset):
+      offset_x, offset_y, offset_z = offset.x, offset.y, offset.z
+    else:
+      offset_x = offset_y = offset_z = 0
+
     ot_api.lh.dispense(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
-      volume=volume, flow_rate=flow_rate, offset_x=op.offset.x,
-       offset_y=op.offset.y, offset_z=op.offset.z)
+      volume=volume, flow_rate=flow_rate, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
   def pick_up_tips96(self, tip_rack: TipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")

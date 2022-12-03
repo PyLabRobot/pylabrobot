@@ -101,11 +101,7 @@ class TestHTTPBackendOps(unittest.TestCase):
         header_match,
         matchers.json_params_matcher({
           "channels": [{
-            "offset": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
+            "offset": "default",
             "resource_name": "tiprack_tipspot_0_0",
             "tip_type": {
               "has_filter": True,
@@ -131,11 +127,7 @@ class TestHTTPBackendOps(unittest.TestCase):
         header_match,
         matchers.json_params_matcher({
           "channels": [{
-            "offset": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
+            "offset": "default",
             "resource_name": "tiprack_tipspot_0_0",
             "tip_type": {
               "has_filter": True,
@@ -162,14 +154,11 @@ class TestHTTPBackendOps(unittest.TestCase):
         header_match,
         matchers.json_params_matcher({
           "channels": [{
-            "offset": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
+            "offset": "default",
             "resource_name": "plate_well_0_0",
             "volume": 10,
-            "flow_rate": "default"
+            "flow_rate": "default",
+            "liquid_height": 0
           }],
           "use_channels": [0],
         })
@@ -188,14 +177,11 @@ class TestHTTPBackendOps(unittest.TestCase):
         header_match,
         matchers.json_params_matcher({
           "channels": [{
-            "offset": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            },
+            "offset": "default",
             "resource_name": "plate_well_0_0",
             "volume": 10,
-            "flow_rate": "default"
+            "flow_rate": "default",
+            "liquid_height": 0
           }],
           "use_channels": [0],
         })
@@ -249,11 +235,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "resource_name": "plate",
             "volume": 10,
             "flow_rate": "default",
-            "offset": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            }
+            "offset": "default",
+            "liquid_height": 0
           }
         })
       ],
@@ -274,11 +257,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "resource_name": "plate",
             "volume": 10,
             "flow_rate": "default",
-            "offset": {
-              "x": 0,
-              "y": 0,
-              "z": 0
-            }
+            "offset": "default",
+            "liquid_height": 0
           }
         })
       ],
