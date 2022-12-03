@@ -334,7 +334,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       for module_name, error in he.items():
         if error.message == "Unknown parameter":
           vp = self.send_command(module=error.raw_module, command="VP", fmt="vp&&")["vp"]
-          he[module_name].message += f" ({vp})"
+          he[module_name].message += f" ({vp})" # pylint: disable=unnecessary-dict-index-lookup
 
       raise he
 
@@ -516,18 +516,19 @@ class STAR(HamiltonLiquidHandler):
 
       # Spread PIP channels command = JE ? (Spread PIP channels)
 
-      #C0DIid0201xp08000&yp4050 3782 3514 3246 2978 2710 2442 2175tp2450tz1220te2450tm1&tt04ti0
-      self.initialize_pipetting_channels( # spreads channels
-        x_positions=[8000],
-        # dy = 268
-        y_positions=[4050, 3782, 3514, 3246, 2978, 2710, 2442, 2175],
-        begin_of_tip_deposit_process=2450,
-        end_of_tip_deposit_process=1220,
-        z_position_at_end_of_a_command=3600,
-        tip_pattern=[True], # [True] * 8
-        tip_type=4, # TODO: get from tip types
-        discarding_method=0
-      )
+    dy = (4050 - 2175) // (self.num_channels - 1)
+    y_positions = [4050 - i * dy for i in range(self.num_channels)]
+
+    self.initialize_pipetting_channels( # spreads channels
+      x_positions=[8000],
+      y_positions=y_positions,
+      begin_of_tip_deposit_process=2450,
+      end_of_tip_deposit_process=1220,
+      z_position_at_end_of_a_command=3600,
+      tip_pattern=[True], # [True] * 8
+      tip_type=4, # TODO: get from tip types
+      discarding_method=0
+    )
 
     extended_conf = self.request_extended_configuration()
     left_x_drive_configuration_byte_1 = bin(extended_conf["xl"])
@@ -2515,6 +2516,8 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="DI",
+      fmt="",
+      timeout=120,
       xp=[f"{xp:05}" for xp in x_positions],
       yp=[f"{yp:04}" for yp in y_positions],
       tp=f"{begin_of_tip_deposit_process:04}",
