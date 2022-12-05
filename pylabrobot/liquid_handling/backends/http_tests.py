@@ -106,7 +106,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             "tip_type": {
               "has_filter": True,
               "total_tip_length": 95.1,
-              "maximal_volume": 1250,
+              "maximal_volume": 1065,
               "fitting_depth": 8
             }
           }],
@@ -132,7 +132,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             "tip_type": {
               "has_filter": True,
               "total_tip_length": 95.1,
-              "maximal_volume": 1250,
+              "maximal_volume": 1065,
               "fitting_depth": 8
             }
           }],
