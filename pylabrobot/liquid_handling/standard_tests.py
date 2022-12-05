@@ -86,7 +86,8 @@ class TestStandard(unittest.TestCase):
       "offset": "default",
       "volume": 100,
       "flow_rate": "default",
-      "liquid_height": 0
+      "liquid_height": 0,
+      "blow_out_air_volume": 0,
     })
 
   def test_aspiration_deserialize(self):
@@ -95,6 +96,7 @@ class TestStandard(unittest.TestCase):
       "offset": "default",
       "volume": 100,
       "liquid_height": 0,
+      "blow_out_air_volume": 0,
       "flow_rate": "default"}, resource=self.plate.get_well("A1")),
       Aspiration(resource=self.plate.get_well("A1"), volume=100))
 
@@ -104,7 +106,8 @@ class TestStandard(unittest.TestCase):
       "offset": "default",
       "volume": 100,
       "flow_rate": "default",
-      "liquid_height": 0
+      "liquid_height": 0,
+      "blow_out_air_volume": 0,
     })
 
   def test_dispense_deserialize(self):
@@ -113,5 +116,6 @@ class TestStandard(unittest.TestCase):
       "offset": "default",
       "volume": 100,
       "liquid_height": 0,
+      "blow_out_air_volume": 0,
       "flow_rate": "default"}, resource=self.plate.get_well("A1")),
       Dispense(resource=self.plate.get_well("A1"), volume=100))

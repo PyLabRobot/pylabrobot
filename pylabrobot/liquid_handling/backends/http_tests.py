@@ -158,7 +158,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "resource_name": "plate_well_0_0",
             "volume": 10,
             "flow_rate": "default",
-            "liquid_height": 0
+            "liquid_height": 0,
+            "blow_out_air_volume": 0
           }],
           "use_channels": [0],
         })
@@ -181,7 +182,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "resource_name": "plate_well_0_0",
             "volume": 10,
             "flow_rate": "default",
-            "liquid_height": 0
+            "liquid_height": 0,
+            "blow_out_air_volume": 0
           }],
           "use_channels": [0],
         })
@@ -236,7 +238,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "volume": 10,
             "flow_rate": "default",
             "offset": "default",
-            "liquid_height": 0
+            "liquid_height": 0,
+            "blow_out_air_volume": 0
           }
         })
       ],
@@ -258,7 +261,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "volume": 10,
             "flow_rate": "default",
             "offset": "default",
-            "liquid_height": 0
+            "liquid_height": 0,
+            "blow_out_air_volume": 0
           }
         })
       ],
