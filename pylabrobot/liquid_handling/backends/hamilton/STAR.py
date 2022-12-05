@@ -642,14 +642,16 @@ class STAR(HamiltonLiquidHandler):
         x_positions.append(0)
         y_positions.append(0)
       channels_involved.append(True)
-      x_pos = ops[i].get_absolute_location().x
+      x_pos = ops[i].resource.get_absolute_location().x
       if ops[i].offset is Default:
         x_pos += ops[i].resource.center().x
+      x_pos += get_value(ops[i].offset, Coordinate.zero()).x
       x_positions.append(int(x_pos*10))
 
-      y_pos = ops[i].get_absolute_location().y
+      y_pos = ops[i].resource.get_absolute_location().y
       if ops[i].offset is Default:
         y_pos += ops[i].resource.center().y
+      y_pos += get_value(ops[i].offset, Coordinate.zero()).y
       y_positions.append(int(y_pos*10))
 
     if len(ops) > self.num_channels:
