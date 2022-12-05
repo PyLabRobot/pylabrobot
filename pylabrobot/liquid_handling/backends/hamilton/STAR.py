@@ -27,6 +27,7 @@ from pylabrobot.liquid_handling.resources import (
   Resource,
   TipRack,
   TipSpot,
+  Well
 )
 from pylabrobot.liquid_handling.resources.ml_star import (
   HamiltonTipType,
@@ -644,13 +645,13 @@ class STAR(HamiltonLiquidHandler):
         y_positions.append(0)
       channels_involved.append(True)
       x_pos = ops[i].resource.get_absolute_location().x
-      if ops[i].offset is Default:
+      if ops[i].offset is Default or isinstance(ops[i].resource, (TipSpot, Well)):
         x_pos += ops[i].resource.center().x
       x_pos += get_value(ops[i].offset, Coordinate.zero()).x
       x_positions.append(int(x_pos*10))
 
       y_pos = ops[i].resource.get_absolute_location().y
-      if ops[i].offset is Default:
+      if ops[i].offset is Default or isinstance(ops[i].resource, (TipSpot, Well)):
         y_pos += ops[i].resource.center().y
       y_pos += get_value(ops[i].offset, Coordinate.zero()).y
       y_positions.append(int(y_pos*10))
