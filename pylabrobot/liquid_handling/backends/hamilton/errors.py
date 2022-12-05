@@ -729,7 +729,7 @@ class HamiltonFirmwareError(HamiltonError):
       self.errors.pop("Master")
 
   def __str__(self) -> str:
-    return f"HamiltonFirmwareError({{{self.errors.items()}}})"
+    return f"HamiltonFirmwareError({self.errors})"
 
   def __len__(self) -> int:
     return len(self.errors)
