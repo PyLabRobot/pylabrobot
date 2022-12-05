@@ -212,8 +212,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     if isinstance(identifier, str):
       assert ":" in identifier, \
         "If identifier is a string, it must be a range of items, e.g. 'A1:E1'."
-      identifier = list(pylabrobot.utils.string_to_indices(identifier,
-        num_rows=self.num_items_y, num_columns=self.num_items_x))
+      identifier = list(pylabrobot.utils.string_to_indices(identifier, num_rows=self.num_items_y))
     elif identifier is None:
       return [None]
 
