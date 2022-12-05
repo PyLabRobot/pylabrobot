@@ -139,11 +139,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     if isinstance(identifier, (slice, range)):
       start, stop = identifier.start, identifier.stop
       if isinstance(identifier.start, str):
-        start = \
-          pylabrobot.utils.string_to_index(identifier.start, num_rows=self.num_items_y)
+        start = pylabrobot.utils.string_to_index(identifier.start, num_rows=self.num_items_y,
+          num_columns=self.num_items_x)
       if isinstance(identifier.stop, str):
-        stop = \
-          pylabrobot.utils.string_to_index(identifier.stop, num_rows=self.num_items_y)
+        stop = pylabrobot.utils.string_to_index(identifier.stop, num_rows=self.num_items_y,
+          num_columns=self.num_items_x)
       identifier = list(range(start, stop))
       return self.get_items(identifier)
 
