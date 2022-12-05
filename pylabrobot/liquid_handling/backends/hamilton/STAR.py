@@ -22,6 +22,7 @@ from pylabrobot.liquid_handling.errors import (
   TooLittleVolumeError,
 )
 from pylabrobot.liquid_handling.resources import (
+  Coordinate,
   Plate,
   Resource,
   TipRack,
