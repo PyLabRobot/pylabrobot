@@ -38,11 +38,13 @@ def string_to_position(position_string: str) -> typing.Tuple[int, int]:
   return (row, column)
 
 
-def string_to_index(position_string: str, num_rows: int = 8) -> int:
+def string_to_index(position_string: str, num_rows: int, num_columns: int) -> int:
   """ Convert a position string to an index.
 
   Args:
     position_string: The position string.
+    num_rows: The number of rows of the resource that's indexed.
+    num_columns: The number of columns of the resource that's indexed.
 
   Returns:
     The index of the position.
@@ -50,26 +52,31 @@ def string_to_index(position_string: str, num_rows: int = 8) -> int:
 
   row, column = string_to_position(position_string)
   assert row < num_rows, f"Row must be less than {num_rows}"
+  assert column < num_columns, f"Column must be less than {num_columns}"
   return row + column * num_rows
 
 
-def string_to_indices(position_range_string: str, num_rows: int, num_columns: int) \
+def string_to_indices(position_range_string: str, num_rows: int) \
   -> typing.List[int]:
   """ Convert a position string to a list of indices.
 
   Args:
     position_string: The position string.
+    num_rows: The number of rows of the resource that's indexed.
 
   Returns:
     A list of indices.
   """
 
-  positions = string_to_pattern(position_range_string, num_rows, num_columns)
+  start_str, end_str = position_range_string.split(":")
+
+  start, end = string_to_position(start_str), string_to_position(end_str)
+  x_dir = 1 if start[0] <= end[0] else -1
+  y_dir = 1 if start[1] <= end[1] else -1
   indices = []
-  for row_idx, row in enumerate(positions):
-    for column_idx, column in enumerate(row):
-      if column:
-        indices.append(row_idx + column_idx * num_rows)
+  for row, column in itertools.product(range(start[0], end[0] + x_dir, x_dir),
+    range(start[1], end[1] + y_dir, y_dir)):
+    indices.append(row + column * num_rows)
   return indices
 
 
