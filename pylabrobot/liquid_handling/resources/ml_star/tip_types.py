@@ -106,7 +106,7 @@ low_volume_tip_with_filter = HamiltonTipType(
 high_volume_tip_no_filter = HamiltonTipType(
   has_filter=False,
   total_tip_length=95.1,
-  maximal_volume=1000,
+  maximal_volume=1250,
   tip_size=TipSize.HIGH_VOLUME,
   pickup_method=TipPickupMethod.OUT_OF_RACK
 )
@@ -115,7 +115,7 @@ high_volume_tip_no_filter = HamiltonTipType(
 high_volume_tip_with_filter = HamiltonTipType(
   has_filter=True,
   total_tip_length=95.1, # 95 in the ctr file, but 95.1 in the log file (871-80)/10
-  maximal_volume=1250,
+  maximal_volume=1065,
   tip_size=TipSize.HIGH_VOLUME,
   pickup_method=TipPickupMethod.OUT_OF_RACK
 )

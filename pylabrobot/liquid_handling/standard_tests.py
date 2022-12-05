@@ -28,7 +28,7 @@ class TestStandard(unittest.TestCase):
       "tip_type": {
         "has_filter": True,
         "total_tip_length": 95.1,
-        "maximal_volume": 1250,
+        "maximal_volume": 1065,
         "fitting_depth": 8,
       }
     })
@@ -41,7 +41,7 @@ class TestStandard(unittest.TestCase):
           "tip_type": {
             "has_filter": True,
             "total_tip_length": 95.1,
-            "maximal_volume": 1250,
+            "maximal_volume": 1065,
             "fitting_depth": 8,
           }},
           resource=self.tip_rack.get_tip("A1"),
@@ -61,7 +61,7 @@ class TestStandard(unittest.TestCase):
         "tip_type": {
           "has_filter": True,
           "total_tip_length": 95.1,
-          "maximal_volume": 1250,
+          "maximal_volume": 1065,
           "fitting_depth": 8,
         }
       })
@@ -73,7 +73,7 @@ class TestStandard(unittest.TestCase):
         "tip_type": {
           "has_filter": True,
           "total_tip_length": 95.1,
-          "maximal_volume": 1250,
+          "maximal_volume": 1065,
           "fitting_depth": 8,
         }},
         resource=self.tip_rack.get_tip("A1"),
