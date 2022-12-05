@@ -10,7 +10,7 @@ import functools
 import logging
 import re
 import time
-from typing import Callable, List, Optional, Tuple, Union, Sequence, TypeVar, cast
+from typing import Callable, List, Optional, Tuple, Sequence, TypeVar, cast
 
 from pylabrobot import utils
 from pylabrobot.default import Default, get_value, is_default
@@ -799,8 +799,6 @@ class STAR(HamiltonLiquidHandler):
     ops: List[Aspiration],
     use_channels: List[int],
 
-    blow_out_air_volumes: Union[float, List[float]] = 0,
-
     lld_search_height: Optional[List[int]] = None,
     clot_detection_height: Optional[List[int]] = None,
     pull_out_distance_transport_air: Optional[List[int]] = None,
@@ -934,7 +932,6 @@ class STAR(HamiltonLiquidHandler):
     flow_rates = [get_value(op.flow_rate, default=100) for op in ops]
     aspiration_speed = [int(fr * 10) for fr in flow_rates]
     transport_air_volume = _to_list(transport_air_volume, [0]*n)
-    blow_out_air_volumes = [200]*n # blow out air is handled separately, see below
     pre_wetting_volume = _to_list(pre_wetting_volume, [0]*n)
     lld_mode = _to_list(lld_mode, [self.__class__.LLDMode.OFF]*n)
     gamma_lld_sensitivity = _to_list(gamma_lld_sensitivity, [1]*n)
@@ -966,24 +963,6 @@ class STAR(HamiltonLiquidHandler):
     ratio_liquid_rise_to_tip_deep_in = _to_list(ratio_liquid_rise_to_tip_deep_in, [0]*n)
     immersion_depth_2nd_section = _to_list(immersion_depth_2nd_section, [0]*n)
 
-    # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
-    # manually.
-    if isinstance(blow_out_air_volumes, list):
-      boavs = [int(boav*10) for boav in blow_out_air_volumes if boav is not None and boav > 0]#0.1ul
-    elif blow_out_air_volumes is not None and blow_out_air_volumes > 0:
-      boavs = [int(blow_out_air_volumes*10) for _ in range(8)] # 0.1ul
-    else:
-      boavs = []
-    if len(boavs) > 0:
-      self.aspirate_pip(
-        tip_pattern=channels_involved,
-        x_positions=x_positions,
-        y_positions=y_positions,
-        lld_mode=[0] * len(boavs),
-        liquid_surface_no_lld=[50] * len(boavs),
-        aspiration_volumes=boavs
-      )
-
     try:
       return self.aspirate_pip(
         tip_pattern=channels_involved,
@@ -1003,7 +982,7 @@ class STAR(HamiltonLiquidHandler):
         surface_following_distance=surface_following_distance,
         aspiration_speed=aspiration_speed,
         transport_air_volume=transport_air_volume,
-        blow_out_air_volume=[0]*n,
+        blow_out_air_volume=[int(op.blow_out_air_volume*10) for op in ops],
         pre_wetting_volume=pre_wetting_volume,
         lld_mode=[mode.value for mode in lld_mode],
         gamma_lld_sensitivity=gamma_lld_sensitivity,
@@ -1058,7 +1037,6 @@ class STAR(HamiltonLiquidHandler):
     self,
     ops: List[Dispense],
     use_channels: List[int],
-    blow_out_air_volumes: Union[float, List[float]] = 0,
 
     dispensing_mode: Optional[List[int]] = None,
     lld_search_height: Optional[List[int]] = None,
@@ -1213,7 +1191,7 @@ class STAR(HamiltonLiquidHandler):
         cut_off_speed=cut_off_speed,
         stop_back_volume=stop_back_volume,
         transport_air_volume=transport_air_volume,
-        blow_out_air_volume=blow_out_air_volume,
+        blow_out_air_volume=[int(op.blow_out_air_volume*10) for op in ops],
         lld_mode=lld_mode,
         dispense_position_above_z_touch_off=dispense_position_above_z_touch_off,
         gamma_lld_sensitivity=gamma_lld_sensitivity,
@@ -1246,25 +1224,6 @@ class STAR(HamiltonLiquidHandler):
             from e
 
       raise e
-
-    # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we dispense air
-    # manually.
-    if isinstance(blow_out_air_volumes, list):
-      boavs = [int(boav*10) for boav in blow_out_air_volumes if boav is not None and boav > 0]#0.1ul
-    elif blow_out_air_volumes is not None and blow_out_air_volumes > 0:
-      boavs = [int(blow_out_air_volumes*10) for _ in range(8)] # 0.1ul
-    else:
-      boavs = []
-    if len(boavs) > 0:
-      self.dispense_pip(
-        tip_pattern=channels_involved,
-        x_positions=x_positions,
-        y_positions=y_positions,
-        lld_mode=[0] * len(boavs),
-        # units of 0.1mm, 1cm above
-        liquid_surface_no_lld=[int((ops[0].get_absolute_location().z + 10) * 10)] * 8,
-        dispense_volumes=boavs
-      )
 
     return ret
 
