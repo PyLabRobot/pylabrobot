@@ -668,14 +668,8 @@ class STAR(HamiltonLiquidHandler):
 
     return x_positions, y_positions, channels_involved
 
-  def get_ttti(self, tips: List[TipSpot]) -> int:
-    """ Get tip type table index for a list of tips.
-
-    Ensure that for all non-None tips, they have the same tip type, and return the tip type table
-    index for that tip type.
-    """
-
-    tip_types = set(tip.tip_type for tip in tips)
+  def _get_hamilton_tip_type(self, tip_spots: List[TipSpot]) -> HamiltonTipType:
+    tip_types = set(tip.tip_type for tip in tip_spots)
     if len(tip_types) > 1:
       raise ValueError("Cannot mix tips with different tip types.")
     if len(tip_types) == 0:
@@ -683,6 +677,16 @@ class STAR(HamiltonLiquidHandler):
     tip_type = tip_types.pop()
     if not isinstance(tip_type, HamiltonTipType):
       raise ValueError(f"Tip type {tip_type} is not a HamiltonTipType.")
+    return tip_type
+
+  def get_ttti(self, tip_spots: List[TipSpot]) -> int:
+    """ Get tip type table index for a list of tips.
+
+    Ensure that for all non-None tips, they have the same tip type, and return the tip type table
+    index for that tip type.
+    """
+
+    tip_type = self._get_hamilton_tip_type(tip_spots)
     return self.get_or_assign_tip_type_index(tip_type)
 
   @need_iswap_parked
@@ -701,6 +705,10 @@ class STAR(HamiltonLiquidHandler):
     max_z = max(op.get_absolute_location().z for op in ops)
     max_total_tip_length = max(op.tip_type.total_tip_length for op in ops)
     max_tip_length = max((op.tip_type.total_tip_length-op.tip_type.fitting_depth) for op in ops)
+
+    if self._get_hamilton_tip_type([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
+      # not sure why this is necessary, but it is according to log files and experiments
+      max_tip_length -= 2
 
     try:
       tip_type = ops[0].tip_type
@@ -2504,8 +2512,8 @@ class STAR(HamiltonLiquidHandler):
 
   def pick_up_tip(
     self,
-    x_positions: List[int], # TODO: these are probably lists.
-    y_positions: List[int], # TODO: these are probably lists.
+    x_positions: List[int],
+    y_positions: List[int],
     tip_pattern: List[bool],
     tip_type_idx: int,
     begin_tip_pick_up_process: int = 0,

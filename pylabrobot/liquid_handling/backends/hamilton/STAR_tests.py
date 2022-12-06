@@ -7,8 +7,10 @@ from pylabrobot.liquid_handling.liquid_handler import LiquidHandler
 from pylabrobot.liquid_handling.resources import (
   Resource,
   TIP_CAR_480_A00,
+  TIP_CAR_288_C00,
   PLT_CAR_L5AC_A00,
   Cos_96_EZWash,
+  HT_P,
   Coordinate,
   PlateReader,
   ResourceStack,
@@ -30,6 +32,7 @@ from .errors import (
 )
 
 
+PICKUP_TIP_FORMAT = "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#"
 DROP_TIP_FORMAT = "xp##### (n)yp#### (n)tm# (n)tp####tz####th####ti#"
 ASPIRATION_RESPONSE_FORMAT = (
   "at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
@@ -215,6 +218,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     taken into account, but the values and formatting should match. The id parameter of the command
     is ignored.
 
+    If a command is found, it is removed from the command buffer.
+
     Args:
       cmd: the command to look for
       should_be: whether the command should be found or not
@@ -294,21 +299,21 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
       "C0TPid0000xp01179 01179 00000&yp2418 2328 0000tm1 1 0&tt01tp2243tz2163th2450td0",
-      "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
+      PICKUP_TIP_FORMAT)
 
   def test_tip_pickup_56(self):
     self.lh.pick_up_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
     self._assert_command_sent_once(
       "C0TPid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
       "0000&tm0 0 0 0 1 1 0 &tt01tp2243tz2163th2450td0",
-      "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
+      PICKUP_TIP_FORMAT)
 
   def test_tip_pickup_15(self):
     self.lh.pick_up_tips(self.tip_rack["A1", "F1"], use_channels=[0, 4])
     self._assert_command_sent_once(
       "C0TPid0000xp01179 00000 00000 00000 01179 00000&yp2418 0000 0000 0000 1968 0000 "
       "&tm1 0 0 0 1 0&tt01tp2243tz2163th2450td0",
-      "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#")
+      PICKUP_TIP_FORMAT)
 
   def test_tip_drop_56(self):
     self.test_tip_pickup_56() # pick up tips first
@@ -568,6 +573,29 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
      "2442 2174tp1970tz1890th2450te2450tm1 1 1 1 1 1 1 1ti0",
      DROP_TIP_FORMAT)
 
+  def test_portrait_tip_rack_handling(self):
+    # Test with an alternative setup.
+
+    deck = STARLetDeck()
+    lh = LiquidHandler(self.mockSTAR, deck=deck)
+    tip_car = TIP_CAR_288_C00(name="tip carrier")
+    tip_car[0] = tr = HT_P(name="tips_01")
+    deck.assign_child_resource(tip_car, rails=2)
+    lh.setup()
+
+    lh.pick_up_tips(tr["A4:A1"])
+
+    self._assert_command_sent_once(
+     "C0TPid0035xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2263tz"
+     "2163th2450td0",
+     PICKUP_TIP_FORMAT)
+
+    lh.drop_tips(tr["A4:A1"])
+
+    self._assert_command_sent_once(
+     "C0TRid0036xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2263tz"
+     "2183th2450ti1",
+     DROP_TIP_FORMAT)
 
 
 if __name__ == "__main__":
