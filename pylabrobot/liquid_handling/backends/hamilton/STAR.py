@@ -4956,12 +4956,12 @@ class STAR(HamiltonLiquidHandler):
   def lock_cover(self):
     """ Lock cover """
 
-    return self.send_command(module="C0", command="HO", fmt="")
+    return self.send_command(module="C0", command="CO", fmt="")
 
   def unlock_cover(self):
     """ Unlock cover """
 
-    return self.send_command(module="C0", command="CO", fmt="")
+    return self.send_command(module="C0", command="HO", fmt="")
 
   def disable_cover_control(self):
     """ Disable cover control """
