@@ -3170,12 +3170,13 @@ class STAR(HamiltonLiquidHandler):
       pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
     """
 
-    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
+    utils.assert_clamp(pipetting_channel_index, 1, self.num_channels, "pipetting_channel_index")
 
     return self.send_command(
       module="C0",
-      command="KZ",
-      pn=pipetting_channel_index,
+      command="JP",
+      fmt="",
+      pn=f"{pipetting_channel_index:02}",
     )
 
   def move_all_channels_in_z_safety(self):
