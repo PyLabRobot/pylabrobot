@@ -4950,3 +4950,54 @@ class STAR(HamiltonLiquidHandler):
 
     resp = self.send_command(module="R0", command="QW", fmt="qw#")
     return cast(int, resp["qw"]) == 1
+
+  # -------------- 3.18 Cover and port control --------------
+
+  def lock_cover(self):
+    """ Lock cover """
+
+    return self.send_command(module="C0", command="HO", fmt="")
+
+  def unlock_cover(self):
+    """ Unlock cover """
+
+    return self.send_command(module="C0", command="CO", fmt="")
+
+  def disable_cover_control(self):
+    """ Disable cover control """
+
+    return self.send_command(module="C0", command="CD", fmt="")
+
+  def enable_cover_control(self):
+    """ Enable cover control """
+
+    return self.send_command(module="C0", command="CE", fmt="")
+
+  def set_cover_output(self, output: int = 0):
+    """ Set cover output
+
+    Args:
+      output: 1 = cover lock; 2 = reserve out; 3 = reserve out.
+    """
+
+    utils.assert_clamp(output, 1, 3, "output")
+    return self.send_command(module="C0", command="OS", on=output, fmt="")
+
+  def reset_output(self, output: int = 0):
+    """ Reset output
+
+    Returns:
+      output: 1 = cover lock; 2 = reserve out; 3 = reserve out.
+    """
+
+    utils.assert_clamp(output, 1, 3, "output")
+    return self.send_command(module="C0", command="QS", on=output, fmt="#")
+
+  def request_cover_open(self) -> bool:
+    """ Request cover open
+
+    Returns: True if the cover is open
+    """
+
+    resp = self.send_command(module="C0", command="QC", fmt="qc#")
+    return bool(resp["qc"])
