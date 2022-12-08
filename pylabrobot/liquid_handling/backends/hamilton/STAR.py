@@ -348,7 +348,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     module: str,
     command: str,
     timeout: Optional[int] = None,
-    fmt: Optional[str]=None,
+    fmt: str = "",
     wait = True,
     **kwargs
   ):
@@ -358,7 +358,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       module: 2 character module identifier (C0 for master, ...)
       command: 2 character command identifier (QM for request status)
       timeout: timeout in seconds. If None, `self.read_timeout` is used.
-      fmt: A string containing the format of the response. If None, the raw response is returned.
+      fmt: A string containing the format of the response. If None, just the id parameter is read.
       kwargs: any named parameters. the parameter name should also be
               2 characters long. The value can be any size.
 
@@ -413,9 +413,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
       # Check if the response is the one we are looking for.
       if "id" in parsed_response and f"{parsed_response['id']:04}" == id_:
-        # If `fmt` is None, return the raw response.
-        if fmt is None:
-          return resp
         return self.parse_response(resp, fmt)
 
     raise TimeoutError(f"Timeout while waiting for response to command {cmd}.")
@@ -1652,8 +1649,7 @@ class STAR(HamiltonLiquidHandler):
 
   def pre_initialize_instrument(self):
     """ Pre-initialize instrument """
-    resp = self.send_command(module="C0", command="VI")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="VI")
 
   def define_tip_needle(
     self,
@@ -1687,7 +1683,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="TT",
-      fmt="",
       tt=f"{tip_type_table_index:02}",
       tf=filter,
       tl=f"{tip_length:04}",
@@ -1711,8 +1706,7 @@ class STAR(HamiltonLiquidHandler):
       ..##/## see node definitions ( chapter 5)
     """
 
-    resp = self.send_command(module="RE", command="RF")
-    return resp
+    return self.send_command(module="RE", command="RF")
 
   def request_firmware_version(self):
     """ Request firmware version
@@ -1745,7 +1739,7 @@ class STAR(HamiltonLiquidHandler):
 
     # pylint: disable=undefined-variable
 
-    resp = self.send_command(module="C0", command="QB")
+    resp = self.send_command(module="C0", command="QB", fmt="")
     try:
       return STAR.BoardType(resp["qb"])
     except ValueError:
@@ -2231,9 +2225,8 @@ class STAR(HamiltonLiquidHandler):
   def request_extended_configuration(self):
     """ Request extended configuration """
 
-    resp = self.send_command(module="C0", command="QM")
-    return self.parse_response(resp, fmt="ka******ke********xt##xa##xw#####xl**" + \
-            "xn**xr**xo**xm#####xx#####xu####xv####kc#kr#ys###kl###km###ym####yu####yx####")
+    return self.send_command(module="C0", command="QM", fmt="ka******ke********xt##xa##xw#####" + \
+            "xl**xn**xr**xo**xm#####xx#####xu####xv####kc#kr#ys###kl###km###ym####yu####yx####")
 
   def request_node_names(self):
     """ Request node names """
@@ -2268,7 +2261,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="JX",
-      fmt="",
       xs=f"{x_position:05}",
     )
 
@@ -2289,7 +2281,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="JS",
-      fmt="",
       xs=f"{x_position:05}",
     )
 
@@ -2305,12 +2296,11 @@ class STAR(HamiltonLiquidHandler):
 
     utils.assert_clamp(x_position, 0, 30000, "x_position")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="KX",
       xs=x_position,
     )
-    return self.parse_response(resp, "")
 
   def move_right_x_arm_to_position_with_all_attached_components_in_z_safety_position(
     self,
@@ -2324,12 +2314,11 @@ class STAR(HamiltonLiquidHandler):
 
     utils.assert_clamp(x_position, 0, 30000, "x_position")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="KR",
       xs=x_position,
     )
-    return self.parse_response(resp, "")
 
   # -------------- 3.4.2 X-Area reservation for external access --------------
 
@@ -2362,7 +2351,7 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(arm_preposition_mode_related_to_taken_areas, 0, 2, \
                   "arm_preposition_mode_(related_to_taken_area)s")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="BA",
       aq=taken_area_identification_number,
@@ -2371,7 +2360,6 @@ class STAR(HamiltonLiquidHandler):
       ar=taken_area_size,
       ap=arm_preposition_mode_related_to_taken_areas,
     )
-    return self.parse_response(resp, "")
 
   def release_occupied_area(
     self,
@@ -2387,44 +2375,38 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(taken_area_identification_number, 0, 9999,
       "taken_area_identification_number")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="BB",
       aq=taken_area_identification_number,
     )
-    return self.parse_response(resp, "")
 
   def release_all_occupied_areas(self):
     """ Release all occupied areas """
 
-    resp = self.send_command(module="C0", command="BC")
-    return resp
+    return self.send_command(module="C0", command="BC")
 
   # -------------- 3.4.3 X-query --------------
 
   def request_left_x_arm_position(self):
     """ Request left X-Arm position """
 
-    resp = self.send_command(module="C0", command="RX")
-    return self.parse_response(resp, "rx#####")
+    return self.send_command(module="C0", command="RX", fmt="rx#####")
 
   def request_right_x_arm_position(self):
     """ Request right X-Arm position """
 
-    resp = self.send_command(module="C0", command="QX")
-    return self.parse_response(resp, "rx#####")
+    return self.send_command(module="C0", command="QX", fmt="rx#####")
 
   def request_maximal_ranges_of_x_drives(self):
     """ Request maximal ranges of X drives """
 
-    resp = self.send_command(module="C0", command="RU")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="RU")
 
   def request_present_wrap_size_of_installed_arms(self):
     """ Request present wrap size of installed arms """
 
-    resp = self.send_command(module="C0", command="UA")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="UA")
 
   def request_left_x_arm_last_collision_type(self):
     """ Request left X-Arm last collision type (after error 27)
@@ -2434,9 +2416,8 @@ class STAR(HamiltonLiquidHandler):
       True if position is never reachable.
     """
 
-    resp = self.send_command(module="C0", command="XX")
-    parsed = self.parse_response(resp, "xq#")
-    return parsed["xq"] == 1
+    resp = self.send_command(module="C0", command="XX", fmt="xq#")
+    return resp["xq"] == 1
 
   def request_right_x_arm_last_collision_type(self) -> bool:
     """ Request right X-Arm last collision type (after error 27)
@@ -2446,9 +2427,8 @@ class STAR(HamiltonLiquidHandler):
       True if position is never reachable.
     """
 
-    resp = self.send_command(module="C0", command="XR")
-    parsed = self.parse_response(resp, "xq#")
-    return cast(int, parsed["xq"]) == 1
+    resp = self.send_command(module="C0", command="XR", fmt="xq#")
+    return cast(int, resp["xq"]) == 1
 
   # -------------- 3.5 Pipetting channel commands --------------
 
@@ -2496,7 +2476,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="DI",
-      fmt="",
       timeout=120,
       xp=[f"{xp:05}" for xp in x_positions],
       yp=[f"{yp:04}" for yp in y_positions],
@@ -2548,7 +2527,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="TP",
-      fmt="",
       timeout=60,
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
@@ -2805,10 +2783,9 @@ class STAR(HamiltonLiquidHandler):
       "ratio_liquid_rise_to_tip_deep_in")
     utils.assert_clamp(immersion_depth_2nd_section, 0, 3600, "immersion_depth_2nd_section")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="AS",
-      fmt="",
       timeout=60,
       at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
@@ -2856,7 +2833,6 @@ class STAR(HamiltonLiquidHandler):
       il=[f"{il:05}" for il in ratio_liquid_rise_to_tip_deep_in],
       in_=[f"{in_:04}" for in_ in immersion_depth_2nd_section],
     )
-    return resp
 
   def dispense_pip(
     self,
@@ -3007,7 +2983,6 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="DS",
       timeout=60,
-      fmt="",
       dm=[f"{dm:01}" for dm in dispensing_mode],
       tm=[f"{tm:01}" for tm in tip_pattern],
       xp=[f"{xp:05}" for xp in x_positions],
@@ -3087,7 +3062,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="KY",
-      fmt="",
       pn=f"{pipetting_channel_index:02}",
       yj=f"{y_position:04}",
     )
@@ -3114,7 +3088,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="KZ",
-      fmt="",
       pn=f"{pipetting_channel_index:02}",
       zj=f"{z_position:04}",
     )
@@ -3181,15 +3154,13 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="JP",
-      fmt="",
       pn=f"{pipetting_channel_index:02}",
     )
 
   def move_all_channels_in_z_safety(self):
     """ Move all pipetting channels in Z-safety position """
 
-    resp = self.send_command(module="C0", command="ZA")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="ZA")
 
   # -------------- 3.5.7 PIP query --------------
 
@@ -3207,12 +3178,12 @@ class STAR(HamiltonLiquidHandler):
 
     utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="RB",
+      fmt="rb####",
       pn=pipetting_channel_index,
     )
-    return self.parse_response(resp, "rb####")
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
 
@@ -3231,12 +3202,12 @@ class STAR(HamiltonLiquidHandler):
 
     utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="RD",
+      fmt="rd####",
       pn=pipetting_channel_index,
     )
-    return self.parse_response(resp, "rd####")
 
   def request_tip_presence(self) -> List[int]:
     """ Request query tip presence on each channel
@@ -3255,8 +3226,7 @@ class STAR(HamiltonLiquidHandler):
       LLD height of all channels
     """
 
-    resp = self.send_command(module="C0", command="RL")
-    return self.parse_response(resp, "lh#### (n)")
+    return self.send_command(module="C0", command="RL", fmt="lh#### (n)")
 
   def request_tadm_status(self):
     """ Request PIP height of last LLD
@@ -3265,8 +3235,7 @@ class STAR(HamiltonLiquidHandler):
       TADM channel status 0 = off, 1 = on
     """
 
-    resp = self.send_command(module="C0", command="QS")
-    return self.parse_response(resp, "qs# (n)")
+    return self.send_command(module="C0", command="QS", fmt="qs# (n)")
 
   # TODO:(command:FS) Request PIP channel dispense on fly status
   # TODO:(command:VE) Request PIP channel 2nd section aspiration data
@@ -3441,8 +3410,7 @@ class STAR(HamiltonLiquidHandler):
   def move_core_96_to_safe_position(self):
     """ Move CoRe 96 Head to Z save position """
 
-    resp = self.send_command(module="C0", command="EV")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="EV")
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
@@ -3484,7 +3452,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="EP",
-      fmt="",
       xs=f"{x_position:05}",
       xd=x_direction,
       yh=f"{y_position:04}",
@@ -3531,7 +3498,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="ER",
-      fmt="",
       xs=f"{x_position:05}",
       xd=x_direction,
       yh=f"{y_position:04}",
@@ -3683,7 +3649,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="EA",
-      fmt="",
       aa=aspiration_type,
       xs=f"{x_position:05}",
       xd=x_direction,
@@ -3865,7 +3830,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="ED",
-      fmt="",
       da=dispensing_mode,
       xs=f"{x_position:05}",
       xd=x_direction,
@@ -3962,8 +3926,7 @@ class STAR(HamiltonLiquidHandler):
       qh: 0 = no tips, 1 = TipRack are picked up
     """
 
-    resp = self.send_command(module="C0", command="QH")
-    return self.parse_response(resp, "qh#")
+    return self.send_command(module="C0", command="QH", fmt="qh#")
 
   def request_position_of_core_96_head(self):
     """ Request position of CoRe 96 Head (A1 considered to tip length)
@@ -3975,8 +3938,7 @@ class STAR(HamiltonLiquidHandler):
       za: Z height [0.1mm]
     """
 
-    resp = self.send_command(module="C0", command="QI")
-    return self.parse_response(resp, "xs#####xd#hy####za####")
+    return self.send_command(module="C0", command="QI", fmt="xs#####xd#hy####za####")
 
   def request_core_96_head_channel_tadm_status(self):
     """ Request CoRe 96 Head channel TADM Status
@@ -3985,8 +3947,7 @@ class STAR(HamiltonLiquidHandler):
       qx: TADM channel status 0 = off 1 = on
     """
 
-    resp = self.send_command(module="C0", command="VC")
-    return self.parse_response(resp, "qx#")
+    return self.send_command(module="C0", command="VC", fmt="qx#")
 
   def request_core_96_head_channel_tadm_error_status(self):
     """ Request CoRe 96 Head channel TADM error status
@@ -3995,8 +3956,7 @@ class STAR(HamiltonLiquidHandler):
       vb: error pattern 0 = no error
     """
 
-    resp = self.send_command(module="C0", command="VB")
-    return self.parse_response(resp, "vb" + "&" * 24)
+    return self.send_command(module="C0", command="VB", fmt="vb" + "&" * 24)
 
   # -------------- 3.11 384 Head commands --------------
 
@@ -4056,14 +4016,12 @@ class STAR(HamiltonLiquidHandler):
   def initialize_auto_load(self):
     """ Initialize Auto load module """
 
-    resp = self.send_command(module="C0", command="II")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="II")
 
   def move_auto_load_to_z_save_position(self):
     """ Move auto load to Z save position """
 
-    resp = self.send_command(module="C0", command="IV")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="IV")
 
   # -------------- 3.13.2 Carrier handling --------------
 
@@ -4117,13 +4075,12 @@ class STAR(HamiltonLiquidHandler):
     bit_pattern_hex   = hex(int("".join(["1" if x else "0" for x in bit_pattern]), base=2))
     blink_pattern_hex = hex(int("".join(["1" if x else "0" for x in blink_pattern]), base=2))
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="CP",
       cl=bit_pattern_hex,
       cb=blink_pattern_hex
     )
-    return self.parse_response(resp, "")
 
   # TODO:(command:CS) Check for presence of carriers on loading tray
 
@@ -4159,12 +4116,11 @@ class STAR(HamiltonLiquidHandler):
     # Convert bit pattern to hex.
     bt_hex = hex(int(bt, base=2))
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="CB",
       bt=bt_hex
     )
-    return self.parse_response(resp, "")
 
   # TODO:(command:CW) Unload carrier finally
 
@@ -4181,12 +4137,11 @@ class STAR(HamiltonLiquidHandler):
       True if present, False otherwise
     """
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="CU",
       cu=should_monitor
     )
-    return self.parse_response(resp, "")
 
   # TODO:(command:CN) Take out the carrier to identification position
 
@@ -4201,8 +4156,7 @@ class STAR(HamiltonLiquidHandler):
       slot position (0..54)
     """
 
-    resp = self.send_command(module="C0", command="QA")
-    return self.parse_response(resp, "qa##")
+    return self.send_command(module="C0", command="QA", fmt="qa##")
 
   # TODO:(command:CQ) Request auto load module type
 
@@ -4239,12 +4193,12 @@ class STAR(HamiltonLiquidHandler):
 
     utils.assert_clamp(pump_station, 1, 3, "pump_station")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="ET",
+      fmt="et#",
       ep=pump_station
     )
-    return self.parse_response(resp, "et#")
 
   # -------------- 3.15.1 DC Wash commands (only for revision up to 01) --------------
 
@@ -4276,12 +4230,11 @@ class STAR(HamiltonLiquidHandler):
 
     utils.assert_clamp(pump_station, 1, 3, "pump_station")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="EJ",
       ep=pump_station
     )
-    return self.parse_response(resp, "")
 
   def fill_selected_dual_chamber(
     self,
@@ -4320,7 +4273,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="EH",
-      fmt="",
       ep=pump_station,
       ed=drain_before_refill,
       ek=connection,
@@ -4345,7 +4297,6 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="EL",
-      fmt="",
       ep=pump_station
     )
 
@@ -4366,14 +4317,12 @@ class STAR(HamiltonLiquidHandler):
   def initialize_iswap(self):
     """ Initialize iSWAP (for standalone configuration only) """
 
-    resp = self.send_command(module="C0", command="FI")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="FI")
 
   def position_components_for_free_iswap_y_range(self):
     """ Position all components so that there is maximum free Y range for iSWAP """
 
-    resp = self.send_command(module="C0", command="FY")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="FY")
 
   def move_iswap_x_direction(
     self,
@@ -4387,13 +4336,12 @@ class STAR(HamiltonLiquidHandler):
       direction: X direction. 0 = positive 1 = negative
     """
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="GX",
       gx=step_size,
       xd=direction
     )
-    return self.parse_response(resp, "")
 
   def move_iswap_y_direction(
     self,
@@ -4407,13 +4355,12 @@ class STAR(HamiltonLiquidHandler):
       direction: Y direction. 0 = positive 1 = negative
     """
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="GY",
       gx=step_size,
       xd=direction
     )
-    return self.parse_response(resp, "")
 
   def move_iswap_z_direction(
     self,
@@ -4427,19 +4374,17 @@ class STAR(HamiltonLiquidHandler):
       direction: Z direction. 0 = positive 1 = negative
     """
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="GZ",
       gx=step_size,
       xd=direction
     )
-    return self.parse_response(resp, "")
 
   def open_not_initialized_gripper(self):
     """ Open not initialized gripper """
 
-    resp = self.send_command(module="C0", command="GI")
-    return self.parse_response(resp, "")
+    return self.send_command(module="C0", command="GI")
 
   def open_gripper(
     self,
@@ -4454,12 +4399,11 @@ class STAR(HamiltonLiquidHandler):
 
     utils.assert_clamp(open_position, 0, 9999, "open_position")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="GF",
       go=f"{open_position:04}"
     )
-    return self.parse_response(resp, "")
 
   def close_gripper(
     self,
@@ -4478,14 +4422,13 @@ class STAR(HamiltonLiquidHandler):
       plate_width_tolerance: Plate width tolerance [0.1mm]. Must be between 0 and 99. Default 20.
     """
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="GC",
       gw=grip_strength,
       gb=plate_width,
       gt=plate_width_tolerance
     )
-    return self.parse_response(resp, "")
 
   # -------------- 3.17.2 Stack handling commands CP --------------
 
@@ -4508,7 +4451,6 @@ class STAR(HamiltonLiquidHandler):
     command_output = self.send_command(
       module="C0",
       command="PG",
-      fmt="",
       th=minimum_traverse_height_at_beginning_of_a_command
     )
 
@@ -4584,7 +4526,6 @@ class STAR(HamiltonLiquidHandler):
     command_output = self.send_command(
       module="C0",
       command="PP",
-      fmt="",
       xs=f"{x_position:05}",
       xd=x_direction,
       yj=f"{y_position:04}",
@@ -4666,7 +4607,6 @@ class STAR(HamiltonLiquidHandler):
     command_output = self.send_command(
       module="C0",
       command="PR",
-      fmt="",
       xs=f"{x_position:05}",
       xd=x_direction,
       yj=f"{y_position:04}",
@@ -4919,8 +4859,7 @@ class STAR(HamiltonLiquidHandler):
       1 = gripper is in parking position
     """
 
-    resp = self.send_command(module="C0", command="RG")
-    return self.parse_response(resp, "rg#")
+    return self.send_command(module="C0", command="RG", fmt="rg#")
 
   def request_plate_in_iswap(self):
     """ Request plate in iSWAP
@@ -4930,8 +4869,7 @@ class STAR(HamiltonLiquidHandler):
       1 = plate holding
     """
 
-    resp = self.send_command(module="C0", command="QP")
-    return self.parse_response(resp, "rg#")
+    return self.send_command(module="C0", command="QP", fmt="rg#")
 
   def request_iswap_position(self):
     """ Request iSWAP position ( grip center )
@@ -4945,8 +4883,7 @@ class STAR(HamiltonLiquidHandler):
       zd: Z direction 0 = positive 1 = negative
     """
 
-    resp = self.send_command(module="C0", command="QG")
-    return self.parse_response(resp, "xs#####xd#yj####yd#zj####zd#")
+    return self.send_command(module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#")
 
   def request_iswap_initialization_status(self) -> bool:
     """ Request iSWAP initialization status
