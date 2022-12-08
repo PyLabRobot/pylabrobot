@@ -2263,14 +2263,14 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position_[0.1mm]")
+    utils.assert_clamp(x_position, 0, 30000, "x_position_")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
       command="JX",
-      xs=x_position,
+      fmt="",
+      xs=f"{x_position:05}",
     )
-    return self.parse_response(resp, "")
 
   def position_right_x_arm_(
     self,
@@ -2284,14 +2284,14 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position_[0.1mm]")
+    utils.assert_clamp(x_position, 0, 30000, "x_position_")
 
-    resp = self.send_command(
+    return self.send_command(
       module="C0",
-      command="JX",
-      xs=x_position,
+      command="JS",
+      fmt="",
+      xs=f"{x_position:05}",
     )
-    return self.parse_response(resp, "")
 
   def move_left_x_arm_to_position_with_all_attached_components_in_z_safety_position(
     self,
@@ -3071,46 +3071,52 @@ class STAR(HamiltonLiquidHandler):
 
   def position_single_pipetting_channel_in_y_direction(
     self,
-    pipetting_channel_index: int = 1,
-    y_position: int = 0
+    pipetting_channel_index: int,
+    y_position: int
   ):
-    """ Position single pipetting channel in Y-direction
+    """ Position single pipetting channel in Y-direction.
 
     Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
-      y_position: y position [0.1mm]. Must be between 0 and 6500. Default 0.
+      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16.
+      y_position: y position [0.1mm]. Must be between 0 and 6500.
     """
 
-    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
+    utils.assert_clamp(pipetting_channel_index, 1, self.num_channels, "pipetting_channel_index")
     utils.assert_clamp(y_position, 0, 6500, "y_position")
 
     return self.send_command(
       module="C0",
       command="KY",
-      pn=pipetting_channel_index,
-      yj=y_position,
+      fmt="",
+      pn=f"{pipetting_channel_index:02}",
+      yj=f"{y_position:04}",
     )
 
   def position_single_pipetting_channel_in_z_direction(
     self,
-    pipetting_channel_index: int = 1,
-    z_position: int = 0
+    pipetting_channel_index: int,
+    z_position: int
   ):
-    """ Position single pipetting channel in Z-direction
+    """ Position single pipetting channel in Z-direction.
+
+    Note that this refers to the point of the tip if a tip is mounted!
 
     Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
-      z_position: y position [0.1mm]. Must be between 0 and 6500. Default 0.
+      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16.
+      z_position: y position [0.1mm]. Must be between 0 and 3347. The docs say 3600,but empirically
+        3347 is the max.
     """
 
-    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
-    utils.assert_clamp(z_position, 0, 6500, "z_position")
+    utils.assert_clamp(pipetting_channel_index, 1, self.num_channels, "pipetting_channel_index")
+    # docs say 3600, but empirically 3347 is the max
+    utils.assert_clamp(z_position, 0, 3347, "z_position")
 
     return self.send_command(
       module="C0",
       command="KZ",
-      pn=pipetting_channel_index,
-      zp=z_position,
+      fmt="",
+      pn=f"{pipetting_channel_index:02}",
+      zj=f"{z_position:04}",
     )
 
   # TODO:(command:XL) Search for Teach in signal using pipetting channel n in X-direction
