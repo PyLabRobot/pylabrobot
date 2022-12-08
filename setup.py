@@ -12,7 +12,8 @@ extras_docs = [
 ]
 
 extras_fw = [
-    'pyusb'
+    'pyusb',
+    'serial'
 ]
 
 extras_http = [

@@ -10,3 +10,4 @@ from .http import HTTPBackend
 from .opentrons_backend import OpentronsBackend
 from .saver_backend import SaverBackend
 from .simulation import SimulatorBackend
+from .tilt_module_backend import TiltModuleBackend
