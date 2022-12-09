@@ -1,13 +1,16 @@
 """ Defines LiquidHandler class, the coordinator for liquid handling operations. """
 
 import functools
+import inspect
 import logging
 import numbers
 import time
-from typing import Dict, Union, Optional, List, Callable, Sequence
+from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set
+import warnings
 
 from pylabrobot.default import Defaultable, Default
 from pylabrobot.liquid_handling.resources.abstract import Deck
+from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, does_tip_tracking
 from pylabrobot.utils.list import expand
 
@@ -33,7 +36,7 @@ from .standard import (
   Move
 )
 
-logger = logging.getLogger(__name__) # TODO: get from somewhere else?
+logger = logging.getLogger("pylabrobot")
 
 
 def need_setup_finished(func: Callable): # pylint: disable=no-self-argument
@@ -197,6 +200,49 @@ class LiquidHandler:
       if resource != self.deck:
         raise ValueError(f"Resource named '{resource.name}' not found on deck.")
 
+  def _check_args(self, method: Callable, backend_kwargs: Dict[str, Any]) -> Set[str]:
+    """ Checks that the arguments to `method` are valid.
+
+    Args:
+      method: Method to check.
+      backend_kwargs: Keyword arguments to `method`.
+
+    Raises:
+      TypeError: If the arguments are invalid.
+
+    Returns:
+      The set of arguments that need to be removed from `backend_kwargs` before passing to `method`.
+    """
+
+    default_args = {"self", "ops", "use_channels"}
+
+    sig = inspect.signature(method)
+    args = {arg: param for arg, param in sig.parameters.items() if arg not in default_args}
+    vars_keyword = {arg for arg, param in sig.parameters.items() # **kwargs
+                    if param.kind == inspect.Parameter.VAR_KEYWORD}
+    args = {arg: param for arg, param in args.items() # filter *args and **kwargs
+            if param.kind not in {inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD}}
+    non_default = {arg for arg, param in args.items() if param.default == inspect.Parameter.empty}
+
+    strictness = get_strictness()
+
+    backend_kws = set(backend_kwargs.keys())
+
+    missing = non_default - backend_kws
+    if len(missing) > 0:
+      raise TypeError(f"Missing arguments to backend.{method.__name__}: {missing}")
+
+    extra = backend_kws - non_default
+    if len(extra) > 0 and len(vars_keyword) == 0:
+      if strictness == Strictness.STRICT:
+        raise TypeError(f"Extra arguments to backend.{method.__name__}: {extra}")
+      elif strictness == Strictness.WARN:
+        warnings.warn(f"Extra arguments to backend.{method.__name__}: {extra}")
+      else:
+        logger.debug("Extra arguments to backend.%s: %s", method.__name__, extra)
+
+    return extra
+
   @need_setup_finished
   def pick_up_tips(
     self,
@@ -266,6 +312,10 @@ class LiquidHandler:
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
         op.resource.tracker.queue_op(op)
         self.trackers[channel].queue_op(op)
+
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    for extra in extras:
+      del backend_kwargs[extra]
 
     try:
       self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
@@ -368,6 +418,10 @@ class LiquidHandler:
         if isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled:
           op.resource.tracker.queue_op(op)
         self.trackers[channel].queue_op(op)
+
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    for extra in extras:
+      del backend_kwargs[extra]
 
     try:
       self.backend.drop_tips(ops=drops, use_channels=use_channels, **backend_kwargs)
@@ -530,7 +584,7 @@ class LiquidHandler:
       if offsets is not Default:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when aspirating "
-                          "from a resource.")
+                           "from a resource.")
       else:
         offsets = resources.get_2d_center_offsets(n=n)
         offsets = list(reversed(offsets))
@@ -555,6 +609,10 @@ class LiquidHandler:
 
     aspirations = [Aspiration(r, v, offset=o, flow_rate=fr, liquid_height=lh)
                    for r, v, o, fr, lh in zip(resources, vols, offsets, flow_rates, liquid_height)]
+
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    for extra in extras:
+      del backend_kwargs[extra]
 
     self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
 
@@ -665,6 +723,10 @@ class LiquidHandler:
     dispenses = [Dispense(r, v, offset=o, flow_rate=fr, liquid_height=lh)
                    for r, v, o, fr, lh in zip(resources, vols, offsets, flow_rates, liquid_height)]
 
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    for extra in extras:
+      del backend_kwargs[extra]
+
     self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
 
     if end_delay > 0:
@@ -763,6 +825,10 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    for extra in extras:
+      del backend_kwargs[extra]
+
     self.backend.pick_up_tips96(tip_rack, **backend_kwargs)
 
     # Save the tips as picked up.
@@ -780,6 +846,10 @@ class LiquidHandler:
       tip_rack: The tip rack to drop tips to.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    for extra in extras:
+      del backend_kwargs[extra]
 
     self.backend.drop_tips96(tip_rack, **backend_kwargs)
 
@@ -830,6 +900,10 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    for extra in extras:
+      del backend_kwargs[extra]
+
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       self.backend.aspirate96(aspiration=Aspiration(
         resource=plate,
@@ -869,6 +943,10 @@ class LiquidHandler:
         the tips used in the dispense are dripping.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    for extra in extras:
+      del backend_kwargs[extra]
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       self.backend.dispense96(dispense=Dispense(
@@ -942,6 +1020,10 @@ class LiquidHandler:
       get_direction: The direction from which to pick up the resource.
       put_direction: The direction from which to put down the resource.
     """
+
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    for extra in extras:
+      del backend_kwargs[extra]
 
     return self.backend.move_resource(Move(
       resource=resource,

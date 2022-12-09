@@ -12,6 +12,7 @@ from pylabrobot.liquid_handling.errors import (
   TipSpotHasNoTipError,
 )
 from pylabrobot.liquid_handling import no_tip_tracking, set_tip_tracking
+from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
 
 from . import backends
 from .liquid_handler import LiquidHandler
@@ -439,6 +440,35 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     # test tip tracking
     with self.assertRaises(RuntimeError):
       self.lh.discard_tips()
+
+  def test_strictness(self):
+    class TestBackend(backends.SaverBackend):
+      """ Override pick_up_tips for testing. """
+      def pick_up_tips(self, ops, use_channels, non_default, default=True):
+        pass
+
+    self.lh.backend = TestBackend(num_channels=8)
+
+    with no_tip_tracking():
+      set_strictness(Strictness.IGNORE)
+      self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
+      self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, does_not_exist=True)
+      with self.assertRaises(TypeError):
+        self.lh.pick_up_tips(self.tip_rack["A1"])
+
+      set_strictness(Strictness.WARN)
+      self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
+      with self.assertWarns(UserWarning):
+        self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, does_not_exist=True)
+      with self.assertRaises(TypeError):
+        self.lh.pick_up_tips(self.tip_rack["A1"])
+
+      set_strictness(Strictness.STRICT)
+      self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
+      with self.assertRaises(TypeError):
+        self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, does_not_exist=True)
+      with self.assertRaises(TypeError):
+        self.lh.pick_up_tips(self.tip_rack["A1"])
 
 
 if __name__ == "__main__":

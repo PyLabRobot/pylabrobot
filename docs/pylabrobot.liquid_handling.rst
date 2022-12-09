@@ -68,3 +68,13 @@ Operations are the main data holders used to transmit information from the liqui
   :recursive:
 
   pylabrobot.liquid_handling.standard
+
+
+Strictness
+----------
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Strictness
+
+   pylabrobot.liquid_handling.strictness
