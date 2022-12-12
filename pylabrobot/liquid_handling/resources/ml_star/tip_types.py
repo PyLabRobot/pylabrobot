@@ -63,8 +63,17 @@ class HamiltonTipType(TipType):
     self.pickup_method = pickup_method
     self.tip_size = tip_size
 
+  def __repr__(self) -> str:
+    return f'HamiltonTipType({self.tip_size.name}, ' \
+            f'has_filter={self.has_filter}, ' \
+            f'maximal_volume={self.maximal_volume}, ' \
+            f'fitting_depth={self.fitting_depth}, ' \
+            f'total_tip_length={self.total_tip_length}, ' \
+            f'pickup_method={self.pickup_method.name})'
 
-# TODO: Can we compress this further?
+  def __hash__(self):
+    return hash(repr(self))
+
 
 #: Standard volume tip without a filter (`tt00` in venus)
 standard_volume_tip_no_filter = HamiltonTipType(
