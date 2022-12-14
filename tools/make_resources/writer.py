@@ -1,4 +1,4 @@
-def _write_tip_rack_header(o, base_class, name, description, with_params: bool, size_x=None, size_y=None, size_z=None, tip_type=None):
+def _write_tip_rack_header(o, base_class, name, description, with_params: bool, size_x=None, size_y=None, size_z=None):
   o.write(f'\n\n')
 
   o.write(f'#: {description}\n')
@@ -9,10 +9,9 @@ def _write_tip_rack_header(o, base_class, name, description, with_params: bool, 
     o.write(f'    size_x={size_x},\n')
     o.write(f'    size_y={size_y},\n')
     o.write(f'    size_z={size_z},\n')
-    o.write(f'    tip_type={tip_type},\n')
 
 def write_tip_rack_with_create_equally_spaced(o, base_class, name, description, size_x, size_y, size_z, dx, dy, dz, num_items_x, num_items_y, tip_size_x, tip_size_y, tip_type):
-  _write_tip_rack_header(o, base_class, name, description, True, size_x, size_y, size_z, tip_type)
+  _write_tip_rack_header(o, base_class, name, description, True, size_x, size_y, size_z)
 
   o.write(f'    items=create_equally_spaced(TipSpot,\n')
   o.write(f'      num_items_x={num_items_x},\n')
@@ -22,6 +21,7 @@ def write_tip_rack_with_create_equally_spaced(o, base_class, name, description, 
   o.write(f'      dz={dz},\n')
   o.write(f'      item_size_x={tip_size_x},\n')
   o.write(f'      item_size_y={tip_size_y},\n')
+  o.write(f'      make_tip={tip_type},\n')
   o.write(f'    ),\n')
   o.write(f'    with_tips=with_tips\n')
   o.write(f'  )\n')

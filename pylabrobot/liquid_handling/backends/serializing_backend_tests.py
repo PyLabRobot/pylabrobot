@@ -3,20 +3,20 @@ import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking
 from pylabrobot.liquid_handling.backends.serializing_backend import SerializingSavingBackend
-from pylabrobot.liquid_handling.resources import STARLetDeck
+from pylabrobot.liquid_handling.resources import (
+  STARLetDeck,
+  TIP_CAR_480_A00,
+  PLT_CAR_L5AC_A00,
+  Cos_96_EZWash,
+  STF_L,
+  Coordinate,
+)
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Drop,
   Aspiration,
   Dispense,
   Move,
-)
-from pylabrobot.liquid_handling.resources import (
-  TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00,
-  Cos_96_EZWash,
-  STF_L,
-  Coordinate,
 )
 
 
@@ -43,22 +43,27 @@ class SerializingBackendTests(unittest.TestCase):
     self.maxDiff = None
 
   def test_pick_up_tips(self):
-    tips = self.tip_rack["A1"]
-    self.lh.pick_up_tips(tips)
+    tip_spot = self.tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+    self.lh.pick_up_tips([tip_spot])
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "pick_up_tips")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
-      channels=[Pickup(resource=tips[0], tip_type=self.tip_rack.tip_type).serialize()],
+      channels=[Pickup(resource=tip_spot, tip=tip).serialize()],
       use_channels=[0]))
 
   def test_drop_tips(self):
+    tip_spot = self.tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+    self.lh.update_head_state({0: tip})
+
     tips = self.tip_rack["A1"]
     with no_tip_tracking():
       self.lh.drop_tips(tips)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "drop_tips")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
-      channels=[Drop(resource=tips[0], tip_type=self.tip_rack.tip_type).serialize()],
+      channels=[Drop(resource=tip_spot, tip=tip).serialize()],
       use_channels=[0]))
 
   def test_aspirate(self):

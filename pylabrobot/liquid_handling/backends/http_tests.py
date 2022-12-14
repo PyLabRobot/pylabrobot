@@ -103,11 +103,14 @@ class TestHTTPBackendOps(unittest.TestCase):
           "channels": [{
             "offset": "default",
             "resource_name": "tiprack_tipspot_0_0",
-            "tip_type": {
+            "tip": {
+              "type": "HamiltonTip",
               "has_filter": True,
               "total_tip_length": 95.1,
               "maximal_volume": 1065,
-              "fitting_depth": 8
+              "fitting_depth": 8,
+              "pickup_method": "OUT_OF_RACK",
+              "tip_size": "HIGH_VOLUME"
             }
           }],
           "use_channels": [0]
@@ -129,11 +132,14 @@ class TestHTTPBackendOps(unittest.TestCase):
           "channels": [{
             "offset": "default",
             "resource_name": "tiprack_tipspot_0_0",
-            "tip_type": {
+            "tip": {
+              "type": "HamiltonTip",
               "has_filter": True,
               "total_tip_length": 95.1,
               "maximal_volume": 1065,
-              "fitting_depth": 8
+              "fitting_depth": 8,
+              "pickup_method": "OUT_OF_RACK",
+              "tip_size": "HIGH_VOLUME"
             }
           }],
           "use_channels": [0]
@@ -142,7 +148,9 @@ class TestHTTPBackendOps(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
+
     with no_tip_tracking():
+      self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
       self.lh.drop_tips(self.tip_rack["A1"])
 
   @responses.activate

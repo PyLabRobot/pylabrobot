@@ -215,9 +215,10 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     return None
 
   def test_offsets_tips(self):
-    tips = self.tip_rack["A1"]
-    self.lh.pick_up_tips(tips, offsets=Coordinate(x=1, y=1, z=1))
-    self.lh.drop_tips(tips, offsets=Coordinate(x=1, y=1, z=1))
+    tip_spot = self.tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+    self.lh.pick_up_tips([tip_spot], offsets=Coordinate(x=1, y=1, z=1))
+    self.lh.drop_tips([tip_spot], offsets=Coordinate(x=1, y=1, z=1))
 
     self.assertEqual(self.get_first_command("pick_up_tips"), {
       "command": "pick_up_tips",
@@ -225,13 +226,13 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       "kwargs": {
         "use_channels": [0],
         "ops": [
-          Pickup(tips[0], tip_type=self.tip_rack.tip_type, offset=Coordinate(x=1, y=1, z=1))]}})
+          Pickup(tip_spot, tip=tip, offset=Coordinate(x=1, y=1, z=1))]}})
     self.assertEqual(self.get_first_command("drop_tips"), {
       "command": "drop_tips",
       "args": (),
       "kwargs": {
         "use_channels": [0], "ops": [
-          Drop(tips[0], tip_type=self.tip_rack.tip_type, offset=Coordinate(x=1, y=1, z=1))]}})
+          Drop(tip_spot, tip=tip, offset=Coordinate(x=1, y=1, z=1))]}})
 
   def test_offsets_asp_disp(self):
     well = self.plate["A1"]
@@ -252,8 +253,9 @@ class TestLiquidHandlerCommands(unittest.TestCase):
         "ops": [Dispense(resource=well[0], volume=10, offset=Coordinate(x=1, y=1, z=1))]}})
 
   def test_return_tips(self):
-    tips = self.tip_rack["A1"]
-    self.lh.pick_up_tips(tips)
+    tip_spot = self.tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+    self.lh.pick_up_tips([tip_spot])
     self.lh.return_tips()
 
     self.assertEqual(self.get_first_command("drop_tips"), {
@@ -261,7 +263,7 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Drop(tips[0], tip_type=self.tip_rack.tip_type)]}})
+        "ops": [Drop(tip_spot, tip=tip)]}})
 
     with self.assertRaises(RuntimeError):
       self.lh.return_tips()
@@ -378,18 +380,15 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       self.lh.pick_up_tips(self.tip_rack["A2"])
 
   def test_tip_tracking_empty_drop(self):
-    self.tip_rack.get_item("A1").tracker.set_initial_state(has_tip=False)
-
     with self.assertRaises(ChannelHasNoTipError):
       self.lh.drop_tips(self.tip_rack["A1"])
 
     self.lh.pick_up_tips(self.tip_rack["A2"])
-    self.lh.drop_tips(self.tip_rack["A2"])
     with self.assertRaises(TipSpotHasTipError):
-      self.lh.drop_tips(self.tip_rack["A1"])
+      self.lh.drop_tips(self.tip_rack["A3"])
 
   def test_tip_tracking_empty_pickup(self):
-    self.tip_rack.get_item("A1").tracker.set_initial_state(has_tip=False)
+    self.tip_rack.get_item("A1").empty()
 
     with self.assertRaises(TipSpotHasNoTipError):
       self.lh.pick_up_tips(self.tip_rack["A1"])
@@ -417,10 +416,11 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
     # Disable tip tracking for a single tip rack
     self.tip_rack.get_item("A1").tracker.disable()
-    self.lh.pick_up_tips(self.tip_rack["A1"])
+    self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[1])
     self.tip_rack.get_item("A1").tracker.enable()
 
   def test_discard_tips(self):
+    tips = self.tip_rack.get_tips("A1:D1")
     self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1", "D1"], use_channels=[0, 1, 3, 4])
     self.lh.discard_tips()
     offsets = self.deck.get_trash_area().get_2d_center_offsets(n=4)
@@ -431,10 +431,10 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       "kwargs": {
         "use_channels": [0, 1, 3, 4],
         "ops": [
-          Drop(self.deck.get_trash_area(), tip_type=self.tip_rack.tip_type, offset=offsets[3]),
-          Drop(self.deck.get_trash_area(), tip_type=self.tip_rack.tip_type, offset=offsets[2]),
-          Drop(self.deck.get_trash_area(), tip_type=self.tip_rack.tip_type, offset=offsets[1]),
-          Drop(self.deck.get_trash_area(), tip_type=self.tip_rack.tip_type, offset=offsets[0]),
+          Drop(self.deck.get_trash_area(), tip=tips[0], offset=offsets[3]),
+          Drop(self.deck.get_trash_area(), tip=tips[1], offset=offsets[2]),
+          Drop(self.deck.get_trash_area(), tip=tips[2], offset=offsets[1]),
+          Drop(self.deck.get_trash_area(), tip=tips[3], offset=offsets[0]),
         ]}})
 
     # test tip tracking

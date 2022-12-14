@@ -9,13 +9,13 @@ try:
 except ImportError:
   USE_OT = False
 
+from pylabrobot.liquid_handling.tip import Tip, TipCreator
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
   Plate,
   TipRack,
   Well,
   TipSpot,
-  TipType,
 )
 
 
@@ -78,10 +78,23 @@ def ot_definition_to_resource(
           well.location = location
           wells[i].append(well)
         else:
+          # closure
+          def make_make_tip(well_data) -> TipCreator:
+            def make_tip() -> Tip:
+              total_tip_length = well_data["depth"]
+              return Tip(
+                total_tip_length=total_tip_length,
+                has_filter="Filter" in data["metadata"]["displayName"],
+                maximal_volume=volume_from_name(data["metadata"]["displayName"]),
+                fitting_depth=data["parameters"]["tipOverlap"]
+              )
+            return make_tip
+
           tip_spot = TipSpot(
             name=item,
             size_x=well_size_x,
             size_y=well_size_y,
+            make_tip=make_make_tip(well_data)
           )
           tip_spot.location = location
           wells[i].append(tip_spot)
@@ -96,22 +109,12 @@ def ot_definition_to_resource(
         one_dot_max=None
       )
     elif display_category == "tipRack":
-      first_well_data = data["wells"][wells[0][0].name]
-      total_tip_length = first_well_data["depth"]
-      tip_type = TipType(
-        total_tip_length=total_tip_length,
-        has_filter="Filter" in data["metadata"]["displayName"],
-        maximal_volume=volume_from_name(data["metadata"]["displayName"]),
-        fitting_depth=data["parameters"]["tipOverlap"]
-      )
-
       return TipRack(
         name=name,
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
         items=cast(List[List[TipSpot]], wells),
-        tip_type=tip_type
       )
   raise UnknownResourceType(f"Unknown resource type '{display_category}'.")
 

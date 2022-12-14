@@ -19,17 +19,20 @@ class TestStandard(unittest.TestCase):
   def test_pick_up_serialize(self):
     self.assertEqual(
       Pickup(
-        resource=self.tip_rack.get_tip("A1"),
-        tip_type=self.tip_rack.tip_type
+        resource=self.tip_rack.get_item("A1"),
+        tip=self.tip_rack.get_tip("A1")
       ).serialize(),
       {
       "resource_name": "tiprack_tipspot_0_0",
       "offset": "default",
-      "tip_type": {
+      "tip": {
+        "type": "HamiltonTip",
         "has_filter": True,
         "total_tip_length": 95.1,
         "maximal_volume": 1065,
         "fitting_depth": 8,
+        "pickup_method": "OUT_OF_RACK",
+        "tip_size": "HIGH_VOLUME"
       }
     })
 
@@ -38,31 +41,37 @@ class TestStandard(unittest.TestCase):
         Pickup.deserialize({
           "resource_name": "tiprack_tipspot_0_0",
           "offset": "default",
-          "tip_type": {
+          "tip": {
+            "type": "HamiltonTip",
             "has_filter": True,
             "total_tip_length": 95.1,
             "maximal_volume": 1065,
             "fitting_depth": 8,
+            "pickup_method": "OUT_OF_RACK",
+            "tip_size": "HIGH_VOLUME"
           }},
-          resource=self.tip_rack.get_tip("A1"),
+          resource=self.tip_rack.get_item("A1"),
         ),
         Pickup(
-          resource=self.tip_rack.get_tip("A1"),
-          tip_type=self.tip_rack.tip_type
+          resource=self.tip_rack.get_item("A1"),
+          tip=self.tip_rack.get_tip("A1")
         )
     )
 
   def test_drop_serialize(self):
     self.assertEqual(
-      Drop(resource=self.tip_rack.get_tip("A1"), tip_type=self.tip_rack.tip_type).serialize(),
+      Drop(resource=self.tip_rack.get_item("A1"), tip=self.tip_rack.get_tip("A1")).serialize(),
       {
         "resource_name": "tiprack_tipspot_0_0",
         "offset": "default",
-        "tip_type": {
+        "tip": {
+          "type": "HamiltonTip",
           "has_filter": True,
           "total_tip_length": 95.1,
           "maximal_volume": 1065,
           "fitting_depth": 8,
+          "pickup_method": "OUT_OF_RACK",
+          "tip_size": "HIGH_VOLUME"
         }
       })
 
@@ -70,15 +79,18 @@ class TestStandard(unittest.TestCase):
     self.assertEqual(Drop.deserialize({
         "resource_name": "tiprack_tipspot_0_0",
         "offset": "default",
-        "tip_type": {
+        "tip": {
+          "type": "HamiltonTip",
           "has_filter": True,
           "total_tip_length": 95.1,
           "maximal_volume": 1065,
           "fitting_depth": 8,
+          "pickup_method": "OUT_OF_RACK",
+          "tip_size": "HIGH_VOLUME"
         }},
-        resource=self.tip_rack.get_tip("A1"),
+        resource=self.tip_rack.get_item("A1"),
       ),
-      Drop(resource=self.tip_rack.get_tip("A1"), tip_type=self.tip_rack.tip_type))
+      Drop(resource=self.tip_rack.get_item("A1"), tip=self.tip_rack.get_tip("A1")))
 
   def test_aspiration_serialize(self):
     self.assertEqual(Aspiration(resource=self.plate.get_well("A1"), volume=100).serialize(), {

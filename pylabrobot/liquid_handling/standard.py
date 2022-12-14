@@ -7,7 +7,7 @@ import enum
 from typing import TYPE_CHECKING
 
 from pylabrobot.default import Defaultable, Default, is_not_default
-from pylabrobot.liquid_handling.tip_type import TipType
+from pylabrobot.liquid_handling.tip import Tip
 from .resources.abstract.coordinate import Coordinate
 if TYPE_CHECKING:
   from pylabrobot.liquid_handling.resources import Resource
@@ -53,23 +53,23 @@ class TipOp(PipettingOp, metaclass=ABCMeta):
   def __init__(
     self,
     resource: Resource,
-    tip_type: TipType,
+    tip: Tip,
     offset: Defaultable[Coordinate] = Default
   ):
     super().__init__(resource, offset)
-    self.tip_type = tip_type
+    self.tip = tip
 
   def __eq__(self, other: object) -> bool:
     return (
       super().__eq__(other) and
       isinstance(other, TipOp) and
-      self.tip_type == other.tip_type
+      self.tip == other.tip
     )
 
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "tip_type": self.tip_type.serialize()
+      "tip": self.tip.serialize()
     }
 
 
@@ -79,20 +79,22 @@ class Pickup(TipOp):
   def __init__(
     self,
     resource: TipSpot,
-    tip_type: TipType,
+    tip: Tip,
     offset: Defaultable[Coordinate] = Default
   ):
-    super().__init__(resource, tip_type, offset)
+    super().__init__(resource=resource, offset=offset, tip=tip)
     self.resource: TipSpot = resource # fix type
 
   @classmethod
   def deserialize(cls, data: dict, resource: TipSpot) -> Pickup:
-    assert resource.name == data["resource_name"]
-    tip_type = TipType.deserialize(data.pop("tip_type"))
+    assert resource.name == data["resource_name"] # TODO: why does this exist?
+    tip_class_name = data["tip"]["type"]
+    tip_classes = {cls.__name__: cls for cls in Tip.__subclasses__()}
+    tip_class = tip_classes[tip_class_name]
     return Pickup(
       resource=resource,
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
-      tip_type=tip_type
+      tip=tip_class.deserialize(data["tip"])
     )
 
 
@@ -101,12 +103,14 @@ class Drop(TipOp):
 
   @classmethod
   def deserialize(cls, data: dict, resource: Resource) -> Drop:
-    assert resource.name == data["resource_name"]
-    tip_type = TipType.deserialize(data.pop("tip_type"))
+    assert resource.name == data["resource_name"] # TODO: why does this exist?
+    tip_class_name = data["tip"]["type"]
+    tip_classes = {cls.__name__: cls for cls in Tip.__subclasses__()}
+    tip_class = tip_classes[tip_class_name]
     return Drop(
       resource=resource,
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
-      tip_type=tip_type
+      tip=tip_class.deserialize(data["tip"])
     )
 
 
@@ -181,26 +185,6 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       "liquid_height": self.liquid_height,
       "blow_out_air_volume": self.blow_out_air_volume
     }
-
-  @classmethod
-  def deserialize(cls, data: dict, resource: Resource) -> LiquidHandlingOp:
-    """ Deserialize the operation.
-
-    Args:
-      data: The serialized operation.
-
-    Returns:
-      The deserialized operation.
-    """
-
-    return cls(
-      resource=resource,
-      volume=data["volume"],
-      flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
-      offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
-      liquid_height=data["liquid_height"],
-      blow_out_air_volume=data["blow_out_air_volume"]
-    )
 
 
 class Aspiration(LiquidHandlingOp):

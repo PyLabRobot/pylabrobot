@@ -52,11 +52,11 @@ class DeckTests(unittest.TestCase):
     ], site_size_x=10, site_size_y=10)
 
     tc[0] = TipRack("tips", 10, 20, 30,
-      tip_type=standard_volume_tip_with_filter,
       items=create_equally_spaced(TipSpot,
         num_items_x=1, num_items_y=1,
         dx=-1, dy=-1, dz=-1,
-        item_size_x=1, item_size_y=1))
+        item_size_x=1, item_size_y=1,
+        make_tip=standard_volume_tip_with_filter))
     pc = PlateCarrier("pc", 100, 100, 100, sites=[
       Coordinate(10, 20, 30)
     ], site_size_x=10, site_size_y=10)

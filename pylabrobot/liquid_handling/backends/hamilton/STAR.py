@@ -24,13 +24,12 @@ from pylabrobot.liquid_handling.errors import (
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
   Plate,
-  Resource,
   TipRack,
   TipSpot,
   Well
 )
 from pylabrobot.liquid_handling.resources.ml_star import (
-  HamiltonTipType,
+  HamiltonTip,
   TipDropMethod,
   TipPickupMethod,
   TipSize,
@@ -434,7 +433,7 @@ class STAR(HamiltonLiquidHandler):
 
     super().__init__(packet_read_timeout=packet_read_timeout, read_timeout=read_timeout, **kwargs)
     self.dev: Optional[usb.core.Device] = None
-    self._tip_types: dict[HamiltonTipType, int] = {}
+    self._tth2tti: dict[int, int] = {} # hash to tip type index
     self._iswap_parked: Optional[bool] = None
 
     self.read_endpoint: Optional[usb.core.Endpoint] = None
@@ -552,76 +551,53 @@ class STAR(HamiltonLiquidHandler):
 
   # ============== Tip Types ==============
 
-  def define_tip_type(self, tip_type: HamiltonTipType):
-    """ Define a new tip type.
+  def get_or_assign_tip_type_index(self, tip: HamiltonTip) -> int:
+    """ Get a tip type table index for the tip.
 
-    Sends a command to the robot to define a new tip type and save the tip type table index for
-    future reference.
-
-    Args:
-      tip_type: Tip type name.
-
-    Returns:
-      Tip type table index.
-
-    Raises:
-      ValueError: If the tip type is already defined.
+    If the tip has previously been defined, used that index. Otherwise, define a new tip type.
     """
 
-    if tip_type in self._tip_types:
-      raise ValueError(f"Tip type {tip_type} already defined.")
+    tip_type_hash = hash(tip)
 
-    ttti = len(self._tip_types) + 1
-    if ttti > 99:
-      raise ValueError("Too many tip types defined.")
+    if tip_type_hash not in self._tth2tti:
+      ttti = len(self._tth2tti) + 1
+      if ttti > 99:
+        raise ValueError("Too many tip types defined.")
 
-    # TODO: look up if there are other tip types with the same properties, and use that ID.
-    self.define_tip_needle(
-      tip_type_table_index=ttti,
-      filter=tip_type.has_filter,
-      tip_length=int((tip_type.total_tip_length - tip_type.fitting_depth) * 10), # in 0.1mm
-      maximum_tip_volume=int(tip_type.maximal_volume * 10), # in 0.1ul
-      tip_size=tip_type.tip_size,
-      pickup_method=tip_type.pickup_method
-    )
-    self._tip_types[tip_type] = ttti
-    return ttti
+      self.define_tip_needle(
+        tip_type_table_index=ttti,
+        filter=tip.has_filter,
+        tip_length=int((tip.total_tip_length - tip.fitting_depth) * 10), # in 0.1mm
+        maximum_tip_volume=int(tip.maximal_volume * 10), # in 0.1ul
+        tip_size=tip.tip_size,
+        pickup_method=tip.pickup_method
+      )
+      self._tth2tti[tip_type_hash] = ttti
 
-  def get_tip_type_table_index(self, tip_type: HamiltonTipType) -> int:
-    """ Get tip type table index.
+    return self._tth2tti[tip_type_hash]
 
-    Args:
-      tip_type: Tip type.
+  def _get_hamilton_tip(self, tip_spots: List[TipSpot]) -> HamiltonTip:
+    """ Get the single tip type for all tip spots. If it does not exist or is not a HamiltonTip,
+    raise an error. """
+    tips = set(tip_spot.get_tip() for tip_spot in tip_spots)
+    if len(tips) > 1:
+      raise ValueError("Cannot mix tips with different tip types.")
+    if len(tips) == 0:
+      raise ValueError("No tips specified.")
+    tip = tips.pop()
+    if not isinstance(tip, HamiltonTip):
+      raise ValueError(f"Tip {tip} is not a HamiltonTip.")
+    return tip
 
-    Returns:
-      Tip type ID.
+  def get_ttti(self, tip_spots: List[TipSpot]) -> int:
+    """ Get tip type table index for a list of tips.
+
+    Ensure that for all non-None tips, they have the same tip type, and return the tip type table
+    index for that tip type.
     """
 
-    return self._tip_types[tip_type]
-
-  def get_or_assign_tip_type_index(self, tip_type: HamiltonTipType) -> int:
-    """ Get a tip type table index for the tip_type if it is defined, otherwise define it and then
-    return it.
-
-    Args:
-      tip_type: Tip type.
-
-    Returns:
-      Tip type ID.
-    """
-
-    if tip_type not in self._tip_types:
-      self.define_tip_type(tip_type)
-    return self.get_tip_type_table_index(tip_type)
-
-  # ============== LiquidHandlerBackend methods ==============
-
-  def assigned_resource_callback(self, resource: Resource):
-    if isinstance(resource, TipRack):
-      if not isinstance(resource.tip_type, HamiltonTipType):
-        raise ValueError(f"TipRack {resource} has unsupported tip type {resource.tip_type}.")
-      if resource.tip_type not in self._tip_types:
-        self.define_tip_type(resource.tip_type)
+    tip = self._get_hamilton_tip(tip_spots)
+    return self.get_or_assign_tip_type_index(tip)
 
   def _ops_to_fw_positions(
     self,
@@ -665,26 +641,7 @@ class STAR(HamiltonLiquidHandler):
 
     return x_positions, y_positions, channels_involved
 
-  def _get_hamilton_tip_type(self, tip_spots: List[TipSpot]) -> HamiltonTipType:
-    tip_types = set(tip.tip_type for tip in tip_spots)
-    if len(tip_types) > 1:
-      raise ValueError("Cannot mix tips with different tip types.")
-    if len(tip_types) == 0:
-      raise ValueError("No tips specified.")
-    tip_type = tip_types.pop()
-    if not isinstance(tip_type, HamiltonTipType):
-      raise ValueError(f"Tip type {tip_type} is not a HamiltonTipType.")
-    return tip_type
-
-  def get_ttti(self, tip_spots: List[TipSpot]) -> int:
-    """ Get tip type table index for a list of tips.
-
-    Ensure that for all non-None tips, they have the same tip type, and return the tip type table
-    index for that tip type.
-    """
-
-    tip_type = self._get_hamilton_tip_type(tip_spots)
-    return self.get_or_assign_tip_type_index(tip_type)
+  # ============== LiquidHandlerBackend methods ==============
 
   @need_iswap_parked
   def pick_up_tips(
@@ -700,16 +657,16 @@ class STAR(HamiltonLiquidHandler):
     ttti = self.get_ttti([op.resource for op in ops])
 
     max_z = max(op.get_absolute_location().z for op in ops)
-    max_total_tip_length = max(op.tip_type.total_tip_length for op in ops)
-    max_tip_length = max((op.tip_type.total_tip_length-op.tip_type.fitting_depth) for op in ops)
+    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
+    max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
 
-    if self._get_hamilton_tip_type([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
+    if self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
       # not sure why this is necessary, but it is according to log files and experiments
       max_tip_length -= 2
 
     try:
-      tip_type = ops[0].tip_type
-      assert isinstance(tip_type, HamiltonTipType), "Tip type must be HamiltonTipType."
+      tip = ops[0].tip
+      assert isinstance(tip, HamiltonTip), "Tip type must be HamiltonTip."
       return self.pick_up_tip(
         x_positions=x_positions,
         y_positions=y_positions,
@@ -718,7 +675,7 @@ class STAR(HamiltonLiquidHandler):
         begin_tip_pick_up_process=int((max_z + max_total_tip_length)*10),
         end_tip_pick_up_process=int((max_z + max_tip_length)*10),
         minimum_traverse_height_at_beginning_of_a_command=2450,
-        pickup_method=tip_type.pickup_method,
+        pickup_method=tip.pickup_method,
       )
     except HamiltonFirmwareError as e:
       tip_already_fitted_errors: List[int] = []
@@ -766,8 +723,8 @@ class STAR(HamiltonLiquidHandler):
 
     # get highest z position
     max_z = max(op.get_absolute_location().z for op in ops)
-    max_total_tip_length = max(op.tip_type.total_tip_length for op in ops)
-    max_tip_length = max((op.tip_type.total_tip_length-op.tip_type.fitting_depth) for op in ops)
+    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
+    max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
 
     try:
       return self.discard_tip(
@@ -1242,10 +1199,11 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 2450
   ):
     assert self.core96_head_installed, "96 head must be installed"
-    assert isinstance(tip_rack.tip_type, HamiltonTipType), "Tip type must be HamiltonTipType."
-    ttti = self.get_or_assign_tip_type_index(tip_rack.tip_type)
-    tip_a1 = tip_rack.get_item("A1")
-    position = tip_a1.get_absolute_location() + tip_a1.center()
+    tip_spot_a1 = tip_rack.get_item("A1")
+    tip_a1 = tip_spot_a1.get_tip()
+    assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
+    ttti = self.get_or_assign_tip_type_index(tip_a1)
+    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center()
 
     return self.pick_up_tips_core96(
       x_position=int(position.x * 10),
@@ -2470,7 +2428,7 @@ class STAR(HamiltonLiquidHandler):
     utils.assert_clamp(begin_of_tip_deposit_process, 0, 3600, "begin_of_tip_deposit_process")
     utils.assert_clamp(end_of_tip_deposit_process, 0, 3600, "end_of_tip_deposit_process")
     utils.assert_clamp(z_position_at_end_of_a_command, 0, 3600, "z_position_at_end_of_a_command")
-    utils.assert_clamp(tip_type, 0, 99, "tip_type")
+    utils.assert_clamp(tip_type, 0, 99, "tip")
     utils.assert_clamp(discarding_method, 0, 1, "discarding_method")
 
     return self.send_command(
