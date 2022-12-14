@@ -125,7 +125,8 @@ class Plate(ItemizedResource[Well]):
       size_x=data["size_x"],
       size_y=data["size_y"],
       size_z=data["size_z"],
-      items=[], # will be filled in by LiquidHandler
+      num_items_x=data["num_items_x"],
+      num_items_y=data["num_items_y"],
       one_dot_max=data["one_dot_max"],
       lid_height=data["lid"]["size_z"] if "lid" in data else 0,
       with_lid="lid" in data,
