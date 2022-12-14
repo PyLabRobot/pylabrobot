@@ -65,6 +65,8 @@ class DeckTests(unittest.TestCase):
         num_items_x=1, num_items_y=1,
         dx=-1, dy=-1, dz=-1,
         item_size_x=1, item_size_y=1))
+    custom_1.assign_child_resource(tc, location=Coordinate(0, 0, 0))
+    custom_1.assign_child_resource(pc, location=Coordinate(100, 0, 0))
 
     fn = os.path.join(tmp_dir, "layout.json")
     custom_1.save(fn)
