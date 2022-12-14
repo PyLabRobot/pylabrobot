@@ -9,8 +9,10 @@ from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set
 import warnings
 
 from pylabrobot.default import Defaultable, Default
+from pylabrobot.liquid_handling.errors import ChannelHasNoTipError
 from pylabrobot.liquid_handling.resources.abstract import Deck
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
+from pylabrobot.liquid_handling.tip import Tip
 from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, does_tip_tracking
 from pylabrobot.utils.list import expand
 
@@ -25,7 +27,6 @@ from .resources import (
   PlateReader,
   TipRack,
   TipSpot,
-  TipType,
   Well
 )
 from .standard import (
@@ -64,18 +65,6 @@ class LiquidHandler:
   interacting with liquid handlers. In the background, this class uses the low-level backend (
   defined in `pyhamilton.liquid_handling.backends`) to communicate with the liquid handler.
 
-  This class is responsible for:
-    - Parsing and validating the layout.
-    - Performing liquid handling operations. This includes:
-      - Aspirating from / dispensing liquid to a location.
-      - Transporting liquid from one location to another.
-      - Picking up tips from and dropping tips into a tip box.
-    - Serializing and deserializing the liquid handler deck. Decks are serialized as JSON and can
-      be loaded from a JSON or .lay (legacy) file.
-    - Static analysis of commands. This includes checking the presence of tips on the head, keeping
-      track of the number of tips in the tip box, and checking the volume of liquid in the liquid
-      handler.
-
   Attributes:
     setup_finished: Whether the liquid handler has been setup.
   """
@@ -97,7 +86,7 @@ class LiquidHandler:
     self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
     self.deck.resource_unassigned_callback_callback = self.resource_unassigned_callback
 
-    self.trackers: Dict[int, ChannelTipTracker] = {}
+    self.head: Dict[int, ChannelTipTracker] = {}
 
   def __del__(self):
     # If setup was finished, close automatically to prevent blocking the USB device.
@@ -113,11 +102,26 @@ class LiquidHandler:
     self.backend.setup()
     self.setup_finished = True
 
-    for channel in range(self.backend.num_channels):
-      self.trackers[channel] = ChannelTipTracker()
+    self.head = {c: ChannelTipTracker() for c in range(self.backend.num_channels)}
 
     for resource in self.deck.children:
       self.resource_assigned_callback(resource)
+
+  def update_head_state(self, state: Dict[int, Optional[Tip]]):
+    """ Update the state of the liquid handler head.
+
+    All keys in `state` must be valid channels. Channels for which no key is specified will keep
+    their current state.
+
+    Args:
+      state: A dictionary mapping channels to tips. If a channel is mapped to None, that channel
+        will have no tip.
+    """
+
+    assert set(state.keys()).issubset(set(self.head.keys())), "Invalid channel."
+
+    for channel, tip in state.items():
+      self.head[channel].tip = tip
 
   def stop(self):
     self.backend.stop()
@@ -200,7 +204,12 @@ class LiquidHandler:
       if resource != self.deck:
         raise ValueError(f"Resource named '{resource.name}' not found on deck.")
 
-  def _check_args(self, method: Callable, backend_kwargs: Dict[str, Any]) -> Set[str]:
+  def _check_args(
+    self,
+    method: Callable,
+    backend_kwargs: Dict[str, Any],
+    default: Set[str]
+  ) -> Set[str]:
     """ Checks that the arguments to `method` are valid.
 
     Args:
@@ -214,7 +223,7 @@ class LiquidHandler:
       The set of arguments that need to be removed from `backend_kwargs` before passing to `method`.
     """
 
-    default_args = {"self", "ops", "use_channels"}
+    default_args = default.union({"self"})
 
     sig = inspect.signature(method)
     args = {arg: param for arg, param in sig.parameters.items() if arg not in default_args}
@@ -246,7 +255,7 @@ class LiquidHandler:
   @need_setup_finished
   def pick_up_tips(
     self,
-    tips: List[TipSpot],
+    tip_spots: List[TipSpot],
     use_channels: Optional[List[int]] = None,
     offsets: Defaultable[Union[Coordinate, List[Defaultable[Coordinate]]]] = Default,
     **backend_kwargs
@@ -278,7 +287,7 @@ class LiquidHandler:
       ... )
 
     Args:
-      tips: Tips to pick up.
+      tip_spots: List of tip spots to pick up tips from.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the tip
@@ -292,28 +301,33 @@ class LiquidHandler:
 
       ChannelHasTipError: If a channel already has a tip.
 
-      SpotHasNoTipError: If a spot does not have a tip.
+      TipSpotHasNoTipError: If a spot does not have a tip.
     """
 
-    self._assert_resources_exist(tips)
+    self._assert_resources_exist(tip_spots)
 
-    offsets = expand(offsets, len(tips))
+    offsets = expand(offsets, len(tip_spots))
 
     if use_channels is None:
-      use_channels = list(range(len(tips)))
+      use_channels = list(range(len(tip_spots)))
 
-    assert len(tips) == len(offsets) == len(use_channels), \
+    assert len(tip_spots) == len(offsets) == len(use_channels), \
       "Number of tips and offsets and use_channels must be equal."
 
-    pickups = [Pickup(resource=tip, tip_type=tip.tip_type, offset=offset)
-               for tip, offset in zip(tips, offsets)]
+    tips: List[Tip] = []
+    for tip_spot in tip_spots:
+      tips.append(tip_spot.get_tip())
+
+    pickups = [Pickup(resource=tip_spot, offset=offset, tip=tip)
+               for tip_spot, offset, tip in zip(tip_spots, offsets, tips)]
 
     for channel, op in zip(use_channels, pickups):
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
         op.resource.tracker.queue_op(op)
-        self.trackers[channel].queue_op(op)
+        self.head[channel].queue_op(op)
 
-    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs,
+      default={"ops", "use_channels"})
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -323,21 +337,20 @@ class LiquidHandler:
       for channel, op in zip(use_channels, pickups):
         if does_tip_tracking() and not op.resource.tracker.is_disabled:
           op.resource.tracker.rollback()
-          self.trackers[channel].rollback()
+          self.head[channel].rollback()
       raise
     else:
       for channel, op in zip(use_channels, pickups):
         if does_tip_tracking() and not op.resource.tracker.is_disabled:
           op.resource.tracker.commit()
-          self.trackers[channel].commit()
+          self.head[channel].commit()
 
   @need_setup_finished
   def drop_tips(
     self,
-    tips: List[Union[TipSpot, Resource]],
+    tip_spots: List[Union[TipSpot, Resource]],
     use_channels: Optional[List[int]] = None,
     offsets: Defaultable[Union[Coordinate, List[Defaultable[Coordinate]]]] = Default,
-    tip_types: Optional[Union[List[TipType], TipType]] = None,
     **backend_kwargs
   ):
     """ Drop tips to a resource.
@@ -364,10 +377,6 @@ class LiquidHandler:
         `len(channels)` channels will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the tip
         pickup location. If `None`, no offset will be applied.
-      tip_types: List of tip types (or a single tip type) for tips to to discard. If `None`, the tip
-        types of the target spots will be used, if the targets are spots. Otherwise, if the targets
-        are not spots, the tip types of the currently picked up tips will be used, if tip tracking
-        is enabled. `None` is the default and recommended value.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -380,46 +389,37 @@ class LiquidHandler:
 
       ChannelHasNoTipError: If a channel does not have a tip.
 
-      SpotHasTipError: If a spot already has a tip.
+      TipSpotHasTipError: If a spot already has a tip.
     """
 
-    self._assert_resources_exist(tips)
+    self._assert_resources_exist(tip_spots)
 
-    offsets = expand(offsets, len(tips))
+    offsets = expand(offsets, len(tip_spots))
 
     if use_channels is None:
-      use_channels = list(range(len(tips)))
+      use_channels = list(range(len(tip_spots)))
 
-    if tip_types is None:
-      tip_types = []
-      for i, channel in enumerate(use_channels):
-        target = tips[i]
-        if isinstance(target, TipSpot):
-          tip_types.append(target.tip_type)
-        else:
-          ctt = self.trackers[channel].current_tip_type
-          if ctt is None:
-            raise RuntimeError(f"Channel {channel} has no tip, the target is not a spot, and no tip"
-                                " type was specified.")
-          tip_types.append(ctt)
-    elif isinstance(tip_types, TipType):
-      tip_types = [tip_types] * len(use_channels)
-    elif len(tip_types) != len(use_channels):
-      raise ValueError("Number of channels and tip types must be equal.")
+    tips = []
+    for channel in use_channels:
+      tip = self.head[channel].tip
+      if tip is None:
+        raise ChannelHasNoTipError(channel)
+      tips.append(tip)
 
-    assert len(tips) == len(offsets) == len(use_channels) == len(tip_types), \
-      "Number of channels and offsets and use_channels and tip_types must be equal."
+    assert len(tip_spots) == len(offsets) == len(use_channels) == len(tips), \
+      "Number of channels and offsets and use_channels and tips must be equal."
 
-    drops = [Drop(resource=tip, tip_type=tip_type, offset=offset)
-             for tip, tip_type, offset in zip(tips, tip_types, offsets)]
+    drops = [Drop(resource=tip_spot, offset=offset, tip=tip)
+             for tip_spot, tip, offset in zip(tip_spots, tips, offsets)]
 
     for channel, op in zip(use_channels, drops):
       if does_tip_tracking():
         if isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled:
           op.resource.tracker.queue_op(op)
-        self.trackers[channel].queue_op(op)
+        self.head[channel].queue_op(op)
 
-    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    extras = self._check_args(self.backend.drop_tips, backend_kwargs,
+      default={"ops", "use_channels"})
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -430,14 +430,14 @@ class LiquidHandler:
         if does_tip_tracking() and \
           (isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled):
           op.resource.tracker.rollback()
-          self.trackers[channel].rollback()
+          self.head[channel].rollback()
       raise
     else:
       for channel, op in zip(use_channels, drops):
-        if does_tip_tracking():
-          if isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled:
-            op.resource.tracker.commit()
-          self.trackers[channel].commit()
+        if does_tip_tracking() and \
+          (isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled):
+          op.resource.tracker.commit()
+          self.head[channel].commit()
 
   def return_tips(self):
     """ Return all tips that are currently picked up to their original place.
@@ -452,23 +452,22 @@ class LiquidHandler:
       RuntimeError: If no tips have been picked up.
     """
 
-    tips: List[TipSpot] = []
+    tip_spots: List[TipSpot] = []
     channels: List[int] = []
 
-    for channel, tracker in self.trackers.items():
-      if tracker.current_tip_origin_spot is not None:
-        tips.append(tracker.current_tip_origin_spot)
+    for channel, tracker in self.head.items():
+      if tracker.tip is not None:
+        tip_spots.append(tracker.get_last_pickup_location())
         channels.append(channel)
 
-    if len(tips) == 0:
+    if len(tip_spots) == 0:
       raise RuntimeError("No tips have been picked up.")
 
-    self.drop_tips(tips=tips, use_channels=channels)
+    self.drop_tips(tip_spots=tip_spots, use_channels=channels)
 
   def discard_tips(
     self,
     use_channels: Optional[List[int]] = None,
-    tip_types: Optional[Union[List[TipType], TipType]] = None,
     **backend_kwargs
   ):
     """ Permanently discard tips.
@@ -490,7 +489,7 @@ class LiquidHandler:
 
     # Different default value from drop_tips: here we factor in the tip tracking.
     if use_channels is None:
-      use_channels = [c for c, t in self.trackers.items() if t.has_tip]
+      use_channels = [c for c, t in self.head.items() if t.has_tip]
 
     n = len(use_channels)
 
@@ -502,9 +501,8 @@ class LiquidHandler:
     offsets = list(reversed(offsets))
 
     return self.drop_tips(
-        tips=[trash]*n,
+        tip_spots=[trash]*n,
         use_channels=use_channels,
-        tip_types=tip_types,
         offsets=offsets,
         **backend_kwargs)
 
@@ -610,7 +608,8 @@ class LiquidHandler:
     aspirations = [Aspiration(r, v, offset=o, flow_rate=fr, liquid_height=lh)
                    for r, v, o, fr, lh in zip(resources, vols, offsets, flow_rates, liquid_height)]
 
-    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    extras = self._check_args(self.backend.aspirate, backend_kwargs,
+      default={"ops", "use_channels"})
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -723,7 +722,8 @@ class LiquidHandler:
     dispenses = [Dispense(r, v, offset=o, flow_rate=fr, liquid_height=lh)
                    for r, v, o, fr, lh in zip(resources, vols, offsets, flow_rates, liquid_height)]
 
-    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    extras = self._check_args(self.backend.dispense, backend_kwargs,
+      default={"ops", "use_channels"})
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -825,11 +825,11 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    extras = self._check_args(self.backend.pick_up_tips96, backend_kwargs, default={"tip_rack"})
     for extra in extras:
       del backend_kwargs[extra]
 
-    self.backend.pick_up_tips96(tip_rack, **backend_kwargs)
+    self.backend.pick_up_tips96(tip_rack=tip_rack, **backend_kwargs)
 
     # Save the tips as picked up.
     self._picked_up_tips96 = tip_rack
@@ -847,7 +847,7 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    extras = self._check_args(self.backend.drop_tips96, backend_kwargs, default={"tip_rack"})
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -900,7 +900,7 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    extras = self._check_args(self.backend.aspirate96, backend_kwargs, default={"aspiration"})
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -944,7 +944,7 @@ class LiquidHandler:
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    extras = self._check_args(self.backend.dispense96, backend_kwargs, default={"dispense"})
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1021,11 +1021,11 @@ class LiquidHandler:
       put_direction: The direction from which to put down the resource.
     """
 
-    extras = self._check_args(self.backend.pick_up_tips, backend_kwargs)
+    extras = self._check_args(self.backend.move_resource, backend_kwargs, default={"move"})
     for extra in extras:
       del backend_kwargs[extra]
 
-    return self.backend.move_resource(Move(
+    return self.backend.move_resource(move=Move(
       resource=resource,
       to=to,
       resource_offset=resource_offset,

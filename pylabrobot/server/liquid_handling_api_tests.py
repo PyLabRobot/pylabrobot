@@ -4,6 +4,7 @@ import unittest
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import SerializingSavingBackend
 from pylabrobot.liquid_handling.resources import (
+  Plate,
   TipRack,
   HTF_L,
   Cos_96_EZWash,
@@ -24,12 +25,9 @@ def build_layout() -> HamiltonDeck:
   # copied from liquid_handler_tests.py, can we make this shared?
   tip_car = TIP_CAR_480_A00(name="tip_carrier")
   tip_car[0] = HTF_L(name="tip_rack_01")
-  tip_car[1] = HTF_L(name="tip_rack_02")
-  tip_car[3] = HTF_L(name="tip_rack_03")
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
   plt_car[0] = Cos_96_EZWash(name="aspiration plate")
-  plt_car[2] = Cos_96_EZWash(name="dispense plate")
 
   deck = STARLetDeck()
   deck.assign_child_resource(tip_car, rails=1)
@@ -118,8 +116,9 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
   def test_tip_pickup(self):
     with self.app.test_client() as client:
       tip_rack = cast(TipRack, self.lh.deck.get_resource("tip_rack_01"))
-      tip = tip_rack.get_tip("A1")
-      pickup = Pickup(resource=tip, tip_type=tip_rack.tip_type)
+      tip_spot = tip_rack.get_item("A1")
+      tip = tip_spot.get_tip()
+      pickup = Pickup(resource=tip_spot, tip=tip)
       response = client.post(
         self.base_url + "/pick-up-tips",
         json=dict(channels=[pickup.serialize()], use_channels=[0]))
@@ -127,12 +126,14 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       self.assertEqual(response.status_code, 200)
 
   def test_drop_tip(self):
-    self.test_tip_pickup() # pick up a tip first
-
     with self.app.test_client() as client:
       tip_rack = cast(TipRack, self.lh.deck.get_resource("tip_rack_01"))
-      tip = tip_rack.get_tip("A1")
-      drop = Drop(resource=tip, tip_type=tip_rack.tip_type)
+      tip_spot = tip_rack.get_item("A1")
+      tip = tip_spot.get_tip()
+
+      self.test_tip_pickup() # Pick up a tip first
+
+      drop = Drop(resource=tip_spot, tip=tip)
       response = client.post(
         self.base_url + "/drop-tips",
         json=dict(channels=[drop.serialize()], use_channels=[0]))
@@ -141,8 +142,8 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
 
   def test_aspirate(self):
     with self.app.test_client() as client:
-      tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
-      aspirate = Aspiration(resource=tip, volume=10)
+      well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
+      aspirate = Aspiration(resource=well, volume=10)
       response = client.post(
         self.base_url + "/aspirate",
         json=dict(channels=[aspirate.serialize()], use_channels=[0]))
@@ -151,8 +152,8 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
 
   def test_dispense(self):
     with self.app.test_client() as client:
-      tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
-      dispense = Dispense(resource=tip, volume=10)
+      well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
+      dispense = Dispense(resource=well, volume=10)
       response = client.post(
         self.base_url + "/dispense",
         json=dict(channels=[dispense.serialize()], use_channels=[0]))

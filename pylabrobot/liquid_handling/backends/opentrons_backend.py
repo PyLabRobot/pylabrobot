@@ -133,8 +133,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     tip_overlap: float = 0
     total_tip_length: float = 0
     if isinstance(resource, TipRack):
-      tip_overlap = resource.tip_type.fitting_depth
-      total_tip_length = resource.tip_type.total_tip_length
+      tip_overlap = resource.get_tip("A1").fitting_depth
+      total_tip_length = resource.get_tip("A1").total_tip_length
 
     lw = {
       "schemaVersion": 2,

@@ -267,21 +267,21 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     # pylint: disable=protected-access
     tip_a1 = self.tip_rack.get_item("A1")
     tip_f1 = self.tip_rack.get_item("F1")
-    tip_type = self.tip_rack.tip_type
+    tip = self.tip_rack.get_tip("A1")
 
-    op = Pickup(resource=tip_a1, tip_type=tip_type)
+    op = Pickup(resource=tip_a1, tip=tip)
     self.assertEqual(
       self.mockSTAR._ops_to_fw_positions((op,), use_channels=[0]),
       ([1179, 0], [2418, 0], [True, False])
     )
 
-    ops = (Pickup(resource=tip_a1, tip_type=tip_type), Pickup(resource=tip_f1, tip_type=tip_type))
+    ops = (Pickup(resource=tip_a1, tip=tip), Pickup(resource=tip_f1, tip=tip))
     self.assertEqual(
       self.mockSTAR._ops_to_fw_positions(ops, use_channels=[0, 1]),
       ([1179, 1179, 0], [2418, 1968, 0], [True, True, False])
     )
 
-    ops = (Pickup(resource=tip_a1, tip_type=tip_type), Pickup(resource=tip_f1, tip_type=tip_type))
+    ops = (Pickup(resource=tip_a1, tip=tip), Pickup(resource=tip_f1, tip=tip))
     self.assertEqual(
       self.mockSTAR._ops_to_fw_positions(ops, use_channels=[1, 2]),
       ([0, 1179, 1179, 0], [0, 2418, 1968, 0], [False, True, True, False])

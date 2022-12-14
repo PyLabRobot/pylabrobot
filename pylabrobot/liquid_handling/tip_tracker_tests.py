@@ -8,6 +8,7 @@ from pylabrobot.liquid_handling.errors import (
 )
 from pylabrobot.liquid_handling.resources import HTF_L
 from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
+from pylabrobot.liquid_handling.tip import Tip
 from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, SpotTipTracker
 
 
@@ -24,8 +25,8 @@ class TestTipTracker(unittest.TestCase):
   def setUp(self) -> None:
     super().setUp()
     self.tip_rack = HTF_L("tip")
-    self.tip = self.tip_rack.get_item("A1")
-    self.tip_type = self.tip_rack.tip_type
+    self.tip_spot = self.tip_rack.get_item("A1")
+    self.tip = self.tip_rack.get_tip("A1")
 
   def test_init(self):
     tracker = LaxTipTracker()
@@ -33,13 +34,14 @@ class TestTipTracker(unittest.TestCase):
     self.assertEqual(tracker.has_tip, False)
 
   def test_init_with_tip(self):
-    tracker = LaxTipTracker(start_with_tip=True)
+    tracker = LaxTipTracker()
+    tracker.tip = Tip(False, 10, 10, 10)
     self.assertEqual(tracker.ops, [])
     self.assertEqual(tracker.has_tip, True)
 
   def test_pickup(self):
     tracker = LaxTipTracker()
-    op = Pickup(self.tip, self.tip_type)
+    op = Pickup(self.tip_spot, self.tip)
     tracker.queue_op(op)
     self.assertEqual(tracker.has_tip, True)
     self.assertEqual(tracker.pending, [op])
@@ -57,31 +59,33 @@ class TestChannelTipTracker(unittest.TestCase):
   def setUp(self) -> None:
     super().setUp()
     self.tip_rack = HTF_L("tip")
-    self.tip = self.tip_rack.get_item("A1")
-    self.tip_type = self.tip_rack.tip_type
+    self.tip_spot = self.tip_rack.get_item("A1")
+    self.tip = self.tip_rack.get_tip("A1")
 
   def test_pickup_with_tip(self):
-    tracker = ChannelTipTracker(start_with_tip=True)
+    tracker = ChannelTipTracker()
+    tracker.tip = Tip(False, 10, 10, 10)
     with self.assertRaises(ChannelHasTipError):
-      tracker.queue_op(Pickup(resource=self.tip, tip_type=self.tip_type))
+      tracker.queue_op(Pickup(resource=self.tip_spot, tip=self.tip))
 
   def test_drop_with_tip(self):
-    tracker = ChannelTipTracker(start_with_tip=True)
-    tracker.queue_op(Drop(resource=self.tip, tip_type=self.tip_type))
+    tracker = ChannelTipTracker()
+    tracker.tip = Tip(False, 10, 10, 10)
+    tracker.queue_op(Drop(resource=self.tip_spot, tip=self.tip))
 
   def test_drop_without_tip(self):
     tracker = ChannelTipTracker()
     with self.assertRaises(ChannelHasNoTipError):
-      tracker.queue_op(Drop(resource=self.tip, tip_type=self.tip_type))
+      tracker.queue_op(Drop(resource=self.tip_spot, tip=self.tip))
 
   def test_pickup_drop(self):
     tracker = ChannelTipTracker()
-    tracker.queue_op(Pickup(resource=self.tip, tip_type=self.tip_type))
-    tracker.queue_op(Drop(resource=self.tip, tip_type=self.tip_type))
+    tracker.queue_op(Pickup(resource=self.tip_spot, tip=self.tip))
+    tracker.queue_op(Drop(resource=self.tip_spot, tip=self.tip))
     tracker.commit()
     self.assertEqual(tracker.ops, [
-      Pickup(resource=self.tip, tip_type=self.tip_type),
-      Drop(resource=self.tip, tip_type=self.tip_type)])
+      Pickup(resource=self.tip_spot, tip=self.tip),
+      Drop(resource=self.tip_spot, tip=self.tip)])
 
 
 class TestSpotTipTracker(unittest.TestCase):
@@ -90,28 +94,29 @@ class TestSpotTipTracker(unittest.TestCase):
   def setUp(self) -> None:
     super().setUp()
     self.tip_rack = HTF_L("tip")
-    self.tip = self.tip_rack.get_item("A1")
-    self.tip_type = self.tip_rack.tip_type
+    self.tip_spot = self.tip_rack.get_item("A1")
+    self.tip = self.tip_rack.get_tip("A1")
 
   def test_pickup_without_tip(self):
     tracker = SpotTipTracker()
     with self.assertRaises(TipSpotHasNoTipError):
-      tracker.queue_op(Pickup(resource=self.tip, tip_type=self.tip_type))
+      tracker.queue_op(Pickup(resource=self.tip_spot, tip=self.tip))
 
   def test_drop_without_tip(self):
     tracker = SpotTipTracker()
-    tracker.queue_op(Drop(resource=self.tip, tip_type=self.tip_type))
-    self.assertEqual(tracker.pending, [Drop(resource=self.tip, tip_type=self.tip_type)])
+    tracker.queue_op(Drop(resource=self.tip_spot, tip=self.tip))
+    self.assertEqual(tracker.pending, [Drop(resource=self.tip_spot, tip=self.tip)])
 
   def test_drop_with_tip(self):
-    tracker = SpotTipTracker(start_with_tip=True)
+    tracker = SpotTipTracker()
+    tracker.tip = Tip(False, 10, 10, 10)
     with self.assertRaises(TipSpotHasTipError):
-      tracker.queue_op(Drop(resource=self.tip, tip_type=self.tip_type))
+      tracker.queue_op(Drop(resource=self.tip_spot, tip=self.tip))
 
   def test_drop_pickup(self):
     tracker = SpotTipTracker()
-    tracker.queue_op(Drop(resource=self.tip, tip_type=self.tip_type))
-    tracker.queue_op(Pickup(resource=self.tip, tip_type=self.tip_type))
+    tracker.queue_op(Drop(resource=self.tip_spot, tip=self.tip))
+    tracker.queue_op(Pickup(resource=self.tip_spot, tip=self.tip))
     self.assertEqual(tracker.pending, [
-      Pickup(resource=self.tip, tip_type=self.tip_type),
-      Drop(resource=self.tip, tip_type=self.tip_type)])
+      Pickup(resource=self.tip_spot, tip=self.tip),
+      Drop(resource=self.tip_spot, tip=self.tip)])

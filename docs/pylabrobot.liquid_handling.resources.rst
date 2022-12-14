@@ -22,9 +22,9 @@ Abstract
     pylabrobot.liquid_handling.resources.abstract.Resource
     pylabrobot.liquid_handling.resources.ResourceStack
     pylabrobot.liquid_handling.resources.abstract.TipRack
-    pylabrobot.liquid_handling.resources.TipType
     pylabrobot.liquid_handling.resources.abstract.Plate
     pylabrobot.liquid_handling.resources.abstract.Carrier
+    pylabrobot.liquid_handling.tip.Tip
     pylabrobot.liquid_handling.resources.abstract.TipCarrier
     pylabrobot.liquid_handling.resources.abstract.PlateCarrier
 
@@ -50,7 +50,7 @@ ML Star resources
   :recursive:
 
     pylabrobot.liquid_handling.resources.ml_star
-    pylabrobot.liquid_handling.resources.ml_star.tip_types
+    pylabrobot.liquid_handling.resources.ml_star.tip_creators
     pylabrobot.liquid_handling.resources.ml_star.tip_racks
     pylabrobot.liquid_handling.resources.ml_star.tip_carriers
     pylabrobot.liquid_handling.resources.ml_star.plate_carriers
