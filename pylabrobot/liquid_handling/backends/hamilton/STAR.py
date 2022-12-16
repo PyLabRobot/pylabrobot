@@ -18,7 +18,7 @@ from pylabrobot.liquid_handling.errors import (
   ChannelHasTipError,
   ChannelHasNoTipError,
   TipSpotHasNoTipError,
-  TooLittleLiquidError,
+  TipTooLittleVolumeError,
   TooLittleVolumeError,
 )
 from pylabrobot.liquid_handling.resources import (
@@ -986,8 +986,8 @@ class STAR(HamiltonLiquidHandler):
           tlv.append(i-1)
 
       if len(tll) > 0:
-        raise TooLittleLiquidError(f"There is not enough liquid in containers where the following"
-                                   f"channels were trying to aspirate: {tll}") from e
+        raise TipTooLittleVolumeError(f"There is not enough liquid in containers where the "
+                                      f"following channels were trying to aspirate: {tll}") from e
       if len(tlv) > 0:
         raise TooLittleVolumeError(f"There is too much liquid in the following channels: {tlv}") \
           from e
@@ -1182,8 +1182,9 @@ class STAR(HamiltonLiquidHandler):
           tll.append(i-1)
 
       if len(tll) > 0:
-        raise TooLittleLiquidError(f"There is not enough liquid in the following channels: {tll}") \
-            from e
+        raise \
+          TipTooLittleVolumeError(f"There is not enough liquid in the following channels: {tll}") \
+          from e
 
       raise e
 

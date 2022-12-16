@@ -14,6 +14,7 @@ from pylabrobot.liquid_handling.resources.abstract import Deck
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.tip import Tip
 from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, does_tip_tracking
+from pylabrobot.liquid_handling.volume_tracker import does_volume_tracking
 from pylabrobot.utils.list import expand
 
 from .backends import LiquidHandlerBackend
@@ -79,8 +80,7 @@ class LiquidHandler:
 
     self.backend = backend
     self.setup_finished = False
-    self._picked_up_tips: Optional[List[TipSpot]] = None
-    self._picked_up_tips96: Optional[TipRack] = None
+    self._picked_up_tips96: Optional[TipRack] = None # TODO: replace with tracker.
 
     self.deck = deck
     self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
@@ -121,7 +121,7 @@ class LiquidHandler:
     assert set(state.keys()).issubset(set(self.head.keys())), "Invalid channel."
 
     for channel, tip in state.items():
-      self.head[channel].tip = tip
+      self.head[channel].set_tip(tip)
 
   def stop(self):
     self.backend.stop()
@@ -351,6 +351,7 @@ class LiquidHandler:
     tip_spots: List[Union[TipSpot, Resource]],
     use_channels: Optional[List[int]] = None,
     offsets: Defaultable[Union[Coordinate, List[Defaultable[Coordinate]]]] = Default,
+    allow_nonzero_volume: bool = False,
     **backend_kwargs
   ):
     """ Drop tips to a resource.
@@ -377,6 +378,9 @@ class LiquidHandler:
         `len(channels)` channels will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the tip
         pickup location. If `None`, no offset will be applied.
+      allow_nonzero_volume: If `True`, the tip will be dropped even if its volume is not zero (there
+        is liquid in the tip). If `False`, a RuntimeError will be raised if the tip has nonzero
+        volume.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -401,9 +405,11 @@ class LiquidHandler:
 
     tips = []
     for channel in use_channels:
-      tip = self.head[channel].tip
+      tip = self.head[channel].get_tip()
       if tip is None:
         raise ChannelHasNoTipError(channel)
+      if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
+        raise RuntimeError(f"Cannot drop tip with volume {tip.tracker.get_used_volume()}")
       tips.append(tip)
 
     assert len(tip_spots) == len(offsets) == len(use_channels) == len(tips), \
@@ -456,7 +462,7 @@ class LiquidHandler:
     channels: List[int] = []
 
     for channel, tracker in self.head.items():
-      if tracker.tip is not None:
+      if tracker.has_tip:
         tip_spots.append(tracker.get_last_pickup_location())
         channels.append(channel)
 
@@ -602,18 +608,38 @@ class LiquidHandler:
     vols = expand(vols, n)
     flow_rates = expand(flow_rates, n)
     liquid_height = expand(liquid_height, n)
+    tips = [self.head[channel].get_tip() for channel in use_channels]
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
-    aspirations = [Aspiration(r, v, offset=o, flow_rate=fr, liquid_height=lh)
-                   for r, v, o, fr, lh in zip(resources, vols, offsets, flow_rates, liquid_height)]
+    aspirations = [Aspiration(r, v, offset=o, flow_rate=fr, liquid_height=lh, tip=t)
+                   for r, v, o, fr, lh, t in
+                    zip(resources, vols, offsets, flow_rates, liquid_height, tips)]
+
+    for op in aspirations:
+      if does_volume_tracking():
+        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+          op.resource.tracker.queue_op(op)
+        op.tip.tracker.queue_op(op)
 
     extras = self._check_args(self.backend.aspirate, backend_kwargs,
       default={"ops", "use_channels"})
     for extra in extras:
       del backend_kwargs[extra]
 
-    self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
+    try:
+      self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
+    except:
+      for op in aspirations:
+        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+          op.resource.tracker.rollback()
+          op.tip.tracker.rollback()
+      raise
+    else:
+      for op in aspirations:
+        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+          op.resource.tracker.commit()
+          op.tip.tracker.commit()
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -716,18 +742,38 @@ class LiquidHandler:
     vols = expand(vols, n)
     flow_rates = expand(flow_rates, n)
     liquid_height = expand(liquid_height, n)
+    tips = [self.head[channel].get_tip() for channel in use_channels]
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
-    dispenses = [Dispense(r, v, offset=o, flow_rate=fr, liquid_height=lh)
-                   for r, v, o, fr, lh in zip(resources, vols, offsets, flow_rates, liquid_height)]
+    dispenses = [Dispense(r, v, offset=o, flow_rate=fr, liquid_height=lh, tip=t)
+                 for r, v, o, fr, lh, t in
+                  zip(resources, vols, offsets, flow_rates, liquid_height, tips)]
+
+    for op in dispenses:
+      if does_volume_tracking():
+        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+          op.resource.tracker.queue_op(op)
+        op.tip.tracker.queue_op(op)
 
     extras = self._check_args(self.backend.dispense, backend_kwargs,
       default={"ops", "use_channels"})
     for extra in extras:
       del backend_kwargs[extra]
 
-    self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
+    try:
+      self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
+    except:
+      for op in dispenses:
+        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+          op.resource.tracker.rollback()
+          op.tip.tracker.rollback()
+      raise
+    else:
+      for op in dispenses:
+        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+          op.resource.tracker.commit()
+          op.tip.tracker.commit()
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -806,11 +852,13 @@ class LiquidHandler:
       vols=[sum(target_vols)],
       flow_rates=aspiration_flow_rate,
       **backend_kwargs)
-    self.dispense(
-      resources=targets,
-      vols=target_vols,
-      flow_rates=dispense_flow_rates,
-      **backend_kwargs)
+    for target, vol in zip(targets, target_vols):
+      self.dispense(
+        resources=[target],
+        vols=vol,
+        flow_rates=dispense_flow_rates,
+        use_channels=[0],
+        **backend_kwargs)
 
   def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
     """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
@@ -904,11 +952,16 @@ class LiquidHandler:
     for extra in extras:
       del backend_kwargs[extra]
 
+    if self._picked_up_tips96 is None:
+      raise ChannelHasNoTipError("No tips have been picked up with the 96 head")
+    tip = self._picked_up_tips96.get_tip("A1") # FIXME:
+
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       self.backend.aspirate96(aspiration=Aspiration(
         resource=plate,
         volume=volume,
-        flow_rate=flow_rate),
+        flow_rate=flow_rate,
+        tip=tip),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
@@ -948,11 +1001,16 @@ class LiquidHandler:
     for extra in extras:
       del backend_kwargs[extra]
 
+    if self._picked_up_tips96 is None:
+      raise ChannelHasNoTipError("No tips have been picked up with the 96 head")
+    tip = self._picked_up_tips96.get_tip("A1") # FIXME:
+
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       self.backend.dispense96(dispense=Dispense(
         resource=plate,
         volume=volume,
-        flow_rate=flow_rate),
+        flow_rate=flow_rate,
+        tip=tip),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "

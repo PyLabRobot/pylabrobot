@@ -13,6 +13,7 @@ from pylabrobot.liquid_handling.standard import (
   Dispense,
   Drop,
 )
+from pylabrobot.liquid_handling.tip import Tip
 
 
 lh_api = Blueprint("liquid handling", __name__, url_prefix="/api/v1/liquid_handling")
@@ -76,12 +77,14 @@ def deserialize_liquid_handling_op_from_request(
   ops = []
   for sc in serialized_channels:
     try:
-      resource = current_app.lh.deck.get_resource(sc["resource_name"])
-      op_ = op.deserialize(sc, resource=resource)
+      try:
+        resource = current_app.lh.deck.get_resource(sc["resource_name"])
+      except ValueError:
+        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"}, 404) \
+          from None
+      tip = Tip.deserialize(sc.pop("tip"))
+      op_ = op.deserialize(sc, resource=resource, tip=tip)
       ops.append(op_)
-    except ValueError:
-      raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"}, 404) \
-       from None
     except KeyError as e:
       raise ErrorResponse({"error": f"missing key in json data: {e}"}, 400) from e
 

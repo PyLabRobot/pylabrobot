@@ -79,7 +79,7 @@ class BarcodeUnreadableError(HamiltonModuleError):
   pass
 
 
-class TooLittleLiquidError(HamiltonModuleError):
+class TipTooLittleVolumeError(HamiltonModuleError):
   """ Too little liquid
 
   Possible cause(s):
@@ -622,7 +622,7 @@ def error_code_to_exception(code: int) -> Type[HamiltonModuleError]:
     3: CommandNotCompletedError,
     4: ClotDetectedError,
     5: BarcodeUnreadableError,
-    6: TooLittleLiquidError,
+    6: TipTooLittleVolumeError,
     7: TipAlreadyFittedError,
     8: NoTipError,
     9: NoCarrierError,

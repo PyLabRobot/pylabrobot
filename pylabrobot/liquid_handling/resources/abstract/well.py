@@ -1,4 +1,7 @@
-from .resource import Resource
+import math
+
+from pylabrobot.liquid_handling.volume_tracker import WellVolumeTracker
+from pylabrobot.liquid_handling.resources.abstract.resource import Resource
 
 
 class Well(Resource):
@@ -9,7 +12,26 @@ class Well(Resource):
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float = 9,
-    category: str = "well"):
+    category: str = "well", volume: float = 0):
     super().__init__(name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
-    # TODO: max_volume: float,
-    # self.max_volume = max_volume
+
+    assert size_x == size_y, "Well max volume computation currently assumes circle wells"
+    self.max_volume = math.pi * (size_x / 2) ** 2 * size_z
+    self.tracker = WellVolumeTracker(max_volume=self.max_volume)
+    self.tracker.set_used_volume(volume)
+
+  def serialize(self):
+    return dict(
+      **super().serialize(),
+      volume=self.tracker.get_used_volume(),
+    )
+
+  @classmethod
+  def deserialize(cls, data):
+    return cls(
+      name=data["name"],
+      size_x=data["size_x"],
+      size_y=data["size_y"],
+      size_z=data["size_z"],
+      volume=data["volume"],
+    )

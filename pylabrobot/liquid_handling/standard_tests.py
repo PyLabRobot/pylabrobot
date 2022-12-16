@@ -25,38 +25,15 @@ class TestStandard(unittest.TestCase):
       {
       "resource_name": "tiprack_tipspot_0_0",
       "offset": "default",
-      "tip": {
-        "type": "HamiltonTip",
-        "has_filter": True,
-        "total_tip_length": 95.1,
-        "maximal_volume": 1065,
-        "fitting_depth": 8,
-        "pickup_method": "OUT_OF_RACK",
-        "tip_size": "HIGH_VOLUME"
-      }
+      "tip": self.tip_rack.get_tip("A1").serialize()
     })
 
   def test_pick_up_deserialize(self):
-    self.assertEqual(
-        Pickup.deserialize({
-          "resource_name": "tiprack_tipspot_0_0",
-          "offset": "default",
-          "tip": {
-            "type": "HamiltonTip",
-            "has_filter": True,
-            "total_tip_length": 95.1,
-            "maximal_volume": 1065,
-            "fitting_depth": 8,
-            "pickup_method": "OUT_OF_RACK",
-            "tip_size": "HIGH_VOLUME"
-          }},
-          resource=self.tip_rack.get_item("A1"),
-        ),
-        Pickup(
-          resource=self.tip_rack.get_item("A1"),
-          tip=self.tip_rack.get_tip("A1")
-        )
-    )
+    tip = self.tip_rack.get_tip("A1")
+    resource = self.tip_rack.get_item("A1")
+    pickup = Pickup(resource=resource, tip=tip)
+
+    self.assertEqual(Pickup.deserialize(pickup.serialize(), tip=tip, resource=resource), pickup)
 
   def test_drop_serialize(self):
     self.assertEqual(
@@ -64,70 +41,50 @@ class TestStandard(unittest.TestCase):
       {
         "resource_name": "tiprack_tipspot_0_0",
         "offset": "default",
-        "tip": {
-          "type": "HamiltonTip",
-          "has_filter": True,
-          "total_tip_length": 95.1,
-          "maximal_volume": 1065,
-          "fitting_depth": 8,
-          "pickup_method": "OUT_OF_RACK",
-          "tip_size": "HIGH_VOLUME"
-        }
+        "tip": self.tip_rack.get_tip("A1").serialize()
       })
 
   def test_drop_deserialize(self):
-    self.assertEqual(Drop.deserialize({
-        "resource_name": "tiprack_tipspot_0_0",
-        "offset": "default",
-        "tip": {
-          "type": "HamiltonTip",
-          "has_filter": True,
-          "total_tip_length": 95.1,
-          "maximal_volume": 1065,
-          "fitting_depth": 8,
-          "pickup_method": "OUT_OF_RACK",
-          "tip_size": "HIGH_VOLUME"
-        }},
-        resource=self.tip_rack.get_item("A1"),
-      ),
-      Drop(resource=self.tip_rack.get_item("A1"), tip=self.tip_rack.get_tip("A1")))
+    tip = self.tip_rack.get_tip("A1")
+    resource = self.tip_rack.get_item("A1")
+    drop = Drop(resource=resource, tip=tip)
+
+    self.assertEqual(Drop.deserialize(drop.serialize(), tip=tip, resource=resource), drop)
 
   def test_aspiration_serialize(self):
-    self.assertEqual(Aspiration(resource=self.plate.get_well("A1"), volume=100).serialize(), {
+    tip = self.tip_rack.get_tip("A1")
+    self.assertEqual(
+      Aspiration(resource=self.plate.get_well("A1"), volume=100, tip=tip).serialize(), {
       "resource_name": "plate_well_0_0",
       "offset": "default",
       "volume": 100,
       "flow_rate": "default",
       "liquid_height": 0,
       "blow_out_air_volume": 0,
+      "tip": self.tip_rack.get_tip("A1").serialize()
     })
 
   def test_aspiration_deserialize(self):
-    self.assertEqual(Aspiration.deserialize({
-      "resource_name": "plate_well_0_0",
-      "offset": "default",
-      "volume": 100,
-      "liquid_height": 0,
-      "blow_out_air_volume": 0,
-      "flow_rate": "default"}, resource=self.plate.get_well("A1")),
-      Aspiration(resource=self.plate.get_well("A1"), volume=100))
+    tip = self.tip_rack.get_tip("A1")
+    resource = self.plate.get_well("A1")
+    asp = Aspiration(resource=resource, volume=100, tip=tip)
+    self.assertEqual(Aspiration.deserialize(asp.serialize(), resource=resource, tip=tip), asp)
 
   def test_dispense_serialize(self):
-    self.assertEqual(Dispense(resource=self.plate.get_well("A1"), volume=100).serialize(), {
+    tip = self.tip_rack.get_tip("A1")
+    self.assertEqual(
+      Dispense(resource=self.plate.get_well("A1"), volume=100, tip=tip).serialize(), {
       "resource_name": "plate_well_0_0",
       "offset": "default",
       "volume": 100,
       "flow_rate": "default",
       "liquid_height": 0,
       "blow_out_air_volume": 0,
+      "tip": self.tip_rack.get_tip("A1").serialize()
     })
 
   def test_dispense_deserialize(self):
-    self.assertEqual(Dispense.deserialize({
-      "resource_name": "plate_well_0_0",
-      "offset": "default",
-      "volume": 100,
-      "liquid_height": 0,
-      "blow_out_air_volume": 0,
-      "flow_rate": "default"}, resource=self.plate.get_well("A1")),
-      Dispense(resource=self.plate.get_well("A1"), volume=100))
+    tip = self.tip_rack.get_tip("A1")
+    resource = self.plate.get_well("A1")
+    disp = Dispense(resource=resource, volume=100, tip=tip)
+    self.assertEqual(Dispense.deserialize(disp.serialize(), resource=resource, tip=tip), disp)

@@ -3,7 +3,7 @@
 from typing import cast
 import unittest
 
-from pylabrobot.liquid_handling.liquid_handler import LiquidHandler
+from pylabrobot.liquid_handling import LiquidHandler, no_volume_tracking
 from pylabrobot.liquid_handling.resources import (
   Resource,
   TIP_CAR_480_A00,
@@ -323,7 +323,10 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "0000&tm0 0 0 0 1 1 0&tp2243tz2163th2450ti1", DROP_TIP_FORMAT)
 
   def test_single_channel_aspiration(self):
-    self.lh.aspirate(self.plate["A1"], vols=[100 * 1.072]) # TODO: Hamilton liquid classes
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
+    well = self.plate.get_item("A1")
+    well.tracker.set_used_volume(100 * 1.072)
+    self.lh.aspirate([well], vols=[100 * 1.072]) # TODO: Hamilton liquid classes
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -334,8 +337,11 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_single_channel_aspiration_liquid_height(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     # TODO: Hamilton liquid classes
-    self.lh.aspirate(self.plate["A1"], vols=[100*1.072], liquid_height=9)
+    well = self.plate.get_item("A1")
+    well.tracker.set_used_volume(100 * 1.072)
+    self.lh.aspirate([well], vols=[100*1.072], liquid_height=9)
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -346,7 +352,11 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_multi_channel_aspiration(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1"), 1: self.tip_rack.get_tip("B1")})
     # TODO: Hamilton liquid classes
+    wells = self.plate.get_items("A1:B1")
+    for well in wells:
+      well.tracker.set_used_volume(100 * 1.072)
     self.lh.aspirate(self.plate["A1:B1"], vols=100*1.072)
 
     # This passes the test, but is not the real command.
@@ -360,6 +370,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_aspirate_single_resource(self):
+    self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
     self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
       "C0ASid0009at0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 1688 "
@@ -376,7 +387,9 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=ASPIRATION_RESPONSE_FORMAT)
 
   def test_dispense_single_resource(self):
-    self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
+    self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
+    with no_volume_tracking():
+      self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
       "C0DSid0010dm2 2 2 2 2&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 "
       "1688 1551 0000&zx1871 1871 1871 1871 1871&lp2321 2321 2321 2321 2321&zl1210 1210 1210 1210 "
@@ -390,8 +403,10 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_single_channel_dispense(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     # TODO: Hamilton liquid classes
-    self.lh.dispense(self.plate["A1"], vols=[100*1.072])
+    with no_volume_tracking():
+      self.lh.dispense(self.plate["A1"], vols=[100*1.072])
     self._assert_command_sent_once(
       "C0DSid0000dm2&tm1 0&xp02980 00000&yp1460 0000&zx1871&lp2321&zl1881&"
       "ip0000&it0&fp0000&th2450te2450dv01072&ds1200&ss0050&rv000&ta000&ba0000&lm0&zo000&ll1&"
@@ -400,8 +415,10 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_multi_channel_dispense(self):
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1"), 1: self.tip_rack.get_tip("B1")})
     # TODO: Hamilton liquid classes
-    self.lh.dispense(self.plate["A1:B1"], vols=100*1.072)
+    with no_volume_tracking():
+      self.lh.dispense(self.plate["A1:B1"], vols=100*1.072)
 
     self._assert_command_sent_once(
       "C0DSid0317dm2 2&tm1 1 0&dv01072 01072&xp02980 02980 00000&yp1460 1370 0000&"
@@ -426,6 +443,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
                 "xs#####xd#yh####za####zh####ze####")
 
   def test_core_96_aspirate(self):
+    self.test_core_96_tip_pickup() # pick up tips first
+
     # TODO: Hamilton liquid classes
     self.lh.aspirate_plate(self.plate, 100*1.072)
 
@@ -438,8 +457,11 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "cw************************pp####")
 
   def test_core_96_dispense(self):
+    self.test_core_96_tip_pickup() # pick up tips first
+
     # TODO: Hamilton liquid classes
-    self.lh.dispense_plate(self.plate, 100*1.072)
+    with no_volume_tracking():
+      self.lh.dispense_plate(self.plate, 100*1.072)
 
     self._assert_command_sent_once(
       "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01072dg1200vt050"

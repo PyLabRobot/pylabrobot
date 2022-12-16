@@ -27,7 +27,8 @@ def build_layout() -> HamiltonDeck:
   tip_car[0] = HTF_L(name="tip_rack_01")
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
-  plt_car[0] = Cos_96_EZWash(name="aspiration plate")
+  plt_car[0] = plate = Cos_96_EZWash(name="aspiration plate")
+  plate.get_item("A1").tracker.set_used_volume(400)
 
   deck = STARLetDeck()
   deck.assign_child_resource(tip_car, rails=1)
@@ -141,21 +142,25 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       self.assertEqual(response.status_code, 200)
 
   def test_aspirate(self):
+    tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
+    self.test_tip_pickup() # pick up a tip first
     with self.app.test_client() as client:
       well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
-      aspirate = Aspiration(resource=well, volume=10)
+      aspirate = Aspiration(resource=well, volume=10, tip=tip)
       response = client.post(
         self.base_url + "/aspirate",
         json=dict(channels=[aspirate.serialize()], use_channels=[0]))
-      self.assertEqual(response.status_code, 200)
       self.assertEqual(response.json, {"status": "ok"})
+      self.assertEqual(response.status_code, 200)
 
   def test_dispense(self):
+    tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
+    self.test_aspirate() # aspirate first
     with self.app.test_client() as client:
       well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
-      dispense = Dispense(resource=well, volume=10)
+      dispense = Dispense(resource=well, volume=10, tip=tip)
       response = client.post(
         self.base_url + "/dispense",
         json=dict(channels=[dispense.serialize()], use_channels=[0]))
-      self.assertEqual(response.status_code, 200)
       self.assertEqual(response.json, {"status": "ok"})
+      self.assertEqual(response.status_code, 200)

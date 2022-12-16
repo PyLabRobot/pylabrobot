@@ -6,6 +6,7 @@ See the TT command.
 """
 
 import enum
+from typing import Union
 
 from pylabrobot.liquid_handling.tip import Tip
 
@@ -40,9 +41,14 @@ class HamiltonTip(Tip):
     has_filter: bool,
     total_tip_length: float,
     maximal_volume: float,
-    tip_size: TipSize,
-    pickup_method: TipPickupMethod
+    tip_size: Union[TipSize, str], # union for deserialization, will probably refactor
+    pickup_method: Union[TipPickupMethod, str] # union for deserialization, will probably refactor
   ):
+    if isinstance(tip_size, str):
+      tip_size = TipSize[tip_size]
+    if isinstance(pickup_method, str):
+      pickup_method = TipPickupMethod[pickup_method]
+
     fitting_depth = {
       None: 0,
       0: 0,
@@ -82,8 +88,10 @@ class HamiltonTip(Tip):
                  self.pickup_method.name, self.total_tip_length))
 
   def serialize(self):
+    super_serialized = super().serialize()
+    del super_serialized["fitting_depth"] # inferred from tip size
     return {
-      **super().serialize(),
+      **super_serialized,
       "pickup_method": self.pickup_method.name,
       "tip_size": self.tip_size.name
     }

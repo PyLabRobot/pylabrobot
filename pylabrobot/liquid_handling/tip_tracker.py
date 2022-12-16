@@ -42,11 +42,25 @@ class TipTracker(ABC):
     self._ops: List[TipOp] = []
     self.pending: List[TipOp] = []
     self._is_disabled = False
-    self.tip: Optional["Tip"] = None
+    self._tip: Optional["Tip"] = None
+    self._pending_tip: Optional["Tip"] = None
 
   @property
   def is_disabled(self) -> bool:
     return self._is_disabled
+
+  def set_tip(self, tip: Optional["Tip"]) -> None:
+    """ Set the tip. """
+    self.pending.clear()
+    self._tip = tip
+    self._pending_tip = tip
+
+  @abstractmethod
+  def get_tip(self) -> "Tip":
+    """ Get the tip. Note that does includes pending operations.
+
+    Raises an error if there is no tip.
+    """
 
   def disable(self) -> None:
     """ Disable the tip tracker. """
@@ -57,32 +71,37 @@ class TipTracker(ABC):
     self._is_disabled = False
 
   @property
-  def ops(self) -> List[TipOp]:
+  def history(self) -> List[TipOp]:
     """ The past operations. """
     return self._ops
 
   @property
-  @abstractmethod
   def has_tip(self) -> bool:
-    """ Whether the tip tracker has a tip. Note that this does include pending operations. """
+    """ Whether the tip tracker has a tip. Note that this includes pending operations. """
+    return self._pending_tip is not None
 
   def queue_op(self, op: TipOp) -> None:
     """ Check if the operation is valid given the current state. """
     assert not self.is_disabled, "Tip tracker is disabled. Call `enable()`."
-    self.validate(op)
+    self.handle(op)
     self.pending.append(op)
 
   @abstractmethod
-  def validate(self, op: TipOp) -> None:
-    """ Validate the current state. """
+  def handle(self, op: TipOp) -> None:
+    """ Update the pending state with the operation. """
 
   def commit(self) -> None:
     """ Commit the pending operations. """
 
+    self._tip = self._pending_tip
+    self._ops += self.pending
+    self.pending.clear()
+
   def rollback(self) -> None:
     """ Rollback the pending operations. """
     assert not self.is_disabled, "Tip tracker is disabled. Call `enable()`."
-    self.pending = []
+    self._pending_tip = self._tip
+    self.pending.clear()
 
 
 class ChannelTipTracker(TipTracker):
@@ -90,10 +109,9 @@ class ChannelTipTracker(TipTracker):
 
   @property
   def _last_pickup(self) -> Optional[Pickup]:
-    if len(self.pending) > 0 and isinstance(self.pending[-1], Pickup):
-      return self.pending[-1]
-    if len(self.ops) > 0 and isinstance(self.ops[-1], Pickup):
-      return self.ops[-1]
+    all_ops = self.history + self.pending
+    if len(all_ops) > 0 and isinstance(all_ops[-1], Pickup):
+      return all_ops[-1]
     return None
 
   def get_last_pickup_location(self) -> "TipSpot":
@@ -102,19 +120,8 @@ class ChannelTipTracker(TipTracker):
       raise ChannelHasNoTipError("Channel has no tip.")
     return self._last_pickup.resource
 
-  @property
-  def has_tip(self) -> bool:
-    num_pickups = len([op for op in self.pending if isinstance(op, Pickup)])
-    num_drops = len([op for op in self.pending if isinstance(op, Drop)])
-    if self.tip is None:
-      return num_drops < num_pickups # if None, then we have more pickups than drops
-    return num_pickups == num_drops # if not None, then we if have as many drops as pickups
-
-  def validate(self, op: TipOp):
-    """ Validate a tip operation.
-
-    Args:
-      op: The tip operation to handle.
+  def handle(self, op: TipOp):
+    """ Update the pending state with the operation.
 
     Raises:
       ChannelHasTipError: If trying to pickup a tip when the channel already has a tip.
@@ -122,44 +129,28 @@ class ChannelTipTracker(TipTracker):
       ChannelHasNoTipError: If trying to drop a tip when the channel has no tip.
     """
 
-    if self.has_tip and isinstance(op, Pickup):
-      raise ChannelHasTipError("Channel already has tip.")
-    if not self.has_tip and isinstance(op, Drop):
+    if isinstance(op, Pickup):
+      if self.has_tip:
+        raise ChannelHasTipError("Channel already has tip.")
+      self._pending_tip = op.tip
+
+    if isinstance(op, Drop):
+      if not self.has_tip:
+        raise ChannelHasNoTipError("Channel has no tip.")
+      self._pending_tip = None
+
+  def get_tip(self) -> "Tip":
+    if self._tip is None:
       raise ChannelHasNoTipError("Channel has no tip.")
-
-  def commit(self) -> None:
-    """ Commit the pending operations. """
-    assert not self.is_disabled, "Tip tracker is disabled. Call `enable()`."
-
-    # Loop through the pending operations and update the tip state and op history.
-    for op in self.pending:
-      self._ops.append(op)
-      if isinstance(op, Pickup):
-        self.tip = op.tip
-      elif isinstance(op, Drop):
-        self.tip = None
-
-    # Clear the pending operations.
-    self.pending.clear()
+    return self._tip
 
 
 class SpotTipTracker(TipTracker):
   """ A tip spot tip tracker tracks and validates tip operations for a single tip spot: a
   location where tips are stored.  """
 
-  @property
-  def has_tip(self) -> bool:
-    num_pickups = len([op for op in self.pending if isinstance(op, Pickup)])
-    num_drops = len([op for op in self.pending if isinstance(op, Drop)])
-    if self.tip is None:
-      return num_drops > num_pickups # if None, then we have more drops than pickups
-    return num_pickups == num_drops # if not None, then we if have as many drops as pickups
-
-  def validate(self, op: TipOp):
-    """ Validate a tip operation.
-
-    Args:
-      op: The tip operation to handle.
+  def handle(self, op: TipOp):
+    """ Update the pending state with the operation.
 
     Raises:
       TipSpotHasNoTipError: If trying to pickup a tip when the tip spot has no tip.
@@ -167,22 +158,17 @@ class SpotTipTracker(TipTracker):
       TipSpotHasTipError: If trying to drop a tip when the tip spot already has a tip.
     """
 
-    if not self.has_tip and isinstance(op, Pickup):
-      raise TipSpotHasNoTipError(f"Tip spot {op.resource.name} has no tip.")
-    if self.has_tip and isinstance(op, Drop):
-      raise TipSpotHasTipError(f"Tip spot {op.resource.name} already has a tip.")
+    if isinstance(op, Pickup):
+      if not self.has_tip:
+        raise TipSpotHasNoTipError("Tip spot has no tip.")
+      self._pending_tip = None
 
-  def commit(self) -> None:
-    """ Commit the pending operations. """
-    assert not self.is_disabled, "Tip tracker is disabled. Call `enable()`."
+    if isinstance(op, Drop):
+      if self.has_tip:
+        raise TipSpotHasTipError("Tip spot already has a tip.")
+      self._pending_tip = op.tip
 
-    # Loop through the pending operations and update the tip state and op history.
-    for op in self.pending:
-      self._ops.append(op)
-      if isinstance(op, Pickup):
-        self.tip = None
-      elif isinstance(op, Drop):
-        self.tip = op.tip
-
-    # Clear the pending operations.
-    self.pending.clear()
+  def get_tip(self) -> "Tip":
+    if self._tip is None:
+      raise TipSpotHasNoTipError("Tip spot has no tip.")
+    return self._tip

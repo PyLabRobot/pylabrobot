@@ -9,6 +9,7 @@ class NoChannelError(Exception):
   - when trying to pick up a tip with no empty channels
   """
 
+
 class ChannelHasTipError(Exception):
   """ Raised when a channel has a tip, e.g. when trying to pick up a tip with a channel that already
   has a tip. """
@@ -38,11 +39,18 @@ class TooLittleVolumeError(Exception):
   """
 
 
-class TooLittleLiquidError(Exception):
-  """ Raised when not enough liquid is present in a container (tip/well/...) to perform an
-  operation.
+class TipTooLittleLiquidError(Exception):
+  """ Raised when trying to dispense more liquid from a tip than is still present. """
 
-  Examples:
-  - when trying to aspirate more liquid than the well contains
-  - when trying to dispense more liquid than the pipette tip contains
-  """
+
+class TipTooLittleVolumeError(Exception):
+  """ Raised when trying to aspirate more liquid into a tip than is still available. """
+
+
+class WellTooLittleLiquidError(Exception):
+  """ Raised when trying to aspirate more liquid from a well than is still present. """
+
+
+class WellTooLittleVolumeError(Exception):
+  """ Raised when trying to dispense more liquid into a well than is still available. """
+

@@ -3,7 +3,7 @@ import unittest
 import responses
 from responses import matchers
 
-from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking
+from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking, no_volume_tracking
 from pylabrobot.liquid_handling.backends import HTTPBackend
 from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
 from pylabrobot.liquid_handling.resources import (
@@ -103,15 +103,7 @@ class TestHTTPBackendOps(unittest.TestCase):
           "channels": [{
             "offset": "default",
             "resource_name": "tiprack_tipspot_0_0",
-            "tip": {
-              "type": "HamiltonTip",
-              "has_filter": True,
-              "total_tip_length": 95.1,
-              "maximal_volume": 1065,
-              "fitting_depth": 8,
-              "pickup_method": "OUT_OF_RACK",
-              "tip_size": "HIGH_VOLUME"
-            }
+            "tip": self.tip_rack.get_tip("A1").serialize()
           }],
           "use_channels": [0]
         })
@@ -132,15 +124,7 @@ class TestHTTPBackendOps(unittest.TestCase):
           "channels": [{
             "offset": "default",
             "resource_name": "tiprack_tipspot_0_0",
-            "tip": {
-              "type": "HamiltonTip",
-              "has_filter": True,
-              "total_tip_length": 95.1,
-              "maximal_volume": 1065,
-              "fitting_depth": 8,
-              "pickup_method": "OUT_OF_RACK",
-              "tip_size": "HIGH_VOLUME"
-            }
+            "tip": self.tip_rack.get_tip("A1").serialize()
           }],
           "use_channels": [0]
         })
@@ -167,7 +151,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "volume": 10,
             "flow_rate": "default",
             "liquid_height": 0,
-            "blow_out_air_volume": 0
+            "blow_out_air_volume": 0,
+            "tip": self.tip_rack.get_tip("A1").serialize()
           }],
           "use_channels": [0],
         })
@@ -175,7 +160,10 @@ class TestHTTPBackendOps(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
-    self.lh.aspirate(self.plate["A1"], 10)
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
+    well = self.plate.get_item("A1")
+    well.tracker.set_used_volume(10)
+    self.lh.aspirate([well], 10)
 
   @responses.activate
   def test_dispense(self):
@@ -191,7 +179,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "volume": 10,
             "flow_rate": "default",
             "liquid_height": 0,
-            "blow_out_air_volume": 0
+            "blow_out_air_volume": 0,
+            "tip": self.tip_rack.get_tip("A1").serialize()
           }],
           "use_channels": [0],
         })
@@ -199,7 +188,9 @@ class TestHTTPBackendOps(unittest.TestCase):
       json={"status": "ok"},
       status=200,
     )
-    self.lh.dispense(self.plate["A1"], 10)
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
+    with no_volume_tracking():
+      self.lh.dispense(self.plate["A1"], 10)
 
   @responses.activate
   def test_pick_up_tips96(self):
@@ -235,6 +226,21 @@ class TestHTTPBackendOps(unittest.TestCase):
 
   @responses.activate
   def test_aspirate96(self):
+    # FIXME: pick up tips first, but make nicer.
+    responses.add(
+      responses.POST,
+      "http://localhost:8080/events/pick-up-tips96",
+      match=[
+        header_match,
+        matchers.json_params_matcher({
+          "resource_name": "tiprack",
+        })
+      ],
+      json={"status": "ok"},
+      status=200,
+    )
+    self.lh.pick_up_tips96(self.tip_rack)
+
     responses.add(
       responses.POST,
       "http://localhost:8080/events/aspirate96",
@@ -247,17 +253,34 @@ class TestHTTPBackendOps(unittest.TestCase):
             "flow_rate": "default",
             "offset": "default",
             "liquid_height": 0,
-            "blow_out_air_volume": 0
+            "blow_out_air_volume": 0,
+            "tip": self.tip_rack.get_tip("A1").serialize()
           }
         })
       ],
       json={"status": "ok"},
       status=200,
     )
+
     self.lh.aspirate_plate(self.plate, 10)
 
   @responses.activate
   def test_dispense96(self):
+    # FIXME: pick up tips first, but make nicer.
+    responses.add(
+      responses.POST,
+      "http://localhost:8080/events/pick-up-tips96",
+      match=[
+        header_match,
+        matchers.json_params_matcher({
+          "resource_name": "tiprack",
+        })
+      ],
+      json={"status": "ok"},
+      status=200,
+    )
+    self.lh.pick_up_tips96(self.tip_rack)
+
     responses.add(
       responses.POST,
       "http://localhost:8080/events/dispense96",
@@ -270,11 +293,13 @@ class TestHTTPBackendOps(unittest.TestCase):
             "flow_rate": "default",
             "offset": "default",
             "liquid_height": 0,
-            "blow_out_air_volume": 0
+            "blow_out_air_volume": 0,
+            "tip": self.tip_rack.get_tip("A1").serialize()
           }
         })
       ],
       json={"status": "ok"},
       status=200,
     )
+
     self.lh.dispense_plate(self.plate, 10)
