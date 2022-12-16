@@ -4,6 +4,7 @@ from .backend import LiquidHandlerBackend
 from .serializing_backend import SerializingBackend, SerializingSavingBackend # many rely on this
 from .websocket import WebSocketBackend # simulation relies on websocket backend
 
+from .USBBackend import USBBackend
 from .hamilton.errors import HamiltonError
 from .hamilton.STAR import STAR
 from .http import HTTPBackend

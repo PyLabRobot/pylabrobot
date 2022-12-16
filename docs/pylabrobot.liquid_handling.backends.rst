@@ -15,6 +15,7 @@ Abstract
 
     pylabrobot.liquid_handling.backends.backend.LiquidHandlerBackend
     pylabrobot.liquid_handling.backends.serializing_backend.SerializingBackend
+    pylabrobot.liquid_handling.backends.USBBackend.USBBackend
 
 Hardware
 --------

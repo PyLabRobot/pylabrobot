@@ -34,7 +34,7 @@ from pylabrobot.liquid_handling.resources.ml_star import (
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
 from pylabrobot.liquid_handling.standard import (
   PipettingOp,
   Pickup,
@@ -48,13 +48,6 @@ import pylabrobot.liquid_handling.backends.hamilton.errors as herrors
 from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
 
 logger = logging.getLogger(__name__)
-
-try:
-  import usb.core
-  import usb.util
-  USE_USB = True
-except ImportError:
-  USE_USB = False
 
 
 def need_iswap_parked(method: Callable):
@@ -74,13 +67,18 @@ def need_iswap_parked(method: Callable):
   return wrapper
 
 
-class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
+class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
   """
 
   @abstractmethod
-  def __init__(self, packet_read_timeout: int = 3, read_timeout: int = 30, **kwargs):
+  def __init__(
+    self,
+    packet_read_timeout: int = 3,
+    read_timeout: int = 30,
+    write_timeout: int = 30,
+  ):
     """
 
     Args:
@@ -89,17 +87,14 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       num_channels: the number of pipette channels present on the robot.
     """
 
-    super().__init__()
+    super().__init__(
+      packet_read_timeout=packet_read_timeout,
+      read_timeout=read_timeout,
+      write_timeout=write_timeout,
+      id_vendor=0x08af,
+      id_product=0x8000)
 
-    assert packet_read_timeout < read_timeout, \
-      "packet_read_timeout must be smaller than read_timeout."
-    self.packet_read_timeout = packet_read_timeout
-    self.read_timeout = read_timeout
     self.id_ = 0
-
-    self.dev: Optional[usb.core.Device] = None # TODO: make this a property
-    self.read_endpoint: Optional[usb.core.Endpoint] = None
-    self.write_endpoint: Optional[usb.core.Endpoint] = None
 
   def _generate_id(self) -> str:
     """ continuously generate unique ids 0 <= x < 10000. """
@@ -112,18 +107,16 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     Args:
       module: 2 character module identifier (C0 for master, ...)
       command: 2 character command identifier (QM for request status, ...)
-      kwargs: any named parameters. the parameter name should also be
-              2 characters long. The value can be any size.
+      kwargs: any named parameters. the parameter name should also be 2 characters long. The value
+        can be any size.
 
     Returns:
       A string containing the assembled command.
     """
 
-    # pylint: disable=redefined-builtin
-
     cmd = module + command
-    id = self._generate_id()
-    cmd += f"id{id}" # has to be first param
+    id_ = self._generate_id()
+    cmd += f"id{id_}" # has to be first param
 
     for k, v in kwargs.items():
       if type(v) is datetime.datetime:
@@ -138,30 +131,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
         k = k[:-1]
       cmd += f"{k}{v}"
 
-    return cmd, id
-
-  def _read_packet(self) -> Optional[str]:
-    """ Read a packet from the Hamilton machine.
-
-    Returns:
-      A string containing the decoded packet, or None if no packet was received.
-    """
-
-    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
-
-    try:
-      res = self.dev.read(
-        self.read_endpoint,
-        self.read_endpoint.wMaxPacketSize,
-        timeout=int(self.packet_read_timeout * 1000) # timeout in ms
-      )
-
-      if res is not None:
-        return bytearray(res).decode("utf-8") # convert res into text
-      return None
-    except usb.core.USBError:
-      # No data available (yet), this will give a timeout error. Don't reraise.
-      return None
+    return cmd, id_
 
   def parse_fw_string(self, resp: str, fmt: str = "") -> dict:
     """ Parse a machine command or response string according to a format string.
@@ -346,7 +316,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     self,
     module: str,
     command: str,
-    timeout: Optional[int] = None,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
     fmt: str = "",
     wait = True,
     **kwargs
@@ -356,10 +327,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     Args:
       module: 2 character module identifier (C0 for master, ...)
       command: 2 character command identifier (QM for request status)
-      timeout: timeout in seconds. If None, `self.read_timeout` is used.
+      write_timeout: write timeout in seconds. If None, `self.write_timeout` is used.
+      read_timeout: read timeout in seconds. If None, `self.read_timeout` is used.
       fmt: A string containing the format of the response. If None, just the id parameter is read.
-      kwargs: any named parameters. the parameter name should also be
-              2 characters long. The value can be any size.
+      kwargs: any named parameters. the parameter name should also be 2 characters long. The value
+        can be any size.
 
     Raises:
       HamiltonFirmwareError: if an error response is received.
@@ -368,39 +340,20 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       A dictionary containing the parsed response, or None if no response was read within `timeout`.
     """
 
-    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
+    cmd, id_ = self._assemble_command(module=module, command=command, **kwargs)
 
-    if timeout is None:
-      timeout = self.read_timeout
-
-    cmd, id_ = self._assemble_command(module, command, **kwargs)
-    print("sending command", cmd)
-
-    # write command to endpoint
-    self.dev.write(self.write_endpoint, cmd)
-    print("sent")
-    logger.info("Sent command: %s", cmd)
+    self.write(cmd, timeout=write_timeout)
 
     if not wait:
       return
 
     # Attempt to read packets until timeout, or when we identify the right id.
-    timeout_time = time.time() + timeout
+    if read_timeout is None:
+      read_timeout = self.read_timeout
+    timeout_time = time.time() + read_timeout
 
     while time.time() < timeout_time:
-      # read response from endpoint, and keep reading until the packet is smaller than the max
-      # packet size: if the packet is that size, it means that there may be more data to read.
-
-      resp = ""
-      last_packet: Optional[str] = None
-      while True: # read while we have data, and while the last packet is the max size.
-        last_packet = self._read_packet()
-        if last_packet is not None:
-          resp += last_packet
-        if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
-          break
-
-      logger.debug("Received data: %s", resp)
+      resp = self.read()
 
       # Parse response.
       try:
@@ -422,22 +375,28 @@ class STAR(HamiltonLiquidHandler):
   Interface for the Hamilton STAR.
   """
 
-  def __init__(self, packet_read_timeout: int = 3, read_timeout: int = 30, **kwargs):
+  def __init__(
+    self,
+    packet_read_timeout: int = 3,
+    read_timeout: int = 30,
+    write_timeout: int = 30,
+  ):
     """ Create a new STAR interface.
 
     Args:
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
+      write_timeout: timeout in seconds for writing a command.
       num_channels: the number of pipette channels present on the robot.
     """
 
-    super().__init__(packet_read_timeout=packet_read_timeout, read_timeout=read_timeout, **kwargs)
-    self.dev: Optional[usb.core.Device] = None
+    super().__init__(
+      packet_read_timeout=packet_read_timeout,
+      read_timeout=read_timeout,
+      write_timeout=write_timeout)
+
     self._tth2tti: dict[int, int] = {} # hash to tip type index
     self._iswap_parked: Optional[bool] = None
-
-    self.read_endpoint: Optional[usb.core.Endpoint] = None
-    self.write_endpoint: Optional[usb.core.Endpoint] = None
 
     self._num_channels: Optional[int] = None
 
@@ -458,48 +417,7 @@ class STAR(HamiltonLiquidHandler):
     Creates a USB connection and finds read/write interfaces.
     """
 
-    if not USE_USB:
-      raise RuntimeError("USB is not enabled. Please install pyusb.")
-
-    if self.dev is not None:
-      logging.warning("Already initialized. Please call stop() first.")
-      return
-
-    logger.info("Finding Hamilton USB device...")
-
-    self.dev = usb.core.find(idVendor=0x08af)
-    if self.dev is None:
-      raise ValueError("Hamilton STAR device not found.")
-
-    logger.info("Found Hamilton USB device.")
-
-    # set the active configuration. With no arguments, the first
-    # configuration will be the active one
-    self.dev.set_configuration()
-
-    cfg = self.dev.get_active_configuration()
-    intf = cfg[(0,0)]
-
-    self.write_endpoint = usb.util.find_descriptor(
-      intf,
-      custom_match = \
-      lambda e: \
-          usb.util.endpoint_direction(e.bEndpointAddress) == \
-          usb.util.ENDPOINT_OUT)
-
-    self.read_endpoint = usb.util.find_descriptor(
-      intf,
-      custom_match = \
-      lambda e: \
-          usb.util.endpoint_direction(e.bEndpointAddress) == \
-          usb.util.ENDPOINT_IN)
-
-    logger.info("Found endpoints. \nWrite:\n %s \nRead:\n %s", self.write_endpoint,
-      self.read_endpoint)
-
-    # Empty the read buffer.
-    while self._read_packet() is not None:
-      pass
+    super().setup()
 
     tip_presences = self.request_tip_presence()
     self._num_channels = len(tip_presences)
@@ -541,13 +459,6 @@ class STAR(HamiltonLiquidHandler):
 
       self.park_iswap()
       self._iswap_parked = True
-
-  def stop(self):
-    if self.dev is None:
-      raise ValueError("USB device was not connected.")
-    logging.warning("Closing connection to USB device.")
-    usb.util.dispose_resources(self.dev)
-    self.dev = None
 
   # ============== Tip Types ==============
 
