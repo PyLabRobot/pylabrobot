@@ -6,7 +6,6 @@ from abc import ABCMeta
 from typing import List, Union, Optional, Sequence
 
 from pylabrobot import utils
-from pylabrobot.liquid_handling.errors import TipSpotHasNoTipError
 from pylabrobot.liquid_handling.tip import Tip, TipCreator
 from pylabrobot.liquid_handling.tip_tracker import SpotTipTracker, does_tip_tracking
 
@@ -37,15 +36,17 @@ class TipSpot(Resource):
 
     self.make_tip = make_tip
 
-    self.tracker.tip = self.make_tip() if start_with_tip else None
+    self.tracker.set_tip(self.make_tip() if start_with_tip else None)
 
   def get_tip(self) -> Tip:
     """ Get a tip from the tip spot. """
-    if self.tracker.tip is None:
-      if does_tip_tracking() and not self.tracker.is_disabled:
-        raise TipSpotHasNoTipError(self)
-      self.tracker.tip = self.make_tip()
-    return self.tracker.tip
+
+    # Tracker will raise an error if there is no tip. We spawn a new tip if tip tracking is disabled
+    tracks = does_tip_tracking() and not self.tracker.is_disabled
+    if not self.tracker.has_tip and not tracks:
+      self.tracker.set_tip(self.make_tip())
+
+    return self.tracker.get_tip()
 
   def has_tip(self) -> bool:
     """ Check if the tip spot has a tip. """
@@ -53,7 +54,7 @@ class TipSpot(Resource):
 
   def empty(self) -> None:
     """ Empty the tip spot. """
-    self.tracker.tip = None
+    self.tracker.set_tip(None)
 
   def serialize(self) -> dict:
     """ Serialize the tip spot. """
@@ -153,9 +154,9 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       # If the tip state is different from the current state, update it by either creating or
       # removing the tip.
       if has_tip[i] and not self.get_item(i).has_tip():
-        self.get_item(i).tracker.tip = self.get_item(i).make_tip()
+        self.get_item(i).tracker.set_tip(self.get_item(i).make_tip())
       elif not has_tip[i] and self.get_item(i).has_tip():
-        self.get_item(i).tracker.tip = None
+        self.get_item(i).tracker.set_tip(None)
 
   def empty(self):
     """ Empty the tip rack. This is useful when tip tracking is enabled and you are modifying

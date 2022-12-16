@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import sys
 from typing import Callable
+
+from pylabrobot.liquid_handling.volume_tracker import TipVolumeTracker
+
+if sys.version_info >= (3, 11):
+  from typing import Self
+else:
+  from typing_extensions import Self
 
 
 class Tip:
@@ -25,6 +33,8 @@ class Tip:
     self.maximal_volume = maximal_volume
     self.fitting_depth = fitting_depth
 
+    self.tracker = TipVolumeTracker(max_volume=self.maximal_volume)
+
   def __eq__(self, other: object) -> bool:
     return (
       isinstance(other, Tip) and
@@ -47,13 +57,12 @@ class Tip:
     }
 
   @classmethod
-  def deserialize(cls, data: dict) -> Tip:
-    return cls(
-      total_tip_length=data["total_tip_length"],
-      has_filter=data["has_filter"],
-      maximal_volume=data["maximal_volume"],
-      fitting_depth=data["fitting_depth"],
-    )
+  def deserialize(cls, data: dict) -> Self: # type: ignore
+    tip_class_name = data.pop("type")
+    tip_classes = {cls.__name__: cls for cls in cls.__subclasses__()}
+    tip_classes["Tip"] = Tip
+    tip_class = tip_classes[tip_class_name]
+    return tip_class(**data)
 
 
 TipCreator = Callable[[], Tip]

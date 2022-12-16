@@ -23,7 +23,7 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 
    basic
    using-the-simulator
-   using-tip-trackers
+   using-trackers
    writing-robot-agnostic-methods
 
 

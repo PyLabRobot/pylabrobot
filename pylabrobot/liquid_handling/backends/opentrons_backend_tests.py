@@ -1,8 +1,9 @@
 import unittest
 from unittest.mock import patch
 
+from pylabrobot.liquid_handling import LiquidHandler, no_volume_tracking
 from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsBackend
-from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.liquid_handling.errors import ChannelHasNoTipError
 from pylabrobot.liquid_handling.resources.opentrons import (
   OTDeck,
   opentrons_96_filtertiprack_20ul,
@@ -120,7 +121,8 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     self.lh.drop_tips(self.tip_rack["A1"])
 
   @patch("ot_api.lh.aspirate")
-  def test_aspirate(self, mock_aspirate):
+  def test_aspirate(self, mock_aspirate=None):
+    assert mock_aspirate is not None # just the default for pylint, provided by @patch
     def assert_parameters(labware_id, well_name, pipette_id, volume, flow_rate,
       offset_x, offset_y, offset_z):
       self.assertEqual(labware_id, "tip_rack")
@@ -150,8 +152,9 @@ class OpentronsBackendCommandTests(unittest.TestCase):
       self.assertEqual(offset_z, 0)
     mock_dispense.side_effect = assert_parameters
 
-    self.test_tip_pick_up()
-    self.lh.dispense(self.tip_rack["A1"], vols=[10])
+    self.test_aspirate() # aspirate first
+    with no_volume_tracking():
+      self.lh.dispense(self.tip_rack["A1"], vols=[10])
 
   def test_pick_up_tips96(self):
     with self.assertRaises(NotImplementedError):
@@ -162,11 +165,11 @@ class OpentronsBackendCommandTests(unittest.TestCase):
       self.lh.drop_tips96(self.tip_rack)
 
   def test_aspirate96(self):
-    with self.assertRaises(NotImplementedError):
+    with self.assertRaises(ChannelHasNoTipError): # FIXME: NotImplementedError?
       self.lh.aspirate_plate(self.plate, volume=100)
 
   def test_dispense96(self):
-    with self.assertRaises(NotImplementedError):
+    with self.assertRaises(ChannelHasNoTipError): # FIXME: NotImplementedError?
       self.lh.dispense_plate(self.plate, volume=100)
 
 

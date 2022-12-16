@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking
+from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking, no_volume_tracking
 from pylabrobot.liquid_handling.backends.serializing_backend import SerializingSavingBackend
 from pylabrobot.liquid_handling.resources import (
   STARLetDeck,
@@ -67,20 +67,26 @@ class SerializingBackendTests(unittest.TestCase):
       use_channels=[0]))
 
   def test_aspirate(self):
-    wells = self.plate["A1"]
-    self.lh.aspirate(wells, vols=10)
+    well = self.plate.get_item("A1")
+    well.tracker.set_used_volume(10)
+    tip = self.tip_rack.get_tip(0)
+    self.lh.update_head_state({0: tip})
+    self.lh.aspirate([well], vols=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
-      channels=[Aspiration(resource=wells[0], volume=10).serialize()], use_channels=[0]))
+      channels=[Aspiration(resource=well, volume=10, tip=tip).serialize()], use_channels=[0]))
 
   def test_dispense(self):
     wells = self.plate["A1"]
-    self.lh.dispense(wells, vols=10)
+    tip = self.tip_rack.get_tip(0)
+    self.lh.update_head_state({0: tip})
+    with no_volume_tracking():
+      self.lh.dispense(wells, vols=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(
-      channels=[Dispense(resource=wells[0], volume=10).serialize()], use_channels=[0]))
+      channels=[Dispense(resource=wells[0], volume=10, tip=tip).serialize()], use_channels=[0]))
 
   def test_pick_up_tips96(self):
     self.lh.pick_up_tips96(self.tip_rack)
@@ -95,18 +101,26 @@ class SerializingBackendTests(unittest.TestCase):
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource_name=self.tip_rack.name))
 
   def test_aspirate96(self):
+    self.test_pick_up_tips96() # pick up tips first
+    self.backend.clear()
+
+    tip = self.tip_rack.get_tip(0) # FIXME:
     self.lh.aspirate_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate96")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(aspiration=
-      Aspiration(resource=self.plate, volume=10).serialize()))
+      Aspiration(resource=self.plate, volume=10, tip=tip).serialize()))
 
   def test_dispense96(self):
+    self.test_pick_up_tips96() # pick up tips first
+    self.backend.clear()
+
+    tip = self.tip_rack.get_tip(0) # FIXME:
     self.lh.dispense_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense96")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(dispense=
-      Dispense(resource=self.plate, volume=10).serialize()))
+      Dispense(resource=self.plate, volume=10, tip=tip).serialize()))
 
   def test_move(self):
     to = Coordinate(600, 200, 200)

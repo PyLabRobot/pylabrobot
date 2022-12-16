@@ -7,10 +7,10 @@ import enum
 from typing import TYPE_CHECKING
 
 from pylabrobot.default import Defaultable, Default, is_not_default
-from pylabrobot.liquid_handling.tip import Tip
 from .resources.abstract.coordinate import Coordinate
 if TYPE_CHECKING:
   from pylabrobot.liquid_handling.resources import Resource
+  from pylabrobot.liquid_handling.tip import Tip
   from .resources.abstract.tip_rack import TipSpot
 
 
@@ -86,15 +86,13 @@ class Pickup(TipOp):
     self.resource: TipSpot = resource # fix type
 
   @classmethod
-  def deserialize(cls, data: dict, resource: TipSpot) -> Pickup:
+  def deserialize(cls, data: dict, tip: Tip, resource: TipSpot) -> Pickup:
     assert resource.name == data["resource_name"] # TODO: why does this exist?
-    tip_class_name = data["tip"]["type"]
-    tip_classes = {cls.__name__: cls for cls in Tip.__subclasses__()}
-    tip_class = tip_classes[tip_class_name]
+    # to prevent circular import (tip->vol tracker->standard->tip) we need to get tip from caller
     return Pickup(
       resource=resource,
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
-      tip=tip_class.deserialize(data["tip"])
+      tip=tip
     )
 
 
@@ -102,15 +100,13 @@ class Drop(TipOp):
   """ A drop operation. """
 
   @classmethod
-  def deserialize(cls, data: dict, resource: Resource) -> Drop:
+  def deserialize(cls, data: dict, tip: Tip, resource: Resource) -> Drop:
     assert resource.name == data["resource_name"] # TODO: why does this exist?
-    tip_class_name = data["tip"]["type"]
-    tip_classes = {cls.__name__: cls for cls in Tip.__subclasses__()}
-    tip_class = tip_classes[tip_class_name]
+    # to prevent circular import (tip->vol tracker->standard->tip) we need to get tip from caller
     return Drop(
       resource=resource,
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
-      tip=tip_class.deserialize(data["tip"])
+      tip=tip
     )
 
 
@@ -128,6 +124,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     self,
     resource: Resource,
     volume: float,
+    tip: Tip,
     flow_rate: Defaultable[float] = Default,
     offset: Defaultable[Coordinate] = Default,
     liquid_height: float = 0,
@@ -149,6 +146,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     self.flow_rate = flow_rate
     self.liquid_height = liquid_height
     self.blow_out_air_volume = blow_out_air_volume
+    self.tip = tip
 
   def __eq__(self, other: object) -> bool:
     return super().__eq__(other) and (
@@ -158,7 +156,8 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       self.flow_rate == other.flow_rate and
       self.offset == other.offset and
       self.liquid_height == other.liquid_height and
-      self.blow_out_air_volume == other.blow_out_air_volume
+      self.blow_out_air_volume == other.blow_out_air_volume and
+      self.tip == other.tip
     )
 
   def __hash__(self) -> int:
@@ -168,7 +167,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     return (
       f"{self.__class__.__name__}(resource={repr(self.resource)}, volume={repr(self.volume)}, "
       f"flow_rate={self.flow_rate}, offset={self.offset}, liquid_height={self.liquid_height}, "
-      f"blow_out_air_volume={self.blow_out_air_volume})"
+      f"blow_out_air_volume={self.blow_out_air_volume}, tip={self.tip})"
     )
 
   def serialize(self) -> dict:
@@ -183,7 +182,8 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       "volume": self.volume,
       "flow_rate": self.flow_rate if is_not_default(self.flow_rate) else "default",
       "liquid_height": self.liquid_height,
-      "blow_out_air_volume": self.blow_out_air_volume
+      "blow_out_air_volume": self.blow_out_air_volume,
+      "tip": self.tip.serialize()
     }
 
 
@@ -196,7 +196,7 @@ class Aspiration(LiquidHandlingOp):
   """
 
   @classmethod
-  def deserialize(cls, data: dict, resource: Resource) -> Aspiration:
+  def deserialize(cls, data: dict, resource: Resource, tip: Tip) -> Aspiration:
     assert resource.name == data["resource_name"]
     return Aspiration(
       resource=resource,
@@ -204,7 +204,8 @@ class Aspiration(LiquidHandlingOp):
       flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
       liquid_height=data["liquid_height"],
-      blow_out_air_volume=data["blow_out_air_volume"]
+      blow_out_air_volume=data["blow_out_air_volume"],
+      tip=tip
     )
 
 
@@ -217,7 +218,7 @@ class Dispense(LiquidHandlingOp):
   """
 
   @classmethod
-  def deserialize(cls, data: dict, resource: Resource) -> Dispense:
+  def deserialize(cls, data: dict, resource: Resource, tip: Tip) -> Dispense:
     assert resource.name == data["resource_name"]
     return Dispense(
       resource=resource,
@@ -225,7 +226,8 @@ class Dispense(LiquidHandlingOp):
       flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
       liquid_height=data["liquid_height"],
-      blow_out_air_volume=data["blow_out_air_volume"]
+      blow_out_air_volume=data["blow_out_air_volume"],
+      tip=tip
     )
 
 

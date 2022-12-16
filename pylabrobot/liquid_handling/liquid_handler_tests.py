@@ -235,22 +235,25 @@ class TestLiquidHandlerCommands(unittest.TestCase):
           Drop(tip_spot, tip=tip, offset=Coordinate(x=1, y=1, z=1))]}})
 
   def test_offsets_asp_disp(self):
-    well = self.plate["A1"]
-    self.lh.aspirate(well, vols=10, offsets=Coordinate(x=1, y=1, z=1))
-    self.lh.dispense(well, vols=10, offsets=Coordinate(x=1, y=1, z=1))
+    well = self.plate.get_item("A1")
+    well.tracker.set_used_volume(10)
+    t = self.tip_rack.get_item("A1").get_tip()
+    self.lh.update_head_state({0: t})
+    self.lh.aspirate([well], vols=10, offsets=Coordinate(x=1, y=1, z=1))
+    self.lh.dispense([well], vols=10, offsets=Coordinate(x=1, y=1, z=1))
 
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Aspiration(resource=well[0], volume=10, offset=Coordinate(x=1, y=1, z=1))]}})
+        "ops": [Aspiration(resource=well, volume=10, offset=Coordinate(x=1, y=1, z=1), tip=t)]}})
     self.assertEqual(self.get_first_command("dispense"), {
       "command": "dispense",
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Dispense(resource=well[0], volume=10, offset=Coordinate(x=1, y=1, z=1))]}})
+        "ops": [Dispense(resource=well, volume=10, offset=Coordinate(x=1, y=1, z=1), tip=t)]}})
 
   def test_return_tips(self):
     tip_spot = self.tip_rack.get_item("A1")
@@ -281,7 +284,11 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       self.lh.return_tips()
 
   def test_transfer(self):
+    t = self.tip_rack.get_item("A1").get_tip()
+    self.lh.update_head_state({0: t})
+
     # Simple transfer
+    self.plate.get_item("A1").tracker.set_used_volume(10)
     self.lh.transfer(self.plate.get_well("A1"), self.plate["A2"], source_vol=10)
 
     self.assertEqual(self.get_first_command("aspirate"), {
@@ -289,64 +296,72 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Aspiration(resource=self.plate.get_item("A1"), volume=10.0)]}})
+        "ops": [Aspiration(resource=self.plate.get_item("A1"), volume=10.0, tip=t)]}})
     self.assertEqual(self.get_first_command("dispense"), {
       "command": "dispense",
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Dispense(resource=self.plate.get_item("A2"), volume=10.0)]}})
+        "ops": [Dispense(resource=self.plate.get_item("A2"), volume=10.0, tip=t)]}})
     self.backend.clear()
 
     # Transfer to multiple wells
+    self.plate.get_item("A1").tracker.set_used_volume(80)
     self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Aspiration(resource=self.plate.get_item("A1"), volume=80.0)]}})
-    self.assertEqual(self.get_first_command("dispense"), {
+        "ops": [Aspiration(resource=self.plate.get_item("A1"), volume=80.0, tip=t)]}})
+
+    dispenses = list(filter(lambda x: x["command"] == "dispense", self.backend.commands_received))
+    self.assertEqual(dispenses, [{
       "command": "dispense",
       "args": (),
       "kwargs": {
-        "use_channels": [0, 1, 2, 3, 4, 5, 6, 7],
-        "ops": [Dispense(resource=well, volume=10.0) for well in self.plate["A1:H1"]]}})
+        "use_channels": [0],
+        "ops": [Dispense(resource=well, volume=10.0, tip=t)]}}
+      for well in self.plate["A1:H1"]])
     self.backend.clear()
 
     # Transfer with ratios
+    self.plate.get_item("A1").tracker.set_used_volume(60)
     self.lh.transfer(self.plate.get_well("A1"), self.plate["B1:C1"], source_vol=60, ratios=[2, 1])
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Aspiration(resource=self.plate.get_item("A1"), volume=60.0)]}})
-    self.assertEqual(self.get_first_command("dispense"), {
+        "ops": [Aspiration(resource=self.plate.get_item("A1"), volume=60.0, tip=t)]}})
+    dispenses = list(filter(lambda x: x["command"] == "dispense", self.backend.commands_received))
+    self.assertEqual(dispenses, [{
       "command": "dispense",
       "args": (),
       "kwargs": {
-        "use_channels": [0, 1],
-        "ops": [Dispense(resource=self.plate.get_item("B1"), volume=40.0),
-                     Dispense(resource=self.plate.get_item("C1"), volume=20.0)]}})
+        "use_channels": [0],
+        "ops": [Dispense(resource=well, volume=vol, tip=t)]}}
+      for well, vol in zip(self.plate["B1:C1"], [40, 20])])
     self.backend.clear()
 
     # Transfer with target_vols
     vols: List[float] = [3, 1, 4, 1, 5, 9, 6, 2]
+    self.plate.get_item("A1").tracker.set_used_volume(sum(vols))
     self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Aspiration(resource=self.plate.get_well("A1"), volume=sum(vols))]}})
-    self.assertEqual(self.get_first_command("dispense"), {
+        "ops": [Aspiration(resource=self.plate.get_well("A1"), volume=sum(vols), tip=t)]}})
+    dispenses = list(filter(lambda x: x["command"] == "dispense", self.backend.commands_received))
+    self.assertEqual(dispenses, [{
       "command": "dispense",
       "args": (),
       "kwargs": {
-        "use_channels": [0, 1, 2, 3, 4, 5, 6, 7],
-        "ops":
-          [Dispense(resource=well, volume=vol) for well, vol in zip(self.plate["A1:H1"], vols)]}})
+        "use_channels": [0],
+        "ops": [Dispense(resource=well, volume=vol, tip=t)]}}
+      for well, vol in zip(self.plate["A1:H1"], vols)])
     self.backend.clear()
 
     # target_vols and source_vol specified
@@ -361,16 +376,19 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
   def test_stamp(self):
     # Simple transfer
+    self.lh.pick_up_tips96(self.tip_rack) # pick up tips first.
     self.lh.stamp(self.plate, self.plate, volume=10)
+    # use first tip as proxy, TODO: will probably introduce new standard ops
+    t = self.tip_rack.get_tip("A1")
 
     self.assertEqual(self.get_first_command("aspirate96"), {
       "command": "aspirate96",
       "args": (),
-      "kwargs": {"aspiration": Aspiration(resource=self.plate, volume=10.0)}})
+      "kwargs": {"aspiration": Aspiration(resource=self.plate, volume=10.0, tip=t)}})
     self.assertEqual(self.get_first_command("dispense96"), {
       "command": "dispense96",
       "args": (),
-      "kwargs": {"dispense": Dispense(resource=self.plate, volume=10.0)}})
+      "kwargs": {"dispense": Dispense(resource=self.plate, volume=10.0, tip=t)}})
     self.backend.clear()
 
   def test_tip_tracking_double_pickup(self):
