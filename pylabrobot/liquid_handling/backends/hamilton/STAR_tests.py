@@ -177,7 +177,7 @@ class STARCommandCatcher(STAR):
     self.iswap_installed = True
     self.core96_head_installed = True
 
-  def send_command(self, module, command, fmt="", timeout=0, **kwargs):
+  def send_command(self, module, command, fmt="", **kwargs):
     cmd, _ = self._assemble_command(module, command, **kwargs)
     self.commands.append(cmd)
 
