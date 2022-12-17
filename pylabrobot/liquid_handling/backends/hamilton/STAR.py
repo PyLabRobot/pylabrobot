@@ -21,6 +21,7 @@ from pylabrobot.liquid_handling.errors import (
   TipTooLittleVolumeError,
   TooLittleVolumeError,
 )
+from pylabrobot.liquid_handling.liquid_classes.hamilton import get_liquid_class
 from pylabrobot.liquid_handling.resources import (
   Coordinate,
   Plate,
@@ -39,6 +40,7 @@ from pylabrobot.liquid_handling.standard import (
   PipettingOp,
   Pickup,
   Drop,
+  LiquidHandlingOp,
   Aspiration,
   Dispense,
   Move
@@ -129,6 +131,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
         v = " ".join([str(e) for e in v]) + ("&" if len(v) < self.num_channels else "")
       if k.endswith("_"): # workaround for kwargs named in, as, ...
         k = k[:-1]
+      assert len(k) == 2, "Keyword arguments should be 2 characters long, but got: " + k
       cmd += f"{k}{v}"
 
     return cmd, id_
@@ -659,6 +662,19 @@ class STAR(HamiltonLiquidHandler):
 
       raise e
 
+  def _get_tip_max_volumes(self, ops: Sequence[LiquidHandlingOp]) -> List[float]:
+    """ These tip volumes (mostly with filters) are slightly different form the ones in the
+    liquid class mapping, so we need to map them here. If no mapping is found, we use the
+    given maximal volume of the tip. """
+
+    return [
+      { 360.0: 300.0,
+        1065.0: 1000.0,
+        1250.0: 1000.0,
+        4367.0: 4000.0,
+        5420.0: 5000.0,
+      }.get(op.tip.maximal_volume, op.tip.maximal_volume) for op in ops]
+
   class LLDMode(enum.Enum):
     OFF = 0
     GAMMA = 1
@@ -777,6 +793,24 @@ class STAR(HamiltonLiquidHandler):
 
     n = len(ops)
 
+    # convert max volumes
+    tip_max_volumes = self._get_tip_max_volumes(ops)
+
+    hamilton_liquid_classes = [
+      get_liquid_class(
+        tip_volume=int(tmv),
+        is_core=False,
+        is_tip=True,
+        has_filter=op.tip.has_filter,
+        liquid_class=op.liquid_class,
+        jet=False, # for aspiration
+        empty=False # for aspiration
+      ) for tmv, op in zip(tip_max_volumes, ops)]
+
+    # correct volumes using the liquid class
+    for op, hlc in zip(ops, hamilton_liquid_classes):
+      op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+
     T = TypeVar("T")
     def _to_list(val: Optional[List[T]], default: List[T]) -> List[T]:
       t = type(default[0])
@@ -794,7 +828,9 @@ class STAR(HamiltonLiquidHandler):
 
     aspiration_volumes = [int(op.volume * 10) for op in ops]
     lld_search_height = [int((ls+5) * 10) for ls in liquid_surfaces_no_lld]
-    clot_detection_height = _to_list(clot_detection_height, [0]*n)
+    clot_detection_height = _to_list(clot_detection_height,
+      default=[int(hlc.aspiration_clot_retract_height*10) if hlc is not None else 0
+              for hlc in hamilton_liquid_classes])
     pull_out_distance_transport_air = _to_list(pull_out_distance_transport_air, [100]*n)
     second_section_height = _to_list(second_section_height, [32]*n)
     second_section_ratio = _to_list(second_section_ratio, [6180]*n)
@@ -802,9 +838,13 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth = _to_list(immersion_depth, [0]*n)
     immersion_depth_direction = _to_list(immersion_depth_direction, [0]*n)
     surface_following_distance = _to_list(surface_following_distance, [0]*n)
-    flow_rates = [get_value(op.flow_rate, default=100) for op in ops]
+    flow_rates = [
+      get_value(op.flow_rate, default=hlc.aspiration_flow_rate if hlc is not None else 100)
+        for op, hlc in zip(ops, hamilton_liquid_classes)]
     aspiration_speed = [int(fr * 10) for fr in flow_rates]
-    transport_air_volume = _to_list(transport_air_volume, [0]*n)
+    transport_air_volume = _to_list(transport_air_volume,
+      default=[int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0
+               for hlc in hamilton_liquid_classes])
     pre_wetting_volume = _to_list(pre_wetting_volume, [0]*n)
     lld_mode = _to_list(lld_mode, [self.__class__.LLDMode.OFF]*n)
     gamma_lld_sensitivity = _to_list(gamma_lld_sensitivity, [1]*n)
@@ -812,13 +852,19 @@ class STAR(HamiltonLiquidHandler):
     aspirate_position_above_z_touch_off = _to_list(aspirate_position_above_z_touch_off, [0]*n)
     detection_height_difference_for_dual_lld = \
       _to_list(detection_height_difference_for_dual_lld, [0]*n)
-    swap_speed = _to_list(swap_speed, [20]*n)
-    settling_time = _to_list(settling_time, [10]*n)
+    swap_speed = _to_list(swap_speed,
+      default=[int(hlc.aspiration_swap_speed*10) if hlc is not None else 0
+               for hlc in hamilton_liquid_classes])
+    settling_time = _to_list(settling_time,
+      default=[int(hlc.aspiration_settling_time*10) if hlc is not None else 0
+               for hlc in hamilton_liquid_classes])
     homogenization_volume = _to_list(homogenization_volume, [0]*n)
     homogenization_cycles = _to_list(homogenization_cycles, [0]*n)
     homogenization_position_from_liquid_surface = \
       _to_list(homogenization_position_from_liquid_surface, [0]*n)
-    homogenization_speed = _to_list(homogenization_speed, [1000]*n)
+    homogenization_speed = _to_list(homogenization_speed,
+        default=[int(hlc.aspiration_mix_flow_rate*10) if hlc is not None else 0
+               for hlc in hamilton_liquid_classes])
     homogenization_surface_following_distance = \
       _to_list(homogenization_surface_following_distance, [0]*n)
     limit_curve_index = _to_list(limit_curve_index, [0]*n)
@@ -997,6 +1043,27 @@ class STAR(HamiltonLiquidHandler):
 
     n = len(ops)
 
+    # convert max volumes
+    tip_max_volumes = self._get_tip_max_volumes(ops)
+
+    hamilton_liquid_classes = [
+      get_liquid_class(
+        tip_volume=int(tmv),
+        is_core=False,
+        is_tip=True,
+        has_filter=op.tip.has_filter,
+        liquid_class=op.liquid_class,
+        # jet if liquid height is known, or if we are dispensing to an empty well
+        jet=op.liquid_height > 0 or
+          (hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0),
+        # dispensing all, get_used_volume includes pending
+        empty=op.tip.tracker.get_used_volume() == 0
+      ) for tmv, op in zip(tip_max_volumes, ops)]
+
+    # correct volumes using the liquid class
+    for op, hlc in zip(ops, hamilton_liquid_classes):
+      op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+
     T = TypeVar("T")
     def _to_list(val: Optional[List[T]], default: List[T]) -> List[T]:
       t = type(default[0])
@@ -1012,7 +1079,16 @@ class STAR(HamiltonLiquidHandler):
     liquid_surfaces_no_lld = [ls + (1 if is_default(op.offset) else 0) + op.liquid_height
                               for ls, op in zip(liquid_surfaces_no_lld, ops)]
 
-    dispensing_mode = _to_list(dispensing_mode, [2]*n)
+    dispensing_mode = [{
+      (False, True): 0,
+      (True, True): 1,
+      (True, False): 2,
+      (False, False): 3,
+    }[(op.tip.tracker.get_used_volume() == 0, # empty
+      op.liquid_height > 0 or # jet
+      (hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0))]
+      for op in ops]
+
     dispense_volumes = [int(op.volume*10) for op in ops]
     lld_search_height = _to_list(lld_search_height, [2321]*n)
     pull_out_distance_transport_air = _to_list(pull_out_distance_transport_air, [100]*n)
@@ -1022,27 +1098,39 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth = _to_list(immersion_depth, [0]*n)
     immersion_depth_direction = _to_list(immersion_depth_direction, [0]*n)
     surface_following_distance = _to_list(surface_following_distance, [0]*n)
-    flow_rates = [get_value(op.flow_rate, 120) for op in ops]
+    flow_rates = [
+      get_value(op.flow_rate, default=hlc.aspiration_flow_rate if hlc is not None else 120)
+        for op, hlc in zip(ops, hamilton_liquid_classes)]
     dispense_speed = [int(fr*10) for fr in flow_rates]
     cut_off_speed = _to_list(cut_off_speed, [50]*n)
-    stop_back_volume = _to_list(stop_back_volume, [0]*n)
-    transport_air_volume = _to_list(transport_air_volume, [0]*n)
-    # blow out air volume is handled separately see below.
-    blow_out_air_volume = _to_list(blow_out_air_volume, [0]*n)
+    stop_back_volume = _to_list(stop_back_volume,
+      default=[int(hlc.dispense_stop_back_volume*10) if hlc is not None else 0
+      for hlc in hamilton_liquid_classes])
+    transport_air_volume = _to_list(transport_air_volume,
+      default=[int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0
+      for hlc in hamilton_liquid_classes])
+    blow_out_air_volume = _to_list(blow_out_air_volume,
+      default=[int(hlc.dispense_blow_out_volume*10) if hlc is not None else 0
+       for hlc in hamilton_liquid_classes])
     lld_mode = _to_list(lld_mode, [0]*n)
     dispense_position_above_z_touch_off = _to_list(dispense_position_above_z_touch_off, [0]*n)
     gamma_lld_sensitivity = _to_list(gamma_lld_sensitivity, [1]*n)
     dp_lld_sensitivity = _to_list(dp_lld_sensitivity, [1]*n)
-    swap_speed = _to_list(swap_speed, [20]*n)
-    settling_time = _to_list(settling_time, [0]*n)
+    swap_speed = _to_list(swap_speed,
+      default=[int(hlc.dispense_swap_speed*10) if hlc is not None else 0
+        for hlc in hamilton_liquid_classes])
+    settling_time = _to_list(settling_time,
+      default=[int(hlc.dispense_settling_time*10) if hlc is not None else 0
+        for hlc in hamilton_liquid_classes])
     mix_volume = _to_list(mix_volume, [0]*n)
     mix_cycles = _to_list(mix_cycles, [0]*n)
     mix_position_from_liquid_surface = _to_list(mix_position_from_liquid_surface, [0]*n)
-    mix_speed = _to_list(mix_speed, [10]*n)
+    mix_speed = _to_list(mix_speed,
+      default=[int(hlc.dispense_mix_flow_rate*10) if hlc is not None else 0
+        for hlc in hamilton_liquid_classes])
     mix_surface_following_distance = _to_list(mix_surface_following_distance, [0]*n)
     limit_curve_index =_to_list(limit_curve_index, [0]*n)
 
-    # Do normal dispense first, then blow out air (maybe).
     try:
       ret = self.dispense_pip(
         tip_pattern=channels_involved,
@@ -2346,7 +2434,7 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="DI",
-      timeout=120,
+      read_timeout=120,
       xp=[f"{xp:05}" for xp in x_positions],
       yp=[f"{yp:04}" for yp in y_positions],
       tp=f"{begin_of_tip_deposit_process:04}",
@@ -2397,7 +2485,7 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="TP",
-      timeout=60,
+      read_timeout=60,
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
@@ -2656,7 +2744,7 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="AS",
-      timeout=60,
+      read_timeout=60,
       at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
       xp=[f"{xp:05}" for xp in x_positions],
@@ -2852,7 +2940,7 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="DS",
-      timeout=60,
+      read_timeout=60,
       dm=[f"{dm:01}" for dm in dispensing_mode],
       tm=[f"{tm:01}" for tm in tip_pattern],
       xp=[f"{xp:05}" for xp in x_positions],

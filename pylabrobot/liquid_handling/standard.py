@@ -7,6 +7,7 @@ import enum
 from typing import TYPE_CHECKING
 
 from pylabrobot.default import Defaultable, Default, is_not_default
+from pylabrobot.liquid_handling.liquid_classes.abstract import LiquidClass
 from .resources.abstract.coordinate import Coordinate
 if TYPE_CHECKING:
   from pylabrobot.liquid_handling.resources import Resource
@@ -128,7 +129,8 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     flow_rate: Defaultable[float] = Default,
     offset: Defaultable[Coordinate] = Default,
     liquid_height: float = 0,
-    blow_out_air_volume: float = 0
+    blow_out_air_volume: float = 0,
+    liquid_class: LiquidClass = LiquidClass.WATER
   ):
     """ Initialize the operation.
 
@@ -147,6 +149,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     self.liquid_height = liquid_height
     self.blow_out_air_volume = blow_out_air_volume
     self.tip = tip
+    self.liquid_class = liquid_class
 
   def __eq__(self, other: object) -> bool:
     return super().__eq__(other) and (
@@ -157,7 +160,8 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       self.offset == other.offset and
       self.liquid_height == other.liquid_height and
       self.blow_out_air_volume == other.blow_out_air_volume and
-      self.tip == other.tip
+      self.tip == other.tip and
+      self.liquid_class == other.liquid_class
     )
 
   def __hash__(self) -> int:
@@ -167,7 +171,8 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     return (
       f"{self.__class__.__name__}(resource={repr(self.resource)}, volume={repr(self.volume)}, "
       f"flow_rate={self.flow_rate}, offset={self.offset}, liquid_height={self.liquid_height}, "
-      f"blow_out_air_volume={self.blow_out_air_volume}, tip={self.tip})"
+      f"blow_out_air_volume={self.blow_out_air_volume}, tip={self.tip}, "
+      "liquid_class={self.liquid_class})"
     )
 
   def serialize(self) -> dict:
@@ -183,7 +188,8 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       "flow_rate": self.flow_rate if is_not_default(self.flow_rate) else "default",
       "liquid_height": self.liquid_height,
       "blow_out_air_volume": self.blow_out_air_volume,
-      "tip": self.tip.serialize()
+      "tip": self.tip.serialize(),
+      "liquid_class": self.liquid_class.name
     }
 
 
@@ -205,7 +211,8 @@ class Aspiration(LiquidHandlingOp):
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
       liquid_height=data["liquid_height"],
       blow_out_air_volume=data["blow_out_air_volume"],
-      tip=tip
+      tip=tip,
+      liquid_class=LiquidClass[data["liquid_class"]]
     )
 
 
@@ -227,7 +234,8 @@ class Dispense(LiquidHandlingOp):
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
       liquid_height=data["liquid_height"],
       blow_out_air_volume=data["blow_out_air_volume"],
-      tip=tip
+      tip=tip,
+      liquid_class=LiquidClass[data["liquid_class"]]
     )
 
 
