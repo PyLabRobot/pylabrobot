@@ -61,7 +61,8 @@ class TestStandard(unittest.TestCase):
       "flow_rate": "default",
       "liquid_height": 0,
       "blow_out_air_volume": 0,
-      "tip": self.tip_rack.get_tip("A1").serialize()
+      "tip": self.tip_rack.get_tip("A1").serialize(),
+      "liquid_class": "WATER"
     })
 
   def test_aspiration_deserialize(self):
@@ -80,7 +81,8 @@ class TestStandard(unittest.TestCase):
       "flow_rate": "default",
       "liquid_height": 0,
       "blow_out_air_volume": 0,
-      "tip": self.tip_rack.get_tip("A1").serialize()
+      "tip": self.tip_rack.get_tip("A1").serialize(),
+      "liquid_class": "WATER"
     })
 
   def test_dispense_deserialize(self):

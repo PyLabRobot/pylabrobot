@@ -152,7 +152,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "flow_rate": "default",
             "liquid_height": 0,
             "blow_out_air_volume": 0,
-            "tip": self.tip_rack.get_tip("A1").serialize()
+            "tip": self.tip_rack.get_tip("A1").serialize(),
+            "liquid_class": "WATER"
           }],
           "use_channels": [0],
         })
@@ -180,7 +181,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "flow_rate": "default",
             "liquid_height": 0,
             "blow_out_air_volume": 0,
-            "tip": self.tip_rack.get_tip("A1").serialize()
+            "tip": self.tip_rack.get_tip("A1").serialize(),
+            "liquid_class": "WATER"
           }],
           "use_channels": [0],
         })
@@ -254,7 +256,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "offset": "default",
             "liquid_height": 0,
             "blow_out_air_volume": 0,
-            "tip": self.tip_rack.get_tip("A1").serialize()
+            "tip": self.tip_rack.get_tip("A1").serialize(),
+            "liquid_class": "WATER"
           }
         })
       ],
@@ -294,7 +297,8 @@ class TestHTTPBackendOps(unittest.TestCase):
             "offset": "default",
             "liquid_height": 0,
             "blow_out_air_volume": 0,
-            "tip": self.tip_rack.get_tip("A1").serialize()
+            "tip": self.tip_rack.get_tip("A1").serialize(),
+            "liquid_class": "WATER"
           }
         })
       ],
