@@ -330,7 +330,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp1931&ch000&zl1881&"
+      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2011&ch000&zl1881&"
       "zx1831&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
       "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
       "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
@@ -341,11 +341,11 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     # TODO: Hamilton liquid classes
     well = self.plate.get_item("A1")
     well.tracker.set_used_volume(100 * 1.072) # liquid class correction
-    self.lh.aspirate([well], vols=[100], liquid_height=9)
+    self.lh.aspirate([well], vols=[100], liquid_height=10)
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2021&ch000&zl1971&"
+      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2011&ch000&zl1971&"
       "zx1921&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
       "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
       "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
@@ -361,7 +361,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp1931 1931&"
+      "C0ASid0000at0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp2011 2011&"
       "ch000 000&zl1881 1881&zx1831 1831&ip0000 0000&it0 0&fp0000 0000&"
       "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&ld00 00&"
       "de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&gi000 000&gj0gk0"
@@ -374,7 +374,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
       "C0ASid0009at0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 1688 "
-      "1551 0000&th2450te2450lp1260 1260 1260 1260 1260&ch000 000 000 000 000&zl1210 1210 1210 "
+      "1551 0000&th2450te2450lp2000 2000 2000 2000 2000&ch000 000 000 000 000&zl1210 1210 1210 "
       "1210 1210&po0100 0100 0100 0100 0100&zu0032 0032 0032 0032 0032&zr06180 06180 06180 06180 "
       "06180&zx1160 1160 1160 1160 1160&ip0000 0000 0000 0000 0000&it0 0 0 0 0&fp0000 0000 0000 "
       "0000 0000&av00119 00119 00119 00119 00119&as1000 1000 1000 1000 1000&ta000 000 000 000 000&"
@@ -408,10 +408,9 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     with no_volume_tracking():
       self.lh.dispense(self.plate["A1"], vols=[100])
     self._assert_command_sent_once(
-      "C0DSid0000dm1&tm1 0&xp02980 00000&yp1460 0000&zx1871&lp2321&zl1881&"
-      "ip0000&it0&fp0000&th2450te2450dv01072&ds1000&ss0050&rv000&ta050&ba0000&lm0&zo000&ll1&"
-      "lv1&de0010&mv00000&mc00&mp000&ms0010&wt00&gi000&gj0gk0zu0032&dj00zr06180&"
-      " mh0000&po0100&",
+      "C0DSid0317dm1&tm1 0&dv01072&xp02980 00000&yp1460 0000&zx1871&lp2321&zl1881&ip0000&it0&fp0000"
+      "&th2450te2450ds1000&ss0050&rv000&ta050&ba0000&lm0&zo000&ll1&lv1&de0010&mv00000&mc00&mp000&ms"
+      "0010&wt00&gi000&gj0gk0zu0032&dj00zr06180&mh0000&po0100&",
       fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_multi_channel_dispense(self):
