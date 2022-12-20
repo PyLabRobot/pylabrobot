@@ -13,7 +13,7 @@ import time
 from typing import Callable, List, Optional, Tuple, Sequence, TypeVar, cast
 
 from pylabrobot import utils
-from pylabrobot.default import Default, get_value, is_default
+from pylabrobot.default import Default, get_value, is_default, is_not_default
 from pylabrobot.liquid_handling.errors import (
   ChannelHasTipError,
   ChannelHasNoTipError,
@@ -676,9 +676,11 @@ class STAR(HamiltonLiquidHandler):
       }.get(op.tip.maximal_volume, op.tip.maximal_volume) for op in ops]
 
   class LLDMode(enum.Enum):
+    """ Liquid level detection mode. """
+
     OFF = 0
     GAMMA = 1
-    DP = 2
+    PRESSURE = 2
     DUAL = 3
     Z_TOUCH_OFF = 4
 
@@ -751,8 +753,7 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth: Unknown exactly, probably the depth to move into the liquid. Possibly below
         the liquid surface.
       immersion_depth_direction: Unknown.
-      surface_following_distance: The distance to follow the liquid surface (0 = go deeper, 1 = go
-        up out of liquid)
+      surface_following_distance: The distance to follow the liquid surface.
       transport_air_volume: The volume of air to aspirate after the liquid.
       pre_wetting_volume: The volume of liquid to use for pre-wetting.
       lld_mode: The liquid level detection mode to use.
@@ -822,12 +823,14 @@ class STAR(HamiltonLiquidHandler):
         return val
       return default
 
-    liquid_surfaces_no_lld = [op.get_absolute_location().z for op in ops]
-    liquid_surfaces_no_lld = [ls + (1 if is_default(op.offset) else 0) + op.liquid_height
-                              for ls, op in zip(liquid_surfaces_no_lld, ops)]
+    well_bottoms = [op.get_absolute_location().z + \
+                    (op.offset.z if is_not_default(op.offset) else 0) for op in ops]
+    liquid_surfaces_no_lld = [ls + max(op.liquid_height, 1)
+                              for ls, op in zip(well_bottoms, ops)]
+    lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
 
     aspiration_volumes = [int(op.volume * 10) for op in ops]
-    lld_search_height = [int((ls+5) * 10) for ls in liquid_surfaces_no_lld]
+    lld_search_height = [int(sh * 10) for sh in lld_search_heights]
     clot_detection_height = _to_list(clot_detection_height,
       default=[int(hlc.aspiration_clot_retract_height*10) if hlc is not None else 0
               for hlc in hamilton_liquid_classes])
@@ -891,7 +894,7 @@ class STAR(HamiltonLiquidHandler):
         aspiration_volumes=aspiration_volumes,
         lld_search_height=lld_search_height,
         clot_detection_height=clot_detection_height,
-        liquid_surface_no_lld=[int(ls*10) for ls in liquid_surfaces_no_lld],
+        liquid_surface_no_lld=[int(ls * 10) for ls in liquid_surfaces_no_lld],
         pull_out_distance_transport_air=pull_out_distance_transport_air,
         second_section_height=second_section_height,
         second_section_ratio=second_section_ratio,
@@ -1021,8 +1024,8 @@ class STAR(HamiltonLiquidHandler):
       lld_mode: The liquid level detection mode to use.
       dispense_position_above_z_touch_off: The height to move after LLD mode found the Z touch off
         position.
-      gamma_lld_sensitivity: The gamma LLD sensitivity.
-      dp_lld_sensitivity: The dp LLD sensitivity.
+      gamma_lld_sensitivity: The gamma LLD sensitivity. (1 = high, 4 = low)
+      dp_lld_sensitivity: The dp LLD sensitivity. (1 = high, 4 = low)
       swap_speed: The homogenization speed.
       settling_time: The settling time.
       mix_volume: The volume to use for homogenization.
