@@ -29,18 +29,6 @@ Abstract
     pylabrobot.resources.abstract.PlateCarrier
 
 
-Shared
-------
-
-Resources that are not abstract, but also not tied to a specific liquid handling equipment.
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    pylabrobot.resources.PlateReader
-
 ML Star resources
 -----------------
 

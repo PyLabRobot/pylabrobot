@@ -2,6 +2,7 @@
   "editor.tabSize": 2,
   "files.trimTrailingWhitespace": true,
   "cSpell.words": [
+    "coro",
     "Defaultable",
     "frontmost",
     "iswap",

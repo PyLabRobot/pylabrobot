@@ -4,6 +4,8 @@ from typing import cast
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler, no_volume_tracking
+from pylabrobot.plate_reading import PlateReader
+from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
 from pylabrobot.resources import (
   Resource,
   TIP_CAR_480_A00,
@@ -12,7 +14,6 @@ from pylabrobot.resources import (
   Cos_96_EZWash,
   HT_P,
   Coordinate,
-  PlateReader,
   ResourceStack,
   Lid
 )
@@ -479,7 +480,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "xs#####xd#yj####yd#zj####zd#th####te####go####ga#")
 
   def test_iswap_plate_reader(self):
-    plate_reader = PlateReader(name="plate_reader")
+    plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
     self.lh.deck.assign_child_resource(plate_reader,
       location=Coordinate(979.5, 285.2-63, 200 - 100))
 
