@@ -7,18 +7,18 @@
 
 ## What is PyLabRobot?
 
-PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots.
+PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots and other lab automation equipment.
 
-PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton and Opentrons robots, but we will soon have drivers for many more. The two Hamilton drivers are Venus, which is derived from the [PyHamilton library](https://github.com/dgretton/pyhamilton), and STAR, which is a low-level firmware interface. The Opentrons driver is based on [Opentrons Python API](https://github.com/rickwierenga/opentrons-python-api). We also provide a simulator which plays the role of a device driver but renders commands in a browser-based deck visualization.
+### Liquid handling robots
 
-**Disclaimer:** PyLabRobot is not officially endorsed or supported by any robot manufacturer. If you use a firmware driver such as the STAR driver provided here, you do so at your own risk. Usage of a firmware driver such as STAR may invalidate your warranty. Please contact us with any questions.
+PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton and Opentrons liquid handling robots, but we will soon have drivers for many more. The two Hamilton drivers are Venus, which is derived from the [PyHamilton library](https://github.com/dgretton/pyhamilton), and STAR, which is a low-level firmware interface. The Opentrons driver is based on [Opentrons Python API](https://github.com/rickwierenga/opentrons-python-api). We also provide a simulator which plays the role of a device driver but renders commands in a browser-based deck visualization.
 
 Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on Hamilton STAR (this will work with any operating system!):
 
 ```python
 from pylabrobot import LiquidHandler
 from pylabrobot.liquid_handling.backends import STAR
-from pylabrobot.liquid_handling.resources import STARLetDeck
+from pylabrobot.resources import STARLetDeck
 
 lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
 lh.setup()
@@ -34,7 +34,7 @@ To run the same procedure on an Opentrons, switch out the following lines:
 
 ```diff
 - from pylabrobot.liquid_handling.backends import STAR
-- from pylabrobot.liquid_handling.resources import STARLetDeck
+- from pylabrobot.resources import STARLetDeck
 + from pylabrobot.liquid_handling.backends import OpentronsBackend
 + from pylabrobot.liquid_handling.resource import OTDeck
 
@@ -43,6 +43,23 @@ To run the same procedure on an Opentrons, switch out the following lines:
 
 - lh.load_layout("hamilton-layout.json")
 + lh.load_layout("opentrons-layout.json")
+```
+
+### Plate readers
+
+PyLabRobot also provides a layer of general-purpose abstractions for plate readers, currently with just a driver for the ClarioStar. This driver works on Windows, macOS and Linux. Here's a quick example showing how to read a plate using the ClarioStar:
+
+```python
+from pylabrobot.plate_reading import PlateReader, ClarioStar
+
+pr = PlateReader(name="plate reader", backend=ClarioStar())
+pr.setup()
+
+# Use in combination with a liquid handler
+lh.assign_child_resource(pr, location=Coordinate(x, y, z))
+lh.move_plate(lh.get_resource("plate"), pr)
+
+data = pr.read_luminescence()
 ```
 
 ## Resources
@@ -60,5 +77,9 @@ To run the same procedure on an Opentrons, switch out the following lines:
 
 - [forums.pylabrobot.org](https://forums.pylabrobot.org) for questions and discussions.
 - [GitHub Issues](https://github.com/pylabrobot/pylabrobot/issues) for bug reports and feature requests.
+
+---
+
+**Disclaimer:** PyLabRobot is not officially endorsed or supported by any robot manufacturer. If you use a firmware driver such as the STAR driver provided here, you do so at your own risk. Usage of a firmware driver such as STAR may invalidate your warranty. Please contact us with any questions.
 
 _Developed for the Sculpting Evolution Group at the MIT Media Lab_

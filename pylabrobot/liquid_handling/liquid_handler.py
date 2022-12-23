@@ -15,6 +15,7 @@ from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.tip import Tip
 from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, does_tip_tracking
 from pylabrobot.liquid_handling.volume_tracker import does_volume_tracking
+from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
   Resource,
   ResourceStack,
@@ -22,7 +23,6 @@ from pylabrobot.resources import (
   CarrierSite,
   Lid,
   Plate,
-  PlateReader,
   TipRack,
   TipSpot,
   Well
