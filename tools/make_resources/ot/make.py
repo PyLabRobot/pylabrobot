@@ -2,8 +2,8 @@ import os
 
 from opentrons_shared_data.load import get_shared_data_root
 
-from pylabrobot.liquid_handling.resources import TipRack, Plate
-from pylabrobot.liquid_handling.resources.opentrons.load import (
+from pylabrobot.resources import TipRack, Plate
+from pylabrobot.resources.opentrons.load import (
   load_shared_opentrons_resource,
   UnknownResourceType
 )

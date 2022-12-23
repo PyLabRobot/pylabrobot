@@ -2,7 +2,7 @@ import tempfile
 import os
 import unittest
 
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import (
   Coordinate,
   Deck,
   Plate,

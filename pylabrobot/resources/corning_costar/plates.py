@@ -2,7 +2,7 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.liquid_handling.resources.abstract import Plate, Well, create_equally_spaced
+from pylabrobot.resources.abstract import Plate, Well, create_equally_spaced
 
 
 def _compute_volume_from_height_Cos_1536_10ul(h: float):

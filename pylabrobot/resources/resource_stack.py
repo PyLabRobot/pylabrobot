@@ -1,7 +1,7 @@
 from typing import List, Optional
 
-from pylabrobot.liquid_handling.resources.abstract.resource import Resource
-from pylabrobot.liquid_handling.resources.abstract.coordinate import Coordinate
+from pylabrobot.resources.abstract.resource import Resource
+from pylabrobot.resources.abstract.coordinate import Coordinate
 
 
 class ResourceStack(Resource):

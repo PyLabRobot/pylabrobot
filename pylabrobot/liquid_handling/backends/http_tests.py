@@ -5,8 +5,8 @@ from responses import matchers
 
 from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking, no_volume_tracking
 from pylabrobot.liquid_handling.backends import HTTPBackend
-from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources.hamilton import STARLetDeck
+from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
   HTF_L,

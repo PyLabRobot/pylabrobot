@@ -14,7 +14,7 @@ from pylabrobot.liquid_handling.errors import (
 from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
 
 if TYPE_CHECKING:
-  from pylabrobot.liquid_handling.resources import TipSpot
+  from pylabrobot.resources import TipSpot
   from pylabrobot.liquid_handling.tip import Tip
 
 

@@ -10,7 +10,7 @@ except ImportError:
   USE_OT = False
 
 from pylabrobot.liquid_handling.tip import Tip, TipCreator
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import (
   Coordinate,
   Plate,
   TipRack,
@@ -126,7 +126,7 @@ def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack]:
     fn: path to the file.
 
   Returns:
-    A :class:`~pylabrobot.liquid_handling.resources.abstract.Resource`.
+    A :class:`~pylabrobot.resources.abstract.Resource`.
 
   Raises:
     ValueError: if the file is not a valid opentrons definition file.
@@ -138,7 +138,7 @@ def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack]:
 
     Load a tip rack:
 
-    >>> from pylabrobot.liquid_handling.resources.opentrons import load_opentrons_resource
+    >>> from pylabrobot.resources.opentrons import load_opentrons_resource
     >>> load_opentron_resource("opentrons/definitions/2/96_standard.json", "96Standard")
 
   """
@@ -161,10 +161,10 @@ def load_shared_opentrons_resource(
     definition: name of the labware definition.
     version: version of the labware definition.
     name: desired name of the PyLabRobot
-      :class:`~pylabrobot.liquid_handling.resources.abstract.Resource`
+      :class:`~pylabrobot.resources.abstract.Resource`
 
   Returns:
-    A :class:`~pylabrobot.liquid_handling.resources.abstract.Resource`.
+    A :class:`~pylabrobot.resources.abstract.Resource`.
 
   Raises:
     ValueError: if the file is not a valid opentrons definition file.
@@ -176,7 +176,7 @@ def load_shared_opentrons_resource(
 
     Load a tip rack:
 
-    >>> from pylabrobot.liquid_handling.resources.opentrons import load_shared_opentrons_resource
+    >>> from pylabrobot.resources.opentrons import load_shared_opentrons_resource
     >>> load_shared_opentrons_resource("opentrons_96_tiprack_labware", "96Standard")
 
   """

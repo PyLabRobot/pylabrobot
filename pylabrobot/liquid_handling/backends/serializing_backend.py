@@ -3,7 +3,7 @@ import sys
 from typing import Any, Dict, Optional, List
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.resources import Resource, TipRack
+from pylabrobot.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Drop,

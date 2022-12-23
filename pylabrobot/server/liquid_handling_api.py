@@ -5,7 +5,7 @@ from typing import List, Tuple, Type, TypeVar, cast
 from flask import Blueprint, request, jsonify, current_app
 import werkzeug
 
-from pylabrobot.liquid_handling.resources import Deck
+from pylabrobot.resources import Deck
 from pylabrobot.liquid_handling.standard import (
   PipettingOp,
   Pickup,

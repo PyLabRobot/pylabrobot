@@ -1,6 +1,6 @@
 import unittest
 
-from pylabrobot.liquid_handling.resources import HTF_L, Cos_96_EZWash
+from pylabrobot.resources import HTF_L, Cos_96_EZWash
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Drop,

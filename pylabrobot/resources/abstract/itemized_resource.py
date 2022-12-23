@@ -22,13 +22,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
   This class provides utilities for getting child resources by an identifier. It also restricts the
   child resources to instances of the generic type `T`, specified by the subclass. For example, a
-  :class:`pylabrobot.liquid_handling.resources.plate.Plate` can only have child resources of type
-  :class:`pylabrobot.liquid_handling.resources.well.Well`.
+  :class:`pylabrobot.resources.plate.Plate` can only have child resources of type
+  :class:`pylabrobot.resources.well.Well`.
 
   .. note::
     This class is not meant to be used directly, but rather to be subclassed, most commonly by
-    :class:`pylabrobot.liquid_handling.resources.abstract.Plate` and
-    :class:`pylabrobot.liquid_handling.resources.abstract.Tips`.
+    :class:`pylabrobot.resources.abstract.Plate` and
+    :class:`pylabrobot.resources.abstract.Tips`.
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
@@ -45,7 +45,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       size_y: The size of the resource in the y direction.
       size_z: The size of the resource in the z direction.
       items: The items on the resource. See
-        :func:`pylabrobot.liquid_handling.resources.abstract.create_equally_spaced`. Note that items
+        :func:`pylabrobot.resources.abstract.create_equally_spaced`. Note that items
         names will be prefixed with the resource name. Defaults to `[]`.
       num_items_x: The number of items in the x direction. This method can only and must be used if
         `items` is not specified.
@@ -57,9 +57,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     Examples:
 
       Creating a plate with 96 wells with
-      :func:`pylabrobot.liquid_handling.resources.abstract.create_equally_spaced`:
+      :func:`pylabrobot.resources.abstract.create_equally_spaced`:
 
-        >>> from pylabrobot.liquid_handling.resources import Plate
+        >>> from pylabrobot.resources import Plate
         >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
         ...   items=create_equally_spaced(Well
         ...     dx=0, dy=0, dz=0, item_size_x=1, item_size_y=1,
@@ -67,7 +67,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
       Creating a plate with 1 well with a list:
 
-        >>> from pylabrobot.liquid_handling.resources import Plate
+        >>> from pylabrobot.resources import Plate
         >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
         ...   items=[[Well("well", size_x=1, size_y=1, size_z=1)]])
     """

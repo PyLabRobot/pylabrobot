@@ -2,7 +2,7 @@
 
 from typing import cast
 
-from pylabrobot.liquid_handling.resources.abstract import Coordinate, Resource, Plate
+from pylabrobot.resources.abstract import Coordinate, Resource, Plate
 
 
 class NoPlateError(Exception):

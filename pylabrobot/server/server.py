@@ -6,7 +6,7 @@ from flask import Flask
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import SerializingSavingBackend
-from pylabrobot.liquid_handling.resources import STARLetDeck
+from pylabrobot.resources import STARLetDeck
 from pylabrobot.server.liquid_handling_api import lh_api
 
 

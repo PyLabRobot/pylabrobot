@@ -10,7 +10,7 @@ It is recommended to keep the layout of the deck separate from the protocol. Thi
 
 ```py
 from pylabrobot.liquid_handling import LiquidHandler, STAR
-from pylabrobot.liquid_handling.resources import Deck, TipRack, Plate
+from pylabrobot.resources import Deck, TipRack, Plate
 
 # Write a method that creates a deck and defines its layout.
 def make_deck() -> Deck:

@@ -3,14 +3,14 @@ from typing import Dict, Optional, List, cast
 from pylabrobot.default import get_value, is_not_default
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import (
   Coordinate,
   ItemizedResource,
   Plate,
   Resource,
   TipRack,
 )
-from pylabrobot.liquid_handling.resources.opentrons import OTDeck
+from pylabrobot.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Drop,

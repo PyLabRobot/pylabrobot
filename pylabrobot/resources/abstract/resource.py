@@ -96,7 +96,7 @@ class Resource:
 
   def get_absolute_location(self) -> Coordinate:
     """ Get the absolute location of this resource, probably within the
-    :class:`pylabrobot.liquid_handling.resources.abstract.Deck`. """
+    :class:`pylabrobot.resources.abstract.Deck`. """
     assert self.location is not None, "Resource has no location."
     if self.parent is None or self.parent.location is None:
       return self.location

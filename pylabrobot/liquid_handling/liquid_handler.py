@@ -10,15 +10,12 @@ import warnings
 
 from pylabrobot.default import Defaultable, Default
 from pylabrobot.liquid_handling.errors import ChannelHasNoTipError
-from pylabrobot.liquid_handling.resources.abstract import Deck
+from pylabrobot.resources.abstract import Deck
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.tip import Tip
 from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, does_tip_tracking
 from pylabrobot.liquid_handling.volume_tracker import does_volume_tracking
-from pylabrobot.utils.list import expand
-
-from .backends import LiquidHandlerBackend
-from .resources import (
+from pylabrobot.resources import (
   Resource,
   ResourceStack,
   Coordinate,
@@ -30,6 +27,9 @@ from .resources import (
   TipSpot,
   Well
 )
+from pylabrobot.utils.list import expand
+
+from .backends import LiquidHandlerBackend
 from .standard import (
   Pickup,
   Drop,
@@ -269,7 +269,7 @@ class LiquidHandler:
 
       Pick up tips on odd numbered rows, skipping the other channels.
 
-      >>> lh.pick_up_tips(channels=tips_resource["A1", "C1", "E1", "G1"], use_channels=[0, 2, 4, 6])
+      >>> lh.pick_up_tips(tips_resource["A1", "C1", "E1", "G1"],use_channels=[0, 2, 4, 6])
 
       Pick up tips from different tip resources:
 
@@ -278,7 +278,7 @@ class LiquidHandler:
       Picking up tips with different offsets:
 
       >>> lh.pick_up_tips(
-      ...   channels=tips_resource["A1":"C1"],
+      ...   tip_spots=tips_resource["A1":"C1"],
       ...   offsets=[
       ...     Coordinate(0, 0, 0), # A1
       ...     Coordinate(1, 1, 1), # B1

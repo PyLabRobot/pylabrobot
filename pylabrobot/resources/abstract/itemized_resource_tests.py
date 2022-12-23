@@ -2,7 +2,7 @@ import sys
 from typing import List
 import unittest
 
-from pylabrobot.liquid_handling.resources.abstract import (
+from pylabrobot.resources.abstract import (
   Coordinate,
   Plate,
   Well,

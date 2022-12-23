@@ -22,14 +22,14 @@ from pylabrobot.liquid_handling.errors import (
   TooLittleVolumeError,
 )
 from pylabrobot.liquid_handling.liquid_classes.hamilton import get_liquid_class
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import (
   Coordinate,
   Plate,
   TipRack,
   TipSpot,
   Well
 )
-from pylabrobot.liquid_handling.resources.ml_star import (
+from pylabrobot.resources.ml_star import (
   HamiltonTip,
   TipDropMethod,
   TipPickupMethod,
