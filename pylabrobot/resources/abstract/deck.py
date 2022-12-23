@@ -4,8 +4,8 @@ import inspect
 import json
 from typing import Optional, Callable, List, Dict, cast
 
-import pylabrobot.liquid_handling.resources as resources_module
-from pylabrobot.liquid_handling.resources.errors import ResourceNotFoundError
+import pylabrobot.resources as resources_module
+from pylabrobot.resources.errors import ResourceNotFoundError
 
 from .coordinate import Coordinate
 from .resource import Resource
@@ -143,7 +143,7 @@ class Deck(Resource):
     Examples:
       Saving to a json file:
 
-      >>> from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
+      >>> from pylabrobot.resources.hamilton import STARLetDeck
       >>> deck = STARLetDeck()
       >>> deck.save("my_layout.json")
     """

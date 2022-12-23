@@ -6,7 +6,7 @@ from pylabrobot.liquid_handling.errors import (
   WellTooLittleLiquidError,
   WellTooLittleVolumeError
 )
-from pylabrobot.liquid_handling.resources import Cos_96_EZWash, HTF_L
+from pylabrobot.resources import Cos_96_EZWash, HTF_L
 from pylabrobot.liquid_handling.standard import Aspiration, Dispense
 from pylabrobot.liquid_handling.volume_tracker import TipVolumeTracker, WellVolumeTracker
 

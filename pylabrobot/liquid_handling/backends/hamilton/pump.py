@@ -1,4 +1,4 @@
-from pylabrobot.liquid_handling.resources.abstract import Coordinate, Resource
+from pylabrobot.resources.abstract import Coordinate, Resource
 from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
 
 

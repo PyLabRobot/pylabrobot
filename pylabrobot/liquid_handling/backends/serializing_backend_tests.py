@@ -3,7 +3,7 @@ import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking, no_volume_tracking
 from pylabrobot.liquid_handling.backends.serializing_backend import SerializingSavingBackend
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import (
   STARLetDeck,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,

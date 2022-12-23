@@ -2,9 +2,9 @@
 
 # pylint: skip-file
 
-from pylabrobot.liquid_handling.resources.abstract import TipRack
-from pylabrobot.liquid_handling.resources.abstract.itemized_resource import create_equally_spaced
-from pylabrobot.liquid_handling.resources.abstract.tip_rack import TipSpot
+from pylabrobot.resources.abstract import TipRack
+from pylabrobot.resources.abstract.itemized_resource import create_equally_spaced
+from pylabrobot.resources.abstract.tip_rack import TipSpot
 from .tip_creators import (
   low_volume_tip_no_filter,
   low_volume_tip_with_filter,

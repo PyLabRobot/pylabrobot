@@ -4,7 +4,7 @@ from typing import cast
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler, no_volume_tracking
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import (
   Resource,
   TIP_CAR_480_A00,
   TIP_CAR_288_C00,
@@ -16,8 +16,8 @@ from pylabrobot.liquid_handling.resources import (
   ResourceStack,
   Lid
 )
-from pylabrobot.liquid_handling.resources.hamilton import STARLetDeck
-from pylabrobot.liquid_handling.resources.ml_star import STF_L
+from pylabrobot.resources.hamilton import STARLetDeck
+from pylabrobot.resources.ml_star import STF_L
 from pylabrobot.liquid_handling.standard import Move, Pickup
 
 from tests.usb import MockDev, MockEndpoint
@@ -404,7 +404,6 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_single_channel_dispense(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
-    # TODO: Hamilton liquid classes
     with no_volume_tracking():
       self.lh.dispense(self.plate["A1"], vols=[100])
     self._assert_command_sent_once(

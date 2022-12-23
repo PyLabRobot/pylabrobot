@@ -16,7 +16,7 @@ from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
 
 from . import backends
 from .liquid_handler import LiquidHandler
-from .resources import (
+from pylabrobot.resources import (
   Coordinate,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
@@ -24,8 +24,8 @@ from .resources import (
   Cos_96_DW_500ul,
   TipRack,
 )
-from .resources.hamilton import STARLetDeck
-from .resources.ml_star import STF_L, HTF_L
+from pylabrobot.resources.hamilton import STARLetDeck
+from pylabrobot.resources.ml_star import STF_L, HTF_L
 from .standard import Pickup, Drop, Aspiration, Dispense
 
 

@@ -3,7 +3,7 @@ import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import SerializingSavingBackend
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import (
   Plate,
   TipRack,
   HTF_L,
@@ -11,7 +11,7 @@ from pylabrobot.liquid_handling.resources import (
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00
 )
-from pylabrobot.liquid_handling.resources.hamilton import HamiltonDeck, STARLetDeck
+from pylabrobot.resources.hamilton import HamiltonDeck, STARLetDeck
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Drop,

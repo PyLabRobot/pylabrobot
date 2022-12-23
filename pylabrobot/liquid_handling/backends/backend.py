@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from typing import List
 
-from pylabrobot.liquid_handling.resources import Resource, TipRack
+from pylabrobot.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   Drop,

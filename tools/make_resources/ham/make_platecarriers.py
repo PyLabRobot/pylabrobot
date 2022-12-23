@@ -3,7 +3,7 @@
 
 import os
 
-from pylabrobot.liquid_handling.resources.abstract import Coordinate
+from pylabrobot.resources.abstract import Coordinate
 from pylabrobot.utils.file_parsing import find_float, find_string
 from tools.make_resources.maker import make
 

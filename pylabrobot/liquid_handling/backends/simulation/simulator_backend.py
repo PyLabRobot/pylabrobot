@@ -8,7 +8,7 @@ import typing
 import webbrowser
 
 from pylabrobot.liquid_handling.backends import WebSocketBackend
-from pylabrobot.liquid_handling.resources import Plate, TipRack
+from pylabrobot.resources import Plate, TipRack
 from pylabrobot.liquid_handling.standard import Move
 
 
@@ -28,7 +28,7 @@ class SimulatorBackend(WebSocketBackend):
   remains the same. This also happens when a browser reloads the page or on the first page load.
 
   Note that the simulator backend uses
-  :class:`~pylabrobot.liquid_handling.resources.abstract.Resource` 's to locate resources, where eg.
+  :class:`~pylabrobot.resources.abstract.Resource` 's to locate resources, where eg.
   :class:`~pylabrobot.liquid_handling.backends.hamilton.STAR` uses absolute coordinates.
 
   .. note::
@@ -210,7 +210,7 @@ class SimulatorBackend(WebSocketBackend):
     Simulator method to place tips on the robot, for testing of tip pickup/droping. Unlike,
     :func:`~Simulator.pick_up_tips`, this method does not raise an exception if tips are already
     present on the specified locations. Note that a
-    :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource has to be assigned
+    :class:`~pylabrobot.resources.abstract.TipRack` resource has to be assigned
     first.
 
     Args:
@@ -238,7 +238,7 @@ class SimulatorBackend(WebSocketBackend):
     self.send_command(command="edit_tips", data=dict(pattern=serialized_pattern))
 
   def fill_tip_rack(self, resource: TipRack):
-    """ Completely fill a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource
+    """ Completely fill a :class:`~pylabrobot.resources.abstract.TipRack` resource
     with tips. (**simulator only**).
 
     Args:
@@ -248,7 +248,7 @@ class SimulatorBackend(WebSocketBackend):
     self.edit_tips(resource, [[True] * 12] * 8)
 
   def clear_tips(self, tip_rack: TipRack):
-    """ Completely clear a :class:`~pylabrobot.liquid_handling.resources.abstract.TipRack` resource.
+    """ Completely clear a :class:`~pylabrobot.resources.abstract.TipRack` resource.
     (**simulator only**).
 
     Args:

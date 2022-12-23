@@ -1,9 +1,9 @@
 import textwrap
 import unittest
 
-from pylabrobot.liquid_handling.resources.opentrons.deck import OTDeck
-from pylabrobot.liquid_handling.resources.opentrons.tip_racks import opentrons_96_tiprack_300ul
-from pylabrobot.liquid_handling.resources.corning_costar.plates import Cos_96_EZWash
+from pylabrobot.resources.opentrons.deck import OTDeck
+from pylabrobot.resources.opentrons.tip_racks import opentrons_96_tiprack_300ul
+from pylabrobot.resources.corning_costar.plates import Cos_96_EZWash
 
 
 class TestOTDeck(unittest.TestCase):

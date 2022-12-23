@@ -2,7 +2,7 @@ import textwrap
 from typing import cast
 import unittest
 
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import (
   Coordinate,
   ItemizedResource,
   TipCarrier,
@@ -15,7 +15,7 @@ from pylabrobot.liquid_handling.resources import (
   Cos_96_DW_1mL,
   Cos_96_DW_500ul,
 )
-from pylabrobot.liquid_handling.resources.hamilton import HamiltonDeck, STARLetDeck
+from pylabrobot.resources.hamilton import HamiltonDeck, STARLetDeck
 
 
 class HamiltonDeckTests(unittest.TestCase):

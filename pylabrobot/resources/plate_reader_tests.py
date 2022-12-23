@@ -3,8 +3,8 @@
 
 import unittest
 
-from pylabrobot.liquid_handling.resources.abstract import Plate, Well, create_equally_spaced
-from pylabrobot.liquid_handling.resources.plate_reader import PlateReader
+from pylabrobot.resources.abstract import Plate, Well, create_equally_spaced
+from pylabrobot.resources.plate_reader import PlateReader
 
 
 class TestPlateReader(unittest.TestCase):

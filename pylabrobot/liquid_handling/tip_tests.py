@@ -1,7 +1,7 @@
 import unittest
 
 from .tip import Tip
-from pylabrobot.liquid_handling.resources.ml_star import HamiltonTip, TipSize, TipPickupMethod
+from pylabrobot.resources.ml_star import HamiltonTip, TipSize, TipPickupMethod
 
 
 class TipTests(unittest.TestCase):

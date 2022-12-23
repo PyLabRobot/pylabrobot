@@ -1,7 +1,7 @@
 import textwrap
 from typing import Optional, Callable, List
 
-from pylabrobot.liquid_handling.resources.abstract import Coordinate, Deck, Resource, Trash
+from pylabrobot.resources.abstract import Coordinate, Deck, Resource, Trash
 
 
 class OTDeck(Deck):

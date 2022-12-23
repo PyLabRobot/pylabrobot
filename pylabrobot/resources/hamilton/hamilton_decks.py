@@ -4,7 +4,7 @@ import inspect
 import logging
 from typing import Callable, Optional, cast
 
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import (
   Coordinate,
   Carrier,
   Deck,
@@ -14,7 +14,7 @@ from pylabrobot.liquid_handling.resources import (
   Trash
 )
 import pylabrobot.utils.file_parsing as file_parser
-import pylabrobot.liquid_handling.resources as resources_module
+import pylabrobot.resources as resources_module
 from pylabrobot import utils
 
 
@@ -174,7 +174,7 @@ class HamiltonDeck(Deck):
 
       Loading from a lay file:
 
-      >>> from pylabrobot.liquid_handling.resources.hamilton import HamiltonDeck
+      >>> from pylabrobot.resources.hamilton import HamiltonDeck
       >>> deck = HamiltonDeck.load_from_lay_file("deck.lay")
     """
 

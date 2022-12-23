@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 
 from pylabrobot.default import Defaultable, Default, is_not_default
 from pylabrobot.liquid_handling.liquid_classes.abstract import LiquidClass
-from .resources.abstract.coordinate import Coordinate
+from pylabrobot.resources.abstract.coordinate import Coordinate
 if TYPE_CHECKING:
-  from pylabrobot.liquid_handling.resources import Resource
+  from pylabrobot.resources import Resource
   from pylabrobot.liquid_handling.tip import Tip
-  from .resources.abstract.tip_rack import TipSpot
+  from pylabrobot.resources.abstract.tip_rack import TipSpot
 
 
 class PipettingOp(ABC):

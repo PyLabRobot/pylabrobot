@@ -12,8 +12,8 @@ import websockets.client
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import SerializingSavingBackend, SimulatorBackend
 from pylabrobot.utils.testing import async_test
-from pylabrobot.liquid_handling.resources import STARLetDeck
-from pylabrobot.liquid_handling.resources import (
+from pylabrobot.resources import STARLetDeck
+from pylabrobot.resources import (
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
   Cos_96_EZWash,

@@ -28,16 +28,6 @@ Backends
   pylabrobot.liquid_handling.backends
 
 
-Resources
----------
-
-The subpackage :code:`resources` contains all resources used by the liquid handling package. You can use these to define deck layouts. Many of VENUS' and Opentrons' resources are already implemented. If the resource is not implemented, you can implement it yourself by implementing or subclassing the appropriate class in :ref:`pylabrobot.liquid_handling.resources:abstract`.
-
-.. toctree::
-  :maxdepth: 2
-
-  pylabrobot.liquid_handling.resources
-
 
 Tip trackers
 ------------

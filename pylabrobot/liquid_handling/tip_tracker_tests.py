@@ -6,7 +6,7 @@ from pylabrobot.liquid_handling.errors import (
   TipSpotHasTipError,
   TipSpotHasNoTipError,
 )
-from pylabrobot.liquid_handling.resources import HTF_L
+from pylabrobot.resources import HTF_L
 from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
 from pylabrobot.liquid_handling.tip import Tip
 from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, SpotTipTracker
