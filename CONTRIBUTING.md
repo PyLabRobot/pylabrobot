@@ -26,8 +26,6 @@ Some VSCode Extensions I'd recommend:
 PyLabRobot uses `pytest` to run unit tests. Please make sure tests pass when you submit a PR. You can run tests as follows.
 
 ```bash
-make test3.7 # run tests on Python 3.7, use make env3.7 to create the environment
-
 make test # run test on the latest version
 ```
 
