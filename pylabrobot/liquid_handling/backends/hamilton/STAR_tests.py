@@ -4,6 +4,7 @@ from typing import cast
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler, no_volume_tracking
+from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
 from pylabrobot.resources import (
@@ -618,6 +619,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
      "2183th2450ti1",
      DROP_TIP_FORMAT)
 
-
-if __name__ == "__main__":
-  unittest.main()
+  def test_serialize(self):
+    serialized = STAR().serialize()
+    deserialized = LiquidHandlerBackend.deserialize(serialized)
+    self.assertEqual(deserialized.__class__.__name__, "STAR")

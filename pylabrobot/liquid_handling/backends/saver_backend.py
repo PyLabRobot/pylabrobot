@@ -57,6 +57,12 @@ class SaverBackend(LiquidHandlerBackend):
   def move_resource(self, *args, **kwargs):
     self.commands_received.append(dict(command="move_resource", args=args, kwargs=kwargs))
 
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "num_channels": self.num_channels,
+    }
+
   # Saver specific methods
 
   def clear(self):

@@ -27,6 +27,12 @@ class OpentronsBackendSetupTests(unittest.TestCase):
     self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
     self.lh.setup()
 
+  def test_serialize(self):
+    serialized = OpentronsBackend(host="localhost", port=1337).serialize()
+    self.assertEqual(serialized, {"type": "OpentronsBackend", "host": "localhost", "port": 1337})
+    self.assertEqual(OpentronsBackend.deserialize(serialized).__class__.__name__,
+      "OpentronsBackend")
+
 
 def _mock_define(lw):
   return dict(data=dict(definitionUri=f"lw['namespace']/{lw['metadata']['displayName']}/1"))
@@ -171,7 +177,3 @@ class OpentronsBackendCommandTests(unittest.TestCase):
   def test_dispense96(self):
     with self.assertRaises(ChannelHasNoTipError): # FIXME: NotImplementedError?
       self.lh.dispense_plate(self.plate, volume=100)
-
-
-if __name__ == "__main__":
-  unittest.main()

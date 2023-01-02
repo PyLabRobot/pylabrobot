@@ -53,10 +53,20 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not USE_OT:
       raise RuntimeError("Opentrons is not installed. Please run pip install pylabrobot[opentrons]")
 
+    self.host = host
+    self.port = port
+
     ot_api.set_host(host)
     ot_api.set_port(port)
 
     self.defined_labware: Dict[str, str] = {}
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "host": self.host,
+      "port": self.port
+    }
 
   def setup(self):
     super().setup()
