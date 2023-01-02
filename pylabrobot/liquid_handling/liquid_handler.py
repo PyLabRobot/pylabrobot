@@ -1,7 +1,10 @@
 """ Defines LiquidHandler class, the coordinator for liquid handling operations. """
 
+from __future__ import annotations
+
 import functools
 import inspect
+import json
 import logging
 import numbers
 import time
@@ -1229,3 +1232,48 @@ class LiquidHandler:
       to.assign_child_resource(plate)
     else:
       to.assign_child_resource(plate, location=to_location)
+
+  def serialize(self) -> dict:
+    """ Serialize the liquid handler to a dictionary.
+
+    Returns:
+      A dictionary representation of the liquid handler.
+    """
+
+    return dict(
+      deck=self.deck.serialize(),
+      backend=self.backend.serialize()
+    )
+
+  def save(self, path: str):
+    """ Save the liquid handler to a file.
+
+    Args:
+      path: The path to the file to save to.
+    """
+
+    with open(path, "w", encoding="utf-8") as f:
+      json.dump(self.serialize(), f, indent=2)
+
+  @classmethod
+  def deserialize(cls, data: dict) -> LiquidHandler:
+    """ Deserialize a liquid handler from a dictionary.
+
+    Args:
+      data: A dictionary representation of the liquid handler.
+    """
+
+    deck = Deck.load_from_json(data)
+    backend = LiquidHandlerBackend.deserialize(data["backend"])
+    return LiquidHandler(deck=deck, backend=backend)
+
+  @classmethod
+  def load(cls, path: str) -> LiquidHandler:
+    """ Load a liquid handler from a file.
+
+    Args:
+      path: The path to the file to load from.
+    """
+
+    with open(path, "r", encoding="utf-8") as f:
+      return cls.deserialize(json.load(f))

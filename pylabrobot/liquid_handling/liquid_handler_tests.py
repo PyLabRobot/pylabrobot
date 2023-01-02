@@ -166,10 +166,6 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     with self.assertRaises(ValueError):
       plt_car[1] = Cos_96_DW_500ul(name="sub")
 
-  def assert_same(self, lh1, lh2):
-    """ Assert two liquid handler decks are the same. """
-    self.assertEqual(lh1.deck.get_all_resources(), lh2.deck.get_all_resources())
-
   def test_move_plate_to_site(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = plate = Cos_96_DW_1mL(name="plate")
@@ -192,6 +188,14 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertIsNone(plt_car[0].resource)
     self.assertEqual(plate.get_absolute_location(),
       Coordinate(1000, 1000+63, 1000+100))
+
+  def test_serialize(self):
+    serialized = self.lh.serialize()
+    deserialized = LiquidHandler.deserialize(serialized)
+
+    self.assertEqual(deserialized.deck, self.lh.deck)
+    self.assertEqual(deserialized.backend.__class__.__name__,
+      self.lh.backend.__class__.__name__)
 
 
 class TestLiquidHandlerCommands(unittest.TestCase):
@@ -487,7 +491,3 @@ class TestLiquidHandlerCommands(unittest.TestCase):
         self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, does_not_exist=True)
       with self.assertRaises(TypeError):
         self.lh.pick_up_tips(self.tip_rack["A1"])
-
-
-if __name__ == "__main__":
-  unittest.main()

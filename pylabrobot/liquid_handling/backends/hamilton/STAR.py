@@ -410,6 +410,14 @@ class STAR(HamiltonLiquidHandler):
       raise RuntimeError("has not loaded num_channels, forgot to call `setup`?")
     return self._num_channels
 
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "packet_read_timeout": self.packet_read_timeout,
+      "read_timeout": self.read_timeout,
+      "write_timeout": self.write_timeout,
+    }
+
   @property
   def iswap_parked(self) -> bool:
     return self._iswap_parked is True
