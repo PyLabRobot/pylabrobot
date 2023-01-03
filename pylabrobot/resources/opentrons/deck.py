@@ -63,14 +63,18 @@ class OTDeck(Deck):
     trash_container.assign_child_resource(actual_trash, location=Coordinate(x=82.84, y=53.56, z=5))
     self.assign_child_at_slot(trash_container, 12)
 
-  def assign_child_resource(self, resource: Resource, location: Coordinate):
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
     """ Assign a resource to a slot.
 
     ..warning:: This method exists only for deserialization. You should use
     :meth:`assign_child_at_slot` instead.
     """
-    slot = self.slot_locations.index(location)
-    self.assign_child_at_slot(resource, slot)
+
+    if location not in self.slot_locations:
+      super().assign_child_resource(resource, location=location)
+    else:
+      slot = self.slot_locations.index(location)
+      self.assign_child_at_slot(resource, slot)
 
   def assign_child_at_slot(self, resource: Resource, slot: int):
     # pylint: disable=arguments-renamed

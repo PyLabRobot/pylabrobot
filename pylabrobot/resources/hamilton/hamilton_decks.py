@@ -133,29 +133,30 @@ class HamiltonDeck(Deck):
     elif location is not None:
       resource_location = location
     else:
-      raise ValueError("At least one of rails and location must be None.")
+      resource_location = None # unknown resource location
 
-    if resource_location.x + resource.get_size_x() > \
-        self._x_coordinate_for_rails(self.num_rails) and \
-      rails is not None:
-      raise ValueError(f"Resource with width {resource.get_size_x()} does not "
-                       f"fit at rails {rails}.")
+    if resource_location is not None: # collision detection only if known location
+      if resource_location.x + resource.get_size_x() > \
+          self._x_coordinate_for_rails(self.num_rails) and \
+        rails is not None:
+        raise ValueError(f"Resource with width {resource.get_size_x()} does not "
+                        f"fit at rails {rails}.")
 
-    # Check if there is space for this new resource.
-    for og_resource in self.children:
-      og_x = cast(Coordinate, og_resource.location).x
-      og_y = cast(Coordinate, og_resource.location).y
+      # Check if there is space for this new resource.
+      for og_resource in self.children:
+        og_x = cast(Coordinate, og_resource.location).x
+        og_y = cast(Coordinate, og_resource.location).y
 
-      # A resource is not allowed to overlap with another resource. Resources overlap when a corner
-      # of one resource is inside the boundaries other resource.
-      if (og_x <= resource_location.x < og_x + og_resource.get_size_x() or \
-         og_x <= resource_location.x + resource.get_size_x() <
-           og_x + og_resource.get_size_x()) and \
-          (og_y <= resource_location.y < og_y + og_resource.get_size_y() or \
-            og_y <= resource_location.y + resource.get_size_y() <
-               og_y + og_resource.get_size_y()):
-        raise ValueError(f"Location {resource_location} is already occupied by resource "
-                          f"'{og_resource.name}'.")
+        # A resource is not allowed to overlap with another resource. Resources overlap when a
+        # corner of one resource is inside the boundaries other resource.
+        if (og_x <= resource_location.x < og_x + og_resource.get_size_x() or \
+          og_x <= resource_location.x + resource.get_size_x() <
+            og_x + og_resource.get_size_x()) and \
+            (og_y <= resource_location.y < og_y + og_resource.get_size_y() or \
+              og_y <= resource_location.y + resource.get_size_y() <
+                og_y + og_resource.get_size_y()):
+          raise ValueError(f"Location {resource_location} is already occupied by resource "
+                            f"'{og_resource.name}'.")
 
     return super().assign_child_resource(resource, location=resource_location)
 

@@ -18,6 +18,7 @@ class Lid(Resource):
     size_x: float,
     size_y: float,
     size_z: float,
+    category: str = "lid"
   ):
     """ Create a lid for a plate.
 
@@ -27,7 +28,7 @@ class Lid(Resource):
       size_y: Size of the lid in y-direction.
       size_z: Size of the lid in z-direction.
     """
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category="lid")
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
 
 
 class Plate(ItemizedResource[Well]):
@@ -100,7 +101,7 @@ class Plate(ItemizedResource[Well]):
 
     return self._compute_volume_from_height(height)
 
-  def assign_child_resource(self, resource: Resource, location: Coordinate):
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
     if isinstance(resource, Lid):
       if self.lid is not None:
         raise ValueError(f"Plate '{self.name}' already has a lid.")

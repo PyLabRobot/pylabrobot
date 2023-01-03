@@ -184,7 +184,8 @@ class Deck(Resource):
         for child_dict in dict_resource["children"]:
           child_resource = deserialize_resource(child_dict)
           child_location = child_dict.pop("location")
-          child_location = Coordinate.deserialize(child_location)
+          if child_location is not None:
+            child_location = Coordinate.deserialize(child_location)
           resource.assign_child_resource(child_resource, location=child_location)
         return cast(Resource, resource)
       else:
