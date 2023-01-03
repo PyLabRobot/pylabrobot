@@ -1612,6 +1612,16 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=0,
     )
 
+  def move_channel_x(self, channel: int, x: float): # pylint: disable=unused-argument
+    self.position_left_x_arm_(int(x * 10))
+
+  def move_channel_y(self, channel: int, y: float): # pylint: disable=unused-argument
+    self.position_left_x_arm_(int(y * 10))
+
+  def move_channel_z(self, channel: int, z: float):
+    self.position_single_pipetting_channel_in_z_direction(
+      pipetting_channel_index=channel + 1, z_position=int(z*10))
+
   # ============== Firmware Commands ==============
 
   # -------------- 3.2 System general commands --------------

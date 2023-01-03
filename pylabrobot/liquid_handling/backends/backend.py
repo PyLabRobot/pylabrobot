@@ -128,3 +128,18 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
 
     del data["type"]
     return subclass(**data)
+
+  def move_channel_x(self, channel: int, x: float):
+    """ Move the specified channel to the specified x coordinate. """
+
+    raise NotImplementedError()
+
+  def move_channel_y(self, channel: int, y: float):
+    """ Move the specified channel to the specified y coordinate. """
+
+    raise NotImplementedError()
+
+  def move_channel_z(self, channel: int, z: float):
+    """ Move the specified channel to the specified z coordinate. """
+
+    raise NotImplementedError()

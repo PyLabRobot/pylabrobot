@@ -86,6 +86,15 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   def move_resource(self, move: Move, **backend_kwargs):
     self.send_command(command="move", data=dict(move=move.serialize()), **backend_kwargs)
 
+  def move_channel_x(self, channel: int, x: float):
+    self.send_command(command="move_channel_x", data=dict(channel=channel, x=x))
+
+  def move_channel_y(self, channel: int, y: float):
+    self.send_command(command="move_channel_y", data=dict(channel=channel, y=y))
+
+  def move_channel_z(self, channel: int, z: float):
+    self.send_command(command="move_channel_z", data=dict(channel=channel, z=z))
+
 
 class SerializingSavingBackend(SerializingBackend):
   """ A backend that saves all serialized commands in `self.sent_commands`, wrote for testing. """
