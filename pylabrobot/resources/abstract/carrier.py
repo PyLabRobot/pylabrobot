@@ -19,7 +19,7 @@ class CarrierSite(Resource):
     self.resource: Optional[Resource] = None
     self.spot: int = spot
 
-  def assign_child_resource(self, resource: Resource, location: Coordinate):
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
     self.resource = resource
     return super().assign_child_resource(resource, location=location)
 
@@ -118,11 +118,7 @@ class Carrier(Resource):
     )
     return out
 
-  def assign_child_resource(
-    self,
-    resource: Resource, # Liskov substitution principle
-    location: Coordinate
-  ):
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
     """ Assign a resource to this carrier.
 
     For a carrier, the only valid resource is a :class:`CarrierSite`.

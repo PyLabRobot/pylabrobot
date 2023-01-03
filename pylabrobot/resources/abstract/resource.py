@@ -116,7 +116,7 @@ class Resource:
     """ Get the size of this resource in the z-direction. """
     return self._size_z
 
-  def assign_child_resource(self, resource: Resource, location: Coordinate):
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
     """ Assign a child resource to this resource.
 
     Will use :meth:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
