@@ -1063,6 +1063,7 @@ class LiquidHandler:
     self,
     resource: Resource,
     to: Coordinate,
+    intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
@@ -1094,6 +1095,7 @@ class LiquidHandler:
     return self.backend.move_resource(move=Move(
       resource=resource,
       to=to,
+      intermediate_locations=intermediate_locations,
       resource_offset=resource_offset,
       to_offset=to_offset,
       pickup_distance_from_top=pickup_distance_from_top,
@@ -1105,6 +1107,7 @@ class LiquidHandler:
     self,
     lid: Lid,
     to: Union[Plate, ResourceStack, Coordinate],
+    intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
     get_direction: Move.Direction = Move.Direction.FRONT,
@@ -1156,6 +1159,7 @@ class LiquidHandler:
     self.move_resource(
       lid,
       to=to_location,
+      intermediate_locations=intermediate_locations,
       pickup_distance_from_top=backend_kwargs.pop("pickup_distance_from_top", 5.7),
       resource_offset=resource_offset,
       to_offset=to_offset,
@@ -1175,6 +1179,7 @@ class LiquidHandler:
     self,
     plate: Plate,
     to: Union[ResourceStack, CarrierSite, Resource, Coordinate],
+    intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
     put_direction: Move.Direction = Move.Direction.FRONT,
@@ -1199,6 +1204,13 @@ class LiquidHandler:
       >>> lh.move_plate(plate, plt_car[1], get_direction=Move.Direction.LEFT)
       >>> lh.move_plate(plate, plt_car[0], put_direction=Move.Direction.LEFT)
 
+      Move a resource while visiting a few intermediate locations along the way:
+
+      >>> lh.move_plate(plate, plt_car[1], intermediate_locations=[
+      ...   Coordinate(100, 100, 100),
+      ...   Coordinate(200, 200, 200),
+      ... ])
+
     Args:
       plate: The plate to move. Can be either a Plate object or a CarrierSite object.
       to: The location to move the plate to, either a plate, CarrierSite or a Coordinate.
@@ -1221,6 +1233,7 @@ class LiquidHandler:
     self.move_resource(
       plate,
       to=to_location,
+      intermediate_locations=intermediate_locations,
       pickup_distance_from_top=backend_kwargs.pop("pickup_distance_from_top", 13.2),
       resource_offset=resource_offset,
       to_offset=to_offset,
