@@ -5,7 +5,11 @@ import time
 import struct
 from typing import List, Optional
 
-from pylibftdi import Device
+try:
+  from pylibftdi import Device
+  USE_FTDI = True
+except ImportError:
+  USE_FTDI = False
 
 from .backend import PlateReaderBackend
 
@@ -21,6 +25,9 @@ class CLARIOStar(PlateReaderBackend):
     self.dev: Optional[Device] = None
 
   async def setup(self):
+    if not USE_FTDI:
+      raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
+
     self.dev = Device()
     self.dev.open()
     self.dev.baudrate = 125000
