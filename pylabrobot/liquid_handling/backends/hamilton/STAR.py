@@ -1612,6 +1612,11 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=0,
     )
 
+  def prepare_for_manual_operation(self):
+    """ Prepare for manual operation. """
+
+    self.position_max_free_y_for_n(pipetting_channel_index=self.num_channels)
+
   def move_channel_x(self, channel: int, x: float): # pylint: disable=unused-argument
     self.position_left_x_arm_(int(x * 10))
 
