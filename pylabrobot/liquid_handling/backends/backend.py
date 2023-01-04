@@ -129,6 +129,11 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     del data["type"]
     return subclass(**data)
 
+  def prepare_for_manual_operation(self):
+    """ Prepare the robot for manual operation. """
+
+    raise NotImplementedError()
+
   def move_channel_x(self, channel: int, x: float):
     """ Move the specified channel to the specified x coordinate. """
 
