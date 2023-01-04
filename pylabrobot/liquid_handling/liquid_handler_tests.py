@@ -425,20 +425,25 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       self.lh.pick_up_tips(self.tip_rack["A1", "A1"])
 
   def test_disable_tip_tracking(self):
+    # Even with tip tracking disabled, we keep track of which tips are on the head.
+
     self.lh.pick_up_tips(self.tip_rack["A1"])
 
     # Disable tip tracking globally with context manager
     with no_tip_tracking():
-      self.lh.pick_up_tips(self.tip_rack["A1"])
+      with self.assertRaises(ChannelHasTipError):
+        self.lh.pick_up_tips(self.tip_rack["A1"])
 
     # Disable tip tracking globally and manually
     set_tip_tracking(enabled=False)
-    self.lh.pick_up_tips(self.tip_rack["A1"])
+    with self.assertRaises(ChannelHasTipError):
+      self.lh.pick_up_tips(self.tip_rack["A1"])
     set_tip_tracking(enabled=True)
 
     # Disable tip tracking for a single tip rack
     self.tip_rack.get_item("A1").tracker.disable()
-    self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[1])
+    with self.assertRaises(ChannelHasTipError):
+      self.lh.pick_up_tips(self.tip_rack["A1"])
     self.tip_rack.get_item("A1").tracker.enable()
 
   def test_discard_tips(self):
@@ -469,25 +474,30 @@ class TestLiquidHandlerCommands(unittest.TestCase):
       def pick_up_tips(self, ops, use_channels, non_default, default=True):
         pass
 
-    self.lh.backend = TestBackend(num_channels=8)
+    self.backend = TestBackend(num_channels=16)
+    self.lh = LiquidHandler(self.backend, deck=self.deck)
+    self.lh.setup()
 
     with no_tip_tracking():
       set_strictness(Strictness.IGNORE)
       self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
-      self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, does_not_exist=True)
+      self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[1],
+        non_default=True, does_not_exist=True)
       with self.assertRaises(TypeError):
-        self.lh.pick_up_tips(self.tip_rack["A1"])
+        self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[2])
 
       set_strictness(Strictness.WARN)
-      self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
+      self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, use_channels=[3])
       with self.assertWarns(UserWarning):
-        self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, does_not_exist=True)
+        self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[4],
+          non_default=True, does_not_exist=True)
       with self.assertRaises(TypeError):
-        self.lh.pick_up_tips(self.tip_rack["A1"])
+        self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[5])
 
       set_strictness(Strictness.STRICT)
-      self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
+      self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, use_channels=[6])
       with self.assertRaises(TypeError):
-        self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, does_not_exist=True)
+        self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[7],
+          non_default=True, does_not_exist=True)
       with self.assertRaises(TypeError):
-        self.lh.pick_up_tips(self.tip_rack["A1"])
+        self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[8])

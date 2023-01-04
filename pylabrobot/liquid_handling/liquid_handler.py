@@ -126,6 +126,11 @@ class LiquidHandler:
     for channel, tip in state.items():
       self.head[channel].set_tip(tip)
 
+  def clear_head_state(self):
+    """ Clear the state of the liquid handler head. """
+
+    self.update_head_state({c: None for c in self.head.keys()})
+
   def stop(self):
     self.backend.stop()
     self.setup_finished = False
@@ -327,7 +332,7 @@ class LiquidHandler:
     for channel, op in zip(use_channels, pickups):
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
         op.resource.tracker.queue_op(op)
-        self.head[channel].queue_op(op)
+      self.head[channel].queue_op(op)
 
     extras = self._check_args(self.backend.pick_up_tips, backend_kwargs,
       default={"ops", "use_channels"})
@@ -340,13 +345,13 @@ class LiquidHandler:
       for channel, op in zip(use_channels, pickups):
         if does_tip_tracking() and not op.resource.tracker.is_disabled:
           op.resource.tracker.rollback()
-          self.head[channel].rollback()
+        self.head[channel].rollback()
       raise
     else:
       for channel, op in zip(use_channels, pickups):
         if does_tip_tracking() and not op.resource.tracker.is_disabled:
           op.resource.tracker.commit()
-          self.head[channel].commit()
+        self.head[channel].commit()
 
   @need_setup_finished
   def drop_tips(
@@ -422,10 +427,10 @@ class LiquidHandler:
              for tip_spot, tip, offset in zip(tip_spots, tips, offsets)]
 
     for channel, op in zip(use_channels, drops):
-      if does_tip_tracking():
-        if isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled:
-          op.resource.tracker.queue_op(op)
-        self.head[channel].queue_op(op)
+      if does_tip_tracking() and isinstance(op.resource, TipSpot) and \
+          not op.resource.tracker.is_disabled:
+        op.resource.tracker.queue_op(op)
+      self.head[channel].queue_op(op)
 
     extras = self._check_args(self.backend.drop_tips, backend_kwargs,
       default={"ops", "use_channels"})
@@ -439,14 +444,14 @@ class LiquidHandler:
         if does_tip_tracking() and \
           (isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled):
           op.resource.tracker.rollback()
-          self.head[channel].rollback()
+        self.head[channel].rollback()
       raise
     else:
       for channel, op in zip(use_channels, drops):
         if does_tip_tracking() and \
           (isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled):
           op.resource.tracker.commit()
-          self.head[channel].commit()
+        self.head[channel].commit()
 
   def return_tips(self):
     """ Return all tips that are currently picked up to their original place.
