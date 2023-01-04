@@ -1587,6 +1587,26 @@ class STAR(HamiltonLiquidHandler):
       fold_up_sequence_at_the_end_of_process = True
     )
 
+    for location in move.intermediate_locations:
+      self.move_plate_to_position(
+        x_position=int((location.x + move.resource.center().x) * 10),
+        x_direction=0,
+        y_position=int((location.y + move.resource.center().y) * 10),
+        y_direction=0,
+        z_position=int((location.z + move.resource.get_size_z() / 2) * 10),
+        z_direction=0,
+        grip_direction={
+          Move.Direction.FRONT: 1,
+          Move.Direction.RIGHT: 2,
+          Move.Direction.BACK: 3,
+          Move.Direction.LEFT: 4,
+        }[move.get_direction],
+        minimum_traverse_height_at_beginning_of_a_command=2840,
+        collision_control_level=1,
+        acceleration_index_high_acc=4,
+        acceleration_index_low_acc=1
+      )
+
     # Get the center of the plate in the destination, which is what STAR expects.
     to_x = move.get_absolute_to_location().x + move.resource.get_size_x()/2
     to_y = move.get_absolute_to_location().y + move.resource.get_size_y()/2
@@ -1755,7 +1775,7 @@ class STAR(HamiltonLiquidHandler):
       Vpid2233er00/00vpth 00000 03500 example without min max data: Vpid2233er00/00vpcd
     """
 
-    return self.send_command(module="C0", command="VP")
+    return self.send_command(module="C0", command="VP", fmt="vp&&")
 
   def request_master_status(self):
     """ Request master status
@@ -4679,14 +4699,14 @@ class STAR(HamiltonLiquidHandler):
     command_output = self.send_command(
       module="C0",
       command="PM",
-      xs=x_position,
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yj=y_position,
+      yj=f"{y_position:04}",
       yd=y_direction,
-      zj=z_position,
+      zj=f"{z_position:04}",
       zd=z_direction,
       gr=grip_direction,
-      th=minimum_traverse_height_at_beginning_of_a_command,
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
       ga=collision_control_level,
       xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
     )

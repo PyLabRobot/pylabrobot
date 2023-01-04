@@ -50,6 +50,10 @@ DISPENSE_RESPONSE_FORMAT = (
   "zu#### (n)zr##### (n)mh#### (n)po#### (n)"
 )
 
+GET_PLATE_FMT = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
+PUT_PLATE_FMT = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
+INTERMEDIATE_FMT = "xs#####xd#yj####yd#zj####zd#gr#th####ga#xe# #"
+
 
 class TestSTARResponseParsing(unittest.TestCase):
   """ Test parsing of response from Hamilton. """
@@ -508,14 +512,11 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.other_plate.lid.unassign() # remove lid from plate
     self.lh.move_lid(self.plate.lid, self.other_plate)
 
-    get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
-    put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
-
     self._assert_command_sent_once(
       "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-      get_plate_fmt)
+      GET_PLATE_FMT)
     self._assert_command_sent_once( # zj sent = 1849
-      "C0PRid0003xs03475xd0yj2105yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+      "C0PRid0003xs03475xd0yj2105yd0zj1949zd0th2840te2840gr1go1300ga0", PUT_PLATE_FMT)
 
   def test_iswap_stacking_area(self):
     stacking_area = ResourceStack("stacking_area", direction="z")
@@ -524,24 +525,21 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     # self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
     self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414-63, 226.2 - 100))
 
-    get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
-    put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
-
     assert self.plate.lid is not None
     self.lh.move_lid(self.plate.lid, stacking_area)
     self._assert_command_sent_once(
       "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-        get_plate_fmt)
+        GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+      "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", PUT_PLATE_FMT)
 
     # Move lids back (reverse order)
     self.lh.move_lid(cast(Lid, stacking_area.get_top_item()), self.plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2305zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-      get_plate_fmt)
+      GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+      "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", PUT_PLATE_FMT)
 
   def test_iswap_stacking_area_2lids(self):
     # for some reason it was like this at some point
@@ -549,24 +547,21 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     stacking_area = ResourceStack("stacking_area", direction="z")
     self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414-63, 226.2 - 100))
 
-    get_plate_fmt = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
-    put_plate_fmt = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
-
     assert self.plate.lid is not None and self.other_plate.lid is not None
 
     self.lh.move_lid(self.plate.lid, stacking_area)
     self._assert_command_sent_once(
       "C0PPid0002xs03475xd0yj1145yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-        get_plate_fmt)
+        GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+      "C0PRid0003xs00695xd0yj4570yd0zj2305zd0th2840te2840gr1go1300ga0", PUT_PLATE_FMT)
 
     self.lh.move_lid(self.other_plate.lid, stacking_area)
     self._assert_command_sent_once(
       "C0PPid0004xs03475xd0yj2105yd0zj1949zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-        get_plate_fmt)
+        GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0005xs00695xd0yj4570yd0zj2405zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+      "C0PRid0005xs00695xd0yj4570yd0zj2405zd0th2840te2840gr1go1300ga0", PUT_PLATE_FMT)
 
     # Move lids back (reverse order)
     top_item = stacking_area.get_top_item()
@@ -574,18 +569,35 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.lh.move_lid(top_item, self.plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2405zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-      get_plate_fmt)
+      GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+      "C0PRid0005xs03475xd0yj1145yd0zj1949zd0th2840te2840gr1go1300ga0", PUT_PLATE_FMT)
 
     top_item = stacking_area.get_top_item()
     assert isinstance(top_item, Lid)
     self.lh.move_lid(top_item, self.other_plate)
     self._assert_command_sent_once(
       "C0PPid0004xs00695xd0yj4570yd0zj2305zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-      get_plate_fmt)
+      GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0005xs03475xd0yj2105yd0zj1949zd0th2840te2840gr1go1300ga0", put_plate_fmt)
+      "C0PRid0005xs03475xd0yj2105yd0zj1949zd0th2840te2840gr1go1300ga0", PUT_PLATE_FMT)
+
+  def test_iswap_move_with_intermediate_locations(self):
+    self.lh.move_plate(self.plate, self.plt_car[1], intermediate_locations=[
+      self.plt_car[2].get_absolute_location() + Coordinate(50, 0, 50),
+      self.plt_car[3].get_absolute_location() + Coordinate(-50, 0, 50),
+    ])
+
+    self._assert_command_sent_once(
+      "C0PPid0023xs03475xd0yj1145yd0zj1874zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
+      GET_PLATE_FMT)
+    self._assert_command_sent_once(
+      "C0PMid0025xs03975xd0yj3065yd0zj2434zd0gr1th2840ga1xe4 1", INTERMEDIATE_FMT)
+    self._assert_command_sent_once(
+      "C0PMid0024xs02975xd0yj4025yd0zj2434zd0gr1th2840ga1xe4 1", INTERMEDIATE_FMT)
+    self._assert_command_sent_once(
+      "C0PRid0026xs03475xd0yj2105yd0zj1874zd0th2840te2840gr1go1300ga0",
+      PUT_PLATE_FMT)
 
   def test_discard_tips(self):
     self.lh.pick_up_tips(self.tip_rack["A1:H1"])

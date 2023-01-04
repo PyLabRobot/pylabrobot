@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, ABCMeta
 import enum
-from typing import TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 from pylabrobot.default import Defaultable, Default, is_not_default
 from pylabrobot.liquid_handling.liquid_classes.abstract import LiquidClass
@@ -253,6 +253,7 @@ class Move():
     self,
     resource: Resource,
     to: Coordinate,
+    intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
@@ -273,6 +274,8 @@ class Move():
 
     self.resource = resource
     self.to = to
+    self.intermediate_locations = (intermediate_locations if intermediate_locations is not None
+                                   else [])
     self.resource_offset = resource_offset
     self.to_offset = to_offset
     self.pickup_distance_from_top = pickup_distance_from_top
@@ -284,6 +287,7 @@ class Move():
       isinstance(other, Move) and
       self.resource == other.resource and
       self.to == other.to and
+      self.intermediate_locations == other.intermediate_locations and
       self.resource_offset == other.resource_offset and
       self.to_offset == other.to_offset and
       self.pickup_distance_from_top == other.pickup_distance_from_top and
@@ -301,12 +305,27 @@ class Move():
     return {
       "resource": self.resource.serialize(),
       "to": self.to.serialize(),
+      "intermediate_locations": [location.serialize() for location in self.intermediate_locations],
       "resource_offset": self.resource_offset.serialize(),
       "to_offset": self.to_offset.serialize(),
       "pickup_distance_from_top": self.pickup_distance_from_top,
       "get_direction": self.get_direction.name,
       "put_direction": self.put_direction.name,
     }
+
+  @classmethod
+  def deserialize(cls, data: dict) -> Move:
+    return Move(
+      resource=Resource.deserialize(data["resource"]),
+      to=Coordinate.deserialize(data["to"]),
+      intermediate_locations=
+        [Coordinate.deserialize(location) for location in data["intermediate_locations"]],
+      resource_offset=Coordinate.deserialize(data["resource_offset"]),
+      to_offset=Coordinate.deserialize(data["to_offset"]),
+      pickup_distance_from_top=data["pickup_distance_from_top"],
+      get_direction=Move.Direction[data["get_direction"]],
+      put_direction=Move.Direction[data["put_direction"]]
+    )
 
   def get_absolute_from_location(self) -> Coordinate:
     """ Returns the absolute location of the resource. """
