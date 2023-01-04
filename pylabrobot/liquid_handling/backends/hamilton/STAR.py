@@ -1620,8 +1620,9 @@ class STAR(HamiltonLiquidHandler):
   def move_channel_x(self, channel: int, x: float): # pylint: disable=unused-argument
     self.position_left_x_arm_(int(x * 10))
 
-  def move_channel_y(self, channel: int, y: float): # pylint: disable=unused-argument
-    self.position_left_x_arm_(int(y * 10))
+  def move_channel_y(self, channel: int, y: float):
+    self.position_single_pipetting_channel_in_y_direction(
+      pipetting_channel_index=channel + 1, y_position=int(y * 10))
 
   def move_channel_z(self, channel: int, z: float):
     self.position_single_pipetting_channel_in_z_direction(
@@ -3076,7 +3077,27 @@ class STAR(HamiltonLiquidHandler):
       zj=f"{z_position:04}",
     )
 
-  # TODO:(command:XL) Search for Teach in signal using pipetting channel n in X-direction
+  def search_for_teach_in_signal_using_pipetting_channel_n_in_x_direction(
+    self,
+    pipetting_channel_index: int,
+    x_position: int
+  ):
+    """ Search for Teach in signal using pipetting channel n in X-direction.
+
+    Args:
+      pipetting_channel_index: Index of pipetting channel. Must be between 1 and self.num_channels.
+      x_position: x position [0.1mm]. Must be between 0 and 30000.
+    """
+
+    utils.assert_clamp(pipetting_channel_index, 1, self.num_channels, "pipetting_channel_index")
+    utils.assert_clamp(x_position, 0, 30000, "x_position")
+
+    return self.send_command(
+      module="C0",
+      command="XL",
+      pn=f"{pipetting_channel_index:02}",
+      xs=f"{x_position:05}",
+    )
 
   def spread_pip_channels(self):
     """ Spread PIP channels """
