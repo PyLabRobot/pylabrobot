@@ -1244,6 +1244,7 @@ class LiquidHandler:
 
     plate.unassign()
     if isinstance(to, Coordinate):
+      to_location -= self.deck.location # passed as an absolute location, but stored as relative
       self.deck.assign_child_resource(plate, location=to_location)
     elif isinstance(to, CarrierSite): # .zero() resources
       to.assign_child_resource(plate, location=Coordinate.zero())
