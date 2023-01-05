@@ -594,9 +594,9 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self._assert_command_sent_once(
       "C0PMid0025xs03975xd0yj3065yd0zj2434zd0gr1th2840ga1xe4 1", INTERMEDIATE_FMT)
     self._assert_command_sent_once(
-      "C0PMid0024xs02975xd0yj4025yd0zj2434zd0gr1th2840ga1xe4 1", INTERMEDIATE_FMT)
+      "C0PMid0024xs02975xd0yj4025yd0zj2434zd0gr1th2430ga1xe4 1", INTERMEDIATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0026xs03475xd0yj2105yd0zj1874zd0th2840te2840gr1go1300ga0",
+      "C0PRid0026xs03475xd0yj2105yd0zj1874zd0th2430te2840gr1go1300ga0",
       PUT_PLATE_FMT)
 
   def test_discard_tips(self):
