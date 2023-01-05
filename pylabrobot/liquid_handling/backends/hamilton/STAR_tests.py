@@ -20,7 +20,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L
-from pylabrobot.liquid_handling.standard import Move, Pickup
+from pylabrobot.liquid_handling.standard import Pickup, GripDirection
 
 from tests.usb import MockDev, MockEndpoint
 
@@ -490,7 +490,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       location=Coordinate(979.5, 285.2-63, 200 - 100))
 
     self.lh.move_plate(self.plate, plate_reader, pickup_distance_from_top=12.2,
-      get_direction=Move.Direction.FRONT, put_direction=Move.Direction.LEFT)
+      get_direction=GripDirection.FRONT, put_direction=GripDirection.LEFT)
     self._assert_command_sent_once(
       "C0PPid0003xs03475xd0yj1145yd0zj1884zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
@@ -499,7 +499,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
     self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0], pickup_distance_from_top=14.2,
-      get_direction=Move.Direction.LEFT, put_direction=Move.Direction.FRONT)
+      get_direction=GripDirection.LEFT, put_direction=GripDirection.FRONT)
     self._assert_command_sent_once(
       "C0PPid0005xs10430xd0yj3282yd0zj2003zd0gr4th2840te2840gw4go1300gb1237gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")

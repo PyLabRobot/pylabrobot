@@ -129,7 +129,7 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     del data["type"]
     return subclass(**data)
 
-  def prepare_for_manual_operation(self):
+  def prepare_for_manual_channel_operation(self):
     """ Prepare the robot for manual operation. """
 
     raise NotImplementedError()

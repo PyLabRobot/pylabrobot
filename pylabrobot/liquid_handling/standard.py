@@ -239,15 +239,16 @@ class Dispense(LiquidHandlingOp):
     )
 
 
+class GripDirection(enum.Enum):
+  """ A direction from which to grab the resource. """
+  FRONT = enum.auto()
+  BACK = enum.auto()
+  LEFT = enum.auto()
+  RIGHT = enum.auto()
+
+
 class Move():
   """ A move operation. """
-
-  class Direction(enum.Enum):
-    """ A direction from which to grab the resource. """
-    FRONT = enum.auto()
-    BACK = enum.auto()
-    LEFT = enum.auto()
-    RIGHT = enum.auto()
 
   def __init__(
     self,
@@ -257,8 +258,8 @@ class Move():
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
-    get_direction: Move.Direction = Direction.FRONT,
-    put_direction: Move.Direction = Direction.FRONT
+    get_direction: GripDirection = GripDirection.FRONT,
+    put_direction: GripDirection = GripDirection.FRONT
   ):
     """ Initialize the move operation.
 
@@ -323,8 +324,8 @@ class Move():
       resource_offset=Coordinate.deserialize(data["resource_offset"]),
       to_offset=Coordinate.deserialize(data["to_offset"]),
       pickup_distance_from_top=data["pickup_distance_from_top"],
-      get_direction=Move.Direction[data["get_direction"]],
-      put_direction=Move.Direction[data["put_direction"]]
+      get_direction=GripDirection[data["get_direction"]],
+      put_direction=GripDirection[data["put_direction"]]
     )
 
   def get_absolute_from_location(self) -> Coordinate:
