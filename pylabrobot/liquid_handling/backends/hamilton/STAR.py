@@ -25,6 +25,7 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import get_liquid_class
 from pylabrobot.resources import (
   Coordinate,
   Plate,
+  Resource,
   TipRack,
   TipSpot,
   Well
@@ -43,6 +44,7 @@ from pylabrobot.liquid_handling.standard import (
   LiquidHandlingOp,
   Aspiration,
   Dispense,
+  GripDirection,
   Move
 )
 
@@ -1547,92 +1549,174 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
-  def move_resource(
+  def pick_up_resource(
     self,
-    move: Move,
-    plate_width: float = 127,
+    resource: Resource,
+    grip_direction: GripDirection,
+    pickup_distance_from_top: float,
+    offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_at_beginning_of_a_command: int = 2840,
+    z_position_at_the_command_end: int = 2840,
+    grip_strength: int = 4,
+    plate_width_tolerance: int = 20,
+    collision_control_level: int = 0,
+    acceleration_index_high_acc: int = 4,
+    acceleration_index_low_acc: int = 1,
+    fold_up_sequence_at_the_end_of_process: bool = True
   ):
-    """ Move a resource to a new position. """
+    assert self.iswap_installed, "iswap must be installed"
+
+    # Get center of source plate. Also gripping height and plate width.
+    center = resource.get_absolute_location() + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    plate_width = resource.get_size_x()
+    # plate_width = { # TODO: LH should rotate resources on move_plate
+    #   GripDirection.FRONT: resource.get_size_x(),
+    #   GripDirection.RIGHT: resource.get_size_y(),
+    #   GripDirection.BACK: resource.get_size_x(),
+    #   GripDirection.LEFT: resource.get_size_y(),
+    # }[grip_direction]
+
+    self.get_plate(
+      x_position=int(center.x * 10),
+      x_direction=0,
+      y_position=int(center.y * 10),
+      y_direction=0,
+      z_position=int(grip_height * 10),
+      z_direction=0,
+      grip_direction={
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
+      minimum_traverse_height_at_beginning_of_a_command=
+        minimum_traverse_height_at_beginning_of_a_command,
+      z_position_at_the_command_end=z_position_at_the_command_end,
+      grip_strength=grip_strength,
+      open_gripper_position=int(plate_width*10) + 30,
+      plate_width=int(plate_width*10) - 33,
+      plate_width_tolerance=plate_width_tolerance,
+      collision_control_level=collision_control_level,
+      acceleration_index_high_acc=acceleration_index_high_acc,
+      acceleration_index_low_acc=acceleration_index_low_acc,
+      fold_up_sequence_at_the_end_of_process=fold_up_sequence_at_the_end_of_process
+    )
+
+  def move_picked_up_resource(
+    self,
+    location: Coordinate,
+    resource: Resource,
+    grip_direction: GripDirection,
+    minimum_traverse_height_at_beginning_of_a_command: int = 2840,
+    collision_control_level: int = 1,
+    acceleration_index_high_acc: int = 4,
+    acceleration_index_low_acc: int = 1
+  ):
+    """ After a resource is picked up, move it to a new location but don't release it yet. """
 
     assert self.iswap_installed, "iswap must be installed"
 
-    # Get center of source plate. Also gripping height.
-    x = move.get_absolute_from_location().x + move.resource.get_size_x()/2
-    y = move.get_absolute_from_location().y + move.resource.get_size_y()/2
-    grip_height = move.get_absolute_from_location().z + move.resource.get_size_z() - \
-      move.pickup_distance_from_top
+    center = location + resource.center()
 
-    self.get_plate(
-      x_position=int(x * 10),
+    self.move_plate_to_position(
+      x_position=int(center.x * 10),
       x_direction=0,
-      y_position=int(y * 10),
+      y_position=int(center.y * 10),
+      y_direction=0,
+      z_position=int((location.z + resource.get_size_z() / 2) * 10),
+      z_direction=0,
+      grip_direction={
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
+      minimum_traverse_height_at_beginning_of_a_command=
+        minimum_traverse_height_at_beginning_of_a_command,
+      collision_control_level=collision_control_level,
+      acceleration_index_high_acc=acceleration_index_high_acc,
+      acceleration_index_low_acc=acceleration_index_low_acc
+    )
+
+  def release_picked_up_resource(
+    self,
+    location: Coordinate,
+    resource: Resource,
+    offset: Coordinate,
+    grip_direction: GripDirection,
+    pickup_distance_from_top: float,
+    minimum_traverse_height_at_beginning_of_a_command: int = 2840,
+    z_position_at_the_command_end: int = 2840,
+    collision_control_level: int = 0,
+  ):
+    """ After a resource is picked up, release it at the specified location. """
+
+    assert self.iswap_installed, "iswap must be installed"
+
+    # Get center of source plate. Also gripping height and plate width.
+    center = location + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    plate_width = resource.get_size_x()
+    # plate_width = { # TODO: LH should rotate resources on move_plate
+    #   GripDirection.FRONT: resource.get_size_x(),
+    #   GripDirection.RIGHT: resource.get_size_y(),
+    #   GripDirection.BACK: resource.get_size_x(),
+    #   GripDirection.LEFT: resource.get_size_y(),
+    # }[grip_direction]
+
+    self.put_plate(
+      x_position=int(center.x * 10),
+      x_direction=0,
+      y_position=int(center.y * 10),
       y_direction=0,
       z_position=int(grip_height * 10),
       z_direction=0,
       grip_direction={
-        Move.Direction.FRONT: 1,
-        Move.Direction.RIGHT: 2,
-        Move.Direction.BACK: 3,
-        Move.Direction.LEFT: 4,
-      }[move.get_direction],
-      minimum_traverse_height_at_beginning_of_a_command = 2840,
-      z_position_at_the_command_end = 2840,
-      grip_strength = 4,
-      open_gripper_position = int(plate_width*10) + 30,
-      plate_width = int(plate_width * 10) - 33,
-      plate_width_tolerance = 20,
-      collision_control_level = 0,
-      acceleration_index_high_acc = 4,
-      acceleration_index_low_acc = 1,
-      fold_up_sequence_at_the_end_of_process = True
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
+      minimum_traverse_height_at_beginning_of_a_command=
+        minimum_traverse_height_at_beginning_of_a_command,
+      z_position_at_the_command_end=
+        z_position_at_the_command_end,
+      open_gripper_position=int(plate_width*10) + 30,
+      collision_control_level=collision_control_level,
     )
 
+  def move_resource(self, move: Move):
+    """ Pick up a resource and move it to a new location.
+
+    Note: this looks like an LH level method, but I am not sure if other robots support such modular
+    control over the moves.
+    """
+
+    self.pick_up_resource(
+      resource=move.resource,
+      grip_direction=move.get_direction,
+      pickup_distance_from_top=move.pickup_distance_from_top,
+      offset=move.resource_offset)
+
     for location in move.intermediate_locations:
-      self.move_plate_to_position(
-        x_position=int((location.x + move.resource.center().x) * 10),
-        x_direction=0,
-        y_position=int((location.y + move.resource.center().y) * 10),
-        y_direction=0,
-        z_position=int((location.z + move.resource.get_size_z() / 2) * 10),
-        z_direction=0,
-        grip_direction={
-          Move.Direction.FRONT: 1,
-          Move.Direction.RIGHT: 2,
-          Move.Direction.BACK: 3,
-          Move.Direction.LEFT: 4,
-        }[move.get_direction],
+      self.move_picked_up_resource(
+        location=location,
+        resource=move.resource,
+        grip_direction=move.get_direction,
         minimum_traverse_height_at_beginning_of_a_command=2840,
         collision_control_level=1,
         acceleration_index_high_acc=4,
-        acceleration_index_low_acc=1
-      )
+        acceleration_index_low_acc=1)
 
-    # Get the center of the plate in the destination, which is what STAR expects.
-    to_x = move.get_absolute_to_location().x + move.resource.get_size_x()/2
-    to_y = move.get_absolute_to_location().y + move.resource.get_size_y()/2
-    grip_height = move.get_absolute_to_location().z + move.resource.get_size_z() - \
-      move.pickup_distance_from_top
+    self.release_picked_up_resource(
+      location=move.to,
+      resource=move.resource,
+      offset=move.to_offset,
+      grip_direction=move.put_direction,
+      pickup_distance_from_top=move.pickup_distance_from_top)
 
-    self.put_plate(
-      x_position=int(to_x * 10),
-      x_direction=0,
-      y_position=int(to_y * 10),
-      y_direction=0,
-      z_position=int(grip_height * 10),
-      z_direction=0,
-      grip_direction={
-        Move.Direction.FRONT: 1,
-        Move.Direction.RIGHT: 2,
-        Move.Direction.BACK: 3,
-        Move.Direction.LEFT: 4,
-      }[move.put_direction],
-      minimum_traverse_height_at_beginning_of_a_command=2840,
-      z_position_at_the_command_end=2840,
-      open_gripper_position = int(plate_width*10) + 30,
-      collision_control_level=0,
-    )
-
-  def prepare_for_manual_operation(self):
+  def prepare_for_manual_channel_operation(self):
     """ Prepare for manual operation. """
 
     self.position_max_free_y_for_n(pipetting_channel_index=self.num_channels)

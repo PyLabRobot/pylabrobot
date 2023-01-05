@@ -38,7 +38,8 @@ from .standard import (
   Drop,
   Aspiration,
   Dispense,
-  Move
+  Move,
+  GripDirection
 )
 
 logger = logging.getLogger("pylabrobot")
@@ -1067,8 +1068,8 @@ class LiquidHandler:
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
-    get_direction: Move.Direction = Move.Direction.FRONT,
-    put_direction: Move.Direction = Move.Direction.FRONT,
+    get_direction: GripDirection = GripDirection.FRONT,
+    put_direction: GripDirection = GripDirection.FRONT,
     **backend_kwargs
   ):
     """ Move a resource to a new location.
@@ -1110,8 +1111,8 @@ class LiquidHandler:
     intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
-    get_direction: Move.Direction = Move.Direction.FRONT,
-    put_direction: Move.Direction = Move.Direction.FRONT,
+    get_direction: GripDirection = GripDirection.FRONT,
+    put_direction: GripDirection = GripDirection.FRONT,
     **backend_kwargs
   ):
     """ Move a lid to a new location.
@@ -1125,8 +1126,8 @@ class LiquidHandler:
 
       Move a lid to the stacking area and back, grabbing it from the left side:
 
-      >>> lh.move_lid(plate.lid, stacking_area, get_direction=Move.Direction.LEFT)
-      >>> lh.move_lid(stacking_area.get_top_item(), plate, put_direction=Move.Direction.LEFT)
+      >>> lh.move_lid(plate.lid, stacking_area, get_direction=GripDirection.LEFT)
+      >>> lh.move_lid(stacking_area.get_top_item(), plate, put_direction=GripDirection.LEFT)
 
     Args:
       lid: The lid to move. Can be either a Plate object or a Lid object.
@@ -1182,8 +1183,8 @@ class LiquidHandler:
     intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
     to_offset: Coordinate = Coordinate.zero(),
-    put_direction: Move.Direction = Move.Direction.FRONT,
-    get_direction: Move.Direction = Move.Direction.FRONT,
+    put_direction: GripDirection = GripDirection.FRONT,
+    get_direction: GripDirection = GripDirection.FRONT,
     **backend_kwargs
   ):
     """ Move a plate to a new location.
@@ -1201,8 +1202,8 @@ class LiquidHandler:
 
       Move a lid to another carrier spot, grabbing it from the left side:
 
-      >>> lh.move_plate(plate, plt_car[1], get_direction=Move.Direction.LEFT)
-      >>> lh.move_plate(plate, plt_car[0], put_direction=Move.Direction.LEFT)
+      >>> lh.move_plate(plate, plt_car[1], get_direction=GripDirection.LEFT)
+      >>> lh.move_plate(plate, plt_car[0], put_direction=GripDirection.LEFT)
 
       Move a resource while visiting a few intermediate locations along the way:
 
