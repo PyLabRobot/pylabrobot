@@ -1683,8 +1683,7 @@ class STAR(HamiltonLiquidHandler):
       }[grip_direction],
       minimum_traverse_height_at_beginning_of_a_command=
         minimum_traverse_height_at_beginning_of_a_command,
-      z_position_at_the_command_end=
-        z_position_at_the_command_end,
+      z_position_at_the_command_end=z_position_at_the_command_end,
       open_gripper_position=int(plate_width*10) + 30,
       collision_control_level=collision_control_level,
     )
@@ -1696,28 +1695,37 @@ class STAR(HamiltonLiquidHandler):
     control over the moves.
     """
 
+    minimum_traverse_height = 284.0
     self.pick_up_resource(
       resource=move.resource,
       grip_direction=move.get_direction,
       pickup_distance_from_top=move.pickup_distance_from_top,
-      offset=move.resource_offset)
+      offset=move.resource_offset,
+      minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10))
 
+    previous_location = move.resource.get_absolute_location() + move.resource_offset
+    previous_location.z = minimum_traverse_height - move.resource.get_size_z() / 2
     for location in move.intermediate_locations:
       self.move_picked_up_resource(
         location=location,
         resource=move.resource,
         grip_direction=move.get_direction,
-        minimum_traverse_height_at_beginning_of_a_command=2840,
+        minimum_traverse_height_at_beginning_of_a_command=
+          int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
         collision_control_level=1,
         acceleration_index_high_acc=4,
         acceleration_index_low_acc=1)
+      previous_location = location
 
     self.release_picked_up_resource(
       location=move.to,
       resource=move.resource,
       offset=move.to_offset,
       grip_direction=move.put_direction,
-      pickup_distance_from_top=move.pickup_distance_from_top)
+      pickup_distance_from_top=move.pickup_distance_from_top,
+      minimum_traverse_height_at_beginning_of_a_command=
+        int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
+    )
 
   def prepare_for_manual_channel_operation(self):
     """ Prepare for manual operation. """
