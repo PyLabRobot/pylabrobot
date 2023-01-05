@@ -127,6 +127,9 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
           break
 
+      if resp == "":
+        continue
+
       logger.debug("Received data: %s", resp)
       return resp
 

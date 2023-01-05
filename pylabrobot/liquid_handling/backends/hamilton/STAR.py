@@ -358,7 +358,10 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     timeout_time = time.time() + read_timeout
 
     while time.time() < timeout_time:
-      resp = self.read()
+      try:
+        resp = self.read()
+      except TimeoutError:
+        continue
 
       # Parse response.
       try:
