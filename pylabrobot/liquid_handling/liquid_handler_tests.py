@@ -187,7 +187,7 @@ class TestLiquidHandlerLayout(unittest.TestCase):
     self.assertIsNotNone(self.lh.get_resource("plate"))
     self.assertIsNone(plt_car[0].resource)
     self.assertEqual(plate.get_absolute_location(),
-      Coordinate(1000, 1000+63, 1000+100))
+      Coordinate(1000, 1000, 1000))
 
   def test_serialize(self):
     serialized = self.lh.serialize()

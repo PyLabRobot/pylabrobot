@@ -4988,7 +4988,8 @@ class STAR(HamiltonLiquidHandler):
       True if holding a plate, False otherwise.
     """
 
-    return self.send_command(module="C0", command="QP", fmt="ph#").get("ph") == 1
+    resp = self.send_command(module="C0", command="QP", fmt="ph#")
+    return resp is not None and resp["ph"] == 1
 
   def request_iswap_position(self):
     """ Request iSWAP position ( grip center )
