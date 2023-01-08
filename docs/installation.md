@@ -6,9 +6,9 @@ Note that there are additional installation steps for using the firmware (univer
 
 ## Installing PyLabRobot
 
-It is recommended that you use a virtual environment to install PyLabRobot. See the [virtualenvironment](https://virtualenv.pypa.io/en/latest/) documentation for more information on virtual environments.
+It is highly recommended that you install PyLabRobot in a virtual environment. [virtualenv](https://virtualenv.pypa.io/en/latest/) is a popular tool for doing that, but you can use any tool you like. Note that virtualenv needs to be installed separately first.
 
-Here's how to create a virtual environment in a nutshell:
+Here's how to create a virtual environment using virtualenv:
 
 ```bash
 mkdir your_project
