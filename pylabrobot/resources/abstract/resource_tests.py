@@ -131,6 +131,7 @@ class TestResource(unittest.TestCase):
 
   def test_rotation90(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
+    r.location = Coordinate.zero()
     c = Resource("child", size_x=10, size_y=20, size_z=10)
     r.assign_child_resource(c, location=Coordinate(20, 10, 10))
 
@@ -143,6 +144,7 @@ class TestResource(unittest.TestCase):
 
   def test_rotation180(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
+    r.location = Coordinate.zero()
     c = Resource("child", size_x=10, size_y=20, size_z=10)
     r.assign_child_resource(c, location=Coordinate(20, 10, 10))
 
@@ -155,6 +157,7 @@ class TestResource(unittest.TestCase):
 
   def test_rotation270(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
+    r.location = Coordinate.zero()
     c = Resource("child", size_x=10, size_y=20, size_z=10)
     r.assign_child_resource(c, location=Coordinate(20, 10, 10))
 
@@ -179,6 +182,7 @@ class TestResource(unittest.TestCase):
 
   def test_multiple_rotations(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
+    r.location = Coordinate.zero()
     c = Resource("child", size_x=10, size_y=20, size_z=10)
     r.assign_child_resource(c, location=Coordinate(20, 10, 10))
 
@@ -197,7 +201,3 @@ class TestResource(unittest.TestCase):
     self.assertEqual(r.get_size_x(), 200)
     self.assertEqual(r.get_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(20, 10, 10))
-
-
-if __name__ == "__main__":
-  unittest.main()

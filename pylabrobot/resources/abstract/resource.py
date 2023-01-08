@@ -98,7 +98,7 @@ class Resource:
     """ Get the absolute location of this resource, probably within the
     :class:`pylabrobot.resources.abstract.Deck`. """
     assert self.location is not None, "Resource has no location."
-    if self.parent is None or self.parent.location is None:
+    if self.parent is None:
       return self.location
     return self.parent.get_absolute_location() + self.location
 
