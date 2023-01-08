@@ -64,7 +64,7 @@ setup(
     description='A hardware agnostic platform for liquid handling',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    install_requires=[],
+    install_requires=["typing_extensions"],
     url='https://github.com/pylabrobot/pylabrobot.git',
     package_data={'pylabrobot': ['liquid_handling/backends/simulation/simulator/*']},
     extras_require={
