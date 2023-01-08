@@ -2,6 +2,7 @@
 
 import json
 import time
+from typing import Any, Dict, Optional
 import unittest
 
 import pytest
@@ -99,6 +100,10 @@ class SimulatorBackendEventCatcher(SerializingSavingBackend, SimulatorBackend): 
   This class inherits from SimulatorBackend to get the same functionality as the
   SimulatorBackend class.
   """
+
+  def send_command(self, command: str, data: Optional[Dict[str, Any]] = None,
+    wait_for_response: bool = True): # pylint: disable=unused-argument
+    self.sent_commands.append(dict(command=command, data=data))
 
 
 class SimulatorBackendCommandTests(unittest.TestCase):

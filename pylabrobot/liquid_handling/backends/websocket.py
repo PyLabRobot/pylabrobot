@@ -16,6 +16,7 @@ except ImportError:
   HAS_WEBSOCKETS = False
 
 from pylabrobot.liquid_handling.backends import SerializingBackend
+from pylabrobot.resources import Resource
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 
 
@@ -156,6 +157,16 @@ class WebSocketBackend(SerializingBackend):
 
     while not self.has_connection():
       time.sleep(0.1)
+
+  def assigned_resource_callback(self, resource: Resource):
+    # override SerializingBackend so we don't wait for a response
+    self.send_command(command="resource_assigned", data=dict(resource=resource.serialize(),
+      parent_name=(resource.parent.name if resource.parent else None)), wait_for_response=False)
+
+  def unassigned_resource_callback(self, name: str):
+    # override SerializingBackend so we don't wait for a response
+    self.send_command(command="resource_unassigned", data=dict(resource_name=name),
+      wait_for_response=False)
 
   def send_command(
     self,
