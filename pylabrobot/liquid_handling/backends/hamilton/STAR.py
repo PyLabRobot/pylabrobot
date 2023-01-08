@@ -14,28 +14,10 @@ from typing import Callable, List, Optional, Tuple, Sequence, TypeVar, cast
 
 from pylabrobot import utils
 from pylabrobot.default import Default, get_value, is_default, is_not_default
-from pylabrobot.liquid_handling.errors import (
-  ChannelHasTipError,
-  ChannelHasNoTipError,
-  TipSpotHasNoTipError,
-  TipTooLittleVolumeError,
-  TooLittleVolumeError,
-)
+import pylabrobot.liquid_handling.backends.hamilton.errors as herrors
+from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
+from pylabrobot.liquid_handling.channel_tip_tracker import  ChannelHasTipError, ChannelHasNoTipError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import get_liquid_class
-from pylabrobot.resources import (
-  Coordinate,
-  Plate,
-  Resource,
-  TipRack,
-  TipSpot,
-  Well
-)
-from pylabrobot.resources.ml_star import (
-  HamiltonTip,
-  TipDropMethod,
-  TipPickupMethod,
-  TipSize,
-)
 from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
 from pylabrobot.liquid_handling.standard import (
   PipettingOp,
@@ -47,9 +29,26 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
+from pylabrobot.resources.abstract import (
+  Coordinate,
+  Plate,
+  Resource,
+  TipRack,
+  TipSpot,
+  Well
+)
+from pylabrobot.resources.abstract.tip_tracker import TipSpotHasNoTipError
+from pylabrobot.resources.abstract.volume_tracker import (
+  TipTooLittleVolumeError,
+  WellTooLittleLiquidError
+)
+from pylabrobot.resources.ml_star import (
+  HamiltonTip,
+  TipDropMethod,
+  TipPickupMethod,
+  TipSize,
+)
 
-import pylabrobot.liquid_handling.backends.hamilton.errors as herrors
-from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
 
 logger = logging.getLogger(__name__)
 
@@ -959,10 +958,10 @@ class STAR(HamiltonLiquidHandler):
           tlv.append(i-1)
 
       if len(tll) > 0:
-        raise TipTooLittleVolumeError(f"There is not enough liquid in containers where the "
+        raise WellTooLittleLiquidError(f"There is not enough liquid in containers where the "
                                       f"following channels were trying to aspirate: {tll}") from e
       if len(tlv) > 0:
-        raise TooLittleVolumeError(f"There is too much liquid in the following channels: {tlv}") \
+        raise TipTooLittleVolumeError(f"There is too much liquid in the following channels: {tlv}")\
           from e
 
       raise e

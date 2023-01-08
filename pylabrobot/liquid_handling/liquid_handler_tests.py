@@ -5,14 +5,16 @@ from typing import Any, Dict, List, Optional, cast
 import unittest
 import unittest.mock
 
-from pylabrobot.liquid_handling.errors import (
+from pylabrobot.liquid_handling.channel_tip_tracker import (
   ChannelHasTipError,
   ChannelHasNoTipError,
+)
+from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
+from pylabrobot.resources.abstract import no_tip_tracking, set_tip_tracking
+from pylabrobot.resources.abstract.tip_tracker import (
   TipSpotHasTipError,
   TipSpotHasNoTipError,
 )
-from pylabrobot.liquid_handling import no_tip_tracking, set_tip_tracking
-from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
 
 from . import backends
 from .liquid_handler import LiquidHandler

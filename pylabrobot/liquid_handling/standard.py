@@ -11,7 +11,7 @@ from pylabrobot.liquid_handling.liquid_classes.abstract import LiquidClass
 from pylabrobot.resources.abstract.coordinate import Coordinate
 if TYPE_CHECKING:
   from pylabrobot.resources import Resource
-  from pylabrobot.liquid_handling.tip import Tip
+  from pylabrobot.resources.abstract.tip import Tip
   from pylabrobot.resources.abstract.tip_rack import TipSpot
 
 

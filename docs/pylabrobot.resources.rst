@@ -24,7 +24,7 @@ Abstract
     pylabrobot.resources.abstract.TipRack
     pylabrobot.resources.abstract.Plate
     pylabrobot.resources.abstract.Carrier
-    pylabrobot.liquid_handling.tip.Tip
+    pylabrobot.resources.abstract.tip.Tip
     pylabrobot.resources.abstract.TipCarrier
     pylabrobot.resources.abstract.PlateCarrier
 
@@ -81,3 +81,36 @@ Opentrons
     pylabrobot.resources.opentrons.load
     pylabrobot.resources.opentrons.tip_racks
     pylabrobot.resources.opentrons.plates
+
+
+Tip trackers
+------------
+
+See :doc:`Using trackers <using-trackers>` for a tutorial.
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+  pylabrobot.resources.abstract.no_tip_tracking
+  pylabrobot.resources.abstract.set_tip_tracking
+  pylabrobot.resources.abstract.tip_tracker.TipTracker
+  pylabrobot.resources.abstract.tip_tracker.SpotTipTracker
+
+
+Volume trackers
+---------------
+
+See :doc:`Using trackers <using-trackers>` for a tutorial.
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+  pylabrobot.resources.abstract.no_volume_tracking
+  pylabrobot.resources.abstract.set_volume_tracking
+  pylabrobot.resources.abstract.volume_tracker.VolumeTracker
+  pylabrobot.resources.abstract.volume_tracker.TipVolumeTracker
+  pylabrobot.resources.abstract.volume_tracker.WellVolumeTracker

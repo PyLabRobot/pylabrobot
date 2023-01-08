@@ -6,8 +6,8 @@ from abc import ABCMeta
 from typing import List, Union, Optional, Sequence
 
 from pylabrobot import utils
-from pylabrobot.liquid_handling.tip import Tip, TipCreator
-from pylabrobot.liquid_handling.tip_tracker import SpotTipTracker, does_tip_tracking
+from pylabrobot.resources.abstract.tip import Tip, TipCreator
+from pylabrobot.resources.abstract.tip_tracker import SpotTipTracker, does_tip_tracking
 
 from .itemized_resource import ItemizedResource
 from .resource import Resource

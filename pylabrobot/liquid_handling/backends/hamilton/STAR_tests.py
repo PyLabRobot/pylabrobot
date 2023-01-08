@@ -3,7 +3,7 @@
 from typing import cast
 import unittest
 
-from pylabrobot.liquid_handling import LiquidHandler, no_volume_tracking
+from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
@@ -16,7 +16,8 @@ from pylabrobot.resources import (
   HT_P,
   Coordinate,
   ResourceStack,
-  Lid
+  Lid,
+  no_volume_tracking
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L

@@ -1,7 +1,7 @@
 import math
 
-from pylabrobot.liquid_handling.volume_tracker import WellVolumeTracker
 from pylabrobot.resources.abstract.resource import Resource
+from pylabrobot.resources.abstract.volume_tracker import WellVolumeTracker
 
 
 class Well(Resource):

@@ -39,29 +39,7 @@ See :doc:`Using trackers <using-trackers>` for a tutorial.
   :nosignatures:
   :recursive:
 
-  pylabrobot.liquid_handling.no_tip_tracking
-  pylabrobot.liquid_handling.set_tip_tracking
-  pylabrobot.liquid_handling.tip_tracker.TipTracker
-  pylabrobot.liquid_handling.tip_tracker.ChannelTipTracker
-  pylabrobot.liquid_handling.tip_tracker.SpotTipTracker
-
-
-Volume trackers
----------------
-
-See :doc:`Using trackers <using-trackers>` for a tutorial.
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-  pylabrobot.liquid_handling.no_volume_tracking
-  pylabrobot.liquid_handling.set_volume_tracking
-  pylabrobot.liquid_handling.volume_tracker.VolumeTracker
-  pylabrobot.liquid_handling.volume_tracker.TipVolumeTracker
-  pylabrobot.liquid_handling.volume_tracker.WellVolumeTracker
-
+  pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker
 
 
 Operations

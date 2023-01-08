@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from pylabrobot.liquid_handling import LiquidHandler, no_tip_tracking, no_volume_tracking
+from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.serializing_backend import SerializingSavingBackend
 from pylabrobot.resources import (
   STARLetDeck,
@@ -10,6 +10,8 @@ from pylabrobot.resources import (
   Cos_96_EZWash,
   STF_L,
   Coordinate,
+  no_tip_tracking,
+  no_volume_tracking,
 )
 from pylabrobot.liquid_handling.standard import (
   Pickup,
