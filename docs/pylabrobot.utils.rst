@@ -14,4 +14,3 @@ Various utilities for the pylabrobot package.
     list
     numbers
     positions
-    string
