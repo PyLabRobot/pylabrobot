@@ -1,10 +1,9 @@
 import math
 import json
-from typing import Union, List, cast
+from typing import Union, List, TYPE_CHECKING, cast
 
 try:
   import opentrons_shared_data.labware
-  from opentrons_shared_data.labware.dev_types import LabwareDefinition
   USE_OT = True
 except ImportError:
   USE_OT = False
@@ -18,13 +17,16 @@ from pylabrobot.resources import (
   TipSpot,
 )
 
+if TYPE_CHECKING:
+  from opentrons_shared_data.labware.dev_types import LabwareDefinition
+
 
 class UnknownResourceType(Exception):
   pass
 
 
 def ot_definition_to_resource(
-  data: LabwareDefinition,
+  data: "LabwareDefinition",
   name: str) -> Union[Plate, TipRack]:
   """ Convert an Opentrons definition file to a PyLabRobot resource file. """
 
