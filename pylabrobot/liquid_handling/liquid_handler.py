@@ -12,23 +12,24 @@ from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set
 import warnings
 
 from pylabrobot.default import Defaultable, Default
-from pylabrobot.liquid_handling.errors import ChannelHasNoTipError
-from pylabrobot.resources.abstract import Deck
+from pylabrobot.liquid_handling.channel_tip_tracker import ChannelHasNoTipError
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
-from pylabrobot.liquid_handling.tip import Tip
-from pylabrobot.liquid_handling.tip_tracker import ChannelTipTracker, does_tip_tracking
-from pylabrobot.liquid_handling.volume_tracker import does_volume_tracking
+from pylabrobot.liquid_handling.channel_tip_tracker import ChannelTipTracker
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
+  Deck,
   Resource,
   ResourceStack,
   Coordinate,
   CarrierSite,
   Lid,
   Plate,
+  Tip,
   TipRack,
   TipSpot,
-  Well
+  Well,
+  does_tip_tracking,
+  does_volume_tracking
 )
 from pylabrobot.utils.list import expand
 
@@ -332,8 +333,8 @@ class LiquidHandler:
 
     for channel, op in zip(use_channels, pickups):
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
-        op.resource.tracker.queue_op(op)
-      self.head[channel].queue_op(op)
+        op.resource.tracker.queue_pickup(op)
+      self.head[channel].queue_pickup(op)
 
     extras = self._check_args(self.backend.pick_up_tips, backend_kwargs,
       default={"ops", "use_channels"})
@@ -430,8 +431,8 @@ class LiquidHandler:
     for channel, op in zip(use_channels, drops):
       if does_tip_tracking() and isinstance(op.resource, TipSpot) and \
           not op.resource.tracker.is_disabled:
-        op.resource.tracker.queue_op(op)
-      self.head[channel].queue_op(op)
+        op.resource.tracker.queue_drop(op)
+      self.head[channel].queue_drop(op)
 
     extras = self._check_args(self.backend.drop_tips, backend_kwargs,
       default={"ops", "use_channels"})
@@ -628,8 +629,8 @@ class LiquidHandler:
     for op in aspirations:
       if does_volume_tracking():
         if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
-          op.resource.tracker.queue_op(op)
-        op.tip.tracker.queue_op(op)
+          op.resource.tracker.queue_aspiration(op)
+        op.tip.tracker.queue_aspiration(op)
 
     extras = self._check_args(self.backend.aspirate, backend_kwargs,
       default={"ops", "use_channels"})
@@ -762,8 +763,8 @@ class LiquidHandler:
     for op in dispenses:
       if does_volume_tracking():
         if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
-          op.resource.tracker.queue_op(op)
-        op.tip.tracker.queue_op(op)
+          op.resource.tracker.queue_dispense(op)
+        op.tip.tracker.queue_dispense(op)
 
     extras = self._check_args(self.backend.dispense, backend_kwargs,
       default={"ops", "use_channels"})

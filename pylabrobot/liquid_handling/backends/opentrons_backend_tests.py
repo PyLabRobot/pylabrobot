@@ -1,13 +1,14 @@
 import unittest
 from unittest.mock import patch
 
-from pylabrobot.liquid_handling import LiquidHandler, no_volume_tracking
+from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsBackend
-from pylabrobot.liquid_handling.errors import ChannelHasNoTipError
+from pylabrobot.liquid_handling.channel_tip_tracker import ChannelHasNoTipError
+from pylabrobot.resources.abstract import no_volume_tracking
 from pylabrobot.resources.opentrons import (
   OTDeck,
   opentrons_96_filtertiprack_20ul,
-  usascientific_96_wellplate_2point4ml_deep
+  usascientific_96_wellplate_2point4ml_deep,
 )
 
 
@@ -131,8 +132,8 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     assert mock_aspirate is not None # just the default for pylint, provided by @patch
     def assert_parameters(labware_id, well_name, pipette_id, volume, flow_rate,
       offset_x, offset_y, offset_z):
-      self.assertEqual(labware_id, "tip_rack")
-      self.assertEqual(well_name, "tip_rack_A1")
+      self.assertEqual(labware_id, "plate")
+      self.assertEqual(well_name, "plate_A1")
       self.assertEqual(pipette_id, "left-pipette-id")
       self.assertEqual(volume, 10)
       self.assertEqual(flow_rate, 3.78)
@@ -142,14 +143,15 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     mock_aspirate.side_effect = assert_parameters
 
     self.test_tip_pick_up()
-    self.lh.aspirate(self.tip_rack["A1"], vols=[10])
+    self.plate.get_well("A1").tracker.set_used_volume(10)
+    self.lh.aspirate(self.plate["A1"], vols=[10])
 
   @patch("ot_api.lh.dispense")
   def test_dispense(self, mock_dispense):
     def assert_parameters(labware_id, well_name, pipette_id, volume, flow_rate,
       offset_x, offset_y, offset_z):
-      self.assertEqual(labware_id, "tip_rack")
-      self.assertEqual(well_name, "tip_rack_A1")
+      self.assertEqual(labware_id, "plate")
+      self.assertEqual(well_name, "plate_A1")
       self.assertEqual(pipette_id, "left-pipette-id")
       self.assertEqual(volume, 10)
       self.assertEqual(flow_rate, 7.56)
@@ -160,7 +162,7 @@ class OpentronsBackendCommandTests(unittest.TestCase):
 
     self.test_aspirate() # aspirate first
     with no_volume_tracking():
-      self.lh.dispense(self.tip_rack["A1"], vols=[10])
+      self.lh.dispense(self.plate["A1"], vols=[10])
 
   def test_pick_up_tips96(self):
     with self.assertRaises(NotImplementedError):

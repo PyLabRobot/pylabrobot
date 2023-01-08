@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from typing import Callable
 
-from pylabrobot.liquid_handling.volume_tracker import TipVolumeTracker
+from pylabrobot.resources.abstract.volume_tracker import TipVolumeTracker
 
 if sys.version_info >= (3, 11):
   from typing import Self

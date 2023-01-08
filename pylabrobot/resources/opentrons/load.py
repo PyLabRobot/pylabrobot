@@ -8,7 +8,7 @@ try:
 except ImportError:
   USE_OT = False
 
-from pylabrobot.liquid_handling.tip import Tip, TipCreator
+from pylabrobot.resources.abstract.tip import Tip, TipCreator
 from pylabrobot.resources import (
   Coordinate,
   Plate,
