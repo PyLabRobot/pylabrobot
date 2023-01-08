@@ -15,7 +15,6 @@ from pylabrobot.resources import (
 )
 import pylabrobot.utils.file_parsing as file_parser
 import pylabrobot.resources as resources_module
-from pylabrobot import utils
 
 
 logger = logging.getLogger(__name__)
@@ -274,16 +273,15 @@ class HamiltonDeck(Deck):
       )
 
     # Print header.
-    summary_ = utils.pad_string("Rail", 9) + utils.pad_string("Resource", 27) + \
-                utils.pad_string("Type", 20) + "Coordinates (mm)\n"
+    summary_ = "Rail" + " " * 5 + "Resource" + " " * 19 +  "Type" + " " * 16 + "Coordinates (mm)\n"
     summary_ += "=" * 95 + "\n"
 
     def parse_resource(resource):
       # TODO: print something else if resource is not assigned to a rails.
       rails = _rails_for_x_coordinate(resource.location.x)
-      rail_label = utils.pad_string(f"({rails})", 4)
-      r_summary = f"{rail_label} ├── {utils.pad_string(resource.name, 27)}" + \
-            f"{utils.pad_string(resource.__class__.__name__, 20)}" + \
+      rail_label = f"({rails})" if rails is not None else "     "
+      r_summary = f"{rail_label:4} ├── {resource.name:27}" + \
+            f"{resource.__class__.__name__:20}" + \
             f"{resource.get_absolute_location()}\n"
 
       if isinstance(resource, Carrier):
@@ -297,8 +295,8 @@ class HamiltonDeck(Deck):
                 subresource.get_item("A1").center()
             else:
               location = subresource.get_absolute_location()
-            r_summary += f"     │   ├── {utils.pad_string(subresource.name, 27-4)}" + \
-                  f"{utils.pad_string(subresource.__class__.__name__, 20)}" + \
+            r_summary += f"     │   ├── {subresource.name:23}" + \
+                  f"{subresource.__class__.__name__:20}" + \
                   f"{location}\n"
 
       return r_summary
