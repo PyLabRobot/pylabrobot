@@ -3,7 +3,7 @@
 
 import unittest
 
-from pylabrobot.resources.abstract import (
+from pylabrobot.resources import (
   Coordinate,
   Plate,
   Resource,

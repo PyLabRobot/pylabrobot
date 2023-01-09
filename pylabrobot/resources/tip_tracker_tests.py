@@ -2,8 +2,8 @@ import unittest
 
 from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
 from pylabrobot.resources import HTF_L
-from pylabrobot.resources.abstract.tip import Tip
-from pylabrobot.resources.abstract.tip_tracker import (
+from pylabrobot.resources.tip import Tip
+from pylabrobot.resources.tip_tracker import (
   SpotTipTracker,
   TipSpotHasTipError,
   TipSpotHasNoTipError,

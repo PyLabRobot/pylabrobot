@@ -1,9 +1,9 @@
 from typing import Optional
 
 from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
-from pylabrobot.resources.abstract.tip import Tip
-from pylabrobot.resources.abstract.tip_rack import TipSpot
-from pylabrobot.resources.abstract.tip_tracker import TipTracker
+from pylabrobot.resources.tip import Tip
+from pylabrobot.resources.tip_rack import TipSpot
+from pylabrobot.resources.tip_tracker import TipTracker
 
 
 class ChannelHasTipError(Exception):

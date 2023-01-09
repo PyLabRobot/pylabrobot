@@ -7,7 +7,7 @@ from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
   from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
-  from pylabrobot.resources.abstract.tip import Tip
+  from pylabrobot.resources.tip import Tip
 
 
 class TipSpotHasTipError(Exception):

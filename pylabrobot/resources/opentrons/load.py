@@ -8,7 +8,7 @@ try:
 except ImportError:
   USE_OT = False
 
-from pylabrobot.resources.abstract.tip import Tip, TipCreator
+from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources import (
   Coordinate,
   Plate,
@@ -128,7 +128,7 @@ def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack]:
     fn: path to the file.
 
   Returns:
-    A :class:`~pylabrobot.resources.abstract.Resource`.
+    A :class:`~pylabrobot.resources.Resource`.
 
   Raises:
     ValueError: if the file is not a valid opentrons definition file.
@@ -163,10 +163,10 @@ def load_shared_opentrons_resource(
     definition: name of the labware definition.
     version: version of the labware definition.
     name: desired name of the PyLabRobot
-      :class:`~pylabrobot.resources.abstract.Resource`
+      :class:`~pylabrobot.resources.Resource`
 
   Returns:
-    A :class:`~pylabrobot.resources.abstract.Resource`.
+    A :class:`~pylabrobot.resources.Resource`.
 
   Raises:
     ValueError: if the file is not a valid opentrons definition file.

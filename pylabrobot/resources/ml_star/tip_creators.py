@@ -8,7 +8,7 @@ See the TT command.
 import enum
 from typing import Union
 
-from pylabrobot.resources.abstract.tip import Tip
+from pylabrobot.resources.tip import Tip
 
 
 class TipSize(enum.Enum):
