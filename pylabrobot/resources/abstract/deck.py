@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import inspect
-import json
 from typing import Optional, Callable, List, Dict, cast
 
-import pylabrobot.resources as resources_module
 from pylabrobot.resources.errors import ResourceNotFoundError
 
 from .coordinate import Coordinate
@@ -17,12 +14,14 @@ class Deck(Resource):
 
   def __init__(
     self,
+    name: str = "deck",
     size_x: float = 1360,
     size_y: float = 653.5,
     size_z: float = 900,
     resource_assigned_callback: Optional[Callable] = None,
     resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 0, 0),
+    category: str = "deck",
   ):
     """ Initialize a new deck.
 
@@ -36,21 +35,11 @@ class Deck(Resource):
         function is called with the resource as an argument.
     """
 
-    super().__init__(name="deck", size_x=size_x, size_y=size_y, size_z=size_z, category="deck")
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
     self.location = origin
     self.resources: Dict[str, Resource] = {}
     self.resource_assigned_callback_callback = resource_assigned_callback
     self.resource_unassigned_callback_callback = resource_unassigned_callback
-
-  @classmethod
-  def deserialize(cls, data: dict):
-    """ Deserialize the deck from a dictionary. """
-    return cls(
-      size_x=data["size_x"],
-      size_y=data["size_y"],
-      size_z=data["size_z"],
-      origin=Coordinate.deserialize(data["location"]),
-    )
 
   def _check_name_exists(self, resource: Resource):
     """ Raises a ValueError if the resource name already exists. This method is recursive, and
@@ -132,87 +121,6 @@ class Deck(Resource):
     all_resources = list(self.resources.values()) # can't change size during iteration
     for resource in all_resources:
       resource.unassign()
-
-  def save(self, fn: str, indent: Optional[int] = None):
-    """ Save the deck layout to a JSON file.
-
-    Args:
-      fn: File name. Caution: file will be overwritten.
-      indent: Same as `json.dump`'s `indent` argument (for json pretty printing).
-
-    Examples:
-      Saving to a json file:
-
-      >>> from pylabrobot.resources.hamilton import STARLetDeck
-      >>> deck = STARLetDeck()
-      >>> deck.save("my_layout.json")
-    """
-
-    serialized = self.serialize()
-    serialized = dict(deck=serialized)
-
-    with open(fn, "w", encoding="utf-8") as f:
-      json.dump(serialized, f, indent=indent)
-
-  @classmethod
-  def load_from_json(cls, content: dict) -> Deck:
-    """ Loads resources from a JSON file.
-
-    Args:
-      content: The content of the JSON file.
-
-    Examples:
-      Loading from a .json file:
-
-      >>> from pylabrobot.liquid_handling import Deck
-      >>> with open("my_layout.json", "r") as f:
-      >>>   content = json.load(f)
-      >>> deck = Deck.load_from_json(content)
-    """
-
-    # Get class names of all defined resources.
-    resource_classes = [c[0] for c in inspect.getmembers(resources_module)]
-
-    def deserialize_resource(dict_resource) -> Resource:
-      """ Deserialize a single resource. """
-
-      # Get class name.
-      class_name = dict_resource["type"]
-      if class_name in resource_classes:
-        klass = getattr(resources_module, class_name)
-        resource = klass.deserialize(dict_resource)
-        for child_dict in dict_resource["children"]:
-          child_resource = deserialize_resource(child_dict)
-          child_location = child_dict.pop("location")
-          if child_location is not None:
-            child_location = Coordinate.deserialize(child_location)
-          resource.assign_child_resource(child_resource, location=child_location)
-        return cast(Resource, resource)
-      else:
-        raise ValueError(f"Resource with classname {class_name} not found.")
-
-    deck_dict = content["deck"]
-    deck = deserialize_resource(deck_dict)
-    return cast(Deck, deck)
-
-  @classmethod
-  def load_from_json_file(cls, json_file: str) -> Deck:
-    """ Loads resources from a JSON file.
-
-    Args:
-      json_file: The path to the JSON file.
-
-    Examples:
-      Loading from a .json file:
-
-      >>> from pylabrobot.liquid_handling import Deck
-      >>> deck = Deck.load_from_json("deck.json")
-    """
-
-    with open(cast(str, json_file), "r", encoding="utf-8") as f:
-      content = json.load(f)
-
-    return cls.load_from_json(content)
 
   def get_trash_area(self) -> Trash:
     """ Returns the trash area resource. """

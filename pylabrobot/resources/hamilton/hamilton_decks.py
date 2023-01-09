@@ -46,13 +46,16 @@ class HamiltonDeck(Deck):
     size_x: float,
     size_y: float,
     size_z: float,
+    name: str = "deck",
+    category: str = "deck",
     resource_assigned_callback: Optional[Callable] = None,
     resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 63, 100),
     no_trash: bool = False,
   ):
-    super().__init__(size_x, size_y, size_z,
-      resource_assigned_callback, resource_unassigned_callback, origin)
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
+      resource_assigned_callback=resource_assigned_callback,
+      resource_unassigned_callback=resource_unassigned_callback, origin=origin)
     self.num_rails = num_rails
 
     # assign trash area
@@ -68,19 +71,8 @@ class HamiltonDeck(Deck):
     return {
       **super().serialize(),
       "num_rails": self.num_rails,
+      "no_trash": True # data encoded as child. (not very pretty to have this key though...)
     }
-
-  @classmethod
-  def deserialize(cls, data: dict):
-    """ Deserialize this deck. """
-    return cls(
-      num_rails=data["num_rails"],
-      size_x=data["size_x"],
-      size_y=data["size_y"],
-      size_z=data["size_z"],
-      origin=Coordinate.deserialize(data["location"]),
-      no_trash=True # will be added back in by the deserializer
-    )
 
   def assign_child_resource(
     self,

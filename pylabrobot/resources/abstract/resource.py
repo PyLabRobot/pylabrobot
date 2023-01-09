@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import copy
-from typing import List, Optional, TypeVar
+import json
+import sys
+from typing import List, Optional, Type
 
 from .coordinate import Coordinate
 
-Self = TypeVar("Self", bound="Resource")
+if sys.version_info >= (3, 11):
+  from typing import Self
+else:
+  from typing_extensions import Self
 
 
 class Resource:
@@ -56,16 +61,6 @@ class Resource:
       children=[child.serialize() for child in self.children],
       parent_name=self.parent.name if self.parent is not None else None
     )
-
-  @classmethod
-  def deserialize(cls, data: dict) -> Resource:
-    """ Deserialize this resource from a dictionary. """
-
-    data_copy = data.copy()
-    # remove keys that are already present in the definition or that we added in the serialization
-    for key in ["type", "children", "parent_name", "location"]:
-      del data_copy[key]
-    return cls(**data_copy)
 
   def copy(self):
     """ Copy this resource. """
@@ -256,7 +251,7 @@ class Resource:
 
     self.rotation = (self.rotation + degrees) % 360
 
-  def rotated(self: Self, degrees: int) -> Self:
+  def rotated(self, degrees: int) -> Self: # type: ignore
     """ Return a copy of this resource rotated by the given number of degrees.
 
     Args:
@@ -271,3 +266,86 @@ class Resource:
     """ Get the center of this resource. """
 
     return Coordinate(self.get_size_x() / 2, self.get_size_y() / 2, 0)
+
+  def save(self, fn: str, indent: Optional[int] = None):
+    """ Save a resource to a JSON file.
+
+    Args:
+      fn: File name. Caution: file will be overwritten.
+      indent: Same as `json.dump`'s `indent` argument (for json pretty printing).
+
+    Examples:
+      Saving to a json file:
+
+      >>> from pylabrobot.resources.hamilton import STARLetDeck
+      >>> deck = STARLetDeck()
+      >>> deck.save("my_layout.json")
+    """
+
+    serialized = self.serialize()
+    with open(fn, "w", encoding="utf-8") as f:
+      json.dump(serialized, f, indent=indent)
+
+  @classmethod
+  def deserialize(cls, data: dict) -> Self: # type: ignore
+    """ Deserialize a resource from a dictionary.
+
+    Examples:
+      Loading a resource from a json file:
+
+      >>> from pylabrobot.resources import Resource
+      >>> with open("my_resource.json", "r") as f:
+      >>>   content = json.load(f)
+      >>> resource = Resource.deserialize(content)
+    """
+
+    data_copy = data.copy() # copy data because we will be modifying it
+
+    # Recursively find a subclass with the correct name
+    def find_subclass(cls: Type[Resource], name: str) -> Optional[Type[Resource]]:
+      if cls.__name__ == name:
+        return cls
+      for subclass in cls.__subclasses__():
+        subclass_ = find_subclass(subclass, name)
+        if subclass_ is not None:
+          return subclass_
+      return None
+
+    subclass = find_subclass(Resource, data["type"])
+    if subclass is None:
+      raise ValueError(f"Could not find subclass with name {data['type']}")
+
+    for key in ["type", "parent_name", "location"]: # delete meta keys
+      del data_copy[key]
+    children_data = data_copy.pop("children")
+    resource = subclass(**data_copy)
+
+    for child_data in children_data:
+      child_cls = find_subclass(Resource, child_data["type"])
+      if child_cls is None:
+        raise ValueError(f"Could not find subclass with name {child_data['type']}")
+      child = child_cls.deserialize(child_data)
+      location = Coordinate.deserialize(child_data["location"]) if "location" in child_data \
+        else None
+      resource.assign_child_resource(child, location=location)
+
+    return resource
+
+  @classmethod
+  def load_from_json_file(cls, json_file: str) -> Self: # type: ignore
+    """ Loads resources from a JSON file.
+
+    Args:
+      json_file: The path to the JSON file.
+
+    Examples:
+      Loading a resource from a json file:
+
+      >>> from pylabrobot.resources import Resource
+      >>> resource = Resource.deserialize("my_resource.json")
+    """
+
+    with open(json_file, "r", encoding="utf-8") as f:
+      content = json.load(f)
+
+    return cls.deserialize(content)

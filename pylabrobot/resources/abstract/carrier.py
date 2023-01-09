@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 class CarrierSite(Resource):
   """ A single site within a carrier. """
 
-  def __init__(self, name: str, size_x, size_y, size_z, spot):
-    super().__init__(name=name, size_x=size_x, size_y=size_y,
-      size_z=size_z, category="carrier_site")
+  def __init__(self, name: str, size_x: float, size_y: float, size_z: float, spot: int,
+    category: str = "carrier_site"):
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
     self.resource: Optional[Resource] = None
     self.spot: int = spot
 
@@ -30,18 +30,7 @@ class CarrierSite(Resource):
   def serialize(self):
     return dict(
       spot=self.spot,
-      resource=self.resource.serialize() if self.resource is not None else None,
       **super().serialize()
-    )
-
-  @classmethod
-  def deserialize(cls, data):
-    return cls(
-      name=data["name"],
-      size_x=data["size_x"],
-      size_y=data["size_y"],
-      size_z=data["size_z"],
-      spot=data["spot"]
     )
 
   def __eq__(self, other):
@@ -86,11 +75,13 @@ class Carrier(Resource):
     self,
     name: str,
     size_x: float, size_y: float, size_z: float,
-    sites: List[Coordinate],
+    sites: Optional[List[Coordinate]] = None,
     site_size_x: Optional[float] = None,
     site_size_y: Optional[float] = None,
     category: Optional[str] = "carrier"):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
+
+    sites = sites if sites is not None else []
     self.capacity = len(sites)
 
     if len(sites) > 0:
@@ -101,22 +92,8 @@ class Carrier(Resource):
     for spot in range(self.capacity):
       site = CarrierSite(
         name=f"carrier-{self.name}-spot-{spot}",
-        size_x=site_size_x, size_y=site_size_y, size_z=0, spot=spot)
+        size_x=site_size_x, size_y=site_size_y, size_z=0, spot=spot) # type: ignore
       self.assign_child_resource(site, location=sites[spot])
-
-  @classmethod
-  def deserialize(cls, data):
-    out = cls(
-      name=data["name"],
-      size_x=data["size_x"],
-      size_y=data["size_y"],
-      size_z=data["size_z"],
-      sites=[], # These will be assigned from the children, so don't auto generate them.
-      site_size_x=None,
-      site_size_y=None,
-      category=data["category"]
-    )
-    return out
 
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
     """ Assign a resource to this carrier.
@@ -184,16 +161,34 @@ class Carrier(Resource):
   def __eq__(self, other):
     return super().__eq__(other) and self.sites == other.sites
 
+
 class TipCarrier(Carrier):
   """ Base class for tip carriers. """
-  def __init__(self, name: str, size_x, size_y, size_z,
-    sites: List[Coordinate], site_size_x, site_size_y, category="tip_carrier"):
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sites: Optional[List[Coordinate]] = None,
+    site_size_x: Optional[float] = None,
+    site_size_y: Optional[float] = None,
+    category="tip_carrier"):
     super().__init__(name, size_x, size_y, size_z,
       sites, site_size_x, site_size_y, category=category)
 
+
 class PlateCarrier(Carrier):
   """ Base class for plate carriers. """
-  def __init__(self, name: str, size_x, size_y, size_z,
-    sites: List[Coordinate], site_size_x, site_size_y, category="plate_carrier"):
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sites: Optional[List[Coordinate]] = None,
+    site_size_x: Optional[float] = None,
+    site_size_y: Optional[float] = None,
+    category="plate_carrier"):
     super().__init__(name, size_x, size_y, size_z,
       sites, site_size_x, site_size_y, category=category)
