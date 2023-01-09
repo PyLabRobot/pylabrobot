@@ -14,7 +14,7 @@ class OTDeck(Deck):
     no_trash: bool = False):
     # size_z is probably wrong
 
-    super().__init__(size_x, size_y, size_z,
+    super().__init__(size_x=size_x, size_y=size_y, size_z=size_z,
      resource_assigned_callback=resource_assigned_callback,
      resource_unassigned_callback=resource_unassigned_callback,
      origin=origin)

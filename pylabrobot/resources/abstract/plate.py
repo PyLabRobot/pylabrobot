@@ -119,22 +119,6 @@ class Plate(ItemizedResource[Well]):
       one_dot_max=self.one_dot_max,
     )
 
-  @classmethod
-  def deserialize(cls, data):
-    out = cls(
-      name=data["name"],
-      size_x=data["size_x"],
-      size_y=data["size_y"],
-      size_z=data["size_z"],
-      num_items_x=data["num_items_x"],
-      num_items_y=data["num_items_y"],
-      one_dot_max=data["one_dot_max"],
-      lid_height=data["lid"]["size_z"] if "lid" in data else 0,
-      with_lid="lid" in data,
-      compute_volume_from_height=None, # TODO: deserialize this, probably deserialize for well.
-    )
-    return out
-
   def __repr__(self) -> str:
     return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
             f"size_y={self._size_y}, size_z={self._size_z}, location={self.location}, "

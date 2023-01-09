@@ -1284,7 +1284,7 @@ class LiquidHandler:
       data: A dictionary representation of the liquid handler.
     """
 
-    deck = Deck.load_from_json(data)
+    deck = Deck.deserialize(data["deck"])
     backend = LiquidHandlerBackend.deserialize(data["backend"])
     return LiquidHandler(deck=deck, backend=backend)
 

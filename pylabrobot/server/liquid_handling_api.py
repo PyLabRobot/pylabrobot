@@ -40,6 +40,7 @@ def get_status():
   return jsonify({"status": status})
 
 
+# TODO: we can deserialize the entire LH. Not just the Deck.
 @lh_api.route("/labware", methods=["POST"])
 def define_labware():
   try:
@@ -50,7 +51,7 @@ def define_labware():
     return jsonify({"error": "json data must be a dict"}), 400
 
   try:
-    deck = Deck.load_from_json(content=data)
+    deck = Deck.deserialize(data=data["deck"])
     current_app.lh.deck = deck
   except KeyError as e:
     return jsonify({"error": "missing key in json data: " + str(e)}), 400

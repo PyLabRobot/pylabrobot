@@ -192,7 +192,6 @@ class CarrierTests(unittest.TestCase):
           "spot": 0,
           "name": "carrier-tip_car-spot-0",
           "type": "CarrierSite",
-          "resource": None,
           "size_x": 10,
           "size_y": 10,
           "size_z": 0,
@@ -209,7 +208,6 @@ class CarrierTests(unittest.TestCase):
           "spot": 1,
           "name": "carrier-tip_car-spot-1",
           "type": "CarrierSite",
-          "resource": None,
           "size_x": 10,
           "size_y": 10,
           "size_z": 0,
@@ -226,7 +224,6 @@ class CarrierTests(unittest.TestCase):
           "spot": 2,
           "name": "carrier-tip_car-spot-2",
           "type": "CarrierSite",
-          "resource": None,
           "size_x": 10,
           "size_y": 10,
           "size_z": 0,
@@ -243,7 +240,6 @@ class CarrierTests(unittest.TestCase):
           "spot": 3,
           "name": "carrier-tip_car-spot-3",
           "type": "CarrierSite",
-          "resource": None,
           "size_x": 10,
           "size_y": 10,
           "size_z": 0,
@@ -260,7 +256,6 @@ class CarrierTests(unittest.TestCase):
           "spot": 4,
           "name": "carrier-tip_car-spot-4",
           "type": "CarrierSite",
-          "resource": None,
           "size_x": 10,
           "size_y": 10,
           "size_z": 0,
@@ -285,6 +280,3 @@ class CarrierTests(unittest.TestCase):
       site_size_x=10, site_size_y=10
     )
     self.assertEqual(tip_car, TipCarrier.deserialize(tip_car.serialize()))
-
-if __name__ == "__main__":
-  unittest.main()

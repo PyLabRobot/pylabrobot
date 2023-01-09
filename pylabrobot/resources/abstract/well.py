@@ -25,13 +25,3 @@ class Well(Resource):
       **super().serialize(),
       volume=self.tracker.get_used_volume(),
     )
-
-  @classmethod
-  def deserialize(cls, data):
-    return cls(
-      name=data["name"],
-      size_x=data["size_x"],
-      size_y=data["size_y"],
-      size_z=data["size_z"],
-      volume=data["volume"],
-    )

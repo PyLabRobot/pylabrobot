@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
-from typing import List
+from typing import List, Type, Optional
 
 from pylabrobot.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
@@ -108,18 +110,19 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     }
 
   @classmethod
-  def deserialize(cls, data: dict):
+  def deserialize(cls, data: dict) -> LiquidHandlerBackend:
     """ Deserialize the backend. Unless a custom serialization method is implemented, this method
     should not be overridden. """
 
     # Recursively find a subclass with the correct name
-    def find_subclass(cls, name):
+    def find_subclass(cls: Type[LiquidHandlerBackend], name: str) -> \
+      Optional[Type[LiquidHandlerBackend]]:
       if cls.__name__ == name:
         return cls
       for subclass in cls.__subclasses__():
-        subclass = find_subclass(subclass, name)
-        if subclass is not None:
-          return subclass
+        subclass_ = find_subclass(subclass, name)
+        if subclass_ is not None:
+          return subclass_
       return None
 
     subclass = find_subclass(cls, data["type"])
