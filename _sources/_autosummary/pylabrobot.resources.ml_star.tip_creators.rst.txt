@@ -1,0 +1,48 @@
+﻿pylabrobot.resources.ml\_star.tip\_creators
+===========================================
+
+.. currentmodule:: pylabrobot.resources.ml_star
+
+.. automodule:: pylabrobot.resources.ml_star.tip_creators
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      five_ml_tip
+      five_ml_tip_with_filter
+      four_ml_tip_with_filter
+      high_volume_tip_no_filter
+      high_volume_tip_with_filter
+      low_volume_tip_no_filter
+      low_volume_tip_with_filter
+      standard_volume_tip_no_filter
+      standard_volume_tip_with_filter
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: class.rst
+   
+      HamiltonTip
+      TipDropMethod
+      TipPickupMethod
+      TipSize
+   
+   
+
+   
+   
+   

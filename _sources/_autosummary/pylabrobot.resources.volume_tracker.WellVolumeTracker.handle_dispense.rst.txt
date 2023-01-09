@@ -1,0 +1,6 @@
+pylabrobot.resources.volume\_tracker.WellVolumeTracker.handle\_dispense
+=======================================================================
+
+.. currentmodule:: pylabrobot.resources.volume_tracker
+
+.. automethod:: WellVolumeTracker.handle_dispense

@@ -1,0 +1,6 @@
+pylabrobot.resources.volume\_tracker.WellVolumeTracker.disable
+==============================================================
+
+.. currentmodule:: pylabrobot.resources.volume_tracker
+
+.. automethod:: WellVolumeTracker.disable

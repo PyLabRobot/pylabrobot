@@ -1,0 +1,6 @@
+pylabrobot.resources.volume\_tracker.WellVolumeTracker.set\_used\_volume
+========================================================================
+
+.. currentmodule:: pylabrobot.resources.volume_tracker
+
+.. automethod:: WellVolumeTracker.set_used_volume

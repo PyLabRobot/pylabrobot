@@ -1,0 +1,4078 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips &#8212; PyLabRobot  documentation</title>
+    
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=1999514e3f237ded88cf" rel="stylesheet">
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=1999514e3f237ded88cf" rel="stylesheet">
+
+    
+  <link rel="stylesheet"
+    href="../_static/vendor/fontawesome/5.13.0/css/all.min.css">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-solid-900.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-brands-400.woff2">
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" href="../_static/styles/sphinx-book-theme.css?digest=5115cc725059bd94278eecd172e13a965bf8f5a9" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.4510f1fc1dee50b3e5859aac5469c37c29e427902b24a333a5f9fcb2f0b3ac41.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css" />
+    
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=1999514e3f237ded88cf">
+
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/clipboard.min.js"></script>
+    <script src="../_static/copybutton.js"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?digest=9c920249402e914e316237a7dbc6769907cce411"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips96" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips96.html" />
+    <link rel="prev" title="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.resource_unassigned_callback" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.resource_unassigned_callback.html" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="docsearch:language" content="None">
+    
+
+    <!-- Google Analytics -->
+    
+  </head>
+  <body data-spy="scroll" data-target="#bd-toc-nav" data-offset="60">
+<!-- Checkboxes to toggle the left sidebar -->
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle navigation sidebar">
+<label class="overlay overlay-navbar" for="__navigation">
+    <div class="visually-hidden">Toggle navigation sidebar</div>
+</label>
+<!-- Checkboxes to toggle the in-page toc -->
+<input type="checkbox" class="sidebar-toggle" name="__page-toc" id="__page-toc" aria-label="Toggle in-page Table of Contents">
+<label class="overlay overlay-pagetoc" for="__page-toc">
+    <div class="visually-hidden">Toggle in-page Table of Contents</div>
+</label>
+<!-- Headers at the top -->
+<div class="announcement header-item noprint"></div>
+<div class="header header-item noprint"></div>
+
+    
+    <div class="container-fluid" id="banner"></div>
+
+    
+
+    <div class="container-xl">
+      <div class="row">
+          
+<!-- Sidebar -->
+<div class="bd-sidebar noprint" id="site-navigation">
+    <div class="bd-sidebar__content">
+        <div class="bd-sidebar__top"><div class="navbar-brand-box">
+    <a class="navbar-brand text-wrap" href="../index.html">
+      
+        <!-- `logo` is deprecated in Sphinx 4.0, so remove this when we stop supporting 3 -->
+        
+      
+      
+      <img src="../_static/logo.png" class="logo" alt="logo">
+      
+      
+      <h1 class="site-logo" id="site-title">PyLabRobot  documentation</h1>
+      
+    </a>
+</div><form class="bd-search d-flex align-items-center" action="../search.html" method="get">
+  <i class="icon fas fa-search"></i>
+  <input type="search" class="form-control" name="q" id="search-input" placeholder="Search the docs ..." aria-label="Search the docs ..." autocomplete="off" >
+</form><nav class="bd-links" id="bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item active">
+        <p aria-level="2" class="caption" role="heading">
+ <span class="caption-text">
+  Getting Started
+ </span>
+</p>
+<ul class="nav bd-sidenav">
+ <li class="toctree-l1">
+  <a class="reference internal" href="../installation.html">
+   Installation
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="../contributing.html">
+   Contributing to PyLabRobot
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="../how-to-open-source.html">
+   How to Open Source
+  </a>
+ </li>
+</ul>
+<p aria-level="2" class="caption" role="heading">
+ <span class="caption-text">
+  Liquid handling
+ </span>
+</p>
+<ul class="nav bd-sidenav">
+ <li class="toctree-l1">
+  <a class="reference internal" href="../basic.html">
+   Basic liquid handling
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="../using-the-simulator.html">
+   Using the simulator
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="../using-trackers.html">
+   Using trackers
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="../writing-robot-agnostic-methods.html">
+   Writing robot agnostic methods
+  </a>
+ </li>
+</ul>
+<p aria-level="2" class="caption" role="heading">
+ <span class="caption-text">
+  API documentation
+ </span>
+</p>
+<ul class="current nav bd-sidenav">
+ <li class="toctree-l1 current active has-children">
+  <a class="reference internal" href="../pylabrobot.html">
+   Public API: pylabrobot package
+  </a>
+  <input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/>
+  <label for="toctree-checkbox-1">
+   <i class="fas fa-chevron-down">
+   </i>
+  </label>
+  <ul class="current">
+   <li class="toctree-l2 has-children">
+    <a class="reference internal" href="../pylabrobot.default.html">
+     pylabrobot.default package
+    </a>
+    <input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/>
+    <label for="toctree-checkbox-2">
+     <i class="fas fa-chevron-down">
+     </i>
+    </label>
+    <ul>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.default.Default.html">
+       pylabrobot.default.Default
+      </a>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.default.get_value.html">
+       pylabrobot.default.get_value
+      </a>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.default.is_default.html">
+       pylabrobot.default.is_default
+      </a>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.default.is_not_default.html">
+       pylabrobot.default.is_not_default
+      </a>
+     </li>
+    </ul>
+   </li>
+   <li class="toctree-l2 current active has-children">
+    <a class="reference internal" href="../pylabrobot.liquid_handling.html">
+     pylabrobot.liquid_handling package
+    </a>
+    <input checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/>
+    <label for="toctree-checkbox-3">
+     <i class="fas fa-chevron-down">
+     </i>
+    </label>
+    <ul class="current">
+     <li class="toctree-l3 current active has-children">
+      <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.html">
+       pylabrobot.liquid_handling.liquid_handler.LiquidHandler
+      </a>
+      <input checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/>
+      <label for="toctree-checkbox-4">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul class="current">
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.__init__.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.aspirate.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.aspirate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.aspirate_plate.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.aspirate_plate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.clear_head_state.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.clear_head_state
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.deserialize.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.discard_tips.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.discard_tips
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.dispense.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.dispense
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.dispense_plate.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.dispense_plate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.drop_tips.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.drop_tips
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.drop_tips96.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.drop_tips96
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.get_resource.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.load.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.load
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.move_lid.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.move_lid
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.move_plate.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.move_plate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.move_resource.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.move_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.pick_up_tips.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.pick_up_tips
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.pick_up_tips96.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.pick_up_tips96
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.resource_assigned_callback.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.resource_unassigned_callback.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4 current active">
+        <a class="current reference internal" href="#">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips96.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips96
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.save.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.serialize.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.setup.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.setup
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.stamp.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.stamp
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.stop.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.stop
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.summary.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.summary
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.transfer.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.transfer
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.unassign_resource.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.unassign_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.update_head_state.html">
+         pylabrobot.liquid_handling.liquid_handler.LiquidHandler.update_head_state
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="../pylabrobot.liquid_handling.backends.html">
+       pylabrobot.liquid_handling.backends package
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" type="checkbox"/>
+      <label for="toctree-checkbox-5">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.backends.backend.LiquidHandlerBackend.html">
+         pylabrobot.liquid_handling.backends.backend.LiquidHandlerBackend
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.backends.serializing_backend.SerializingBackend.html">
+         pylabrobot.liquid_handling.backends.serializing_backend.SerializingBackend
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.backends.USBBackend.USBBackend.html">
+         pylabrobot.liquid_handling.backends.USBBackend.USBBackend
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR.HamiltonLiquidHandler.html">
+         pylabrobot.liquid_handling.backends.hamilton.STAR.HamiltonLiquidHandler
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.backends.hamilton.STAR.STAR.html">
+         pylabrobot.liquid_handling.backends.hamilton.STAR.STAR
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.backends.opentrons_backend.OpentronsBackend.html">
+         pylabrobot.liquid_handling.backends.opentrons_backend.OpentronsBackend
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.backends.http.HTTPBackend.html">
+         pylabrobot.liquid_handling.backends.http.HTTPBackend
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.backends.websocket.WebSocketBackend.html">
+         pylabrobot.liquid_handling.backends.websocket.WebSocketBackend
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.backends.simulation.SimulatorBackend.html">
+         pylabrobot.liquid_handling.backends.simulation.SimulatorBackend
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.html">
+       pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" type="checkbox"/>
+      <label for="toctree-checkbox-6">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.has_tip.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.has_tip
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.history.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.history
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.is_disabled.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.is_disabled
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.__init__.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.commit.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.commit
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.disable.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.disable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.enable.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.enable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.get_last_pickup_location.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.get_last_pickup_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.get_tip.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.get_tip
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.handle.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.handle
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.handle_drop.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.handle_drop
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.handle_pickup.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.handle_pickup
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.queue_drop.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.queue_drop
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.queue_pickup.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.queue_pickup
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.rollback.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.rollback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.set_tip.html">
+         pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker.set_tip
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.liquid_handling.standard.html">
+       pylabrobot.liquid_handling.standard
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" type="checkbox"/>
+      <label for="toctree-checkbox-7">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.standard.Aspiration.html">
+         pylabrobot.liquid_handling.standard.Aspiration
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.standard.Dispense.html">
+         pylabrobot.liquid_handling.standard.Dispense
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.standard.Drop.html">
+         pylabrobot.liquid_handling.standard.Drop
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.standard.GripDirection.html">
+         pylabrobot.liquid_handling.standard.GripDirection
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.standard.LiquidHandlingOp.html">
+         pylabrobot.liquid_handling.standard.LiquidHandlingOp
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.standard.Move.html">
+         pylabrobot.liquid_handling.standard.Move
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.standard.Pickup.html">
+         pylabrobot.liquid_handling.standard.Pickup
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.standard.PipettingOp.html">
+         pylabrobot.liquid_handling.standard.PipettingOp
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.standard.TipOp.html">
+         pylabrobot.liquid_handling.standard.TipOp
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="../pylabrobot.liquid_handling.strictness.html">
+       pylabrobot.liquid_handling.strictness package
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" type="checkbox"/>
+      <label for="toctree-checkbox-8">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.strictness.Strictness.html">
+         pylabrobot.liquid_handling.strictness.Strictness
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.liquid_handling.strictness.set_strictness.html">
+         pylabrobot.liquid_handling.strictness.set_strictness
+        </a>
+       </li>
+      </ul>
+     </li>
+    </ul>
+   </li>
+   <li class="toctree-l2 has-children">
+    <a class="reference internal" href="../pylabrobot.resources.html">
+     pylabrobot.resources package
+    </a>
+    <input class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" type="checkbox"/>
+    <label for="toctree-checkbox-9">
+     <i class="fas fa-chevron-down">
+     </i>
+    </label>
+    <ul>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.html">
+       pylabrobot.resources
+      </a>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.Coordinate.html">
+       pylabrobot.resources.Coordinate
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" type="checkbox"/>
+      <label for="toctree-checkbox-10">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Coordinate.__init__.html">
+         pylabrobot.resources.Coordinate.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Coordinate.deserialize.html">
+         pylabrobot.resources.Coordinate.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Coordinate.serialize.html">
+         pylabrobot.resources.Coordinate.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Coordinate.zero.html">
+         pylabrobot.resources.Coordinate.zero
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.Deck.html">
+       pylabrobot.resources.Deck
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" type="checkbox"/>
+      <label for="toctree-checkbox-11">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.__init__.html">
+         pylabrobot.resources.Deck.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.assign_child_resource.html">
+         pylabrobot.resources.Deck.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.center.html">
+         pylabrobot.resources.Deck.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.clear.html">
+         pylabrobot.resources.Deck.clear
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.copy.html">
+         pylabrobot.resources.Deck.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.deserialize.html">
+         pylabrobot.resources.Deck.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.get_2d_center_offsets.html">
+         pylabrobot.resources.Deck.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.get_absolute_location.html">
+         pylabrobot.resources.Deck.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.get_all_children.html">
+         pylabrobot.resources.Deck.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.get_all_resources.html">
+         pylabrobot.resources.Deck.get_all_resources
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.get_resource.html">
+         pylabrobot.resources.Deck.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.get_size_x.html">
+         pylabrobot.resources.Deck.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.get_size_y.html">
+         pylabrobot.resources.Deck.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.get_size_z.html">
+         pylabrobot.resources.Deck.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.get_trash_area.html">
+         pylabrobot.resources.Deck.get_trash_area
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.has_resource.html">
+         pylabrobot.resources.Deck.has_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.load_from_json_file.html">
+         pylabrobot.resources.Deck.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.resource_assigned_callback.html">
+         pylabrobot.resources.Deck.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.resource_unassigned_callback.html">
+         pylabrobot.resources.Deck.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.rotate.html">
+         pylabrobot.resources.Deck.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.rotated.html">
+         pylabrobot.resources.Deck.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.save.html">
+         pylabrobot.resources.Deck.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.serialize.html">
+         pylabrobot.resources.Deck.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.summary.html">
+         pylabrobot.resources.Deck.summary
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.unassign.html">
+         pylabrobot.resources.Deck.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Deck.unassign_child_resource.html">
+         pylabrobot.resources.Deck.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.ItemizedResource.html">
+       pylabrobot.resources.ItemizedResource
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" type="checkbox"/>
+      <label for="toctree-checkbox-12">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.num_items.html">
+         pylabrobot.resources.ItemizedResource.num_items
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.__init__.html">
+         pylabrobot.resources.ItemizedResource.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.assign_child_resource.html">
+         pylabrobot.resources.ItemizedResource.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.center.html">
+         pylabrobot.resources.ItemizedResource.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.copy.html">
+         pylabrobot.resources.ItemizedResource.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.deserialize.html">
+         pylabrobot.resources.ItemizedResource.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.get_2d_center_offsets.html">
+         pylabrobot.resources.ItemizedResource.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.get_absolute_location.html">
+         pylabrobot.resources.ItemizedResource.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.get_all_children.html">
+         pylabrobot.resources.ItemizedResource.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.get_item.html">
+         pylabrobot.resources.ItemizedResource.get_item
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.get_items.html">
+         pylabrobot.resources.ItemizedResource.get_items
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.get_resource.html">
+         pylabrobot.resources.ItemizedResource.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.get_size_x.html">
+         pylabrobot.resources.ItemizedResource.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.get_size_y.html">
+         pylabrobot.resources.ItemizedResource.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.get_size_z.html">
+         pylabrobot.resources.ItemizedResource.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.index_of_item.html">
+         pylabrobot.resources.ItemizedResource.index_of_item
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.load_from_json_file.html">
+         pylabrobot.resources.ItemizedResource.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.resource_assigned_callback.html">
+         pylabrobot.resources.ItemizedResource.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.resource_unassigned_callback.html">
+         pylabrobot.resources.ItemizedResource.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.rotate.html">
+         pylabrobot.resources.ItemizedResource.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.rotated.html">
+         pylabrobot.resources.ItemizedResource.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.save.html">
+         pylabrobot.resources.ItemizedResource.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.serialize.html">
+         pylabrobot.resources.ItemizedResource.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.traverse.html">
+         pylabrobot.resources.ItemizedResource.traverse
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.unassign.html">
+         pylabrobot.resources.ItemizedResource.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ItemizedResource.unassign_child_resource.html">
+         pylabrobot.resources.ItemizedResource.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.create_equally_spaced.html">
+       pylabrobot.resources.create_equally_spaced
+      </a>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.Lid.html">
+       pylabrobot.resources.Lid
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" type="checkbox"/>
+      <label for="toctree-checkbox-13">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.__init__.html">
+         pylabrobot.resources.Lid.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.assign_child_resource.html">
+         pylabrobot.resources.Lid.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.center.html">
+         pylabrobot.resources.Lid.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.copy.html">
+         pylabrobot.resources.Lid.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.deserialize.html">
+         pylabrobot.resources.Lid.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.get_2d_center_offsets.html">
+         pylabrobot.resources.Lid.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.get_absolute_location.html">
+         pylabrobot.resources.Lid.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.get_all_children.html">
+         pylabrobot.resources.Lid.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.get_resource.html">
+         pylabrobot.resources.Lid.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.get_size_x.html">
+         pylabrobot.resources.Lid.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.get_size_y.html">
+         pylabrobot.resources.Lid.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.get_size_z.html">
+         pylabrobot.resources.Lid.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.load_from_json_file.html">
+         pylabrobot.resources.Lid.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.resource_assigned_callback.html">
+         pylabrobot.resources.Lid.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.resource_unassigned_callback.html">
+         pylabrobot.resources.Lid.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.rotate.html">
+         pylabrobot.resources.Lid.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.rotated.html">
+         pylabrobot.resources.Lid.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.save.html">
+         pylabrobot.resources.Lid.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.serialize.html">
+         pylabrobot.resources.Lid.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.unassign.html">
+         pylabrobot.resources.Lid.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Lid.unassign_child_resource.html">
+         pylabrobot.resources.Lid.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.Resource.html">
+       pylabrobot.resources.Resource
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" type="checkbox"/>
+      <label for="toctree-checkbox-14">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.__init__.html">
+         pylabrobot.resources.Resource.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.assign_child_resource.html">
+         pylabrobot.resources.Resource.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.center.html">
+         pylabrobot.resources.Resource.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.copy.html">
+         pylabrobot.resources.Resource.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.deserialize.html">
+         pylabrobot.resources.Resource.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.get_2d_center_offsets.html">
+         pylabrobot.resources.Resource.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.get_absolute_location.html">
+         pylabrobot.resources.Resource.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.get_all_children.html">
+         pylabrobot.resources.Resource.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.get_resource.html">
+         pylabrobot.resources.Resource.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.get_size_x.html">
+         pylabrobot.resources.Resource.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.get_size_y.html">
+         pylabrobot.resources.Resource.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.get_size_z.html">
+         pylabrobot.resources.Resource.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.load_from_json_file.html">
+         pylabrobot.resources.Resource.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.resource_assigned_callback.html">
+         pylabrobot.resources.Resource.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.resource_unassigned_callback.html">
+         pylabrobot.resources.Resource.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.rotate.html">
+         pylabrobot.resources.Resource.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.rotated.html">
+         pylabrobot.resources.Resource.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.save.html">
+         pylabrobot.resources.Resource.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.serialize.html">
+         pylabrobot.resources.Resource.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.unassign.html">
+         pylabrobot.resources.Resource.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Resource.unassign_child_resource.html">
+         pylabrobot.resources.Resource.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.ResourceStack.html">
+       pylabrobot.resources.ResourceStack
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" type="checkbox"/>
+      <label for="toctree-checkbox-15">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.__init__.html">
+         pylabrobot.resources.ResourceStack.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.assign_child_resource.html">
+         pylabrobot.resources.ResourceStack.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.center.html">
+         pylabrobot.resources.ResourceStack.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.copy.html">
+         pylabrobot.resources.ResourceStack.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.deserialize.html">
+         pylabrobot.resources.ResourceStack.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.get_2d_center_offsets.html">
+         pylabrobot.resources.ResourceStack.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.get_absolute_location.html">
+         pylabrobot.resources.ResourceStack.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.get_all_children.html">
+         pylabrobot.resources.ResourceStack.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.get_resource.html">
+         pylabrobot.resources.ResourceStack.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.get_size_x.html">
+         pylabrobot.resources.ResourceStack.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.get_size_y.html">
+         pylabrobot.resources.ResourceStack.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.get_size_z.html">
+         pylabrobot.resources.ResourceStack.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.get_top_item.html">
+         pylabrobot.resources.ResourceStack.get_top_item
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.load_from_json_file.html">
+         pylabrobot.resources.ResourceStack.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.resource_assigned_callback.html">
+         pylabrobot.resources.ResourceStack.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.resource_unassigned_callback.html">
+         pylabrobot.resources.ResourceStack.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.rotate.html">
+         pylabrobot.resources.ResourceStack.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.rotated.html">
+         pylabrobot.resources.ResourceStack.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.save.html">
+         pylabrobot.resources.ResourceStack.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.serialize.html">
+         pylabrobot.resources.ResourceStack.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.unassign.html">
+         pylabrobot.resources.ResourceStack.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ResourceStack.unassign_child_resource.html">
+         pylabrobot.resources.ResourceStack.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.TipRack.html">
+       pylabrobot.resources.TipRack
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" type="checkbox"/>
+      <label for="toctree-checkbox-16">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.num_items.html">
+         pylabrobot.resources.TipRack.num_items
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.__init__.html">
+         pylabrobot.resources.TipRack.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.assign_child_resource.html">
+         pylabrobot.resources.TipRack.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.center.html">
+         pylabrobot.resources.TipRack.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.copy.html">
+         pylabrobot.resources.TipRack.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.deserialize.html">
+         pylabrobot.resources.TipRack.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.empty.html">
+         pylabrobot.resources.TipRack.empty
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.fill.html">
+         pylabrobot.resources.TipRack.fill
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_2d_center_offsets.html">
+         pylabrobot.resources.TipRack.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_absolute_location.html">
+         pylabrobot.resources.TipRack.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_all_children.html">
+         pylabrobot.resources.TipRack.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_item.html">
+         pylabrobot.resources.TipRack.get_item
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_items.html">
+         pylabrobot.resources.TipRack.get_items
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_resource.html">
+         pylabrobot.resources.TipRack.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_size_x.html">
+         pylabrobot.resources.TipRack.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_size_y.html">
+         pylabrobot.resources.TipRack.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_size_z.html">
+         pylabrobot.resources.TipRack.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_tip.html">
+         pylabrobot.resources.TipRack.get_tip
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.get_tips.html">
+         pylabrobot.resources.TipRack.get_tips
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.index_of_item.html">
+         pylabrobot.resources.TipRack.index_of_item
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.load_from_json_file.html">
+         pylabrobot.resources.TipRack.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.resource_assigned_callback.html">
+         pylabrobot.resources.TipRack.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.resource_unassigned_callback.html">
+         pylabrobot.resources.TipRack.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.rotate.html">
+         pylabrobot.resources.TipRack.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.rotated.html">
+         pylabrobot.resources.TipRack.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.save.html">
+         pylabrobot.resources.TipRack.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.serialize.html">
+         pylabrobot.resources.TipRack.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.set_tip_state.html">
+         pylabrobot.resources.TipRack.set_tip_state
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.traverse.html">
+         pylabrobot.resources.TipRack.traverse
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.unassign.html">
+         pylabrobot.resources.TipRack.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipRack.unassign_child_resource.html">
+         pylabrobot.resources.TipRack.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.Plate.html">
+       pylabrobot.resources.Plate
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" type="checkbox"/>
+      <label for="toctree-checkbox-17">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.num_items.html">
+         pylabrobot.resources.Plate.num_items
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.__init__.html">
+         pylabrobot.resources.Plate.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.assign_child_resource.html">
+         pylabrobot.resources.Plate.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.center.html">
+         pylabrobot.resources.Plate.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.compute_volume_from_height.html">
+         pylabrobot.resources.Plate.compute_volume_from_height
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.copy.html">
+         pylabrobot.resources.Plate.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.deserialize.html">
+         pylabrobot.resources.Plate.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_2d_center_offsets.html">
+         pylabrobot.resources.Plate.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_absolute_location.html">
+         pylabrobot.resources.Plate.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_all_children.html">
+         pylabrobot.resources.Plate.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_item.html">
+         pylabrobot.resources.Plate.get_item
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_items.html">
+         pylabrobot.resources.Plate.get_items
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_resource.html">
+         pylabrobot.resources.Plate.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_size_x.html">
+         pylabrobot.resources.Plate.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_size_y.html">
+         pylabrobot.resources.Plate.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_size_z.html">
+         pylabrobot.resources.Plate.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_well.html">
+         pylabrobot.resources.Plate.get_well
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.get_wells.html">
+         pylabrobot.resources.Plate.get_wells
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.index_of_item.html">
+         pylabrobot.resources.Plate.index_of_item
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.load_from_json_file.html">
+         pylabrobot.resources.Plate.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.resource_assigned_callback.html">
+         pylabrobot.resources.Plate.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.resource_unassigned_callback.html">
+         pylabrobot.resources.Plate.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.rotate.html">
+         pylabrobot.resources.Plate.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.rotated.html">
+         pylabrobot.resources.Plate.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.save.html">
+         pylabrobot.resources.Plate.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.serialize.html">
+         pylabrobot.resources.Plate.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.traverse.html">
+         pylabrobot.resources.Plate.traverse
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.unassign.html">
+         pylabrobot.resources.Plate.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Plate.unassign_child_resource.html">
+         pylabrobot.resources.Plate.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.Carrier.html">
+       pylabrobot.resources.Carrier
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" type="checkbox"/>
+      <label for="toctree-checkbox-18">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.__init__.html">
+         pylabrobot.resources.Carrier.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.assign_child_resource.html">
+         pylabrobot.resources.Carrier.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.assign_resource_to_site.html">
+         pylabrobot.resources.Carrier.assign_resource_to_site
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.center.html">
+         pylabrobot.resources.Carrier.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.copy.html">
+         pylabrobot.resources.Carrier.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.deserialize.html">
+         pylabrobot.resources.Carrier.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.get_2d_center_offsets.html">
+         pylabrobot.resources.Carrier.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.get_absolute_location.html">
+         pylabrobot.resources.Carrier.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.get_all_children.html">
+         pylabrobot.resources.Carrier.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.get_resource.html">
+         pylabrobot.resources.Carrier.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.get_resources.html">
+         pylabrobot.resources.Carrier.get_resources
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.get_sites.html">
+         pylabrobot.resources.Carrier.get_sites
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.get_size_x.html">
+         pylabrobot.resources.Carrier.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.get_size_y.html">
+         pylabrobot.resources.Carrier.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.get_size_z.html">
+         pylabrobot.resources.Carrier.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.load_from_json_file.html">
+         pylabrobot.resources.Carrier.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.resource_assigned_callback.html">
+         pylabrobot.resources.Carrier.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.resource_unassigned_callback.html">
+         pylabrobot.resources.Carrier.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.rotate.html">
+         pylabrobot.resources.Carrier.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.rotated.html">
+         pylabrobot.resources.Carrier.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.save.html">
+         pylabrobot.resources.Carrier.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.serialize.html">
+         pylabrobot.resources.Carrier.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.unassign.html">
+         pylabrobot.resources.Carrier.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.Carrier.unassign_child_resource.html">
+         pylabrobot.resources.Carrier.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.tip.Tip.html">
+       pylabrobot.resources.tip.Tip
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" type="checkbox"/>
+      <label for="toctree-checkbox-19">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip.Tip.__init__.html">
+         pylabrobot.resources.tip.Tip.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip.Tip.deserialize.html">
+         pylabrobot.resources.tip.Tip.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip.Tip.serialize.html">
+         pylabrobot.resources.tip.Tip.serialize
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.TipCarrier.html">
+       pylabrobot.resources.TipCarrier
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" type="checkbox"/>
+      <label for="toctree-checkbox-20">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.__init__.html">
+         pylabrobot.resources.TipCarrier.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.assign_child_resource.html">
+         pylabrobot.resources.TipCarrier.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.assign_resource_to_site.html">
+         pylabrobot.resources.TipCarrier.assign_resource_to_site
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.center.html">
+         pylabrobot.resources.TipCarrier.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.copy.html">
+         pylabrobot.resources.TipCarrier.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.deserialize.html">
+         pylabrobot.resources.TipCarrier.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.get_2d_center_offsets.html">
+         pylabrobot.resources.TipCarrier.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.get_absolute_location.html">
+         pylabrobot.resources.TipCarrier.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.get_all_children.html">
+         pylabrobot.resources.TipCarrier.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.get_resource.html">
+         pylabrobot.resources.TipCarrier.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.get_resources.html">
+         pylabrobot.resources.TipCarrier.get_resources
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.get_sites.html">
+         pylabrobot.resources.TipCarrier.get_sites
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.get_size_x.html">
+         pylabrobot.resources.TipCarrier.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.get_size_y.html">
+         pylabrobot.resources.TipCarrier.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.get_size_z.html">
+         pylabrobot.resources.TipCarrier.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.load_from_json_file.html">
+         pylabrobot.resources.TipCarrier.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.resource_assigned_callback.html">
+         pylabrobot.resources.TipCarrier.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.resource_unassigned_callback.html">
+         pylabrobot.resources.TipCarrier.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.rotate.html">
+         pylabrobot.resources.TipCarrier.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.rotated.html">
+         pylabrobot.resources.TipCarrier.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.save.html">
+         pylabrobot.resources.TipCarrier.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.serialize.html">
+         pylabrobot.resources.TipCarrier.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.unassign.html">
+         pylabrobot.resources.TipCarrier.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.TipCarrier.unassign_child_resource.html">
+         pylabrobot.resources.TipCarrier.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.PlateCarrier.html">
+       pylabrobot.resources.PlateCarrier
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" type="checkbox"/>
+      <label for="toctree-checkbox-21">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.__init__.html">
+         pylabrobot.resources.PlateCarrier.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.assign_child_resource.html">
+         pylabrobot.resources.PlateCarrier.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.assign_resource_to_site.html">
+         pylabrobot.resources.PlateCarrier.assign_resource_to_site
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.center.html">
+         pylabrobot.resources.PlateCarrier.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.copy.html">
+         pylabrobot.resources.PlateCarrier.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.deserialize.html">
+         pylabrobot.resources.PlateCarrier.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.get_2d_center_offsets.html">
+         pylabrobot.resources.PlateCarrier.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.get_absolute_location.html">
+         pylabrobot.resources.PlateCarrier.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.get_all_children.html">
+         pylabrobot.resources.PlateCarrier.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.get_resource.html">
+         pylabrobot.resources.PlateCarrier.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.get_resources.html">
+         pylabrobot.resources.PlateCarrier.get_resources
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.get_sites.html">
+         pylabrobot.resources.PlateCarrier.get_sites
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.get_size_x.html">
+         pylabrobot.resources.PlateCarrier.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.get_size_y.html">
+         pylabrobot.resources.PlateCarrier.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.get_size_z.html">
+         pylabrobot.resources.PlateCarrier.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.load_from_json_file.html">
+         pylabrobot.resources.PlateCarrier.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.resource_assigned_callback.html">
+         pylabrobot.resources.PlateCarrier.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.resource_unassigned_callback.html">
+         pylabrobot.resources.PlateCarrier.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.rotate.html">
+         pylabrobot.resources.PlateCarrier.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.rotated.html">
+         pylabrobot.resources.PlateCarrier.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.save.html">
+         pylabrobot.resources.PlateCarrier.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.serialize.html">
+         pylabrobot.resources.PlateCarrier.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.unassign.html">
+         pylabrobot.resources.PlateCarrier.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.PlateCarrier.unassign_child_resource.html">
+         pylabrobot.resources.PlateCarrier.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.ml_star.html">
+       pylabrobot.resources.ml_star
+      </a>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.html">
+       pylabrobot.resources.ml_star.tip_creators
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" type="checkbox"/>
+      <label for="toctree-checkbox-22">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.five_ml_tip.html">
+         pylabrobot.resources.ml_star.tip_creators.five_ml_tip
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.five_ml_tip_with_filter.html">
+         pylabrobot.resources.ml_star.tip_creators.five_ml_tip_with_filter
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.four_ml_tip_with_filter.html">
+         pylabrobot.resources.ml_star.tip_creators.four_ml_tip_with_filter
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.high_volume_tip_no_filter.html">
+         pylabrobot.resources.ml_star.tip_creators.high_volume_tip_no_filter
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.high_volume_tip_with_filter.html">
+         pylabrobot.resources.ml_star.tip_creators.high_volume_tip_with_filter
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.low_volume_tip_no_filter.html">
+         pylabrobot.resources.ml_star.tip_creators.low_volume_tip_no_filter
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.low_volume_tip_with_filter.html">
+         pylabrobot.resources.ml_star.tip_creators.low_volume_tip_with_filter
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.standard_volume_tip_no_filter.html">
+         pylabrobot.resources.ml_star.tip_creators.standard_volume_tip_no_filter
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.standard_volume_tip_with_filter.html">
+         pylabrobot.resources.ml_star.tip_creators.standard_volume_tip_with_filter
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.HamiltonTip.html">
+         pylabrobot.resources.ml_star.tip_creators.HamiltonTip
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.TipDropMethod.html">
+         pylabrobot.resources.ml_star.tip_creators.TipDropMethod
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.TipPickupMethod.html">
+         pylabrobot.resources.ml_star.tip_creators.TipPickupMethod
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_creators.TipSize.html">
+         pylabrobot.resources.ml_star.tip_creators.TipSize
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.html">
+       pylabrobot.resources.ml_star.tip_racks
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" type="checkbox"/>
+      <label for="toctree-checkbox-23">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.FivemlT_L.html">
+         pylabrobot.resources.ml_star.tip_racks.FivemlT_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.FivemlT_P.html">
+         pylabrobot.resources.ml_star.tip_racks.FivemlT_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.FourmlTF_L.html">
+         pylabrobot.resources.ml_star.tip_racks.FourmlTF_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.FourmlTF_P.html">
+         pylabrobot.resources.ml_star.tip_racks.FourmlTF_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.HTF_L.html">
+         pylabrobot.resources.ml_star.tip_racks.HTF_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.HTF_P.html">
+         pylabrobot.resources.ml_star.tip_racks.HTF_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.HT_L.html">
+         pylabrobot.resources.ml_star.tip_racks.HT_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.HT_P.html">
+         pylabrobot.resources.ml_star.tip_racks.HT_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.LTF_L.html">
+         pylabrobot.resources.ml_star.tip_racks.LTF_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.LTF_P.html">
+         pylabrobot.resources.ml_star.tip_racks.LTF_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.LT_L.html">
+         pylabrobot.resources.ml_star.tip_racks.LT_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.LT_P.html">
+         pylabrobot.resources.ml_star.tip_racks.LT_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.STF_L.html">
+         pylabrobot.resources.ml_star.tip_racks.STF_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.STF_P.html">
+         pylabrobot.resources.ml_star.tip_racks.STF_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.ST_L.html">
+         pylabrobot.resources.ml_star.tip_racks.ST_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_racks.ST_P.html">
+         pylabrobot.resources.ml_star.tip_racks.ST_P
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.html">
+       pylabrobot.resources.ml_star.tip_carriers
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-24" name="toctree-checkbox-24" type="checkbox"/>
+      <label for="toctree-checkbox-24">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_120BC_4mlTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_120BC_4mlTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_120BC_5mlT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_120BC_5mlT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_B00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_B00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HTF_B00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HTF_B00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HTF_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HTF_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HT_B00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HT_B00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HT_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_HT_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LTF_B00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LTF_B00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LTF_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LTF_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LT_B00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LT_B00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LT_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_LT_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_STF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_STF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_STF_B00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_STF_B00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_STF_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_STF_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_ST_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_ST_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_ST_B00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_ST_B00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_ST_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_ST_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_TIP_50ulF_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_TIP_50ulF_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_TIP_50ul_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_288_TIP_50ul_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_HTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_HTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_HT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_HT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_LTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_LTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_LT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_LT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_STF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_STF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_ST_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_ST_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_TIP_50ulF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_TIP_50ulF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_TIP_50ul_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384BC_TIP_50ul_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_HT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_HT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_LTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_LTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_LT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_LT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_STF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_STF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_ST_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_ST_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_TIP_50ulF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_TIP_50ulF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_TIP_50ul_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_384_TIP_50ul_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_HTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_HTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_HT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_HT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_LTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_LTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_LT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_LT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_PiercingTip150ulFilter_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_PiercingTip150ulFilter_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_PiercingTips_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_PiercingTips_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_STF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_STF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_ST_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_ST_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_SlimTips300ulFilter_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_SlimTips300ulFilter_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_SlimTips_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_SlimTips_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_TIP_50ulF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_TIP_50ulF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_TIP_50ul_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480BC_TIP_50ul_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_HTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_HTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_HT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_HT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_LTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_LTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_LT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_LT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_STF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_STF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_ST_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_ST_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_TIP_50ulF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_TIP_50ulF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_TIP_50ul_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_480_TIP_50ul_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_72_4mlTF_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_72_4mlTF_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_72_5mlT_C00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_72_5mlT_C00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_96BC_4mlTF_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_96BC_4mlTF_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_96BC_5mlT_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_96BC_5mlT_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_NTR_A00.html">
+         pylabrobot.resources.ml_star.tip_carriers.TIP_CAR_NTR_A00
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.html">
+       pylabrobot.resources.ml_star.plate_carriers
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-25" name="toctree-checkbox-25" type="checkbox"/>
+      <label for="toctree-checkbox-25">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L4HD.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L4HD
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5AC.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5AC
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5AC_A00.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5AC_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5FLEX_AC.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5FLEX_AC
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5FLEX_AC_A00.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5FLEX_AC_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5FLEX_MD.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5FLEX_MD
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5FLEX_MD_A00.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5FLEX_MD_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5MD.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5MD
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5MD_A00.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5MD_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5PCR.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5PCR
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5PCR_A00.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5PCR_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5PCR_A01.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_L5PCR_A01
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3AC_A00.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3AC_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3AC_A01.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3AC_A01
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3HD.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3HD
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3MD.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3MD
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3MD_A00.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3MD_A00
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3MD_A01.html">
+         pylabrobot.resources.ml_star.plate_carriers.PLT_CAR_P3MD_A01
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.html">
+       pylabrobot.resources.corning_costar.plates
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-26" name="toctree-checkbox-26" type="checkbox"/>
+      <label for="toctree-checkbox-26">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_1536_10ul.html">
+         pylabrobot.resources.corning_costar.plates.Cos_1536_10ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_1536_10ul_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_1536_10ul_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_1536_10ul_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_1536_10ul_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_DW.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_DW
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_DW_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_DW_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_DW_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_DW_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_PCR.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_PCR
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_PCR_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_PCR_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_PCR_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_PCR_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_Sq.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_Sq
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_Sq_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_Sq_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_Sq_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_Sq_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_Sq_Rd.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_Sq_Rd
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_Sq_Rd_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_Sq_Rd_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_384_Sq_Rd_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_384_Sq_Rd_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_DW_1mL.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_DW_1mL
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_DW_1mL_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_DW_1mL_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_DW_1mL_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_DW_1mL_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_DW_2mL.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_DW_2mL
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_DW_2mL_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_DW_2mL_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_DW_2mL_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_DW_2mL_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_DW_500ul.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_DW_500ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_DW_500ul_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_DW_500ul_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_DW_500ul_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_DW_500ul_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_EZWash.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_EZWash
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_EZWash_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_EZWash_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_EZWash_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_EZWash_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_FL.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_FL
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Filter.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Filter
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Filter_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Filter_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Filter_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Filter_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Fl_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Fl_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Fl_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Fl_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_HalfArea.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_HalfArea
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_HalfArea_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_HalfArea_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_HalfArea_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_HalfArea_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_PCR.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_PCR
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_PCR_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_PCR_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_PCR_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_PCR_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_ProtCryst.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_ProtCryst
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_ProtCryst_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_ProtCryst_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_ProtCryst_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_ProtCryst_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Rd.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Rd
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Rd_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Rd_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Rd_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Rd_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_SpecOps.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_SpecOps
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_SpecOps_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_SpecOps_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_SpecOps_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_SpecOps_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_UV.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_UV
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_UV_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_UV_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_UV_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_UV_P
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Vb.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Vb
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Vb_L.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Vb_L
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.corning_costar.plates.Cos_96_Vb_P.html">
+         pylabrobot.resources.corning_costar.plates.Cos_96_Vb_P
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.hamilton.html">
+       pylabrobot.resources.hamilton
+      </a>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.html">
+       pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-27" name="toctree-checkbox-27" type="checkbox"/>
+      <label for="toctree-checkbox-27">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.__init__.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.assign_child_resource.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.assign_child_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.center.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.center
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.clear.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.clear
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.copy.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.copy
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.deserialize.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.deserialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_2d_center_offsets.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_2d_center_offsets
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_absolute_location.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_absolute_location
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_all_children.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_all_children
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_all_resources.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_all_resources
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_resource.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_size_x.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_size_x
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_size_y.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_size_y
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_size_z.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_size_z
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_trash_area.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.get_trash_area
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.has_resource.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.has_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.load_from_json_file.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.load_from_json_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.load_from_lay_file.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.load_from_lay_file
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.resource_assigned_callback.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.resource_assigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.resource_unassigned_callback.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.resource_unassigned_callback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.rotate.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.rotate
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.rotated.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.rotated
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.save.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.save
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.serialize.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.serialize
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.summary.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.summary
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.unassign.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.unassign
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.unassign_child_resource.html">
+         pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck.unassign_child_resource
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.hamilton.STARDeck.html">
+       pylabrobot.resources.hamilton.STARDeck
+      </a>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.hamilton.STARLetDeck.html">
+       pylabrobot.resources.hamilton.STARLetDeck
+      </a>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.opentrons.html">
+       pylabrobot.resources.opentrons
+      </a>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.opentrons.load.html">
+       pylabrobot.resources.opentrons.load
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-28" name="toctree-checkbox-28" type="checkbox"/>
+      <label for="toctree-checkbox-28">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.load.load_opentrons_resource.html">
+         pylabrobot.resources.opentrons.load.load_opentrons_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.load.load_shared_opentrons_resource.html">
+         pylabrobot.resources.opentrons.load.load_shared_opentrons_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.load.ot_definition_to_resource.html">
+         pylabrobot.resources.opentrons.load.ot_definition_to_resource
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.load.UnknownResourceType.html">
+         pylabrobot.resources.opentrons.load.UnknownResourceType
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.html">
+       pylabrobot.resources.opentrons.tip_racks
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-29" name="toctree-checkbox-29" type="checkbox"/>
+      <label for="toctree-checkbox-29">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.eppendorf_96_tiprack_1000ul_eptips.html">
+         pylabrobot.resources.opentrons.tip_racks.eppendorf_96_tiprack_1000ul_eptips
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.eppendorf_96_tiprack_10ul_eptips.html">
+         pylabrobot.resources.opentrons.tip_racks.eppendorf_96_tiprack_10ul_eptips
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.geb_96_tiprack_1000ul.html">
+         pylabrobot.resources.opentrons.tip_racks.geb_96_tiprack_1000ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.geb_96_tiprack_10ul.html">
+         pylabrobot.resources.opentrons.tip_racks.geb_96_tiprack_10ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.opentrons_96_filtertiprack_1000ul.html">
+         pylabrobot.resources.opentrons.tip_racks.opentrons_96_filtertiprack_1000ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.opentrons_96_filtertiprack_10ul.html">
+         pylabrobot.resources.opentrons.tip_racks.opentrons_96_filtertiprack_10ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.opentrons_96_filtertiprack_200ul.html">
+         pylabrobot.resources.opentrons.tip_racks.opentrons_96_filtertiprack_200ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.opentrons_96_filtertiprack_20ul.html">
+         pylabrobot.resources.opentrons.tip_racks.opentrons_96_filtertiprack_20ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.opentrons_96_tiprack_1000ul.html">
+         pylabrobot.resources.opentrons.tip_racks.opentrons_96_tiprack_1000ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.opentrons_96_tiprack_10ul.html">
+         pylabrobot.resources.opentrons.tip_racks.opentrons_96_tiprack_10ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.opentrons_96_tiprack_20ul.html">
+         pylabrobot.resources.opentrons.tip_racks.opentrons_96_tiprack_20ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.opentrons_96_tiprack_300ul.html">
+         pylabrobot.resources.opentrons.tip_racks.opentrons_96_tiprack_300ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.tip_racks.tipone_96_tiprack_200ul.html">
+         pylabrobot.resources.opentrons.tip_racks.tipone_96_tiprack_200ul
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.opentrons.plates.html">
+       pylabrobot.resources.opentrons.plates
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-30" name="toctree-checkbox-30" type="checkbox"/>
+      <label for="toctree-checkbox-30">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.appliedbiosystemsmicroamp_384_wellplate_40ul.html">
+         pylabrobot.resources.opentrons.plates.appliedbiosystemsmicroamp_384_wellplate_40ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.biorad_384_wellplate_50ul.html">
+         pylabrobot.resources.opentrons.plates.biorad_384_wellplate_50ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.biorad_96_wellplate_200ul_pcr.html">
+         pylabrobot.resources.opentrons.plates.biorad_96_wellplate_200ul_pcr
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.corning_12_wellplate_6point9ml_flat.html">
+         pylabrobot.resources.opentrons.plates.corning_12_wellplate_6point9ml_flat
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.corning_24_wellplate_3point4ml_flat.html">
+         pylabrobot.resources.opentrons.plates.corning_24_wellplate_3point4ml_flat
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.corning_384_wellplate_112ul_flat.html">
+         pylabrobot.resources.opentrons.plates.corning_384_wellplate_112ul_flat
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.corning_48_wellplate_1point6ml_flat.html">
+         pylabrobot.resources.opentrons.plates.corning_48_wellplate_1point6ml_flat
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.corning_6_wellplate_16point8ml_flat.html">
+         pylabrobot.resources.opentrons.plates.corning_6_wellplate_16point8ml_flat
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.corning_96_wellplate_360ul_flat.html">
+         pylabrobot.resources.opentrons.plates.corning_96_wellplate_360ul_flat
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.nest_96_wellplate_100ul_pcr_full_skirt.html">
+         pylabrobot.resources.opentrons.plates.nest_96_wellplate_100ul_pcr_full_skirt
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.nest_96_wellplate_200ul_flat.html">
+         pylabrobot.resources.opentrons.plates.nest_96_wellplate_200ul_flat
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.nest_96_wellplate_2ml_deep.html">
+         pylabrobot.resources.opentrons.plates.nest_96_wellplate_2ml_deep
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.thermoscientificnunc_96_wellplate_1300ul.html">
+         pylabrobot.resources.opentrons.plates.thermoscientificnunc_96_wellplate_1300ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.thermoscientificnunc_96_wellplate_2000ul.html">
+         pylabrobot.resources.opentrons.plates.thermoscientificnunc_96_wellplate_2000ul
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.opentrons.plates.usascientific_96_wellplate_2point4ml_deep.html">
+         pylabrobot.resources.opentrons.plates.usascientific_96_wellplate_2point4ml_deep
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.no_tip_tracking.html">
+       pylabrobot.resources.no_tip_tracking
+      </a>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.set_tip_tracking.html">
+       pylabrobot.resources.set_tip_tracking
+      </a>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.html">
+       pylabrobot.resources.tip_tracker.TipTracker
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-31" name="toctree-checkbox-31" type="checkbox"/>
+      <label for="toctree-checkbox-31">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.has_tip.html">
+         pylabrobot.resources.tip_tracker.TipTracker.has_tip
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.history.html">
+         pylabrobot.resources.tip_tracker.TipTracker.history
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.is_disabled.html">
+         pylabrobot.resources.tip_tracker.TipTracker.is_disabled
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.__init__.html">
+         pylabrobot.resources.tip_tracker.TipTracker.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.commit.html">
+         pylabrobot.resources.tip_tracker.TipTracker.commit
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.disable.html">
+         pylabrobot.resources.tip_tracker.TipTracker.disable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.enable.html">
+         pylabrobot.resources.tip_tracker.TipTracker.enable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.get_tip.html">
+         pylabrobot.resources.tip_tracker.TipTracker.get_tip
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.handle_drop.html">
+         pylabrobot.resources.tip_tracker.TipTracker.handle_drop
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.handle_pickup.html">
+         pylabrobot.resources.tip_tracker.TipTracker.handle_pickup
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.queue_drop.html">
+         pylabrobot.resources.tip_tracker.TipTracker.queue_drop
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.queue_pickup.html">
+         pylabrobot.resources.tip_tracker.TipTracker.queue_pickup
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.rollback.html">
+         pylabrobot.resources.tip_tracker.TipTracker.rollback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.TipTracker.set_tip.html">
+         pylabrobot.resources.tip_tracker.TipTracker.set_tip
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.html">
+       pylabrobot.resources.tip_tracker.SpotTipTracker
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-32" name="toctree-checkbox-32" type="checkbox"/>
+      <label for="toctree-checkbox-32">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.has_tip.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.has_tip
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.history.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.history
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.is_disabled.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.is_disabled
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.__init__.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.commit.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.commit
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.disable.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.disable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.enable.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.enable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.get_tip.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.get_tip
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.handle_drop.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.handle_drop
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.handle_pickup.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.handle_pickup
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.queue_drop.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.queue_drop
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.queue_pickup.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.queue_pickup
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.rollback.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.rollback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.tip_tracker.SpotTipTracker.set_tip.html">
+         pylabrobot.resources.tip_tracker.SpotTipTracker.set_tip
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.no_volume_tracking.html">
+       pylabrobot.resources.no_volume_tracking
+      </a>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="pylabrobot.resources.set_volume_tracking.html">
+       pylabrobot.resources.set_volume_tracking
+      </a>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.html">
+       pylabrobot.resources.volume_tracker.VolumeTracker
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-33" name="toctree-checkbox-33" type="checkbox"/>
+      <label for="toctree-checkbox-33">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.history.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.history
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.is_disabled.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.is_disabled
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.__init__.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.commit.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.commit
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.disable.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.disable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.enable.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.enable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.get_free_volume.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.get_free_volume
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.get_used_volume.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.get_used_volume
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.handle_aspiration.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.handle_aspiration
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.handle_dispense.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.handle_dispense
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.queue_aspiration.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.queue_aspiration
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.queue_dispense.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.queue_dispense
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.rollback.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.rollback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.VolumeTracker.set_used_volume.html">
+         pylabrobot.resources.volume_tracker.VolumeTracker.set_used_volume
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.html">
+       pylabrobot.resources.volume_tracker.TipVolumeTracker
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-34" name="toctree-checkbox-34" type="checkbox"/>
+      <label for="toctree-checkbox-34">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.history.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.history
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.is_disabled.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.is_disabled
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.__init__.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.commit.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.commit
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.disable.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.disable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.enable.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.enable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.get_free_volume.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.get_free_volume
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.get_used_volume.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.get_used_volume
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.handle_aspiration.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.handle_aspiration
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.handle_dispense.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.handle_dispense
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.queue_aspiration.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.queue_aspiration
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.queue_dispense.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.queue_dispense
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.rollback.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.rollback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.TipVolumeTracker.set_used_volume.html">
+         pylabrobot.resources.volume_tracker.TipVolumeTracker.set_used_volume
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.html">
+       pylabrobot.resources.volume_tracker.WellVolumeTracker
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-35" name="toctree-checkbox-35" type="checkbox"/>
+      <label for="toctree-checkbox-35">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.history.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.history
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.is_disabled.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.is_disabled
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.__init__.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.__init__
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.commit.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.commit
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.disable.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.disable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.enable.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.enable
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.get_free_volume.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.get_free_volume
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.get_used_volume.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.get_used_volume
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.handle_aspiration.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.handle_aspiration
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.handle_dispense.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.handle_dispense
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.queue_aspiration.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.queue_aspiration
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.queue_dispense.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.queue_dispense
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.rollback.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.rollback
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.resources.volume_tracker.WellVolumeTracker.set_used_volume.html">
+         pylabrobot.resources.volume_tracker.WellVolumeTracker.set_used_volume
+        </a>
+       </li>
+      </ul>
+     </li>
+    </ul>
+   </li>
+   <li class="toctree-l2 has-children">
+    <a class="reference internal" href="../pylabrobot.utils.html">
+     pylabrobot.utils package
+    </a>
+    <input class="toctree-checkbox" id="toctree-checkbox-36" name="toctree-checkbox-36" type="checkbox"/>
+    <label for="toctree-checkbox-36">
+     <i class="fas fa-chevron-down">
+     </i>
+    </label>
+    <ul>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.utils.file_parsing.html">
+       pylabrobot.utils.file_parsing
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-37" name="toctree-checkbox-37" type="checkbox"/>
+      <label for="toctree-checkbox-37">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.file_parsing.find_float.html">
+         pylabrobot.utils.file_parsing.find_float
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.file_parsing.find_int.html">
+         pylabrobot.utils.file_parsing.find_int
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.file_parsing.find_string.html">
+         pylabrobot.utils.file_parsing.find_string
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.utils.list.html">
+       pylabrobot.utils.list
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-38" name="toctree-checkbox-38" type="checkbox"/>
+      <label for="toctree-checkbox-38">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.list.assert_shape.html">
+         pylabrobot.utils.list.assert_shape
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.list.expand.html">
+         pylabrobot.utils.list.expand
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.list.reshape_2d.html">
+         pylabrobot.utils.list.reshape_2d
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.utils.numbers.html">
+       pylabrobot.utils.numbers
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-39" name="toctree-checkbox-39" type="checkbox"/>
+      <label for="toctree-checkbox-39">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.numbers.assert_clamp.html">
+         pylabrobot.utils.numbers.assert_clamp
+        </a>
+       </li>
+      </ul>
+     </li>
+     <li class="toctree-l3 has-children">
+      <a class="reference internal" href="pylabrobot.utils.positions.html">
+       pylabrobot.utils.positions
+      </a>
+      <input class="toctree-checkbox" id="toctree-checkbox-40" name="toctree-checkbox-40" type="checkbox"/>
+      <label for="toctree-checkbox-40">
+       <i class="fas fa-chevron-down">
+       </i>
+      </label>
+      <ul>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.positions.string_to_index.html">
+         pylabrobot.utils.positions.string_to_index
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.positions.string_to_indices.html">
+         pylabrobot.utils.positions.string_to_indices
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.positions.string_to_pattern.html">
+         pylabrobot.utils.positions.string_to_pattern
+        </a>
+       </li>
+       <li class="toctree-l4">
+        <a class="reference internal" href="pylabrobot.utils.positions.string_to_position.html">
+         pylabrobot.utils.positions.string_to_position
+        </a>
+       </li>
+      </ul>
+     </li>
+    </ul>
+   </li>
+  </ul>
+ </li>
+</ul>
+
+    </div>
+</nav></div>
+        <div class="bd-sidebar__bottom">
+             <!-- To handle the deprecated key -->
+            
+            <div class="navbar_extra_footer">
+            Theme by the <a href="https://ebp.jupyterbook.org">Executable Book Project</a>
+            </div>
+            
+        </div>
+    </div>
+    <div id="rtd-footer-container"></div>
+</div>
+
+
+          
+
+
+          
+<!-- A tiny helper pixel to detect if we've scrolled -->
+<div class="sbt-scroll-pixel-helper"></div>
+<!-- Main content -->
+<div class="col py-0 content-container">
+    
+    <div class="header-article row sticky-top noprint">
+        
+
+
+
+<div class="col py-1 d-flex header-article-main">
+    <div class="header-article__left">
+        
+        <label for="__navigation"
+  class="headerbtn"
+  data-toggle="tooltip"
+data-placement="right"
+title="Toggle navigation"
+>
+  
+
+<span class="headerbtn__icon-container">
+  <i class="fas fa-bars"></i>
+  </span>
+
+</label>
+
+        
+    </div>
+    <div class="header-article__right">
+<button onclick="toggleFullScreen()"
+  class="headerbtn"
+  data-toggle="tooltip"
+data-placement="bottom"
+title="Fullscreen mode"
+>
+  
+
+<span class="headerbtn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+<a href="https://github.com/pylabrobot/pylabrobot/edit/main/docs/_autosummary/pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips.rst"
+   class="headerbtn"
+   data-toggle="tooltip"
+data-placement="bottom"
+title="Edit this page"
+>
+  
+
+<span class="headerbtn__icon-container">
+  <i class="fas fa-pencil-alt"></i>
+  </span>
+
+</a>
+
+<div class="menu-dropdown menu-dropdown-download-buttons">
+  <button class="headerbtn menu-dropdown__trigger"
+      aria-label="Download this page">
+      <i class="fas fa-download"></i>
+  </button>
+  <div class="menu-dropdown__content">
+    <ul>
+      <li>
+        <a href="../_sources/_autosummary/pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips.rst.txt"
+   class="headerbtn"
+   data-toggle="tooltip"
+data-placement="left"
+title="Download source file"
+>
+  
+
+<span class="headerbtn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="headerbtn__text-container">.rst</span>
+</a>
+
+      </li>
+      
+      <li>
+        
+<button onclick="printPdf(this)"
+  class="headerbtn"
+  data-toggle="tooltip"
+data-placement="left"
+title="Print to PDF"
+>
+  
+
+<span class="headerbtn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="headerbtn__text-container">.pdf</span>
+</button>
+
+      </li>
+      
+    </ul>
+  </div>
+</div>
+
+    </div>
+</div>
+
+<!-- Table of contents -->
+<div class="col-md-3 bd-toc show noprint">
+</div>
+    </div>
+    <div class="article row">
+        <div class="col pl-md-3 pl-lg-5 content-container">
+            <!-- Table of contents that is only displayed when printing the page -->
+            <div id="jb-print-docs-body" class="onlyprint">
+                <h1>pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips</h1>
+                <!-- Table of contents -->
+                <div id="print-main-content">
+                    <div id="jb-print-toc">
+                        
+                    </div>
+                </div>
+            </div>
+            <main id="main-content" role="main">
+                
+              <div>
+                
+  <section id="pylabrobot-liquid-handling-liquid-handler-liquidhandler-return-tips">
+<h1>pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips<a class="headerlink" href="#pylabrobot-liquid-handling-liquid-handler-liquidhandler-return-tips" title="Permalink to this headline">#</a></h1>
+<dl class="py method">
+<dt class="sig sig-object py" id="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips">
+<span class="sig-prename descclassname"><span class="pre">LiquidHandler.</span></span><span class="sig-name descname"><span class="pre">return_tips</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips" title="Permalink to this definition">#</a></dt>
+<dd><p>Return all tips that are currently picked up to their original place.</p>
+<p class="rubric">Examples</p>
+<p>Return the tips on the head to the tip rack where they were picked up:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">lh</span><span class="o">.</span><span class="n">pick_up_tips</span><span class="p">(</span><span class="n">tip_rack</span><span class="p">[</span><span class="s2">&quot;A1&quot;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lh</span><span class="o">.</span><span class="n">return_tips</span><span class="p">()</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.11)"><strong>RuntimeError</strong></a> – If no tips have been picked up.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+              </div>
+              
+            </main>
+            <footer class="footer-article noprint">
+                
+    <!-- Previous / next buttons -->
+<div class='prev-next-area'>
+    <a class='left-prev' id="prev-link" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.resource_unassigned_callback.html" title="previous page">
+        <i class="fas fa-angle-left"></i>
+        <div class="prev-next-info">
+            <p class="prev-next-subtitle">previous</p>
+            <p class="prev-next-title">pylabrobot.liquid_handling.liquid_handler.LiquidHandler.resource_unassigned_callback</p>
+        </div>
+    </a>
+    <a class='right-next' id="next-link" href="pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips96.html" title="next page">
+    <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">pylabrobot.liquid_handling.liquid_handler.LiquidHandler.return_tips96</p>
+    </div>
+    <i class="fas fa-angle-right"></i>
+    </a>
+</div>
+            </footer>
+        </div>
+    </div>
+    <div class="footer-content row">
+        <footer class="col footer"><p>
+  
+    By The PyLabRobot authors<br/>
+  
+      &copy; Copyright 2022, PyLabRobot.<br/>
+</p>
+        </footer>
+    </div>
+    
+</div>
+
+
+      </div>
+    </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/pydata-sphinx-theme.js?digest=1999514e3f237ded88cf"></script>
+
+
+  </body>
+</html>
