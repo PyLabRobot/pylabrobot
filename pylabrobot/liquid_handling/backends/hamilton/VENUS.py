@@ -35,7 +35,7 @@
 #   USE_VENUS = False
 
 # from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
-# from pylabrobot.resources.abstract import Resource, TipRack
+# from pylabrobot.resources import Resource, TipRack
 # import pylabrobot.utils.file_parsing as file_parser
 # from pylabrobot.liquid_handling.standard import (
 #   Pickup,

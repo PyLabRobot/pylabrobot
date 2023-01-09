@@ -13,7 +13,7 @@ from pylabrobot.liquid_handling.standard import (
   Dispense,
   Drop,
 )
-from pylabrobot.resources.abstract.tip import Tip
+from pylabrobot.resources.tip import Tip
 
 
 lh_api = Blueprint("liquid handling", __name__, url_prefix="/api/v1/liquid_handling")

@@ -1,7 +1,7 @@
 import asyncio
 from typing import List, cast
 
-from pylabrobot.resources.abstract import Coordinate, Resource, Plate
+from pylabrobot.resources import Coordinate, Resource, Plate
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.utils import run_with_timeout
 

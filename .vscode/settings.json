@@ -12,6 +12,7 @@
     "pyhamilton",
     "pylabrobot",
     "pytest",
+    "subclassing",
     "subresource",
     "tiprack",
     "usascientific",

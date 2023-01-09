@@ -27,8 +27,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
   .. note::
     This class is not meant to be used directly, but rather to be subclassed, most commonly by
-    :class:`pylabrobot.resources.abstract.Plate` and
-    :class:`pylabrobot.resources.abstract.Tips`.
+    :class:`pylabrobot.resources.Plate` and
+    :class:`pylabrobot.resources.Tips`.
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
@@ -45,7 +45,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       size_y: The size of the resource in the y direction.
       size_z: The size of the resource in the z direction.
       items: The items on the resource. See
-        :func:`pylabrobot.resources.abstract.create_equally_spaced`. Note that items
+        :func:`pylabrobot.resources.create_equally_spaced`. Note that items
         names will be prefixed with the resource name. Defaults to `[]`.
       num_items_x: The number of items in the x direction. This method can only and must be used if
         `items` is not specified.
@@ -57,7 +57,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     Examples:
 
       Creating a plate with 96 wells with
-      :func:`pylabrobot.resources.abstract.create_equally_spaced`:
+      :func:`pylabrobot.resources.create_equally_spaced`:
 
         >>> from pylabrobot.resources import Plate
         >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,

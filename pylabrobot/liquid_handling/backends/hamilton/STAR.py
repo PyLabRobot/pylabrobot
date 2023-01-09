@@ -29,7 +29,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
-from pylabrobot.resources.abstract import (
+from pylabrobot.resources import (
   Coordinate,
   Plate,
   Resource,
@@ -37,8 +37,8 @@ from pylabrobot.resources.abstract import (
   TipSpot,
   Well
 )
-from pylabrobot.resources.abstract.tip_tracker import TipSpotHasNoTipError
-from pylabrobot.resources.abstract.volume_tracker import (
+from pylabrobot.resources.tip_tracker import TipSpotHasNoTipError
+from pylabrobot.resources.volume_tracker import (
   TipTooLittleVolumeError,
   WellTooLittleLiquidError
 )

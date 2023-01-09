@@ -2,7 +2,7 @@ import unittest
 
 from pylabrobot.liquid_handling.standard import Aspiration, Dispense
 from pylabrobot.resources import Cos_96_EZWash, HTF_L
-from pylabrobot.resources.abstract.volume_tracker import (
+from pylabrobot.resources.volume_tracker import (
   TipVolumeTracker,
   WellVolumeTracker,
   TipTooLittleLiquidError,

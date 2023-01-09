@@ -3,7 +3,7 @@
 
 import unittest
 
-from pylabrobot.resources.abstract.itemized_resource import create_equally_spaced
+from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
 
 from .carrier import Carrier, TipCarrier

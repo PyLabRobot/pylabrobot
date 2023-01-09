@@ -10,8 +10,8 @@ from pylabrobot.liquid_handling.channel_tip_tracker import (
   ChannelHasNoTipError,
 )
 from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
-from pylabrobot.resources.abstract import no_tip_tracking, set_tip_tracking
-from pylabrobot.resources.abstract.tip_tracker import (
+from pylabrobot.resources import no_tip_tracking, set_tip_tracking
+from pylabrobot.resources.tip_tracker import (
   TipSpotHasTipError,
   TipSpotHasNoTipError,
 )

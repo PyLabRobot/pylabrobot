@@ -3,7 +3,7 @@
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
 
-from pylabrobot.resources.abstract import TipCarrier, Coordinate
+from pylabrobot.resources import TipCarrier, Coordinate
 
 
 def TIP_CAR_288_TIP_50ul_C00(name: str) -> TipCarrier:

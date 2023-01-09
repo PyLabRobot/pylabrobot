@@ -4,7 +4,7 @@ from unittest.mock import patch
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsBackend
 from pylabrobot.liquid_handling.channel_tip_tracker import ChannelHasNoTipError
-from pylabrobot.resources.abstract import no_volume_tracking
+from pylabrobot.resources import no_volume_tracking
 from pylabrobot.resources.opentrons import (
   OTDeck,
   opentrons_96_filtertiprack_20ul,
