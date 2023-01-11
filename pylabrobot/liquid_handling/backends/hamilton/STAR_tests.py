@@ -331,6 +331,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_single_channel_aspiration(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
     well = self.plate.get_item("A1")
     well.tracker.set_used_volume(100 * 1.072) # liquid class correction
     self.lh.aspirate([well], vols=[100])
@@ -346,6 +348,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_single_channel_aspiration_liquid_height(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     # TODO: Hamilton liquid classes
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
     well = self.plate.get_item("A1")
     well.tracker.set_used_volume(100 * 1.072) # liquid class correction
     self.lh.aspirate([well], vols=[100], liquid_height=10)
@@ -361,6 +365,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_multi_channel_aspiration(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1"), 1: self.tip_rack.get_tip("B1")})
     # TODO: Hamilton liquid classes
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
     wells = self.plate.get_items("A1:B1")
     for well in wells:
       well.tracker.set_used_volume(100 * 1.072) # liquid class correction
@@ -411,6 +417,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_single_channel_dispense(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
     with no_volume_tracking():
       self.lh.dispense(self.plate["A1"], vols=[100])
     self._assert_command_sent_once(
@@ -422,6 +430,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_multi_channel_dispense(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1"), 1: self.tip_rack.get_tip("B1")})
     # TODO: Hamilton liquid classes
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
     with no_volume_tracking():
       self.lh.dispense(self.plate["A1:B1"], vols=100)
 
@@ -451,6 +461,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.test_core_96_tip_pickup() # pick up tips first
 
     # TODO: Hamilton liquid classes
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
     self.lh.aspirate_plate(self.plate, 100*1.072)
 
     self._assert_command_sent_once(
@@ -465,6 +477,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.test_core_96_tip_pickup() # pick up tips first
 
     # TODO: Hamilton liquid classes
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
     with no_volume_tracking():
       self.lh.dispense_plate(self.plate, 100*1.072)
 
