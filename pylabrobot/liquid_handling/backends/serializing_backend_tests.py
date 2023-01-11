@@ -113,6 +113,9 @@ class SerializingBackendTests(unittest.TestCase):
     self.backend.clear()
 
     tip = self.tip_rack.get_tip(0) # FIXME:
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    self.backend.clear()
     self.lh.aspirate_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate96")
@@ -124,6 +127,9 @@ class SerializingBackendTests(unittest.TestCase):
     self.backend.clear()
 
     tip = self.tip_rack.get_tip(0) # FIXME:
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    self.backend.clear()
     self.lh.dispense_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense96")

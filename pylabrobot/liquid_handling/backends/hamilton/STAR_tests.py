@@ -461,6 +461,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.test_core_96_tip_pickup() # pick up tips first
 
     # TODO: Hamilton liquid classes
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
     self.lh.aspirate_plate(self.plate, 100*1.072)
 
     self._assert_command_sent_once(
@@ -475,6 +477,8 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.test_core_96_tip_pickup() # pick up tips first
 
     # TODO: Hamilton liquid classes
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
     with no_volume_tracking():
       self.lh.dispense_plate(self.plate, 100*1.072)
 
