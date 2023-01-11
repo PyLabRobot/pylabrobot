@@ -610,6 +610,10 @@ class LiquidHandler:
       self._assert_resources_exist(resources)
       n = len(resources)
 
+      for resource in resources:
+        if isinstance(resource.parent, Plate) and resource.parent.has_lid():
+          raise ValueError("Aspirating from plate with lid")
+
       if use_channels is None:
         use_channels = list(range(len(resources)))
 
@@ -743,6 +747,10 @@ class LiquidHandler:
         raise ValueError("No channels specified")
       self._assert_resources_exist(resources)
       n = len(resources)
+
+      for resource in resources:
+        if isinstance(resource.parent, Plate) and resource.parent.has_lid():
+          raise ValueError("Dispensing to plate with lid")
 
       if use_channels is None:
         use_channels = list(range(len(resources)))

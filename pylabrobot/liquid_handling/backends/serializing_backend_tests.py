@@ -73,6 +73,9 @@ class SerializingBackendTests(unittest.TestCase):
     well.tracker.set_used_volume(10)
     tip = self.tip_rack.get_tip(0)
     self.lh.update_head_state({0: tip})
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    self.backend.clear()
     self.lh.aspirate([well], vols=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate")
@@ -83,6 +86,9 @@ class SerializingBackendTests(unittest.TestCase):
     wells = self.plate["A1"]
     tip = self.tip_rack.get_tip(0)
     self.lh.update_head_state({0: tip})
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    self.backend.clear()
     with no_volume_tracking():
       self.lh.dispense(wells, vols=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
