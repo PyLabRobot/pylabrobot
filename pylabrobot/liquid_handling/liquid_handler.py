@@ -610,6 +610,10 @@ class LiquidHandler:
       self._assert_resources_exist(resources)
       n = len(resources)
 
+      for resource in resources:
+        if isinstance(resource.parent, Plate) and resource.parent.has_lid():
+          raise ValueError("Aspirating from plate with lid")
+
       if use_channels is None:
         use_channels = list(range(len(resources)))
 
@@ -743,6 +747,10 @@ class LiquidHandler:
         raise ValueError("No channels specified")
       self._assert_resources_exist(resources)
       n = len(resources)
+
+      for resource in resources:
+        if isinstance(resource.parent, Plate) and resource.parent.has_lid():
+          raise ValueError("Dispensing to plate with lid")
 
       if use_channels is None:
         use_channels = list(range(len(resources)))
@@ -966,6 +974,9 @@ class LiquidHandler:
       raise ChannelHasNoTipError("No tips have been picked up with the 96 head")
     tip = self._picked_up_tips96.get_tip("A1") # FIXME:
 
+    if plate.has_lid():
+      raise ValueError("Aspirating from plate with lid")
+
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       self.backend.aspirate96(aspiration=Aspiration(
         resource=plate,
@@ -1014,6 +1025,9 @@ class LiquidHandler:
     if self._picked_up_tips96 is None:
       raise ChannelHasNoTipError("No tips have been picked up with the 96 head")
     tip = self._picked_up_tips96.get_tip("A1") # FIXME:
+
+    if plate.has_lid():
+      raise ValueError("Dispensing to plate with lid")
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       self.backend.dispense96(dispense=Dispense(

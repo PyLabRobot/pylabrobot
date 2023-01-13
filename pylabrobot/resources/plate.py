@@ -75,6 +75,7 @@ class Plate(ItemizedResource[Well]):
                      num_items_x=num_items_x, num_items_y=num_items_y, category=category)
     self.one_dot_max = one_dot_max
     self.lid: Optional[Lid] = None
+    self.lid_height = lid_height
     self._compute_volume_from_height = compute_volume_from_height
 
     if with_lid:
@@ -103,13 +104,13 @@ class Plate(ItemizedResource[Well]):
 
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
     if isinstance(resource, Lid):
-      if self.lid is not None:
+      if self.has_lid():
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self.lid = resource
     return super().assign_child_resource(resource, location=location)
 
   def unassign_child_resource(self, resource):
-    if isinstance(resource, Lid) and self.lid is not None:
+    if isinstance(resource, Lid) and self.has_lid():
       self.lid = None
     return super().unassign_child_resource(resource)
 
@@ -140,3 +141,6 @@ class Plate(ItemizedResource[Well]):
     """
 
     return super().get_items(identifier)
+
+  def has_lid(self) -> bool:
+    return self.lid is not None
