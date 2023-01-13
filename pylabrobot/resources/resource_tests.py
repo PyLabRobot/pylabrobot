@@ -124,6 +124,12 @@ class TestResource(unittest.TestCase):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
     self.assertEqual(Resource.deserialize(r.serialize()), r)
 
+  def test_deserialize_location_none(self):
+    r = Resource("test", size_x=10, size_y=10, size_z=10)
+    c = Resource("child", size_x=1, size_y=1, size_z=1)
+    r.assign_child_resource(c, location=None)
+    self.assertEqual(Resource.deserialize(r.serialize()), r)
+
   def test_get_center_offsets(self):
     r = Resource("test", size_x=10, size_y=120, size_z=10)
     self.assertEqual(r.get_2d_center_offsets(), [Coordinate(5, 60, 0)])
