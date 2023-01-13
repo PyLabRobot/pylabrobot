@@ -4,16 +4,22 @@ import logging
 import math
 import time
 import struct
-from typing import List, Literal, Optional, Union
+import sys
+from typing import List, Optional, Union
+
+from .backend import PlateReaderBackend
+from pylabrobot import utils
+
+if sys.version_info >= (3, 8):
+  from typing import Literal
+else:
+  from typing_extensions import Literal
 
 try:
   from pylibftdi import Device
   USE_FTDI = True
 except ImportError:
   USE_FTDI = False
-
-from .backend import PlateReaderBackend
-from pylabrobot import utils
 
 
 logger = logging.getLogger("pylabrobot")

@@ -1,5 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import List, Literal
+import sys
+from typing import List
+
+if sys.version_info >= (3, 8):
+  from typing import Literal
+else:
+  from typing_extensions import Literal
 
 
 class PlateReaderBackend(ABC):

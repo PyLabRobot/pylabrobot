@@ -1,7 +1,13 @@
-from typing import List, Literal, cast
+import sys
+from typing import List, cast
 
 from pylabrobot.resources import Coordinate, Resource, Plate
 from pylabrobot.plate_reading.backend import PlateReaderBackend
+
+if sys.version_info >= (3, 8):
+  from typing import Literal
+else:
+  from typing_extensions import Literal
 
 
 class NoPlateError(Exception):
