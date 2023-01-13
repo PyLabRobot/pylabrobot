@@ -62,5 +62,27 @@ class PlateReader(Resource):
   async def close(self) -> None:
     await self.backend.close()
 
-  async def read_luminescence(self) -> List[List[float]]:
-    return await self.backend.read_luminescence()
+  async def read_luminescence(self, focal_height: float) -> List[List[float]]:
+    """ Read the luminescence from the plate.
+
+    Args:
+      focal_height: The focal height to read the luminescence at, in micrometers.
+    """
+
+    return await self.backend.read_luminescence(focal_height=focal_height)
+
+  async def read_absorbance(
+    self,
+    wavelength: int,
+    report: Literal["OD", "transmittance"]
+  ) -> List[List[float]]:
+    """ Read the absorbance from the plate.
+
+    Args:
+      wavelength: The wavelength to read the absorbance at, in nanometers.
+    """
+
+    if report not in {"OD", "transmittance"}:
+      raise ValueError("report must be either 'OD' or 'transmittance'.")
+
+    return await self.backend.read_absorbance(wavelength=wavelength, report=report)
