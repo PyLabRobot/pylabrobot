@@ -325,8 +325,11 @@ class Resource:
       if child_cls is None:
         raise ValueError(f"Could not find subclass with name {child_data['type']}")
       child = child_cls.deserialize(child_data)
-      location = Coordinate.deserialize(child_data["location"]) if "location" in child_data \
-        else None
+      location_data = child_data.get("location", None)
+      if location_data is not None:
+        location = Coordinate.deserialize(location_data)
+      else:
+        location = None
       resource.assign_child_resource(child, location=location)
 
     return resource
