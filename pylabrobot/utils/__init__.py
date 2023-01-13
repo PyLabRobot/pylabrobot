@@ -12,6 +12,3 @@ from .positions import (
   string_to_indices,
   string_to_pattern
 )
-from .sync import (
-  run_with_timeout
-)
