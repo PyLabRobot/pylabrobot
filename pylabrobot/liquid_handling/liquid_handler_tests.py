@@ -20,6 +20,7 @@ from . import backends
 from .liquid_handler import LiquidHandler
 from pylabrobot.resources import (
   Coordinate,
+  Lid,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
   Cos_96_DW_1mL,
@@ -469,6 +470,20 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     # test tip tracking
     with self.assertRaises(RuntimeError):
       self.lh.discard_tips()
+
+  def test_aspirate_with_lid(self):
+    lid = Lid("lid",
+              size_x=self.plate.get_size_x(),
+              size_y=self.plate.get_size_y(),
+              size_z=self.plate.lid_height)
+    self.plate.assign_child_resource(lid, location=Coordinate(0, 0,
+                                     self.plate.get_size_z() - self.plate.lid_height))
+    well = self.plate.get_item("A1")
+    well.tracker.set_used_volume(10)
+    t = self.tip_rack.get_item("A1").get_tip()
+    self.lh.update_head_state({0: t})
+    with self.assertRaises(ValueError):
+      self.lh.aspirate([well], vols=10)
 
   def test_strictness(self):
     class TestBackend(backends.SaverBackend):
