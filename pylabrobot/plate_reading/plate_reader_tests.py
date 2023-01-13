@@ -24,6 +24,9 @@ class MockPlateReaderBackend(PlateReaderBackend):
   async def read_luminescence(self):
     return [[1, 2, 3], [4, 5, 6]]
 
+  async def read_absorbance(self):
+    return [[1, 2, 3], [4, 5, 6]]
+
 
 class TestPlateReaderResource(unittest.TestCase):
   """ Test plate reade as a resource. """

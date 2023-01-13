@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Literal
 
 
 class PlateReaderBackend(ABC):
@@ -23,6 +23,15 @@ class PlateReaderBackend(ABC):
     """ Close the plate reader. Also known as plate in. """
 
   @abstractmethod
-  async def read_luminescence(self) -> List[List[float]]:
+  async def read_luminescence(self, focal_height: float) -> List[List[float]]:
     """ Read the luminescence from the plate reader. This should return a list of lists, where the
+    outer list is the columns of the plate and the inner list is the rows of the plate. """
+
+  @abstractmethod
+  async def read_absorbance(
+    self,
+    wavelength: int,
+    report: Literal["OD", "transmittance"]
+  ) -> List[List[float]]:
+    """ Read the absorbance from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate. """
