@@ -64,14 +64,32 @@ class CLARIOStar(PlateReaderBackend):
       raise RuntimeError("device not initialized")
 
     d = b""
+    last_read = b""
+    end_byte_found = False
     t = time.time()
-    while (len(d) == 0 or not d[-1] == 0x0d) and time.time() - t < timeout: #
-      r = self.dev.read(25) # 25 is max length observed in pcap
-      if len(r) != 0:
-        d += r
+
+    # Commands are terminated with 0x0d, but this value may also occur as a part of the response.
+    # Therefore, we read until we read a 0x0d, but if that's the last byte we read in a full packet,
+    # we keep reading for at least one more cycle. We only check the timeout if the last read was
+    # unsuccessful (i.e. keep reading if we are still getting data).
+    while True:
+      last_read = self.dev.read(25) # 25 is max length observed in pcap
+      if len(last_read) > 0:
+        d += last_read
+        end_byte_found = d[-1] == 0x0d
+        if len(last_read) < 25 and end_byte_found: # if we read less than 25 bytes, we're at the end
+          break
       else:
-        # If we read data, immediately try again. if we didn't read data, wait a bit before trying
-        # again.
+        # If we didn't read any data, check if the last read ended in an end byte. If so, we're done
+        if end_byte_found:
+          break
+
+        # Check if we've timed out.
+        if time.time() - t > timeout:
+          logger.warning("timed out reading response")
+          break
+
+        # If we read data, we don't wait and immediately try to read more.
         await asyncio.sleep(0.0001)
 
     logger.debug("read %s", d.hex())
