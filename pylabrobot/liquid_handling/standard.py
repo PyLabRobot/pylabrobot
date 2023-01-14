@@ -128,7 +128,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     tip: Tip,
     flow_rate: Defaultable[float] = Default,
     offset: Defaultable[Coordinate] = Default,
-    liquid_height: float = 0,
+    liquid_height: Defaultable[float] = Default,
     blow_out_air_volume: float = 0,
     liquid_class: LiquidClass = LiquidClass.WATER
   ):
@@ -186,7 +186,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       **super().serialize(),
       "volume": self.volume,
       "flow_rate": self.flow_rate if is_not_default(self.flow_rate) else "default",
-      "liquid_height": self.liquid_height,
+      "liquid_height": self.liquid_height if is_not_default(self.liquid_height) else "default",
       "blow_out_air_volume": self.blow_out_air_volume,
       "tip": self.tip.serialize(),
       "liquid_class": self.liquid_class.name
@@ -209,7 +209,7 @@ class Aspiration(LiquidHandlingOp):
       volume=data["volume"],
       flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
-      liquid_height=data["liquid_height"],
+      liquid_height=Default if data["liquid_height"] == "default" else data["liquid_height"],
       blow_out_air_volume=data["blow_out_air_volume"],
       tip=tip,
       liquid_class=LiquidClass[data["liquid_class"]]
@@ -232,7 +232,8 @@ class Dispense(LiquidHandlingOp):
       volume=data["volume"],
       flow_rate=Default if data["flow_rate"] == "default" else data["flow_rate"],
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
-      liquid_height=data["liquid_height"],
+      liquid_height=Default if data["liquid_height"] == "default" \
+        else data["liquid_height"],
       blow_out_air_volume=data["blow_out_air_volume"],
       tip=tip,
       liquid_class=LiquidClass[data["liquid_class"]]

@@ -531,7 +531,7 @@ class LiquidHandler:
     flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
     end_delay: float = 0,
     offsets: Union[Defaultable[Coordinate], Sequence[Defaultable[Coordinate]]] = Default,
-    liquid_height: Union[float, List[float]] = 0,
+    liquid_height: Union[Defaultable[float], List[Defaultable[float]]] = Default,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified wells.
@@ -667,7 +667,7 @@ class LiquidHandler:
     flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
     end_delay: float = 0,
     offsets: Union[Defaultable[Coordinate], Sequence[Defaultable[Coordinate]]] = Default,
-    liquid_height: Union[float, List[float]] = 0,
+    liquid_height: Union[Defaultable[float], List[Defaultable[float]]] = Default,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
