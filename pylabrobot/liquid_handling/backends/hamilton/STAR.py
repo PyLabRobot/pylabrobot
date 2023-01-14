@@ -437,30 +437,6 @@ class STAR(HamiltonLiquidHandler):
     tip_presences = self.request_tip_presence()
     self._num_channels = len(tip_presences)
 
-    initialized = self.request_instrument_initialization_status()
-    if not initialized:
-      logger.info("Running backend initialization procedure.")
-
-      # initialization procedure
-      # TODO: before layout...
-      self.pre_initialize_instrument()
-
-      # Spread PIP channels command = JE ? (Spread PIP channels)
-
-    dy = (4050 - 2175) // (self.num_channels - 1)
-    y_positions = [4050 - i * dy for i in range(self.num_channels)]
-
-    self.initialize_pipetting_channels( # spreads channels
-      x_positions=[8000],
-      y_positions=y_positions,
-      begin_of_tip_deposit_process=2450,
-      end_of_tip_deposit_process=1220,
-      z_position_at_end_of_a_command=3600,
-      tip_pattern=[True], # [True] * 8
-      tip_type=4, # TODO: get from tip types
-      discarding_method=0
-    )
-
     extended_conf = self.request_extended_configuration()
     left_x_drive_configuration_byte_1 = bin(extended_conf["xl"])
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1 + \
@@ -468,6 +444,31 @@ class STAR(HamiltonLiquidHandler):
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1[2:]
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
     self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
+
+    initialized = self.request_instrument_initialization_status()
+
+    if not initialized:
+      logger.info("Running backend initialization procedure.")
+
+      self.pre_initialize_instrument()
+
+      if self.core96_head_installed:
+        self.initialize_core_96_head()
+
+    if not initialized or any(tip_presences):
+      dy = (4050 - 2175) // (self.num_channels - 1)
+      y_positions = [4050 - i * dy for i in range(self.num_channels)]
+
+      self.initialize_pipetting_channels(
+        x_positions=[8000],
+        y_positions=y_positions,
+        begin_of_tip_deposit_process=2450,
+        end_of_tip_deposit_process=1220,
+        z_position_at_end_of_a_command=3600,
+        tip_pattern=[True], # [True] * 8
+        tip_type=4, # TODO: get from tip types
+        discarding_method=0
+      )
 
     if self.iswap_installed and not self.request_iswap_initialization_status():
       self.initialize_iswap()
@@ -973,7 +974,6 @@ class STAR(HamiltonLiquidHandler):
     use_channels: List[int],
 
     dispensing_mode: Optional[List[int]] = None,
-    lld_search_height: Optional[List[int]] = None,
     pull_out_distance_transport_air: Optional[List[int]] = None,
     second_section_height: Optional[List[int]] = None,
     second_section_ratio: Optional[List[int]] = None,
@@ -1019,7 +1019,6 @@ class STAR(HamiltonLiquidHandler):
       blow_out_air_volumes: The amount of air to blow out after dispensing. If a single value is
         given, it will be used for all operations.
       dispensing_mode: The dispensing mode to use for each operation.
-      lld_search_height: The height to start searching for the liquid level when using LLD.
       pull_out_distance_transport_air: The distance to pull out the tip for aspirating transport air
         if LLD is disabled.
       second_section_height: Unknown.
@@ -3489,11 +3488,11 @@ class STAR(HamiltonLiquidHandler):
 
   def initialize_core_96_head(
     self,
-    x_position: int = 0,
-    x_direction: int = 0,
-    y_position: int = 5743,
-    z_deposit_position: int = 3425,
-    z_position_at_the_command_end: int = 3425
+    x_position: int = 2321,
+    x_direction: int = 1,
+    y_position: int = 1103,
+    z_deposit_position: int = 1890,
+    z_position_at_the_command_end: int = 2450
   ):
     """ Initialize CoRe 96 Head
 
@@ -3520,11 +3519,11 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="EI",
-      xs=x_position,
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yh=y_position,
-      za=z_deposit_position,
-      ze=z_position_at_the_command_end,
+      yh=f"{y_position}",
+      za=f"{z_deposit_position}",
+      ze=f"{z_position_at_the_command_end}",
     )
 
   def move_core_96_to_safe_position(self):
