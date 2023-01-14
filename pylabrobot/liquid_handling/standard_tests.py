@@ -59,7 +59,7 @@ class TestStandard(unittest.TestCase):
       "offset": "default",
       "volume": 100,
       "flow_rate": "default",
-      "liquid_height": 0,
+      "liquid_height": "default",
       "blow_out_air_volume": 0,
       "tip": self.tip_rack.get_tip("A1").serialize(),
       "liquid_class": "WATER"
@@ -79,7 +79,7 @@ class TestStandard(unittest.TestCase):
       "offset": "default",
       "volume": 100,
       "flow_rate": "default",
-      "liquid_height": 0,
+      "liquid_height": "default",
       "blow_out_air_volume": 0,
       "tip": self.tip_rack.get_tip("A1").serialize(),
       "liquid_class": "WATER"

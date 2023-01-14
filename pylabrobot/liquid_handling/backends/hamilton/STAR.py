@@ -837,7 +837,7 @@ class STAR(HamiltonLiquidHandler):
 
     well_bottoms = [op.get_absolute_location().z + \
                     (op.offset.z if is_not_default(op.offset) else 0) for op in ops]
-    liquid_surfaces_no_lld = [ls + max(op.liquid_height, 1)
+    liquid_surfaces_no_lld = [ls + (op.liquid_height if is_not_default(op.liquid_height) else 1)
                               for ls, op in zip(well_bottoms, ops)]
     lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
 
@@ -1069,8 +1069,8 @@ class STAR(HamiltonLiquidHandler):
         has_filter=op.tip.has_filter,
         liquid_class=op.liquid_class,
         # jet if liquid height is known, or if we are dispensing to an empty well
-        jet=op.liquid_height > 0 or
-          (hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0),
+        jet=(hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0) or
+        (is_default(op.liquid_height) or is_not_default(op.liquid_height) and op.liquid_height > 0),
         # dispensing all, get_used_volume includes pending
         empty=op.tip.tracker.get_used_volume() == 0
       ) for tmv, op in zip(tip_max_volumes, ops)]
@@ -1090,9 +1090,11 @@ class STAR(HamiltonLiquidHandler):
         return val
       return default
 
-    liquid_surfaces_no_lld = [op.get_absolute_location().z for op in ops]
-    liquid_surfaces_no_lld = [ls + (1 if is_default(op.offset) else 0) + op.liquid_height
-                              for ls, op in zip(liquid_surfaces_no_lld, ops)]
+    well_bottoms = [op.get_absolute_location().z + \
+                    (op.offset.z if is_not_default(op.offset) else 0) for op in ops]
+    liquid_surfaces_no_lld = [ls + (op.liquid_height if is_not_default(op.liquid_height) else 1)
+                              for ls, op in zip(well_bottoms, ops)]
+    # lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
 
     dispensing_mode = [{
       (False, True): 0,
@@ -1100,8 +1102,8 @@ class STAR(HamiltonLiquidHandler):
       (True, False): 2,
       (False, False): 3,
     }[(op.tip.tracker.get_used_volume() == 0, # empty
-      op.liquid_height > 0 or # jet
-      (hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0))]
+      (is_default(op.liquid_height) or is_not_default(op.liquid_height) and op.liquid_height > 0) or
+      (hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0))] # jet
       for op in ops]
 
     dispense_volumes = [int(op.volume*10) for op in ops]

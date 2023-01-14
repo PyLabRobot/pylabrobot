@@ -152,7 +152,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             "resource_name": "plate_well_0_0",
             "volume": 10,
             "flow_rate": "default",
-            "liquid_height": 0,
+            "liquid_height": "default",
             "blow_out_air_volume": 0,
             "tip": self.tip_rack.get_tip("A1").serialize(),
             "liquid_class": "WATER"
@@ -181,7 +181,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             "resource_name": "plate_well_0_0",
             "volume": 10,
             "flow_rate": "default",
-            "liquid_height": 0,
+            "liquid_height": "default",
             "blow_out_air_volume": 0,
             "tip": self.tip_rack.get_tip("A1").serialize(),
             "liquid_class": "WATER"
@@ -256,7 +256,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             "volume": 10,
             "flow_rate": "default",
             "offset": "default",
-            "liquid_height": 0,
+            "liquid_height": "default",
             "blow_out_air_volume": 0,
             "tip": self.tip_rack.get_tip("A1").serialize(),
             "liquid_class": "WATER"
@@ -297,7 +297,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             "volume": 10,
             "flow_rate": "default",
             "offset": "default",
-            "liquid_height": 0,
+            "liquid_height": "default",
             "blow_out_air_volume": 0,
             "tip": self.tip_rack.get_tip("A1").serialize(),
             "liquid_class": "WATER"
