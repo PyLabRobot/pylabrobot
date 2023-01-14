@@ -1094,7 +1094,7 @@ class STAR(HamiltonLiquidHandler):
                     (op.offset.z if is_not_default(op.offset) else 0) for op in ops]
     liquid_surfaces_no_lld = [ls + (op.liquid_height if is_not_default(op.liquid_height) else 1)
                               for ls, op in zip(well_bottoms, ops)]
-    # lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
+    lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
 
     dispensing_mode = [{
       (False, True): 0,
@@ -1107,11 +1107,10 @@ class STAR(HamiltonLiquidHandler):
       for op in ops]
 
     dispense_volumes = [int(op.volume*10) for op in ops]
-    lld_search_height = _to_list(lld_search_height, [2321]*n)
     pull_out_distance_transport_air = _to_list(pull_out_distance_transport_air, [100]*n)
     second_section_height = _to_list(second_section_height, [32]*n)
     second_section_ratio = _to_list(second_section_ratio, [6180]*n)
-    minimum_height = _to_list(minimum_height, [1871]*n)
+    minimum_height = _to_list(minimum_height, [int((ls+5) * 10) for ls in liquid_surfaces_no_lld])
     immersion_depth = _to_list(immersion_depth, [0]*n)
     immersion_depth_direction = _to_list(immersion_depth_direction, [0]*n)
     surface_following_distance = _to_list(surface_following_distance, [0]*n)
@@ -1156,7 +1155,7 @@ class STAR(HamiltonLiquidHandler):
 
         dispensing_mode=dispensing_mode,
         dispense_volumes=dispense_volumes,
-        lld_search_height=lld_search_height,
+        lld_search_height=[int(sh*10) for sh in lld_search_heights],
         liquid_surface_no_lld=[int(ls*10) for ls in liquid_surfaces_no_lld],
         pull_out_distance_transport_air=pull_out_distance_transport_air,
         second_section_height=second_section_height,
