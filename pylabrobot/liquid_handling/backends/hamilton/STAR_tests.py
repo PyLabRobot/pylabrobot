@@ -37,7 +37,7 @@ from .errors import (
 
 PICKUP_TIP_FORMAT = "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#"
 DROP_TIP_FORMAT = "xp##### (n)yp#### (n)tm# (n)tp####tz####th####ti#"
-ASPIRATION_RESPONSE_FORMAT = (
+ASPIRATION_COMMAND_FORMAT = (
   "at# (n)tm# (n)xp##### (n)yp#### (n)th####te####lp#### (n)ch### (n)zl#### (n)zx#### (n)"
   "ip#### (n)it# (n)fp#### (n)av#### (n)as#### (n)ta### (n)ba#### (n)oa### (n)lm# (n)ll# (n)"
   "lv# (n)ld## (n)de#### (n)wt## (n)mv##### (n)mc## (n)mp### (n)ms#### (n)gi### (n)gj#gk#"
@@ -184,8 +184,9 @@ class STARCommandCatcher(STAR):
     self.iswap_installed = True
     self.core96_head_installed = True
 
-  def send_command(self, module, command, fmt="", read_timeout=0, write_timeout=0, **kwargs):
-    cmd, _ = self._assemble_command(module, command, **kwargs)
+  def send_command(self, module, command, tip_pattern=None, fmt="", read_timeout=0, write_timeout=0,
+    **kwargs):
+    cmd, _ = self._assemble_command(module, command, tip_pattern, **kwargs)
     self.commands.append(cmd)
 
   def stop(self):
@@ -329,6 +330,31 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
       "0000&tm0 0 0 0 1 1 0&tp2243tz2163th2450ti1", DROP_TIP_FORMAT)
 
+  def test_aspirate56(self):
+    self.maxDiff = None
+    self.test_tip_pickup_56() # pick up tips first
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    for well in self.plate.get_items(["A1", "B1"]):
+      well.tracker.set_used_volume(100 * 1.072) # liquid class correction
+    self.lh.aspirate(self.plate["A1", "B1"], vols=[100, 100], use_channels=[4, 5])
+    self._assert_command_sent_once("C0ASid0004at0 0 0 0 0 0 0&tm0 0 0 0 1 1 0&xp00000 00000 00000 "
+      "00000 02980 02980 00000&yp0000 0000 0000 0000 1460 1370 0000&th2450te2450lp2011 2011 2011 "
+      "2011 2011 2011 2011&ch000 000 000 000 000 000 000&zl1881 1881 1881 1881 1881 1881 1881&"
+      "po0100 0100 0100 0100 0100 0100 0100&zu0032 0032 0032 0032 0032 0032 0032&zr06180 06180 "
+      "06180 06180 06180 06180 06180&zx1831 1831 1831 1831 1831 1831 1831&ip0000 0000 0000 0000 "
+      "0000 0000 0000&it0 0 0 0 0 0 0&fp0000 0000 0000 0000 0000 0000 0000&av01072 01072 01072 "
+      "01072 01072 01072 01072&as1000 1000 1000 1000 1000 1000 1000&ta000 000 000 000 000 000 000&"
+      "ba0000 0000 0000 0000 0000 0000 0000&oa000 000 000 000 000 000 000&lm0 0 0 0 0 0 0&ll1 1 1 "
+      "1 1 1 1&lv1 1 1 1 1 1 1&zo000 000 000 000 000 000 000&ld00 00 00 00 00 00 00&de0020 0020 "
+      "0020 0020 0020 0020 0020&wt10 10 10 10 10 10 10&mv00000 00000 00000 00000 00000 00000 00000&"
+      "mc00 00 00 00 00 00 00&mp000 000 000 000 000 000 000&ms1000 1000 1000 1000 1000 1000 1000&"
+      "mh0000 0000 0000 0000 0000 0000 0000&gi000 000 000 000 000 000 000&gj0gk0lk0 0 0 0 0 0 0&"
+      "ik0000 0000 0000 0000 0000 0000 0000&sd0500 0500 0500 0500 0500 0500 0500&se0500 0500 0500 "
+      "0500 0500 0500 0500&sz0300 0300 0300 0300 0300 0300 0300&io0000 0000 0000 0000 0000 0000 0"
+      "000&il00000 00000 00000 00000 00000 00000 00000&in0000 0000 0000 0000 0000 0000 0000&",
+      ASPIRATION_COMMAND_FORMAT)
+
   def test_single_channel_aspiration(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     assert self.plate.lid is not None
@@ -339,11 +365,13 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2011&ch000&zl1881&"
-      "zx1831&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
-      "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
-      "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
-      fmt=ASPIRATION_RESPONSE_FORMAT)
+      "C0ASid0002at0 0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2011 2011&ch000 000&zl1881 "
+      "1881&po0100 0100&zu0032 0032&zr06180 06180&zx1831 1831&ip0000 0000&it0 0&fp0000 0000&"
+      "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&zo000 000&"
+      "ld00 00&de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&mh0000 0000&"
+      "gi000 000&gj0gk0lk0 0&ik0000 0000&sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&"
+      "il00000 00000&in0000 0000&",
+      fmt=ASPIRATION_COMMAND_FORMAT)
 
   def test_single_channel_aspiration_liquid_height(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
@@ -356,11 +384,13 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2011&ch000&zl1971&"
-      "zx1921&ip0000&it0&fp0000&av01072&as1000&ta000&ba0000&oa000&lm0&ll1&lv1&ld00&"
-      "de0020&wt10&mv00000&mc00&mp000&ms1000&gi000&gj0gk0zu0032&zr06180&mh0000&zo000&"
-      "po0100&lk0&ik0000&sd0500&se0500&sz0300&io0000&il00000&in0000&",
-      fmt=ASPIRATION_RESPONSE_FORMAT)
+      "C0ASid0002at0 0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2011 2011&ch000 000&zl1971 "
+      "1971&po0100 0100&zu0032 0032&zr06180 06180&zx1921 1921&ip0000 0000&it0 0&fp0000 0000&"
+      "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&zo000 000&"
+      "ld00 00&de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&mh0000 0000&"
+      "gi000 000&gj0gk0lk0 0&ik0000 0000&sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&"
+      "il00000 00000&in0000 0000&",
+      fmt=ASPIRATION_COMMAND_FORMAT)
 
   def test_multi_channel_aspiration(self):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1"), 1: self.tip_rack.get_tip("B1")})
@@ -374,45 +404,50 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0000at0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp2011 2011&"
-      "ch000 000&zl1881 1881&zx1831 1831&ip0000 0000&it0 0&fp0000 0000&"
-      "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&ld00 00&"
-      "de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&gi000 000&gj0gk0"
-      "zu0032 0032&zr06180 06180&mh0000 0000&zo000 000&po0100 0100&lk0 0&ik0000 0000&"
-      "sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&il00000 00000&in0000 0000&",
-      fmt=ASPIRATION_RESPONSE_FORMAT)
+      "C0ASid0002at0 0 0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp2011 2011 2011&"
+      "ch000 000 000&zl1881 1881 1881&po0100 0100 0100&zu0032 0032 0032&zr06180 06180 06180&"
+      "zx1831 1831 1831&ip0000 0000 0000&it0 0 0&fp0000 0000 0000&av01072 01072 01072&as1000 1000 "
+      "1000&ta000 000 000&ba0000 0000 0000&oa000 000 000&lm0 0 0&ll1 1 1&lv1 1 1&zo000 000 000&"
+      "ld00 00 00&de0020 0020 0020&wt10 10 10&mv00000 00000 00000&mc00 00 00&mp000 000 000&"
+      "ms1000 1000 1000&mh0000 0000 0000&gi000 000 000&gj0gk0lk0 0 0&ik0000 0000 0000&sd0500 0500 "
+      "0500&se0500 0500 0500&sz0300 0300 0300&io0000 0000 0000&il00000 00000 00000&in0000 0000 "
+      "0000&",
+      fmt=ASPIRATION_COMMAND_FORMAT)
 
   def test_aspirate_single_resource(self):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
     self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
-      "C0ASid0009at0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 1688 "
-      "1551 0000&th2450te2450lp2000 2000 2000 2000 2000&ch000 000 000 000 000&zl1210 1210 1210 "
-      "1210 1210&po0100 0100 0100 0100 0100&zu0032 0032 0032 0032 0032&zr06180 06180 06180 06180 "
-      "06180&zx1160 1160 1160 1160 1160&ip0000 0000 0000 0000 0000&it0 0 0 0 0&fp0000 0000 0000 "
-      "0000 0000&av00119 00119 00119 00119 00119&as1000 1000 1000 1000 1000&ta000 000 000 000 000&"
-      "ba0000 0000 0000 0000 0000&oa000 000 000 000 000&lm0 0 0 0 0&ll1 1 1 1 1&lv1 1 1 1 1&zo000 "
-      "000 000 000 000&ld00 00 00 00 00&de0020 0020 0020 0020 0020&wt10 10 10 10 10&mv00000 00000 "
-      "00000 00000 00000&mc00 00 00 00 00&mp000 000 000 000 000&ms1000 1000 1000 1000 1000&mh0000 "
-      "0000 0000 0000 0000&gi000 000 000 000 000&gj0gk0lk0 0 0 0 0&ik0000 0000 0000 0000 0000&"
-      "sd0500 0500 0500 0500 0500&se0500 0500 0500 0500 0500&sz0300 0300 0300 0300 0300&io0000 0000"
-      " 0000 0000 0000&il00000 00000 00000 00000 00000&in0000 0000 0000 0000 0000&",
-      fmt=ASPIRATION_RESPONSE_FORMAT)
+      "C0ASid0002at0 0 0 0 0 0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 "
+      "1825 1688 1551 0000&th2450te2450lp2000 2000 2000 2000 2000 2000&ch000 000 000 000 000 000&"
+      "zl1210 1210 1210 1210 1210 1210&po0100 0100 0100 0100 0100 0100&zu0032 0032 0032 0032 0032 "
+      "0032&zr06180 06180 06180 06180 06180 06180&zx1160 1160 1160 1160 1160 1160&ip0000 0000 0000 "
+      "0000 0000 0000&it0 0 0 0 0 0&fp0000 0000 0000 0000 0000 0000&av00119 00119 00119 00119 "
+      "00119 00119&as1000 1000 1000 1000 1000 1000&ta000 000 000 000 000 000&ba0000 0000 0000 0000 "
+      "0000 0000&oa000 000 000 000 000 000&lm0 0 0 0 0 0&ll1 1 1 1 1 1&lv1 1 1 1 1 1&zo000 000 000 "
+      "000 000 000&ld00 00 00 00 00 00&de0020 0020 0020 0020 0020 0020&wt10 10 10 10 10 10&mv00000 "
+      "00000 00000 00000 00000 00000&mc00 00 00 00 00 00&mp000 000 000 000 000 000&ms1000 1000 "
+      "1000 1000 1000 1000&mh0000 0000 0000 0000 0000 0000&gi000 000 000 000 000 000&gj0gk0lk0 0 0 "
+      "0 0 0&ik0000 0000 0000 0000 0000 0000&sd0500 0500 0500 0500 0500 0500&se0500 0500 0500 0500 "
+      "0500 0500&sz0300 0300 0300 0300 0300 0300&io0000 0000 0000 0000 0000 0000&il00000 00000 "
+      "00000 00000 00000 00000&in0000 0000 0000 0000 0000 0000&",
+      fmt=ASPIRATION_COMMAND_FORMAT)
 
   def test_dispense_single_resource(self):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
     with no_volume_tracking():
       self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
-      "C0DSid0010dm1 1 1 1 1&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 "
-      "1688 1551 0000&zx1260 1260 1260 1260 1260&lp2000 2000 2000 2000 2000&zl1210 1210 1210 1210 "
-      "1210&po0100 0100 0100 0100 0100&ip0000 0000 0000 0000 0000&it0 0 0 0 0&fp0000 0000 0000 0000"
-      " 0000&zu0032 0032 0032 0032 0032&zr06180 06180 06180 06180 06180&th2450te2450dv00116 00116 "
-      "00116 00116 00116&ds1000 1000 1000 1000 1000&ss0050 0050 0050 0050 0050&rv000 000 000 000 "
-      "000&ta050 050 050 050 050&ba0000 0000 0000 0000 0000&lm0 0 0 0 0&dj00zo000 000 000 000 000&"
-      "ll1 1 1 1 1&lv1 1 1 1 1&de0010 0010 0010 0010 0010&wt00 00 00 00 00&mv00000 00000 00000 "
-      "00000 00000&mc00 00 00 00 00&mp000 000 000 000 000&ms0010 0010 0010 0010 0010&mh0000 0000 "
-      "0000 0000 0000&gi000 000 000 000 000&gj0gk0",
+      "C0DSid0002dm1 1 1 1 1 1&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 "
+      "1825 1688 1551 0000&zx1260 1260 1260 1260 1260 1260&lp2000 2000 2000 2000 2000 2000&zl1210 "
+      "1210 1210 1210 1210 1210&po0100 0100 0100 0100 0100 0100&ip0000 0000 0000 0000 0000 0000&"
+      "it0 0 0 0 0 0&fp0000 0000 0000 0000 0000 0000&zu0032 0032 0032 0032 0032 0032&zr06180 06180 "
+      "06180 06180 06180 06180&th2450te2450dv00116 00116 00116 00116 00116 00116&ds1000 1000 1000 "
+      "1000 1000 1000&ss0050 0050 0050 0050 0050 0050&rv000 000 000 000 000 000&ta050 050 050 050 "
+      "050 050&ba0000 0000 0000 0000 0000 0000&lm0 0 0 0 0 0&dj00zo000 000 000 000 000 000&ll1 1 1 "
+      "1 1 1&lv1 1 1 1 1 1&de0010 0010 0010 0010 0010 0010&wt00 00 00 00 00 00&mv00000 00000 00000 "
+      "00000 00000 00000&mc00 00 00 00 00 00&mp000 000 000 000 000 000&ms0010 0010 0010 0010 0010 "
+      "0010&mh0000 0000 0000 0000 0000 0000&gi000 000 000 000 000 000&gj0gk0",
       fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_single_channel_dispense(self):
@@ -422,9 +457,11 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     with no_volume_tracking():
       self.lh.dispense(self.plate["A1"], vols=[100])
     self._assert_command_sent_once(
-      "C0DSid0317dm1&tm1 0&dv01072&xp02980 00000&yp1460 0000&zx1931&lp2011&zl1881&ip0000&it0&fp0000"
-      "&th2450te2450ds1000&ss0050&rv000&ta050&ba0000&lm0&zo000&ll1&lv1&de0010&mv00000&mc00&mp000&ms"
-      "0010&wt00&gi000&gj0gk0zu0032&dj00zr06180&mh0000&po0100&",
+      "C0DSid0002dm1 1&tm1 0&xp02980 00000&yp1460 0000&zx1931 1931&lp2011 2011&zl1881 1881&"
+      "po0100 0100&ip0000 0000&it0 0&fp0000 0000&zu0032 0032&zr06180 06180&th2450te2450"
+      "dv01072 01072&ds1000 1000&ss0050 0050&rv000 000&ta050 050&ba0000 0000&lm0 0&"
+      "dj00zo000 000&ll1 1&lv1 1&de0010 0010&wt00 00&mv00000 00000&mc00 00&mp000 000&"
+      "ms0010 0010&mh0000 0000&gi000 000&gj0gk0",
       fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_multi_channel_dispense(self):
@@ -436,11 +473,12 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       self.lh.dispense(self.plate["A1:B1"], vols=100)
 
     self._assert_command_sent_once(
-      "C0DSid0317dm1 1&tm1 1 0&dv01072 01072&xp02980 02980 00000&yp1460 1370 0000&"
-      "zx1931 1931&lp2011 2011&zl1881 1881&ip0000 0000&it0 0&fp0000 0000&th2450"
-      "te2450ds1000 1000&ss0050 0050&rv000 000&ta050 050&ba0000 0000&lm0 0&zo000 000&ll1 1&"
-      "lv1 1&de0010 0010&mv00000 00000&mc00 00&mp000 000&ms0010 0010&wt00 00&gi000 000&gj0gk0"
-      "zu0032 0032&dj00zr06180 06180&mh0000 0000&po0100 0100&",
+      "C0DSid0002dm1 1 1&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&zx1931 1931 1931&lp2011 2011 "
+      "2011&zl1881 1881 1881&po0100 0100 0100&ip0000 0000 0000&it0 0 0&fp0000 0000 0000&zu0032 "
+      "0032 0032&zr06180 06180 06180&th2450te2450dv01072 01072 01072&ds1000 1000 1000&"
+      "ss0050 0050 0050&rv000 000 000&ta050 050 050&ba0000 0000 0000&lm0 0 0&dj00zo000 000 000&"
+      "ll1 1 1&lv1 1 1&de0010 0010 0010&wt00 00 00&mv00000 00000 00000&mc00 00 00&mp000 000 000&"
+      "ms0010 0010 0010&mh0000 0000 0000&gi000 000 000&gj0gk0",
       fmt=DISPENSE_RESPONSE_FORMAT)
 
   def test_core_96_tip_pickup(self):
