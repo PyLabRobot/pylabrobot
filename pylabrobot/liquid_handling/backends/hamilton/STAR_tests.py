@@ -502,24 +502,24 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
   def test_iswap_plate_reader(self):
     plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
     self.lh.deck.assign_child_resource(plate_reader,
-      location=Coordinate(979.5, 285.2-63, 200 - 100))
+      location=Coordinate(979.5, 285.2-63, 200 - 100)) # 666: 00002
 
-    self.lh.move_plate(self.plate, plate_reader, pickup_distance_from_top=12.2,
+    self.lh.move_plate(self.plate, plate_reader, pickup_distance_from_top=8.2,
       get_direction=GripDirection.FRONT, put_direction=GripDirection.LEFT)
     self._assert_command_sent_once(
-      "C0PPid0003xs03475xd0yj1145yd0zj1884zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
-                "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
+      "C0PPid0003xs03475xd0yj1145yd0zj1924zd0th2840te2840gw4gb1237go1300gt20gr1ga0gc1",
+                "xs#####xd#yj####yd#zj####zd#th####te####gw#gb####go####gt##gr#ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0004xs10430xd0yj3282yd0zj2023zd0th2840te2840gr4go1300ga0",
-                "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
+      "C0PRid0004xs10430xd0yj3282yd0zj2063zd0th2840te2840go1300gr4ga0",
+                "xs#####xd#yj####yd#zj####zd#th####te####go####gr#ga#")
 
-    self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0], pickup_distance_from_top=14.2,
+    self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0], pickup_distance_from_top=8.2,
       get_direction=GripDirection.LEFT, put_direction=GripDirection.FRONT)
     self._assert_command_sent_once(
-      "C0PPid0005xs10430xd0yj3282yd0zj2003zd0gr4th2840te2840gw4go1300gb1237gt20ga0gc1",
+      "C0PPid0005xs10430xd0yj3282yd0zj2063zd0gr4th2840te2840gw4go1300gb1237gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0006xs03475xd0yj1145yd0zj1864zd0th2840te2840gr1go1300ga0",
+      "C0PRid0006xs03475xd0yj1145yd0zj1924zd0th2840te2840gr1go1300ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
   def test_iswap_move_lid(self):

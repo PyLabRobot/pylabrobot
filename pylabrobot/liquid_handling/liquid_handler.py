@@ -1128,6 +1128,7 @@ class LiquidHandler:
     to_offset: Coordinate = Coordinate.zero(),
     get_direction: GripDirection = GripDirection.FRONT,
     put_direction: GripDirection = GripDirection.FRONT,
+    pickup_distance_from_top: float = 5.7,
     **backend_kwargs
   ):
     """ Move a lid to a new location.
@@ -1176,7 +1177,7 @@ class LiquidHandler:
       lid,
       to=to_location,
       intermediate_locations=intermediate_locations,
-      pickup_distance_from_top=backend_kwargs.pop("pickup_distance_from_top", 5.7),
+      pickup_distance_from_top=pickup_distance_from_top,
       resource_offset=resource_offset,
       to_offset=to_offset,
       get_direction=get_direction,
@@ -1200,6 +1201,7 @@ class LiquidHandler:
     to_offset: Coordinate = Coordinate.zero(),
     put_direction: GripDirection = GripDirection.FRONT,
     get_direction: GripDirection = GripDirection.FRONT,
+    pickup_distance_from_top: float = 13.2,
     **backend_kwargs
   ):
     """ Move a plate to a new location.
@@ -1250,7 +1252,7 @@ class LiquidHandler:
       plate,
       to=to_location,
       intermediate_locations=intermediate_locations,
-      pickup_distance_from_top=backend_kwargs.pop("pickup_distance_from_top", 13.2),
+      pickup_distance_from_top=pickup_distance_from_top,
       resource_offset=resource_offset,
       to_offset=to_offset,
       get_direction=get_direction,
