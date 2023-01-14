@@ -113,17 +113,16 @@ class CLARIOStar(PlateReaderBackend):
         continue
 
       if command_status != last_status:
-        logger.info("status changed %s", command_status)
+        logger.info("status changed %s", command_status.hex())
         last_status = command_status
       else:
         continue
 
-      if command_status[2] != b"\x18" or command_status[3] != b"\x0c" or \
-        command_status[4] != b"\x01":
+      if command_status[2] != 0x18 or command_status[3] != 0x0c or command_status[4] != 0x01:
         logger.warning("unexpected response %s. I think 18 0c 01 indicates a command status "
                         "response", command_status)
 
-      if command_status[5] not in {b"\x25", b"\x05"}: # 25 is busy, 05 is ready. probably.
+      if command_status[5] not in {0x25, 0x05}: # 25 is busy, 05 is ready. probably.
         logger.warning("unexpected response %s.", command_status)
 
       if command_status[5] == 0x05:
@@ -195,9 +194,9 @@ class CLARIOStar(PlateReaderBackend):
     absorbance_command = (b"\x02\x00\x7C\x0C\x04\x31\xEC\x21\x66\x05\x96\x04\x60\x2C\x56\x1D\x06"
       b"\x0C\x08\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00\x00\x00\x00\x00\x00\x00\x00"
       b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-      b"\x00\x00\x00\x00\x00\x00\x02\x02\x00\x00\x00\x00\x00\x00\x00\x20\x04\x00\x1E\x27\x0F\x27"
+      b"\x00\x00\x00\x00\x00\x00\x82\x02\x00\x00\x00\x00\x00\x00\x00\x20\x04\x00\x1E\x27\x0F\x27"
       b"\x0F\x19\x01" + wavelength_data + b"\x00\x00\x00\x64\x00\x00\x00\x00\x00\x00\x00\x64\x00"
-      b"\x00\x00\x00\x00\x02\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x16\x00\x01\x00\x00\x12\x46"
+      b"\x00\x00\x00\x00\x02\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x16\x00\x01\x00\x00\x12\xcb"
       b"\x0D")
     run_response = await self.send(absorbance_command)
 
@@ -316,7 +315,7 @@ class CLARIOStar(PlateReaderBackend):
       od = []
       for t in transmittance:
         od.append(math.log10(100/t))
-      return utils.reshape_2d(od, (12, 8))
+      return utils.reshape_2d(od, (8, 12))
 
     if report == "transmittance":
-      return utils.reshape_2d(transmittance, (12, 8))
+      return utils.reshape_2d(transmittance, (8, 12))
