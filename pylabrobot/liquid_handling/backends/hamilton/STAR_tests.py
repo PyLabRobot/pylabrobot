@@ -405,7 +405,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
       self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
       "C0DSid0010dm1 1 1 1 1&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 1825 "
-      "1688 1551 0000&zx1871 1871 1871 1871 1871&lp2321 2321 2321 2321 2321&zl1210 1210 1210 1210 "
+      "1688 1551 0000&zx1260 1260 1260 1260 1260&lp2000 2000 2000 2000 2000&zl1210 1210 1210 1210 "
       "1210&po0100 0100 0100 0100 0100&ip0000 0000 0000 0000 0000&it0 0 0 0 0&fp0000 0000 0000 0000"
       " 0000&zu0032 0032 0032 0032 0032&zr06180 06180 06180 06180 06180&th2450te2450dv00116 00116 "
       "00116 00116 00116&ds1000 1000 1000 1000 1000&ss0050 0050 0050 0050 0050&rv000 000 000 000 "
@@ -422,7 +422,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     with no_volume_tracking():
       self.lh.dispense(self.plate["A1"], vols=[100])
     self._assert_command_sent_once(
-      "C0DSid0317dm1&tm1 0&dv01072&xp02980 00000&yp1460 0000&zx1871&lp2321&zl1881&ip0000&it0&fp0000"
+      "C0DSid0317dm1&tm1 0&dv01072&xp02980 00000&yp1460 0000&zx1931&lp2011&zl1881&ip0000&it0&fp0000"
       "&th2450te2450ds1000&ss0050&rv000&ta050&ba0000&lm0&zo000&ll1&lv1&de0010&mv00000&mc00&mp000&ms"
       "0010&wt00&gi000&gj0gk0zu0032&dj00zr06180&mh0000&po0100&",
       fmt=DISPENSE_RESPONSE_FORMAT)
@@ -437,7 +437,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
     self._assert_command_sent_once(
       "C0DSid0317dm1 1&tm1 1 0&dv01072 01072&xp02980 02980 00000&yp1460 1370 0000&"
-      "zx1871 1871&lp2321 2321&zl1881 1881&ip0000 0000&it0 0&fp0000 0000&th2450"
+      "zx1931 1931&lp2011 2011&zl1881 1881&ip0000 0000&it0 0&fp0000 0000&th2450"
       "te2450ds1000 1000&ss0050 0050&rv000 000&ta050 050&ba0000 0000&lm0 0&zo000 000&ll1 1&"
       "lv1 1&de0010 0010&mv00000 00000&mc00 00&mp000 000&ms0010 0010&wt00 00&gi000 000&gj0gk0"
       "zu0032 0032&dj00zr06180 06180&mh0000 0000&po0100 0100&",
