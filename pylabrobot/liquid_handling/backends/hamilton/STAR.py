@@ -50,6 +50,9 @@ from pylabrobot.resources.ml_star import (
 )
 
 
+T = TypeVar("T")
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,6 +71,18 @@ def need_iswap_parked(method: Callable):
 
     return result
   return wrapper
+
+
+def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
+  """ Util for filling in None lists with the default values. """
+  t = type(default[0])
+  if val is not None:
+    if len(val) != len(default):
+      raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
+    if not all(isinstance(v, t) for v in val):
+      raise ValueError(f"Value must be a list of {t}, but is {val}")
+    return val
+  return default
 
 
 class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
@@ -104,12 +119,54 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     self.id_ += 1
     return f"{self.id_ % 10000:04}"
 
-  def _assemble_command(self, module, command, **kwargs) -> Tuple[str, str]:
+  def _to_list(self, val: List[T], tip_pattern: List[bool]) -> List[T]:
+    """ Convert a list of values to a list of values with the correct length.
+
+    This is roughly one-hot encoding. STAR expects a value for a list parameter at the position
+    for the corresponding channel. If `tip_pattern` is False, there, the value itself is ignored,
+    but it must be present.
+
+    Args:
+      val: A list of values, exactly one for each channel that is involved in the operation.
+      tip_pattern: A list of booleans indicating whether a channel is involved in the operation.
+
+    Returns:
+      A list of values with the correct length. Each value that is not involved in the operation
+      is set to the first value in `val`, which is ignored by STAR.
+    """
+
+    # use the default value if a channel is not involved, otherwise use the value in val
+    assert len(val) > 0
+    assert len(val) <= len(tip_pattern)
+
+    result: List[T] = []
+    arg_index = 0
+    for channel_involved in tip_pattern:
+      if channel_involved:
+        if arg_index >= len(val):
+          raise ValueError(f"Too few values for tip pattern {tip_pattern}: {val}")
+        result.append(val[arg_index])
+        arg_index += 1
+      else:
+        # this value will be ignored, and using the first value silences mypy
+        result.append(val[0])
+    if arg_index < len(val):
+      raise ValueError(f"Too many values for tip pattern {tip_pattern}: {val}")
+    return result
+
+  def _assemble_command(
+    self,
+    module: str,
+    command: str,
+    tip_pattern: Optional[List[bool]],
+    **kwargs) -> Tuple[str, str]:
     """ Assemble a firmware command to the Hamilton machine.
 
     Args:
       module: 2 character module identifier (C0 for master, ...)
       command: 2 character command identifier (QM for request status, ...)
+      tip_pattern: A list of booleans indicating whether a channel is involved in the operation.
+        This value will be used to convert the list values in kwargs to the correct length.
       kwargs: any named parameters. the parameter name should also be 2 characters long. The value
         can be any size.
 
@@ -127,6 +184,15 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       elif type(v) is bool:
         v = 1 if v else 0
       elif type(v) is list:
+        # If this command is 'one-hot' encoded, for the channels, then the list should be the
+        # same length as the 'one-hot' encoding key (tip_pattern.) If the list is shorter than
+        # that, it will be 'one-hot encoded automatically. Note that this may raise an error if
+        # the number of values provided is not the same as the number of channels used.
+        if tip_pattern is not None:
+          if len(v) != len(tip_pattern):
+            # convert one-hot encoded list to int list
+            v = self._to_list(v, tip_pattern)
+          # list is now of length len(tip_pattern)
         if type(v[0]) is bool: # convert bool list to int list
           v = [int(x) for x in v]
         v = " ".join([str(e) for e in v]) + ("&" if len(v) < self.num_channels else "")
@@ -320,6 +386,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     self,
     module: str,
     command: str,
+    tip_pattern: Optional[List[bool]] = None,
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
     fmt: str = "",
@@ -344,7 +411,8 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       A dictionary containing the parsed response, or None if no response was read within `timeout`.
     """
 
-    cmd, id_ = self._assemble_command(module=module, command=command, **kwargs)
+    cmd, id_ = self._assemble_command(module=module, command=command, tip_pattern=tip_pattern,
+      **kwargs)
 
     self.write(cmd, timeout=write_timeout)
 
@@ -825,17 +893,6 @@ class STAR(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hamilton_liquid_classes):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    T = TypeVar("T")
-    def _to_list(val: Optional[List[T]], default: List[T]) -> List[T]:
-      t = type(default[0])
-      if val is not None:
-        if len(val) != len(ops):
-          raise ValueError(f"Value length must match number of operations, but is {val}")
-        if not all(isinstance(v, t) for v in val):
-          raise ValueError(f"Value must be a list of {t}, but is {val}")
-        return val
-      return default
-
     well_bottoms = [op.get_absolute_location().z + \
                     (op.offset.z if is_not_default(op.offset) else 0) for op in ops]
     liquid_surfaces_no_lld = [ls + (op.liquid_height if is_not_default(op.liquid_height) else 1)
@@ -844,62 +901,65 @@ class STAR(HamiltonLiquidHandler):
 
     aspiration_volumes = [int(op.volume * 10) for op in ops]
     lld_search_height = [int(sh * 10) for sh in lld_search_heights]
-    clot_detection_height = _to_list(clot_detection_height,
+    clot_detection_height = _fill_in_defaults(clot_detection_height,
       default=[int(hlc.aspiration_clot_retract_height*10) if hlc is not None else 0
               for hlc in hamilton_liquid_classes])
-    pull_out_distance_transport_air = _to_list(pull_out_distance_transport_air, [100]*n)
-    second_section_height = _to_list(second_section_height, [32]*n)
-    second_section_ratio = _to_list(second_section_ratio, [6180]*n)
-    minimum_height = _to_list(minimum_height, [int((ls-5) * 10) for ls in liquid_surfaces_no_lld])
-    immersion_depth = _to_list(immersion_depth, [0]*n)
-    immersion_depth_direction = _to_list(immersion_depth_direction, [0]*n)
-    surface_following_distance = _to_list(surface_following_distance, [0]*n)
+    pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [100]*n)
+    second_section_height = _fill_in_defaults(second_section_height, [32]*n)
+    second_section_ratio = _fill_in_defaults(second_section_ratio, [6180]*n)
+    minimum_height = \
+      _fill_in_defaults(minimum_height, [int((ls-5) * 10) for ls in liquid_surfaces_no_lld])
+    immersion_depth = _fill_in_defaults(immersion_depth, [0]*n)
+    immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
+    surface_following_distance = _fill_in_defaults(surface_following_distance, [0]*n)
     flow_rates = [
       get_value(op.flow_rate, default=hlc.aspiration_flow_rate if hlc is not None else 100)
         for op, hlc in zip(ops, hamilton_liquid_classes)]
     aspiration_speed = [int(fr * 10) for fr in flow_rates]
-    transport_air_volume = _to_list(transport_air_volume,
+    transport_air_volume = _fill_in_defaults(transport_air_volume,
       default=[int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0
                for hlc in hamilton_liquid_classes])
-    pre_wetting_volume = _to_list(pre_wetting_volume, [0]*n)
-    lld_mode = _to_list(lld_mode, [self.__class__.LLDMode.OFF]*n)
-    gamma_lld_sensitivity = _to_list(gamma_lld_sensitivity, [1]*n)
-    dp_lld_sensitivity = _to_list(dp_lld_sensitivity, [1]*n)
-    aspirate_position_above_z_touch_off = _to_list(aspirate_position_above_z_touch_off, [0]*n)
+    pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0]*n)
+    lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF]*n)
+    gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1]*n)
+    dp_lld_sensitivity = _fill_in_defaults(dp_lld_sensitivity, [1]*n)
+    aspirate_position_above_z_touch_off = \
+      _fill_in_defaults(aspirate_position_above_z_touch_off, [0]*n)
     detection_height_difference_for_dual_lld = \
-      _to_list(detection_height_difference_for_dual_lld, [0]*n)
-    swap_speed = _to_list(swap_speed,
+      _fill_in_defaults(detection_height_difference_for_dual_lld, [0]*n)
+    swap_speed = _fill_in_defaults(swap_speed,
       default=[int(hlc.aspiration_swap_speed*10) if hlc is not None else 0
                for hlc in hamilton_liquid_classes])
-    settling_time = _to_list(settling_time,
+    settling_time = _fill_in_defaults(settling_time,
       default=[int(hlc.aspiration_settling_time*10) if hlc is not None else 0
                for hlc in hamilton_liquid_classes])
-    homogenization_volume = _to_list(homogenization_volume, [0]*n)
-    homogenization_cycles = _to_list(homogenization_cycles, [0]*n)
+    homogenization_volume = _fill_in_defaults(homogenization_volume, [0]*n)
+    homogenization_cycles = _fill_in_defaults(homogenization_cycles, [0]*n)
     homogenization_position_from_liquid_surface = \
-      _to_list(homogenization_position_from_liquid_surface, [0]*n)
-    homogenization_speed = _to_list(homogenization_speed,
+      _fill_in_defaults(homogenization_position_from_liquid_surface, [0]*n)
+    homogenization_speed = _fill_in_defaults(homogenization_speed,
         default=[int(hlc.aspiration_mix_flow_rate*10) if hlc is not None else 0
                for hlc in hamilton_liquid_classes])
     homogenization_surface_following_distance = \
-      _to_list(homogenization_surface_following_distance, [0]*n)
-    limit_curve_index = _to_list(limit_curve_index, [0]*n)
+      _fill_in_defaults(homogenization_surface_following_distance, [0]*n)
+    limit_curve_index = _fill_in_defaults(limit_curve_index, [0]*n)
 
-    use_2nd_section_aspiration = _to_list(use_2nd_section_aspiration, [False]*n)
+    use_2nd_section_aspiration = _fill_in_defaults(use_2nd_section_aspiration, [False]*n)
     retract_height_over_2nd_section_to_empty_tip = \
-      _to_list(retract_height_over_2nd_section_to_empty_tip, [0]*n)
+      _fill_in_defaults(retract_height_over_2nd_section_to_empty_tip, [0]*n)
     dispensation_speed_during_emptying_tip = \
-      _to_list(dispensation_speed_during_emptying_tip, [500]*n)
+      _fill_in_defaults(dispensation_speed_during_emptying_tip, [500]*n)
     dosing_drive_speed_during_2nd_section_search = \
-      _to_list(dosing_drive_speed_during_2nd_section_search, [500]*n)
+      _fill_in_defaults(dosing_drive_speed_during_2nd_section_search, [500]*n)
     z_drive_speed_during_2nd_section_search = \
-      _to_list(z_drive_speed_during_2nd_section_search, [300]*n)
-    cup_upper_edge = _to_list(cup_upper_edge, [0]*n)
-    ratio_liquid_rise_to_tip_deep_in = _to_list(ratio_liquid_rise_to_tip_deep_in, [0]*n)
-    immersion_depth_2nd_section = _to_list(immersion_depth_2nd_section, [0]*n)
+      _fill_in_defaults(z_drive_speed_during_2nd_section_search, [300]*n)
+    cup_upper_edge = _fill_in_defaults(cup_upper_edge, [0]*n)
+    ratio_liquid_rise_to_tip_deep_in = _fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0]*n)
+    immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0]*n)
 
     try:
       return self.aspirate_pip(
+        aspiration_type=[0 for _ in range(n)],
         tip_pattern=channels_involved,
         x_positions=x_positions,
         y_positions=y_positions,
@@ -1078,17 +1138,6 @@ class STAR(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hamilton_liquid_classes):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    T = TypeVar("T")
-    def _to_list(val: Optional[List[T]], default: List[T]) -> List[T]:
-      t = type(default[0])
-      if val is not None:
-        if len(val) != len(ops):
-          raise ValueError(f"Value length must match number of operations, but is {val}")
-        if not all(isinstance(v, t) for v in val):
-          raise ValueError(f"Value must be a list of {t}, but is {val}")
-        return val
-      return default
-
     well_bottoms = [op.get_absolute_location().z + \
                     (op.offset.z if is_not_default(op.offset) else 0) for op in ops]
     liquid_surfaces_no_lld = [ls + (op.liquid_height if is_not_default(op.liquid_height) else 1)
@@ -1106,45 +1155,47 @@ class STAR(HamiltonLiquidHandler):
       for op in ops]
 
     dispense_volumes = [int(op.volume*10) for op in ops]
-    pull_out_distance_transport_air = _to_list(pull_out_distance_transport_air, [100]*n)
-    second_section_height = _to_list(second_section_height, [32]*n)
-    second_section_ratio = _to_list(second_section_ratio, [6180]*n)
-    minimum_height = _to_list(minimum_height, [int((ls+5) * 10) for ls in liquid_surfaces_no_lld])
-    immersion_depth = _to_list(immersion_depth, [0]*n)
-    immersion_depth_direction = _to_list(immersion_depth_direction, [0]*n)
-    surface_following_distance = _to_list(surface_following_distance, [0]*n)
+    pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [100]*n)
+    second_section_height = _fill_in_defaults(second_section_height, [32]*n)
+    second_section_ratio = _fill_in_defaults(second_section_ratio, [6180]*n)
+    minimum_height = _fill_in_defaults(minimum_height,
+      default=[int((ls+5) * 10) for ls in liquid_surfaces_no_lld])
+    immersion_depth = _fill_in_defaults(immersion_depth, [0]*n)
+    immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
+    surface_following_distance = _fill_in_defaults(surface_following_distance, [0]*n)
     flow_rates = [
       get_value(op.flow_rate, default=hlc.aspiration_flow_rate if hlc is not None else 120)
         for op, hlc in zip(ops, hamilton_liquid_classes)]
     dispense_speed = [int(fr*10) for fr in flow_rates]
-    cut_off_speed = _to_list(cut_off_speed, [50]*n)
-    stop_back_volume = _to_list(stop_back_volume,
+    cut_off_speed = _fill_in_defaults(cut_off_speed, [50]*n)
+    stop_back_volume = _fill_in_defaults(stop_back_volume,
       default=[int(hlc.dispense_stop_back_volume*10) if hlc is not None else 0
       for hlc in hamilton_liquid_classes])
-    transport_air_volume = _to_list(transport_air_volume,
+    transport_air_volume = _fill_in_defaults(transport_air_volume,
       default=[int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0
       for hlc in hamilton_liquid_classes])
-    blow_out_air_volume = _to_list(blow_out_air_volume,
+    blow_out_air_volume = _fill_in_defaults(blow_out_air_volume,
       default=[int(hlc.dispense_blow_out_volume*10) if hlc is not None else 0
        for hlc in hamilton_liquid_classes])
-    lld_mode = _to_list(lld_mode, [0]*n)
-    dispense_position_above_z_touch_off = _to_list(dispense_position_above_z_touch_off, [0]*n)
-    gamma_lld_sensitivity = _to_list(gamma_lld_sensitivity, [1]*n)
-    dp_lld_sensitivity = _to_list(dp_lld_sensitivity, [1]*n)
-    swap_speed = _to_list(swap_speed,
+    lld_mode = _fill_in_defaults(lld_mode, [0]*n)
+    dispense_position_above_z_touch_off = _fill_in_defaults(dispense_position_above_z_touch_off,
+      default=[0]*n)
+    gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1]*n)
+    dp_lld_sensitivity = _fill_in_defaults(dp_lld_sensitivity, [1]*n)
+    swap_speed = _fill_in_defaults(swap_speed,
       default=[int(hlc.dispense_swap_speed*10) if hlc is not None else 0
         for hlc in hamilton_liquid_classes])
-    settling_time = _to_list(settling_time,
+    settling_time = _fill_in_defaults(settling_time,
       default=[int(hlc.dispense_settling_time*10) if hlc is not None else 0
         for hlc in hamilton_liquid_classes])
-    mix_volume = _to_list(mix_volume, [0]*n)
-    mix_cycles = _to_list(mix_cycles, [0]*n)
-    mix_position_from_liquid_surface = _to_list(mix_position_from_liquid_surface, [0]*n)
-    mix_speed = _to_list(mix_speed,
+    mix_volume = _fill_in_defaults(mix_volume, [0]*n)
+    mix_cycles = _fill_in_defaults(mix_cycles, [0]*n)
+    mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0]*n)
+    mix_speed = _fill_in_defaults(mix_speed,
       default=[int(hlc.dispense_mix_flow_rate*10) if hlc is not None else 0
         for hlc in hamilton_liquid_classes])
-    mix_surface_following_distance = _to_list(mix_surface_following_distance, [0]*n)
-    limit_curve_index =_to_list(limit_curve_index, [0]*n)
+    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0]*n)
+    limit_curve_index = _fill_in_defaults(limit_curve_index, [0]*n)
 
     try:
       ret = self.dispense_pip(
@@ -2626,6 +2677,7 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="TP",
+      tip_pattern=tip_pattern,
       read_timeout=60,
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
@@ -2678,6 +2730,7 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="TR",
+      tip_pattern=tip_pattern,
       fmt="kz### (n)vz### (n)",
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
@@ -2885,6 +2938,7 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="AS",
+      tip_pattern=tip_pattern,
       read_timeout=60,
       at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
@@ -3081,6 +3135,7 @@ class STAR(HamiltonLiquidHandler):
     return self.send_command(
       module="C0",
       command="DS",
+      tip_pattern=tip_pattern,
       read_timeout=60,
       dm=[f"{dm:01}" for dm in dispensing_mode],
       tm=[f"{tm:01}" for tm in tip_pattern],

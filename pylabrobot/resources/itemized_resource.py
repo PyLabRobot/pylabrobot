@@ -1,4 +1,3 @@
-
 from abc import ABCMeta
 import sys
 from typing import Union, TypeVar, Generic, List, Optional, Generator, Type, Sequence, cast
@@ -182,7 +181,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     # Cast child to item type. Children will always be `T`, but the type checker doesn't know that.
     return cast(T, self.children[identifier])
 
-  def get_items(self, identifier: Union[str, Sequence[int]]) -> List[T]:
+  def get_items(self, identifier: Union[str, Sequence[int], Sequence[str]]) -> List[T]:
     """ Get the items with the given identifier.
 
     Args:
