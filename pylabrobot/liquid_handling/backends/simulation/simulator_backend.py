@@ -198,7 +198,7 @@ class SimulatorBackend(WebSocketBackend):
         if well is None:
           raise RuntimeError(f"Could not find well {idx} in plate {plate.name}.")
         serialized_pattern.append({
-          "well": well.serialize(),
+          "well_name": well.name,
           "volume": vol
         })
 

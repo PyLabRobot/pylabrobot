@@ -98,6 +98,9 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     super().assigned_resource_callback(resource)
 
+    if resource.name == "deck":
+      return
+
     well_names = [well.name for well in resource.children]
     if isinstance(resource, ItemizedResource):
       ordering = utils.reshape_2d(well_names, (resource.num_items_x, resource.num_items_y))
