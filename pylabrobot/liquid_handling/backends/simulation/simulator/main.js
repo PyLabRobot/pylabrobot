@@ -134,10 +134,22 @@ class Resource {
 }
 
 class Deck extends Resource {
-  constructor(resource_data) {
-    super(resource_data, undefined);
+  draw(layer) {
+    // Draw a transparent rectangle with an outline
+    const rect = new Konva.Rect({
+      x: 0,
+      y: 0,
+      width: this.size_x,
+      height: this.size_y,
+      fill: "white",
+      stroke: "black",
+      strokeWidth: 1,
+    });
+    layer.add(rect);
   }
+}
 
+class HamiltonDeck extends Deck {
   draw(layer) {
     // Draw a transparent rectangle with an outline
     const { x, y } = this.getAbsoluteLocation();
@@ -185,6 +197,64 @@ class Deck extends Resource {
         railLabel.scaleY(-1); // Flip the text vertically
         layer.add(railLabel);
       }
+    }
+  }
+}
+
+class OTDeck extends Deck {
+  constructor(resource_data) {
+    resource_data.location = { x: 115.65, y: 68.03 };
+    super(resource_data, undefined);
+  }
+
+  draw(layer) {
+    super.draw(layer);
+
+    // Draw the sites
+    const siteLocations = [
+      { x: 0.0, y: 0.0 },
+      { x: 132.5, y: 0.0 },
+      { x: 265.0, y: 0.0 },
+      { x: 0.0, y: 90.5 },
+      { x: 132.5, y: 90.5 },
+      { x: 265.0, y: 90.5 },
+      { x: 0.0, y: 181.0 },
+      { x: 132.5, y: 181.0 },
+      { x: 265.0, y: 181.0 },
+      { x: 0.0, y: 271.5 },
+      { x: 132.5, y: 271.5 },
+      { x: 265.0, y: 271.5 },
+    ];
+
+    for (let i = 0; i < siteLocations.length; i++) {
+      const siteLocation = siteLocations[i];
+      const width = 128.0;
+      const height = 86.0;
+      const site = new Konva.Rect({
+        x: this.location.x + siteLocation.x,
+        y: this.location.y + siteLocation.y,
+        width: width,
+        height: height,
+        fill: "white",
+        stroke: "black",
+        strokeWidth: 1,
+      });
+      layer.add(site);
+
+      // Add a text label in the site
+      const siteLabel = new Konva.Text({
+        x: this.location.x + siteLocation.x,
+        y: this.location.y + siteLocation.y + height,
+        text: i + 1,
+        width: width,
+        height: height,
+        fontSize: 16,
+        fill: "black",
+        align: "center",
+        verticalAlign: "middle",
+      });
+      siteLabel.scaleY(-1); // Flip the text vertically
+      layer.add(siteLabel);
     }
   }
 }
@@ -317,11 +387,27 @@ class TipSpot extends Resource {
   }
 }
 
+class Trash extends Resource {
+  constructor(resource_data, parent) {
+    super(resource_data, parent);
+    this.color = "red";
+  }
+
+  draw(layer) {
+    // Don't draw trash
+  }
+}
+
 function classForResourceType(type) {
   switch (type) {
     case "Deck":
-    case "HamiltonDeck":
       return Deck;
+    case "HamiltonDeck":
+      return HamiltonDeck;
+    case "Trash":
+      return Trash;
+    case "OTDeck":
+      return OTDeck;
     case "Plate":
       return Plate;
     case "Well":
