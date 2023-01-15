@@ -63,28 +63,28 @@ class WebSocketBackend(SerializingBackend):
   def websocket(self) -> websockets.legacy.server.WebSocketServerProtocol:
     """ The websocket connection. """
     if self._websocket is None:
-      raise ValueError("No websocket connection has been established.")
+      raise RuntimeError("No websocket connection has been established.")
     return self._websocket
 
   @property
   def loop(self) -> asyncio.AbstractEventLoop:
     """ The event loop. """
     if self._loop is None:
-      raise ValueError("Event loop has not been started.")
+      raise RuntimeError("Event loop has not been started.")
     return self._loop
 
   @property
   def t(self) -> threading.Thread:
     """ The thread that runs the event loop. """
     if self._t is None:
-      raise ValueError("Event loop has not been started.")
+      raise RuntimeError("Event loop has not been started.")
     return self._t
 
   @property
   def stop_(self) -> asyncio.Future:
     """ The future that is set when the simulation is stopped. """
     if self._stop_ is None:
-      raise ValueError("Event loop has not been started.")
+      raise RuntimeError("Event loop has not been started.")
     return self._stop_
 
   def _generate_id(self):
@@ -214,7 +214,7 @@ class WebSocketBackend(SerializingBackend):
 
         if not message["success"]:
           error = message.get("error", "unknown error")
-          raise ValueError(f"Error during event {command}: " + error)
+          raise RuntimeError(f"Error during event {command}: " + error)
 
         return message
 
@@ -243,7 +243,7 @@ class WebSocketBackend(SerializingBackend):
       while True:
         try:
           async with websockets.server.serve(self._socket_handler, self.ws_host, self.ws_port):
-            print(f"Simulation server started at http://{self.ws_host}:{self.ws_port}")
+            print(f"Websocket server started at http://{self.ws_host}:{self.ws_port}")
             lock.release()
             await self.stop_
             break
