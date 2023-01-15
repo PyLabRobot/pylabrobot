@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Union, List, Sequence
+from typing import Callable, Optional, Union, List, Sequence, cast
 
 from .resource import Resource, Coordinate
 from .well import Well
@@ -144,3 +144,38 @@ class Plate(ItemizedResource[Well]):
 
   def has_lid(self) -> bool:
     return self.lid is not None
+
+  def set_well_volumes(self, volumes: Union[List[List[float]], List[float], float]) -> None:
+    """ Update the volume in the volume tracker of each well in the plate.
+
+    Args:
+      volumes: A list of volumes, one for each well in the plate. The list can be a list of lists,
+        where each inner list contains the volumes for each well in a column.  If a single float is
+        given, the volume is assumed to be the same for all wells. Volumes are in uL.
+
+    Raises:
+      ValueError: If the number of volumes does not match the number of wells in the plate.
+
+    Example:
+      Set the volume of each well in a 96-well plate to 10 uL.
+
+      >>> plate = Plate("plate", 127.0, 86.0, 14.5, num_items_x=12, num_items_y=8)
+      >>> plate.update_well_volumes(10)
+    """
+
+    if isinstance(volumes, float):
+      volumes = [volumes] * self.num_items
+    elif isinstance(volumes, list) and all(isinstance(column, list) for column in volumes):
+      volumes = cast(List[List[float]], volumes) # mypy doesn't know that all() checks the type
+      volumes = [list(column) for column in zip(*volumes)] # transpose the list of lists
+      volumes = [volume for column in volumes for volume in column] # flatten the list of lists
+
+    volumes = cast(List[float], volumes) # mypy doesn't know type is correct at this point.
+
+    if len(volumes) != self.num_items:
+      raise ValueError(f"Number of volumes ({len(volumes)}) does not match number of wells "
+                      f"({self.num_items}) in plate '{self.name}'.")
+
+    for i, volume in enumerate(volumes):
+      well = self.get_well(i)
+      well.tracker.set_used_volume(volume)
