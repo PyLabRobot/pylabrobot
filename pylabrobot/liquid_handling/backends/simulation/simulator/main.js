@@ -2,12 +2,12 @@ var config = {
   pip_aspiration_duration: 2,
   pip_dispense_duration: 2,
   pip_tip_pickup_duration: 2,
-  pip_tip_discard_duration: 2,
+  pip_tip_drop_duration: 2,
 
   core_aspiration_duration: 2,
   core_dispense_duration: 2,
   core_tip_pickup_duration: 2,
-  core_tip_discard_duration: 2,
+  core_tip_drop_duration: 2,
 
   min_pip_head_location: -1,
   max_pip_head_location: -1,
@@ -89,9 +89,9 @@ function sleep(s) {
 }
 
 function createShape(resource) {
-  if (resource.category === "tip" || resource.category === "well") {
+  if (resource.category === "tip_spot" || resource.category === "well") {
     const strokeColor =
-      resource.category === "tip" ? COLORS["tip"] : colorForVolume(1, 1);
+      resource.category === "tip_spot" ? COLORS["tip"] : colorForVolume(1, 1);
     return new Konva.Circle({
       x: 1,
       y: 1,
@@ -132,7 +132,7 @@ function drawResource(resource, parentGroup) {
   var info = {};
   if (resource.category === "well") {
     info = {
-      maxVolume: 1000,
+      maxVolume: resource.max_volume,
       volume: 0,
     };
   }
@@ -165,10 +165,20 @@ function adjustVolumeSingleWell(well_name, volume) {
 }
 
 function adjustVolume(pattern) {
+  // Validate pattern.
+  for (let i = 0; i < pattern.length; i++) {
+    const { well, volume } = pattern[i];
+    const wellResource = resources[well.name]; // TODO: just get well_name from server.
+    if (wellResource.info.maxVolume < volume) {
+      return `Volume ${volume} exceeds max volume ${wellResource.info.maxVolume} for well ${well.name}`;
+    }
+  }
+
   for (let i = 0; i < pattern.length; i++) {
     const { well, volume } = pattern[i];
     adjustVolumeSingleWell(well.name, volume);
   }
+
   return null;
 }
 
@@ -224,24 +234,25 @@ function checkCoreHeadReachable(x) {
 // Returns error message if there is a problem, otherwise returns null.
 function pickUpTips(channels) {
   for (var i = 0; i < channels.length; i++) {
-    var tip = channels[i].resource;
-    if (tip === null || tip === undefined) {
+    var tipSpotName = channels[i].resource_name;
+    if (tipSpotName === null || tipSpotName === undefined) {
       continue;
     }
 
-    const resource = resources[tip.name];
+    const resource = resources[tipSpotName];
 
     if (!resource.info.has_tip) {
-      return `${tip.name} is not a tip`;
+      return `${tipSpotName} is not a tip`;
     }
     if (pipHead[i].has_tip) {
-      return `${tip.name} is already picked up`;
+      return `${tipSpotName} is already picked up`;
     }
 
-    if (
-      checkPipHeadReach(getAbsoluteLocation(resource.resource).x) !== undefined
-    ) {
-      return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
+    const pipError = checkPipHeadReach(
+      getAbsoluteLocation(resource.resource).x
+    );
+    if (pipError !== undefined) {
+      return pipError;
     }
 
     resource.shape.fill(COLORS["noTipsColor"]);
@@ -253,17 +264,17 @@ function pickUpTips(channels) {
 }
 
 // Returns error message if there is a problem, otherwise returns null.
-function discardTips(channels) {
+function dropTips(channels) {
   for (let i = 0; i < channels.length; i++) {
-    var tip = channels[i].resource;
-    if (tip === null || tip === undefined) {
+    var tipSpotName = channels[i].resource_name;
+    if (tipSpotName === null || tipSpotName === undefined) {
       continue;
     }
 
-    const resource = resources[tip.name];
+    const resource = resources[tipSpotName];
 
     if (resource.info.has_tip) {
-      return `There already is tip at location ${tip.resource}.`;
+      return `There already is tip at location ${tipSpotName}.`;
     }
     if (!pipHead[i].has_tip) {
       return `Pip head channel ${i + 1} already does not have a tip.`;
@@ -274,9 +285,10 @@ function discardTips(channels) {
       }uL > 0`;
     }
 
-    if (
-      checkPipHeadReach(getAbsoluteLocation(resource.resource).x) !== undefined
-    ) {
+    const pipError = checkPipHeadReach(
+      getAbsoluteLocation(resource.resource).x
+    );
+    if (pipError !== undefined) {
       return checkPipHeadReach(getAbsoluteLocation(resource.resource).x);
     }
 
@@ -305,9 +317,9 @@ function aspirate(channels) {
       continue;
     }
 
-    let { resource, volume } = channels[i];
+    let { resource_name, volume } = channels[i];
 
-    const well = resources[resource.name];
+    const well = resources[resource_name];
 
     if (well.info.volume < volume) {
       return `Not enough volume in well: ${well.info.volume}uL.`;
@@ -324,7 +336,7 @@ function aspirate(channels) {
     }
 
     pipHead[i].volume += volume;
-    adjustVolumeSingleWell(resource.name, well.info.volume - volume);
+    adjustVolumeSingleWell(well.resource.name, well.info.volume - volume);
   }
   return null;
 }
@@ -335,9 +347,9 @@ function dispense(channels) {
       continue;
     }
 
-    let { resource, volume } = channels[i];
+    let { resource_name, volume } = channels[i];
 
-    const well = resources[resource.name];
+    const well = resources[resource_name];
 
     if (pipHead[i].volume < volume) {
       return `Not enough volume in tip: ${pipHead[i].volume}.`;
@@ -354,28 +366,30 @@ function dispense(channels) {
     }
 
     pipHead[i].volume -= volume;
-    adjustVolumeSingleWell(resource.name, well.info.volume + volume);
+    adjustVolumeSingleWell(well.resource.name, well.info.volume + volume);
   }
   return null;
 }
 
-function pickupTips96(resource) {
+function pickupTips96(resource_name) {
+  const tipRack = resources[resource_name].resource;
+
   // Validate there are enough tips first, and that there are no tips in the head.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      const tip_name = resource.children[i + resource.num_items_y * j].name;
+      const tip_name = tipRack.children[i + tipRack.num_items_y * j].name;
       const tip = resources[tip_name];
       if (!tip.info.has_tip) {
-        return `There is no tip at (${i},${j}) in ${resource.name}.`;
+        return `There is no tip at (${i},${j}) in ${resource_name}.`;
       }
       if (CoRe96Head[i][j].has_tip) {
-        return `There already is a tip in the CoRe 96 head at (${i},${j}) in ${resource.name}.`;
+        return `There already is a tip in the CoRe 96 head at (${i},${j}) in ${resource_name}.`;
       }
     }
   }
 
   // Check reachable for A1.
-  let a1_name = resource.children[0].name;
+  let a1_name = tipRack.children[0].name;
   let a1_resource = resources[a1_name];
   if (checkCoreHeadReachable(a1_resource.x) !== undefined) {
     return checkCoreHeadReachable(a1_resource.x);
@@ -384,7 +398,7 @@ function pickupTips96(resource) {
   // Then pick up the tips.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      const tip_name = resource.children[i + resource.num_items_y * j].name;
+      const tip_name = tipRack.children[i + tipRack.num_items_y * j].name;
       const tip = resources[tip_name];
       tip.info.has_tip = false;
       tip.shape.fill(COLORS["noTipsColor"]);
@@ -394,23 +408,25 @@ function pickupTips96(resource) {
   }
 }
 
-function discardTips96(resource) {
+function dropTips96(resource_name) {
+  const tipRack = resources[resource_name].resource;
+
   // Validate there are enough tips first, and that there are no tips in the head.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      const tip_name = resource.children[i * resource.num_items_x + j].name;
+      const tip_name = tipRack.children[i * tipRack.num_items_x + j].name;
       const tip = resources[tip_name];
       if (tip.info.has_tip) {
-        return `There already is a tip at (${i},${j}) in ${resource.name}.`;
+        return `There already is a tip at (${i},${j}) in ${resource_name}.`;
       }
       if (!CoRe96Head[i][j].has_tip) {
-        return `There is no tip in the CoRe 96 head at (${i},${j}) in ${resource.name}.`;
+        return `There is no tip in the CoRe 96 head at (${i},${j}) in ${resource_name}.`;
       }
     }
   }
 
   // Check reachable for A1.
-  let a1_name = resource.children[0].name;
+  let a1_name = tipRack.children[0].name;
   let a1_resource = resources[a1_name];
   if (checkCoreHeadReachable(a1_resource.x) !== undefined) {
     return checkCoreHeadReachable(a1_resource.x);
@@ -419,7 +435,7 @@ function discardTips96(resource) {
   // Then pick up the tips.
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 12; j++) {
-      const tip_name = resource.children[i * resource.num_items_x + j].name;
+      const tip_name = tipRack.children[i * tipRack.num_items_x + j].name;
       const tip = resources[tip_name];
       tip.info.has_tip = true;
       tip.shape.fill(COLORS["tip"]);
@@ -429,9 +445,12 @@ function discardTips96(resource) {
   }
 }
 
-function aspirate96(resource, volume) {
+function aspirate96(aspiration) {
+  const resource_name = aspiration.resource_name;
+  const plate = resources[resource_name].resource;
+
   // Check reachable for A1.
-  let a1_name = resource.children[0].name;
+  let a1_name = plate.children[0].name;
   let a1_resource = resources[a1_name];
   if (checkCoreHeadReachable(a1_resource.x) !== undefined) {
     return checkCoreHeadReachable(a1_resource.x);
@@ -439,15 +458,18 @@ function aspirate96(resource, volume) {
 
   // Validate there is enough liquid available, that it fits in the tips, and that each channel
   // has a tip before aspiration.
-  for (let i = 0; i < resource.num_items_y; i++) {
-    for (let j = 0; j < resource.num_items_x; j++) {
-      const well_name = resource.children[i * resource.num_items_x + j].name;
+  for (let i = 0; i < plate.num_items_y; i++) {
+    for (let j = 0; j < plate.num_items_x; j++) {
+      const well_name = plate.children[i * plate.num_items_x + j].name;
       const well = resources[well_name];
-      if (well.info.volume < volume) {
+      if (well.info.volume < aspiration.volume) {
         return `Not enough volume in well: ${well.info.volume}uL.`;
       }
-      if (CoRe96Head[i][j].volume + volume > CoRe96Head[i][j].maxVolume) {
-        return `Aspirated volume (${volume}uL) + volume of tip (${CoRe96Head[i][j].volume}uL) > maximal volume of tip (${CoRe96Head[i][j].maxVolume}uL).`;
+      if (
+        CoRe96Head[i][j].volume + aspiration.volume >
+        CoRe96Head[i][j].maxVolume
+      ) {
+        return `Aspirated volume (${aspiration.volume}uL) + volume of tip (${CoRe96Head[i][j].volume}uL) > maximal volume of tip (${CoRe96Head[i][j].maxVolume}uL).`;
       }
       if (!CoRe96Head[i][j].has_tip) {
         return `CoRe 96 head channel (${i},${j}) does not have a tip.`;
@@ -455,21 +477,24 @@ function aspirate96(resource, volume) {
     }
   }
 
-  for (let i = 0; i < resource.num_items_y; i++) {
-    for (let j = 0; j < resource.num_items_x; j++) {
-      const well_name = resource.children[i * resource.num_items_x + j].name;
+  for (let i = 0; i < plate.num_items_y; i++) {
+    for (let j = 0; j < plate.num_items_x; j++) {
+      const well_name = plate.children[i * plate.num_items_x + j].name;
       const well = resources[well_name];
-      CoRe96Head[i][j].volume += volume;
-      adjustVolumeSingleWell(well_name, well.info.volume - volume);
+      CoRe96Head[i][j].volume += aspiration.volume;
+      adjustVolumeSingleWell(well_name, well.info.volume - aspiration.volume);
     }
   }
 
   return null;
 }
 
-function dispense96(resource, volume) {
+function dispense96(dispense) {
+  const resource_name = dispense.resource_name;
+  const plate = resources[resource_name].resource;
+
   // Check reachable for A1.
-  let a1_name = resource.children[0].name;
+  let a1_name = plate.children[0].name;
   let a1_resource = resources[a1_name];
   if (checkCoreHeadReachable(a1_resource.x) !== undefined) {
     return checkCoreHeadReachable(a1_resource.x);
@@ -477,15 +502,15 @@ function dispense96(resource, volume) {
 
   // Validate there is enough liquid available, that it fits in the well, and that each channel
   // has a tip before dispense.
-  for (let i = 0; i < resource.num_items_y; i++) {
-    for (let j = 0; j < resource.num_items_x; j++) {
-      const well_name = resource.children[i * resource.num_items_x + j].name;
+  for (let i = 0; i < plate.num_items_y; i++) {
+    for (let j = 0; j < plate.num_items_x; j++) {
+      const well_name = plate.children[i * plate.num_items_x + j].name;
       const well = resources[well_name];
-      if (CoRe96Head[i][j].volume < volume) {
+      if (CoRe96Head[i][j].volume < dispense.volume) {
         return `Not enough volume in head: ${CoRe96Head[i][j].volume}uL.`;
       }
-      if (well.info.volume + volume > well.info.maxVolume) {
-        return `Dispensed volume (${volume}uL) + volume of well (${well.info.volume}uL) > maximal volume of well (${well.info.maxVolume}uL).`;
+      if (well.info.volume + dispense.volume > well.info.maxVolume) {
+        return `Dispensed volume (${dispense.volume}uL) + volume of well (${well.info.volume}uL) > maximal volume of well (${well.info.maxVolume}uL).`;
       }
       if (!CoRe96Head[i][j].has_tip) {
         return `CoRe 96 head channel (${i},${j}) does not have a tip.`;
@@ -493,12 +518,12 @@ function dispense96(resource, volume) {
     }
   }
 
-  for (let i = 0; i < resource.num_items_y; i++) {
-    for (let j = 0; j < resource.num_items_x; j++) {
-      const well_name = resource.children[i * resource.num_items_x + j].name;
+  for (let i = 0; i < plate.num_items_y; i++) {
+    for (let j = 0; j < plate.num_items_x; j++) {
+      const well_name = plate.children[i * plate.num_items_x + j].name;
       const well = resources[well_name];
-      CoRe96Head[i][j].volume -= volume;
-      adjustVolumeSingleWell(well_name, well.info.volume + volume);
+      CoRe96Head[i][j].volume -= dispense.volume;
+      adjustVolumeSingleWell(well_name, well.info.volume + dispense.volume);
     }
   }
 
@@ -547,9 +572,9 @@ async function handleEvent(event, data) {
       ret.error = pickUpTips(data.channels);
       break;
 
-    case "discard_tips":
-      await sleep(config.pip_tip_discard_duration);
-      ret.error = discardTips(data.channels);
+    case "drop_tips":
+      await sleep(config.pip_tip_drop_duration);
+      ret.error = dropTips(data.channels);
       break;
 
     case "edit_tips":
@@ -572,26 +597,26 @@ async function handleEvent(event, data) {
 
     case "pick_up_tips96":
       await sleep(config.core_tip_pickup_duration);
-      ret.error = pickupTips96(resource);
+      ret.error = pickupTips96(data.resource_name);
       break;
 
-    case "discard_tips96":
-      await sleep(config.core_tip_discard_duration);
-      ret.error = discardTips96(resource);
+    case "drop_tips96":
+      await sleep(config.core_tip_drop_duration);
+      ret.error = dropTips96(data.resource_name);
       break;
 
     case "aspirate96":
       await sleep(config.core_aspiration_duration);
       resource = data.aspiration.resource;
       var volume = data.aspiration.volume;
-      ret.error = aspirate96(resource, volume);
+      ret.error = aspirate96(data.aspiration);
       break;
 
     case "dispense96":
       await sleep(config.core_dispense_duration);
       resource = data.dispense.resource;
       var volume = data.dispense.volume;
-      ret.error = dispense96(resource, volume);
+      ret.error = dispense96(data.dispense);
       break;
 
     default:

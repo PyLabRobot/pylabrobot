@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.volume_tracker import WellVolumeTracker
@@ -12,11 +13,27 @@ class Well(Resource):
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float = 9,
-    category: str = "well", volume: float = 0):
+    category: str = "well", volume: float = 0, max_volume: Optional[float] = None):
+    """ Create a new well.
+
+    Args:
+      name: Name of the well.
+      size_x: Size of the well in the x direction.
+      size_y: Size of the well in the y direction.
+      size_z: Size of the well in the z direction.
+      category: Category of the well.
+      volume: Initial volume of the well.
+      max_volume: Maximum volume of the well. If not specified, the well will be seen as a cylinder
+        and the max volume will be computed based on size_x, size_y, and size_z.
+    """
+
     super().__init__(name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
 
     assert size_x == size_y, "Well max volume computation currently assumes circle wells"
-    self.max_volume = math.pi * (size_x / 2) ** 2 * size_z
+    if max_volume is None:
+      self.max_volume = math.pi * (size_x / 2) ** 2 * size_z
+    else:
+      self.max_volume = max_volume
     self.tracker = WellVolumeTracker(max_volume=self.max_volume)
     self.tracker.set_used_volume(volume)
 
@@ -24,4 +41,5 @@ class Well(Resource):
     return dict(
       **super().serialize(),
       volume=self.tracker.get_used_volume(),
+      max_volume=self.max_volume
     )
