@@ -747,7 +747,7 @@ function closeSettings() {
   settingsWindow.style.display = "none";
 }
 
-window.addEventListener("load", function () {
+function scaleStage(stage) {
   const canvas = document.getElementById("kanvas");
   canvasWidth = canvas.offsetWidth;
   canvasHeight = canvas.offsetHeight;
@@ -755,18 +755,25 @@ window.addEventListener("load", function () {
   scaleX = canvasWidth / robotWidthMM;
   scaleY = canvasHeight / robotHeightMM;
 
-  // TODO: use min(scaleX, scaleY) to preserve aspect ratio.
+  const effectiveScale = Math.min(scaleX, scaleY);
+
+  stage.scaleX(effectiveScale);
+  stage.scaleY(-1 * effectiveScale);
+  stage.offsetY(canvasHeight / effectiveScale);
+}
+
+window.addEventListener("load", function () {
+  const canvas = document.getElementById("kanvas");
+  canvasWidth = canvas.offsetWidth;
+  canvasHeight = canvas.offsetHeight;
 
   stage = new Konva.Stage({
     container: "kanvas",
     width: canvasWidth,
     height: canvasHeight,
-
-    scaleX: scaleX,
-    // VENUS & robot coordinates have the origin in the bottom left corner, so we need to flip the y axis.
-    scaleY: -1 * scaleY,
-    offsetY: canvasHeight / scaleY,
   });
+
+  scaleStage(stage);
 
   // add the layer to the stage
   stage.add(layer);
@@ -781,4 +788,8 @@ window.addEventListener("load", function () {
   openSocket();
 
   loadSettings();
+});
+
+window.addEventListener("resize", function () {
+  scaleStage(stage);
 });
