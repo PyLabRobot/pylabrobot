@@ -109,6 +109,7 @@ class LiquidHandler:
 
     self.head = {c: ChannelTipTracker() for c in range(self.backend.num_channels)}
 
+    self.resource_assigned_callback(self.deck)
     for resource in self.deck.children:
       self.resource_assigned_callback(resource)
 

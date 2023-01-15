@@ -45,7 +45,8 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     """ Called when a new resource was assigned to the robot.
 
     This callback will also be called immediately after the setup method has been called for any
-    resources that were assigned to the robot before it was set up.
+    resources that were assigned to the robot before it was set up. The first resource will always
+    be the deck itself.
 
     Args:
       resource: The resource that was assigned to the robot.
