@@ -27,7 +27,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   .. note::
     This class is not meant to be used directly, but rather to be subclassed, most commonly by
     :class:`pylabrobot.resources.Plate` and
-    :class:`pylabrobot.resources.Tips`.
+    :class:`pylabrobot.resources.TipRack`.
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
@@ -174,9 +174,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         raise IndexError(f"Identifier '{identifier}' out of range.")
       identifier = row + column * self.num_items_y
 
-    if not 0 <= identifier < (self.num_items_x * self.num_items_y):
+    if not 0 <= identifier < self.num_items:
       raise IndexError(f"Item with identifier '{identifier}' does not exist on "
-                       f"plate '{self.name}'.")
+                       f"resource '{self.name}'.")
 
     # Cast child to item type. Children will always be `T`, but the type checker doesn't know that.
     return cast(T, self.children[identifier])
@@ -230,7 +230,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
                        "snake_up", "snake_down", "snake_left", "snake_right"],
     repeat: bool = False,
   ) -> Generator[List[T], None, None]:
-    """ Traverse the items in the plate.
+    """ Traverse the items in this resource.
 
     Directions `"down"`, `"snake_down"`, `"right"`, and `"snake_right"` start at the top left item
     (A1). Directions `"up"` and `"snake_up"` start at the bottom left (H1). Directions `"left"`
@@ -241,16 +241,16 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     With `repeat=False`, if the batch size does not divide the number of items evenly, the last
     batch will be smaller than the others. With `repeat=True`, the batch would contain the same
-    number of items, and batch would be padded with items from the beginning of the plate. For
-    example, if the plate has 96 items and the batch size is 5, the first batch would be `[A1, B1,
-    C1, D1, E1]`, and the 20th batch would be `[H12, A1, B1, C1, D1]`, and the 21st batch would
+    number of items, and batch would be padded with items from the beginning of the resource. For
+    example, if the resource has 96 items and the batch size is 5, the first batch would be `[A1,
+    B1, C1, D1, E1]`, the 20th batch would be `[H12, A1, B1, C1, D1]`, and the 21st batch would
     be `[E1, F1, G1, H1, A2]`.
 
     Args:
       batch_size: The number of items to return in each batch.
       direction: The direction to traverse the items. Can be one of "up", "down", "right", "left",
         "snake_up", "snake_down", "snake_left" or "snake_right".
-      repeat: Whether to repeat the traversal when the end of the plate is reached.
+      repeat: Whether to repeat the traversal when the end of the resource is reached.
 
     Returns:
       A list of items.
@@ -259,14 +259,14 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       ValueError: If the direction is not valid.
 
     Examples:
-      Traverse the items in the plate from top to bottom, in batches of 3:
+      Traverse the items in the resource from top to bottom, in batches of 3:
 
         >>> items.traverse(batch_size=3, direction="down", repeat=False)
 
         [[<Item A1>, <Item B1>, <Item C1>], [<Item D1>, <Item E1>, <Item F1>], ...]
 
-      Traverse the items in the plate from left to right, in batches of 5, repeating the traversal
-      when the end of the plate is reached:
+      Traverse the items in the resource from left to right, in batches of 5, repeating the
+      traversal when the end of the resource is reached:
 
         >>> items.traverse(batch_size=5, direction="right", repeat=True)
 
@@ -367,7 +367,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     }
 
   def index_of_item(self, item: T) -> Optional[int]:
-    """ Return the index of the given item in the plate, or `None` if the resource was not found.
+    """ Return the index of the given item in the resource, or `None` if the resource was not found.
     """
     for i, i_item in enumerate(self.children):
       if i_item == item:
