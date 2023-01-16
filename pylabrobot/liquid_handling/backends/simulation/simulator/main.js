@@ -136,7 +136,7 @@ class Resource {
     this.location = location;
     this.parent = parent;
 
-    this.color = "red";
+    this.color = "#5B6D8F";
 
     this.children = [];
     for (let i = 0; i < children.length; i++) {
@@ -320,7 +320,24 @@ class Plate extends Resource {
     this.num_items_x = num_items_x;
     this.num_items_y = num_items_y;
 
-    this.color = "green";
+    this.color = "#2B2D42";
+  }
+
+  draw(layer) {
+    const { x, y } = this.getAbsoluteLocation();
+
+    const rect = new Konva.Rect({
+      x: x,
+      y: y,
+      width: this.size_x,
+      height: this.size_y,
+      fill: this.color,
+      stroke: "black",
+      strokeWidth: 1,
+    });
+    layer.add(rect);
+
+    this.drawChildren(layer);
   }
 }
 
@@ -389,13 +406,32 @@ class TipRack extends Resource {
     const { num_items_x, num_items_y } = resource_data;
     this.num_items_x = num_items_x;
     this.num_items_y = num_items_y;
+
+    this.color = "#2B2D42";
+  }
+
+  draw(layer) {
+    const { x, y } = this.getAbsoluteLocation();
+
+    const rect = new Konva.Rect({
+      x: x,
+      y: y,
+      width: this.size_x,
+      height: this.size_y,
+      fill: this.color,
+      stroke: "black",
+      strokeWidth: 1,
+    });
+    layer.add(rect);
+
+    this.drawChildren(layer);
   }
 }
 
 class TipSpot extends Resource {
   constructor(resource_data, parent) {
     super(resource_data, parent);
-    this.color = "orange";
+    this.color = "#40CDA1";
     this.has_tip = false;
     this.tip = resource_data.prototype_tip; // not really a creator, but good enough for now.
 
