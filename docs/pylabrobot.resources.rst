@@ -65,6 +65,16 @@ Hamilton
     pylabrobot.resources.hamilton.STARDeck
     pylabrobot.resources.hamilton.STARLetDeck
 
+VWR
+---
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.vwr.troughs
+
 
 Opentrons
 ---------
