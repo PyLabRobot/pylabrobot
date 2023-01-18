@@ -118,6 +118,13 @@ class VolumeTracker(ABC):
     self._pending_volume = self._current_volume
     self.pending.clear()
 
+  def clear(self) -> None:
+    """ Clear the history. """
+    self._ops.clear()
+    self.pending.clear()
+    self._current_volume = 0.0
+    self._pending_volume = 0.0
+
 
 class TipVolumeTracker(VolumeTracker):
   """ A channel volume tracker tracks and validates volume operations for a single tip. """
