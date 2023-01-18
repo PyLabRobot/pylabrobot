@@ -11,38 +11,36 @@ PyLabRobot is a hardware agnostic, pure Python library for liquid handling robot
 
 ### Liquid handling robots
 
-PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton and Opentrons liquid handling robots, but we will soon have drivers for many more. The two Hamilton drivers are Venus, which is derived from the [PyHamilton library](https://github.com/dgretton/pyhamilton), and STAR, which is a low-level firmware interface. The Opentrons driver is based on [Opentrons Python API](https://github.com/rickwierenga/opentrons-python-api). We also provide a simulator which plays the role of a device driver but renders commands in a browser-based deck visualization.
+PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton and Opentrons liquid handling robots, but we will soon have drivers for many more. The two Hamilton drivers are Venus, which is derived from the [PyHamilton library](https://github.com/dgretton/pyhamilton), and STAR, which is a low-level firmware interface. The Opentrons driver is based on the [Opentrons HTTP API](https://github.com/rickwierenga/opentrons-python-api). We also provide a simulator which plays the role of a device driver but renders commands in a browser-based deck visualization.
 
-Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on Hamilton STAR (this will work with any operating system!):
+Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on Hamilton STAR (this will work on any operating system!):
 
 ```python
 from pylabrobot import LiquidHandler
 from pylabrobot.liquid_handling.backends import STAR
-from pylabrobot.resources import STARLetDeck
+from pylabrobot.resources import Deck
 
-lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
+deck = Deck.load_from_json_file("hamilton-layout.json")
+lh = LiquidHandler(backend=STAR(), deck=deck)
 lh.setup()
-lh.load_layout("hamilton-layout.json")
 
-lh.pickup_tips(lh.get_resource("tips")["A1:H1"])
-lh.aspirate(lh.get_resource("plate")["A1"], vols=[100])
-lh.dispense(lh.get_resource("plate")["A2"], vols=[100])
+lh.pick_up_tips(lh.get_resource("tip_rack")["A1"])
+lh.aspirate(lh.get_resource("plate")["A1"], vols=100)
+lh.dispense(lh.get_resource("plate")["A2"], vols=100)
 lh.return_tips()
 ```
 
-To run the same procedure on an Opentrons, switch out the following lines:
+To run the same procedure on an Opentrons, change the following lines:
 
 ```diff
 - from pylabrobot.liquid_handling.backends import STAR
-- from pylabrobot.resources import STARLetDeck
 + from pylabrobot.liquid_handling.backends import OpentronsBackend
-+ from pylabrobot.liquid_handling.resource import OTDeck
 
-- lh = LiquidHandler(backend=STAR(), deck=STARLetDeck())
-+ lh = LiquidHandler(backend=OpentronsBackend(), deck=OTDeck())
+- deck = Deck.load_from_json_file("hamilton-layout.json")
++ deck = Deck.load_from_json_file("opentrons-layout.json")
 
-- lh.load_layout("hamilton-layout.json")
-+ lh.load_layout("opentrons-layout.json")
+- lh = LiquidHandler(backend=STAR(), deck=deck)
++ lh = LiquidHandler(backend=OpentronsBackend(host="x.x.x.x"), deck=deck)
 ```
 
 ### Plate readers
