@@ -3,24 +3,15 @@ import contextlib
 import sys
 from typing import List, TYPE_CHECKING
 
+from pylabrobot.resources.errors import (
+  WellTooLittleLiquidError,
+  WellTooLittleVolumeError,
+  TipTooLittleLiquidError,
+  TipTooLittleVolumeError,
+)
+
 if TYPE_CHECKING:
   from pylabrobot.liquid_handling.standard import LiquidHandlingOp, Aspiration, Dispense
-
-
-class WellTooLittleLiquidError(Exception):
-  """ Raised when trying to aspirate more liquid from a well than is still present. """
-
-
-class WellTooLittleVolumeError(Exception):
-  """ Raised when trying to dispense more liquid into a well than is still available. """
-
-
-class TipTooLittleLiquidError(Exception):
-  """ Raised when trying to dispense more liquid from a tip than is still present. """
-
-
-class TipTooLittleVolumeError(Exception):
-  """ Raised when trying to aspirate more liquid into a tip than is still available. """
 
 
 this = sys.modules[__name__]

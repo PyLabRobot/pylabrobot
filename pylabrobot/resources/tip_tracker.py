@@ -5,19 +5,11 @@ import contextlib
 import sys
 from typing import List, Optional, TYPE_CHECKING
 
+from pylabrobot.resources.errors import TipSpotHasTipError, TipSpotHasNoTipError
+
 if TYPE_CHECKING:
   from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
   from pylabrobot.resources.tip import Tip
-
-
-class TipSpotHasTipError(Exception):
-  """ Raised when a tip spot has a tip, e.g. when trying to drop a tip with a tip spot that has a
-  tip. """
-
-
-class TipSpotHasNoTipError(Exception):
-  """ Raised when a tip spot has no tip, e.g. when trying to pick up a tip with a tip spot that does
-  not have a tip. """
 
 
 this = sys.modules[__name__]
