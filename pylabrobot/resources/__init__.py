@@ -1,4 +1,5 @@
 from .carrier import Carrier, CarrierSite, PlateCarrier, TipCarrier
+from .container import Container
 from .coordinate import Coordinate
 from .deck import Deck
 from .itemized_resource import ItemizedResource, create_equally_spaced

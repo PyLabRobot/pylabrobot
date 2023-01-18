@@ -167,3 +167,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     """ Fill the tip rack. This is useful when tip tracking is enabled and you are modifying
     the state manually (without the robot). """
     self.set_tip_state([[True] * self.num_items_x] * self.num_items_y)
+
+  def get_all_tips(self) -> List[Tip]:
+    """ Get all tips in the tip rack. """
+    return [ts.get_tip() for ts in self.get_all_items()]

@@ -17,7 +17,9 @@ from pylabrobot.liquid_handling.standard import (
   Pickup,
   Drop,
   Aspiration,
+  AspirationPlate,
   Dispense,
+  DispensePlate,
   Move,
 )
 
@@ -112,7 +114,7 @@ class SerializingBackendTests(unittest.TestCase):
     self.test_pick_up_tips96() # pick up tips first
     self.backend.clear()
 
-    tip = self.tip_rack.get_tip(0) # FIXME:
+    tips = self.tip_rack.get_all_tips()
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     self.backend.clear()
@@ -120,13 +122,13 @@ class SerializingBackendTests(unittest.TestCase):
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate96")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(aspiration=
-      Aspiration(resource=self.plate, volume=10, tip=tip).serialize()))
+      AspirationPlate(resource=self.plate, volume=10, tips=tips).serialize()))
 
   def test_dispense96(self):
     self.test_pick_up_tips96() # pick up tips first
     self.backend.clear()
 
-    tip = self.tip_rack.get_tip(0) # FIXME:
+    tips = self.tip_rack.get_all_tips()
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     self.backend.clear()
@@ -134,7 +136,7 @@ class SerializingBackendTests(unittest.TestCase):
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense96")
     self.assertEqual(self.backend.sent_commands[0]["data"], dict(dispense=
-      Dispense(resource=self.plate, volume=10, tip=tip).serialize()))
+      DispensePlate(resource=self.plate, volume=10, tips=tips).serialize()))
 
   def test_move(self):
     to = Coordinate(600, 200, 200)

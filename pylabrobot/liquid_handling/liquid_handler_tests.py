@@ -29,7 +29,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L, HTF_L
-from .standard import Pickup, Drop, Aspiration, Dispense
+from .standard import Pickup, Drop, Aspiration, Dispense, AspirationPlate, DispensePlate
 
 
 class TestLiquidHandlerLayout(unittest.TestCase):
@@ -385,17 +385,16 @@ class TestLiquidHandlerCommands(unittest.TestCase):
     # Simple transfer
     self.lh.pick_up_tips96(self.tip_rack) # pick up tips first.
     self.lh.stamp(self.plate, self.plate, volume=10)
-    # use first tip as proxy, TODO: will probably introduce new standard ops
-    t = self.tip_rack.get_tip("A1")
+    ts = self.tip_rack.get_all_tips()
 
     self.assertEqual(self.get_first_command("aspirate96"), {
       "command": "aspirate96",
       "args": (),
-      "kwargs": {"aspiration": Aspiration(resource=self.plate, volume=10.0, tip=t)}})
+      "kwargs": {"aspiration": AspirationPlate(resource=self.plate, volume=10.0, tips=ts)}})
     self.assertEqual(self.get_first_command("dispense96"), {
       "command": "dispense96",
       "args": (),
-      "kwargs": {"dispense": Dispense(resource=self.plate, volume=10.0, tip=t)}})
+      "kwargs": {"dispense": DispensePlate(resource=self.plate, volume=10.0, tips=ts)}})
     self.backend.clear()
 
   def test_tip_tracking_double_pickup(self):

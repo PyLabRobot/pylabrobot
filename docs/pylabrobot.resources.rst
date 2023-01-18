@@ -109,5 +109,5 @@ See :doc:`Using trackers <using-trackers>` for a tutorial.
   pylabrobot.resources.no_volume_tracking
   pylabrobot.resources.set_volume_tracking
   pylabrobot.resources.volume_tracker.VolumeTracker
+  pylabrobot.resources.volume_tracker.ContainerVolumeTracker
   pylabrobot.resources.volume_tracker.TipVolumeTracker
-  pylabrobot.resources.volume_tracker.WellVolumeTracker

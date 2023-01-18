@@ -8,7 +8,7 @@ from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
 from pylabrobot.resources import (
-  Resource,
+  Container,
   TIP_CAR_480_A00,
   TIP_CAR_288_C00,
   PLT_CAR_L5AC_A00,
@@ -211,9 +211,10 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
     self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
-    class BlueBucket(Resource):
+    class BlueBucket(Container):
       def __init__(self, name: str):
-        super().__init__(name, size_x=123, size_y=82, size_z=75, category="bucket")
+        super().__init__(name, size_x=123, size_y=82, size_z=75, category="bucket",
+          max_volume=123 * 82 * 75)
     self.bb = BlueBucket(name="blue bucket")
     self.deck.assign_child_resource(self.bb, location=Coordinate(425, 78.5, 20))
 
@@ -416,6 +417,7 @@ class TestSTARLiquidHandlerCommands(unittest.TestCase):
 
   def test_aspirate_single_resource(self):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
+    self.bb.tracker.set_used_volume(96 * 10 * 1.072) # liquid class correction
     self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
       "C0ASid0002at0 0 0 0 0 0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 "

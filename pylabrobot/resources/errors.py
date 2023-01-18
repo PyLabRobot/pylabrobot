@@ -2,11 +2,11 @@ class ResourceNotFoundError(Exception):
   pass
 
 
-class WellTooLittleLiquidError(Exception):
+class ContainerTooLittleLiquidError(Exception):
   """ Raised when trying to aspirate more liquid from a well than is still present. """
 
 
-class WellTooLittleVolumeError(Exception):
+class ContainerTooLittleVolumeError(Exception):
   """ Raised when trying to dispense more liquid into a well than is still available. """
 
 

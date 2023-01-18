@@ -8,7 +8,9 @@ from pylabrobot.liquid_handling.standard import (
   Pickup,
   Drop,
   Aspiration,
+  AspirationPlate,
   Dispense,
+  DispensePlate,
   Move,
 )
 
@@ -77,10 +79,10 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   def drop_tips96(self, tip_rack: TipRack):
     self.send_command(command="drop_tips96", data=dict(resource_name=tip_rack.name))
 
-  def aspirate96(self, aspiration: Aspiration):
+  def aspirate96(self, aspiration: AspirationPlate):
     self.send_command(command="aspirate96", data=dict(aspiration=aspiration.serialize()))
 
-  def dispense96(self, dispense: Dispense):
+  def dispense96(self, dispense: DispensePlate):
     self.send_command(command="dispense96", data=dict(dispense=dispense.serialize()))
 
   def move_resource(self, move: Move, **backend_kwargs):

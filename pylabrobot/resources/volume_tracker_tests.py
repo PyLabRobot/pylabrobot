@@ -2,12 +2,12 @@ import unittest
 
 from pylabrobot.liquid_handling.standard import Aspiration, Dispense
 from pylabrobot.resources import Cos_96_EZWash, HTF_L
-from pylabrobot.resources.volume_tracker import TipVolumeTracker, WellVolumeTracker
+from pylabrobot.resources.volume_tracker import TipVolumeTracker, ContainerVolumeTracker
 from pylabrobot.resources.errors import (
   TipTooLittleLiquidError,
   TipTooLittleVolumeError,
-  WellTooLittleLiquidError,
-  WellTooLittleVolumeError
+  ContainerTooLittleLiquidError,
+  ContainerTooLittleVolumeError
 )
 
 
@@ -63,7 +63,7 @@ class TestTipVolumeTracker(unittest.TestCase):
       tracker.queue_dispense(disp)
 
 
-class TestWellVolumeTracker(unittest.TestCase):
+class TestContainerVolumeTracker(unittest.TestCase):
   """ Test for the well volume tracker """
 
   def setUp(self) -> None:
@@ -72,7 +72,7 @@ class TestWellVolumeTracker(unittest.TestCase):
     self.tip_rack = HTF_L("tip")
 
   def test_init(self):
-    tracker = WellVolumeTracker(max_volume=100)
+    tracker = ContainerVolumeTracker(max_volume=100)
     self.assertEqual(tracker.history, [])
     self.assertEqual(tracker.get_free_volume(), 100)
     self.assertEqual(tracker.get_used_volume(), 0)
@@ -82,7 +82,7 @@ class TestWellVolumeTracker(unittest.TestCase):
     self.assertEqual(tracker.get_used_volume(), 20)
 
   def test_aspirate(self):
-    tracker = WellVolumeTracker(max_volume=100)
+    tracker = ContainerVolumeTracker(max_volume=100)
 
     op = Dispense(resource=self.plate.get_item("A1"), volume=20, tip=self.tip_rack.get_tip("A1"))
     tracker.queue_dispense(op)
@@ -96,11 +96,11 @@ class TestWellVolumeTracker(unittest.TestCase):
     self.assertEqual(tracker.get_free_volume(), 80)
 
     op = Dispense(resource=self.plate.get_item("A1"), volume=100, tip=self.tip_rack.get_tip("A1"))
-    with self.assertRaises(WellTooLittleVolumeError):
+    with self.assertRaises(ContainerTooLittleVolumeError):
       tracker.queue_dispense(op)
 
   def test_dispense(self):
-    tracker = WellVolumeTracker(max_volume=100)
+    tracker = ContainerVolumeTracker(max_volume=100)
 
     disp = Dispense(resource=self.plate.get_item("A1"), volume=80, tip=self.tip_rack.get_tip("A1"))
     tracker.queue_dispense(disp)
@@ -112,5 +112,5 @@ class TestWellVolumeTracker(unittest.TestCase):
 
     asp = Aspiration(resource=self.plate.get_item("A1"), volume=100,
       tip=self.tip_rack.get_tip("A1"))
-    with self.assertRaises(WellTooLittleLiquidError):
+    with self.assertRaises(ContainerTooLittleLiquidError):
       tracker.queue_aspiration(asp)

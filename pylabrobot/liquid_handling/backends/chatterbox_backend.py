@@ -6,7 +6,9 @@ from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.resources import Resource, TipRack
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
+  AspirationPlate,
   Dispense,
+  DispensePlate,
   Pickup,
   Drop,
   Move
@@ -54,10 +56,10 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
     print(f"Dropping tips to {tip_rack}.")
 
-  def aspirate96(self, aspiration: Aspiration):
+  def aspirate96(self, aspiration: AspirationPlate):
     print(f"Aspirating {aspiration.volume} from {aspiration.resource}.")
 
-  def dispense96(self, dispense: Dispense):
+  def dispense96(self, dispense: DispensePlate):
     print(f"Dispensing {dispense.volume} to {dispense.resource}.")
 
   def move_resource(self, move: Move, **backend_kwargs):
