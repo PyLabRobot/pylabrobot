@@ -1,4 +1,4 @@
-from .carrier import Carrier, CarrierSite, PlateCarrier, TipCarrier
+from .carrier import Carrier, CarrierSite, PlateCarrier, TipCarrier, create_homogenous_carrier_sites
 from .container import Container
 from .coordinate import Coordinate
 from .deck import Deck
