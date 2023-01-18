@@ -117,6 +117,13 @@ class TipTracker(ABC):
     self._pending_tip = self._tip
     self.pending.clear()
 
+  def clear(self) -> None:
+    """ Clear the history. """
+    self._ops.clear()
+    self.pending.clear()
+    self._tip = None
+    self._pending_tip = None
+
 
 class SpotTipTracker(TipTracker):
   """ A tip spot tip tracker tracks and validates tip operations for a single tip spot: a
