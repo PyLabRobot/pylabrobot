@@ -17,6 +17,7 @@ from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.channel_tip_tracker import ChannelTipTracker
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
+  Container,
   Deck,
   Resource,
   ResourceStack,
@@ -38,7 +39,9 @@ from .standard import (
   Pickup,
   Drop,
   Aspiration,
+  AspirationPlate,
   Dispense,
+  DispensePlate,
   Move,
   GripDirection
 )
@@ -526,7 +529,7 @@ class LiquidHandler:
   @need_setup_finished
   def aspirate(
     self,
-    resources: Union[Sequence[Resource], Resource],
+    resources: Union[Container, Sequence[Container]],
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
@@ -633,7 +636,7 @@ class LiquidHandler:
 
     for op in aspirations:
       if does_volume_tracking():
-        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+        if not op.resource.tracker.is_disabled:
           op.resource.tracker.queue_aspiration(op)
         op.tip.tracker.queue_aspiration(op)
 
@@ -646,13 +649,13 @@ class LiquidHandler:
       self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
     except:
       for op in aspirations:
-        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+        if not op.resource.tracker.is_disabled:
           op.resource.tracker.rollback()
           op.tip.tracker.rollback()
       raise
     else:
       for op in aspirations:
-        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+        if not op.resource.tracker.is_disabled:
           op.resource.tracker.commit()
           op.tip.tracker.commit()
 
@@ -662,7 +665,7 @@ class LiquidHandler:
   @need_setup_finished
   def dispense(
     self,
-    resources: Union[Resource, Sequence[Resource]],
+    resources: Union[Container, Sequence[Container]],
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
@@ -771,7 +774,7 @@ class LiquidHandler:
 
     for op in dispenses:
       if does_volume_tracking():
-        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+        if not op.resource.tracker.is_disabled:
           op.resource.tracker.queue_dispense(op)
         op.tip.tracker.queue_dispense(op)
 
@@ -784,13 +787,13 @@ class LiquidHandler:
       self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
     except:
       for op in dispenses:
-        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+        if not op.resource.tracker.is_disabled:
           op.resource.tracker.rollback()
           op.tip.tracker.rollback()
       raise
     else:
       for op in dispenses:
-        if hasattr(op.resource, "tracker") and not op.resource.tracker.is_disabled:
+        if not op.resource.tracker.is_disabled:
           op.resource.tracker.commit()
           op.tip.tracker.commit()
 
@@ -973,17 +976,17 @@ class LiquidHandler:
 
     if self._picked_up_tips96 is None:
       raise ChannelHasNoTipError("No tips have been picked up with the 96 head")
-    tip = self._picked_up_tips96.get_tip("A1") # FIXME:
+    tips = self._picked_up_tips96.get_all_tips()
 
     if plate.has_lid():
       raise ValueError("Aspirating from plate with lid")
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
-      self.backend.aspirate96(aspiration=Aspiration(
+      self.backend.aspirate96(aspiration=AspirationPlate(
         resource=plate,
         volume=volume,
         flow_rate=flow_rate,
-        tip=tip),
+        tips=tips),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
@@ -1025,17 +1028,17 @@ class LiquidHandler:
 
     if self._picked_up_tips96 is None:
       raise ChannelHasNoTipError("No tips have been picked up with the 96 head")
-    tip = self._picked_up_tips96.get_tip("A1") # FIXME:
+    tips = self._picked_up_tips96.get_all_tips()
 
     if plate.has_lid():
       raise ValueError("Dispensing to plate with lid")
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
-      self.backend.dispense96(dispense=Dispense(
+      self.backend.dispense96(dispense=DispensePlate(
         resource=plate,
         volume=volume,
         flow_rate=flow_rate,
-        tip=tip),
+        tips=tips),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "

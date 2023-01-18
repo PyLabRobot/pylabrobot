@@ -232,13 +232,13 @@
 #     venus_resource = self._get_venus_resource(tip_rack)
 #     venus_utils.tip_eject_96(self.ham_int, venus_resource, **backend_kwargs)
 
-#   def aspirate96(self, aspiration: Aspiration, **backend_kwargs):
+#   def aspirate96(self, aspiration: AspirationPlate, **backend_kwargs):
 #     """ Aspirate liquid from the specified resource using CoRe 96. """
 #     venus_resource = self._get_venus_resource(aspiration.resource)
 #     venus_utils.aspirate_96(self.ham_int, venus_resource, aspiration.volume,
 #       aspiration_speed=aspiration.flow_rate, **backend_kwargs)
 
-#   def dispense96(self, dispense: Dispense, **backend_kwargs):
+#   def dispense96(self, dispense: DispensePlate, **backend_kwargs):
 #     """ Dispense liquid to the specified resource using CoRe 96. """
 #     venus_resource = self._get_venus_resource(dispense.resource)
 #     venus_utils.dispense_96(self.ham_int, venus_resource, dispense.volume,

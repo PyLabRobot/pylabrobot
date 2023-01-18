@@ -10,7 +10,7 @@ import functools
 import logging
 import re
 import time
-from typing import Callable, List, Optional, Tuple, Sequence, TypeVar, cast
+from typing import Callable, List, Optional, Tuple, Sequence, TypeVar, Union, cast
 
 from pylabrobot import utils
 from pylabrobot.default import Default, get_value, is_default, is_not_default
@@ -23,9 +23,10 @@ from pylabrobot.liquid_handling.standard import (
   PipettingOp,
   Pickup,
   Drop,
-  LiquidHandlingOp,
   Aspiration,
+  AspirationPlate,
   Dispense,
+  DispensePlate,
   GripDirection,
   Move
 )
@@ -37,10 +38,10 @@ from pylabrobot.resources import (
   TipSpot,
   Well
 )
-from pylabrobot.resources.tip_tracker import TipSpotHasNoTipError
-from pylabrobot.resources.volume_tracker import (
+from pylabrobot.resources.errors import (
   TipTooLittleVolumeError,
-  WellTooLittleLiquidError
+  ContainerTooLittleLiquidError,
+  TipSpotHasNoTipError
 )
 from pylabrobot.resources.ml_star import (
   HamiltonTip,
@@ -743,7 +744,7 @@ class STAR(HamiltonLiquidHandler):
 
       raise e
 
-  def _get_tip_max_volumes(self, ops: Sequence[LiquidHandlingOp]) -> List[float]:
+  def _get_tip_max_volumes(self, ops: Sequence[Union[Aspiration, Dispense]]) -> List[float]:
     """ These tip volumes (mostly with filters) are slightly different form the ones in the
     liquid class mapping, so we need to map them here. If no mapping is found, we use the
     given maximal volume of the tip. """
@@ -1019,7 +1020,7 @@ class STAR(HamiltonLiquidHandler):
           tlv.append(i-1)
 
       if len(tll) > 0:
-        raise WellTooLittleLiquidError(f"There is not enough liquid in containers where the "
+        raise ContainerTooLittleLiquidError(f"There is not enough liquid in containers where the "
                                       f"following channels were trying to aspirate: {tll}") from e
       if len(tlv) > 0:
         raise TipTooLittleVolumeError(f"There is too much liquid in the following channels: {tlv}")\
@@ -1308,7 +1309,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def aspirate96(
     self,
-    aspiration: Aspiration,
+    aspiration: AspirationPlate,
     blow_out_air_volume: float = 0,
     use_lld: bool = False,
     liquid_height: float = 2,
@@ -1452,7 +1453,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def dispense96(
     self,
-    dispense: Dispense,
+    dispense: DispensePlate,
     jet: bool = False,
     blow_out: bool = True, # TODO: do we need this if we can just check if blow_out_air_volume > 0?
     liquid_height: float = 2,

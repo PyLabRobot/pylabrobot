@@ -258,7 +258,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             "offset": "default",
             "liquid_height": "default",
             "blow_out_air_volume": 0,
-            "tip": self.tip_rack.get_tip("A1").serialize(),
+            "tips": [tip.serialize() for tip in self.tip_rack.get_all_tips()],
             "liquid_class": "WATER"
           }
         })
@@ -299,7 +299,7 @@ class TestHTTPBackendOps(unittest.TestCase):
             "offset": "default",
             "liquid_height": "default",
             "blow_out_air_volume": 0,
-            "tip": self.tip_rack.get_tip("A1").serialize(),
+            "tips": [tip.serialize() for tip in self.tip_rack.get_all_tips()],
             "liquid_class": "WATER"
           }
         })

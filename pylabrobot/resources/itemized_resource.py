@@ -374,6 +374,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         return i
     return None
 
+  def get_all_items(self) -> List[T]:
+    """ Get all items in the resource."""
+
+    return self.get_items(range(self.num_items))
 
 def create_equally_spaced(
     klass: Type[T],

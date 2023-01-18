@@ -4,8 +4,8 @@ import sys
 from typing import List, TYPE_CHECKING
 
 from pylabrobot.resources.errors import (
-  WellTooLittleLiquidError,
-  WellTooLittleVolumeError,
+  ContainerTooLittleLiquidError,
+  ContainerTooLittleVolumeError,
   TipTooLittleLiquidError,
   TipTooLittleVolumeError,
 )
@@ -117,6 +117,24 @@ class VolumeTracker(ABC):
     self._pending_volume = 0.0
 
 
+class ContainerVolumeTracker(VolumeTracker):
+  """ A container volume tracker tracks and validates volume operations for a single container. """
+
+  def handle_aspiration(self, op: "Aspiration") -> None:
+    if op.volume > self.get_used_volume():
+      raise ContainerTooLittleLiquidError(f"Container {op.resource.name} has too little liquid to "
+                                      f"aspirate {op.volume} uL ({self.get_used_volume()} uL out "
+                                      f"of {self.max_volume} uL used).")
+    self._pending_volume -= op.volume
+
+  def handle_dispense(self, op: "Dispense") -> None:
+    if op.volume > self.get_free_volume():
+      raise ContainerTooLittleVolumeError(f"Container {op.resource.name} has too little volume to "
+                                      f"dispense {op.volume} uL ({self.get_used_volume()} uL out "
+                                      f"of {self.max_volume} uL used).")
+    self._pending_volume += op.volume
+
+
 class TipVolumeTracker(VolumeTracker):
   """ A channel volume tracker tracks and validates volume operations for a single tip. """
 
@@ -135,21 +153,3 @@ class TipVolumeTracker(VolumeTracker):
                                     f"{self.max_volume} uL used).")
 
     self._pending_volume -= op.volume
-
-
-class WellVolumeTracker(VolumeTracker):
-  """ A well volume tracker tracks and validates volume operations for a single well. """
-
-  def handle_aspiration(self, op: "Aspiration") -> None:
-    if op.volume > self.get_used_volume():
-      raise WellTooLittleLiquidError(f"Well {op.resource.name} has too little liquid to aspirate "
-                                      f"{op.volume} uL ({self.get_used_volume()} uL out of "
-                                      f"{self.max_volume} uL used).")
-    self._pending_volume -= op.volume
-
-  def handle_dispense(self, op: "Dispense") -> None:
-    if op.volume > self.get_free_volume():
-      raise WellTooLittleVolumeError(f"Well {op.resource.name} has too little volume to dispense "
-                                      f"{op.volume} uL ({self.get_used_volume()} uL out of "
-                                      f"{self.max_volume} uL used).")
-    self._pending_volume += op.volume
