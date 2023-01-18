@@ -35,7 +35,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
                 num_items_x: Optional[int] = None,
                 num_items_y: Optional[int] = None,
                 category: Optional[str] = None,
-                ):
+                model: Optional[str] = None):
     """ Initialize an itemized resource
 
     Args:
@@ -71,7 +71,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         ...   items=[[Well("well", size_x=1, size_y=1, size_z=1)]])
     """
 
-    super().__init__(name, size_x, size_y, size_z, category=category)
+    super().__init__(name, size_x, size_y, size_z, category=category, model=model)
 
     if items is None:
       if num_items_x is None or num_items_y is None:

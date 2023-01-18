@@ -12,7 +12,8 @@ class Well(Container):
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float = 9,
-    category: str = "well", volume: float = 0, max_volume: Optional[float] = None):
+    category: str = "well", volume: float = 0, max_volume: Optional[float] = None,
+    model: Optional[str] = None):
     """ Create a new well.
 
     Args:
@@ -31,4 +32,4 @@ class Well(Container):
       max_volume = math.pi * (size_x / 2) ** 2 * size_z
 
     super().__init__(name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
-      volume=volume, max_volume=max_volume)
+      volume=volume, max_volume=max_volume, model=model)

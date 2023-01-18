@@ -99,10 +99,11 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
     category: str = "tip_rack",
+    model: Optional[str] = None,
     with_tips: bool = True,
   ):
-    super().__init__(name, size_x, size_y, size_z, items=items,
-                     num_items_x=num_items_x, num_items_y=num_items_y, category=category)
+    super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
+      num_items_y=num_items_y, category=category, model=model)
 
     if items is not None and len(items) > 0:
       if with_tips:

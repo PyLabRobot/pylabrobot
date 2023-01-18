@@ -41,6 +41,12 @@ class Deck(Resource):
     self.resource_assigned_callback_callback = resource_assigned_callback
     self.resource_unassigned_callback_callback = resource_unassigned_callback
 
+  def serialize(self) -> dict:
+    """ Serialize this deck. """
+    super_serialized = super().serialize()
+    del super_serialized["model"] # deck's don't typically have a model
+    return super_serialized
+
   def _check_name_exists(self, resource: Resource):
     """ Raises a ValueError if the resource name already exists. This method is recursive, and
     will also check child resources. """

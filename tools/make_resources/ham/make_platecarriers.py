@@ -47,7 +47,8 @@ def make_from_file(fn, o):
     o.write(f'      {repr(site)}' + ('' if i == len(sites) - 1 else ',') + '\n')
   o.write(f'    ],\n')
   o.write(f'    site_size_x={site_width},\n')
-  o.write(f'    site_size_y={site_height}\n')
+  o.write(f'    site_size_y={site_height},\n')
+  o.write(f'    model="{cname}"\n')
   o.write(f'  )\n')
 
 

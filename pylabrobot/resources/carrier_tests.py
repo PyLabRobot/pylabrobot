@@ -186,6 +186,7 @@ class CarrierTests(unittest.TestCase):
       "size_z": 13.0,
       "location": None,
       "category": "tip_carrier",
+      "model": None,
       "parent_name": None,
       "children": [
         {
@@ -202,7 +203,8 @@ class CarrierTests(unittest.TestCase):
           },
           "category": "carrier_site",
           "children": [],
-          "parent_name": "tip_car"
+          "parent_name": "tip_car",
+          "model": None
         },
         {
           "spot": 1,
@@ -218,7 +220,8 @@ class CarrierTests(unittest.TestCase):
           },
           "category": "carrier_site",
           "children": [],
-          "parent_name": "tip_car"
+          "parent_name": "tip_car",
+          "model": None
         },
         {
           "spot": 2,
@@ -234,7 +237,8 @@ class CarrierTests(unittest.TestCase):
           },
           "category": "carrier_site",
           "children": [],
-          "parent_name": "tip_car"
+          "parent_name": "tip_car",
+          "model": None
         },
         {
           "spot": 3,
@@ -250,7 +254,8 @@ class CarrierTests(unittest.TestCase):
           },
           "category": "carrier_site",
           "children": [],
-          "parent_name": "tip_car"
+          "parent_name": "tip_car",
+          "model": None
         },
         {
           "spot": 4,
@@ -266,7 +271,8 @@ class CarrierTests(unittest.TestCase):
           },
           "category": "carrier_site",
           "children": [],
-          "parent_name": "tip_car"
+          "parent_name": "tip_car",
+          "model": None
         }
       ]
     })
