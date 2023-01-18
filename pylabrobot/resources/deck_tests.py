@@ -13,7 +13,8 @@ from pylabrobot.resources import (
   TipSpot,
   Well,
   create_equally_spaced,
-  standard_volume_tip_with_filter
+  standard_volume_tip_with_filter,
+  create_homogenous_carrier_sites
 )
 
 
@@ -47,9 +48,8 @@ class DeckTests(unittest.TestCase):
 
     # test with custom classes
     custom_1 = Deck()
-    tc = TipCarrier("tc", 200, 200, 200, sites=[
-      Coordinate(10, 20, 30)
-    ], site_size_x=10, site_size_y=10)
+    tc = TipCarrier("tc", 200, 200, 200, sites=create_homogenous_carrier_sites([
+      Coordinate(10, 20, 30)], site_size_x=10, site_size_y=10))
 
     tc[0] = TipRack("tips", 10, 20, 30,
       items=create_equally_spaced(TipSpot,
@@ -57,9 +57,8 @@ class DeckTests(unittest.TestCase):
         dx=-1, dy=-1, dz=-1,
         item_size_x=1, item_size_y=1,
         make_tip=standard_volume_tip_with_filter))
-    pc = PlateCarrier("pc", 100, 100, 100, sites=[
-      Coordinate(10, 20, 30)
-    ], site_size_x=10, site_size_y=10)
+    pc = PlateCarrier("pc", 100, 100, 100, sites=create_homogenous_carrier_sites([
+      Coordinate(10, 20, 30)], site_size_x=10, site_size_y=10))
     pc[0] = Plate("plate", 10, 20, 30,
       items=create_equally_spaced(Well,
         num_items_x=1, num_items_y=1,

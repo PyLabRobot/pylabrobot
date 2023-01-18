@@ -76,9 +76,7 @@ class Carrier(Resource):
     self,
     name: str,
     size_x: float, size_y: float, size_z: float,
-    sites: Optional[List[Coordinate]] = None,
-    site_size_x: Optional[float] = None,
-    site_size_y: Optional[float] = None,
+    sites: Optional[List[CarrierSite]] = None,
     category: Optional[str] = "carrier",
     model: Optional[str] = None):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
@@ -87,16 +85,10 @@ class Carrier(Resource):
     sites = sites if sites is not None else []
     self.capacity = len(sites)
 
-    if len(sites) > 0:
-      assert site_size_x is not None and site_size_y is not None, \
-        "site_size_x and site_size_y must be specified if sites are specified"
-
     self.sites: List[CarrierSite] = []
-    for spot in range(self.capacity):
-      site = CarrierSite(
-        name=f"carrier-{self.name}-spot-{spot}",
-        size_x=site_size_x, size_y=site_size_y, size_z=0, spot=spot) # type: ignore
-      self.assign_child_resource(site, location=sites[spot])
+    for site in sites:
+      site.name = f"carrier-{self.name}-spot-{site.spot}"
+      self.assign_child_resource(site, location=site.location)
 
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
     """ Assign a resource to this carrier.
@@ -173,13 +165,11 @@ class TipCarrier(Carrier):
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Optional[List[Coordinate]] = None,
-    site_size_x: Optional[float] = None,
-    site_size_y: Optional[float] = None,
+    sites: Optional[List[CarrierSite]] = None,
     category="tip_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
-      sites, site_size_x, site_size_y, category=category, model=model)
+      sites,category=category, model=model)
 
 
 class PlateCarrier(Carrier):
@@ -190,10 +180,24 @@ class PlateCarrier(Carrier):
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Optional[List[Coordinate]] = None,
-    site_size_x: Optional[float] = None,
-    site_size_y: Optional[float] = None,
+    sites: Optional[List[CarrierSite]] = None,
     category="plate_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
-      sites, site_size_x, site_size_y, category=category, model=model)
+      sites,category=category, model=model)
+
+
+def create_homogenous_carrier_sites(
+  locations: List[Coordinate],
+  site_size_x: float,
+  site_size_y: float) -> List[CarrierSite]:
+  """ Create a list of carrier sites with the same size. """
+
+  sites = []
+  for spot, location in enumerate(locations):
+    site = CarrierSite(
+      name=f"carrier-site-{spot}",
+      size_x=site_size_x, size_y=site_size_y, size_z=0, spot=spot)
+    site.location = location
+    sites.append(site)
+  return sites
