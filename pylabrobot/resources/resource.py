@@ -58,6 +58,7 @@ class Resource:
       size_z=self._size_z,
       location=self.location.serialize() if self.location is not None else None,
       category=self.category,
+      model=self.model,
       children=[child.serialize() for child in self.children],
       parent_name=self.parent.name if self.parent is not None else None
     )

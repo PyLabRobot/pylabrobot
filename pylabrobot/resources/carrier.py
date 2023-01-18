@@ -14,8 +14,9 @@ class CarrierSite(Resource):
   """ A single site within a carrier. """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float, spot: int,
-    category: str = "carrier_site"):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
+    category: str = "carrier_site", model: Optional[str] = None):
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
+      model=model)
     self.resource: Optional[Resource] = None
     self.spot: int = spot
 
@@ -78,8 +79,10 @@ class Carrier(Resource):
     sites: Optional[List[Coordinate]] = None,
     site_size_x: Optional[float] = None,
     site_size_y: Optional[float] = None,
-    category: Optional[str] = "carrier"):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
+    category: Optional[str] = "carrier",
+    model: Optional[str] = None):
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
+      model=model)
 
     sites = sites if sites is not None else []
     self.capacity = len(sites)
@@ -173,9 +176,10 @@ class TipCarrier(Carrier):
     sites: Optional[List[Coordinate]] = None,
     site_size_x: Optional[float] = None,
     site_size_y: Optional[float] = None,
-    category="tip_carrier"):
+    category="tip_carrier",
+    model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
-      sites, site_size_x, site_size_y, category=category)
+      sites, site_size_x, site_size_y, category=category, model=model)
 
 
 class PlateCarrier(Carrier):
@@ -189,6 +193,7 @@ class PlateCarrier(Carrier):
     sites: Optional[List[Coordinate]] = None,
     site_size_x: Optional[float] = None,
     site_size_y: Optional[float] = None,
-    category="plate_carrier"):
+    category="plate_carrier",
+    model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
-      sites, site_size_x, site_size_y, category=category)
+      sites, site_size_x, site_size_y, category=category, model=model)

@@ -47,7 +47,8 @@ class Plate(ItemizedResource[Well]):
     category: str = "plate",
     lid_height: float = 0,
     with_lid: bool = False,
-    compute_volume_from_height: Optional[Callable[[float], float]] = None
+    compute_volume_from_height: Optional[Callable[[float], float]] = None,
+    model: Optional[str] = None
   ):
     """ Initialize a Plate resource.
 
@@ -71,8 +72,8 @@ class Plate(ItemizedResource[Well]):
       with_lid: Whether the plate has a lid.
     """
 
-    super().__init__(name, size_x, size_y, size_z, items=items,
-                     num_items_x=num_items_x, num_items_y=num_items_y, category=category)
+    super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
+      num_items_y=num_items_y, category=category, model=model)
     self.one_dot_max = one_dot_max
     self.lid: Optional[Lid] = None
     self.lid_height = lid_height

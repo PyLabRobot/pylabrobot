@@ -117,7 +117,8 @@ class TestResource(unittest.TestCase):
       "type": "Resource",
       "children": [],
       "category": None,
-      "parent_name": None
+      "parent_name": None,
+      "model": None,
     })
 
   def test_deserialize(self):

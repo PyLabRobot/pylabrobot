@@ -60,9 +60,9 @@ def make_from_file(fn, o):
   description = find_string("Description", c)
 
   if cname.endswith("_P"):
-    writer.write_tip_rack_p(o=o, cname=cname, description=description)
+    writer.write_tip_rack_p(o=o, cname=cname, description=description, model=cname)
   else:
-    writer.write_tip_rack_with_create_equally_spaced(o=o, base_class=BASE_CLASS, name=cname, description=description, size_x=size_x, size_y=size_y, size_z=size_z, tip_type=tip_type, dx=dx, dy=dy, dz=dz, tip_size_x=tip_size_x, tip_size_y=tip_size_y, num_items_x=num_items_x, num_items_y=num_items_y)
+    writer.write_tip_rack_with_create_equally_spaced(o=o, base_class=BASE_CLASS, name=cname, description=description, size_x=size_x, size_y=size_y, size_z=size_z, tip_type=tip_type, dx=dx, dy=dy, dz=dz, tip_size_x=tip_size_x, tip_size_y=tip_size_y, num_items_x=num_items_x, num_items_y=num_items_y, model=cname)
 
 
 if __name__ == "__main__":

@@ -31,7 +31,6 @@ def make_from_file(fn, o):
 
   # rck files use the center of the well, but we want the bottom left corner.
   dx = round(find_float('BndryX', c) - well_size_x/2, 4)
-  print(dx, find_float('BndryX', c), well_size_x/2)
   dy = round(find_float('BndryY', c) - well_size_y/2, 4)
   dz = 0
 
@@ -53,10 +52,10 @@ def make_from_file(fn, o):
     one_dot_max = find_float('1.Max', c2)
 
   if fn.endswith("_L.rck"): # landscape mode
-    writer.write_landscape_plate(o=o, cname=cname, description=description)
+    writer.write_landscape_plate(o=o, cname=cname, description=description, model=cname)
 
   elif fn.endswith("_P.rck"): # portrait mode
-    writer.write_portrait_plate(o=o, cname=cname, description=description)
+    writer.write_portrait_plate(o=o, cname=cname, description=description, model=cname)
 
   else: # definition
     writer.write_plate_with_create_equally_spaced(
@@ -76,7 +75,8 @@ def make_from_file(fn, o):
       well_size_y=well_size_y,
       one_dot_max=one_dot_max,
       EqnOfVol=EqnOfVol,
-      lid_height=10
+      lid_height=10,
+      model=cname
     )
 
 
