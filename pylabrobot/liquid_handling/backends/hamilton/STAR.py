@@ -12,7 +12,6 @@ import re
 import time
 from typing import Callable, List, Optional, Tuple, Sequence, TypeVar, Union, cast
 
-from pylabrobot import utils
 from pylabrobot.default import Default, get_value, is_default, is_not_default
 import pylabrobot.liquid_handling.backends.hamilton.errors as herrors
 from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
@@ -1828,9 +1827,10 @@ class STAR(HamiltonLiquidHandler):
 
     # pylint: disable=redefined-builtin
 
-    utils.assert_clamp(tip_type_table_index, 0, 99, "tip_type_table_index")
-    utils.assert_clamp(tip_length, 1, 1999, "tip_length")
-    utils.assert_clamp(maximum_tip_volume, 1, 56000, "maximum_tip_volume")
+    assert 0 <= tip_type_table_index <= 99, "tip_type_table_index must be between 0 and 99"
+    assert 0 <= tip_type_table_index <= 99, "tip_type_table_index must be between 0 and 99"
+    assert 1 <= tip_length <= 1999, "tip_length must be between 1 and 1999"
+    assert 1 <= maximum_tip_volume <= 56000, "maximum_tip_volume must be between 1 and 56000"
 
     return self.send_command(
       module="C0",
@@ -2043,7 +2043,7 @@ class STAR(HamiltonLiquidHandler):
       verification_status: verification status.
     """
 
-    utils.assert_clamp(verification_subject, 0, 24, "verification_subject")
+    assert 0 <= verification_subject <= 24, "verification_subject must be between 0 and 24"
 
     return self.send_command(
       module="C0",
@@ -2168,17 +2168,15 @@ class STAR(HamiltonLiquidHandler):
       tip_waste_x_position: tip waste X-position. Must be between 1000 and
                             25000. Default 13400.
       right_x_drive_configuration_byte_1: right X drive configuration byte 1 (see
-                                          xl parameter bits). Must be between 0 and 1.
-                                          Default 0. # TODO: this.
+        xl parameter bits). Must be between 0 and 1.  Default 0. # TODO: this.
       right_x_drive_configuration_byte_2: right X drive configuration byte 2 (see
-                                          xn parameter bits). Must be between 0 and 1.
-                                          Default 0. # TODO: this.
+        xn parameter bits). Must be between 0 and 1.  Default 0. # TODO: this.
       minimal_iswap_collision_free_position: minimal iSWAP collision free position for
-                                            direct X access. For explanation of calculation
-                                            see Fig. 4. Must be between 0 and 30000. Default 3500.
+        direct X access. For explanation of calculation see Fig. 4. Must be between 0 and 30000.
+        Default 3500.
       maximal_iswap_collision_free_position: maximal iSWAP collision free position for
-                                              direct X access. For explanation of calculation
-                                              see Fig. 4. Must be between 0 and 30000. Default 11400
+        direct X access. For explanation of calculation see Fig. 4. Must be between 0 and 30000.
+        Default 11400
       left_x_arm_width: width of left X arm [0.1 mm]. Must be between 0 and 9999. Default 3700.
       right_x_arm_width: width of right X arm [0.1 mm]. Must be between 0 and 9999. Default 3700.
       num_pip_channels: number of PIP channels. Must be between 0 and 16. Default 0.
@@ -2198,32 +2196,35 @@ class STAR(HamiltonLiquidHandler):
                                     and 9999. Default 60.
     """
 
-    utils.assert_clamp(instrument_size_in_slots_x_range, 10, 99,
-      "instrument_size_in_slots_(x_range)")
-    utils.assert_clamp(auto_load_size_in_slots, 10, 54, "auto_load_size_in_slots")
-    utils.assert_clamp(tip_waste_x_position, 1000, 25000, "tip_waste_x_position")
-    utils.assert_clamp(right_x_drive_configuration_byte_1, 0, 1,
-      "right_x_drive_configuration_byte_1")
-    utils.assert_clamp(right_x_drive_configuration_byte_2, 0, 1,
-      "right_x_drive_configuration_byte_2")
-    utils.assert_clamp(minimal_iswap_collision_free_position, 0, 30000, \
-                  "minimal_iswap_collision_free_position")
-    utils.assert_clamp(maximal_iswap_collision_free_position, 0, 30000, \
-                  "maximal_iswap_collision_free_position")
-    utils.assert_clamp(left_x_arm_width, 0, 9999, "left_x_arm_width")
-    utils.assert_clamp(right_x_arm_width, 0, 9999, "right_x_arm_width")
-    utils.assert_clamp(num_pip_channels, 0, 16, "num_pip_channels")
-    utils.assert_clamp(num_xl_channels, 0, 8, "num_xl_channels")
-    utils.assert_clamp(num_robotic_channels, 0, 8, "num_robotic_channels")
-    utils.assert_clamp(minimal_raster_pitch_of_pip_channels, 0, 999, \
-                  "minimal_raster_pitch_of_pip_channels")
-    utils.assert_clamp(minimal_raster_pitch_of_xl_channels, 0, 999, \
-                  "minimal_raster_pitch_of_xl_channels")
-    utils.assert_clamp(minimal_raster_pitch_of_robotic_channels, 0, 999, \
-                  "minimal_raster_pitch_of_robotic_channels")
-    utils.assert_clamp(pip_maximal_y_position, 0, 9999, "pip_maximal_y_position")
-    utils.assert_clamp(left_arm_minimal_y_position, 0, 9999, "left_arm_minimal_y_position")
-    utils.assert_clamp(right_arm_minimal_y_position, 0, 9999, "right_arm_minimal_y_position")
+    assert 1 <= instrument_size_in_slots_x_range <= 9, \
+      "instrument_size_in_slots_x_range must be between 1 and 99"
+    assert 1 <= auto_load_size_in_slots <= 54, "auto_load_size_in_slots must be between 1 and 54"
+    assert 1000 <= tip_waste_x_position <= 25000, "tip_waste_x_position must be between 1 and 25000"
+    assert 0 <= right_x_drive_configuration_byte_1 <= 1, \
+      "right_x_drive_configuration_byte_1 must be between 0 and 1"
+    assert 0 <= right_x_drive_configuration_byte_2 <= 1, \
+      "right_x_drive_configuration_byte_2 must be between 0 and  must1"
+    assert 0 <= minimal_iswap_collision_free_position <= 30000, \
+      "minimal_iswap_collision_free_position must be between 0 and 30000"
+    assert 0 <= maximal_iswap_collision_free_position <= 30000, \
+      "maximal_iswap_collision_free_position must be between 0 and 30000"
+    assert 0 <= left_x_arm_width <= 9999, "left_x_arm_width must be between 0 and 9999"
+    assert 0 <= right_x_arm_width <= 9999, "right_x_arm_width must be between 0 and 9999"
+    assert 0 <= num_pip_channels <= 16, "num_pip_channels must be between 0 and 16"
+    assert 0 <= num_xl_channels <= 8, "num_xl_channels must be between 0 and 8"
+    assert 0 <= num_robotic_channels <= 8, "num_robotic_channels must be between 0 and 8"
+    assert 0 <= minimal_raster_pitch_of_pip_channels <= 999, \
+     "minimal_raster_pitch_of_pip_channels must be between 0 and 999"
+    assert 0 <= minimal_raster_pitch_of_xl_channels <= 999, \
+      "minimal_raster_pitch_of_xl_channels must be between 0 and 999"
+    assert 0 <= minimal_raster_pitch_of_robotic_channels <= 999, \
+      "minimal_raster_pitch_of_robotic_channels must be between 0 and 999"
+    assert 0 <= pip_maximal_y_position <= 9999, \
+      "pip_maximal_y_position must be between 0 and 9999"
+    assert 0 <= left_arm_minimal_y_position <= 9999, \
+      "left_arm_minimal_y_position must be between 0 and 9999"
+    assert 0 <= right_arm_minimal_y_position <= 9999, \
+      "right_arm_minimal_y_position must be between 0 and 9999"
 
     return self.send_command(
       module="C0",
@@ -2301,7 +2302,7 @@ class STAR(HamiltonLiquidHandler):
       data_stream: data stream (12 characters). Default <class 'str'>.
     """
 
-    utils.assert_clamp(data_index, 0, 9, "data_index")
+    assert 0 <= data_index <= 9, "data_index must be between 0 and 9"
     assert len(data_stream) == 12, "data_stream must be 12 chars"
 
     return self.send_command(
@@ -2341,7 +2342,7 @@ class STAR(HamiltonLiquidHandler):
       verification_subject: verification subject. Must be between 0 and 24. Default 0.
     """
 
-    utils.assert_clamp(verification_subject, 0, 24, "verification_subject")
+    assert 0 <= verification_subject <= 24, "verification_subject must be between 0 and 24"
 
     # TODO: parse results.
     return self.send_command(
@@ -2408,7 +2409,7 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position_")
+    assert 0 <= x_position <= 30000, "x_position_ must be between 0 and 30000"
 
     return self.send_command(
       module="C0",
@@ -2428,7 +2429,7 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position_")
+    assert 0 <= x_position <= 30000, "x_position_ must be between 0 and 30000"
 
     return self.send_command(
       module="C0",
@@ -2446,7 +2447,7 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
 
     return self.send_command(
       module="C0",
@@ -2464,7 +2465,7 @@ class STAR(HamiltonLiquidHandler):
       x_position: X-Position [0.1mm]. Must be between 0 and 30000. Default 0.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
 
     return self.send_command(
       module="C0",
@@ -2495,13 +2496,14 @@ class STAR(HamiltonLiquidHandler):
         1) all arms left.  2) all arms right.
     """
 
-    utils.assert_clamp(taken_area_identification_number, 0, 9999, \
-                  "taken_area_identification_number")
-    utils.assert_clamp(taken_area_left_margin, 0, 99, "taken_area_left_margin")
-    utils.assert_clamp(taken_area_left_margin_direction, 0, 1, "taken_area_left_margin_direction")
-    utils.assert_clamp(taken_area_size, 0, 50000, "taken_area_size")
-    utils.assert_clamp(arm_preposition_mode_related_to_taken_areas, 0, 2, \
-                  "arm_preposition_mode_(related_to_taken_area)s")
+    assert 0 <= taken_area_identification_number <= 9999, \
+      "taken_area_identification_number must be between 0 and 9999"
+    assert 0 <= taken_area_left_margin <= 99, "taken_area_left_margin must be between 0 and 99"
+    assert 0 <= taken_area_left_margin_direction <= 1, \
+      "taken_area_left_margin_direction must be between 0 and 1"
+    assert 0 <= taken_area_size <= 50000, "taken_area_size must be between 0 and 50000"
+    assert 0 <= arm_preposition_mode_related_to_taken_areas <= 2, \
+      "arm_preposition_mode_related_to_taken_areas must be between 0 and 2"
 
     return self.send_command(
       module="C0",
@@ -2524,8 +2526,8 @@ class STAR(HamiltonLiquidHandler):
                                         Must be between 0 and 9999. Default 0.
     """
 
-    utils.assert_clamp(taken_area_identification_number, 0, 9999,
-      "taken_area_identification_number")
+    assert 0 <= taken_area_identification_number <= 999, \
+      "taken_area_identification_number must be between 0 and 9999"
 
     return self.send_command(
       module="C0",
@@ -2617,13 +2619,16 @@ class STAR(HamiltonLiquidHandler):
         drop (no shift) (tp/ tz = stop disk height). Must be between 0 and 1. Default 1.
     """
 
-    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
-    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
-    utils.assert_clamp(begin_of_tip_deposit_process, 0, 3600, "begin_of_tip_deposit_process")
-    utils.assert_clamp(end_of_tip_deposit_process, 0, 3600, "end_of_tip_deposit_process")
-    utils.assert_clamp(z_position_at_end_of_a_command, 0, 3600, "z_position_at_end_of_a_command")
-    utils.assert_clamp(tip_type, 0, 99, "tip")
-    utils.assert_clamp(discarding_method, 0, 1, "discarding_method")
+    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
+    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
+    assert 0 <= begin_of_tip_deposit_process <= 3600, \
+      "begin_of_tip_deposit_process must be between 0 and 3600"
+    assert 0 <= end_of_tip_deposit_process <= 3600, \
+      "end_of_tip_deposit_process must be between 0 and 3600"
+    assert 0 <= z_position_at_end_of_a_command <= 3600, \
+      "z_position_at_end_of_a_command must be between 0 and 3600"
+    assert 0 <= tip_type <= 99, "tip must be between 0 and 99"
+    assert 0 <= discarding_method <= 1, "discarding_method must be between 0 and 1"
 
     return self.send_command(
       module="C0",
@@ -2669,12 +2674,14 @@ class STAR(HamiltonLiquidHandler):
       pickup_method: Pick up method.
     """
 
-    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
-    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
-    utils.assert_clamp(begin_tip_pick_up_process, 0, 3600, "begin_tip_pick_up_process")
-    utils.assert_clamp(end_tip_pick_up_process, 0, 3600, "end_tip_pick_up_process")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
+    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
+    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
+    assert 0 <= begin_tip_pick_up_process <= 3600, \
+      "begin_tip_pick_up_process must be between 0 and 3600"
+    assert 0 <= end_tip_pick_up_process <= 3600, \
+      "end_tip_pick_up_process must be between 0 and 3600"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
 
     return self.send_command(
       module="C0",
@@ -2722,12 +2729,14 @@ class STAR(HamiltonLiquidHandler):
     Otherwise, tp/ tz = stop disk height.
     """
 
-    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
-    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
-    utils.assert_clamp(begin_tip_deposit_process, 0, 3600, "begin_tip_deposit_process")
-    utils.assert_clamp(end_tip_deposit_process, 0, 3600, "end_tip_deposit_process")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
+    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
+    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
+    assert 0 <= begin_tip_deposit_process <= 3600, \
+      "begin_tip_deposit_process must be between 0 and 3600"
+    assert 0 <= end_tip_deposit_process <= 3600, \
+      "end_tip_deposit_process must be between 0 and 3600"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
 
     return self.send_command(
       module="C0",
@@ -2885,57 +2894,78 @@ class STAR(HamiltonLiquidHandler):
           3600. Default 30.
     """
 
-    utils.assert_clamp(aspiration_type, 0, 2, "aspiration_type")
-    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
-    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(min_z_endpos, 0, 3600, "min_z_endpos")
-    utils.assert_clamp(lld_search_height, 0, 3600, "lld_search_height")
-    utils.assert_clamp(clot_detection_height, 0, 500, "clot_detection_height")
-    utils.assert_clamp(liquid_surface_no_lld, 0, 3600, "liquid_surface_no_lld")
-    utils.assert_clamp(pull_out_distance_transport_air, 0, 3600, "pull_out_distance_transport_air")
-    utils.assert_clamp(second_section_height, 0, 3600, "second_section_height")
-    utils.assert_clamp(second_section_ratio, 0, 10000, "second_section_ratio")
-    utils.assert_clamp(minimum_height, 0, 3600, "minimum_height")
-    utils.assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
-    utils.assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    utils.assert_clamp(surface_following_distance, 0, 3600, "surface_following_distance")
-    utils.assert_clamp(aspiration_volumes, 0, 12500, "aspiration_volumes")
-    utils.assert_clamp(aspiration_speed, 4, 5000, "aspiration_speed")
-    utils.assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
-    utils.assert_clamp(blow_out_air_volume, 0, 9999, "blow_out_air_volume")
-    utils.assert_clamp(pre_wetting_volume, 0, 999, "pre_wetting_volume")
-    utils.assert_clamp(lld_mode, 0, 4, "lld_mode")
-    utils.assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
-    utils.assert_clamp(dp_lld_sensitivity, 1, 4, "dp_lld_sensitivity")
-    utils.assert_clamp(aspirate_position_above_z_touch_off, 0, 100, \
-                  "aspirate_position_above_z_touch_off")
-    utils.assert_clamp(detection_height_difference_for_dual_lld, 0, 99, \
-                  "detection_height_difference_for_dual_lld")
-    utils.assert_clamp(swap_speed, 3, 1600, "swap_speed")
-    utils.assert_clamp(settling_time, 0, 99, "settling_time")
-    utils.assert_clamp(homogenization_volume, 0, 12500, "homogenization_volume")
-    utils.assert_clamp(homogenization_cycles, 0, 99, "homogenization_cycles")
-    utils.assert_clamp(homogenization_position_from_liquid_surface, 0, 900, \
-                  "homogenization_position_from_liquid_surface")
-    utils.assert_clamp(homogenization_speed, 4, 5000, "homogenization_speed")
-    utils.assert_clamp(homogenization_surface_following_distance, 0, 3600, \
-                  "homogenization_surface_following_distance")
-    utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
-    utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
-    utils.assert_clamp(retract_height_over_2nd_section_to_empty_tip, 0, 3600, \
-                  "retract_height_over_2nd_section_to_empty_tip")
-    utils.assert_clamp(dispensation_speed_during_emptying_tip, 4, 5000, \
-                  "dispensation_speed_during_emptying_tip")
-    utils.assert_clamp(dosing_drive_speed_during_2nd_section_search, 4, 5000, \
-                  "dosing_drive_speed_during_2nd_section_search")
-    utils.assert_clamp(z_drive_speed_during_2nd_section_search, 3, 1600, \
-                  "z_drive_speed_during_2nd_section_search")
-    utils.assert_clamp(cup_upper_edge, 0, 3600, "cup_upper_edge")
-    utils.assert_clamp(ratio_liquid_rise_to_tip_deep_in, 0, 50000,
-      "ratio_liquid_rise_to_tip_deep_in")
-    utils.assert_clamp(immersion_depth_2nd_section, 0, 3600, "immersion_depth_2nd_section")
+    assert all(0 <= x <= 2 for x in aspiration_type), "aspiration_type must be between 0 and 2"
+    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
+    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= min_z_endpos <= 3600, "min_z_endpos must be between 0 and 3600"
+    assert all(0 <= x <= 3600 for x in lld_search_height), \
+      "lld_search_height must be between 0 and 3600"
+    assert all(0 <= x <= 500 for x in clot_detection_height), \
+      "clot_detection_height must be between 0 and 500"
+    assert all(0 <= x <= 3600 for x in liquid_surface_no_lld), \
+      "liquid_surface_no_lld must be between 0 and 3600"
+    assert all(0 <= x <= 3600 for x in pull_out_distance_transport_air), \
+      "pull_out_distance_transport_air must be between 0 and 3600"
+    assert all(0 <= x <= 3600 for x in second_section_height), \
+      "second_section_height must be between 0 and 3600"
+    assert all(0 <= x <= 10000 for x in second_section_ratio), \
+      "second_section_ratio must be between 0 and 10000"
+    assert all(0 <= x <= 3600 for x in minimum_height), "minimum_height must be between 0 and 3600"
+    assert all(0 <= x <= 3600 for x in immersion_depth), \
+      "immersion_depth must be between 0 and 3600"
+    assert all(0 <= x <= 1 for x in immersion_depth_direction), \
+      "immersion_depth_direction must be between 0 and 1"
+    assert all(0 <= x <= 3600 for x in surface_following_distance), \
+      "surface_following_distance must be between 0 and 3600"
+    assert all(0 <= x <= 12500 for x in aspiration_volumes), \
+      "aspiration_volumes must be between 0 and 12500"
+    assert all(4 <= x <= 5000 for x in aspiration_speed), \
+      "aspiration_speed must be between 4 and 5000"
+    assert all(0 <= x <= 500 for x in transport_air_volume), \
+      "transport_air_volume must be between 0 and 500"
+    assert all(0 <= x <= 9999 for x in blow_out_air_volume), \
+      "blow_out_air_volume must be between 0 and 9999"
+    assert all(0 <= x <= 999 for x in pre_wetting_volume), \
+      "pre_wetting_volume must be between 0 and 999"
+    assert all(0 <= x <= 4 for x in lld_mode), "lld_mode must be between 0 and 4"
+    assert all(1 <= x <= 4 for x in gamma_lld_sensitivity), \
+      "gamma_lld_sensitivity must be between 1 and 4"
+    assert all(1 <= x <= 4 for x in dp_lld_sensitivity), \
+      "dp_lld_sensitivity must be between 1 and 4"
+    assert all(0 <= x <= 100 for x in aspirate_position_above_z_touch_off), \
+      "aspirate_position_above_z_touch_off must be between 0 and 100"
+    assert all(0 <= x <= 99 for x in detection_height_difference_for_dual_lld), \
+      "detection_height_difference_for_dual_lld must be between 0 and 99"
+    assert all(3 <= x <= 1600 for x in swap_speed), "swap_speed must be between 3 and 1600"
+    assert all(0 <= x <= 99 for x in settling_time), "settling_time must be between 0 and 99"
+    assert all(0 <= x <= 12500 for x in homogenization_volume), \
+      "homogenization_volume must be between 0 and 12500"
+    assert all(0 <= x <= 99 for x in homogenization_cycles), \
+      "homogenization_cycles must be between 0 and 99"
+    assert all(0 <= x <= 900 for x in homogenization_position_from_liquid_surface), \
+      "homogenization_position_from_liquid_surface must be between 0 and 900"
+    assert all(4 <= x <= 5000 for x in homogenization_speed), \
+      "homogenization_speed must be between 4 and 5000"
+    assert all(0 <= x <= 3600 for x in homogenization_surface_following_distance), \
+      "homogenization_surface_following_distance must be between 0 and 3600"
+    assert all(0 <= x <= 999 for x in limit_curve_index), \
+      "limit_curve_index must be between 0 and 999"
+    assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
+    assert all(0 <= x <= 3600 for x in retract_height_over_2nd_section_to_empty_tip), \
+      "retract_height_over_2nd_section_to_empty_tip must be between 0 and 3600"
+    assert all(4 <= x <= 5000 for x in dispensation_speed_during_emptying_tip), \
+      "dispensation_speed_during_emptying_tip must be between 4 and 5000"
+    assert all(4 <= x <= 5000 for x in dosing_drive_speed_during_2nd_section_search), \
+      "dosing_drive_speed_during_2nd_section_search must be between 4 and 5000"
+    assert all(3 <= x <= 1600 for x in z_drive_speed_during_2nd_section_search), \
+      "z_drive_speed_during_2nd_section_search must be between 3 and 1600"
+    assert all(0 <= x <= 3600 for x in cup_upper_edge), "cup_upper_edge must be between 0 and 3600"
+    assert all(0 <= x <= 5000 for x in ratio_liquid_rise_to_tip_deep_in), \
+      "ratio_liquid_rise_to_tip_deep_in must be between 0 and 50000"
+    assert all(0 <= x <= 3600 for x in immersion_depth_2nd_section), \
+      "immersion_depth_2nd_section must be between 0 and 3600"
 
     return self.send_command(
       module="C0",
@@ -3097,42 +3127,60 @@ class STAR(HamiltonLiquidHandler):
         be between 0 and 2. Default 0.
     """
 
-    utils.assert_clamp(dispensing_mode, 0, 4, "dispensing_mode")
-    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
-    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
-    utils.assert_clamp(minimum_height, 0, 3600, "minimum_height")
-    utils.assert_clamp(lld_search_height, 0, 3600, "lld_search_height")
-    utils.assert_clamp(liquid_surface_no_lld, 0, 3600, "liquid_surface_no_lld")
-    utils.assert_clamp(pull_out_distance_transport_air, 0, 3600, "pull_out_distance_transport_air")
-    utils.assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
-    utils.assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    utils.assert_clamp(surface_following_distance, 0, 3600, "surface_following_distance")
-    utils.assert_clamp(second_section_height, 0, 3600, "second_section_height")
-    utils.assert_clamp(second_section_ratio, 0, 10000, "second_section_ratio")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(min_z_endpos, 0, 3600, "min_z_endpos")
-    utils.assert_clamp(dispense_volumes, 0, 12500, "dispense_volume")
-    utils.assert_clamp(dispense_speed, 4, 5000, "dispense_speed")
-    utils.assert_clamp(cut_off_speed, 4, 5000, "cut_off_speed")
-    utils.assert_clamp(stop_back_volume, 0, 180, "stop_back_volume")
-    utils.assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
-    utils.assert_clamp(blow_out_air_volume, 0, 9999, "blow_out_air_volume")
-    utils.assert_clamp(lld_mode, 0, 4, "lld_mode")
-    utils.assert_clamp(side_touch_off_distance, 0, 45, "side_touch_off_distance")
-    utils.assert_clamp(dispense_position_above_z_touch_off, 0, 100, \
-                  "dispense_position_above_z_touch_off")
-    utils.assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
-    utils.assert_clamp(dp_lld_sensitivity, 1, 4, "dp_lld_sensitivity")
-    utils.assert_clamp(swap_speed, 3, 1600, "swap_speed")
-    utils.assert_clamp(settling_time, 0, 99, "settling_time")
-    utils.assert_clamp(mix_volume, 0, 12500, "mix_volume")
-    utils.assert_clamp(mix_cycles, 0, 99, "mix_cycles")
-    utils.assert_clamp(mix_position_from_liquid_surface, 0, 900, "mix_position_from_liquid_surface")
-    utils.assert_clamp(mix_speed, 4, 5000, "mix_speed")
-    utils.assert_clamp(mix_surface_following_distance, 0, 3600, "mix_surface_following_distance")
-    utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
-    utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
+    assert all(0 <= x <= 4 for x in dispensing_mode), "dispensing_mode must be between 0 and 4"
+    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
+    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
+    assert any(0 <= x <= 3600 for x in minimum_height), \
+      "minimum_height must be between 0 and 3600"
+    assert any(0 <= x <= 3600 for x in lld_search_height), \
+      "lld_search_height must be between 0 and 3600"
+    assert any(0 <= x <= 3600 for x in liquid_surface_no_lld), \
+      "liquid_surface_no_lld must be between 0 and 3600"
+    assert any(0 <= x <= 3600 for x in pull_out_distance_transport_air), \
+      "pull_out_distance_transport_air must be between 0 and 3600"
+    assert any(0 <= x <= 3600 for x in immersion_depth), \
+      "immersion_depth must be between 0 and 3600"
+    assert any(0 <= x <= 1 for x in immersion_depth_direction), \
+      "immersion_depth_direction must be between 0 and 1"
+    assert any(0 <= x <= 3600 for x in surface_following_distance), \
+      "surface_following_distance must be between 0 and 3600"
+    assert any(0 <= x <= 3600 for x in second_section_height), \
+      "second_section_height must be between 0 and 3600"
+    assert any(0 <= x <= 10000 for x in second_section_ratio), \
+      "second_section_ratio must be between 0 and 10000"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= min_z_endpos <= 3600, "min_z_endpos must be between 0 and 3600"
+    assert any(0 <= x <= 12500 for x in dispense_volumes), \
+      "dispense_volume must be between 0 and 12500"
+    assert any(4 <= x <= 5000 for x in dispense_speed), "dispense_speed must be between 4 and 5000"
+    assert any(4 <= x <= 5000 for x in cut_off_speed), "cut_off_speed must be between 4 and 5000"
+    assert any(0 <= x <= 180 for x in stop_back_volume), \
+      "stop_back_volume must be between 0 and 180"
+    assert any(0 <= x <= 500 for x in transport_air_volume), \
+      "transport_air_volume must be between 0 and 500"
+    assert any(0 <= x <= 9999 for x in blow_out_air_volume), \
+      "blow_out_air_volume must be between 0 and 9999"
+    assert any(0 <= x <= 4 for x in lld_mode), "lld_mode must be between 0 and 4"
+    assert 0 <= side_touch_off_distance <= 45, "side_touch_off_distance must be between 0 and 45"
+    assert any(0 <= x <= 100 for x in dispense_position_above_z_touch_off), \
+      "dispense_position_above_z_touch_off must be between 0 and 100"
+    assert any(1 <= x <= 4 for x in gamma_lld_sensitivity), \
+      "gamma_lld_sensitivity must be between 1 and 4"
+    assert any(1 <= x <= 4 for x in dp_lld_sensitivity), \
+      "dp_lld_sensitivity must be between 1 and 4"
+    assert any(3 <= x <= 1600 for x in swap_speed), "swap_speed must be between 3 and 1600"
+    assert any(0 <= x <= 99 for x in settling_time), "settling_time must be between 0 and 99"
+    assert any(0 <= x <= 12500 for x in mix_volume), "mix_volume must be between 0 and 12500"
+    assert any(0 <= x <= 99 for x in mix_cycles), "mix_cycles must be between 0 and 99"
+    assert any(0 <= x <= 900 for x in mix_position_from_liquid_surface), \
+      "mix_position_from_liquid_surface must be between 0 and 900"
+    assert any(4 <= x <= 5000 for x in mix_speed), "mix_speed must be between 4 and 5000"
+    assert any(0 <= x <= 3600 for x in mix_surface_following_distance), \
+      "mix_surface_following_distance must be between 0 and 3600"
+    assert any(0 <= x <= 999 for x in limit_curve_index), \
+      "limit_curve_index must be between 0 and 999"
+    assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
     return self.send_command(
       module="C0",
@@ -3212,8 +3260,9 @@ class STAR(HamiltonLiquidHandler):
       y_position: y position [0.1mm]. Must be between 0 and 6500.
     """
 
-    utils.assert_clamp(pipetting_channel_index, 1, self.num_channels, "pipetting_channel_index")
-    utils.assert_clamp(y_position, 0, 6500, "y_position")
+    assert 1 <= pipetting_channel_index <= self.num_channels, \
+      "pipetting_channel_index must be between 1 and self"
+    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
 
     return self.send_command(
       module="C0",
@@ -3237,9 +3286,10 @@ class STAR(HamiltonLiquidHandler):
         3347 is the max.
     """
 
-    utils.assert_clamp(pipetting_channel_index, 1, self.num_channels, "pipetting_channel_index")
+    assert 1 <= pipetting_channel_index <= self.num_channels, \
+      "pipetting_channel_index must be between 1 and self.num_channels"
     # docs say 3600, but empirically 3347 is the max
-    utils.assert_clamp(z_position, 0, 3347, "z_position")
+    assert 0 <= z_position <= 3347, "z_position must be between 0 and 3347"
 
     return self.send_command(
       module="C0",
@@ -3260,8 +3310,9 @@ class STAR(HamiltonLiquidHandler):
       x_position: x position [0.1mm]. Must be between 0 and 30000.
     """
 
-    utils.assert_clamp(pipetting_channel_index, 1, self.num_channels, "pipetting_channel_index")
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
+    assert 1 <= pipetting_channel_index <= self.num_channels, \
+      "pipetting_channel_index must be between 1 and self.num_channels"
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
 
     return self.send_command(
       module="C0",
@@ -3290,18 +3341,17 @@ class STAR(HamiltonLiquidHandler):
       x_positions: x positions [0.1mm]. Must be between 0 and 25000. Default 0.
       y_positions: y positions [0.1mm]. Must be between 0 and 6500. Default 0.
       minimum_traverse_height_at_beginning_of_command: Minimum traverse height at beginning of a
-                                                       command 0.1mm] (refers to all channels
-                                                       independent of tip pattern parameter 'tm').
-                                                       Must be between 0 and 3600. Default 3600.
+        command 0.1mm] (refers to all channels independent of tip pattern parameter 'tm').  Must be
+        between 0 and 3600. Default 3600.
       z_endpos: Z-Position at end of a command [0.1 mm] (refers to all channels independent of tip
-                pattern parameter 'tm'). Must be between 0 and 3600. Default 0.
+        pattern parameter 'tm'). Must be between 0 and 3600. Default 0.
     """
 
-    utils.assert_clamp(x_positions, 0, 25000, "x_positions")
-    utils.assert_clamp(y_positions, 0, 6500, "y_positions")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_command")
-    utils.assert_clamp(z_endpos, 0, 3600, "z_endpos")
+    assert 0 <= x_positions <= 25000, "x_positions must be between 0 and 25000"
+    assert 0 <= y_positions <= 6500, "y_positions must be between 0 and 6500"
+    assert 0 <= minimum_traverse_height_at_beginning_of_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_command must be between 0 and 3600"
+    assert 0 <= z_endpos <= 3600, "z_endpos must be between 0 and 3600"
 
     return self.send_command(
       module="C0",
@@ -3325,7 +3375,8 @@ class STAR(HamiltonLiquidHandler):
       pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
     """
 
-    utils.assert_clamp(pipetting_channel_index, 1, self.num_channels, "pipetting_channel_index")
+    assert 1 <= pipetting_channel_index <= self.num_channels, \
+      "pipetting_channel_index must be between 1 and self.num_channels"
 
     return self.send_command(
       module="C0",
@@ -3352,7 +3403,7 @@ class STAR(HamiltonLiquidHandler):
       pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
     """
 
-    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
+    assert 1 <= pipetting_channel_index <= 16, "pipetting_channel_index must be between 1 and 16"
 
     return self.send_command(
       module="C0",
@@ -3376,7 +3427,7 @@ class STAR(HamiltonLiquidHandler):
       Z-Position of channel n [0.1mm]. Taking into account tip presence and length.
     """
 
-    utils.assert_clamp(pipetting_channel_index, 1, 16, "pipetting_channel_index")
+    assert 1 <= pipetting_channel_index <= 16, "pipetting_channel_index must be between 1 and 16"
 
     return self.send_command(
       module="C0",
@@ -3567,11 +3618,12 @@ class STAR(HamiltonLiquidHandler):
         3425. Default 3425.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 1054, 5743, "y_position")
-    utils.assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
-    utils.assert_clamp(z_position_at_the_command_end, 0, 3425, "z_position_at_the_command_end")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 1054 <= y_position <= 5743, "y_position must be between 1054 and 5743"
+    assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
+    assert 0 <= z_position_at_the_command_end <= 3425, \
+      "z_position_at_the_command_end must be between 0 and 3425"
 
     return self.send_command(
       module="C0",
@@ -3609,21 +3661,22 @@ class STAR(HamiltonLiquidHandler):
       y_position: y position [0.1mm]. Must be between 1080 and 5600. Default 5600.
       tip_size: Tip type.
       tip_pickup_method: Tip pick up method. 0 = pick up from rack. 1 = pick up from C0Re 96 tip
-                          wash station. 2 = pick up with " full volume blow out"
+        wash station. 2 = pick up with " full volume blow out"
       z_deposit_position: Z- deposit position [0.1mm] (collar bearing position) Must bet between
-                          0 and 3425. Default 3425.
+        0 and 3425. Default 3425.
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning
-          of a command [0.1mm]. Must be between 0 and 3425.
+        of a command [0.1mm]. Must be between 0 and 3425.
       minimum_height_command_end: Minimal height at command end [0.1 mm] Must be between 0 and 3425.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 1080, 5600, "y_position")
-    utils.assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(minimum_height_command_end, 0, 3425, "minimum_height_command_end")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
+    assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
+    assert 0 <= minimum_height_command_end <= 3425, \
+      "minimum_height_command_end must be between 0 and 3425"
 
     return self.send_command(
       module="C0",
@@ -3655,21 +3708,22 @@ class STAR(HamiltonLiquidHandler):
       y_position: y position [0.1mm]. Must be between 1080 and 5600. Default 5600.
       tip_type: Tip type.
       tip_pickup_method: Tip pick up method. 0 = pick up from rack. 1 = pick up from C0Re 96
-                          tip wash station. 2 = pick up with " full volume blow out"
+        tip wash station. 2 = pick up with " full volume blow out"
       z_deposit_position: Z- deposit position [0.1mm] (collar bearing position) Must bet between
-                          0 and 3425. Default 3425.
+        0 and 3425. Default 3425.
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning
-          of a command [0.1mm]. Must be between 0 and 3425.
+        of a command [0.1mm]. Must be between 0 and 3425.
       minimum_height_command_end: Minimal height at command end [0.1 mm] Must be between 0 and 3425
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 1080, 5600, "y_position")
-    utils.assert_clamp(z_deposit_position, 0, 3425, "z_deposit_position")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(minimum_height_command_end, 0, 3425, "minimum_height_command_end")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
+    assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
+    assert 0 <= minimum_height_command_end <= 3425, \
+      "minimum_height_command_end must be between 0 and 3425"
 
     return self.send_command(
       module="C0",
@@ -3777,45 +3831,48 @@ class STAR(HamiltonLiquidHandler):
           Must be between 0 and 2. Default 0.
     """
 
-    utils.assert_clamp(aspiration_type, 0, 2, "aspiration_type")
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_positions, 1080, 5600, "y_positions")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(minimal_end_height, 0, 3425, "minimal_end_height")
-    utils.assert_clamp(lld_search_height, 0, 3425, "lld_search_height")
-    utils.assert_clamp(liquid_surface_at_function_without_lld, 0, 3425, \
-                  "liquid_surface_at_function_without_lld")
-    utils.assert_clamp(pull_out_distance_to_take_transport_air_in_function_without_lld, 0, 3425, \
-                  "pull_out_distance_to_take_transport_air_in_function_without_lld")
-    utils.assert_clamp(maximum_immersion_depth, 0, 3425, "maximum_immersion_depth")
-    utils.assert_clamp(tube_2nd_section_height_measured_from_zm, 0, 3425, \
-                  "tube_2nd_section_height_measured_from_zm")
-    utils.assert_clamp(tube_2nd_section_ratio, 0, 10000, "tube_2nd_section_ratio")
-    utils.assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
-    utils.assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    utils.assert_clamp(liquid_surface_sink_distance_at_the_end_of_aspiration, 0, 990, \
-                  "liquid_surface_sink_distance_at_the_end_of_aspiration")
-    utils.assert_clamp(aspiration_volumes, 0, 11500, "aspiration_volumes")
-    utils.assert_clamp(aspiration_speed, 3, 5000, "aspiration_speed")
-    utils.assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
-    utils.assert_clamp(blow_out_air_volume, 0, 11500, "blow_out_air_volume")
-    utils.assert_clamp(pre_wetting_volume, 0, 11500, "pre_wetting_volume")
-    utils.assert_clamp(lld_mode, 0, 4, "lld_mode")
-    utils.assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
-    utils.assert_clamp(swap_speed, 3, 1000, "swap_speed")
-    utils.assert_clamp(settling_time, 0, 99, "settling_time")
-    utils.assert_clamp(homogenization_volume, 0, 11500, "homogenization_volume")
-    utils.assert_clamp(homogenization_cycles, 0, 99, "homogenization_cycles")
-    utils.assert_clamp(homogenization_position_from_liquid_surface, 0, 990, \
-                  "homogenization_position_from_liquid_surface")
-    utils.assert_clamp(surface_following_distance_during_homogenization, 0, 990, \
-                  "surface_following_distance_during_homogenization")
-    utils.assert_clamp(speed_of_homogenization, 3, 5000, "speed_of_homogenization")
-    utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
+    assert 0 <= aspiration_type <= 2, "aspiration_type must be between 0 and 2"
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 1080 <= y_positions <= 5600, "y_positions must be between 1080 and 5600"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
+    assert 0 <= minimal_end_height <= 3425, "minimal_end_height must be between 0 and 3425"
+    assert 0 <= lld_search_height <= 3425, "lld_search_height must be between 0 and 3425"
+    assert 0 <= liquid_surface_at_function_without_lld <= 3425, \
+      "liquid_surface_at_function_without_lld must be between 0 and 3425"
+    assert 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3425, \
+      "pull_out_distance_to_take_transport_air_in_function_without_lld must be between 0 and 3425"
+    assert 0 <= maximum_immersion_depth <= 3425, \
+      "maximum_immersion_depth must be between 0 and 3425"
+    assert 0 <= tube_2nd_section_height_measured_from_zm <= 3425, \
+      "tube_2nd_section_height_measured_from_zm must be between 0 and 3425"
+    assert 0 <= tube_2nd_section_ratio <= 10000, \
+      "tube_2nd_section_ratio must be between 0 and 10000"
+    assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
+    assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
+    assert 0 <= liquid_surface_sink_distance_at_the_end_of_aspiration <= 990, \
+      "liquid_surface_sink_distance_at_the_end_of_aspiration must be between 0 and 990"
+    assert 0 <= aspiration_volumes <= 11500, "aspiration_volumes must be between 0 and 11500"
+    assert 3 <= aspiration_speed <= 5000, "aspiration_speed must be between 3 and 5000"
+    assert 0 <= transport_air_volume <= 500, "transport_air_volume must be between 0 and 500"
+    assert 0 <= blow_out_air_volume <= 11500, "blow_out_air_volume must be between 0 and 11500"
+    assert 0 <= pre_wetting_volume <= 11500, "pre_wetting_volume must be between 0 and 11500"
+    assert 0 <= lld_mode <= 4, "lld_mode must be between 0 and 4"
+    assert 1 <= gamma_lld_sensitivity <= 4, "gamma_lld_sensitivity must be between 1 and 4"
+    assert 3 <= swap_speed <= 1000, "swap_speed must be between 3 and 1000"
+    assert 0 <= settling_time <= 99, "settling_time must be between 0 and 99"
+    assert 0 <= homogenization_volume <= 11500, "homogenization_volume must be between 0 and 11500"
+    assert 0 <= homogenization_cycles <= 99, "homogenization_cycles must be between 0 and 99"
+    assert 0 <= homogenization_position_from_liquid_surface <= 990, \
+      "homogenization_position_from_liquid_surface must be between 0 and 990"
+    assert 0 <= surface_following_distance_during_homogenization <= 990, \
+      "surface_following_distance_during_homogenization must be between 0 and 990"
+    assert 3 <= speed_of_homogenization <= 5000, \
+      "speed_of_homogenization must be between 3 and 5000"
+    assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
 
-    utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
+    assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
     # Convert bool list to hex string
     assert len(channel_pattern) == 96, "channel_pattern must be a list of 96 boolean values"
@@ -3903,7 +3960,7 @@ class STAR(HamiltonLiquidHandler):
     Dispensing of liquid using CoRe 96
 
     Args:
-      dispensing_mode: Type of dispsensing mode 0 = Partial volume in jet mode 1 = Blow out
+      dispensing_mode: Type of dispensing mode 0 = Partial volume in jet mode 1 = Blow out
           in jet mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix
           position. Must be between 0 and 4. Default 0.
       x_position: X-Position [0.1mm] of well A1. Must be between 0 and 30000. Default 0.
@@ -3957,46 +4014,48 @@ class STAR(HamiltonLiquidHandler):
           be between 0 and 2. Default 0.
     """
 
-    utils.assert_clamp(dispensing_mode, 0, 4, "dispensing_mode")
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 1080, 5600, "y_position")
-    utils.assert_clamp(maximum_immersion_depth, 0, 3425, "maximum_immersion_depth")
-    utils.assert_clamp(tube_2nd_section_height_measured_from_zm, 0, 3425, \
-                  "tube_2nd_section_height_measured_from_zm")
-    utils.assert_clamp(tube_2nd_section_ratio, 0, 10000, "tube_2nd_section_ratio")
-    utils.assert_clamp(lld_search_height, 0, 3425, "lld_search_height")
-    utils.assert_clamp(liquid_surface_at_function_without_lld, 0, 3425, \
-                  "liquid_surface_at_function_without_lld")
-    utils.assert_clamp(pull_out_distance_to_take_transport_air_in_function_without_lld, 0, 3425, \
-                  "pull_out_distance_to_take_transport_air_in_function_without_lld")
-    utils.assert_clamp(immersion_depth, 0, 3600, "immersion_depth")
-    utils.assert_clamp(immersion_depth_direction, 0, 1, "immersion_depth_direction")
-    utils.assert_clamp(liquid_surface_sink_distance_at_the_end_of_dispense, 0, 990, \
-                  "liquid_surface_sink_distance_at_the_end_of_dispense")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3425, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(minimal_end_height, 0, 3425, "minimal_end_height")
-    utils.assert_clamp(dispense_volume, 0, 11500, "dispense_volume")
-    utils.assert_clamp(dispense_speed, 3, 5000, "dispense_speed")
-    utils.assert_clamp(cut_off_speed, 3, 5000, "cut_off_speed")
-    utils.assert_clamp(stop_back_volume, 0, 999, "stop_back_volume")
-    utils.assert_clamp(transport_air_volume, 0, 500, "transport_air_volume")
-    utils.assert_clamp(blow_out_air_volume, 0, 11500, "blow_out_air_volume")
-    utils.assert_clamp(lld_mode, 0, 4, "lld_mode")
-    utils.assert_clamp(gamma_lld_sensitivity, 1, 4, "gamma_lld_sensitivity")
-    utils.assert_clamp(side_touch_off_distance, 0, 45, "side_touch_off_distance")
-    utils.assert_clamp(swap_speed, 3, 1000, "swap_speed")
-    utils.assert_clamp(settling_time, 0, 99, "settling_time")
-    utils.assert_clamp(mixing_volume, 0, 11500, "mixing_volume")
-    utils.assert_clamp(mixing_cycles, 0, 99, "mixing_cycles")
-    utils.assert_clamp(mixing_position_from_liquid_surface, 0, 990, \
-                  "mixing_position_from_liquid_surface")
-    utils.assert_clamp(surface_following_distance_during_mixing, 0, 990, \
-                  "surface_following_distance_during_mixing")
-    utils.assert_clamp(speed_of_mixing, 3, 5000, "speed_of_mixing")
-    utils.assert_clamp(limit_curve_index, 0, 999, "limit_curve_index")
-    utils.assert_clamp(recording_mode, 0, 2, "recording_mode")
+    assert 0 <= dispensing_mode <= 4, "dispensing_mode must be between 0 and 4"
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
+    assert 0 <= maximum_immersion_depth <= 3425, \
+      "maximum_immersion_depth must be between 0 and 3425"
+    assert 0 <= tube_2nd_section_height_measured_from_zm <= 3425, \
+      "tube_2nd_section_height_measured_from_zm must be between 0 and 3425"
+    assert 0 <= tube_2nd_section_ratio <= 10000, \
+      "tube_2nd_section_ratio must be between 0 and 10000"
+    assert 0 <= lld_search_height <= 3425, "lld_search_height must be between 0 and 3425"
+    assert 0 <= liquid_surface_at_function_without_lld <= 3425, \
+      "liquid_surface_at_function_without_lld must be between 0 and 3425"
+    assert 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3425, \
+      "pull_out_distance_to_take_transport_air_in_function_without_lld must be between 0 and 3425"
+    assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
+    assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
+    assert 0 <= liquid_surface_sink_distance_at_the_end_of_dispense <= 990, \
+      "liquid_surface_sink_distance_at_the_end_of_dispense must be between 0 and 990"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
+    assert 0 <= minimal_end_height <= 3425, "minimal_end_height must be between 0 and 3425"
+    assert 0 <= dispense_volume <= 11500, "dispense_volume must be between 0 and 11500"
+    assert 3 <= dispense_speed <= 5000, "dispense_speed must be between 3 and 5000"
+    assert 3 <= cut_off_speed <= 5000, "cut_off_speed must be between 3 and 5000"
+    assert 0 <= stop_back_volume <= 999, "stop_back_volume must be between 0 and 999"
+    assert 0 <= transport_air_volume <= 500, "transport_air_volume must be between 0 and 500"
+    assert 0 <= blow_out_air_volume <= 11500, "blow_out_air_volume must be between 0 and 11500"
+    assert 0 <= lld_mode <= 4, "lld_mode must be between 0 and 4"
+    assert 1 <= gamma_lld_sensitivity <= 4, "gamma_lld_sensitivity must be between 1 and 4"
+    assert 0 <= side_touch_off_distance <= 45, "side_touch_off_distance must be between 0 and 45"
+    assert 3 <= swap_speed <= 1000, "swap_speed must be between 3 and 1000"
+    assert 0 <= settling_time <= 99, "settling_time must be between 0 and 99"
+    assert 0 <= mixing_volume <= 11500, "mixing_volume must be between 0 and 11500"
+    assert 0 <= mixing_cycles <= 99, "mixing_cycles must be between 0 and 99"
+    assert 0 <= mixing_position_from_liquid_surface <= 990, \
+      "mixing_position_from_liquid_surface must be between 0 and 990"
+    assert 0 <= surface_following_distance_during_mixing <= 990, \
+      "surface_following_distance_during_mixing must be between 0 and 990"
+    assert 3 <= speed_of_mixing <= 5000, "speed_of_mixing must be between 3 and 5000"
+    assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
+    assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
     # Convert bool list to hex string
     assert len(channel_pattern) == 96, "channel_pattern must be a list of 96 boolean values"
@@ -4047,7 +4106,7 @@ class STAR(HamiltonLiquidHandler):
 
   def move_core_96_head_to_defined_position(
     self,
-    dispsensing_mode: int = 0,
+    dispensing_mode: int = 0,
     x_position: int = 0,
     x_direction: int = 0,
     y_position: int = 0,
@@ -4057,30 +4116,30 @@ class STAR(HamiltonLiquidHandler):
     """ Move CoRe 96 Head to defined position
 
     Args:
-      dispsensing_mode: Type of dispsensing mode 0 = Partial volume in jet mode 1 = Blow out
-                        in jet mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty
-                        tip at fix position. Must be between 0 and 4. Default 0.
+      dispensing_mode: Type of dispensing mode 0 = Partial volume in jet mode 1 = Blow out
+        in jet mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix
+        position. Must be between 0 and 4. Default 0.
       x_position: X-Position [0.1mm] of well A1. Must be between 0 and 30000. Default 0.
       x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
       y_position: Y-Position [0.1mm]. Must be between 1080 and 5600. Default 0.
       z_position: Z-Position [0.1mm]. Must be between 0 and 5600. Default 0.
       minimum_height_at_beginning_of_a_command: Minimum height at beginning of a command 0.1mm]
-                        (refers to all channels independent of tip pattern parameter 'tm'). Must be
-                        between 0 and 3425. Default 3425.
+        (refers to all channels independent of tip pattern parameter 'tm'). Must be between 0 and
+        3425. Default 3425.
     """
 
-    utils.assert_clamp(dispsensing_mode, 0, 4, "dispsensing_mode")
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 1080, 5600, "y_position")
-    utils.assert_clamp(y_position, 0, 5600, "z_position")
-    utils.assert_clamp(minimum_height_at_beginning_of_a_command, 0, 3425, \
-                  "minimum_height_at_beginning_of_a_command")
+    assert 0 <= dispensing_mode <= 4, "dispensing_mode must be between 0 and 4"
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
+    assert 0 <= y_position <= 5600, "z_position must be between 0 and 5600"
+    assert 0 <= minimum_height_at_beginning_of_a_command <= 3425, \
+      "minimum_height_at_beginning_of_a_command must be between 0 and 3425"
 
     return self.send_command(
       module="C0",
       command="EM",
-      dm=dispsensing_mode,
+      dm=dispensing_mode,
       xs=x_position,
       xd=x_direction,
       yh=y_position,
@@ -4216,7 +4275,7 @@ class STAR(HamiltonLiquidHandler):
       True if present, False otherwise
     """
 
-    utils.assert_clamp(carrier_position, 1, 54, "carrier_position")
+    assert 1 <= carrier_position <= 54, "carrier_position must be between 1 and 54"
 
     resp = self.send_command(
       module="C0",
@@ -4367,7 +4426,7 @@ class STAR(HamiltonLiquidHandler):
       5 = ReReRe (dual chamber)
     """
 
-    utils.assert_clamp(pump_station, 1, 3, "pump_station")
+    assert 1 <= pump_station <= 3, "pump_station must be between 1 and 3"
 
     return self.send_command(
       module="C0",
@@ -4404,7 +4463,7 @@ class STAR(HamiltonLiquidHandler):
       carrier_position: pump station number (1..3)
     """
 
-    utils.assert_clamp(pump_station, 1, 3, "pump_station")
+    assert 1 <= pump_station <= 3, "pump_station must be between 1 and 3"
 
     return self.send_command(
       module="C0",
@@ -4430,9 +4489,9 @@ class STAR(HamiltonLiquidHandler):
       drain_before_refill: waste chamber suck time after sensor change [s] (for error handling only)
     """
 
-    utils.assert_clamp(pump_station, 1, 3, "pump_station")
-    utils.assert_clamp(wash_fluid, 1, 2, "wash_fluid")
-    utils.assert_clamp(chamber, 1, 2, "chamber")
+    assert 1 <= pump_station <= 3, "pump_station must be between 1 and 3"
+    assert 1 <= wash_fluid <= 2, "wash_fluid must be between 1 and 2"
+    assert 1 <= chamber <= 2, "chamber must be between 1 and 2"
 
     # wash fluid <-> chamber connection
     # 0 = wash fluid 1 <-> chamber 2
@@ -4468,7 +4527,7 @@ class STAR(HamiltonLiquidHandler):
       carrier_position: pump station number (1..3)
     """
 
-    utils.assert_clamp(pump_station, 1, 3, "pump_station")
+    assert 1 <= pump_station <= 3, "pump_station must be between 1 and 3"
 
     return self.send_command(
       module="C0",
@@ -4573,7 +4632,7 @@ class STAR(HamiltonLiquidHandler):
                      Must be between 0 and 9999. Default 860.
     """
 
-    utils.assert_clamp(open_position, 0, 9999, "open_position")
+    assert 0 <= open_position <= 9999, "open_position must be between 0 and 9999"
 
     return self.send_command(
       module="C0",
@@ -4621,8 +4680,8 @@ class STAR(HamiltonLiquidHandler):
                 of a command [0.1mm]. Must be between 0 and 3600. Default 3600.
     """
 
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
 
     command_output = self.send_command(
       module="C0",
@@ -4681,23 +4740,26 @@ class STAR(HamiltonLiquidHandler):
       fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 0, 6500, "y_position")
-    utils.assert_clamp(y_direction, 0, 1, "y_direction")
-    utils.assert_clamp(z_position, 0, 3600, "z_position")
-    utils.assert_clamp(z_direction, 0, 1, "z_direction")
-    utils.assert_clamp(grip_direction, 1, 4, "grip_direction")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(z_position_at_the_command_end, 0, 3600, "z_position_at_the_command_end")
-    utils.assert_clamp(grip_strength, 1, 9, "grip_strength")
-    utils.assert_clamp(open_gripper_position, 0, 9999, "open_gripper_position")
-    utils.assert_clamp(plate_width, 0, 9999, "plate_width")
-    utils.assert_clamp(plate_width_tolerance, 0, 99, "plate_width_tolerance")
-    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
-    utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
-    utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
+    assert 0 <= y_direction <= 1, "y_direction must be between 0 and 1"
+    assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
+    assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
+    assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= z_position_at_the_command_end <= 3600, \
+      "z_position_at_the_command_end must be between 0 and 3600"
+    assert 1 <= grip_strength <= 9, "grip_strength must be between 1 and 9"
+    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
+    assert 0 <= plate_width <= 9999, "plate_width must be between 0 and 9999"
+    assert 0 <= plate_width_tolerance <= 99, "plate_width_tolerance must be between 0 and 99"
+    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
+    assert 0 <= acceleration_index_high_acc <= 4, \
+      "acceleration_index_high_acc must be between 0 and 4"
+    assert 0 <= acceleration_index_low_acc <= 4, \
+      "acceleration_index_low_acc must be between 0 and 4"
 
     command_output = self.send_command(
       module="C0",
@@ -4765,20 +4827,23 @@ class STAR(HamiltonLiquidHandler):
             Default 1.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 0, 6500, "y_position")
-    utils.assert_clamp(y_direction, 0, 1, "y_direction")
-    utils.assert_clamp(z_position, 0, 3600, "z_position")
-    utils.assert_clamp(z_direction, 0, 1, "z_direction")
-    utils.assert_clamp(grip_direction, 1, 4, "grip_direction")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(z_position_at_the_command_end, 0, 3600, "z_position_at_the_command_end")
-    utils.assert_clamp(open_gripper_position, 0, 9999, "open_gripper_position")
-    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
-    utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
-    utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
+    assert 0 <= y_direction <= 1, "y_direction must be between 0 and 1"
+    assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
+    assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
+    assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= z_position_at_the_command_end <= 3600, \
+      "z_position_at_the_command_end must be between 0 and 3600"
+    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
+    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
+    assert 0 <= acceleration_index_high_acc <= 4, \
+      "acceleration_index_high_acc must be between 0 and 4"
+    assert 0 <= acceleration_index_low_acc <= 4, \
+      "acceleration_index_low_acc must be between 0 and 4"
 
     command_output = self.send_command(
       module="C0",
@@ -4834,18 +4899,20 @@ class STAR(HamiltonLiquidHandler):
       acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4. Default 1.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 0, 6500, "y_position")
-    utils.assert_clamp(y_direction, 0, 1, "y_direction")
-    utils.assert_clamp(z_position, 0, 3600, "z_position")
-    utils.assert_clamp(z_direction, 0, 1, "z_direction")
-    utils.assert_clamp(grip_direction, 1, 4, "grip_direction")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
-    utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
-    utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
+    assert 0 <= y_direction <= 1, "y_direction must be between 0 and 1"
+    assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
+    assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
+    assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
+    assert 0 <= acceleration_index_high_acc <= 4, \
+      "acceleration_index_high_acc must be between 0 and 4"
+    assert 0 <= acceleration_index_low_acc <= 4, \
+      "acceleration_index_low_acc must be between 0 and 4"
 
     command_output = self.send_command(
       module="C0",
@@ -4879,8 +4946,8 @@ class STAR(HamiltonLiquidHandler):
       fold_up_sequence_at_the_end_of_process: fold up sequence at the end of process. Default True.
     """
 
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
 
     return self.send_command(
       module="C0",
@@ -4901,20 +4968,20 @@ class STAR(HamiltonLiquidHandler):
   # -------------- 3.17.5 Teach in commands --------------
 
   def prepare_iswap_teaching(
-  self,
-  x_position: int = 0,
-  x_direction: int = 0,
-  y_position: int = 0,
-  y_direction: int = 0,
-  z_position: int = 0,
-  z_direction: int = 0,
-  location: int = 0,
-  hotel_depth: int = 0,
-  minimum_traverse_height_at_beginning_of_a_command: int = 3600,
-  collision_control_level: int = 1,
-  acceleration_index_high_acc: int = 4,
-  acceleration_index_low_acc: int = 1
-):
+    self,
+    x_position: int = 0,
+    x_direction: int = 0,
+    y_position: int = 0,
+    y_direction: int = 0,
+    z_position: int = 0,
+    z_direction: int = 0,
+    location: int = 0,
+    hotel_depth: int = 0,
+    minimum_traverse_height_at_beginning_of_a_command: int = 3600,
+    collision_control_level: int = 1,
+    acceleration_index_high_acc: int = 4,
+    acceleration_index_low_acc: int = 1
+  ):
     """ Prepare iSWAP teaching
 
     Prepare for teaching with iSWAP
@@ -4929,29 +4996,28 @@ class STAR(HamiltonLiquidHandler):
       location: location. 0 = Stack 1 = Hotel. Must be between 0 and 1. Default 0.
       hotel_depth: Hotel depth [0.1mm]. Must be between 0 and 3000. Default 13000.
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of
-                                                         a command 0.1mm]. Must be between 0 and
-                                                         3600. Default 3600.
+        a command 0.1mm]. Must be between 0 and 3600. Default 3600.
       collision_control_level: collision control level 1 = high 0 = low. Must be between 0 and 1.
-                               Default 1.
-      acceleration_index_high_acc: acceleration index high acc. Must be between 0 and 4.
-                                   Default 4.
-      acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4.
-                                  Default 1.
+        Default 1.
+      acceleration_index_high_acc: acceleration index high acc. Must be between 0 and 4. Default 4.
+      acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4. Default 1.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 0, 6500, "y_position")
-    utils.assert_clamp(y_direction, 0, 1, "y_direction")
-    utils.assert_clamp(z_position, 0, 3600, "z_position")
-    utils.assert_clamp(z_direction, 0, 1, "z_direction")
-    utils.assert_clamp(location, 0, 1, "location")
-    utils.assert_clamp(hotel_depth, 0, 3000, "hotel_depth")
-    utils.assert_clamp(minimum_traverse_height_at_beginning_of_a_command, 0, 3600, \
-                  "minimum_traverse_height_at_beginning_of_a_command")
-    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
-    utils.assert_clamp(acceleration_index_high_acc, 0, 4, "acceleration_index_high_acc")
-    utils.assert_clamp(acceleration_index_low_acc, 0, 4, "acceleration_index_low_acc")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
+    assert 0 <= y_direction <= 1, "y_direction must be between 0 and 1"
+    assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
+    assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
+    assert 0 <= location <= 1, "location must be between 0 and 1"
+    assert 0 <= hotel_depth <= 3000, "hotel_depth must be between 0 and 3000"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
+    assert 0 <= acceleration_index_high_acc <= 4, \
+      "acceleration_index_high_acc must be between 0 and 4"
+    assert 0 <= acceleration_index_low_acc <= 4, \
+      "acceleration_index_low_acc must be between 0 and 4"
 
     return self.send_command(
       module="C0",
@@ -4999,16 +5065,16 @@ class STAR(HamiltonLiquidHandler):
                                Default 1.
     """
 
-    utils.assert_clamp(x_position, 0, 30000, "x_position")
-    utils.assert_clamp(x_direction, 0, 1, "x_direction")
-    utils.assert_clamp(y_position, 0, 6500, "y_position")
-    utils.assert_clamp(y_direction, 0, 1, "y_direction")
-    utils.assert_clamp(z_position, 0, 3600, "z_position")
-    utils.assert_clamp(z_direction, 0, 1, "z_direction")
-    utils.assert_clamp(location, 0, 1, "location")
-    utils.assert_clamp(hotel_depth, 0, 3000, "hotel_depth")
-    utils.assert_clamp(grip_direction, 1, 4, "grip_direction")
-    utils.assert_clamp(collision_control_level, 0, 1, "collision_control_level")
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
+    assert 0 <= y_direction <= 1, "y_direction must be between 0 and 1"
+    assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
+    assert 0 <= z_direction <= 1, "z_direction must be between 0 and 1"
+    assert 0 <= location <= 1, "location must be between 0 and 1"
+    assert 0 <= hotel_depth <= 3000, "hotel_depth must be between 0 and 3000"
+    assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
+    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
 
     return self.send_command(
       module="C0",
@@ -5100,7 +5166,7 @@ class STAR(HamiltonLiquidHandler):
       output: 1 = cover lock; 2 = reserve out; 3 = reserve out.
     """
 
-    utils.assert_clamp(output, 1, 3, "output")
+    assert 1 <= output <= 3, "output must be between 1 and 3"
     return self.send_command(module="C0", command="OS", on=output, fmt="")
 
   def reset_output(self, output: int = 0):
@@ -5110,7 +5176,7 @@ class STAR(HamiltonLiquidHandler):
       output: 1 = cover lock; 2 = reserve out; 3 = reserve out.
     """
 
-    utils.assert_clamp(output, 1, 3, "output")
+    assert 1 <= output <= 3, "output must be between 1 and 3"
     return self.send_command(module="C0", command="QS", on=output, fmt="#")
 
   def request_cover_open(self) -> bool:
