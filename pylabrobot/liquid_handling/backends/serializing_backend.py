@@ -3,10 +3,12 @@ import sys
 from typing import Any, Dict, Optional, List
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.resources import Resource, TipRack
+from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,
+  PickupTipRack,
   Drop,
+  DropTipRack,
   Aspiration,
   AspirationPlate,
   Dispense,
@@ -73,11 +75,11 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       command="dispense",
       data=dict(channels=serialized, use_channels=use_channels))
 
-  def pick_up_tips96(self, tip_rack: TipRack):
-    self.send_command(command="pick_up_tips96", data=dict(resource_name=tip_rack.name))
+  def pick_up_tips96(self, pickup: PickupTipRack):
+    self.send_command(command="pick_up_tips96", data=pickup.serialize())
 
-  def drop_tips96(self, tip_rack: TipRack):
-    self.send_command(command="drop_tips96", data=dict(resource_name=tip_rack.name))
+  def drop_tips96(self, drop: DropTipRack):
+    self.send_command(command="drop_tips96", data=drop.serialize())
 
   def aspirate96(self, aspiration: AspirationPlate):
     self.send_command(command="aspirate96", data=dict(aspiration=aspiration.serialize()))
@@ -126,3 +128,6 @@ class SerializingSavingBackend(SerializingBackend):
       if sent_command["command"] == command:
         return sent_command["data"]
     return None
+
+  def pick_up_resource(self, *args, **kwargs):
+    pass

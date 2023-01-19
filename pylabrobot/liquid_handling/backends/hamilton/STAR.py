@@ -22,7 +22,9 @@ from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
 from pylabrobot.liquid_handling.standard import (
   PipettingOp,
   Pickup,
+  PickupTipRack,
   Drop,
+  DropTipRack,
   Aspiration,
   AspirationPlate,
   Dispense,
@@ -34,7 +36,6 @@ from pylabrobot.resources import (
   Coordinate,
   Plate,
   Resource,
-  TipRack,
   TipSpot,
   Well
 )
@@ -1259,18 +1260,18 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def pick_up_tips96(
     self,
-    tip_rack: TipRack,
+    pickup: PickupTipRack,
     tip_pickup_method: int = 0,
     z_deposit_position: int = 2164,
     minimum_height_command_end: int = 2450,
     minimum_traverse_height_at_beginning_of_a_command: int = 2450
   ):
     assert self.core96_head_installed, "96 head must be installed"
-    tip_spot_a1 = tip_rack.get_item("A1")
+    tip_spot_a1 = pickup.resource.get_item("A1")
     tip_a1 = tip_spot_a1.get_tip()
     assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = self.get_or_assign_tip_type_index(tip_a1)
-    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center()
+    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
 
     return self.pick_up_tips_core96(
       x_position=int(position.x * 10),
@@ -1287,14 +1288,14 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   def drop_tips96(
     self,
-    tip_rack: TipRack,
+    drop: DropTipRack,
     z_deposit_position: int = 2164,
     minimum_height_command_end: int = 2450,
     minimum_traverse_height_at_beginning_of_a_command: int = 2450
   ):
     assert self.core96_head_installed, "96 head must be installed"
-    tip_a1 = tip_rack.get_item("A1")
-    position = tip_a1.get_absolute_location() + tip_a1.center()
+    tip_a1 = drop.resource.get_item("A1")
+    position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
 
     return self.discard_tips_core96(
       x_position=int(position.x * 10),

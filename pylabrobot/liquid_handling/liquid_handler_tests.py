@@ -29,7 +29,15 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L, HTF_L
-from .standard import Pickup, Drop, Aspiration, Dispense, AspirationPlate, DispensePlate
+from .standard import (
+  Pickup,
+  Drop,
+  DropTipRack,
+  Aspiration,
+  Dispense,
+  AspirationPlate,
+  DispensePlate
+)
 
 
 class TestLiquidHandlerLayout(unittest.TestCase):
@@ -284,8 +292,10 @@ class TestLiquidHandlerCommands(unittest.TestCase):
 
     self.assertEqual(self.get_first_command("drop_tips96"), {
       "command": "drop_tips96",
-      "args": (self.tip_rack,),
-      "kwargs": {}})
+      "args": (),
+      "kwargs": {
+        "drop": DropTipRack(resource=self.tip_rack, offset=Coordinate.zero())
+      }})
 
     with self.assertRaises(RuntimeError):
       self.lh.return_tips()

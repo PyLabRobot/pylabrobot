@@ -102,13 +102,19 @@ class SerializingBackendTests(unittest.TestCase):
     self.lh.pick_up_tips96(self.tip_rack)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "pick_up_tips96")
-    self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource_name=self.tip_rack.name))
+    self.assertEqual(self.backend.sent_commands[0]["data"], dict(
+      resource_name=self.tip_rack.name,
+      offset=Coordinate.zero().serialize()
+    ))
 
   def test_drop_tips96(self):
     self.lh.drop_tips96(self.tip_rack)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "drop_tips96")
-    self.assertEqual(self.backend.sent_commands[0]["data"], dict(resource_name=self.tip_rack.name))
+    self.assertEqual(self.backend.sent_commands[0]["data"], dict(
+      resource_name=self.tip_rack.name,
+      offset=Coordinate.zero().serialize()
+    ))
 
   def test_aspirate96(self):
     self.test_pick_up_tips96() # pick up tips first
