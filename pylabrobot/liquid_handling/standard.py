@@ -10,7 +10,7 @@ from pylabrobot.default import Defaultable, Default, is_not_default
 from pylabrobot.liquid_handling.liquid_classes.abstract import LiquidClass
 from pylabrobot.resources.coordinate import Coordinate
 if TYPE_CHECKING:
-  from pylabrobot.resources import Container, Plate, Resource
+  from pylabrobot.resources import Container, Plate, Resource, TipRack
   from pylabrobot.resources.tip import Tip
   from pylabrobot.resources.tip_rack import TipSpot
 
@@ -108,6 +108,56 @@ class Drop(TipOp):
       resource=resource,
       offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"]),
       tip=tip
+    )
+
+
+class TipRackOp(PipettingOp, metaclass=ABCMeta):
+  """ Abstract base class for tip rack operations. """
+
+  def __init__(
+    self,
+    resource: TipRack,
+    offset: Defaultable[Coordinate] = Default
+  ):
+    super().__init__(resource=resource, offset=offset)
+    self.resource: TipRack = resource # fix type
+
+
+class PickupTipRack(TipRackOp):
+  """ A pickup operation for an entire tip rack. """
+
+  def __init__(
+    self,
+    resource: TipRack,
+    offset: Defaultable[Coordinate] = Default
+  ):
+    super().__init__(resource=resource, offset=offset)
+
+  @classmethod
+  def deserialize(cls, data: dict, resource: TipRack) -> PickupTipRack:
+    assert resource.name == data["resource_name"]
+    return PickupTipRack(
+      resource=resource,
+      offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"])
+    )
+
+
+class DropTipRack(TipRackOp):
+  """ A drop operation for an entire tip rack. """
+
+  def __init__(
+    self,
+    resource: TipRack,
+    offset: Defaultable[Coordinate] = Default
+  ):
+    super().__init__(resource=resource, offset=offset)
+
+  @classmethod
+  def deserialize(cls, data: dict, resource: TipRack) -> DropTipRack:
+    assert resource.name == data["resource_name"]
+    return DropTipRack(
+      resource=resource,
+      offset=Default if data["offset"] == "default" else Coordinate.deserialize(data["offset"])
     )
 
 
@@ -332,11 +382,11 @@ class AspirationPlate(LiquidHandlingOp):
 
     Args:
       resource: The resource that will be used in the operation.
-      volume: The volume of the liquid that is being handled. In ul.
-      tip: The tip that is being used in the operation.
-      flow_rate: The flow rate. None is default for the Machine. In ul/s.
-      offset: The offset in the z direction. In mm.
-      liquid_height: The height of the liquid in the well. In mm.
+      volume: The volume of the liquid that is being handled. In ul. Per tip.
+      tips: The tips that are being used in the operation.
+      flow_rate: The flow rate. None is default for the Machine. In ul/s. For all tips.
+      offset: The offset in the z direction. In mm. For all tips.
+      liquid_height: The height of the liquid in the well. In mm. For all tips.
     """
 
     super().__init__(
@@ -395,11 +445,11 @@ class DispensePlate(LiquidHandlingOp):
 
     Args:
       resource: The resource that will be used in the operation.
-      volume: The volume of the liquid that is being handled. In ul.
-      tip: The tip that is being used in the operation.
-      flow_rate: The flow rate. None is default for the Machine. In ul/s.
-      offset: The offset in the z direction. In mm.
-      liquid_height: The height of the liquid in the well. In mm.
+      volume: The volume of the liquid that is being handled. In ul. Per tip.
+      tips: The tips that are being used in the operation.
+      flow_rate: The flow rate. None is default for the Machine. In ul/s. For all tips.
+      offset: The offset in the z direction. In mm. For all tips.
+      liquid_height: The height of the liquid in the well. In mm. For all tips.
     """
 
     super().__init__(

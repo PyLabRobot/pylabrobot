@@ -205,6 +205,7 @@ class TestHTTPBackendOps(unittest.TestCase):
         header_match,
         matchers.json_params_matcher({
           "resource_name": "tiprack",
+          "offset": {"x": 0, "y": 0, "z": 0},
         })
       ],
       json={"status": "ok"},
@@ -221,6 +222,7 @@ class TestHTTPBackendOps(unittest.TestCase):
         header_match,
         matchers.json_params_matcher({
           "resource_name": "tiprack",
+          "offset": {"x": 0, "y": 0, "z": 0},
         })
       ],
       json={"status": "ok"},
@@ -238,6 +240,7 @@ class TestHTTPBackendOps(unittest.TestCase):
         header_match,
         matchers.json_params_matcher({
           "resource_name": "tiprack",
+          "offset": {"x": 0, "y": 0, "z": 0},
         })
       ],
       json={"status": "ok"},
@@ -279,6 +282,7 @@ class TestHTTPBackendOps(unittest.TestCase):
         header_match,
         matchers.json_params_matcher({
           "resource_name": "tiprack",
+          "offset": {"x": 0, "y": 0, "z": 0},
         })
       ],
       json={"status": "ok"},

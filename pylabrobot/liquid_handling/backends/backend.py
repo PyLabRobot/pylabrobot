@@ -3,10 +3,12 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import List, Type, Optional
 
-from pylabrobot.resources import Resource, TipRack
+from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,
+  PickupTipRack,
   Drop,
+  DropTipRack,
   Aspiration,
   AspirationPlate,
   Dispense,
@@ -83,11 +85,11 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     """ Dispense liquid from the specified resource using pip. """
 
   @abstractmethod
-  def pick_up_tips96(self, tip_rack: TipRack):
+  def pick_up_tips96(self, pickup: PickupTipRack):
     """ Pick up tips from the specified resource using CoRe 96. """
 
   @abstractmethod
-  def drop_tips96(self, tip_rack: TipRack):
+  def drop_tips96(self, drop: DropTipRack):
     """ Drop tips to the specified resource using CoRe 96. """
 
   @abstractmethod

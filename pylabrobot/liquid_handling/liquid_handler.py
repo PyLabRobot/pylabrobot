@@ -37,7 +37,9 @@ from pylabrobot.utils.list import expand
 from .backends import LiquidHandlerBackend
 from .standard import (
   Pickup,
+  PickupTipRack,
   Drop,
+  DropTipRack,
   Aspiration,
   AspirationPlate,
   Dispense,
@@ -882,8 +884,12 @@ class LiquidHandler:
         use_channels=[0],
         **backend_kwargs)
 
-  def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
-    """ Pick up tips using the CoRe 96 head. This will pick up 96 tips.
+  def pick_up_tips96(
+    self,
+    tip_rack: TipRack,
+    offset: Coordinate = Coordinate.zero(),
+    **backend_kwargs):
+    """ Pick up tips using the 96 head. This will pick up 96 tips.
 
     Examples:
       Pick up tips from a 96-tip tiprack:
@@ -892,20 +898,29 @@ class LiquidHandler:
 
     Args:
       tip_rack: The tip rack to pick up tips from.
+      offset: The offset to use when picking up tips, optional.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    extras = self._check_args(self.backend.pick_up_tips96, backend_kwargs, default={"tip_rack"})
+    extras = self._check_args(self.backend.pick_up_tips96, backend_kwargs, default={"pickup"})
     for extra in extras:
       del backend_kwargs[extra]
 
-    self.backend.pick_up_tips96(tip_rack=tip_rack, **backend_kwargs)
+    self.backend.pick_up_tips96(
+      pickup=PickupTipRack(resource=tip_rack, offset=offset),
+      **backend_kwargs
+    )
 
     # Save the tips as picked up.
     self._picked_up_tips96 = tip_rack
 
-  def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
-    """ Drop tips using the CoRe 96 head. This will drop 96 tips.
+  def drop_tips96(
+    self,
+    tip_rack: TipRack,
+    offset: Coordinate = Coordinate.zero(),
+    **backend_kwargs
+  ):
+    """ Drop tips using the 96 head. This will drop 96 tips.
 
     Examples:
       Drop tips to a 96-tip tiprack:
@@ -914,14 +929,18 @@ class LiquidHandler:
 
     Args:
       tip_rack: The tip rack to drop tips to.
+      offset: The offset to use when dropping tips.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    extras = self._check_args(self.backend.drop_tips96, backend_kwargs, default={"tip_rack"})
+    extras = self._check_args(self.backend.drop_tips96, backend_kwargs, default={"drop"})
     for extra in extras:
       del backend_kwargs[extra]
 
-    self.backend.drop_tips96(tip_rack, **backend_kwargs)
+    self.backend.drop_tips96(
+      drop=DropTipRack(resource=tip_rack, offset=offset),
+      **backend_kwargs
+    )
 
     self._picked_up_tips96 = None
 
