@@ -1265,6 +1265,7 @@ class STAR(HamiltonLiquidHandler):
     minimum_height_command_end: int = 2450,
     minimum_traverse_height_at_beginning_of_a_command: int = 2450
   ):
+    """ Pick up tips using the 96 head. """
     assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
     tip_a1 = tip_spot_a1.get_tip()
@@ -1292,6 +1293,7 @@ class STAR(HamiltonLiquidHandler):
     minimum_height_command_end: int = 2450,
     minimum_traverse_height_at_beginning_of_a_command: int = 2450
   ):
+    """ Drop tips from the 96 head. """
     assert self.core96_head_installed, "96 head must be installed"
     tip_a1 = drop.resource.get_item("A1")
     position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
@@ -1618,6 +1620,8 @@ class STAR(HamiltonLiquidHandler):
     acceleration_index_low_acc: int = 1,
     fold_up_sequence_at_the_end_of_process: bool = True
   ):
+    """ Pick up a resource using iSWAP """
+
     assert self.iswap_installed, "iswap must be installed"
 
     # Get center of source plate. Also gripping height and plate width.

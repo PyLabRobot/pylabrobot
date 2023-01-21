@@ -25,8 +25,8 @@ class LiquidClass(enum.Enum):
 
   @staticmethod
   def from_str(s: str) -> "LiquidClass":
-    # Some liquid classes have more than one name. This is a little Hamilton specific, will probably
-    # refactor in the future.
+    """ Some liquid classes have more than one name. This is a little Hamilton specific, will
+    probably refactor in the future. """
 
     s = s.strip()
 

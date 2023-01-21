@@ -117,7 +117,8 @@ class CLARIOStar(PlateReaderBackend):
     status = await self.send(bytearray([0x02, 0x00, 0x09, 0x0c, 0x80, 0x00, 0x00, 0x97, 0x0d]))
     return status
 
-  async def wait_for_ready_and_return(self, ret, timeout=150):
+  async def _wait_for_ready_and_return(self, ret, timeout=150):
+    """ Wait for the plate reader to be ready and return the response. """
     last_status = None
     t = time.time()
     while time.time() - t < timeout:
@@ -150,31 +151,31 @@ class CLARIOStar(PlateReaderBackend):
   async def initialize(self):
     command_response = await self.send(
       bytearray([0x02, 0x00, 0x0D, 0x0C, 0x01, 0x00, 0x00, 0x10, 0x02, 0x00, 0x00, 0x2E, 0x0D]))
-    return await self.wait_for_ready_and_return(command_response)
+    return await self._wait_for_ready_and_return(command_response)
 
   async def request_eeprom_data(self):
     eeprom_response = await self.send(
       bytearray([0x02, 0x00, 0x0F, 0x0C, 0x05, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x29,
         0x0D]))
-    return await self.wait_for_ready_and_return(eeprom_response)
+    return await self._wait_for_ready_and_return(eeprom_response)
 
   async def open(self):
     open_response = await self.send(bytearray([0x02, 0x00, 0x0E, 0x0C, 0x03, 0x01, 0x00, 0x00, 0x00,
       0x00, 0x00, 0x00, 0x20, 0x0D]))
-    return await self.wait_for_ready_and_return(open_response)
+    return await self._wait_for_ready_and_return(open_response)
 
   async def close(self):
     close_response = await self.send(bytearray([0x02, 0x00, 0x0E, 0x0C, 0x03, 0x00, 0x00, 0x00,
       0x00, 0x00, 0x00, 0x00, 0x1F, 0x0D]))
-    return await self.wait_for_ready_and_return(close_response)
+    return await self._wait_for_ready_and_return(close_response)
 
   async def _mp_and_focus_height_value(self):
     mp_and_focus_height_value_response = await self.send(bytearray([0x02, 0x00, 0x0F, 0x0C, 0x05,
       0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x39, 0x0D]))
-    return await self.wait_for_ready_and_return(mp_and_focus_height_value_response)
+    return await self._wait_for_ready_and_return(mp_and_focus_height_value_response)
 
   async def _run_luminescence(self, focal_height: float):
-    """ Run a plate reader run. """
+    """ Run a plate reader luminescence run. """
 
     assert 0 <= focal_height <= 25, "focal height must be between 0 and 25 mm"
 
@@ -190,7 +191,7 @@ class CLARIOStar(PlateReaderBackend):
       b"\x01\x00\x01\x00\x01\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x01"
       b"\x00\x00\x00\x01\x00\x64\x00\x20\x00\x00\x11\x65\x0d")
 
-    # TODO: find a prettier way to do this. It's essentially copied from wait_for_ready_and_return.
+    # TODO: find a prettier way to do this. It's essentially copied from _wait_for_ready_and_return.
     last_status = None
     while True:
       await asyncio.sleep(0.1)
@@ -207,6 +208,7 @@ class CLARIOStar(PlateReaderBackend):
         return run_response
 
   async def _run_absorbance(self, wavelength: float):
+    """ Run a plate reader absorbance run. """
     wavelength_data = int(wavelength * 10).to_bytes(2, byteorder="big")
 
     absorbance_command = (b"\x02\x00\x7C\x0C\x04\x31\xEC\x21\x66\x05\x96\x04\x60\x2C\x56\x1D\x06"
@@ -218,7 +220,7 @@ class CLARIOStar(PlateReaderBackend):
       b"\x0D")
     run_response = await self.send(absorbance_command)
 
-    # TODO: find a prettier way to do this. It's essentially copied from wait_for_ready_and_return.
+    # TODO: find a prettier way to do this. It's essentially copied from _wait_for_ready_and_return.
     last_status = None
     while True:
       await asyncio.sleep(0.1)
@@ -242,13 +244,14 @@ class CLARIOStar(PlateReaderBackend):
   async def _status_hw(self):
     status_hw_response = await self.send(bytearray([0x02, 0x00, 0x09, 0x0C, 0x81, 0x00, 0x00, 0x98,
       0x0D]))
-    return await self.wait_for_ready_and_return(status_hw_response)
+    return await self._wait_for_ready_and_return(status_hw_response)
 
   async def _get_measurement_values(self):
     return await self.send(bytearray([0x02, 0x00, 0x0F, 0x0C, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00,
       0x00, 0x00, 0x00, 0x24, 0x0D]))
 
   async def read_luminescence(self, focal_height: float = 13) -> List[List[float]]:
+    """ Read luminescence values from the plate reader. """
     await self._mp_and_focus_height_value()
 
     await self._run_luminescence(focal_height=focal_height)
