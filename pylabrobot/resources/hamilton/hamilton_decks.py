@@ -316,13 +316,13 @@ def STARLetDeck( # pylint: disable=invalid-name
   """
 
   return HamiltonDeck(
-      num_rails=STARLET_NUM_RAILS,
-      size_x=STARLET_SIZE_X,
-      size_y=STARLET_SIZE_Y,
-      size_z=STARLET_SIZE_Z,
-      resource_assigned_callback=resource_assigned_callback,
-      resource_unassigned_callback=resource_unassigned_callback,
-      origin=origin)
+    num_rails=STARLET_NUM_RAILS,
+    size_x=STARLET_SIZE_X,
+    size_y=STARLET_SIZE_Y,
+    size_z=STARLET_SIZE_Z,
+    resource_assigned_callback=resource_assigned_callback,
+    resource_unassigned_callback=resource_unassigned_callback,
+    origin=origin)
 
 
 def STARDeck( # pylint: disable=invalid-name
@@ -336,10 +336,10 @@ def STARDeck( # pylint: disable=invalid-name
   """
 
   return HamiltonDeck(
-      num_rails=STAR_NUM_RAILS,
-      size_x=STAR_SIZE_X,
-      size_y=STAR_SIZE_Y,
-      size_z=STAR_SIZE_Z,
-      resource_assigned_callback=resource_assigned_callback,
-      resource_unassigned_callback=resource_unassigned_callback,
-      origin=origin)
+    num_rails=STAR_NUM_RAILS,
+    size_x=STAR_SIZE_X,
+    size_y=STAR_SIZE_Y,
+    size_z=STAR_SIZE_Z,
+    resource_assigned_callback=resource_assigned_callback,
+    resource_unassigned_callback=resource_unassigned_callback,
+    origin=origin)

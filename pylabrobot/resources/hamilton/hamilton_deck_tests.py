@@ -20,6 +20,7 @@ from pylabrobot.resources.hamilton import HamiltonDeck, STARLetDeck
 
 class HamiltonDeckTests(unittest.TestCase):
   """ Tests for the HamiltonDeck class. """
+
   def test_parse_lay_file(self):
     fn = "./pylabrobot/testing/test_data/test_deck.lay"
     deck = HamiltonDeck.load_from_lay_file(fn)
@@ -83,6 +84,7 @@ class HamiltonDeckTests(unittest.TestCase):
     self.assertIsNone(plt_car2[4].resource)
 
   def build_layout(self):
+    """ Build a deck layout for testing """
     deck = STARLetDeck()
 
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
