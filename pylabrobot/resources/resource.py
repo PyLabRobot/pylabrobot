@@ -35,7 +35,7 @@ class Resource:
     category: Optional[str] = None,
     model: Optional[str] = None
   ):
-    self.name = name
+    self._name = name
     self._size_x = size_x
     self._size_y = size_y
     self._size_z = size_z
@@ -62,6 +62,22 @@ class Resource:
       children=[child.serialize() for child in self.children],
       parent_name=self.parent.name if self.parent is not None else None
     )
+
+  @property
+  def name(self) -> str:
+    """ Get the name of this resource. """
+    return self._name
+
+  @name.setter
+  def name(self, name: str):
+    """ Set the name of this resource.
+
+    Will raise a `RuntimeError` if the resource is assigned to another resource.
+    """
+
+    if self.parent is not None:
+      raise RuntimeError("Cannot change the name of a resource that is assigned.")
+    self._name = name
 
   def copy(self):
     """ Copy this resource. """
