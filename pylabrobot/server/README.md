@@ -12,8 +12,14 @@ pip install pylabrobot[server]
 ## Usage
 
 ```sh
-python server.py
+python liquid_handling_server.py
 ```
+
+The `backend.json` file must contain a serialized backend. See `https://docs.pylabrobot.org/_autosummary/pylabrobot.liquid_handling.backends.backend.LiquidHandlerBackend.deserialize.html` and `https://docs.pylabrobot.org/_autosummary/pylabrobot.liquid_handling.backends.backend.LiquidHandlerBackend.serialize.html`
+
+The `deck.json` file must contain a serialized deck. See `https://docs.pylabrobot.org/_autosummary/pylabrobot.resources.Deck.deserialize.html` and `https://docs.pylabrobot.org/_autosummary/pylabrobot.resources.Deck.serialize.html`.
+
+Filenames can be overridden with the `BACKEND_FILE` and `DECK_FILE` environment variables.
 
 ## API Reference
 

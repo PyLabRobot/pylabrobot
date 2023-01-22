@@ -18,7 +18,7 @@ from pylabrobot.liquid_handling.standard import (
   Aspiration,
   Dispense,
 )
-from pylabrobot.server.server import create_app
+from pylabrobot.server.liquid_handling_server import create_app
 
 
 def build_layout() -> HamiltonDeck:
