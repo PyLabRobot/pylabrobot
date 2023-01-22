@@ -1,11 +1,14 @@
 # mypy: disable-error-code = attr-defined
 
+import json
+import os
 from typing import List, Tuple, Type, TypeVar, cast
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, Flask, request, jsonify, current_app
 import werkzeug
 
-from pylabrobot.resources import Deck
+from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import (
   PipettingOp,
   Pickup,
@@ -13,7 +16,7 @@ from pylabrobot.liquid_handling.standard import (
   Dispense,
   Drop,
 )
-from pylabrobot.resources.tip import Tip
+from pylabrobot.resources import Deck, Tip
 
 
 lh_api = Blueprint("liquid handling", __name__, url_prefix="/api/v1/liquid_handling")
@@ -172,3 +175,34 @@ def dispense():
     return jsonify({"status": "ok"})
   except Exception as e: # pylint: disable=broad-except
     return jsonify({"error": str(e)}), 400
+
+
+def create_app(lh: LiquidHandler):
+  """ Create a Flask app with the given LiquidHandler """
+  app = Flask(__name__)
+  app.lh = lh
+  app.register_blueprint(lh_api)
+  return app
+
+
+def main():
+  backend_file = os.environ.get("BACKEND_FILE", "backend.json")
+  with open(backend_file, "r", encoding="utf-8") as f:
+    data = json.load(f)
+    backend = LiquidHandlerBackend.deserialize(data)
+
+  deck_file = os.environ.get("DECK_FILE", "deck.json")
+  with open(deck_file, "r", encoding="utf-8") as f:
+    data = json.load(f)
+    deck = Deck.deserialize(data)
+
+  lh = LiquidHandler(backend=backend, deck=deck)
+
+  app = create_app(lh)
+  host = os.environ.get("HOST", "0.0.0.0")
+  port = int(os.environ.get("PORT", 5001))
+  app.run(debug=True, host=host, port=port)
+
+
+if __name__ == "__main__":
+  main()
