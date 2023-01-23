@@ -49,7 +49,3 @@ class TestPositions(unittest.TestCase):
 
     with self.assertRaises(AssertionError):
       string_to_index("C1", num_rows=2, num_columns=12)
-
-
-if __name__ == "__main__":
-  unittest.main()

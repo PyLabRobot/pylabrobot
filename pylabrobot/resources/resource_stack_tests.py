@@ -114,7 +114,3 @@ class ResourceStackTests(unittest.TestCase):
     top_item = stacking_area.get_top_item()
     assert top_item is not None
     self.assertEqual(top_item.get_absolute_location(), Coordinate(0, 0, 1))
-
-
-if __name__ == "__main__":
-  unittest.main()

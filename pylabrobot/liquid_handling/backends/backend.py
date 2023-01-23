@@ -31,21 +31,13 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
   def __init__(self):
     self.setup_finished = False
 
-  def setup(self):
+  async def setup(self):
     self.setup_finished = True
 
-  def stop(self):
+  async def stop(self):
     self.setup_finished = False
 
-  def __enter__(self):
-    self.setup()
-    return self
-
-  def __exit__(self, *exc):
-    self.stop()
-    return False
-
-  def assigned_resource_callback(self, resource: Resource):
+  async def assigned_resource_callback(self, resource: Resource):
     """ Called when a new resource was assigned to the robot.
 
     This callback will also be called immediately after the setup method has been called for any
@@ -56,7 +48,7 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
       resource: The resource that was assigned to the robot.
     """
 
-  def unassigned_resource_callback(self, name: str):
+  async def unassigned_resource_callback(self, name: str):
     """ Called when a resource is unassigned from the robot.
 
     Args:
@@ -69,39 +61,39 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     """ The number of channels that the robot has. """
 
   @abstractmethod
-  def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
+  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     """ Pick up tips from the specified resource. """
 
   @abstractmethod
-  def drop_tips(self, ops: List[Drop], use_channels: List[int]):
+  async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     """ Drop tips from the specified resource. """
 
   @abstractmethod
-  def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
+  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
     """ Aspirate liquid from the specified resource using pip. """
 
   @abstractmethod
-  def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
     """ Dispense liquid from the specified resource using pip. """
 
   @abstractmethod
-  def pick_up_tips96(self, pickup: PickupTipRack):
+  async def pick_up_tips96(self, pickup: PickupTipRack):
     """ Pick up tips from the specified resource using CoRe 96. """
 
   @abstractmethod
-  def drop_tips96(self, drop: DropTipRack):
+  async def drop_tips96(self, drop: DropTipRack):
     """ Drop tips to the specified resource using CoRe 96. """
 
   @abstractmethod
-  def aspirate96(self, aspiration: AspirationPlate):
+  async def aspirate96(self, aspiration: AspirationPlate):
     """ Aspirate from all wells in 96 well plate. """
 
   @abstractmethod
-  def dispense96(self, dispense: DispensePlate):
+  async def dispense96(self, dispense: DispensePlate):
     """ Dispense to all wells in 96 well plate. """
 
   @abstractmethod
-  def move_resource(self, move: Move):
+  async def move_resource(self, move: Move):
     """ Move a resource to a new location. """
 
   def serialize(self):
@@ -137,22 +129,22 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     del data["type"]
     return subclass(**data)
 
-  def prepare_for_manual_channel_operation(self):
+  async def prepare_for_manual_channel_operation(self):
     """ Prepare the robot for manual operation. """
 
     raise NotImplementedError()
 
-  def move_channel_x(self, channel: int, x: float):
+  async def move_channel_x(self, channel: int, x: float):
     """ Move the specified channel to the specified x coordinate. """
 
     raise NotImplementedError()
 
-  def move_channel_y(self, channel: int, y: float):
+  async def move_channel_y(self, channel: int, y: float):
     """ Move the specified channel to the specified y coordinate. """
 
     raise NotImplementedError()
 
-  def move_channel_z(self, channel: int, z: float):
+  async def move_channel_z(self, channel: int, z: float):
     """ Move the specified channel to the specified z coordinate. """
 
     raise NotImplementedError()

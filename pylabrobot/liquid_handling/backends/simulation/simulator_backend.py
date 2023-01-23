@@ -107,13 +107,13 @@ class SimulatorBackend(WebSocketBackend):
       raise RuntimeError("The file server thread has not been started yet.")
     return self._fst
 
-  def setup(self):
+  async def setup(self):
     """ Setup the simulation.
 
     Sets up the websocket server. This will run in a separate thread.
     """
 
-    super().setup()
+    await super().setup()
     self._run_file_server()
 
   def _run_file_server(self):
@@ -156,10 +156,10 @@ class SimulatorBackend(WebSocketBackend):
     if self.open_browser:
       webbrowser.open(f"http://{self.fs_host}:{self.fs_port}")
 
-  def stop(self):
+  async def stop(self):
     """ Stop the simulation. """
 
-    super().stop()
+    await super().stop()
 
     # Stop the file server.
     self.httpd.shutdown()
@@ -169,10 +169,10 @@ class SimulatorBackend(WebSocketBackend):
     self._httpd = None
     self._fst = None
 
-  def move_resource(self, move: Move, **backend_kwargs):
+  async def move_resource(self, move: Move, **backend_kwargs):
     raise NotImplementedError("This method is not implemented in the simulator.")
 
-  def adjust_well_volume(self, plate: Plate, pattern: typing.List[typing.List[float]]):
+  async def adjust_well_volume(self, plate: Plate, pattern: typing.List[typing.List[float]]):
     """ Fill a resource with liquid (**simulator only**).
 
     Simulator method to fill a resource with liquid, for testing of liquid handling.
@@ -202,9 +202,9 @@ class SimulatorBackend(WebSocketBackend):
           "volume": vol
         })
 
-    self.send_command(command="adjust_well_volume", data=dict(pattern=serialized_pattern))
+    await self.send_command(command="adjust_well_volume", data=dict(pattern=serialized_pattern))
 
-  def edit_tips(self, tip_rack: TipRack, pattern: typing.List[typing.List[bool]]):
+  async def edit_tips(self, tip_rack: TipRack, pattern: typing.List[typing.List[bool]]):
     """ Place and/or remove tips on the robot (**simulator only**).
 
     Simulator method to place tips on the robot, for testing of tip pickup/droping. Unlike,
@@ -235,9 +235,9 @@ class SimulatorBackend(WebSocketBackend):
           "has_one": has_one
         })
 
-    self.send_command(command="edit_tips", data=dict(pattern=serialized_pattern))
+    await self.send_command(command="edit_tips", data=dict(pattern=serialized_pattern))
 
-  def fill_tip_rack(self, resource: TipRack):
+  async def fill_tip_rack(self, resource: TipRack):
     """ Completely fill a :class:`~pylabrobot.resources.TipRack` resource
     with tips. (**simulator only**).
 
@@ -245,9 +245,9 @@ class SimulatorBackend(WebSocketBackend):
       resource: The resource where all tips should be placed.
     """
 
-    self.edit_tips(resource, [[True] * 12] * 8)
+    await self.edit_tips(resource, [[True] * 12] * 8)
 
-  def clear_tips(self, tip_rack: TipRack):
+  async def clear_tips(self, tip_rack: TipRack):
     """ Completely clear a :class:`~pylabrobot.resources.TipRack` resource.
     (**simulator only**).
 
@@ -255,4 +255,4 @@ class SimulatorBackend(WebSocketBackend):
       tip_rack: The resource where all tips should be removed.
     """
 
-    self.edit_tips(tip_rack, [[True] * 12] * 8)
+    await self.edit_tips(tip_rack, [[True] * 12] * 8)

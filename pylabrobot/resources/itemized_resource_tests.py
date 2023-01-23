@@ -221,7 +221,3 @@ class TestCreateEquallySpaced(unittest.TestCase):
     correct_items[2][1].location = Coordinate(18, 0, 0)
 
     self.assertEqual(equally_spaced, correct_items)
-
-
-if __name__ == "__main__":
-  unittest.main()

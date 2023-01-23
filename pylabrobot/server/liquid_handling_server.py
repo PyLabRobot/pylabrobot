@@ -28,13 +28,13 @@ def index():
 
 
 @lh_api.route("/setup", methods=["POST"])
-def setup():
-  current_app.lh.setup()
+async def setup():
+  await current_app.lh.setup()
   return jsonify({"status": "running"})
 
 @lh_api.route("/stop", methods=["POST"])
-def stop():
-  current_app.lh.stop()
+async def stop():
+  await current_app.lh.stop()
   return jsonify({"status": "stopped"})
 
 @lh_api.route("/status", methods=["GET"])
@@ -105,14 +105,14 @@ def deserialize_liquid_handling_op_from_request(
   return cast(List[T], ops), cast(List[int], use_channels) # right types, but mypy doesn't know
 
 @lh_api.route("/pick-up-tips", methods=["POST"])
-def pick_up_tips():
+async def pick_up_tips():
   try:
     pickups, use_channels = deserialize_liquid_handling_op_from_request(Pickup)
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
 
   try:
-    current_app.lh.pick_up_tips(
+    await current_app.lh.pick_up_tips(
       tip_spots=[p.resource for p in pickups],
       offsets=[p.offset for p in pickups],
       use_channels=use_channels
@@ -122,14 +122,14 @@ def pick_up_tips():
     return jsonify({"error": str(e)}), 400
 
 @lh_api.route("/drop-tips", methods=["POST"])
-def drop_tips():
+async def drop_tips():
   try:
     drops, use_channels = deserialize_liquid_handling_op_from_request(Drop)
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
 
   try:
-    current_app.lh.drop_tips(
+    await current_app.lh.drop_tips(
       tip_spots=[p.resource for p in drops],
       offsets=[p.offset for p in drops],
       use_channels=use_channels
@@ -139,14 +139,14 @@ def drop_tips():
     return jsonify({"error": str(e)}), 400
 
 @lh_api.route("/aspirate", methods=["POST"])
-def aspirate():
+async def aspirate():
   try:
     aspirations, use_channels = deserialize_liquid_handling_op_from_request(Aspiration)
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
 
   try:
-    current_app.lh.aspirate(
+    await current_app.lh.aspirate(
       resources=[a.resource for a in aspirations],
       vols=[a.volume for a in aspirations],
       offsets=[a.offset for a in aspirations],
@@ -158,14 +158,14 @@ def aspirate():
     return jsonify({"error": str(e)}), 400
 
 @lh_api.route("/dispense", methods=["POST"])
-def dispense():
+async def dispense():
   try:
     dispenses, use_channels = deserialize_liquid_handling_op_from_request(Dispense)
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
 
   try:
-    current_app.lh.dispense(
+    await current_app.lh.dispense(
       resources=[d.resource for d in dispenses],
       vols=[d.volume for d in dispenses],
       offsets=[d.offset for d in dispenses],

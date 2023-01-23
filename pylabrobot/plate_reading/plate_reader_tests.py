@@ -6,6 +6,7 @@ from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources import Plate, Well, create_equally_spaced
 
+
 class MockPlateReaderBackend(PlateReaderBackend):
   """ A mock backend for testing. """
 

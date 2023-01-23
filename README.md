@@ -22,12 +22,12 @@ from pylabrobot.resources import Deck
 
 deck = Deck.load_from_json_file("hamilton-layout.json")
 lh = LiquidHandler(backend=STAR(), deck=deck)
-lh.setup()
+await lh.setup()
 
-lh.pick_up_tips(lh.get_resource("tip_rack")["A1"])
-lh.aspirate(lh.get_resource("plate")["A1"], vols=100)
-lh.dispense(lh.get_resource("plate")["A2"], vols=100)
-lh.return_tips()
+await lh.pick_up_tips(lh.get_resource("tip_rack")["A1"])
+await lh.aspirate(lh.get_resource("plate")["A1"], vols=100)
+await lh.dispense(lh.get_resource("plate")["A2"], vols=100)
+await lh.return_tips()
 ```
 
 To run the same procedure on an Opentrons, change the following lines:
@@ -51,13 +51,13 @@ PyLabRobot also provides a layer of general-purpose abstractions for plate reade
 from pylabrobot.plate_reading import PlateReader, ClarioStar
 
 pr = PlateReader(name="plate reader", backend=ClarioStar())
-pr.setup()
+await pr.setup()
 
 # Use in combination with a liquid handler
 lh.assign_child_resource(pr, location=Coordinate(x, y, z))
 lh.move_plate(lh.get_resource("plate"), pr)
 
-data = pr.read_luminescence()
+data = await pr.read_luminescence()
 ```
 
 ## Resources

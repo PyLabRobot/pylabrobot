@@ -72,8 +72,8 @@ class OpentronsBackend(LiquidHandlerBackend):
       "port": self.port
     }
 
-  def setup(self):
-    super().setup()
+  async def setup(self):
+    await super().setup()
 
     # create run
     run_id = ot_api.runs.create()
@@ -88,11 +88,11 @@ class OpentronsBackend(LiquidHandlerBackend):
   def num_channels(self) -> int:
     return len([p for p in [self.left_pipette, self.right_pipette] if p is not None])
 
-  def stop(self):
+  async def stop(self):
     self.defined_labware = {}
-    super().stop()
+    await super().stop()
 
-  def assigned_resource_callback(self, resource: Resource):
+  async def assigned_resource_callback(self, resource: Resource):
     """ Called when a resource is assigned to a backend.
 
     Note that for Opentrons, all children to all resources on the deck are named "wells". They also
@@ -100,7 +100,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     be ignored when they are not used for aspirating/dispensing.
     """
 
-    super().assigned_resource_callback(resource)
+    await super().assigned_resource_callback(resource)
 
     if resource.name == "deck":
       return
@@ -216,8 +216,8 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     self.defined_labware[resource.name] = labware_uuid
 
-  def unassigned_resource_callback(self, name: str):
-    super().unassigned_resource_callback(name)
+  async def unassigned_resource_callback(self, name: str):
+    await super().unassigned_resource_callback(name)
 
     # The OT API does not support deleting labware, so we just forget about it locally.
     del self.defined_labware[name]
@@ -252,7 +252,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     return None
 
-  def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
+  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     """ Pick up tips from the specified resource. """
 
     assert len(ops) == 1, "only one channel supported for now"
@@ -282,7 +282,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     else:
       self.right_pipette_has_tip = True
 
-  def drop_tips(self, ops: List[Drop], use_channels: List[int]):
+  async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     """ Drop tips from the specified resource. """
 
     # right now we get the tip rack, and then identifier within that tip rack?
@@ -377,7 +377,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6
     }[pipette_name]
 
-  def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
+  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
     """ Aspirate liquid from the specified resource using pip. """
 
     assert len(ops) == 1, "only one channel supported for now"
@@ -431,7 +431,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6
     }[pipette_name]
 
-  def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
     """ Dispense liquid from the specified resource using pip. """
 
     assert len(ops) == 1, "only one channel supported for now"
@@ -460,18 +460,18 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.lh.dispense(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=flow_rate, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
-  def pick_up_tips96(self, pickup: PickupTipRack):
+  async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def drop_tips96(self, drop: DropTipRack):
+  async def drop_tips96(self, drop: DropTipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def aspirate96(self, aspiration: AspirationPlate):
+  async def aspirate96(self, aspiration: AspirationPlate):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def dispense96(self, dispense: DispensePlate):
+  async def dispense96(self, dispense: DispensePlate):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  def move_resource(self, move: Move):
+  async def move_resource(self, move: Move):
     """ Move the specified lid within the robot. """
     raise NotImplementedError("Moving resources in Opentrons is not implemented yet.")
