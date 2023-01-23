@@ -36,7 +36,7 @@ def build_layout() -> HamiltonDeck:
   return deck
 
 
-class LiquidHandlingApiGeneralTests(unittest.TestCase):
+class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.backend = SerializingSavingBackend(num_channels=8)
     self.deck = STARLetDeck()
@@ -66,13 +66,13 @@ class LiquidHandlingApiGeneralTests(unittest.TestCase):
 
       assert not self.lh.setup_finished
 
-  def test_status(self):
+  async def test_status(self):
     with self.app.test_client() as client:
       response = client.get(self.base_url + "/status")
       self.assertEqual(response.status_code, 200)
       self.assertEqual(response.json, {"status": "stopped"})
 
-      self.lh.setup()
+      await self.lh.setup()
       response = client.get(self.base_url + "/status")
       self.assertEqual(response.status_code, 200)
       self.assertEqual(response.json, {"status": "running"})

@@ -70,7 +70,7 @@
 
 #     self._venus_resources: dict[str, ResourceType] = {}
 
-#   def setup(self):
+#   async def setup(self):
 #     if not USE_VENUS:
 #       raise RuntimeError("Venus backend requires the pyhamilton library.")
 
@@ -125,14 +125,14 @@
 
 #     self._venus_resources[name] = self.lmgr.assign_unused_resource(resource_type)
 
-#   def stop(self):
+#   async def stop(self):
 #     self.ham_int.stop()
 #     super().stop()
 
-#   def assigned_resource_callback(self, resource: Resource):
+#   async def assigned_resource_callback(self, resource: Resource):
 #     raise RuntimeError("VENUS backend does not support assigning resources.")
 
-#   def unassigned_resource_callback(self, name: str):
+#   async def unassigned_resource_callback(self, name: str):
 #     raise RuntimeError("VENUS backend does not support assigning resources.")
 
 #   def _get_venus_resource(self, resource: Resource) -> DeckResource:

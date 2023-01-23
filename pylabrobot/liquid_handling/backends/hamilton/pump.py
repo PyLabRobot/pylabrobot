@@ -15,9 +15,9 @@ class Pump(Resource):
     self.chamber_2 = Resource("chamber_2", size_x=121, size_y=85, size_z=2, category="chamber")
     self.assign_child_resource(self.chamber_2, location=Coordinate(18.05, 241.500-63, 100))
 
-  def refill(self):
-    self.backend.drain_dual_chamber_system(pump_station=1)
-    self.backend.fill_selected_dual_chamber(pump_station=1, drain_before_refill=False, wash_fluid=2,
-      chamber=1, waste_chamber_suck_time_after_sensor_change=0)
-    self.backend.fill_selected_dual_chamber(pump_station=1, drain_before_refill=False, wash_fluid=1,
-      chamber=2, waste_chamber_suck_time_after_sensor_change=0)
+  async def refill(self):
+    await self.backend.drain_dual_chamber_system(pump_station=1)
+    await self.backend.fill_selected_dual_chamber(pump_station=1, drain_before_refill=False,
+      wash_fluid=2, chamber=1, waste_chamber_suck_time_after_sensor_change=0)
+    await self.backend.fill_selected_dual_chamber(pump_station=1, drain_before_refill=False,
+      wash_fluid=1, chamber=2, waste_chamber_suck_time_after_sensor_change=0)

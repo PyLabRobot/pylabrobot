@@ -53,15 +53,16 @@ class HTTPBackend(SerializingBackend):
     self.base_path = base_path
     self.url = f"{self.protocol}://{self.host}:{self.port}/{self.base_path}/"
 
-  def send_command(self, command: str, data: Optional[Dict[str, Any]] = None) -> Optional[dict]:
+  async def send_command(
+    self,
+    command: str,
+    data: Optional[Dict[str, Any]] = None
+  ) -> Optional[dict]:
     """ Send an event to the server.
 
     Args:
       event: The event identifier.
       data: The event arguments, which must be serializable by `json.dumps`.
-
-    Returns:
-      The response from the browser, if `wait_for_response` is `True`, otherwise `None`.
     """
 
     if self.session is None:
@@ -78,10 +79,10 @@ class HTTPBackend(SerializingBackend):
       })
     return cast(dict, resp.json())
 
-  def setup(self):
+  async def setup(self):
     self.session = requests.Session()
-    super().setup()
+    await super().setup()
 
-  def stop(self):
-    super().stop()
+  async def stop(self):
+    await super().stop()
     self.session = None

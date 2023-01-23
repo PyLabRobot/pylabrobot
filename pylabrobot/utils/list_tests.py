@@ -39,7 +39,3 @@ class TestListUtils(unittest.TestCase):
       expand(1, n=0)
     with self.assertRaises(ValueError):
       expand(1, n=-1)
-
-
-if __name__ == "__main__":
-  unittest.main()

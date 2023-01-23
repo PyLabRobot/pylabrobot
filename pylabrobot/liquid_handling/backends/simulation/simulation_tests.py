@@ -12,7 +12,6 @@ import websockets.client
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import SerializingSavingBackend, SimulatorBackend
-from pylabrobot.utils.testing import async_test
 from pylabrobot.resources import STARLetDeck
 from pylabrobot.resources import (
   TIP_CAR_480_A00,
@@ -22,52 +21,43 @@ from pylabrobot.resources import (
 )
 
 
-class SimulatorBackendSetupStopTests(unittest.TestCase):
+class SimulatorBackendSetupStopTests(unittest.IsolatedAsyncioTestCase):
   """ Tests for the setup and stop methods of the simulator backend. """
 
   @pytest.mark.timeout(20)
-  def test_setup_stop(self):
+  async def test_setup_stop(self):
     """ Test that the thread is started and stopped correctly. """
 
     backend = SimulatorBackend(open_browser=False)
 
-    def setup_stop_single():
-      backend.setup()
+    async def setup_stop_single():
+      await backend.setup()
       self.assertIsNotNone(backend.loop)
       # wait for the server to start
       time.sleep(1)
-      backend.stop()
+      await backend.stop()
       self.assertFalse(backend.has_connection())
 
     # setup and stop twice to ensure that everything is recycled correctly
-    setup_stop_single()
-    setup_stop_single()
+    await setup_stop_single()
+    await setup_stop_single()
 
 
-class SimulatorBackendServerTests(unittest.TestCase):
+class SimulatorBackendServerTests(unittest.IsolatedAsyncioTestCase):
   """ Tests for servers (ws/fs). """
 
-  def setUp(self):
-    super().setUp()
-    self.backend = SimulatorBackend(open_browser=False)
-    self.backend.setup()
-
-    self.asyncSetUp()
-
-  @async_test
   async def asyncSetUp(self):
+    await super().asyncSetUp()
+    self.backend = SimulatorBackend(open_browser=False)
+    await self.backend.setup()
+
     ws_port = self.backend.ws_port # port may change if port is already in use
     self.uri = f"ws://localhost:{ws_port}"
     self.client = await websockets.client.connect(self.uri)
 
-  def tearDown(self):
-    super().tearDown()
-    self.backend.stop()
-
-    self.asyncTearDown()
-
-  @async_test
   async def asyncTearDown(self):
+    await super().asyncTearDown()
+    await self.backend.stop()
     await self.client.close()
 
   def test_get_index_html(self):
@@ -76,19 +66,17 @@ class SimulatorBackendServerTests(unittest.TestCase):
     self.assertEqual(r.status_code, 200)
     self.assertEqual(r.headers["Content-Type"], "text/html")
 
-  @async_test
   async def test_connect(self):
     await self.client.send('{"event": "ready"}')
     response = await self.client.recv()
     self.assertEqual(response, '{"event": "ready"}')
 
-  @async_test
   async def test_event_sent(self):
     await self.client.send('{"event": "ready"}')
     response = await self.client.recv()
     self.assertEqual(response, '{"event": "ready"}')
 
-    self.backend.send_command("test", wait_for_response=False)
+    await self.backend.send_command("test", wait_for_response=False)
     recv = await self.client.recv()
     data = json.loads(recv)
     self.assertEqual(data["event"], "test")
@@ -101,21 +89,21 @@ class SimulatorBackendEventCatcher(SerializingSavingBackend, SimulatorBackend): 
   SimulatorBackend class.
   """
 
-  def send_command(self, command: str, data: Optional[Dict[str, Any]] = None,
+  async def send_command(self, command: str, data: Optional[Dict[str, Any]] = None,
     wait_for_response: bool = True): # pylint: disable=unused-argument
     self.sent_commands.append(dict(command=command, data=data))
 
 
-class SimulatorBackendCommandTests(unittest.TestCase):
+class SimulatorBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   """ Tests for command sending using the simulator backend. """
 
-  def setUp(self):
-    super().setUp()
+  async def asyncSetUp(self):
+    await super().asyncSetUp()
 
     self.backend = SimulatorBackendEventCatcher(open_browser=False)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    self.lh.setup()
+    await self.lh.setup()
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[0] = self.tip_rack = STF_L(name="tip_rack_01")
@@ -129,26 +117,26 @@ class SimulatorBackendCommandTests(unittest.TestCase):
 
     self.backend.clear()
 
-  def test_adjust_volume(self):
-    self.backend.adjust_well_volume(self.plate, [[100]*12]*8)
+  async def asyncTearDown(self):
+    await super().asyncTearDown()
+    await self.lh.stop()
+
+  async def test_adjust_volume(self):
+    await self.backend.adjust_well_volume(self.plate, [[100]*12]*8)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "adjust_well_volume")
 
-  def test_edit_tips(self):
-    self.backend.edit_tips(self.tip_rack, [[True]*12]*8)
+  async def test_edit_tips(self):
+    await self.backend.edit_tips(self.tip_rack, [[True]*12]*8)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "edit_tips")
 
-  def test_fill_tip_rack(self):
-    self.backend.fill_tip_rack(self.tip_rack)
+  async def test_fill_tip_rack(self):
+    await self.backend.fill_tip_rack(self.tip_rack)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "edit_tips")
 
-  def test_clear_tips(self):
-    self.backend.fill_tip_rack(self.tip_rack)
+  async def test_clear_tips(self):
+    await self.backend.fill_tip_rack(self.tip_rack)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "edit_tips")
-
-
-if __name__ == "__main__":
-  unittest.main()

@@ -40,7 +40,3 @@ class TestLid(unittest.TestCase):
     plate = self.test_add_lid()
     plate.unassign_child_resource(plate.lid)
     self.assertIsNone(plate.lid)
-
-
-if __name__ == "__main__":
-  unittest.main()

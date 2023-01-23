@@ -40,7 +40,7 @@ extras_opentrons = [
 ]
 
 extras_server = [
-    'flask',
+    'flask[async]',
 ]
 
 extras_testing = [

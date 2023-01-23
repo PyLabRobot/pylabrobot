@@ -135,7 +135,7 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
     raise TimeoutError("Timeout while reading.")
 
-  def setup(self):
+  async def setup(self):
     """ Initialize the USB connection to the machine."""
 
     if not USE_USB:
@@ -181,7 +181,7 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     while self._read_packet() is not None:
       pass
 
-  def stop(self):
+  async def stop(self):
     """ Close the USB connection to the machine. """
 
     if self.dev is None:

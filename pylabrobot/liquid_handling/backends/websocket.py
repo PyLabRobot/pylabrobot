@@ -158,17 +158,17 @@ class WebSocketBackend(SerializingBackend):
     while not self.has_connection():
       time.sleep(0.1)
 
-  def assigned_resource_callback(self, resource: Resource):
+  async def assigned_resource_callback(self, resource: Resource):
     # override SerializingBackend so we don't wait for a response
-    self.send_command(command="resource_assigned", data=dict(resource=resource.serialize(),
+    await self.send_command(command="resource_assigned", data=dict(resource=resource.serialize(),
       parent_name=(resource.parent.name if resource.parent else None)), wait_for_response=False)
 
-  def unassigned_resource_callback(self, name: str):
+  async def unassigned_resource_callback(self, name: str):
     # override SerializingBackend so we don't wait for a response
-    self.send_command(command="resource_unassigned", data=dict(resource_name=name),
+    await self.send_command(command="resource_unassigned", data=dict(resource_name=name),
       wait_for_response=False)
 
-  def send_command(
+  async def send_command(
     self,
     command: str,
     data: Optional[Dict[str, Any]] = None,
@@ -229,7 +229,7 @@ class WebSocketBackend(SerializingBackend):
     for message in self._sent_messages:
       asyncio.run_coroutine_threadsafe(self.websocket.send(message), self.loop)
 
-  def setup(self):
+  async def setup(self):
     """ Setup the simulation.
 
     Sets up the websocket server. This will run in a separate thread.
@@ -268,14 +268,14 @@ class WebSocketBackend(SerializingBackend):
 
     self.setup_finished = True
 
-  def stop(self):
+  async def stop(self):
     """ Stop the simulation. """
 
     if self.loop is None:
       raise ValueError("Cannot stop simulation when it has not been started.")
 
     # send stop event to the browser
-    self.send_command("stop", wait_for_response=False)
+    await self.send_command("stop", wait_for_response=False)
 
     # must be thread safe, because event loop is running in a separate thread
     self.loop.call_soon_threadsafe(self.stop_.set_result, "done")
