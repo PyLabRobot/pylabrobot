@@ -80,6 +80,10 @@ setup(
         'server': extras_server,
         'dev': extras_dev,
         'all': extras_all,
+    },
+    entry_points={
+        'console_scripts': [
+            'lh-server=pylabrobot.server.liquid_handling_server:main',
+        ],
     }
 )
-
