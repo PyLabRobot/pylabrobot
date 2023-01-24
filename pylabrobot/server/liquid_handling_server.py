@@ -95,7 +95,6 @@ def get_status():
   return jsonify({"status": status})
 
 
-# TODO: we can deserialize the entire LH. Not just the Deck.
 @lh_api.route("/labware", methods=["POST"])
 def define_labware():
   try:
