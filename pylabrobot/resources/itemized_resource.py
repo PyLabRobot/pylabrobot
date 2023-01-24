@@ -395,8 +395,8 @@ def create_equally_spaced(
     klass: The class of the resource to create
     num_items_x: The number of items in the x direction
     num_items_y: The number of items in the y direction
-    dx: The center for items in the left column
-    dy: The center for items in the top row
+    dx: The bottom left corner for items in the left column
+    dy: The bottom left corner for items in the top row
     dz: The z coordinate for all items
     item_size_x: The size of the items in the x direction
     item_size_y: The size of the items in the y direction
