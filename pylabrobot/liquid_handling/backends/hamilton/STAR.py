@@ -498,11 +498,15 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
 
       for id_, (loop, fut, cmd, fmt, timeout_time) in self._waiting_tasks.items():
         if "id" in parsed_response and f"{parsed_response['id']:04}" == id_:
-          parsed = self.parse_response(resp, fmt)
-          if fmt is not None and fmt != "":
-            loop.call_soon_threadsafe(fut.set_result, parsed)
+          try:
+            parsed = self.parse_response(resp, fmt)
+          except HamiltonFirmwareError as e:
+            loop.call_soon_threadsafe(fut.set_exception, e)
           else:
-            loop.call_soon_threadsafe(fut.set_result, resp)
+            if fmt is not None and fmt != "":
+              loop.call_soon_threadsafe(fut.set_result, parsed)
+            else:
+              loop.call_soon_threadsafe(fut.set_result, resp)
           del self._waiting_tasks[id_]
           break
 
