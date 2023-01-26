@@ -565,7 +565,7 @@ class STAR(HamiltonLiquidHandler):
     Creates a USB connection and finds read/write interfaces.
     """
 
-    super().setup()
+    await super().setup()
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
