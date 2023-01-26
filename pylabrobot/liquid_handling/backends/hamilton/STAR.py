@@ -593,7 +593,7 @@ class STAR(HamiltonLiquidHandler):
       y_positions = [4050 - i * dy for i in range(self.num_channels)]
 
       await self.initialize_pipetting_channels(
-        x_positions=[8000],
+        x_positions=[extended_conf["xw"]],  # Tip eject waste X position.
         y_positions=y_positions,
         begin_of_tip_deposit_process=2450,
         end_of_tip_deposit_process=1220,
