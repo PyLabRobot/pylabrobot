@@ -3,7 +3,7 @@ import json
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 try:
   import websockets
@@ -18,6 +18,9 @@ except ImportError:
 from pylabrobot.liquid_handling.backends import SerializingBackend
 from pylabrobot.resources import Resource
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
+
+if TYPE_CHECKING:
+  import websockets.legacy
 
 
 logger = logging.getLogger(__name__) # TODO: get from somewhere else?
@@ -60,7 +63,7 @@ class WebSocketBackend(SerializingBackend):
     self._id = 0
 
   @property
-  def websocket(self) -> websockets.legacy.server.WebSocketServerProtocol:
+  def websocket(self) -> "websockets.legacy.server.WebSocketServerProtocol":
     """ The websocket connection. """
     if self._websocket is None:
       raise RuntimeError("No websocket connection has been established.")
