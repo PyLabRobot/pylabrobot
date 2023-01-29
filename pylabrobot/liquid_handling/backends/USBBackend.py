@@ -3,7 +3,7 @@
 from abc import ABCMeta, abstractmethod
 import logging
 import time
-from typing import Optional
+from typing import List, Optional
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 
@@ -27,6 +27,8 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     self,
     id_vendor: int,
     id_product: int,
+    address: Optional[int] = None,
+    serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30
@@ -36,6 +38,9 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     Args:
       id_vendor: The USB vendor ID of the machine.
       id_product: The USB product ID of the machine.
+      address: The USB address of the machine. If `None`, use the first device found. This is useful
+        for machines that have no unique serial number, such as the Hamilton STAR.
+      serial_number: The serial number of the machine. If `None`, use the first device found.
       packet_read_timeout: The timeout for reading packets from the machine in seconds.
       read_timeout: The timeout for reading from the machine in seconds.
       write_timeout: The timeout for writing to the machine in seconds.
@@ -48,6 +53,8 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
     self.id_vendor = id_vendor
     self.id_product = id_product
+    self.address = address
+    self.serial_number = serial_number
 
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
@@ -77,7 +84,7 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     logger.info("Sent command: %s", data)
 
   def _read_packet(self) -> Optional[str]:
-    """ Read a packet from the Hamilton machine.
+    """ Read a packet from the machine.
 
     Returns:
       A string containing the decoded packet, or None if no packet was received.
@@ -135,6 +142,41 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
     raise TimeoutError("Timeout while reading.")
 
+  def get_available_devices(self) -> List[usb.core.Device]:
+    """ Get a list of available devices that match the specified vendor and product IDs, and serial
+    number and address if specified. """
+
+    found_devices = usb.core.find(idVendor=self.id_vendor, idProduct=self.id_product, find_all=True)
+    devices: List[usb.core.Device] = []
+    for dev in found_devices:
+      if self.address is not None:
+        if dev.address is None:
+          raise RuntimeError("A device address was specified, but the backend used for PyUSB does "
+          "not support device addresses.")
+
+        if dev.address != self.address:
+          continue
+
+      if self.serial_number is not None:
+        if dev.serial_number is None:
+          raise RuntimeError("A serial number was specified, but the device does not have a serial "
+            "number.")
+
+        if dev.serial_number != self.serial_number:
+          continue
+
+      devices.append(dev)
+
+    return devices
+
+  def list_available_devices(self) -> None:
+    """ Utility to list all devices that match the specified vendor and product IDs, and serial
+    number and address if specified. You can use this to discover the serial number and address of
+    your device, if using multiple. Note that devices may not have a unique serial number. """
+
+    for dev in self.get_available_devices():
+      print(dev)
+
   async def setup(self):
     """ Initialize the USB connection to the machine."""
 
@@ -145,11 +187,14 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       logging.warning("Already initialized. Please call stop() first.")
       return
 
-    logger.info("Finding Hamilton USB device...")
+    logger.info("Finding USB device...")
 
-    self.dev = usb.core.find(idVendor=self.id_vendor, idProduct=self.id_product)
-    if self.dev is None:
-      raise ValueError("USB device not found.")
+    devices = self.get_available_devices()
+    if len(devices) == 0:
+      raise RuntimeError("USB device not found.")
+    if len(devices) > 1:
+      logging.warning("Multiple devices found. Using the first one.")
+    self.dev = devices[0]
 
     logger.info("Found USB device.")
 

@@ -96,6 +96,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
   @abstractmethod
   def __init__(
     self,
+    device_address: Optional[int] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -103,12 +104,15 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     """
 
     Args:
+      device_address: The USB address of the Hamilton device. Only useful if using more than one
+        Hamilton device.
       packet_read_timeout: The timeout for reading packets from the Hamilton machine in seconds.
       read_timeout: The timeout for  from the Hamilton machine in seconds.
       num_channels: the number of pipette channels present on the robot.
     """
 
     super().__init__(
+      address=device_address,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
@@ -521,6 +525,7 @@ class STAR(HamiltonLiquidHandler):
 
   def __init__(
     self,
+    device_address: Optional[int] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -528,6 +533,8 @@ class STAR(HamiltonLiquidHandler):
     """ Create a new STAR interface.
 
     Args:
+      device_address: the USB device address of the Hamilton STAR. Only useful if using more than
+        one Hamilton machine over USB.
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
       write_timeout: timeout in seconds for writing a command.
@@ -535,6 +542,7 @@ class STAR(HamiltonLiquidHandler):
     """
 
     super().__init__(
+      device_address=device_address,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout)
