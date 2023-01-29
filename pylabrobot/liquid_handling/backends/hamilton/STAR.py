@@ -498,11 +498,15 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
 
       for id_, (loop, fut, cmd, fmt, timeout_time) in self._waiting_tasks.items():
         if "id" in parsed_response and f"{parsed_response['id']:04}" == id_:
-          parsed = self.parse_response(resp, fmt)
-          if fmt is not None and fmt != "":
-            loop.call_soon_threadsafe(fut.set_result, parsed)
+          try:
+            parsed = self.parse_response(resp, fmt)
+          except HamiltonFirmwareError as e:
+            loop.call_soon_threadsafe(fut.set_exception, e)
           else:
-            loop.call_soon_threadsafe(fut.set_result, resp)
+            if fmt is not None and fmt != "":
+              loop.call_soon_threadsafe(fut.set_result, parsed)
+            else:
+              loop.call_soon_threadsafe(fut.set_result, resp)
           del self._waiting_tasks[id_]
           break
 
@@ -565,7 +569,7 @@ class STAR(HamiltonLiquidHandler):
     Creates a USB connection and finds read/write interfaces.
     """
 
-    super().setup()
+    await super().setup()
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
@@ -593,7 +597,7 @@ class STAR(HamiltonLiquidHandler):
       y_positions = [4050 - i * dy for i in range(self.num_channels)]
 
       await self.initialize_pipetting_channels(
-        x_positions=[8000],
+        x_positions=[extended_conf["xw"]],  # Tip eject waste X position.
         y_positions=y_positions,
         begin_of_tip_deposit_process=2450,
         end_of_tip_deposit_process=1220,
