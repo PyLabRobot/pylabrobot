@@ -1,5 +1,6 @@
+import functools
 import sys
-from typing import List, cast
+from typing import Callable, List, cast
 
 from pylabrobot.resources import Coordinate, Resource, Plate
 from pylabrobot.plate_reading.backend import PlateReaderBackend
@@ -12,6 +13,25 @@ else:
 
 class NoPlateError(Exception):
   pass
+
+
+# copied from LiquidHandler.py, maybe we need a shared base class?
+
+def need_setup_finished(func: Callable): # pylint: disable=no-self-argument
+  """ Decorator for methods that require the plate reader to be set up.
+
+  Checked by verifying `self.setup_finished` is `True`.
+
+  Raises:
+    RuntimeError: If the liquid handler is not set up.
+  """
+
+  @functools.wraps(func)
+  async def wrapper(self, *args, **kwargs):
+    if not self.setup_finished:
+      raise RuntimeError("The setup has not finished. See `PlateReader.setup`.")
+    await func(self, *args, **kwargs) # pylint: disable=not-callable
+  return wrapper
 
 
 class PlateReader(Resource):
@@ -43,6 +63,7 @@ class PlateReader(Resource):
   def __init__(self, name: str, backend: PlateReaderBackend) -> None:
     super().__init__(name=name, size_x=0, size_y=0, size_z=0, category="plate_reader")
     self.backend = backend
+    self.setup_finished = False
 
   def assign_child_resource(self, resource):
     if len(self.children) >= 1:
@@ -58,9 +79,11 @@ class PlateReader(Resource):
 
   async def setup(self) -> None:
     await self.backend.setup()
+    self.setup_finished = True
 
   async def stop(self) -> None:
     await self.backend.stop()
+    self.setup_finished = False
 
   async def open(self) -> None:
     await self.backend.open()
@@ -68,6 +91,7 @@ class PlateReader(Resource):
   async def close(self) -> None:
     await self.backend.close()
 
+  @need_setup_finished
   async def read_luminescence(self, focal_height: float) -> List[List[float]]:
     """ Read the luminescence from the plate.
 
@@ -77,6 +101,7 @@ class PlateReader(Resource):
 
     return await self.backend.read_luminescence(focal_height=focal_height)
 
+  @need_setup_finished
   async def read_absorbance(
     self,
     wavelength: int,
