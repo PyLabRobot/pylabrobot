@@ -3,7 +3,7 @@
 from abc import ABCMeta, abstractmethod
 import logging
 import time
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 
@@ -13,6 +13,10 @@ try:
   USE_USB = True
 except ImportError:
   USE_USB = False
+
+
+if TYPE_CHECKING:
+  import usb.core
 
 
 logger = logging.getLogger(__name__)
@@ -61,7 +65,7 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     self.write_timeout = write_timeout
     self.id_ = 0
 
-    self.dev: Optional[usb.core.Device] = None # TODO: make this a property
+    self.dev: Optional["usb.core.Device"] = None # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
@@ -142,12 +146,12 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
     raise TimeoutError("Timeout while reading.")
 
-  def get_available_devices(self) -> List[usb.core.Device]:
+  def get_available_devices(self) -> List["usb.core.Device"]:
     """ Get a list of available devices that match the specified vendor and product IDs, and serial
     number and address if specified. """
 
     found_devices = usb.core.find(idVendor=self.id_vendor, idProduct=self.id_product, find_all=True)
-    devices: List[usb.core.Device] = []
+    devices: List["usb.core.Device"] = []
     for dev in found_devices:
       if self.address is not None:
         if dev.address is None:
