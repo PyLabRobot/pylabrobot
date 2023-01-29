@@ -1,6 +1,8 @@
 import datetime
 import logging
 
+from pylabrobot.__version__ import __version__
+
 # Create a logger
 logger = logging.getLogger(__name__)
 
