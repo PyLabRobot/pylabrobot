@@ -60,3 +60,10 @@ class TestPlateReaderResource(unittest.TestCase):
     plate_reader.assign_child_resource(plate)
 
     self.assertEqual(plate_reader.get_plate(), plate)
+
+  def test_serialization(self):
+    backend = MockPlateReaderBackend()
+    self.assertEqual(backend.serialize(), {
+      "type": "MockPlateReaderBackend",
+    })
+    self.assertIsInstance(backend.deserialize(backend.serialize()), MockPlateReaderBackend)
