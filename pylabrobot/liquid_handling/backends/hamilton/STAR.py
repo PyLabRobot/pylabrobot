@@ -811,6 +811,7 @@ class STAR(HamiltonLiquidHandler):
         begin_tip_deposit_process=int((max_z + max_total_tip_length)*10),
         end_tip_deposit_process=int((max_z + max_tip_length)*10),
         minimum_traverse_height_at_beginning_of_a_command=2450,
+        z_position_at_end_of_a_command=2450,
         discarding_method=drop_method
       )
     except HamiltonFirmwareError as e:
