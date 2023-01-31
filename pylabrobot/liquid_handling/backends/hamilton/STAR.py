@@ -2797,6 +2797,7 @@ class STAR(HamiltonLiquidHandler):
     begin_tip_deposit_process: int = 0,
     end_tip_deposit_process: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
+    z_position_at_end_of_a_command: int = 3600,
     discarding_method: TipDropMethod = TipDropMethod.DROP
   ):
     """ discard tip
@@ -2812,6 +2813,8 @@ class STAR(HamiltonLiquidHandler):
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
           command 0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must
           be between 0 and 3600.
+      z-position_at_end_of_a_command: Z-Position at end of a command [0.1mm].
+          Must be between 0 and 3600.
       discarding_method: Pick up method Pick up method. 0 = auto selection (see command TT
           parameter tu) 1 = pick up out of rack. 2 = pick up out of wash liquid (slowly). Must be
           between 0 and 2.
@@ -2828,6 +2831,8 @@ class STAR(HamiltonLiquidHandler):
       "end_tip_deposit_process must be between 0 and 3600"
     assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
       "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= z_position_at_end_of_a_command <= 3600, \
+      "z_position_at_end_of_a_command must be between 0 and 3600"
 
     return await self.send_command(
       module="C0",
@@ -2840,6 +2845,7 @@ class STAR(HamiltonLiquidHandler):
       tp=begin_tip_deposit_process,
       tz=end_tip_deposit_process,
       th=minimum_traverse_height_at_beginning_of_a_command,
+      te=z_position_at_end_of_a_command,
       ti=discarding_method.value,
     )
 
