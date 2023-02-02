@@ -91,7 +91,7 @@ class SimulatorBackendEventCatcher(SerializingSavingBackend, SimulatorBackend): 
 
   async def send_command(self, command: str, data: Optional[Dict[str, Any]] = None,
     wait_for_response: bool = True): # pylint: disable=unused-argument
-    self.sent_commands.append(dict(command=command, data=data))
+    self.sent_commands.append({"command": command, "data": data})
 
 
 class SimulatorBackendCommandTests(unittest.IsolatedAsyncioTestCase):

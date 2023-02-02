@@ -36,7 +36,11 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
 
 
 def _mock_define(lw):
-  return dict(data=dict(definitionUri=f"lw['namespace']/{lw['metadata']['displayName']}/1"))
+  return {
+    "data": {
+      "definitionUri": f"lw['namespace']/{lw['metadata']['displayName']}/1"
+    }
+  }
 
 def _mock_add(load_name, namespace, slot, version, labware_id, display_name):
   # pylint: disable=unused-argument
@@ -85,8 +89,8 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     mock_add.side_effect = _mock_add
     mock_define.side_effect = _mock_define
     mock_add_mounted_pipettes.return_value = (
-      dict(pipetteId="left-pipette-id", name="p20_single_gen2"),
-      dict(pipetteId="right-pipette-id", name="p20_single_gen2"))
+      {"pipetteId": "left-pipette-id", "name": "p20_single_gen2"},
+      {"pipetteId": "right-pipette-id", "name": "p20_single_gen2"})
     mock_create.return_value = "run-id"
 
     self.backend = OpentronsBackend(host="localhost", port=1338)

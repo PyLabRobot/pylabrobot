@@ -33,8 +33,8 @@ class Container(Resource, metaclass=ABCMeta):
     self.tracker.set_used_volume(volume)
 
   def serialize(self):
-    return dict(
+    return {
       **super().serialize(),
-      volume=self.tracker.get_used_volume(),
-      max_volume=self.max_volume
-    )
+      "volume": self.tracker.get_used_volume(),
+      "max_volume": self.max_volume
+    }

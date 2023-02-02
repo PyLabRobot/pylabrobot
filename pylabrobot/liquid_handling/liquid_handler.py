@@ -1299,10 +1299,10 @@ class LiquidHandler:
       A dictionary representation of the liquid handler.
     """
 
-    return dict(
-      deck=self.deck.serialize(),
-      backend=self.backend.serialize()
-    )
+    return {
+      "deck": self.deck.serialize(),
+      "backend": self.backend.serialize()
+    }
 
   def save(self, path: str):
     """ Save the liquid handler to a file.

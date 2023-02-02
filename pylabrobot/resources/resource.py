@@ -50,18 +50,18 @@ class Resource:
 
   def serialize(self) -> dict:
     """ Serialize this resource. """
-    return dict(
-      name=self.name,
-      type=self.__class__.__name__,
-      size_x=self._size_x,
-      size_y=self._size_y,
-      size_z=self._size_z,
-      location=self.location.serialize() if self.location is not None else None,
-      category=self.category,
-      model=self.model,
-      children=[child.serialize() for child in self.children],
-      parent_name=self.parent.name if self.parent is not None else None
-    )
+    return {
+      "name": self.name,
+      "type": self.__class__.__name__,
+      "size_x": self._size_x,
+      "size_y": self._size_y,
+      "size_z": self._size_z,
+      "location": self.location.serialize() if self.location is not None else None,
+      "category": self.category,
+      "model": self.model,
+      "children": [child.serialize() for child in self.children],
+      "parent_name": self.parent.name if self.parent is not None else None
+    }
 
   @property
   def name(self) -> str:

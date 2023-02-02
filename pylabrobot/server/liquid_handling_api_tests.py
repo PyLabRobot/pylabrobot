@@ -93,7 +93,7 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
 
       # Post with valid data
       deck = build_layout()
-      response = client.post(self.base_url + "/labware", json=dict(deck=deck.serialize()))
+      response = client.post(self.base_url + "/labware", json={"deck": deck.serialize()})
       self.assertEqual(response.json, {"status": "ok"})
       self.assertEqual(response.status_code, 200)
       self.assertEqual(self.lh.deck, deck)
@@ -109,7 +109,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
 
     deck = build_layout()
     with self.app.test_client() as client:
-      response = client.post(self.base_url + "/labware", json=dict(deck=deck.serialize()))
+      response = client.post(self.base_url + "/labware", json={"deck": deck.serialize()})
       assert response.status_code == 200
       assert self.lh.deck == deck
       assert self.lh.deck.resources == deck.resources
@@ -124,7 +124,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       pickup = Pickup(resource=tip_spot, tip=tip)
       response = client.post(
         self.base_url + "/pick-up-tips",
-        json=dict(channels=[pickup.serialize()], use_channels=[0]))
+        json={"channels": [pickup.serialize()], "use_channels": [0]})
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
@@ -139,7 +139,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       drop = Drop(resource=tip_spot, tip=tip)
       response = client.post(
         self.base_url + "/drop-tips",
-        json=dict(channels=[drop.serialize()], use_channels=[0]))
+        json={"channels": [drop.serialize()], "use_channels": [0]})
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
@@ -151,7 +151,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       aspirate = Aspiration(resource=well, volume=10, tip=tip)
       response = client.post(
         self.base_url + "/aspirate",
-        json=dict(channels=[aspirate.serialize()], use_channels=[0]))
+        json={"channels": [aspirate.serialize()], "use_channels": [0]})
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
@@ -163,6 +163,6 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       dispense = Dispense(resource=well, volume=10, tip=tip)
       response = client.post(
         self.base_url + "/dispense",
-        json=dict(channels=[dispense.serialize()], use_channels=[0]))
+        json={"channels": [dispense.serialize()], "use_channels": [0]})
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)

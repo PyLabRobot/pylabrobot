@@ -142,7 +142,7 @@ class WebSocketBackend(SerializingBackend):
   def _assemble_command(self, event: str, data) -> Tuple[str, str]:
     """ Assemble a command into standard JSON form. """
     id_ = self._generate_id()
-    command_data = dict(event=event, id=id_, version=STANDARD_FORM_JSON_VERSION, **data)
+    command_data = {"event": event, "id": id_, "version": STANDARD_FORM_JSON_VERSION, **data}
     return json.dumps(command_data), id_
 
   def has_connection(self) -> bool:
@@ -163,13 +163,14 @@ class WebSocketBackend(SerializingBackend):
 
   async def assigned_resource_callback(self, resource: Resource):
     # override SerializingBackend so we don't wait for a response
-    await self.send_command(command="resource_assigned", data=dict(resource=resource.serialize(),
-      parent_name=(resource.parent.name if resource.parent else None)), wait_for_response=False)
+    await self.send_command(command="resource_assigned", data={"resource": resource.serialize(),
+      "parent_name": (resource.parent.name if resource.parent else None),
+      "wait_for_response": False})
 
   async def unassigned_resource_callback(self, name: str):
     # override SerializingBackend so we don't wait for a response
-    await self.send_command(command="resource_unassigned", data=dict(resource_name=name),
-      wait_for_response=False)
+    await self.send_command(command="resource_unassigned", data={"resource_name": name,
+      "wait_for_response": False})
 
   async def send_command(
     self,

@@ -202,7 +202,7 @@ class SimulatorBackend(WebSocketBackend):
           "volume": vol
         })
 
-    await self.send_command(command="adjust_well_volume", data=dict(pattern=serialized_pattern))
+    await self.send_command(command="adjust_well_volume", data={"pattern": serialized_pattern})
 
   async def edit_tips(self, tip_rack: TipRack, pattern: typing.List[typing.List[bool]]):
     """ Place and/or remove tips on the robot (**simulator only**).
@@ -235,7 +235,7 @@ class SimulatorBackend(WebSocketBackend):
           "has_one": has_one
         })
 
-    await self.send_command(command="edit_tips", data=dict(pattern=serialized_pattern))
+    await self.send_command(command="edit_tips", data={"pattern": serialized_pattern})
 
   async def fill_tip_rack(self, resource: TipRack):
     """ Completely fill a :class:`~pylabrobot.resources.TipRack` resource
