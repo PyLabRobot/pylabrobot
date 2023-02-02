@@ -46,7 +46,7 @@ class Coordinate:
     return hash((self.x, self.y, self.z))
 
   def serialize(self) -> dict:
-    return dict(x=self.x, y=self.y, z=self.z)
+    return {"x": self.x, "y": self.y, "z": self.z}
 
   @staticmethod
   def deserialize(d: dict) -> Coordinate:

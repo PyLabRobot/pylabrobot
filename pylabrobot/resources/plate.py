@@ -116,10 +116,10 @@ class Plate(ItemizedResource[Well]):
     return super().unassign_child_resource(resource)
 
   def serialize(self):
-    return dict(
+    return {
       **super().serialize(),
-      one_dot_max=self.one_dot_max,
-    )
+      "one_dot_max": self.one_dot_max,
+    }
 
   def __repr__(self) -> str:
     return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "

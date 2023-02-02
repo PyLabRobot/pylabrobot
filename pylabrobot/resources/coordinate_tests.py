@@ -22,5 +22,5 @@ class TestCoordinate(unittest.TestCase):
     self.assertEqual(f"{self.a}", "(001.000, 002.000, 003.000)")
 
   def test_serialization(self):
-    self.assertEqual(self.a.serialize(), dict(x=1, y=2, z=3))
+    self.assertEqual(self.a.serialize(), {"x": 1, "y": 2, "z": 3})
     self.assertEqual(self.a, Coordinate.deserialize(self.a.serialize()))

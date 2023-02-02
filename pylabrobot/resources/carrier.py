@@ -29,10 +29,10 @@ class CarrierSite(Resource):
     return super().unassign_child_resource(resource)
 
   def serialize(self):
-    return dict(
-      spot=self.spot,
+    return {
+      "spot": self.spot,
       **super().serialize()
-    )
+    }
 
   def __eq__(self, other):
     return super().__eq__(other) and self.spot == other.spot and self.resource == other.resource
