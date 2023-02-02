@@ -50,7 +50,7 @@ class HamiltonDeck(Deck):
     category: str = "deck",
     resource_assigned_callback: Optional[Callable] = None,
     resource_unassigned_callback: Optional[Callable] = None,
-    origin: Coordinate = Coordinate(0, 63, 100),
+    origin: Coordinate = Coordinate.zero(),
     no_trash: bool = False,
   ):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
@@ -64,7 +64,7 @@ class HamiltonDeck(Deck):
 
       self.assign_child_resource(
         resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
-        location=Coordinate(x=trash_x, y=190.6-63, z=37.1)) # z I am not sure about
+        location=Coordinate(x=trash_x, y=190.6, z=137.1)) # z I am not sure about
 
   def serialize(self) -> dict:
     """ Serialize this deck. """
@@ -120,7 +120,7 @@ class HamiltonDeck(Deck):
         raise ValueError(f"Resource with name '{resource.name}' already defined.")
 
     if rails is not None:
-      resource_location = Coordinate(x=self._x_coordinate_for_rails(rails), y=0, z=0)
+      resource_location = Coordinate(x=self._x_coordinate_for_rails(rails), y=63, z=100)
     elif location is not None:
       resource_location = location
     else:
@@ -308,7 +308,7 @@ class HamiltonDeck(Deck):
 def STARLetDeck( # pylint: disable=invalid-name
   resource_assigned_callback: Optional[Callable] = None,
   resource_unassigned_callback: Optional[Callable] = None,
-  origin: Coordinate = Coordinate(0, 63, 100),
+  origin: Coordinate = Coordinate.zero(),
 ) -> HamiltonDeck:
   """ A STARLet deck.
 
@@ -328,7 +328,7 @@ def STARLetDeck( # pylint: disable=invalid-name
 def STARDeck( # pylint: disable=invalid-name
   resource_assigned_callback: Optional[Callable] = None,
   resource_unassigned_callback: Optional[Callable] = None,
-  origin: Coordinate = Coordinate(0, 63, 100),
+  origin: Coordinate = Coordinate.zero(),
 ) -> HamiltonDeck:
   """ The Hamilton STAR deck.
 

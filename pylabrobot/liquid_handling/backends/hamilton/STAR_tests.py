@@ -217,7 +217,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         super().__init__(name, size_x=123, size_y=82, size_z=75, category="bucket",
           max_volume=123 * 82 * 75)
     self.bb = BlueBucket(name="blue bucket")
-    self.deck.assign_child_resource(self.bb, location=Coordinate(425, 78.5, 20))
+    self.deck.assign_child_resource(self.bb, location=Coordinate(425, 141.5, 120))
 
     self.maxDiff = None
 
@@ -546,7 +546,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_iswap_plate_reader(self):
     plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
     self.lh.deck.assign_child_resource(plate_reader,
-      location=Coordinate(979.5, 285.2-63, 200 - 100)) # 666: 00002
+      location=Coordinate(979.5, 285.2, 200)) # 666: 00002
 
     await self.lh.move_plate(self.plate, plate_reader, pickup_distance_from_top=8.2,
       get_direction=GripDirection.FRONT, put_direction=GripDirection.LEFT)
@@ -583,7 +583,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
     # self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
-    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414-63, 226.2 - 100))
+    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2))
 
     assert self.plate.lid is not None
     await self.lh.move_lid(self.plate.lid, stacking_area)
@@ -605,7 +605,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
     stacking_area = ResourceStack("stacking_area", direction="z")
-    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414-63, 226.2 - 100))
+    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2))
 
     assert self.plate.lid is not None and self.other_plate.lid is not None
 
