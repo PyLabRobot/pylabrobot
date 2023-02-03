@@ -542,7 +542,7 @@ class EVO200(TecanLiquidHandler):
     resp: List[int] = (await self.send_command(module='C5', command='RPX', params=[param]))['data']
     return resp[0]
 
-  async def report_y_parm(self, param: int) -> List[int]:
+  async def report_y_param(self, param: int) -> List[int]:
     """ Report current parameters for y-axis.
 
     Args:
