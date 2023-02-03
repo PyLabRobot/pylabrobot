@@ -104,7 +104,7 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       )
 
       if res is not None:
-        return bytearray(res).decode("utf-8") # convert res into text
+        return bytearray(res).decode("utf-8", "ignore") # convert res into text
       return None
     except usb.core.USBError:
       # No data available (yet), this will give a timeout error. Don't reraise.

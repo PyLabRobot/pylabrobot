@@ -43,9 +43,11 @@ class LiquidClass(enum.Enum):
       s = "Blood"
     elif s == "Glycerin80":
       s = "Glycerin 80%"
-    elif s == "SysFlWater":
+    elif s in {"Water", "SysFlWater"}:
       s = "Water" # TODO: ?
     elif s == "Plasma":
       s = "Plasma 100%"
+    elif s == "DMSO":
+      s = "DMSO"
 
     return LiquidClass(s)
