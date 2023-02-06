@@ -1,7 +1,6 @@
 import enum
 
 from pylabrobot.resources import Tip
-from pylabrobot.resources.tecan import TecanResource
 
 
 class TipType(enum.Enum):
@@ -14,7 +13,7 @@ class TipType(enum.Enum):
   AIRDITI = "ZaapDiTi"
 
 
-class TecanTip(Tip, TecanResource):
+class TecanTip(Tip):
   """ Represents a single tip for Tecan instruments. """
 
   def __init__(
