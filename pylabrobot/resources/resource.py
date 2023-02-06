@@ -319,7 +319,7 @@ class Resource:
     data_copy = data.copy() # copy data because we will be modifying it
 
     # Recursively find a subclass with the correct name
-    def find_subclass(cls: Type[Resource], name: str) -> Optional[Type[Resource]]:
+    def find_subclass(cls: Type[Self], name: str) -> Optional[Type[Self]]:
       if cls.__name__ == name:
         return cls
       for subclass in cls.__subclasses__():
@@ -331,6 +331,7 @@ class Resource:
     subclass = find_subclass(Resource, data["type"])
     if subclass is None:
       raise ValueError(f"Could not find subclass with name {data['type']}")
+    assert issubclass(subclass, cls) # mypy does not know the type after the None check...
 
     for key in ["type", "parent_name", "location"]: # delete meta keys
       del data_copy[key]
