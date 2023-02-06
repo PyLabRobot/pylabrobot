@@ -11,9 +11,10 @@ from pylabrobot.resources import (
   Coordinate,
   create_homogenous_carrier_sites
 )
+from pylabrobot.resources.tecan import TecanResource
 
 
-class TecanPlateCarrier(PlateCarrier):
+class TecanPlateCarrier(PlateCarrier, TecanResource):
   """ Base class for Tecan plate carriers. """
 
   def __init__(
@@ -30,8 +31,8 @@ class TecanPlateCarrier(PlateCarrier):
     super().__init__(name, size_x, size_y, size_z,
       sites, category=category, model=model)
 
-    self.off_x: float = off_x
-    self.off_y: float = off_y
+    self.off_x = off_x
+    self.off_y = off_y
 
 
 def MP_2Pos_portrait_No_Robot_Access(name: str) -> TecanPlateCarrier:

@@ -1,1 +1,1 @@
-from .EVO import EVO200
+from .EVO import EVO

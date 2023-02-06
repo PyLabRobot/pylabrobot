@@ -8,13 +8,26 @@ from pylabrobot.resources import (
   Resource,
   TipRack,
 )
+from pylabrobot.resources.tecan import TecanResource
+
 
 _RAILS_WIDTH = 25
 
-EVO200_NUM_RAILS=69
-EVO200_SIZE_X=1915
-EVO200_SIZE_Y=780
-EVO200_SIZE_Z=765
+EVO100_NUM_RAILS = 30
+EVO100_SIZE_X = 940
+EVO100_SIZE_Y = 780
+EVO100_SIZE_Z = 765
+
+EVO150_NUM_RAILS = 45
+EVO150_SIZE_X = 1315
+EVO150_SIZE_Y = 780
+EVO150_SIZE_Z = 765
+
+EVO200_NUM_RAILS = 69
+EVO200_SIZE_X = 1915
+EVO200_SIZE_Y = 780
+EVO200_SIZE_Z = 765
+
 
 class TecanDeck(Deck):
   """ Tecan decks """
@@ -25,8 +38,8 @@ class TecanDeck(Deck):
     size_x: float,
     size_y: float,
     size_z: float,
-    name: str = 'deck',
-    category: str = 'deck',
+    name: str = "deck",
+    category: str = "deck",
     resource_assigned_callback: Optional[Callable] = None,
     resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 0, 0),
@@ -39,7 +52,7 @@ class TecanDeck(Deck):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      'num_rails': self.num_rails
+      "num_rails": self.num_rails
     }
 
   def assign_child_resource(
@@ -52,7 +65,7 @@ class TecanDeck(Deck):
     """ Assign a new deck resource. """
 
     if rails is not None and not 1 <= rails <= self.num_rails:
-      raise ValueError(f'Rails must be between 1 and {self.num_rails}.')
+      raise ValueError(f"Rails must be between 1 and {self.num_rails}.")
 
     # Check if resource exists.
     if self.has_resource(resource.name):
@@ -60,7 +73,7 @@ class TecanDeck(Deck):
         # unassign first, so we don't have problems with location checking later.
         cast(Resource, self.get_resource(resource.name)).unassign()
       else:
-        raise ValueError(f'Resource with name "{resource.name}" already defined.')
+        raise ValueError(f"Resource with name '{resource.name}' already defined.")
 
     if rails is not None:
       resource_location = self._coordinate_for_rails(rails, resource)
@@ -72,8 +85,8 @@ class TecanDeck(Deck):
     if resource_location is not None:
       if resource_location.x + resource.get_size_x() > self.get_size_x() and \
         rails is not None:
-        raise ValueError(f'Resource with width {resource.get_size_x()} does not '
-                        f'fit at rails {rails}.')
+        raise ValueError(f"Resource with width {resource.get_size_x()} does not "
+                        f"fit at rails {rails}.")
 
       # Check if there is space for this new resource.
       for og_resource in self.children:
@@ -88,19 +101,20 @@ class TecanDeck(Deck):
             (og_y <= resource_location.y < og_y + og_resource.get_size_y() or \
               og_y <= resource_location.y + resource.get_size_y() <
                 og_y + og_resource.get_size_y()):
-          raise ValueError(f'Location {resource_location} is already occupied by resource '
-                            f'"{og_resource.name}".')
+          raise ValueError(f"Location {resource_location} is already occupied by resource "
+                            f"'{og_resource.name}'.")
 
     return super().assign_child_resource(resource, location=resource_location)
 
   def _coordinate_for_rails(self, rails: int, resource: Resource):
     """ Convert a rail identifier and resource to a location. """
 
-    assert hasattr(resource, 'off_x') and hasattr(resource, 'off_y') # TODO
+    if not isinstance(resource, TecanResource):
+      raise ValueError(f"Resource {resource} is not a Tecan resource.")
 
     return Coordinate(
       (rails - 1) * _RAILS_WIDTH - resource.off_x + 100,
-      resource.off_y + 345 - resource.get_size_y(), 0)
+      resource.off_y + 345 - resource.get_size_y(), 0) # TODO: verify
 
   def _rails_for_x_coordinate(self, x: float):
     """ Convert an x coordinate to a rail identifier. """
@@ -122,36 +136,36 @@ class TecanDeck(Deck):
 
     if len(self.get_all_resources()) == 0:
       raise ValueError(
-          'This liquid editor does not have any resources yet. '
-          'Build a layout first by calling `assign_child_resource()`. '
+          "This liquid editor does not have any resources yet. "
+          "Build a layout first by calling `assign_child_resource()`. "
       )
 
     # Print header.
-    summary_ = 'Rail' + ' ' * 5 + 'Resource' + ' ' * 19 +  'Type' + ' ' * 16 + 'Coordinates (mm)\n'
-    summary_ += '=' * 95 + '\n'
+    summary_ = "Rail" + " " * 5 + "Resource" + " " * 19 +  "Type" + " " * 16 + "Coordinates (mm)\n"
+    summary_ += "=" * 95 + "\n"
 
-    def parse_resource(resource):
+    def parse_resource(resource): # pylint: disable=invalid-name
       # TODO: print something else if resource is not assigned to a rails.
       rails = self._rails_for_x_coordinate(resource.location.x)
-      rail_label = f'({rails})' if rails is not None else '     '
-      r_summary = f'{rail_label:4} ├── {resource.name:27}' + \
-            f'{resource.__class__.__name__:20}' + \
-            f'{resource.get_absolute_location()}\n'
+      rail_label = f"({rails})" if rails is not None else "     "
+      r_summary = f"{rail_label:4} ├── {resource.name:27}" + \
+            f"{resource.__class__.__name__:20}" + \
+            f"{resource.get_absolute_location()}\n"
 
       if isinstance(resource, Carrier):
         for site in resource.get_sites():
           if site.resource is None:
-            r_summary += '     │   ├── <empty>\n'
+            r_summary += "     │   ├── <empty>\n"
           else:
             subresource = site.resource
             if isinstance(subresource, (TipRack, Plate)):
-              location = subresource.get_item('A1').get_absolute_location() + \
-                subresource.get_item('A1').center()
+              location = subresource.get_item("A1").get_absolute_location() + \
+                subresource.get_item("A1").center()
             else:
               location = subresource.get_absolute_location()
-            r_summary += f'     │   ├── {subresource.name:23}' + \
-                  f'{subresource.__class__.__name__:20}' + \
-                  f'{location}\n'
+            r_summary += f"     │   ├── {subresource.name:23}" + \
+                  f"{subresource.__class__.__name__:20}" + \
+                  f"{location}\n"
 
       return r_summary
 
@@ -161,10 +175,50 @@ class TecanDeck(Deck):
     # Print table body.
     summary_ += parse_resource(sorted_resources[0])
     for resource in sorted_resources[1:]:
-      summary_ += '     │\n'
+      summary_ += "     │\n"
       summary_ += parse_resource(resource)
 
     return summary_
+
+
+def EVO100Deck( # pylint: disable=invalid-name
+  resource_assigned_callback: Optional[Callable] = None,
+  resource_unassigned_callback: Optional[Callable] = None,
+  origin: Coordinate = Coordinate(0, 0, 0),
+) -> TecanDeck:
+  """ EVO100 deck.
+
+  Sizes from operating manual
+  """
+
+  return TecanDeck(
+      num_rails=EVO100_NUM_RAILS,
+      size_x=EVO100_SIZE_X,
+      size_y=EVO100_SIZE_Y,
+      size_z=EVO100_SIZE_Z,
+      resource_assigned_callback=resource_assigned_callback,
+      resource_unassigned_callback=resource_unassigned_callback,
+      origin=origin)
+
+
+def EVO150Deck( # pylint: disable=invalid-name
+  resource_assigned_callback: Optional[Callable] = None,
+  resource_unassigned_callback: Optional[Callable] = None,
+  origin: Coordinate = Coordinate(0, 0, 0),
+) -> TecanDeck:
+  """ EVO150 deck.
+
+  Sizes from operating manual
+  """
+
+  return TecanDeck(
+      num_rails=EVO150_NUM_RAILS,
+      size_x=EVO150_SIZE_X,
+      size_y=EVO150_SIZE_Y,
+      size_z=EVO150_SIZE_Z,
+      resource_assigned_callback=resource_assigned_callback,
+      resource_unassigned_callback=resource_unassigned_callback,
+      origin=origin)
 
 
 def EVO200Deck( # pylint: disable=invalid-name
@@ -185,5 +239,3 @@ def EVO200Deck( # pylint: disable=invalid-name
       resource_assigned_callback=resource_assigned_callback,
       resource_unassigned_callback=resource_unassigned_callback,
       origin=origin)
-
-

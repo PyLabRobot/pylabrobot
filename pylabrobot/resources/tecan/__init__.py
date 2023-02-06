@@ -1,3 +1,4 @@
+from .tecan_resource import *
 from .tecan_decks import *
 from .plates import *
 from .plate_carriers import *
