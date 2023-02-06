@@ -12,9 +12,10 @@ from pylabrobot.resources import (
   create_carrier_sites,
   create_homogenous_carrier_sites
 )
+from pylabrobot.resources.tecan import TecanResource
 
 
-class TecanTipCarrier(TipCarrier):
+class TecanTipCarrier(TipCarrier, TecanResource):
   """ Base class for Tecan tip carriers. """
 
   def __init__(

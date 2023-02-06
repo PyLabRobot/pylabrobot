@@ -1,18 +1,20 @@
 import enum
 
-from pylabrobot.resources.tip import Tip
+from pylabrobot.resources import Tip
+from pylabrobot.resources.tecan import TecanResource
+
 
 class TipType(enum.Enum):
   """ Tip type """
-  STANDARD = 'Standard'
-  DITI = 'DiTi'
-  STDLOWVOL = 'StandardLowVolume'
-  DITILOWVOL = 'DiTiLowVolume'
-  MCADITI = 'MCADiTi'
-  AIRDITI = 'ZaapDiTi'
+  STANDARD = "Standard"
+  DITI = "DiTi"
+  STDLOWVOL = "StandardLowVolume"
+  DITILOWVOL = "DiTiLowVolume"
+  MCADITI = "MCADiTi"
+  AIRDITI = "ZaapDiTi"
 
 
-class TecanTip(Tip):
+class TecanTip(Tip, TecanResource):
   """ Represents a single tip for Tecan instruments. """
 
   def __init__(

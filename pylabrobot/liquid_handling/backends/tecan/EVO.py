@@ -22,10 +22,11 @@ from pylabrobot.liquid_handling.standard import (
 )
 from pylabrobot.resources import (
   TecanPlate,
-  TecanTipRack
+  TecanTipRack,
+  TecanTip
 )
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
   """
@@ -71,8 +72,8 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
       A string containing the assembled command.
     """
 
-    cmd = module + command + ','.join(str(a) if a is not None else '' for a in params)
-    return f'\02{cmd}\00'
+    cmd = module + command + ",".join(str(a) if a is not None else "" for a in params)
+    return f"\02{cmd}\00"
 
   def parse_response(self, resp: str) -> Dict[str, Union[str, List[int]]]:
     """ Parse a machine response string
@@ -84,11 +85,11 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
       A dictionary containing the parsed values.
     """
 
-    data: List[int] = [int(x) for x in resp[3:-1].split(',')]
+    data: List[int] = [int(x) for x in resp[3:-1].split(",")]
     return {
-      'module': resp[1:3],
-      'ret': [0], # data[0] TODO: get error return code
-      'data': data
+      "module": resp[1:3],
+      "ret": [0], # data[0] TODO: get error return code
+      "data": data
     }
 
   async def send_command(
@@ -100,7 +101,8 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
     read_timeout: Optional[int] = None,
     wait = True
   ):
-    """ Send a firmware command to the Tecan machine.
+    """ Send a firmware command to the Tecan machine. Caches `set` commands and ignores if
+    redundant.
 
     Args:
       module: 2 character module identifier (C5 for LiHa, ...)
@@ -114,11 +116,11 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
       A dictionary containing the parsed response, or None if no response was read within `timeout`.
     """
 
-    if command[0] == 'S':
-      if self._cache.get(module + command, None) == params:
+    if command[0] == "S":
+      k = module + command
+      if k in self._cache and self._cache[k] == params:
         return
-      else:
-        self._cache[module + command] = params
+      self._cache[k] = params
 
     cmd = self._assemble_command(module, command, params)
 
@@ -130,7 +132,7 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
     return self.parse_response(resp)
 
 
-class EVO200(TecanLiquidHandler):
+class EVO(TecanLiquidHandler):
   """
   Interface for the Tecan Freedom EVO 200
   """
@@ -159,15 +161,15 @@ class EVO200(TecanLiquidHandler):
     """ The number of pipette channels present on the robot. """
 
     if self._num_channels is None:
-      raise RuntimeError('has not loaded num_channels, forgot to call `setup`?')
+      raise RuntimeError("has not loaded num_channels, forgot to call `setup`?")
     return self._num_channels
 
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      'packet_read_timeout': self.packet_read_timeout,
-      'read_timeout': self.read_timeout,
-      'write_timeout': self.write_timeout,
+      "packet_read_timeout": self.packet_read_timeout,
+      "read_timeout": self.read_timeout,
+      "write_timeout": self.write_timeout,
     }
 
   async def setup(self):
@@ -204,7 +206,7 @@ class EVO200(TecanLiquidHandler):
         target_volume=op.volume,
         liquid_class=op.liquid_class,
         tip_type=op.tip.tip_type
-      ) if hasattr(op.tip, 'tip_type') else None for op in ops]
+      ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
     for op, tlc in zip(ops, tecan_liquid_classes):
       op.volume = tlc.compute_corrected_volume(op.volume) if tlc is not None else op.volume
@@ -215,7 +217,9 @@ class EVO200(TecanLiquidHandler):
       par = ops[i].resource.parent
       if par is None:
         continue
-      assert hasattr(par, 'area')
+      if not isinstance(par, TecanPlate):
+        raise ValueError(f"Operation is not supported by resource {par}.")
+      # TODO: calculate defaults when area is not specified
       zadd[channel] = round(ops[i].volume / par.area * 10)
 
     # moves such that first channel is over first location
@@ -225,18 +229,18 @@ class EVO200(TecanLiquidHandler):
     await self.set_z_travel_height([self._z_range] * self._num_channels)
     await self.position_absolute_all_axis(
       x, y - yi * ys, ys,
-      [z if z else self._z_range for z in z_positions['travel']])
+      [z if z else self._z_range for z in z_positions["travel"]])
     # TODO check channel positions match resource positions
 
     # aspirate airgap
-    pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, 'lag')
+    pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "lag")
     if any(ppr):
       await self.position_valve_logical(pvl)
       await self.set_end_speed_plunger(sep)
       await self.move_plunger_relative(ppr)
 
     # perform liquid level detection
-    # TODO: only supports 'Detect twice with separate tips with retract (SDM7,1)
+    # TODO: only supports Detect twice with separate tips with retract (SDM7,1)
     if any(tlc.aspirate_lld if tlc is not None else None for tlc in tecan_liquid_classes):
       tlc, _ = self._first_valid(tecan_liquid_classes)
       assert tlc is not None
@@ -246,10 +250,10 @@ class EVO200(TecanLiquidHandler):
       ssl, sdl, sbl = self._liquid_detection(use_channels, tecan_liquid_classes)
       await self.set_search_speed(ssl)
       await self.set_search_retract_distance(sdl)
-      await self.set_search_z_start(z_positions['start'])
-      await self.set_search_z_max(list(z if z else self._z_range for z in z_positions['max']))
+      await self.set_search_z_start(z_positions["start"])
+      await self.set_search_z_max(list(z if z else self._z_range for z in z_positions["max"]))
       await self.set_search_submerge(sbl)
-      shz = [min(z for z in z_positions['travel'] if z)] * self._num_channels
+      shz = [min(z for z in z_positions["travel"] if z)] * self._num_channels
       await self.set_z_travel_height(shz)
       await self.move_detect_liquid(self._bin_use_channels(use_channels), zadd)
       await self.set_z_travel_height([self._z_range] * self._num_channels)
@@ -263,10 +267,10 @@ class EVO200(TecanLiquidHandler):
     await self.set_tracking_distance_z(stz)
     await self.move_tracking_relative(mtr)
     await self.set_slow_speed_z(ssz_r)
-    await self.move_absolute_z(z_positions['start']) # TODO: use retract_position and offset
+    await self.move_absolute_z(z_positions["start"]) # TODO: use retract_position and offset
 
     # aspirate airgap
-    pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, 'tag')
+    pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "tag")
     await self.position_valve_logical(pvl)
     await self.set_end_speed_plunger(sep)
     await self.move_plunger_relative(ppr)
@@ -291,7 +295,7 @@ class EVO200(TecanLiquidHandler):
         target_volume=op.volume,
         liquid_class=op.liquid_class,
         tip_type=op.tip.tip_type
-      ) if hasattr(op.tip, 'tip_type') else None for op in ops]
+      ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
     for op, tlc in zip(ops, tecan_liquid_classes):
       op.volume = tlc.compute_corrected_volume(op.volume) + \
@@ -301,10 +305,10 @@ class EVO200(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.set_z_travel_height(z if z else self._z_range for z in z_positions['travel'])
+    await self.set_z_travel_height(z if z else self._z_range for z in z_positions["travel"])
     await self.position_absolute_all_axis(
       x, y - yi * ys, ys,
-      [z if z else self._z_range for z in z_positions['dispense']])
+      [z if z else self._z_range for z in z_positions["dispense"]])
 
     sep, spp, stz, mtr = self._dispense(ops, use_channels, tecan_liquid_classes)
     await self.set_end_speed_plunger(sep)
@@ -313,25 +317,25 @@ class EVO200(TecanLiquidHandler):
     await self.move_tracking_relative(mtr)
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
-    pass
+    raise NotImplementedError()
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
-    pass
+    raise NotImplementedError()
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
-    pass
+    raise NotImplementedError()
 
   async def drop_tips96(self, drop: DropTipRack):
-    pass
+    raise NotImplementedError()
 
   async def aspirate96(self, aspiration: AspirationPlate):
-    pass
+    raise NotImplementedError()
 
   async def dispense96(self, dispense: DispensePlate):
-    pass
+    raise NotImplementedError()
 
   async def move_resource(self, move: Move):
-    pass
+    raise NotImplementedError()
 
   def _first_valid(
     self,
@@ -347,7 +351,7 @@ class EVO200(TecanLiquidHandler):
   def _bin_use_channels(
     self,
     use_channels: List[int]
-  ):
+  ) -> int:
     """ Converts use_channels to a binary coded tip representation. """
 
     b = 0
@@ -365,10 +369,10 @@ class EVO200(TecanLiquidHandler):
     x_positions: List[Optional[int]] = [None] * self._num_channels
     y_positions: List[Optional[int]] = [None] * self._num_channels
     z_positions: Dict[str, List[Optional[int]]] = {
-      'travel': [None] * self._num_channels,
-      'start': [None] * self._num_channels,
-      'dispense': [None] * self._num_channels,
-      'max': [None] * self._num_channels
+      "travel": [None] * self._num_channels,
+      "start": [None] * self._num_channels,
+      "dispense": [None] * self._num_channels,
+      "max": [None] * self._num_channels
     }
     def get_z_position(z, z_off, tip_length):
       return int(self._z_range - z + z_off * 10 + tip_length)  # TODO: verify z formula
@@ -379,15 +383,17 @@ class EVO200(TecanLiquidHandler):
       y_positions[channel] = int((345 - location.y) * 10) # TODO: verify
 
       par = ops[i].resource.parent
-      assert isinstance(par, (TecanPlate, TecanTipRack))
+      if not isinstance(par, (TecanPlate, TecanTipRack)):
+        raise ValueError(f"Operation is not supported by resource {par}.")
+      # TODO: calculate defaults when z-attribs are not specified
       tip_length = ops[i].tip.total_tip_length
-      z_positions['travel'][channel] = get_z_position(
+      z_positions["travel"][channel] = get_z_position(
         par.z_travel, par.get_absolute_location().z, tip_length)
-      z_positions['start'][channel] = get_z_position(
+      z_positions["start"][channel] = get_z_position(
         par.z_start, par.get_absolute_location().z, tip_length)
-      z_positions['dispense'][channel] = get_z_position(
+      z_positions["dispense"][channel] = get_z_position(
         par.z_dispense, par.get_absolute_location().z, tip_length)
-      z_positions['max'][channel] = get_z_position(
+      z_positions["max"][channel] = get_z_position(
         par.z_max, par.get_absolute_location().z, tip_length)
 
     return x_positions, y_positions, z_positions
@@ -417,10 +423,10 @@ class EVO200(TecanLiquidHandler):
       tlc = tecan_liquid_classes[i]
       assert tlc is not None
       pvl[channel] = 0
-      if airgap == 'lag':
+      if airgap == "lag":
         sep[channel] = int(tlc.aspirate_lag_speed * 12) # 6? TODO: verify step unit
         ppr[channel] = int(tlc.aspirate_lag_volume * 6) # 3?
-      elif airgap == 'tag':
+      elif airgap == "tag":
         sep[channel] = int(tlc.aspirate_tag_speed * 12) # 6?
         ppr[channel] = int(tlc.aspirate_tag_volume * 6) # 3?
 
@@ -529,7 +535,7 @@ class EVO200(TecanLiquidHandler):
   async def report_number_tips(self) -> int:
     """ Report number of tips on arm. """
 
-    resp: List[int] = (await self.send_command(module='C5', command='RNT', params=[1]))['data']
+    resp: List[int] = (await self.send_command(module="C5", command="RNT", params=[1]))["data"]
     return resp[0]
 
   async def report_x_param(self, param: int) -> int:
@@ -539,7 +545,7 @@ class EVO200(TecanLiquidHandler):
       param: 0 - current position, 5 - actual machine range
     """
 
-    resp: List[int] = (await self.send_command(module='C5', command='RPX', params=[param]))['data']
+    resp: List[int] = (await self.send_command(module="C5", command="RPX", params=[param]))["data"]
     return resp[0]
 
   async def report_y_param(self, param: int) -> List[int]:
@@ -549,7 +555,7 @@ class EVO200(TecanLiquidHandler):
       param: 0 - current position, 5 - actual machine range
     """
 
-    resp: List[int] = (await self.send_command(module='C5', command='RPY', params=[param]))['data']
+    resp: List[int] = (await self.send_command(module="C5", command="RPY", params=[param]))["data"]
     return resp
 
   async def report_z_param(self, param: int) -> List[int]:
@@ -559,7 +565,7 @@ class EVO200(TecanLiquidHandler):
       param: 0 - current position, 5 - actual machine range
     """
 
-    resp: List[int] = (await self.send_command(module='C5', command='RPZ', params=[param]))['data']
+    resp: List[int] = (await self.send_command(module="C5", command="RPZ", params=[param]))["data"]
     return resp
 
   async def position_absolute_all_axis(self, x: int, y: int, ys: int, z: List[int]):
@@ -573,7 +579,7 @@ class EVO200(TecanLiquidHandler):
          allowed machine range
     """
 
-    await self.send_command(module='C5', command='PAA', params=list([x, y, ys] + z))
+    await self.send_command(module="C5", command="PAA", params=list([x, y, ys] + z))
 
   async def position_valve_logical(self, param: List[Optional[int]]):
     """ Position valve logical for each channel.
@@ -582,7 +588,7 @@ class EVO200(TecanLiquidHandler):
       param: 0 - outlet, 1 - inlet, 2 - bypass
     """
 
-    await self.send_command(module='C5', command='PVL', params=param)
+    await self.send_command(module="C5", command="PVL", params=param)
 
   async def set_end_speed_plunger(self, speed: List[Optional[int]]):
     """ Set end speed for plungers.
@@ -592,7 +598,7 @@ class EVO200(TecanLiquidHandler):
              5 and 6000
     """
 
-    await self.send_command(module='C5', command='SEP', params=speed)
+    await self.send_command(module="C5", command="SEP", params=speed)
 
   async def move_plunger_relative(self, rel: List[Optional[int]]):
     """ Move plunger relative upwards (dispense) or downards (aspirate).
@@ -602,7 +608,7 @@ class EVO200(TecanLiquidHandler):
            -3150 and 3150
     """
 
-    await self.send_command(module='C5', command='PPR', params=rel)
+    await self.send_command(module="C5", command="PPR", params=rel)
 
   async def set_detection_mode(self, proc: int, sense: int):
     """ Set liquid detection mode.
@@ -613,7 +619,7 @@ class EVO200(TecanLiquidHandler):
       sense: conductivity (1 for high)
     """
 
-    await self.send_command(module='C5', command='SDM', params=[proc, sense])
+    await self.send_command(module="C5", command="SDM", params=[proc, sense])
 
   async def set_search_speed(self, speed: List[Optional[int]]):
     """ Set search speed for liquid search commands.
@@ -622,7 +628,7 @@ class EVO200(TecanLiquidHandler):
       speed: speed for each channel in 1/10 mm/s, must be between 1 and 1500
     """
 
-    await self.send_command(module='C5', command='SSL', params=speed)
+    await self.send_command(module="C5", command="SSL", params=speed)
 
   async def set_search_retract_distance(self, dist: List[Optional[int]]):
     """ Set z-axis retract distance for liquid search commands.
@@ -632,7 +638,7 @@ class EVO200(TecanLiquidHandler):
             machine range
     """
 
-    await self.send_command(module='C5', command='SDL', params=dist)
+    await self.send_command(module="C5", command="SDL", params=dist)
 
   async def set_search_submerge(self, dist: List[Optional[int]]):
     """ Set submerge for liquid search commands.
@@ -642,7 +648,7 @@ class EVO200(TecanLiquidHandler):
             -1000 and max z range
     """
 
-    await self.send_command(module='C5', command='SBL', params=dist)
+    await self.send_command(module="C5", command="SBL", params=dist)
 
   async def set_search_z_start(self, z: List[Optional[int]]):
     """ Set z-start for liquid search commands.
@@ -651,7 +657,7 @@ class EVO200(TecanLiquidHandler):
       z: start height for each channel in 1/10 mm, must be in allowed machine range
     """
 
-    await self.send_command(module='C5', command='STL', params=z)
+    await self.send_command(module="C5", command="STL", params=z)
 
   async def set_search_z_max(self, z: List[Optional[int]]):
     """ Set z-max for liquid search commands.
@@ -660,7 +666,7 @@ class EVO200(TecanLiquidHandler):
       z: max for each channel in 1/10 mm, must be in allowed machine range
     """
 
-    await self.send_command(module='C5', command='SML', params=z)
+    await self.send_command(module="C5", command="SML", params=z)
 
   async def set_z_travel_height(self, z):
     """ Set z-travel height.
@@ -669,7 +675,7 @@ class EVO200(TecanLiquidHandler):
       z: travel heights in absolute 1/10 mm for each channel, must be in allowed
          machine range + 20
     """
-    await self.send_command(module='C5', command='SHZ', params=z)
+    await self.send_command(module="C5", command="SHZ", params=z)
 
   async def move_detect_liquid(self, channels: int, zadd: List[Optional[int]]):
     """ Move tip, detect liquid, submerge.
@@ -680,7 +686,7 @@ class EVO200(TecanLiquidHandler):
             must be between 0 and z-start - z-max
     """
 
-    await self.send_command(module='C5', command='MDT',
+    await self.send_command(module="C5", command="MDT",
       params=[channels] + [None] * 3 + zadd)
 
   async def set_slow_speed_z(self, speed: List[Optional[int]]):
@@ -690,7 +696,7 @@ class EVO200(TecanLiquidHandler):
       speed: speed in 1/10 mm/s for each channel, must be between 1 and 4000
     """
 
-    await self.send_command(module='C5', command='SSZ', params=speed)
+    await self.send_command(module="C5", command="SSZ", params=speed)
 
   async def set_tracking_distance_z(self, rel: List[Optional[int]]):
     """ Set z-axis relative tracking distance used by dispense and aspirate.
@@ -700,7 +706,7 @@ class EVO200(TecanLiquidHandler):
             -2100 and 2100
     """
 
-    await self.send_command(module='C5', command='STZ', params=rel)
+    await self.send_command(module="C5", command="STZ", params=rel)
 
   async def move_tracking_relative(self, rel: List[Optional[int]]):
     """ Move tracking relative. Starts the z-drives and dilutors simultaneously
@@ -711,7 +717,7 @@ class EVO200(TecanLiquidHandler):
            -3150 and 3150
     """
 
-    await self.send_command(module='C5', command='MTR', params=rel)
+    await self.send_command(module="C5", command="MTR", params=rel)
 
   async def move_absolute_z(self, z: List[Optional[int]]):
     """ Position absolute with slow speed z-axis
@@ -721,7 +727,7 @@ class EVO200(TecanLiquidHandler):
          allowed machine range
     """
 
-    await self.send_command(module='C5', command='MAZ', params=z)
+    await self.send_command(module="C5", command="MAZ", params=z)
 
   async def set_stop_speed_plunger(self, speed: List[Optional[int]]):
     """ Set stop speed for plungers
@@ -731,4 +737,4 @@ class EVO200(TecanLiquidHandler):
              50 and 2700
     """
 
-    await self.send_command(module='C5', command='SPP', params=speed)
+    await self.send_command(module="C5", command="SPP", params=speed)
