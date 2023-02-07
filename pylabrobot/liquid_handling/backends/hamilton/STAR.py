@@ -488,7 +488,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
           break
 
       try:
-        resp = self.read()
+        resp = self.read().decode("utf-8")
       except TimeoutError:
         continue
 
