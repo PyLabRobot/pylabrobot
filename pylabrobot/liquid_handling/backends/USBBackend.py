@@ -87,7 +87,7 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     self.dev.write(self.write_endpoint, data, timeout=timeout)
     logger.info("Sent command: %s", data)
 
-  def _read_packet(self) -> Optional[str]:
+  def _read_packet(self) -> Optional[bytearray]:
     """ Read a packet from the machine.
 
     Returns:
@@ -104,13 +104,13 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       )
 
       if res is not None:
-        return bytearray(res).decode("utf-8") # convert res into text
+        return bytearray(res) # convert res into text
       return None
     except usb.core.USBError:
       # No data available (yet), this will give a timeout error. Don't reraise.
       return None
 
-  def read(self, timeout: Optional[int] = None) -> str:
+  def read(self, timeout: Optional[int] = None) -> bytearray:
     """ Read a response from the device.
 
     Args:
@@ -129,8 +129,8 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     while time.time() < timeout_time:
       # read response from endpoint, and keep reading until the packet is smaller than the max
       # packet size: if the packet is that size, it means that there may be more data to read.
-      resp = ""
-      last_packet: Optional[str] = None
+      resp = bytearray()
+      last_packet: Optional[bytearray] = None
       while True: # read while we have data, and while the last packet is the max size.
         last_packet = self._read_packet()
         if last_packet is not None:
