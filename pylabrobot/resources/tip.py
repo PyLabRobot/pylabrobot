@@ -60,7 +60,7 @@ class Tip:
   def deserialize(cls, data: dict) -> Self: # type: ignore
     tip_class_name = data.pop("type")
     tip_classes = {cls.__name__: cls for cls in cls.__subclasses__()}
-    tip_classes["Tip"] = Tip
+    tip_classes["Tip"] = cls
     tip_class = tip_classes[tip_class_name]
     return tip_class(**data)
 

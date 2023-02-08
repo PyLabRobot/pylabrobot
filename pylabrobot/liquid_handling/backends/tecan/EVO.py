@@ -128,7 +128,7 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
     if not wait:
       return None
 
-    resp = self.read(timeout=read_timeout)
+    resp = self.read(timeout=read_timeout).decode("utf-8", "ignore")
     return self.parse_response(resp)
 
 
