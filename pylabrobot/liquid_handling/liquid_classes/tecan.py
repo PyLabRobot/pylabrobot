@@ -1,4 +1,5 @@
 from typing import Dict, Tuple, Optional
+import re
 
 from pylabrobot.liquid_handling.liquid_classes import LiquidClass
 from pylabrobot.resources.tecan import TipType
@@ -116,6 +117,19 @@ class TecanLiquidClass:
 
   def compute_corrected_volume(self, target_volume: float) -> float:
     return self.calibration_factor * target_volume + self.calibration_offset
+
+  @staticmethod
+  def from_str(s: str) -> Optional[LiquidClass]:
+    """ Parses a Tecan liquid class name and creates a LiquidClass object. """
+
+    m = re.match(r"(\w+) free dispense$", s)
+    if m is None:
+      return None
+
+    lc = m.group(1)
+    if lc in {"Ethanol", "Serum"}:
+      lc += " 100%"
+    return LiquidClass(lc)
 
 
 mapping: Dict[Tuple[float, float, LiquidClass, TipType], TecanLiquidClass] = {}
