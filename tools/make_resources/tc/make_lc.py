@@ -1,22 +1,21 @@
-from xml.etree.ElementTree import parse
-import re
+""" Convert liquid classes from EVOware into Python. """
 
-from pylabrobot.liquid_handling.liquid_classes.tecan import *
+from xml.etree.ElementTree import parse
+
+from pylabrobot.liquid_handling.liquid_classes.tecan import TecanLiquidClass
 from pylabrobot.resources.tecan import TipType
 
 
 path = "DefaultLCs.xml"
-FD = re.compile("(\w+) free dispense$")
 
 
 def main(lc):
   et = parse(path)
 
   for liquid_class in et.getroot():
-    m = FD.match(liquid_class.attrib["name"])
-    if m is None:
+    liquid = TecanLiquidClass.from_str(liquid_class.attrib["name"])
+    if liquid is None:
       continue
-    liquid = LiquidClass.from_str(m.group(1))
 
     lld = liquid_class[0][0].attrib
     clot = liquid_class[0][1].attrib
