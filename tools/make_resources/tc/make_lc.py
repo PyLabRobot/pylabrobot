@@ -2,7 +2,7 @@
 
 from xml.etree.ElementTree import parse
 
-from pylabrobot.liquid_handling.liquid_classes.tecan import TecanLiquidClass
+from pylabrobot.liquid_handling.liquid_classes.tecan import from_str
 from pylabrobot.resources.tecan import TipType
 
 
@@ -13,7 +13,7 @@ def main(lc):
   et = parse(path)
 
   for liquid_class in et.getroot():
-    liquid = TecanLiquidClass.from_str(liquid_class.attrib["name"])
+    liquid = from_str(liquid_class.attrib["name"])
     if liquid is None:
       continue
 
