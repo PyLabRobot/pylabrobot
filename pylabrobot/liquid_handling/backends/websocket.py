@@ -163,9 +163,11 @@ class WebSocketBackend(SerializingBackend):
 
   async def assigned_resource_callback(self, resource: Resource):
     # override SerializingBackend so we don't wait for a response
-    await self.send_command(command="resource_assigned", data={"resource": resource.serialize(),
-      "parent_name": (resource.parent.name if resource.parent else None),
-      "wait_for_response": False})
+    await self.send_command(command="resource_assigned", data={
+      "resource": resource.serialize(),
+      "parent_name": (resource.parent.name if resource.parent else None)
+      },
+      wait_for_response=False)
 
   async def unassigned_resource_callback(self, name: str):
     # override SerializingBackend so we don't wait for a response
