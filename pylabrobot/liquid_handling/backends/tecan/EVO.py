@@ -491,7 +491,7 @@ class EVO(TecanLiquidHandler):
 
     for i, channel in enumerate(use_channels):
       tlc = tecan_liquid_classes[i]
-      z = zadd[i]
+      z = zadd[channel]
       assert tlc is not None and z is not None
       sep[channel] = int(tlc.aspirate_speed * 12) # 6?
       ssz[channel] = round(z * tlc.aspirate_speed / ops[i].volume)
