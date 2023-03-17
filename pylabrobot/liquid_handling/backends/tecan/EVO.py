@@ -75,7 +75,7 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
     cmd = module + command + ",".join(str(a) if a is not None else "" for a in params)
     return f"\02{cmd}\00"
 
-  def parse_response(self, resp: str) -> Dict[str, Union[str, List[int]]]:
+  def parse_response(self, resp: bytearray) -> Dict[str, Union[str, int, List[int]]]:
     """ Parse a machine response string
 
     Args:
@@ -89,7 +89,7 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
     data: List[int] = [int(x) for x in s[3:-1].split(",")]
     return {
       "module": s[1:3],
-      "ret": resp[3] ^ (1 << 7),
+      "ret": int(resp[3]) ^ (1 << 7),
       "data": data
     }
 
