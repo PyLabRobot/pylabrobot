@@ -85,10 +85,11 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
       A dictionary containing the parsed values.
     """
 
-    data: List[int] = [int(x) for x in resp[3:-1].split(",")]
+    s = resp.decode("utf-8", "ignore")
+    data: List[int] = [int(x) for x in s[3:-1].split(",")]
     return {
-      "module": resp[1:3],
-      "ret": [0], # data[0] TODO: get error return code
+      "module": s[1:3],
+      "ret": resp[3] ^ (1 << 7),
       "data": data
     }
 
@@ -128,7 +129,7 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
     if not wait:
       return None
 
-    resp = self.read(timeout=read_timeout).decode("utf-8", "ignore")
+    resp = self.read(timeout=read_timeout)
     return self.parse_response(resp)
 
 
