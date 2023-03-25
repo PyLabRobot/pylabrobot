@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 this = sys.modules[__name__]
-this.tip_tracking_enabled = True # type: ignore
+this.tip_tracking_enabled = False # type: ignore
 
 def set_tip_tracking(enabled: bool):
   this.tip_tracking_enabled = enabled # type: ignore
