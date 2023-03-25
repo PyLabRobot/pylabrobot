@@ -20,11 +20,22 @@ from pylabrobot.liquid_handling.standard import (
 class ChatterBoxBackend(LiquidHandlerBackend):
   """ Chatter box backend for 'How to Open Source' """
 
+  def __init__(self, num_channels: int = 8):
+    """ Initialize a chatter box backend. """
+    super().__init__()
+    self._num_channels = num_channels
+
   async def setup(self):
+    await super().setup()
     print("Setting up the robot.")
 
   async def stop(self):
+    await super().stop()
     print("Stopping the robot.")
+
+  @property
+  def num_channels(self) -> int:
+    return self._num_channels
 
   async def assigned_resource_callback(self, resource: Resource):
     print(f"Resource {resource.name} was assigned to the robot.")
