@@ -135,11 +135,14 @@ class Resource:
     if parent is not `None`.  Note that the resource to be assigned may have child resources, in
     which case you will be responsible for handling any checking, if necessary.
     """
+    
+    # Check for unsupported resource assignment operations
+    self.check_assignment(resource)
+
+    resource.parent = self
+    resource.location = location
 
     try:
-      self.check_assignment(resource, location)
-      resource.parent = self
-      resource.location = location
       self.resource_assigned_callback(resource) # call callbacks first.
     except Exception as e:
       resource.parent = None
