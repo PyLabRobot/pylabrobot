@@ -157,7 +157,7 @@ class Resource:
 
     # Check for multiple parents
     if resource.parent:
-      msgs.append(f"Will not assign resource '{self.name}' that already has a parent: '{self.parent.name}'. ")
+      msgs.append(f"Will not assign resource '{resource.name}' that already has a parent: '{resource.parent.name}'.")
 
     # TODO: write other checks, perhaps recursive or location checks.
 
