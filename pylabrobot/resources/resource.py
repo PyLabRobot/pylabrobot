@@ -135,7 +135,7 @@ class Resource:
     if parent is not `None`.  Note that the resource to be assigned may have child resources, in
     which case you will be responsible for handling any checking, if necessary.
     """
-    
+
     # Check for unsupported resource assignment operations
     self.check_assignment(resource)
 
@@ -150,7 +150,7 @@ class Resource:
       raise e
 
     self.children.append(resource)
-  
+
   def check_assignment(self, resource: Resource):
     """Check if the resource assignment produces unsupported or dangerous conflicts.
     """
