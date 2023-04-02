@@ -12,6 +12,8 @@ if sys.version_info >= (3, 11):
 else:
   from typing_extensions import Self
 
+import logging
+logger = logging.getLogger(__name__)
 
 class Resource:
   """ Base class for deck resources.
@@ -162,10 +164,15 @@ class Resource:
     if resource is self:
       msgs.append(f"Will not assign resource '{self.name}' to itself.")
 
-    # Check for reassignment to the same parent
-    if resource.parent is not None and (resource.parent is self):
-      msgs.append(f"Will not reassign resource '{resource.name}' " +
-                  f"to the same parent: '{resource.parent.name}'.")
+    # Check for reassignment to the same (non-null) parent
+    if (resource.parent is not None) and (resource.parent is self):
+      if reassign:
+        # Inform the user that this is redundant.
+        logger.info(f"Resource '{resource.name}' already assigned to '{resource.parent.name}'")
+      else:
+        # Else raise an error.
+        msgs.append(f"Will not reassign resource '{resource.name}' " +
+                    f"to the same parent: '{resource.parent.name}'.")
 
     # Check for pre-existing parent
     if resource.parent is not None and not reassign:
