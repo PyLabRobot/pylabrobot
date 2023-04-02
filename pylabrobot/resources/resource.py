@@ -128,7 +128,7 @@ class Resource:
     """ Get the size of this resource in the z-direction. """
     return self._size_z
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
+  def assign_child_resource(self, resource: Resource):
     """ Assign a child resource to this resource.
 
     Will use :meth:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
@@ -147,8 +147,10 @@ class Resource:
       raise e
 
     self.children.append(resource)
-    
-  def check_assignment(self, resource: Resource, location: Optional[Coordinate]):
+  
+  def check_assignment(self, resource: Resource):
+    """Check if the resource assignment produces unsupported or dangerous conflicts.
+    """
     msgs = []
 
     # Check for self assignment
@@ -157,7 +159,8 @@ class Resource:
 
     # Check for multiple parents
     if resource.parent is not None:
-      msgs.append(f"Will not assign resource '{resource.name}' that already has a parent: '{resource.parent.name}'.")
+      msgs.append(f"Will not assign resource '{resource.name}' " +
+                  f"that already has a parent: '{resource.parent.name}'.")
 
     # TODO: write other checks, perhaps recursive or location checks.
 
