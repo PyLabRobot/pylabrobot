@@ -168,7 +168,7 @@ class Resource:
     if (resource.parent is not None) and (resource.parent is self):
       if reassign:
         # Inform the user that this is redundant.
-        logger.info(f"Resource '{resource.name}' already assigned to '{resource.parent.name}'")
+        logger.warning(f"Resource '{resource.name}' already assigned to '{resource.parent.name}'")
       else:
         # Else raise an error.
         msgs.append(f"Will not reassign resource '{resource.name}' " +
