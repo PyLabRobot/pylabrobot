@@ -136,9 +136,10 @@ class Resource:
     which case you will be responsible for handling any checking, if necessary.
     """
 
-    resource.parent = self
-    resource.location = location
     try:
+      self.check_assignment(resource, location)
+      resource.parent = self
+      resource.location = location
       self.resource_assigned_callback(resource) # call callbacks first.
     except Exception as e:
       resource.parent = None
@@ -146,6 +147,23 @@ class Resource:
       raise e
 
     self.children.append(resource)
+    
+  def check_assignment(self, resource: Resource, location: Optional[Coordinate]):
+    msgs = []
+
+    # Check for self assignment
+    if resource is self:
+      msgs.append(f"Will not assign resource '{self.name}' to itself.")
+
+    # Check for multiple parents
+    if resource.parent:
+      msgs.append(f"Will not assign resource '{self.name}' that already has a parent: '{self.parent.name}'. ")
+
+    # TODO: write other checks, perhaps recursive or location checks.
+
+    msg = " ".join(msgs)
+    if msg != "":
+      raise ValueError(msg)
 
   def unassign_child_resource(self, resource: Resource):
     """ Unassign a child resource from this resource.
