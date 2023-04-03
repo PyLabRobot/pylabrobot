@@ -103,12 +103,17 @@ class Plate(ItemizedResource[Well]):
 
     return self._compute_volume_from_height(height)
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate],
+    reassign: bool = True
+  ):
     if isinstance(resource, Lid):
       if self.has_lid():
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self.lid = resource
-    return super().assign_child_resource(resource, location=location)
+    return super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def unassign_child_resource(self, resource):
     if isinstance(resource, Lid) and self.has_lid():

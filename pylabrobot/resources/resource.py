@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import sys
 from typing import List, Optional, Type
 
@@ -12,6 +13,7 @@ if sys.version_info >= (3, 11):
 else:
   from typing_extensions import Self
 
+logger = logging.getLogger(__name__)
 
 class Resource:
   """ Base class for deck resources.
@@ -128,16 +130,30 @@ class Resource:
     """ Get the size of this resource in the z-direction. """
     return self._size_z
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate],
+    reassign: bool = True):
     """ Assign a child resource to this resource.
 
     Will use :meth:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
     if parent is not `None`.  Note that the resource to be assigned may have child resources, in
     which case you will be responsible for handling any checking, if necessary.
+
+    Args:
+      resource: The resource to assign.
+      location: The location of the resource, relative to this resource.
+      reassign: If `True`, will not raise an error if the resource is already assigned to this
+        resource.
     """
+
+    # Check for unsupported resource assignment operations
+    self._check_assignment(resource=resource, reassign=reassign)
 
     resource.parent = self
     resource.location = location
+
     try:
       self.resource_assigned_callback(resource) # call callbacks first.
     except Exception as e:
@@ -146,6 +162,36 @@ class Resource:
       raise e
 
     self.children.append(resource)
+
+  def _check_assignment(self, resource: Resource, reassign: bool = True):
+    """ Check if the resource assignment produces unsupported or dangerous conflicts. """
+    msgs = []
+
+    # Check for self assignment
+    if resource is self:
+      msgs.append(f"Will not assign resource '{self.name}' to itself.")
+
+    # Check for reassignment to the same (non-null) parent
+    if (resource.parent is not None) and (resource.parent is self):
+      if reassign:
+        # Inform the user that this is redundant.
+        logger.warning("Resource '%s' already assigned to '%s'", resource.name,
+          resource.parent.name)
+      else:
+        # Else raise an error.
+        msgs.append(f"Will not reassign resource '{resource.name}' " +
+                    f"to the same parent: '{resource.parent.name}'.")
+
+    # Check for pre-existing parent
+    if resource.parent is not None and not reassign:
+      msgs.append(f"Will not assign resource '{resource.name}' " +
+                  f"that already has a parent: '{resource.parent.name}'.")
+
+    # TODO: write other checks, perhaps recursive or location checks.
+
+    if len(msgs) > 0:
+      msg = " ".join(msgs)
+      raise ValueError(msg)
 
   def unassign_child_resource(self, resource: Resource):
     """ Unassign a child resource from this resource.
