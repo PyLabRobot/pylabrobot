@@ -20,7 +20,12 @@ class CarrierSite(Resource):
     self.resource: Optional[Resource] = None
     self.spot: int = spot
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate],
+    reassign: bool = True
+  ):
     self.resource = resource
     return super().assign_child_resource(resource, location=location)
 
@@ -90,12 +95,17 @@ class Carrier(Resource):
       site.name = f"carrier-{self.name}-spot-{site.spot}"
       self.assign_child_resource(site, location=site.location)
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate],
+    reassign: bool = True
+  ):
     """ Assign a resource to this carrier.
 
     For a carrier, the only valid resource is a :class:`CarrierSite`.
 
-    Also see :meth:`~Resource.assign_child_resource`
+    Also see :meth:`~Resource.assign_child_resource`.
 
     Raises:
       TypeError: If the resource is not a :class:`CarrierSite`.

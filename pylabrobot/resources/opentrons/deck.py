@@ -63,7 +63,12 @@ class OTDeck(Deck):
     trash_container.assign_child_resource(actual_trash, location=Coordinate(x=82.84, y=53.56, z=5))
     self.assign_child_at_slot(trash_container, 12)
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]):
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate],
+    reassign: bool = True
+  ):
     """ Assign a resource to a slot.
 
     ..warning:: This method exists only for deserialization. You should use
