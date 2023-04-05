@@ -11,6 +11,10 @@ from pylabrobot.resources import (
   create_equally_spaced
 )
 from pylabrobot.resources.tecan import TecanResource
+from .tip_creators import (
+  diti_10ul_liha,
+  diti_1000ul_liha
+)
 
 
 class TecanTipRack(TipRack, TecanResource):
@@ -1023,6 +1027,7 @@ def DiTi_1000ul_LiHa(name: str) -> TecanTipRack:
       dz=32.6,
       item_size_x=9.0,
       item_size_y=9.0,
+      make_tip=diti_1000ul_liha
     ),
   )
 
@@ -1073,6 +1078,7 @@ def DiTi_10ul_LiHa(name: str) -> TecanTipRack:
       dz=-31.3,
       item_size_x=9.0,
       item_size_y=9.0,
+      make_tip=diti_10ul_liha
     ),
   )
 

@@ -3,7 +3,8 @@ import re
 from pylabrobot.resources import Coordinate
 
 
-path = "Carrier_Coley.cfg"
+# path = "Carrier_Coley.cfg"
+path = "Carrier.cfg"
 
 RES = re.compile("(\d{2});(.*?);(\S*)")
 SITE = re.compile("998;0;(\S{2,});")

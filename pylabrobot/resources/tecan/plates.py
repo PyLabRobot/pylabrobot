@@ -44,7 +44,9 @@ class TecanPlate(Plate, TecanResource):
 
 
 def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
-  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306 """
+  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306
+
+  Coley
   return TecanPlate(
     name=name,
     size_x=129.9,
@@ -63,6 +65,31 @@ def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       num_items_y=8,
       dx=10.8,
       dy=6.2,
+      dz=0.0,
+      item_size_x=9.0,
+      item_size_y=9.0,
+    ),
+  )
+  """
+
+  return TecanPlate(
+    name=name,
+    size_x=127.8,
+    size_y=85.4,
+    size_z=7.6,
+    with_lid=with_lid,
+    lid_height=8,
+    model="Microplate_96_Well",
+    z_travel=1900.0,
+    z_start=1957.0,
+    z_dispense=1975.0,
+    z_max=2051.0,
+    area=33.2,
+    items=create_equally_spaced(Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=9.9,
+      dy=6.7,
       dz=0.0,
       item_size_x=9.0,
       item_size_y=9.0,
