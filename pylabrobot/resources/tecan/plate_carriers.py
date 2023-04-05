@@ -350,7 +350,9 @@ def MP_3Pos_Fixed(name: str) -> TecanPlateCarrier:
 
 
 def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
-  """ Tecan part no. 10612624 """
+  """ Tecan part no. 10612624
+
+  Coley
   return TecanPlateCarrier(
     name=name,
     size_x=149.0,
@@ -362,6 +364,25 @@ def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
         Coordinate(11.7, 10.5, 6.0),
         Coordinate(11.0, 106.4, 6.0),
         Coordinate(11.0, 202.8, 6.0),
+      ],
+      site_size_x=127.0,
+      site_size_y=85.5,
+    ),
+    model="MP_3Pos_Flat"
+  )
+  """
+
+  return TecanPlateCarrier(
+    name=name,
+    size_x=149.0,
+    size_y=295.0,
+    size_z=6.0,
+    off_x=12.0,
+    off_y=11.0,
+    sites=create_homogenous_carrier_sites(locations=[
+        Coordinate(10.5, 12.0, 6.0),
+        Coordinate(10.5, 108.0, 6.0),
+        Coordinate(10.5, 204.0, 6.0),
       ],
       site_size_x=127.0,
       site_size_y=85.5,

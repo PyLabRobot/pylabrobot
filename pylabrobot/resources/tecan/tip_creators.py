@@ -32,7 +32,27 @@ def standard_fixed_tip() -> TecanTip:
   """ Default standard fixed tip """
   return TecanTip(
     has_filter=False,
-    total_tip_length=390,
+    total_tip_length=39.0,
     maximal_volume=1000,
     tip_type=TipType.STANDARD
+  )
+
+
+def diti_1000ul_liha() -> TecanTip:
+  """ 1000ul tip """
+  return TecanTip(
+    has_filter=False,
+    total_tip_length=32.6,
+    maximal_volume=1100,
+    tip_type=TipType.DITI
+  )
+
+
+def diti_10ul_liha() -> TecanTip:
+  """ 10ul tip """
+  return TecanTip(
+    has_filter=False,
+    total_tip_length=31.3,
+    maximal_volume=23,
+    tip_type=TipType.DITI
   )

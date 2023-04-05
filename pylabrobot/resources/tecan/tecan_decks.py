@@ -59,6 +59,7 @@ class TecanDeck(Deck):
     self,
     resource: Resource,
     location: Optional[Coordinate] = None,
+    reassign: bool = False,
     rails: Optional[int] = None,
     replace=False
   ):
