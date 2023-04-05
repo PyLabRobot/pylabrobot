@@ -78,6 +78,7 @@ class HamiltonDeck(Deck):
     self,
     resource: Resource,
     location: Optional[Coordinate] = None,
+    reassign: bool = False,
     rails: Optional[int] = None,
     replace=False
   ):
@@ -94,13 +95,17 @@ class HamiltonDeck(Deck):
 
     Args:
       resource: A Resource to assign to this liquid handler.
-      rails: The left most real (inclusive) of the deck resource (between and 1-30 for STARLet,
-             max 55 for STAR.) Either rails or location must be None, but not both.
       location: The location of the resource relative to the liquid handler. Either rails or
-                location must be None, but not both.
+        location must be `None`, but not both.
+      reassign: If True, reassign the resource if it is already assigned. If False, raise a
+        `ValueError` if the resource is already assigned.
+      rails: The left most real (inclusive) of the deck resource (between and 1-30 for STARLet,
+        max 55 for STAR.) Either rails or location must be None, but not both.
+      location: The location of the resource relative to the liquid handler. Either rails or
+        location must be None, but not both.
       replace: Replace the resource with the same name that was previously assigned, if it exists.
-               If a resource is assigned with the same name and replace is False, a ValueError
-               will be raised.
+        If a resource is assigned with the same name and replace is False, a ValueError
+        will be raised.
 
     Raises:
       ValueError: If a resource is assigned with the same name and replace is `False`.

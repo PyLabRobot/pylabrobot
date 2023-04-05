@@ -43,9 +43,11 @@ There's a multitude of other optional dependencies that you can install. Replace
 - `simulation`: Needed for the simulation backend.
 - `venus`: Needed for the VENUS backend. This is
   [PyHamilton](https://github.com/dgretton/pyhamilton).
-- `server`: Needed for LH server, an HTTP front end to LH.
 - `opentrons`: Needed for the Opentrons backend.
+- `server`: Needed for LH server, an HTTP front end to LH.
 - `plate_reading`: Needed to interact with the CLARIO Star plate reader.
+- `dev`: Everything you need for development.
+- `all`: Everything. May not be available on all platforms.
 
 To install multiple dependencies, separate them with a comma:
 

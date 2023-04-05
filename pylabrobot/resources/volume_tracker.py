@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 this = sys.modules[__name__]
-this.volume_tracking_enabled = True # type: ignore
+this.volume_tracking_enabled = False # type: ignore
 
 def set_volume_tracking(enabled: bool):
   this.volume_tracking_enabled = enabled # type: ignore

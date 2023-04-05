@@ -17,6 +17,6 @@ jobs:
         with:
           python-version: 3.9
       - name: Install Dependencies
-        run: pip install -e '.[testing]'
+        run: pip install -e '.[dev]'
       - name: Run Pytest
         run: make lint
