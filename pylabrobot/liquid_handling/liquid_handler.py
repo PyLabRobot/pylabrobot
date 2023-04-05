@@ -267,6 +267,12 @@ class LiquidHandler:
 
     return extra
 
+  def _make_sure_channels_exist(self, channels: List[int]):
+    """ Checks that the channels exist. """
+    invalid_channels = [c for c in channels if c not in self.head]
+    if not len(invalid_channels) == 0:
+      raise ValueError(f"Invalid channels: {invalid_channels}")
+
   @need_setup_finished
   async def pick_up_tips(
     self,
@@ -325,6 +331,8 @@ class LiquidHandler:
 
     if use_channels is None:
       use_channels = list(range(len(tip_spots)))
+
+    self._make_sure_channels_exist(use_channels)
 
     assert len(tip_spots) == len(offsets) == len(use_channels), \
       "Number of tips and offsets and use_channels must be equal."
@@ -417,6 +425,8 @@ class LiquidHandler:
 
     if use_channels is None:
       use_channels = list(range(len(tip_spots)))
+
+    self._make_sure_channels_exist(use_channels)
 
     tips = []
     for channel in use_channels:
@@ -595,6 +605,8 @@ class LiquidHandler:
       if use_channels is None:
         use_channels = [0]
 
+      self._make_sure_channels_exist(use_channels)
+
       n = len(use_channels)
 
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
@@ -621,6 +633,8 @@ class LiquidHandler:
 
       if use_channels is None:
         use_channels = list(range(len(resources)))
+
+      self._make_sure_channels_exist(use_channels)
 
       offsets = expand(offsets, n)
 
@@ -733,6 +747,8 @@ class LiquidHandler:
       if use_channels is None:
         use_channels = [0]
 
+      self._make_sure_channels_exist(use_channels)
+
       n = len(use_channels)
 
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
@@ -759,6 +775,8 @@ class LiquidHandler:
 
       if use_channels is None:
         use_channels = list(range(len(resources)))
+
+      self._make_sure_channels_exist(use_channels)
 
       offsets = expand(offsets, n)
 

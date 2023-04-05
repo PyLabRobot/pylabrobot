@@ -24,7 +24,7 @@ var stage;
 var canvasWidth, canvasHeight;
 
 const robotWidthMM = 100 + 30 * 22.5; // mm, just the deck
-const robotHeightMM = 497; // mm
+const robotHeightMM = 653.5; // mm
 var scaleX, scaleY;
 
 const numRails = 30;
@@ -208,11 +208,13 @@ class HamiltonDeck extends Deck {
     // Draw a transparent rectangle with an outline
     const { x, y } = this.getAbsoluteLocation();
 
+    this.railHeight = 497;
+
     const rect = new Konva.Rect({
       x: x,
-      y: y,
+      y: y + 63,
       width: this.size_x,
-      height: robotHeightMM, // FIXME: for some reason robotHeightMM is different from the .size_y
+      height: this.railHeight,
       fill: "white",
       stroke: "black",
       strokeWidth: 1,
@@ -229,9 +231,9 @@ class HamiltonDeck extends Deck {
       const rail = new Konva.Line({
         points: [
           100 + i * 22.5, // 22.5 mm per rail
-          this.location.y,
+          this.location.y + 63,
           100 + i * 22.5, // 22.5 mm per rail
-          this.location.y + robotHeightMM,
+          this.location.y + this.railHeight + 63,
         ],
         stroke: "black",
         strokeWidth: 1,

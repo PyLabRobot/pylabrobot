@@ -9,6 +9,7 @@ from pylabrobot.resources import (
   Plate,
   Resource,
   TipRack,
+  TipSpot
 )
 from pylabrobot.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
@@ -113,6 +114,8 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     def _get_volume(well: Resource) -> float:
       """ Temporary hack to get the volume of the well (in ul), TODO: store in resource. """
+      if isinstance(well, TipSpot):
+        return well.make_tip().maximal_volume
       return well.get_size_x() * well.get_size_y() * well.get_size_z()
 
     # try to stick to opentrons' naming convention
@@ -135,7 +138,7 @@ class OpentronsBackend(LiquidHandlerBackend):
         "diameter": child.get_size_x(),
 
         # Opentrons requires `totalLiquidVolume`, even for tip racks!
-        "totalLiquidVolume": _get_volume(child)
+        "totalLiquidVolume": _get_volume(child),
       } for child in resource.children
     }
 
@@ -160,7 +163,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "metadata":{
         "displayName": resource.name,
         "displayCategory": display_category,
-        "displayVolumeUnits":"µL",
+        "displayVolumeUnits": "µL",
       },
       "brand":{
         "brand": "unknown",
