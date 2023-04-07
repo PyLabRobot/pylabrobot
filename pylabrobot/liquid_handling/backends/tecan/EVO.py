@@ -238,17 +238,27 @@ class EVO(TecanLiquidHandler):
       self.liha = LiHa(self, EVO.LIHA)
       await self.liha.position_initialization_x()
 
-    # TODO initialize dilutors, requires wash station
-
     self._num_channels = await self.liha.report_number_tips()
     self._x_range = await self.liha.report_x_param(5)
     self._y_range = (await self.liha.report_y_param(5))[0]
     self._z_range = (await self.liha.report_z_param(5))[0] # TODO: assert all are same?
 
+    # Initialize plungers. Assumes wash station assigned at rail 1.
+    await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
+    await self.liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
+    await self.liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
+    await self.liha.position_valve_logical([1] * self.num_channels)
+    await self.liha.move_plunger_relative([100] * self.num_channels)
+    await self.liha.position_valve_logical([0] * self.num_channels)
+    await self.liha.set_end_speed_plunger([1800] * self.num_channels)
+    await self.liha.move_plunger_relative([-100] * self.num_channels)
+    await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
+
     # TODO: cache arm positions to prevent collisions
 
     # TODO: get number of fixed tips, initialize fixed tips
-    self._diti_index = 4 # all channels [_diti_index, _num_channels) must have disposable tips
+    self._diti_index = self._num_channels
+    # channels [_diti_index, _num_channels) configured for disposable tips
 
   async def setup_arm(self, module):
     await self.send_command(module, command="PIA")
@@ -787,6 +797,14 @@ class LiHa(EVOArm):
   """
   Provides firmware commands for the LiHa
   """
+
+  async def initialize_plunger(self, tips):
+    """ Initializes plunger and valve drive
+
+    Args:
+      tips: binary coded tip select
+    """
+    await self.backend.send_command(module=self.module, command="PID", params=[tips])
 
   async def report_number_tips(self) -> int:
     """ Report number of tips on arm. """
