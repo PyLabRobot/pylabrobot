@@ -305,7 +305,6 @@ class EVO(TecanLiquidHandler):
     # moves such that first channel is over first location
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
-    print(y, yi)
     assert x is not None and y is not None
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(
