@@ -7,8 +7,9 @@ This file defines interfaces for all supported Tecan liquid handling robots.
 from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional, Tuple, Sequence, TypeVar, Union
 
-from pylabrobot.liquid_handling.liquid_classes.tecan import TecanLiquidClass, get_liquid_class
 from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
+from pylabrobot.liquid_handling.liquid_classes.tecan import TecanLiquidClass, get_liquid_class
+from pylabrobot.liquid_handling.backends.tecan.errors import TecanError, error_code_to_exception
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   PickupTipRack,
@@ -89,10 +90,14 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
     """
 
     s = resp.decode("utf-8", "ignore")
+    module = s[1:3]
+    ret = int(resp[3]) ^ (1 << 7)
+    if ret != 0:
+      raise error_code_to_exception(module, ret)
+
     data: List[int] = [int(x) for x in s[3:-1].split(",") if x]
     return {
-      "module": s[1:3],
-      "ret": int(resp[3]) ^ (1 << 7),
+      "module": module,
       "data": data
     }
 
@@ -148,6 +153,7 @@ class EVO(TecanLiquidHandler):
 
   def __init__(
     self,
+    diti_count: int = 0,
     packet_read_timeout: int = 10,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -166,6 +172,8 @@ class EVO(TecanLiquidHandler):
       write_timeout=write_timeout)
 
     self._num_channels: Optional[int] = None
+    self.diti_count = diti_count
+    # channels [num_channels - diti_count, num_channels) configured for disposable tips
 
     self._liha_connected: Optional[bool] = None
     self._roma_connected: Optional[bool] = None
@@ -256,14 +264,16 @@ class EVO(TecanLiquidHandler):
 
     # TODO: cache arm positions to prevent collisions
 
-    # TODO: get number of fixed tips, initialize fixed tips
-    self._diti_index = self._num_channels
-    # channels [_diti_index, _num_channels) configured for disposable tips
-
   async def setup_arm(self, module):
-    await self.send_command(module, command="PIA")
+    try:
+      await self.send_command(module, command="PIA")
+    except TecanError as e:
+      if e.error_code == 5:
+        return False
+      raise e
+
     await self.send_command(module, command="BMX", params=[2])
-    return True # TODO: return False if arm not connected
+    return True
 
   # ============== LiquidHandlerBackend methods ==============
 
@@ -408,8 +418,8 @@ class EVO(TecanLiquidHandler):
       use_channels: The channels to use for the pickup operations.
     """
 
-    assert min(use_channels) >= self._diti_index, \
-      f"DiTis configured only for the last {self.num_channels - self._diti_index} channels"
+    assert min(use_channels) >= self.num_channels - self.diti_count, \
+      f"DiTis can only be configured for the last {self.diti_count} channels"
 
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
@@ -450,8 +460,8 @@ class EVO(TecanLiquidHandler):
       use_channels: The channels to use for the drop operations.
     """
 
-    assert min(use_channels) >= self._diti_index, \
-      f"DiTis configured only for the last {self.num_channels - self._diti_index} channels"
+    assert min(use_channels) >= self.num_channels - self.diti_count, \
+      f"DiTis can only be configured for the last {self.diti_count} channels"
     assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
 
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)

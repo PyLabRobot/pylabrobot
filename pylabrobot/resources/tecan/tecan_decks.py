@@ -9,6 +9,12 @@ from pylabrobot.resources import (
   TipRack,
 )
 from pylabrobot.resources.tecan import TecanResource
+from pylabrobot.resources.tecan.wash import (
+  Wash_Station,
+  Wash_Station_Cleaner_shallow,
+  Wash_Station_Waste,
+  Wash_Station_Cleaner_deep
+)
 
 
 _RAILS_WIDTH = 25
@@ -48,6 +54,12 @@ class TecanDeck(Deck):
       resource_assigned_callback=resource_assigned_callback,
       resource_unassigned_callback=resource_unassigned_callback, origin=origin)
     self.num_rails = num_rails
+
+    wash = Wash_Station(name="wash_station")
+    wash[0] = Wash_Station_Cleaner_deep(name="wash_clean_deep")
+    wash[1] = Wash_Station_Waste(name="wash_waste")
+    wash[2] = Wash_Station_Cleaner_shallow(name="wash_clean_shallow")
+    self.assign_child_resource(wash, rails=1)
 
   def serialize(self) -> dict:
     return {
