@@ -11,9 +11,9 @@ PyLabRobot is a hardware agnostic, pure Python library for liquid handling robot
 
 ### Liquid handling robots
 
-PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton and Opentrons liquid handling robots, but we will soon have drivers for many more. The two Hamilton drivers are Venus, which is derived from the [PyHamilton library](https://github.com/dgretton/pyhamilton), and STAR, which is a low-level firmware interface. The Opentrons driver is based on the [Opentrons HTTP API](https://github.com/rickwierenga/opentrons-python-api). We also provide a simulator which plays the role of a device driver but renders commands in a browser-based deck visualization.
+PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton, Tecan and Opentrons liquid handling robots, but we will soon have drivers for many more. The two Hamilton drivers are Venus, which is derived from the [PyHamilton library](https://github.com/dgretton/pyhamilton), and STAR, which is a low-level firmware interface. The Tecan driver is EVO, also a low level, cross platform firmware interface. The Opentrons driver is based on the [Opentrons HTTP API](https://github.com/rickwierenga/opentrons-python-api). We also provide a simulator which plays the role of a device driver but renders commands in a browser-based deck visualization.
 
-Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on Hamilton STAR (this will work on any operating system!):
+Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on **Hamilton STAR** (this will work on any operating system!):
 
 ```python
 from pylabrobot import LiquidHandler
@@ -30,7 +30,7 @@ await lh.dispense(lh.get_resource("plate")["A2"], vols=100)
 await lh.return_tips()
 ```
 
-To run the same procedure on an Opentrons, change the following lines:
+To run the same procedure on an **Opentrons**, change the following lines:
 
 ```diff
 - from pylabrobot.liquid_handling.backends import STAR
@@ -41,6 +41,19 @@ To run the same procedure on an Opentrons, change the following lines:
 
 - lh = LiquidHandler(backend=STAR(), deck=deck)
 + lh = LiquidHandler(backend=OpentronsBackend(host="x.x.x.x"), deck=deck)
+```
+
+Or **Tecan** (also works on any operating system!):
+
+```diff
+- from pylabrobot.liquid_handling.backends import STAR
++ from pylabrobot.liquid_handling.backends import EVO
+
+- deck = Deck.load_from_json_file("hamilton-layout.json")
++ deck = Deck.load_from_json_file("tecan-layout.json")
+
+- lh = LiquidHandler(backend=STAR(), deck=deck)
++ lh = LiquidHandler(backend=EVO(), deck=deck)
 ```
 
 ### Plate readers
