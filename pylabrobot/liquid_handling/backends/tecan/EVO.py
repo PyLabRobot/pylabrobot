@@ -636,11 +636,11 @@ class EVO(TecanLiquidHandler):
       assert tlc is not None
       pvl[channel] = 0
       if airgap == "lag":
-        sep[channel] = int(tlc.aspirate_lag_speed * 6) # 12? TODO: verify step unit
-        ppr[channel] = int(tlc.aspirate_lag_volume * 3) # 6?
+        sep[channel] = int(tlc.aspirate_lag_speed * 12) # 6? TODO: verify step unit
+        ppr[channel] = int(tlc.aspirate_lag_volume * 6) # 3?
       elif airgap == "tag":
-        sep[channel] = int(tlc.aspirate_tag_speed * 6) # 12?
-        ppr[channel] = int(tlc.aspirate_tag_volume * 3) # 6?
+        sep[channel] = int(tlc.aspirate_tag_speed * 12) # 6?
+        ppr[channel] = int(tlc.aspirate_tag_volume * 6) # 3?
 
     return pvl, sep, ppr
 
@@ -705,9 +705,9 @@ class EVO(TecanLiquidHandler):
       tlc = tecan_liquid_classes[i]
       z = zadd[channel]
       assert tlc is not None and z is not None
-      sep[channel] = int(tlc.aspirate_speed * 6) # 12?
+      sep[channel] = int(tlc.aspirate_speed * 12) # 6?
       ssz[channel] = round(z * tlc.aspirate_speed / ops[i].volume)
-      mtr[channel] = round(ops[i].volume * 3) # 6?
+      mtr[channel] = round(ops[i].volume * 6) # 3?
       ssz_r[channel] = int(tlc.aspirate_retract_speed * 10)
 
     return ssz, sep, stz, mtr, ssz_r
@@ -735,10 +735,10 @@ class EVO(TecanLiquidHandler):
     for i, channel in enumerate(use_channels):
       tlc = tecan_liquid_classes[i]
       assert tlc is not None
-      sep[channel] = int(tlc.dispense_speed * 6) # 12?
-      spp[channel] = int(tlc.dispense_breakoff * 6) # 12?
+      sep[channel] = int(tlc.dispense_speed * 12) # 6?
+      spp[channel] = int(tlc.dispense_breakoff * 12) # 6?
       stz[channel] = 0
-      mtr[channel] = -round(ops[i].volume * 3) # 6?
+      mtr[channel] = -round(ops[i].volume * 6) # 3?
 
     return sep, spp, stz, mtr
 
