@@ -242,6 +242,9 @@ class EVO(TecanLiquidHandler):
     if self.roma_connected: # position_initialization_x in reverse order from setup_arm
       self.roma = RoMa(self, EVO.ROMA)
       await self.roma.position_initialization_x()
+      # move to home position (TBD) after initialization
+      await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
+      await self.roma.action_move_vector_coordinate_position()
     if self.liha_connected:
       self.liha = LiHa(self, EVO.LIHA)
       await self.liha.position_initialization_x()
@@ -752,8 +755,10 @@ class EVO(TecanLiquidHandler):
 
 class EVOArm:
   """
-  Provides firmware commands for EVO arms
+  Provides firmware commands for EVO arms. Caches arm positions.
   """
+
+  _pos_cache: Dict[str, int] = {}
 
   def __init__(
     self,
@@ -790,17 +795,6 @@ class EVOArm:
                              command="RPY", params=[param]))["data"]
     return resp
 
-  async def report_z_param(self, param: int) -> List[int]:
-    """ Report current parameters for z-axis.
-
-    Args:
-      param: 0 - current position, 5 - actual machine range
-    """
-
-    resp: List[int] = (await self.backend.send_command(module=self.module,
-                             command="RPZ", params=[param]))["data"]
-    return resp
-
 
 class LiHa(EVOArm):
   """
@@ -814,6 +808,17 @@ class LiHa(EVOArm):
       tips: binary coded tip select
     """
     await self.backend.send_command(module=self.module, command="PID", params=[tips])
+
+  async def report_z_param(self, param: int) -> List[int]:
+    """ Report current parameters for z-axis.
+
+    Args:
+      param: 0 - current position, 5 - actual machine range
+    """
+
+    resp: List[int] = (await self.backend.send_command(module=self.module,
+                             command="RPZ", params=[param]))["data"]
+    return resp
 
   async def report_number_tips(self) -> int:
     """ Report number of tips on arm. """
@@ -831,9 +836,21 @@ class LiHa(EVOArm):
       ys: absolute y spacing in 1/10 mm, must be between 90 and 380
       z: absolute z position in 1/10 mm for each channel, must be in
          allowed machine range
+
+    Raises:
+      TecanError: if moving to the target position causes a collision
     """
 
+    cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
+    for module, pos in EVOArm._pos_cache.items():
+      if module == self.module:
+        continue
+      if cur_x < pos < x or x < pos < cur_x or abs(pos - x) < 1500:
+        raise TecanError("Invalid command (collision)", self.module, 2)
+
     await self.backend.send_command(module=self.module, command="PAA", params=list([x, y, ys] + z))
+
+    EVOArm._pos_cache[self.module] = x
 
   async def position_valve_logical(self, param: List[Optional[int]]):
     """ Position valve logical for each channel.
@@ -1113,7 +1130,17 @@ class RoMa(EVOArm):
       g: aboslute g position in 1/10 mm
       speed: speed select, 0 - slow, 1 - fast
       tw: target window class, set with STW
+
+    Raises:
+      TecanError: if moving to the target position causes a collision
     """
+
+    cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
+    for module, pos in EVOArm._pos_cache.items():
+      if module == self.module:
+        continue
+      if cur_x < pos < x or x < pos < cur_x or abs(pos - x) < 1500:
+        raise TecanError("Invalid command (collision)", self.module, 2)
 
     await self.backend.send_command(module=self.module, command="SAA",
                                     params=[v, x, y, z, r, g, speed, 0, tw])
@@ -1122,6 +1149,8 @@ class RoMa(EVOArm):
     """ Starts coordinate movement, built by vector coordinate table. """
 
     await self.backend.send_command(module=self.module, command="AAC")
+
+    EVOArm._pos_cache[self.module] = await self.report_x_param(0)
 
   async def position_absolute_g(self, g: int):
     """ Position absolute for G-axis
