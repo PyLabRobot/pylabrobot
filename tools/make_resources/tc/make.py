@@ -3,8 +3,8 @@ import re
 from pylabrobot.resources import Coordinate
 
 
-# path = "Carrier_Coley.cfg"
-path = "Carrier.cfg"
+path = "Carrier_Coley.cfg"
+# path = "Carrier.cfg"
 
 RES = re.compile("(\d{2});(.*?);(\S*)")
 SITE = re.compile("998;0;(\S{2,});")
@@ -35,7 +35,7 @@ def main(pc, tc, p, tr):
       site_size_x = []
       site_size_y = []
       desc = ""
-      while not RES.match(c[i + 1]):
+      while i + 1 < len(c) and not RES.match(c[i + 1]):
         i += 1
 
         if s:=SITE.match(c[i]):
@@ -135,7 +135,7 @@ def main(pc, tc, p, tr):
       area = float(dim[4][0])
 
       desc = ""
-      while not RES.match(c[i + 1]):
+      while i + 1 < len(c) and not RES.match(c[i + 1]):
         i += 1
         if d:=DESC.match(c[i]):
           desc = d.group(1)
