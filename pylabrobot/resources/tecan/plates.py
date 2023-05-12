@@ -44,52 +44,25 @@ class TecanPlate(Plate, TecanResource):
 
 
 def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
-  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306
-
-  Coley
+  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306 """
   return TecanPlate(
     name=name,
-    size_x=129.9,
-    size_y=83.9,
-    size_z=5.6,
+    size_x=133.3,
+    size_y=87.6,
+    size_z=3.0,
     with_lid=with_lid,
     lid_height=8,
     model="Microplate_96_Well",
-    z_travel=1750.0,
-    z_start=1800.0,
-    z_dispense=1970.0,
-    z_max=2026.0,
-    area=33.2,
-    items=create_equally_spaced(Well,
-      num_items_x=12,
-      num_items_y=8,
-      dx=10.8,
-      dy=6.2,
-      dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
-    ),
-  )
-  """
-
-  return TecanPlate(
-    name=name,
-    size_x=127.8,
-    size_y=85.4,
-    size_z=7.6,
-    with_lid=with_lid,
-    lid_height=8,
-    model="Microplate_96_Well",
-    z_travel=1900.0,
-    z_start=1957.0,
+    z_travel=1850.0,
+    z_start=1925.0,
     z_dispense=1975.0,
-    z_max=2051.0,
+    z_max=2005.0,
     area=33.2,
     items=create_equally_spaced(Well,
       num_items_x=12,
       num_items_y=8,
-      dx=9.9,
-      dy=6.7,
+      dx=12.5,
+      dy=7.6,
       dz=0.0,
       item_size_x=9.0,
       item_size_y=9.0,
@@ -491,8 +464,8 @@ def Plate_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
   """ white: pn 30122301, black: pn 30122299, cell culture/clear: pn 30122305, cell culture/black with clear bottom: pn 30122307 """
   return TecanPlate(
     name=name,
-    size_x=127.7,
-    size_y=85.5,
+    size_x=131.7,
+    size_y=89.7,
     size_z=10.1,
     with_lid=with_lid,
     lid_height=8,
@@ -505,8 +478,8 @@ def Plate_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
     items=create_equally_spaced(Well,
       num_items_x=24,
       num_items_y=16,
-      dx=9.85,
-      dy=6.75,
+      dx=11.75,
+      dy=9.05,
       dz=0.0,
       item_size_x=4.5,
       item_size_y=4.5,
@@ -518,25 +491,25 @@ def Microplate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
   """ cell culture/clear: pn 30122302 """
   return TecanPlate(
     name=name,
-    size_x=130.9,
-    size_y=85.5,
-    size_z=14.4,
+    size_x=129.5,
+    size_y=82.7,
+    size_z=32.6,
     with_lid=with_lid,
     lid_height=8,
     model="Microplate_24_Well",
-    z_travel=1841.0,
-    z_start=1885.0,
-    z_dispense=1917.0,
-    z_max=2061.0,
+    z_travel=1447.0,
+    z_start=1575.0,
+    z_dispense=1655.0,
+    z_max=1981.0,
     area=193.6,
     items=create_equally_spaced(Well,
       num_items_x=6,
       num_items_y=4,
-      dx=6.6,
-      dy=3.5,
+      dx=1.8,
+      dy=-1.0,
       dz=0.0,
-      item_size_x=19.6,
-      item_size_y=19.6,
+      item_size_x=21.0,
+      item_size_y=21.0,
     ),
   )
 
@@ -590,5 +563,221 @@ def Microplate_48_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dz=0.0,
       item_size_x=13.0,
       item_size_y=13.0,
+    ),
+  )
+
+
+def Microplate_Nuncflat_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306 """
+  return TecanPlate(
+    name=name,
+    size_x=133.1,
+    size_y=88.3,
+    size_z=4.7,
+    with_lid=with_lid,
+    lid_height=8,
+    model="Microplate_Nuncflat_96_Well",
+    z_travel=1874.0,
+    z_start=1939.0,
+    z_dispense=1973.0,
+    z_max=2020.0,
+    area=33.2,
+    items=create_equally_spaced(Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=13.15,
+      dy=8.45,
+      dz=0.0,
+      item_size_x=8.9,
+      item_size_y=8.9,
+    ),
+  )
+
+
+def Plate_ARTEL_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
+  """ white: pn 30122301, black: pn 30122299, cell culture/clear: pn 30122305, cell culture/black with clear bottom: pn 30122307 """
+  return TecanPlate(
+    name=name,
+    size_x=133.4,
+    size_y=90.5,
+    size_z=7.0,
+    with_lid=with_lid,
+    lid_height=8,
+    model="Plate_ARTEL_384_Well",
+    z_travel=1900.0,
+    z_start=1940.0,
+    z_dispense=1960.0,
+    z_max=2030.0,
+    area=13.7,
+    items=create_equally_spaced(Well,
+      num_items_x=24,
+      num_items_y=16,
+      dx=12.45,
+      dy=9.15,
+      dz=0.0,
+      item_size_x=4.5,
+      item_size_y=4.5,
+    ),
+  )
+
+
+def Plate_greiner_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
+  """ white: pn 30122301, black: pn 30122299, cell culture/clear: pn 30122305, cell culture/black with clear bottom: pn 30122307 """
+  return TecanPlate(
+    name=name,
+    size_x=132.1,
+    size_y=89.8,
+    size_z=7.0,
+    with_lid=with_lid,
+    lid_height=8,
+    model="Plate_greiner_384_Well",
+    z_travel=1900.0,
+    z_start=1940.0,
+    z_dispense=1960.0,
+    z_max=2030.0,
+    area=14.4,
+    items=create_equally_spaced(Well,
+      num_items_x=24,
+      num_items_y=16,
+      dx=11.95,
+      dy=9.15,
+      dz=0.0,
+      item_size_x=4.5,
+      item_size_y=4.5,
+    ),
+  )
+
+
+def greiner_no_change_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
+  """ white: pn 30122301, black: pn 30122299, cell culture/clear: pn 30122305, cell culture/black with clear bottom: pn 30122307 """
+  return TecanPlate(
+    name=name,
+    size_x=132.1,
+    size_y=89.8,
+    size_z=7.0,
+    with_lid=with_lid,
+    lid_height=8,
+    model="greiner_no_change_384_Well",
+    z_travel=1900.0,
+    z_start=1940.0,
+    z_dispense=1960.0,
+    z_max=2030.0,
+    area=14.4,
+    items=create_equally_spaced(Well,
+      num_items_x=24,
+      num_items_y=16,
+      dx=11.95,
+      dy=9.15,
+      dz=0.0,
+      item_size_x=4.5,
+      item_size_y=4.5,
+    ),
+  )
+
+
+def Microplate_Nunc_v_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306 """
+  return TecanPlate(
+    name=name,
+    size_x=131.8,
+    size_y=88.4,
+    size_z=3.8,
+    with_lid=with_lid,
+    lid_height=8,
+    model="Microplate_Nunc_v_96_Well",
+    z_travel=1874.0,
+    z_start=1939.0,
+    z_dispense=1973.0,
+    z_max=2011.0,
+    area=33.2,
+    items=create_equally_spaced(Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=11.9,
+      dy=8.5,
+      dz=0.0,
+      item_size_x=9.0,
+      item_size_y=9.0,
+    ),
+  )
+
+
+def Microplate_Nunc_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
+  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306 """
+  return TecanPlate(
+    name=name,
+    size_x=133.1,
+    size_y=88.3,
+    size_z=4.7,
+    with_lid=with_lid,
+    lid_height=8,
+    model="Microplate_Nunc_96_Well",
+    z_travel=1874.0,
+    z_start=1939.0,
+    z_dispense=1973.0,
+    z_max=2020.0,
+    area=33.2,
+    items=create_equally_spaced(Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=13.15,
+      dy=8.45,
+      dz=0.0,
+      item_size_x=8.9,
+      item_size_y=8.9,
+    ),
+  )
+
+
+def Plate_Corning_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
+  """ white: pn 30122301, black: pn 30122299, cell culture/clear: pn 30122305, cell culture/black with clear bottom: pn 30122307 """
+  return TecanPlate(
+    name=name,
+    size_x=132.2,
+    size_y=87.7,
+    size_z=7.0,
+    with_lid=with_lid,
+    lid_height=8,
+    model="Plate_Corning_384_Well",
+    z_travel=1900.0,
+    z_start=1940.0,
+    z_dispense=1960.0,
+    z_max=2030.0,
+    area=13.7,
+    items=create_equally_spaced(Well,
+      num_items_x=24,
+      num_items_y=16,
+      dx=12.35,
+      dy=7.95,
+      dz=0.0,
+      item_size_x=4.5,
+      item_size_y=4.5,
+    ),
+  )
+
+
+def Plate_Corning_No_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
+  """ white: pn 30122301, black: pn 30122299, cell culture/clear: pn 30122305, cell culture/black with clear bottom: pn 30122307 """
+  return TecanPlate(
+    name=name,
+    size_x=132.6,
+    size_y=88.2,
+    size_z=7.0,
+    with_lid=with_lid,
+    lid_height=8,
+    model="Plate_Corning_No_384_Well",
+    z_travel=1900.0,
+    z_start=1940.0,
+    z_dispense=1960.0,
+    z_max=2030.0,
+    area=13.7,
+    items=create_equally_spaced(Well,
+      num_items_x=24,
+      num_items_y=16,
+      dx=12.45,
+      dy=7.95,
+      dz=0.0,
+      item_size_x=4.5,
+      item_size_y=4.5,
     ),
   )
