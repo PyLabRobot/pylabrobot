@@ -1,4 +1,4 @@
-from .carrier import Carrier, CarrierSite, PlateCarrier, TipCarrier, create_homogenous_carrier_sites
+from .carrier import Carrier, CarrierSite, PlateCarrier, TipCarrier, create_homogenous_carrier_sites, create_carrier_sites
 from .container import Container
 from .coordinate import Coordinate
 from .deck import Deck
@@ -15,3 +15,5 @@ from .corning_costar import *
 from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
 from .ml_star import *
 from .resource_stack import ResourceStack
+
+from .tecan import *
