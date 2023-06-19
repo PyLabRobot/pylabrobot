@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import contextlib
 import sys
-from typing import List, Tuple, Optional, TYPE_CHECKING
+from typing import List, Tuple, Optional
 
 from pylabrobot.resources.errors import (
   ContainerTooLittleLiquidError,
@@ -10,9 +10,8 @@ from pylabrobot.resources.errors import (
   TipTooLittleVolumeError,
 )
 
-if TYPE_CHECKING:
-  from pylabrobot.liquid_handling.standard import LiquidHandlingOp, Aspiration, Dispense
-  from pylabrobot.liquid_handling.liquid_classes.abstract import Liquid
+from pylabrobot.liquid_handling.standard import LiquidHandlingOp, Aspiration, Dispense
+from pylabrobot.liquid_handling.liquid_classes.abstract import Liquid
 
 
 this = sys.modules[__name__]
@@ -122,6 +121,46 @@ class VolumeTracker(ABC):
     self.pending.clear()
     self.liquids.clear()
     self.pending_liquids.clear()
+
+  def serialize(self) -> dict:
+    """ Serialize the volume tracker. """
+
+    def serialize_liquid_or_none(liquid: Optional["Liquid"]) -> Optional[str]:
+      return liquid.serialize() if liquid is not None else None
+
+    def serialize_op(op: "LiquidHandlingOp") -> dict:
+      return {
+        "type": op.__class__.__name__,
+        "volume": op.volume,
+      }
+
+    return {
+      "history": [serialize_op(op) for op in self.history],
+      "pending": [serialize_op(op) for op in self.pending],
+      "liquids": [(serialize_liquid_or_none(l), v) for l, v in self.liquids],
+      "pending_liquids": [(serialize_liquid_or_none(l), v) for l, v in self.pending_liquids],
+    }
+
+  def load_state(self, state: dict) -> None:
+    """ Load the state of the volume tracker. """
+
+    def load_liquid_or_none(liquid: Optional[str]) -> Optional["Liquid"]:
+      return Liquid.deserialize(liquid) if liquid is not None else None
+
+    def load_op(op_data: dict) -> "LiquidHandlingOp":
+      op_data_copy = op_data.copy()
+      op_type = op_data_copy.pop("type")
+      if op_type == "Aspiration":
+        return Aspiration(**op_data_copy)
+      elif op_type == "Dispense":
+        return Dispense(**op_data_copy)
+      else:
+        raise ValueError(f"Unknown op type: {op_type}")
+
+    self._ops = [load_op(op) for op in state["history"]]
+    self.pending = [load_op(op) for op in state["pending"]]
+    self.liquids = [(load_liquid_or_none(l), v) for l, v in state["liquids"]]
+    self.pending_liquids = [(load_liquid_or_none(l), v) for l, v in state["pending_liquids"]]
 
 
 class ContainerVolumeTracker(VolumeTracker):

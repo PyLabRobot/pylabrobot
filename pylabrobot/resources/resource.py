@@ -350,7 +350,7 @@ class Resource:
       json.dump(serialized, f, indent=indent)
 
   @classmethod
-  def deserialize(cls, data: dict) -> Self: # type: ignore
+  def deserialize(cls, data: dict) -> Self:
     """ Deserialize a resource from a dictionary.
 
     Examples:
