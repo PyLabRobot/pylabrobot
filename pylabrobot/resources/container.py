@@ -15,7 +15,6 @@ class Container(Resource, metaclass=ABCMeta):
     size_y: float,
     size_z: float,
     max_volume: float,
-    volume: float = 0,
     category: Optional[str] = None,
     model: Optional[str] = None
   ):
@@ -30,11 +29,9 @@ class Container(Resource, metaclass=ABCMeta):
       model=model)
     self.max_volume = max_volume
     self.tracker = ContainerVolumeTracker(max_volume=max_volume)
-    # self.tracker.set_used_volume(volume)
 
-  def serialize(self):
+  def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "volume": self.tracker.get_used_volume(),
       "max_volume": self.max_volume
     }

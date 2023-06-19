@@ -3,13 +3,12 @@
 from abc import ABC, abstractmethod
 import contextlib
 import sys
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional
 
 from pylabrobot.resources.errors import TipSpotHasTipError, TipSpotHasNoTipError
 
-if TYPE_CHECKING:
-  from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
-  from pylabrobot.resources.tip import Tip
+from pylabrobot.liquid_handling.standard import TipOp, Pickup, Drop
+from pylabrobot.resources.tip import Tip
 
 
 this = sys.modules[__name__]
@@ -115,6 +114,40 @@ class TipTracker(ABC):
     self.pending.clear()
     self._tip = None
     self._pending_tip = None
+
+  def serialize(self) -> dict:
+    """ Serialize the state of the tip tracker. """
+    def serialize_op(op: "TipOp") -> dict:
+      return {
+        "type": op.__class__.__name__,
+        "tip": op.tip.serialize()
+      }
+
+    return {
+      "history": [serialize_op(op) for op in self.history],
+      "pending": [serialize_op(op) for op in self.pending],
+      "tip": self._tip.serialize() if self._tip is not None else None,
+      "pending_tip": self._pending_tip.serialize() if self._pending_tip is not None else None
+    }
+
+  def load_state(self, state: dict) -> None:
+    """ Load a saved tip tracker state. """
+
+    def load_op(op_data: dict) -> "TipOp":
+      op_data_copy = op_data.copy()
+      op_type = op_data_copy.pop("type")
+      if op_type == "Pickup":
+        return Pickup(**op_data_copy)
+      elif op_type == "Drop":
+        return Drop(**op_data_copy)
+      else:
+        raise ValueError(f"Unknown op type: {op_type}")
+
+    self._ops = [load_op(op) for op in state["history"]]
+    self.pending = [load_op(op) for op in state["pending"]]
+    self._tip = Tip.deserialize(state["tip"]) if state["tip"] is not None else None
+    self._pending_tip = Tip.deserialize(state["pending_tip"])if state["pending_tip"] is not None \
+      else None
 
 
 class SpotTipTracker(TipTracker):
