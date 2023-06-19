@@ -82,7 +82,8 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
   def test_load_labware(self):
     with self.app.test_client() as client:
       # Post with no data
-      response = client.post(self.base_url + "/labware")
+      response = client.post(self.base_url + "/labware",
+                             headers={"Content-Type": "application/json"})
       self.assertEqual(response.status_code, 400)
       self.assertEqual(response.json, {"error": "json data must be a dict"})
 
