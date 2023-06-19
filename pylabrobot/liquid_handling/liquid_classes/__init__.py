@@ -1,1 +1,1 @@
-from .abstract import LiquidClass
+from .abstract import Liquid

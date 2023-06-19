@@ -967,7 +967,7 @@ class STAR(HamiltonLiquidHandler):
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
-        liquid_class=op.liquid_class,
+        liquid=op.liquid,
         jet=False, # for aspiration
         empty=False # for aspiration
       ) for tmv, op in zip(tip_max_volumes, ops)]
@@ -1209,7 +1209,7 @@ class STAR(HamiltonLiquidHandler):
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
-        liquid_class=op.liquid_class,
+        liquid=op.liquid,
         # jet if liquid height is known, or if we are dispensing to an empty well
         jet=(hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0) or
         (is_default(op.liquid_height) or is_not_default(op.liquid_height) and op.liquid_height > 0),
