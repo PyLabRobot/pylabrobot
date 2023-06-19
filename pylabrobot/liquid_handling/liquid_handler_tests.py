@@ -9,6 +9,7 @@ from pylabrobot.liquid_handling.channel_tip_tracker import (
   ChannelHasTipError,
   ChannelHasNoTipError,
 )
+from pylabrobot.liquid_handling.liquid_classes import Liquid
 from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
 from pylabrobot.resources import no_tip_tracking, set_tip_tracking
 from pylabrobot.resources.tip_tracker import (
@@ -251,7 +252,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_offsets_asp_disp(self):
     well = self.plate.get_item("A1")
-    well.tracker.set_used_volume(10)
+    well.tracker.set_liquids([(Liquid.WATER, 10)])
     t = self.tip_rack.get_item("A1").get_tip()
     self.lh.update_head_state({0: t})
     await self.lh.aspirate([well], vols=10, offsets=Coordinate(x=1, y=1, z=1))
@@ -305,7 +306,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh.update_head_state({0: t})
 
     # Simple transfer
-    self.plate.get_item("A1").tracker.set_used_volume(10)
+    self.plate.get_item("A1").tracker.set_liquids([(Liquid.WATER, 10)])
     await self.lh.transfer(self.plate.get_well("A1"), self.plate["A2"], source_vol=10)
 
     self.assertEqual(self.get_first_command("aspirate"), {
@@ -323,7 +324,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.backend.clear()
 
     # Transfer to multiple wells
-    self.plate.get_item("A1").tracker.set_used_volume(80)
+    self.plate.get_item("A1").tracker.set_liquids([(Liquid.WATER, 80)])
     await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
@@ -343,7 +344,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.backend.clear()
 
     # Transfer with ratios
-    self.plate.get_item("A1").tracker.set_used_volume(60)
+    self.plate.get_item("A1").tracker.set_liquids([(Liquid.WATER, 60)])
     await self.lh.transfer(self.plate.get_well("A1"), self.plate["B1:C1"], source_vol=60,
       ratios=[2, 1])
     self.assertEqual(self.get_first_command("aspirate"), {
@@ -364,7 +365,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # Transfer with target_vols
     vols: List[float] = [3, 1, 4, 1, 5, 9, 6, 2]
-    self.plate.get_item("A1").tracker.set_used_volume(sum(vols))
+    self.plate.get_item("A1").tracker.set_liquids([(Liquid.WATER, sum(vols))])
     await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols)
     self.assertEqual(self.get_first_command("aspirate"), {
       "command": "aspirate",
@@ -489,7 +490,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate.assign_child_resource(lid, location=Coordinate(0, 0,
                                      self.plate.get_size_z() - self.plate.lid_height))
     well = self.plate.get_item("A1")
-    well.tracker.set_used_volume(10)
+    well.tracker.set_liquids([(Liquid.WATER, 10)])
     t = self.tip_rack.get_item("A1").get_tip()
     self.lh.update_head_state({0: t})
     with self.assertRaises(ValueError):

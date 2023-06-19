@@ -29,7 +29,7 @@ def build_layout() -> HamiltonDeck:
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
   plt_car[0] = plate = Cos_96_EZWash(name="aspiration plate")
-  plate.get_item("A1").tracker.set_used_volume(400)
+  plate.get_item("A1").tracker.set_liquids([(None, 400)])
 
   deck = STARLetDeck()
   deck.assign_child_resource(tip_car, rails=1)

@@ -7,7 +7,7 @@ import enum
 from typing import List, Optional, TYPE_CHECKING
 
 from pylabrobot.default import Defaultable, Default, is_not_default
-from pylabrobot.liquid_handling.liquid_classes.abstract import LiquidClass
+from pylabrobot.liquid_handling.liquid_classes.abstract import Liquid
 from pylabrobot.resources.coordinate import Coordinate
 if TYPE_CHECKING:
   from pylabrobot.resources import Container, Plate, Resource, TipRack
@@ -172,7 +172,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     offset: Defaultable[Coordinate] = Default,
     liquid_height: Defaultable[float] = Default,
     blow_out_air_volume: float = 0,
-    liquid_class: LiquidClass = LiquidClass.WATER
+    liquid: Liquid = Liquid.WATER
   ):
     """ Initialize the operation.
 
@@ -182,6 +182,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       flow_rate: The flow rate. None is default for the Machine. In ul/s.
       offset: The offset in the z direction. In mm.
       liquid_height: The height of the liquid in the well. In mm.
+      liquid: The liquid that is being handled (water, ethanol, etc.).
     """
 
     super().__init__(resource, offset)
@@ -190,7 +191,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     self.flow_rate = flow_rate
     self.liquid_height = liquid_height
     self.blow_out_air_volume = blow_out_air_volume
-    self.liquid_class = liquid_class
+    self.liquid = liquid
 
   def __eq__(self, other: object) -> bool:
     return super().__eq__(other) and (
@@ -201,7 +202,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       self.offset == other.offset and
       self.liquid_height == other.liquid_height and
       self.blow_out_air_volume == other.blow_out_air_volume and
-      self.liquid_class == other.liquid_class
+      self.liquid == other.liquid
     )
 
   def __hash__(self) -> int:
@@ -211,7 +212,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
     return (
       f"{self.__class__.__name__}(resource={repr(self.resource)}, volume={repr(self.volume)}, "
       f"flow_rate={self.flow_rate}, offset={self.offset}, liquid_height={self.liquid_height}, "
-      f"blow_out_air_volume={self.blow_out_air_volume}, liquid_class={self.liquid_class})"
+      f"blow_out_air_volume={self.blow_out_air_volume}, liquid={self.liquid})"
     )
 
   def serialize(self) -> dict:
@@ -227,7 +228,7 @@ class LiquidHandlingOp(PipettingOp, metaclass=ABCMeta):
       "flow_rate": self.flow_rate if is_not_default(self.flow_rate) else "default",
       "liquid_height": self.liquid_height if is_not_default(self.liquid_height) else "default",
       "blow_out_air_volume": self.blow_out_air_volume,
-      "liquid_class": self.liquid_class.name
+      "liquid": self.liquid.name
     }
 
 
@@ -248,7 +249,7 @@ class Aspiration(LiquidHandlingOp):
     offset: Defaultable[Coordinate] = Default,
     liquid_height: Defaultable[float] = Default,
     blow_out_air_volume: float = 0,
-    liquid_class: LiquidClass = LiquidClass.WATER
+    liquid: Liquid = Liquid.WATER
   ):
     """ Initialize an aspiration operation.
 
@@ -268,7 +269,7 @@ class Aspiration(LiquidHandlingOp):
       offset=offset,
       liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
-      liquid_class=liquid_class
+      liquid=liquid
     )
 
     self.resource: Container = resource # fix type
@@ -291,7 +292,7 @@ class Aspiration(LiquidHandlingOp):
       liquid_height=Default if data["liquid_height"] == "default" else data["liquid_height"],
       blow_out_air_volume=data["blow_out_air_volume"],
       tip=tip,
-      liquid_class=LiquidClass[data["liquid_class"]]
+      liquid=Liquid[data["liquid"]]
     )
 
 
@@ -312,7 +313,7 @@ class Dispense(LiquidHandlingOp):
     offset: Defaultable[Coordinate] = Default,
     liquid_height: Defaultable[float] = Default,
     blow_out_air_volume: float = 0,
-    liquid_class: LiquidClass = LiquidClass.WATER
+    liquid: Liquid = Liquid.WATER
   ):
     """ Initialize a dispense operation.
 
@@ -332,7 +333,7 @@ class Dispense(LiquidHandlingOp):
       offset=offset,
       liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
-      liquid_class=liquid_class
+      liquid=liquid
     )
 
     self.resource: Container = resource # fix type
@@ -356,7 +357,7 @@ class Dispense(LiquidHandlingOp):
         else data["liquid_height"],
       blow_out_air_volume=data["blow_out_air_volume"],
       tip=tip,
-      liquid_class=LiquidClass[data["liquid_class"]]
+      liquid=Liquid[data["liquid"]]
     )
 
 
@@ -376,7 +377,7 @@ class AspirationPlate(LiquidHandlingOp):
     offset: Defaultable[Coordinate] = Default,
     liquid_height: Defaultable[float] = Default,
     blow_out_air_volume: float = 0,
-    liquid_class: LiquidClass = LiquidClass.WATER
+    liquid: Liquid = Liquid.WATER
   ):
     """ Initialize an aspiration plate operation.
 
@@ -396,7 +397,7 @@ class AspirationPlate(LiquidHandlingOp):
       offset=offset,
       liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
-      liquid_class=liquid_class
+      liquid=liquid
     )
 
     self.resource: Plate = resource # fix type
@@ -419,7 +420,7 @@ class AspirationPlate(LiquidHandlingOp):
       liquid_height=Default if data["liquid_height"] == "default" else data["liquid_height"],
       blow_out_air_volume=data["blow_out_air_volume"],
       tips=tips,
-      liquid_class=LiquidClass[data["liquid_class"]]
+      liquid=Liquid[data["liquid"]]
     )
 
 
@@ -439,7 +440,7 @@ class DispensePlate(LiquidHandlingOp):
     offset: Defaultable[Coordinate] = Default,
     liquid_height: Defaultable[float] = Default,
     blow_out_air_volume: float = 0,
-    liquid_class: LiquidClass = LiquidClass.WATER
+    liquid: Liquid = Liquid.WATER
   ):
     """ Initialize an dispense plate operation.
 
@@ -459,7 +460,7 @@ class DispensePlate(LiquidHandlingOp):
       offset=offset,
       liquid_height=liquid_height,
       blow_out_air_volume=blow_out_air_volume,
-      liquid_class=liquid_class
+      liquid=liquid
     )
 
     self.resource: Plate = resource # fix type
@@ -482,7 +483,7 @@ class DispensePlate(LiquidHandlingOp):
       liquid_height=Default if data["liquid_height"] == "default" else data["liquid_height"],
       blow_out_air_volume=data["blow_out_air_volume"],
       tips=tips,
-      liquid_class=LiquidClass[data["liquid_class"]]
+      liquid=Liquid[data["liquid"]]
     )
 
 

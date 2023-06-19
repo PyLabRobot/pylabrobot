@@ -156,7 +156,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
             "liquid_height": "default",
             "blow_out_air_volume": 0,
             "tip": self.tip_rack.get_tip("A1").serialize(),
-            "liquid_class": "WATER"
+            "liquid": "WATER"
           }],
           "use_channels": [0],
         })
@@ -166,7 +166,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
     )
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     well = self.plate.get_item("A1")
-    well.tracker.set_used_volume(10)
+    well.tracker.set_liquids([(None, 10)])
     await self.lh.aspirate([well], 10)
 
   @responses.activate
@@ -185,7 +185,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
             "liquid_height": "default",
             "blow_out_air_volume": 0,
             "tip": self.tip_rack.get_tip("A1").serialize(),
-            "liquid_class": "WATER"
+            "liquid": "WATER"
           }],
           "use_channels": [0],
         })
@@ -263,7 +263,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
             "liquid_height": "default",
             "blow_out_air_volume": 0,
             "tips": [tip.serialize() for tip in self.tip_rack.get_all_tips()],
-            "liquid_class": "WATER"
+            "liquid": "WATER"
           }
         })
       ],
@@ -305,7 +305,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
             "liquid_height": "default",
             "blow_out_air_volume": 0,
             "tips": [tip.serialize() for tip in self.tip_rack.get_all_tips()],
-            "liquid_class": "WATER"
+            "liquid": "WATER"
           }
         })
       ],

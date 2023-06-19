@@ -25,7 +25,7 @@ class TestTipVolumeTracker(unittest.TestCase):
     self.assertEqual(tracker.get_free_volume(), 100)
     self.assertEqual(tracker.get_used_volume(), 0)
 
-    tracker.set_used_volume(volume=20)
+    tracker.set_liquids([(None, 20)])
     self.assertEqual(tracker.get_free_volume(), 80)
     self.assertEqual(tracker.get_used_volume(), 20)
 
@@ -77,7 +77,7 @@ class TestContainerVolumeTracker(unittest.TestCase):
     self.assertEqual(tracker.get_free_volume(), 100)
     self.assertEqual(tracker.get_used_volume(), 0)
 
-    tracker.set_used_volume(volume=20)
+    tracker.set_liquids([(Liquid.WATER, 20)])
     self.assertEqual(tracker.get_free_volume(), 80)
     self.assertEqual(tracker.get_used_volume(), 20)
 

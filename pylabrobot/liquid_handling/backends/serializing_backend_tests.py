@@ -72,7 +72,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate(self):
     well = self.plate.get_item("A1")
-    well.tracker.set_used_volume(10)
+    well.tracker.set_liquids([(None, 10)])
     tip = self.tip_rack.get_tip(0)
     self.lh.update_head_state({0: tip})
     assert self.plate.lid is not None
