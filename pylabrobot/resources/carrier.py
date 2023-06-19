@@ -197,17 +197,27 @@ class PlateCarrier(Carrier):
       sites,category=category, model=model)
 
 
+def create_carrier_sites(
+  locations: List[Coordinate],
+  site_size_x: List[float],
+  site_size_y: List[float]) -> List[CarrierSite]:
+  """ Create a list of carrier sites with the given sizes. """
+
+  sites = []
+  for spot, (l, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
+    site = CarrierSite(
+      name = f"carrier-site-{spot}",
+      size_x=x, size_y=y, size_z=0, spot=spot)
+    site.location = l
+    sites.append(site)
+  return sites
+
+
 def create_homogenous_carrier_sites(
   locations: List[Coordinate],
   site_size_x: float,
   site_size_y: float) -> List[CarrierSite]:
   """ Create a list of carrier sites with the same size. """
 
-  sites = []
-  for spot, location in enumerate(locations):
-    site = CarrierSite(
-      name=f"carrier-site-{spot}",
-      size_x=site_size_x, size_y=site_size_y, size_z=0, spot=spot)
-    site.location = location
-    sites.append(site)
-  return sites
+  n = len(locations)
+  return create_carrier_sites(locations, [site_size_x] * n, [site_size_y] * n)

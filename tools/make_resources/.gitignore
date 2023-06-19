@@ -4,6 +4,9 @@
 !ham/make_*.py
 !ot
 !ot/make.py
+!tc
+!tc/make.py
+!tc/make_lc.py
 !maker.py
 !writer.py
 !.gitignore
