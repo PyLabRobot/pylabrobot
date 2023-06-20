@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import contextlib
 import sys
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, TYPE_CHECKING
 
 from pylabrobot.resources.errors import (
   ContainerTooLittleLiquidError,
@@ -10,9 +10,11 @@ from pylabrobot.resources.errors import (
   TipTooLittleVolumeError,
 )
 
-from pylabrobot.liquid_handling.standard import LiquidHandlingOp, Aspiration, Dispense
 from pylabrobot.liquid_handling.liquid_classes.abstract import Liquid
+from pylabrobot.liquid_handling.standard import LiquidHandlingOp, Aspiration, Dispense
 
+if TYPE_CHECKING:
+  from pylabrobot.resources.container import Container
 
 this = sys.modules[__name__]
 this.volume_tracking_enabled = False # type: ignore
@@ -131,7 +133,7 @@ class VolumeTracker(ABC):
     def serialize_op(op: "LiquidHandlingOp") -> dict:
       return {
         "type": op.__class__.__name__,
-        "volume": op.volume,
+        "op": op.serialize()
       }
 
     return {
@@ -141,19 +143,20 @@ class VolumeTracker(ABC):
       "pending_liquids": [(serialize_liquid_or_none(l), v) for l, v in self.pending_liquids],
     }
 
-  def load_state(self, state: dict) -> None:
+  def load_state(self, state: dict, resource: "Container") -> None:
     """ Load the state of the volume tracker. """
 
     def load_liquid_or_none(liquid: Optional[str]) -> Optional["Liquid"]:
       return Liquid.deserialize(liquid) if liquid is not None else None
 
-    def load_op(op_data: dict) -> "LiquidHandlingOp":
-      op_data_copy = op_data.copy()
-      op_type = op_data_copy.pop("type")
+    def load_op(data: dict) -> "LiquidHandlingOp":
+      op_type = data["type"]
+      op_data = data["op"]
+      del op_data["resource_name"]
       if op_type == "Aspiration":
-        return Aspiration(**op_data_copy)
+        return Aspiration(**op_data, resource=resource)
       elif op_type == "Dispense":
-        return Dispense(**op_data_copy)
+        return Dispense(**op_data, resource=resource)
       else:
         raise ValueError(f"Unknown op type: {op_type}")
 
