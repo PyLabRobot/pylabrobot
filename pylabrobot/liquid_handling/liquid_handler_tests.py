@@ -1,6 +1,7 @@
 """ Tests for LiquidHandler """
 # pylint: disable=missing-class-docstring
 
+import tempfile
 from typing import Any, Dict, List, Optional, cast
 import unittest
 import unittest.mock
@@ -16,11 +17,13 @@ from pylabrobot.resources.tip_tracker import (
   TipSpotHasTipError,
   TipSpotHasNoTipError,
 )
+from pylabrobot.resources.volume_tracker import set_volume_tracking
 
 from . import backends
 from .liquid_handler import LiquidHandler
 from pylabrobot.resources import (
   Coordinate,
+  Deck,
   Lid,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
@@ -529,3 +532,34 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           non_default=True, does_not_exist=True)
       with self.assertRaises(TypeError):
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[8])
+
+  async def test_save_state(self):
+    set_volume_tracking(enabled=True)
+
+    # a mini protocol
+    self.plate.get_item("A1").tracker.set_liquids([(Liquid.WATER, 10)])
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    await self.lh.aspirate(self.plate["A1"], vols=10)
+    await self.lh.dispense(self.plate["A2"], vols=10)
+
+    # save the state
+    state_filename = tempfile.mktemp()
+    self.lh.deck.save_state(filename=state_filename)
+
+    # save the deck
+    deck_filename = tempfile.mktemp()
+    self.lh.deck.save(fn=deck_filename)
+
+    # create a new liquid handler, load the state and the deck
+    lh2 = LiquidHandler(self.backend, deck=STARLetDeck())
+    lh2.deck = Deck.load_from_json_file(json_file=deck_filename)
+    lh2.deck.load_state(filename=state_filename)
+
+    # assert that the state is the same
+    well_a1 = lh2.deck.get_resource("plate").get_item("A1") # type: ignore
+    self.assertEqual(well_a1.tracker.liquids, [])
+    well_a2 = lh2.deck.get_resource("plate").get_item("A2") # type: ignore
+    self.assertEqual(well_a2.tracker.liquids,
+      [(Liquid.WATER, 10)])
+
+    set_volume_tracking(enabled=False)
