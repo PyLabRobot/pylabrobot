@@ -112,7 +112,7 @@ class Carrier(Resource):
     """
 
     if not isinstance(resource, CarrierSite):
-      raise TypeError(f"Invalid location {location}")
+      raise TypeError(f"Invalid resource {resource}")
     self.sites.append(resource)
     super().assign_child_resource(resource, location=location)
 
@@ -213,7 +213,7 @@ def create_carrier_sites(
   return sites
 
 
-def create_homogenous_carrier_sites(
+def create_homogeneous_carrier_sites(
   locations: List[Coordinate],
   site_size_x: float,
   site_size_y: float) -> List[CarrierSite]:

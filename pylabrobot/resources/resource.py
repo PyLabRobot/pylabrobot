@@ -138,14 +138,14 @@ class Resource:
     """ Assign a child resource to this resource.
 
     Will use :meth:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
-    if parent is not `None`.  Note that the resource to be assigned may have child resources, in
+    if parent is not `None`. Note that the resource to be assigned may have child resources, in
     which case you will be responsible for handling any checking, if necessary.
 
     Args:
       resource: The resource to assign.
       location: The location of the resource, relative to this resource.
-      reassign: If `True`, will not raise an error if the resource is already assigned to this
-        resource.
+      reassign: If `False`, an error will be raised if the resource to be assigned is already
+        assigned to this resource. Defaults to `True`.
     """
 
     # Check for unsupported resource assignment operations

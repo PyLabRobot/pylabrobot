@@ -42,7 +42,7 @@ def make_from_file(fn, o):
   o.write(f'    size_x={size_x},\n')
   o.write(f'    size_y={size_y},\n')
   o.write(f'    size_z={size_z},\n')
-  o.write(f'    sites=create_homogenous_carrier_sites([\n')
+  o.write(f'    sites=create_homogeneous_carrier_sites([\n')
   for i, site in enumerate(sites):
     o.write(f'        {repr(site)}' + ('' if i == len(sites) - 1 else ',') + '\n')
   o.write(f'      ],\n')

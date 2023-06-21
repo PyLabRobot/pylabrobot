@@ -77,7 +77,7 @@ def main(pc, tc, p, tr):
         o.write(f'    off_y={off_y},\n')
         if all(x == site_size_x[0] for x in site_size_x) and \
            all(y == site_size_y[0] for y in site_size_y):
-          o.write(f'    sites=create_homogenous_carrier_sites(locations=[\n')
+          o.write(f'    sites=create_homogeneous_carrier_sites(locations=[\n')
           for l in locations:
             o.write(f'        {repr(l)},\n')
           o.write(f'      ],\n')
