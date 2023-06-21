@@ -6,7 +6,7 @@ import unittest
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
 
-from .carrier import Carrier, TipCarrier, create_homogenous_carrier_sites
+from .carrier import Carrier, TipCarrier, create_homogeneous_carrier_sites
 from .coordinate import Coordinate
 from .deck import Deck
 from .resource import Resource
@@ -42,7 +42,7 @@ class CarrierTests(unittest.TestCase):
     self.tip_car = TipCarrier(
       "tip_car",
       size_x=135.0, size_y=497.0, size_z=13.0,
-      sites=create_homogenous_carrier_sites([
+      sites=create_homogeneous_carrier_sites([
           Coordinate(10,   20, 30),
           Coordinate(10,   50, 30),
           Coordinate(10,   80, 30),
@@ -56,7 +56,7 @@ class CarrierTests(unittest.TestCase):
     carrier = Carrier(
       name="carrier",
       size_x=200, size_y=200, size_z=50,
-      sites=create_homogenous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
+      sites=create_homogeneous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
     )
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_resource_to_site(plate, spot=0)
@@ -71,7 +71,7 @@ class CarrierTests(unittest.TestCase):
     carrier = Carrier(
       name="carrier",
       size_x=200, size_y=200, size_z=50,
-      sites=create_homogenous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
+      sites=create_homogeneous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
     )
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_resource_to_site(plate, spot=0)
@@ -87,7 +87,7 @@ class CarrierTests(unittest.TestCase):
     carrier = Carrier(
       name="carrier",
       size_x=200, size_y=200, size_z=50,
-      sites=create_homogenous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
+      sites=create_homogeneous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
     )
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_resource_to_site(plate, spot=0)
@@ -105,7 +105,7 @@ class CarrierTests(unittest.TestCase):
     carrier = Carrier(
       name="carrier",
       size_x=200, size_y=200, size_z=50,
-      sites=create_homogenous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
+      sites=create_homogeneous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
     )
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     with self.assertRaises(IndexError):
@@ -115,7 +115,7 @@ class CarrierTests(unittest.TestCase):
     carrier = Carrier(
       name="carrier",
       size_x=200, size_y=200, size_z=50,
-      sites=create_homogenous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
+      sites=create_homogeneous_carrier_sites([Coordinate(5, 5, 5)], site_size_x=10, site_size_y=10)
     )
     carrier.location = Coordinate(10, 10, 10)
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
