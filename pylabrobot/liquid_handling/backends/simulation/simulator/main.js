@@ -127,6 +127,62 @@ function sleep(s) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getSnappingResourceAndLocationAndSnappingBox(x, y) {
+  // Return the snapping resource that the given point is within, or undefined if there is no such resource.
+  // A snapping resource is a spot within a plate/tip carrier or the OT deck.
+  // This can probably be simplified a lot.
+  // Returns {resource, location wrt resource}
+
+  // Check if the resource is in a CarrierSite.
+  for (let resource_name in resources) {
+    const resource = resources[resource_name];
+    if (resource.type === "CarrierSite") {
+      const { x: resourceX, y: resourceY } = resource.getAbsoluteLocation();
+      return {
+        resource: resource,
+        location: { x: 0, y: 0 },
+        snappingBox: {
+          x: resourceX,
+          y: resourceY,
+          width: resource.size_x,
+          height: resource.size_y,
+        },
+      };
+    }
+  }
+
+  // Check if the resource is in the OT Deck.
+  const deck = resources["deck"];
+  if (deck.constructor.name === "OTDeck") {
+    const siteWidth = 128.0;
+    const siteHeight = 86.0;
+
+    for (let i = 0; i < otDeckSiteLocations.length; i++) {
+      let siteLocation = otDeckSiteLocations[i];
+      if (
+        x > deck.location.x + siteLocation.x &&
+        x < deck.location.x + siteLocation.x + siteWidth &&
+        y > deck.location.y + siteLocation.y &&
+        y < deck.location.y + siteLocation.y + siteHeight
+      ) {
+        return {
+          resource: deck,
+          location: { x: siteLocation.x, y: siteLocation.y },
+          snappingBox: {
+            x: deck.location.x + siteLocation.x,
+            y: deck.location.y + siteLocation.y,
+            width: siteWidth,
+            height: siteHeight,
+          },
+        };
+      }
+    }
+  }
+
+  // Check if the resource is in an OTDeck.
+  return undefined;
+}
+
 class Resource {
   constructor(resource_data, parent = undefined) {
     const { name, location, size_x, size_y, children } = resource_data;
@@ -257,6 +313,21 @@ class HamiltonDeck extends Deck {
   }
 }
 
+const otDeckSiteLocations = [
+  { x: 0.0, y: 0.0 },
+  { x: 132.5, y: 0.0 },
+  { x: 265.0, y: 0.0 },
+  { x: 0.0, y: 90.5 },
+  { x: 132.5, y: 90.5 },
+  { x: 265.0, y: 90.5 },
+  { x: 0.0, y: 181.0 },
+  { x: 132.5, y: 181.0 },
+  { x: 265.0, y: 181.0 },
+  { x: 0.0, y: 271.5 },
+  { x: 132.5, y: 271.5 },
+  { x: 265.0, y: 271.5 },
+];
+
 class OTDeck extends Deck {
   constructor(resource_data) {
     resource_data.location = { x: 115.65, y: 68.03 };
@@ -267,23 +338,8 @@ class OTDeck extends Deck {
     super.draw(layer);
 
     // Draw the sites
-    const siteLocations = [
-      { x: 0.0, y: 0.0 },
-      { x: 132.5, y: 0.0 },
-      { x: 265.0, y: 0.0 },
-      { x: 0.0, y: 90.5 },
-      { x: 132.5, y: 90.5 },
-      { x: 265.0, y: 90.5 },
-      { x: 0.0, y: 181.0 },
-      { x: 132.5, y: 181.0 },
-      { x: 265.0, y: 181.0 },
-      { x: 0.0, y: 271.5 },
-      { x: 132.5, y: 271.5 },
-      { x: 265.0, y: 271.5 },
-    ];
-
-    for (let i = 0; i < siteLocations.length; i++) {
-      const siteLocation = siteLocations[i];
+    for (let i = 0; i < otDeckSiteLocations.length; i++) {
+      const siteLocation = otDeckSiteLocations[i];
       const width = 128.0;
       const height = 86.0;
       const site = new Konva.Rect({
@@ -336,10 +392,95 @@ class Plate extends Resource {
       fill: this.color,
       stroke: "black",
       strokeWidth: 1,
+      draggable: true,
     });
     layer.add(rect);
+    this.mainShape = rect;
 
     this.drawChildren(layer);
+
+    // Update the location of the children when the plate is dragged
+    rect.on("dragmove", () => {
+      const { x, y } = rect.position();
+
+      // Update the UI location of children.
+      this.updateChildrenLocation(x, y);
+
+      // If we have a snapping match, show an indicator.
+      const { x: rectX, y: rectY } = rect.position();
+      const snapResult = getSnappingResourceAndLocationAndSnappingBox(
+        rectX + this.size_x / 2,
+        rectY + this.size_y / 2
+      );
+
+      if (this._snappingBox !== undefined) {
+        this._snappingBox.destroy();
+      }
+
+      if (snapResult !== undefined) {
+        const {
+          snappingBox: { x, y, width, height },
+        } = snapResult;
+
+        this._snappingBox = new Konva.Rect({
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+          fill: "rgba(0, 0, 0, 0.1)",
+          stroke: "red",
+          strokeWidth: 1,
+          dash: [10, 5],
+        });
+        layer.add(this._snappingBox);
+      }
+    });
+
+    rect.on("dragend", () => {
+      let { x: rectX, y: rectY } = rect.position();
+
+      const snapResult = getSnappingResourceAndLocationAndSnappingBox(
+        rectX + this.size_x / 2,
+        rectY + this.size_y / 2
+      );
+
+      if (snapResult !== undefined) {
+        const { resource, location } = snapResult;
+        const { x, y } = location;
+        const { x: parentX, y: parentY } = resource.getAbsoluteLocation();
+        rectX = parentX + x;
+        rectY = parentY + y;
+
+        // Snap to position in UI.
+        rect.position({ x: rectX, y: rectY });
+        this.updateChildrenLocation(rectX, rectY);
+
+        // Update the deck layout with the new parent.
+        this.parent = resource;
+      }
+
+      if (this._snappingBox !== undefined) {
+        this._snappingBox.destroy();
+      }
+
+      // Update the deck layout with the new location.
+      this.location.x = rectX - this.parent.getAbsoluteLocation().x;
+      this.location.y = rectY - this.parent.getAbsoluteLocation().y;
+
+      // TODO: I think we can auto save here.
+      // we should have a saving indicator, show a warning if the user tries to leave the page
+    });
+  }
+
+  updateChildrenLocation(x, y) {
+    // Update the UI location of children.
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i];
+
+      // The 5 magic number is also here. That's not great.
+      child.mainShape.x(child.location.x + x + 5);
+      child.mainShape.y(child.location.y + y + 5);
+    }
   }
 }
 
@@ -348,8 +489,6 @@ class Well extends Resource {
     super(resource_data, parent);
     this.volume = 0;
     this.maxVolume = resource_data.max_volume;
-
-    this._circles = [];
   }
 
   static colorForVolume(volume, maxVolume) {
@@ -357,12 +496,12 @@ class Well extends Resource {
   }
 
   draw(layer) {
-    for (let i = 0; i < this._circles.length; i++) {
-      this._circles[i].destroy();
+    if (this.mainShape !== undefined) {
+      this.mainShape.destroy();
     }
 
     const { x, y } = this.getAbsoluteLocation();
-    const circ = new Konva.Circle({
+    this.mainShape = new Konva.Circle({
       x: x + 5,
       y: y + 5,
       radius: 4,
@@ -370,8 +509,7 @@ class Well extends Resource {
       stroke: "black",
       strokeWidth: 1,
     });
-    layer.add(circ);
-    this._circles.push(circ);
+    layer.add(this.mainShape);
 
     super.drawChildren(layer);
   }
