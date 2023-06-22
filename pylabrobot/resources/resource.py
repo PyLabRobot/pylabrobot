@@ -15,6 +15,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
+
 class Resource:
   """ Base class for deck resources.
 
@@ -364,17 +365,7 @@ class Resource:
 
     data_copy = data.copy() # copy data because we will be modifying it
 
-    # Recursively find a subclass with the correct name
-    def find_subclass(cls: Type[Self], name: str) -> Optional[Type[Self]]:
-      if cls.__name__ == name:
-        return cls
-      for subclass in cls.__subclasses__():
-        subclass_ = find_subclass(subclass, name)
-        if subclass_ is not None:
-          return subclass_
-      return None
-
-    subclass = find_subclass(Resource, data["type"])
+    subclass = get_resource_class_from_string(data["type"])
     if subclass is None:
       raise ValueError(f"Could not find subclass with name '{data['type']}'")
     assert issubclass(subclass, cls) # mypy does not know the type after the None check...
@@ -385,7 +376,7 @@ class Resource:
     resource = subclass(**data_copy)
 
     for child_data in children_data:
-      child_cls = find_subclass(Resource, child_data["type"])
+      child_cls = get_resource_class_from_string(child_data["type"])
       if child_cls is None:
         raise ValueError(f"Could not find subclass with name {child_data['type']}")
       child = child_cls.deserialize(child_data)
@@ -416,3 +407,27 @@ class Resource:
       content = json.load(f)
 
     return cls.deserialize(content)
+
+
+# Recursively find a subclass with the correct name
+def get_resource_class_from_string(
+  class_name: str,
+  cls: Type[Resource] = Resource
+) -> Optional[Type[Resource]]:
+  """ Recursively find a subclass with the correct name.
+
+  Args:
+    class_name: The name of the class to find.
+    cls: The class to search in.
+
+  Returns:
+    The class with the given name, or `None` if no such class exists.
+  """
+
+  if cls.__name__ == class_name:
+    return cls
+  for subclass in cls.__subclasses__():
+    subclass_ = get_resource_class_from_string(class_name=class_name, cls=subclass)
+    if subclass_ is not None:
+      return subclass_
+  return None
