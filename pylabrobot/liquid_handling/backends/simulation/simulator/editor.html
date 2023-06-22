@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PyLabRobot Simulator</title>
+    <title>PyLabRobot Graphical Labware Editor</title>
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.3/font/bootstrap-icons.css"
@@ -42,17 +42,53 @@
     <div class="row content" id="editor">
       <div class="col-md-2 border-end" id="sidebar">
         <div class="flex-shrink-0 p-3">
-          <a
-            href="/"
-            class="d-flex align-items-center pb-3 mb-3 link-body-emphasis text-decoration-none border-bottom"
-          >
+          <div class="pb-3 mb-3 link-body-emphasis border-bottom">
             <span class="fs-5 fw-semibold">Labware Library</span>
-          </a>
+            <p class="text-muted mb-0 ms-auto">Use cmd/ctrl + k to search</p>
+          </div>
           <ul class="list-unstyled ps-0" id="labware-list"></ul>
         </div>
       </div>
 
       <main class="col-10">
+        <div id="context-menu">
+          <button id="delete">
+            <i class="bi bi-trash"></i>
+            Delete
+          </button>
+        </div>
+
+        <style>
+          #context-menu {
+            display: none;
+            position: absolute;
+            width: 120px;
+            background-color: white;
+            box-shadow: 0 0 5px grey;
+            border-radius: 5px;
+            overflow: hidden;
+            z-index: 100000;
+          }
+
+          #context-menu button {
+            width: 100%;
+            background-color: white;
+            border: none;
+            margin: 0;
+            padding: 10px;
+            text-align: left;
+            box-sizing: border-box;
+          }
+
+          #context-menu button:not(:last-child) {
+            border-bottom: 1px solid lightgray;
+          }
+
+          #context-menu button:hover {
+            background-color: #f1f1f1;
+          }
+        </style>
+
         <div id="kanvas"></div>
       </main>
     </div>
