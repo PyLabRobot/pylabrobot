@@ -72,10 +72,11 @@ function getSnappingResourceAndLocationAndSnappingBox(x, y) {
 
 class Resource {
   constructor(resource_data, parent = undefined) {
-    const { name, location, size_x, size_y, children } = resource_data;
+    const { name, location, size_x, size_y, size_z, children } = resource_data;
     this.name = name;
     this.size_x = size_x;
     this.size_y = size_y;
+    this.size_z = size_z;
     this.location = location;
     this.parent = parent;
 
@@ -127,6 +128,25 @@ class Resource {
     } else {
       return this.location;
     }
+  }
+
+  serialize() {
+    const serializedChildren = [];
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i];
+      serializedChildren.push(child.serialize());
+    }
+
+    return {
+      name: this.name,
+      type: this.constructor.name,
+      location: this.location,
+      size_x: this.size_x,
+      size_y: this.size_y,
+      size_z: this.size_z,
+      children: serializedChildren,
+      parent_name: this.parent === undefined ? null : this.parent.name,
+    };
   }
 }
 
@@ -255,6 +275,15 @@ class OTDeck extends Deck {
       siteLabel.scaleY(-1); // Flip the text vertically
       layer.add(siteLabel);
     }
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        no_trash: true,
+      },
+    };
   }
 }
 

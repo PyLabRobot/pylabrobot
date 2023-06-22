@@ -1,9 +1,16 @@
 import inspect
+import json
+import os
 
 from flask import Flask, jsonify, render_template, request
+
 import pylabrobot.resources as resources_module
+from pylabrobot.resources import Resource
 
 app = Flask(__name__, template_folder=".", static_folder=".")
+
+
+FILENAME = "data.json"
 
 
 @app.route('/')
@@ -96,6 +103,28 @@ def resource(resource_id):
 @app.route('/<path:path>')
 def static_proxy(path):
   return app.send_static_file(path)
+
+
+@app.route("/save", methods=["POST"])
+def save():
+  data = request.get_json()
+
+  try:
+    deck = Resource.deserialize(data)
+  except Exception as e:
+    print(str(e))
+    import traceback
+    traceback.print_exc()
+    return jsonify({"error": str(e), "success": False}), 400
+
+  with open(FILENAME, "w") as f:
+    serialized = deck.serialize()
+    serialized = json.dumps(serialized, indent=2)
+    f.write(serialized)
+    path = os.path.abspath(FILENAME)
+    print(path)
+
+  return jsonify({"success": True})
 
 
 if __name__ == "__main__":

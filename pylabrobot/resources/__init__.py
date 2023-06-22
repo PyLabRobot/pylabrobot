@@ -21,6 +21,7 @@ from .volume_tracker import does_volume_tracking, no_volume_tracking, set_volume
 from .corning_costar import *
 from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
 from .ml_star import *
+from .opentrons import *
 from .resource_stack import ResourceStack
 
 from .tecan import *
