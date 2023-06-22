@@ -91,6 +91,26 @@ function getSnappingResourceAndLocationAndSnappingBox(x, y) {
   return undefined;
 }
 
+function getSnappingGrid(x, y) {
+  // Get snapping lines. Returns {x, y}. Either x or y may be undefined when snapping, or both when
+  // no snapping occurs.
+
+  const SNAP_MARGIN = 5;
+
+  // Check if the resource is on a Hamilton deck rail. (100 + 22.5 * i)
+  const deck = resources["deck"];
+  if (deck.constructor.name === "HamiltonDeck") {
+    for (let rail = 0; rail < deck.num_rails; rail++) {
+      const railX = 100 + 22.5 * rail;
+      if (Math.abs(x - railX) < SNAP_MARGIN) {
+        return { x: railX, y: undefined };
+      }
+    }
+  }
+
+  return { x: undefined, y: undefined };
+}
+
 class Resource {
   constructor(resource_data, parent = undefined) {
     const { name, location, size_x, size_y, size_z, children } = resource_data;
@@ -358,6 +378,8 @@ class OTDeck extends Deck {
   }
 }
 
+let snapLine = undefined;
+
 class Plate extends Resource {
   constructor(resource_data, parent = undefined) {
     super(resource_data, parent);
@@ -393,7 +415,29 @@ class Plate extends Resource {
 
     // Update the location of the children when the plate is dragged
     rect.on("dragmove", () => {
-      const { x, y } = rect.position();
+      let { x, y } = rect.position();
+
+      // Snap to grid
+      let { x: snapX, y: snapY } = getSnappingGrid(x, y);
+      if (snapLine !== undefined) {
+        snapLine.destroy();
+      }
+      if (snapX !== undefined) {
+        x = snapX;
+
+        // Draw a vertical line
+        snapLine = new Konva.Line({
+          points: [x, 0, x, canvasHeight],
+          stroke: "red",
+          strokeWidth: 1,
+          dash: [10, 5],
+        });
+        layer.add(snapLine);
+      }
+      if (snapY !== undefined) {
+        y = snapY;
+      }
+      rect.position({ x: x, y: y }); // snap to grid
 
       // Update the UI location of children.
       this.updateChildrenLocation(x, y);
@@ -463,6 +507,10 @@ class Plate extends Resource {
 
       if (this._snappingBox !== undefined) {
         this._snappingBox.destroy();
+      }
+
+      if (snapLine !== undefined) {
+        snapLine.destroy();
       }
 
       // Update the deck layout with the new location.
