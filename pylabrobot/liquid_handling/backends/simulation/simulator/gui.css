@@ -3,6 +3,8 @@
   overflow-y: scroll;
 }
 
+/* search */
+
 #search-bar-background {
   width: 100vw;
   height: 100vh;
@@ -71,4 +73,30 @@
   flex: 0 1 auto;
   font-size: 12px;
   color: gray;
+}
+
+/* not found */
+
+#file-not-found {
+  margin-top: 100px;
+  text-align: center;
+}
+
+#file-not-found i.triangle {
+  font-size: 100px;
+  color: #dc3545;
+}
+
+#file-not-found h1 {
+  font-size: 50px;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+#file-not-found p {
+  font-size: 20px;
+}
+
+#file-not-found a {
+  margin-top: 20px;
 }

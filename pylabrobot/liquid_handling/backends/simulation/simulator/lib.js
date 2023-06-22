@@ -222,6 +222,12 @@ class Deck extends Resource {
 }
 
 class HamiltonDeck extends Deck {
+  constructor(resource_data) {
+    super(resource_data, undefined);
+    const { num_rails } = resource_data;
+    this.num_rails = num_rails;
+  }
+
   draw(layer) {
     // Draw a transparent rectangle with an outline
     const { x, y } = this.getAbsoluteLocation();
@@ -272,6 +278,16 @@ class HamiltonDeck extends Deck {
         layer.add(railLabel);
       }
     }
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        num_rails: this.num_rails,
+        no_trash: true,
+      },
+    };
   }
 }
 
