@@ -29,6 +29,35 @@ function addResource(resourceIdentifier) {
     });
 }
 
+function save() {
+  const data = resources["deck"].serialize();
+  fetch("/save", {
+    method: "POST",
+    body: JSON.stringify(data),
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+    .then((response) => response.json())
+    .then((response) => {
+      if (response.success) {
+        alert("Saved successfully!");
+      } else {
+        alert(`Error saving: ${response.error}`);
+      }
+    })
+    .catch((error) => {
+      alert(`Error saving: ${error}`);
+    });
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "s" && e.metaKey) {
+    e.preventDefault();
+    save();
+  }
+});
+
 // Search bar
 
 function openSearchBar() {
@@ -38,6 +67,7 @@ function openSearchBar() {
 
 function closeSearchBar() {
   document.getElementById("search-bar-background").style.display = "none";
+  document.querySelector("#search-bar input").value = "";
 }
 
 document.addEventListener("keydown", (e) => {

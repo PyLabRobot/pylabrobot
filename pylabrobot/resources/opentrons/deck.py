@@ -11,7 +11,7 @@ class OTDeck(Deck):
     resource_assigned_callback: Optional[Callable] = None,
     resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 0, 0),
-    no_trash: bool = False):
+    no_trash: bool = False, name: str = "deck"):
     # size_z is probably wrong
 
     super().__init__(size_x=size_x, size_y=size_y, size_z=size_z,
