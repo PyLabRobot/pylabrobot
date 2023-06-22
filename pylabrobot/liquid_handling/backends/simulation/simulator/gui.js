@@ -253,8 +253,24 @@ function recursivelyDrawAllResources(resource) {
   }
 }
 
+function openContextMenu() {
+  // Open the context menu at the mouse position.
+
+  const menu = document.getElementById("context-menu");
+  var containerRect = stage.container().getBoundingClientRect();
+
+  menu.style.display = "block";
+  menu.style.left = `${stage.getPointerPosition().x + containerRect.left}px`;
+  menu.style.top = `${stage.getPointerPosition().y + containerRect.top}px`;
+  menu.style.zIndex = 1000;
+}
+
+function closeContextMenu() {
+  document.getElementById("context-menu").style.display = "none";
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  this.fetch(`/data/${filename}`)
+  fetch(`/data/${filename}`)
     .then((response) => response.json())
     .then((response) => {
       if (response.not_found) {
@@ -280,4 +296,10 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log(error);
       alert(error);
     });
+
+  document.getElementById("delete").addEventListener("click", () => {
+    selectedResource.destroy();
+    save();
+    closeContextMenu();
+  });
 });

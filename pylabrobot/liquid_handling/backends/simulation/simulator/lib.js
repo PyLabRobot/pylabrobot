@@ -3,6 +3,7 @@ var resourceLayer = new Konva.Layer();
 var tooltipLayer = new Konva.Layer();
 var tooltip;
 var stage;
+var selectedResource;
 
 var canvasWidth, canvasHeight;
 
@@ -461,6 +462,13 @@ class Plate extends Resource {
     rect.on("dragstart", () => {
       resourceLayer.add(trash);
       // resourceLayer.draw();
+    });
+
+    // on right click, show options
+    rect.on("contextmenu", (e) => {
+      e.evt.preventDefault();
+      selectedResource = this;
+      openContextMenu();
     });
 
     // Update the location of the children when the plate is dragged
