@@ -136,9 +136,10 @@ class Resource {
   }
 
   draw(layer) {
-    const { x, y } = this.getAbsoluteLocation();
+    layer.add(this.mainShape);
 
-    const rect = new Konva.Rect({
+    const { x, y } = this.getAbsoluteLocation();
+    this.mainShape = new Konva.Rect({
       x: x,
       y: y,
       width: this.size_x,
@@ -147,9 +148,56 @@ class Resource {
       stroke: "black",
       strokeWidth: 1,
     });
-    layer.add(rect);
 
     this.drawChildren(layer);
+    this.addTooltip();
+  }
+
+  addTooltip() {
+    this.mainShape.on("mouseover", () => {
+      const { x, y } = this.mainShape.position();
+      if (tooltip !== undefined) {
+        tooltip.destroy();
+      }
+      tooltip = new Konva.Label({
+        x: x + this.size_x / 2,
+        y: y + this.size_y / 2,
+        opacity: 0.75,
+      });
+      tooltip.add(
+        new Konva.Tag({
+          fill: "black",
+          pointerDirection: "down",
+          pointerWidth: 10,
+          pointerHeight: 10,
+          lineJoin: "round",
+          shadowColor: "black",
+          shadowBlur: 10,
+          shadowOffset: 10,
+          shadowOpacity: 0.5,
+        })
+      );
+      tooltip.add(
+        new Konva.Text({
+          text: this.tooltipLabel(),
+          fontFamily: "Arial",
+          fontSize: 18,
+          padding: 5,
+          fill: "white",
+        })
+      );
+      tooltipLayer.add(tooltip);
+      tooltipLayer.draw();
+      tooltip.scaleY(-1);
+    });
+
+    this.mainShape.on("mouseout", () => {
+      tooltip.destroy();
+    });
+  }
+
+  tooltipLabel() {
+    return `${this.name} (${this.constructor.name})`;
   }
 
   drawChildren(layer) {
@@ -406,6 +454,8 @@ class Plate extends Resource {
     layer.add(rect);
     this.mainShape = rect;
 
+    this.addTooltip();
+
     this.drawChildren(layer);
 
     rect.on("dragstart", () => {
@@ -578,6 +628,7 @@ class Well extends Resource {
     layer.add(this.mainShape);
 
     super.drawChildren(layer);
+    this.addTooltip();
   }
 
   setVolume(volume, layer) {
@@ -631,6 +682,7 @@ class TipRack extends Resource {
     layer.add(rect);
 
     this.drawChildren(layer);
+    this.addTooltip();
   }
 }
 
@@ -663,6 +715,7 @@ class TipSpot extends Resource {
     this._circles.push(circ);
 
     super.drawChildren(layer);
+    this.addTooltip();
   }
 
   setTip(has_tip, layer) {
@@ -770,8 +823,6 @@ window.addEventListener("load", function () {
   stage.add(layer);
   stage.add(resourceLayer);
   stage.add(tooltipLayer);
-  tooltipLayer.scaleY(-1);
-  tooltipLayer.offsetY(canvasHeight);
 
   // add a trash icon for deleting resources
   var imageObj = new Image();
