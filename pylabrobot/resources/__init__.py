@@ -11,7 +11,7 @@ from .coordinate import Coordinate
 from .deck import Deck
 from .itemized_resource import ItemizedResource, create_equally_spaced
 from .plate import Plate, Lid, Well
-from .resource import Resource
+from .resource import Resource, get_resource_class_from_string
 from .tip_rack import TipRack, TipSpot
 from .trash import Trash
 
