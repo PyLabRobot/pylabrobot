@@ -436,7 +436,7 @@ async function handleEvent(event, data) {
 
   switch (event) {
     case "resource_assigned":
-      drawResource(data);
+      drawResource(data.resource);
       if (data.resource.name === "deck") {
         // infer the system from the deck.
         if (data.resource.type === "OTDeck") {

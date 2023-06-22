@@ -364,9 +364,8 @@ class Plate extends Resource {
     for (let i = 0; i < this.children.length; i++) {
       const child = this.children[i];
 
-      // The 5 magic number is also here. That's not great.
-      child.mainShape.x(child.location.x + x + 5);
-      child.mainShape.y(child.location.y + y + 5);
+      child.mainShape.x(child.location.x + x + child.size_x / 2);
+      child.mainShape.y(child.location.y + y + child.size_y / 2);
     }
   }
 }
@@ -389,9 +388,9 @@ class Well extends Resource {
 
     const { x, y } = this.getAbsoluteLocation();
     this.mainShape = new Konva.Circle({
-      x: x + 5,
-      y: y + 5,
-      radius: 4,
+      x: x + this.size_x / 2,
+      y: y + this.size_y / 2,
+      radius: this.size_x / 2,
       fill: Well.colorForVolume(this.volume, this.maxVolume),
       stroke: "black",
       strokeWidth: 1,
@@ -473,9 +472,9 @@ class TipSpot extends Resource {
     const { x, y } = this.getAbsoluteLocation();
     const magicTipOffset = system === SYSTEM_OPENTRONS ? 1 : 5; // what is this?
     const circ = new Konva.Circle({
-      x: x + magicTipOffset,
-      y: y + magicTipOffset,
-      radius: 4,
+      x: x + this.size_x / 2,
+      y: y + this.size_y / 2,
+      radius: this.size_x,
       fill: this.has_tip ? this.color : "white",
       stroke: "black",
       strokeWidth: 1,
@@ -540,8 +539,7 @@ function classForResourceType(type) {
   }
 }
 
-function drawResource(data) {
-  const resource = data.resource;
+function drawResource(resource) {
   const resourceClass = classForResourceType(resource.type);
 
   const parentName = resource.parent_name;
@@ -594,16 +592,6 @@ window.addEventListener("load", function () {
   stage.add(tooltipLayer);
   tooltipLayer.scaleY(-1);
   tooltipLayer.offsetY(canvasHeight);
-
-  // this.fetch("/data")
-  //   .then((response) => response.json())
-  //   .then((data) => {
-  //     drawResource(data);
-
-  //     for (let child in data.resource.children) {
-  //       drawResource({ resource: data.resource.children[child] });
-  //     }
-  //   });
 });
 
 window.addEventListener("resize", function () {
