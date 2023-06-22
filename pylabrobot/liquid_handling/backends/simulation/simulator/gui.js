@@ -29,8 +29,13 @@ function addResource(resourceIdentifier) {
     });
 }
 
+var saving = false;
 function save() {
+  const saveLabel = document.getElementById("save-label");
+  saveLabel.style.display = "block";
+
   const data = resources["deck"].serialize();
+  saving = true;
   fetch(`/editor/${filename}/save`, {
     method: "POST",
     body: JSON.stringify(data),
@@ -40,14 +45,15 @@ function save() {
   })
     .then((response) => response.json())
     .then((response) => {
-      if (response.success) {
-        alert("Saved successfully!");
-      } else {
+      if (!response.success) {
         alert(`Error saving: ${response.error}`);
       }
+      saving = false;
+      saveLabel.style.display = "none";
     })
     .catch((error) => {
       alert(`Error saving: ${error}`);
+      saving = false;
     });
 }
 
@@ -57,6 +63,12 @@ window.addEventListener("keydown", (e) => {
     save();
   }
 });
+
+window.onbeforeunload = function () {
+  if (saving) {
+    return "You have unsaved changes. Are you sure you want to leave?";
+  }
+};
 
 // Search bar
 
