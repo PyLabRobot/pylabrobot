@@ -14,11 +14,32 @@ const numRails = 30;
 
 var resources = {}; // name -> Resource object
 
+let trash;
+
 function getSnappingResourceAndLocationAndSnappingBox(x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
   // A snapping resource is a spot within a plate/tip carrier or the OT deck.
   // This can probably be simplified a lot.
   // Returns {resource, location wrt resource}
+
+  // Check if the resource is in the trash.
+  if (
+    x > trash.x() &&
+    x < trash.x() + trash.width() &&
+    y > trash.y() &&
+    y < trash.y() + trash.height()
+  ) {
+    return {
+      resource: trash,
+      location: { x: 0, y: 0 },
+      snappingBox: {
+        x: trash.x(),
+        y: trash.y(),
+        width: trash.width(),
+        height: trash.height(),
+      },
+    };
+  }
 
   // Check if the resource is in a CarrierSite.
   for (let resource_name in resources) {
@@ -147,6 +168,40 @@ class Resource {
       children: serializedChildren,
       parent_name: this.parent === undefined ? null : this.parent.name,
     };
+  }
+
+  assignChild(child) {
+    child.parent = this;
+    this.children.push(child);
+  }
+
+  unassignChild(child) {
+    child.parent = undefined;
+    const index = this.children.indexOf(child);
+    if (index > -1) {
+      this.children.splice(index, 1);
+    }
+  }
+
+  destroy() {
+    // Destroy children
+    for (let i = this.children.length - 1; i >= 0; i--) {
+      const child = this.children[i];
+      child.destroy();
+    }
+
+    // Remove from global lookup
+    delete resources[this.name];
+
+    // Remove from UI
+    if (this.mainShape !== undefined) {
+      this.mainShape.destroy();
+    }
+
+    // Remove from parent
+    if (this.parent !== undefined) {
+      this.parent.unassignChild(this);
+    }
   }
 }
 
@@ -315,6 +370,11 @@ class Plate extends Resource {
 
     this.drawChildren(layer);
 
+    rect.on("dragstart", () => {
+      resourceLayer.add(trash);
+      // resourceLayer.draw();
+    });
+
     // Update the location of the children when the plate is dragged
     rect.on("dragmove", () => {
       const { x, y } = rect.position();
@@ -361,18 +421,28 @@ class Plate extends Resource {
       );
 
       if (snapResult !== undefined) {
-        const { resource, location } = snapResult;
-        const { x, y } = location;
-        const { x: parentX, y: parentY } = resource.getAbsoluteLocation();
-        rectX = parentX + x;
-        rectY = parentY + y;
+        const { resource: parent, location } = snapResult;
 
-        // Snap to position in UI.
-        rect.position({ x: rectX, y: rectY });
-        this.updateChildrenLocation(rectX, rectY);
+        if (parent === trash) {
+          // special case for trash
+          // Delete the plate.
+          this.destroy();
+        } else {
+          const { x, y } = location;
+          const { x: parentX, y: parentY } = parent.getAbsoluteLocation();
+          rectX = parentX + x;
+          rectY = parentY + y;
 
-        // Update the deck layout with the new parent.
-        this.parent = resource;
+          // Snap to position in UI.
+          rect.position({ x: rectX, y: rectY });
+          this.updateChildrenLocation(rectX, rectY);
+
+          // Update the deck layout with the new parent.
+          if (this.parent !== undefined) {
+            this.parent.unassignChild(this);
+          }
+          parent.assignChild(this);
+        }
       }
 
       if (this._snappingBox !== undefined) {
@@ -380,8 +450,16 @@ class Plate extends Resource {
       }
 
       // Update the deck layout with the new location.
-      this.location.x = rectX - this.parent.getAbsoluteLocation().x;
-      this.location.y = rectY - this.parent.getAbsoluteLocation().y;
+      if (this.parent === undefined) {
+        // not in the tree, so no need to update
+        this.location = undefined;
+      } else {
+        this.location.x = rectX - this.parent.getAbsoluteLocation().x;
+        this.location.y = rectY - this.parent.getAbsoluteLocation().y;
+      }
+
+      // hide the trash icon
+      trash.remove();
 
       // TODO: I think we can auto save here.
       // we should have a saving indicator, show a warning if the user tries to leave the page
@@ -396,6 +474,16 @@ class Plate extends Resource {
       child.mainShape.x(child.location.x + x + child.size_x / 2);
       child.mainShape.y(child.location.y + y + child.size_y / 2);
     }
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        num_items_x: this.num_items_x,
+        num_items_y: this.num_items_y,
+      },
+    };
   }
 }
 
@@ -621,6 +709,20 @@ window.addEventListener("load", function () {
   stage.add(tooltipLayer);
   tooltipLayer.scaleY(-1);
   tooltipLayer.offsetY(canvasHeight);
+
+  // add a trash icon for deleting resources
+  var imageObj = new Image();
+  trash = new Konva.Image({
+    x: 700,
+    y: 100,
+    image: imageObj,
+    width: 50,
+    height: 50,
+  });
+  imageObj.src = "/trash3.svg";
+  // Flip the image vertically in place
+  trash.scaleY(-1);
+  trash.offsetY(50);
 });
 
 window.addEventListener("resize", function () {
