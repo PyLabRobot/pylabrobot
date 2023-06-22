@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PyLabRobot Simulator</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.3/font/bootstrap-icons.css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM"
+      crossorigin="anonymous"
+    />
+
+    <script src="https://unpkg.com/konva@8/konva.min.js"></script>
+
+    <link rel="stylesheet" href="/sidebars.css" />
+
+    <link href="./main.css" rel="stylesheet" />
+    <link href="./gui.css" rel="stylesheet" />
+  </head>
+  <body>
+    <nav class="navbar bg-light">
+      <div class="container-fluid">
+        PyLabRobot Graphical Labware Editor
+        <span class="fs-6 text-muted">(v0.1)</span>
+      </div>
+    </nav>
+
+    <div class="row content">
+      <div class="col-md-2 border-end" id="sidebar">
+        <div class="flex-shrink-0 p-3">
+          <a
+            href="/"
+            class="d-flex align-items-center pb-3 mb-3 link-body-emphasis text-decoration-none border-bottom"
+          >
+            <span class="fs-5 fw-semibold">Labware Library</span>
+          </a>
+          <ul class="list-unstyled ps-0" id="labware-list"></ul>
+        </div>
+      </div>
+
+      <main class="col-10">
+        <div id="kanvas"></div>
+      </main>
+    </div>
+
+    <div id="search-bar-background" style="display: none">
+      <div id="search-bar">
+        <input type="text" placeholder="Search Labware Library" />
+
+        <div class="results"></div>
+
+        <div class="footer">Press ESC to close</div>
+      </div>
+    </div>
+
+    <script></script>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz"
+      crossorigin="anonymous"
+    ></script>
+
+    <script src="./lib.js"></script>
+    <script src="./gui.js"></script>
+  </body>
+</html>
