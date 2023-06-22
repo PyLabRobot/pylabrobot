@@ -1,28 +1,34 @@
 import inspect
 import json
 import os
+import traceback
 
 from flask import Flask, jsonify, render_template, request
 
 import pylabrobot.resources as resources_module
-from pylabrobot.resources import Resource
+from pylabrobot.resources import Resource, STARDeck, STARLetDeck, OTDeck
 
 app = Flask(__name__, template_folder=".", static_folder=".")
 
 
-FILENAME = "data.json"
-
-
-@app.route('/')
+@app.route("/")
 def hello_world():
-  return render_template("gui.html")
+  return render_template("welcome.html")
 
 
-@app.route('/data')
-def data():
-  # with open("data.json", "r") as f:
-  #   return f.read()
-  return jsonify({'name': 'deck', 'type': 'OTDeck', 'size_x': 624.3, 'size_y': 565.2, 'size_z': 900, 'location': {'x': 0, 'y': 0, 'z': 0}, 'category': 'deck', 'children': [{'name': 'trash_container', 'type': 'Resource', 'size_x': 172.86, 'size_y': 165.86, 'size_z': 82, 'location': {'x': 265.0, 'y': 271.5, 'z': 0.0}, 'category': None, 'model': None, 'children': [{'name': 'trash', 'type': 'Trash', 'size_x': 172.86, 'size_y': 165.86, 'size_z': 82, 'location': {'x': 82.84, 'y': 53.56, 'z': 5}, 'category': None, 'model': None, 'children': [], 'parent_name': 'trash_container'}], 'parent_name': 'deck'}], 'parent_name': None})
+@app.route("/data/<string:filename>")
+def get_file_data(filename):
+  if not os.path.exists(filename):
+    return jsonify({"error": f"File '{filename}' not found.", "not_found": True})
+
+  with open(filename, "r", encoding="utf-8") as f:
+    contents = f.read()
+    data = json.loads(contents)
+    return jsonify(data=data)
+
+@app.route("/editor/<string:filename>")
+def editor(filename):
+  return render_template("editor.html", filename=filename)
 
 
 @app.route("/plates")
@@ -99,32 +105,68 @@ def resource(resource_id):
   return jsonify(resource.serialize())
 
 
-# catch all for static
-@app.route('/<path:path>')
-def static_proxy(path):
-  return app.send_static_file(path)
-
-
-@app.route("/save", methods=["POST"])
-def save():
+@app.route("/editor/<string:filename>/save", methods=["POST"])
+def save(filename):
   data = request.get_json()
 
   try:
     deck = Resource.deserialize(data)
   except Exception as e:
-    print(str(e))
-    import traceback
     traceback.print_exc()
     return jsonify({"error": str(e), "success": False}), 400
 
-  with open(FILENAME, "w") as f:
+  with open(filename, "w", encoding="utf-8") as f:
     serialized = deck.serialize()
-    serialized = json.dumps(serialized, indent=2)
-    f.write(serialized)
-    path = os.path.abspath(FILENAME)
-    print(path)
+    serialized_data = json.dumps(serialized, indent=2)
+    f.write(serialized_data)
 
   return jsonify({"success": True})
+
+
+@app.route("/create", methods=["POST"])
+def create():
+  data = request.get_json()
+
+  if not "type" in data:
+    return jsonify({"error": "No type specified.", "success": False}), 400
+
+  # Get a deck from the submitted data, either from a file or create a new deck.
+  if data["type"] == "from_file":
+    deck_data = data["deck"]
+    try:
+      deck = Resource.deserialize(deck_data)
+    except Exception as e: # pylint: disable=broad-exception-caught
+      traceback.print_exc()
+      return jsonify({"error": str(e), "success": False}), 400
+  elif data["type"] == "new_deck":
+    deck_type = data["deck_type"]
+    if deck_type == "hamilton-star":
+      deck = STARDeck()
+    elif deck_type == "hamilton-starlet":
+      deck = STARLetDeck()
+    elif deck_type == "opentrons-ot2":
+      deck = OTDeck()
+    else:
+      return jsonify({"error": f"Unknown deck type '{deck_type}'.", "success": False}), 400
+  else:
+    return jsonify({"error": f"Unknown type '{data['type']}'.", "success": False}), 400
+
+  # Save the deck to a file.
+  filename = data["filename"]
+  if filename is None:
+    return jsonify({"error": "No filename specified.", "success": False}), 400
+  with open(filename, "w", encoding="utf-8") as f:
+    serialized = deck.serialize()
+    serialized_data = json.dumps(serialized, indent=2)
+    f.write(serialized_data)
+
+  return jsonify({"success": True})
+
+
+# catch all for static
+@app.route("/<path:path>")
+def static_proxy(path):
+  return app.send_static_file(path)
 
 
 if __name__ == "__main__":

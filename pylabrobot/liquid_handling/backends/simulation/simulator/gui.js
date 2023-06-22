@@ -31,7 +31,7 @@ function addResource(resourceIdentifier) {
 
 function save() {
   const data = resources["deck"].serialize();
-  fetch("/save", {
+  fetch(`/editor/${filename}/save`, {
     method: "POST",
     body: JSON.stringify(data),
     headers: {
@@ -223,14 +223,49 @@ function loadResourceNames() {
 
 window.addEventListener("load", loadResourceNames);
 
-document.addEventListener("DOMContentLoaded", () => {
-  this.fetch("/data")
-    .then((response) => response.json())
-    .then((data) => {
-      drawResource(data);
+function showFileNotFoundError() {
+  let error = document.getElementById("file-not-found");
+  error.style.display = "block";
+}
 
-      for (let child in data.children) {
-        drawResource(data.children[child]);
+function hideEditor() {
+  let editor = document.getElementById("editor");
+  editor.style.display = "none";
+}
+
+function recursivelyDrawAllResources(resource) {
+  drawResource(resource);
+  console.log("resource", resource);
+  for (let child of resource.children) {
+    recursivelyDrawAllResources(child);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  this.fetch(`/data/${filename}`)
+    .then((response) => response.json())
+    .then((response) => {
+      if (response.not_found) {
+        hideEditor();
+        showFileNotFoundError();
+        return;
       }
+
+      if (response.error) {
+        alert(response.error);
+        return;
+      }
+
+      if (response.data === undefined) {
+        alert("No data found");
+        return;
+      }
+
+      const data = response.data;
+      recursivelyDrawAllResources(data);
+    })
+    .catch((error) => {
+      console.log(error);
+      alert(error);
     });
 });
