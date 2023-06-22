@@ -525,8 +525,7 @@ class Plate extends Resource {
       // hide the trash icon
       trash.remove();
 
-      // TODO: I think we can auto save here.
-      // we should have a saving indicator, show a warning if the user tries to leave the page
+      save();
     });
   }
 
