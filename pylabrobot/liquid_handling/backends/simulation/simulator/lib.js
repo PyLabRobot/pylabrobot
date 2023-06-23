@@ -137,8 +137,66 @@ class Resource {
   }
 
   draw(layer) {
-    layer.add(this.mainShape);
+    // On draw, destroy the old shape.
+    if (this.mainShape !== undefined) {
+      this.mainShape.destroy();
+    }
 
+    this.drawMainShape(layer);
+
+    this.drawChildren(layer);
+
+    // If a shape is drawn, add event handlers and other things.
+    if (this.mainShape !== undefined) {
+      // Add a reference to this to the shape (so that it may be accessed in event handlers)
+      this.mainShape.resource = this;
+
+      // Add a tooltip
+      this.mainShape.on("mouseover", () => {
+        const { x, y } = this.mainShape.position();
+        if (tooltip !== undefined) {
+          tooltip.destroy();
+        }
+        tooltip = new Konva.Label({
+          x: x + this.size_x / 2,
+          y: y + this.size_y / 2,
+          opacity: 0.75,
+        });
+        tooltip.add(
+          new Konva.Tag({
+            fill: "black",
+            pointerDirection: "down",
+            pointerWidth: 10,
+            pointerHeight: 10,
+            lineJoin: "round",
+            shadowColor: "black",
+            shadowBlur: 10,
+            shadowOffset: 10,
+            shadowOpacity: 0.5,
+          })
+        );
+        tooltip.add(
+          new Konva.Text({
+            text: this.tooltipLabel(),
+            fontFamily: "Arial",
+            fontSize: 18,
+            padding: 5,
+            fill: "white",
+          })
+        );
+        tooltipLayer.add(tooltip);
+        tooltipLayer.draw();
+        tooltip.scaleY(-1);
+      });
+
+      this.mainShape.on("mouseout", () => {
+        tooltip.destroy();
+      });
+    }
+  }
+
+  drawMainShape(layer) {
+    // Draw the main shape of the resource.
     const { x, y } = this.getAbsoluteLocation();
     this.mainShape = new Konva.Rect({
       x: x,
@@ -148,53 +206,20 @@ class Resource {
       fill: this.color,
       stroke: "black",
       strokeWidth: 1,
+      draggable: true,
     });
-
-    this.drawChildren(layer);
-    this.addTooltip();
+    layer.add(this.mainShape);
   }
 
-  addTooltip() {
-    this.mainShape.on("mouseover", () => {
-      const { x, y } = this.mainShape.position();
-      if (tooltip !== undefined) {
-        tooltip.destroy();
-      }
-      tooltip = new Konva.Label({
-        x: x + this.size_x / 2,
-        y: y + this.size_y / 2,
-        opacity: 0.75,
-      });
-      tooltip.add(
-        new Konva.Tag({
-          fill: "black",
-          pointerDirection: "down",
-          pointerWidth: 10,
-          pointerHeight: 10,
-          lineJoin: "round",
-          shadowColor: "black",
-          shadowBlur: 10,
-          shadowOffset: 10,
-          shadowOpacity: 0.5,
-        })
-      );
-      tooltip.add(
-        new Konva.Text({
-          text: this.tooltipLabel(),
-          fontFamily: "Arial",
-          fontSize: 18,
-          padding: 5,
-          fill: "white",
-        })
-      );
-      tooltipLayer.add(tooltip);
-      tooltipLayer.draw();
-      tooltip.scaleY(-1);
-    });
+  updateChildrenLocation(x, y) {
+    // Update the UI location of children.
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i];
 
-    this.mainShape.on("mouseout", () => {
-      tooltip.destroy();
-    });
+      // why was child.size_x / 2 needed?
+      child.mainShape.x(child.location.x + x); // + child.size_x / 2);
+      child.mainShape.y(child.location.y + y); // + child.size_y / 2);
+    }
   }
 
   tooltipLabel() {
@@ -275,9 +300,9 @@ class Resource {
 }
 
 class Deck extends Resource {
-  draw(layer) {
+  mainResource(layer) {
     // Draw a transparent rectangle with an outline
-    const rect = new Konva.Rect({
+    this.mainResource = new Konva.Rect({
       x: 0,
       y: 0,
       width: this.size_x,
@@ -286,7 +311,7 @@ class Deck extends Resource {
       stroke: "black",
       strokeWidth: 1,
     });
-    layer.add(rect);
+    layer.add(this.mainResource);
   }
 }
 
@@ -297,13 +322,13 @@ class HamiltonDeck extends Deck {
     this.num_rails = num_rails;
   }
 
-  draw(layer) {
+  drawMainShape(layer) {
     // Draw a transparent rectangle with an outline
     const { x, y } = this.getAbsoluteLocation();
 
     this.railHeight = 497;
 
-    const rect = new Konva.Rect({
+    this.mainShape = new Konva.Rect({
       x: x,
       y: y + 63,
       width: this.size_x,
@@ -312,10 +337,9 @@ class HamiltonDeck extends Deck {
       stroke: "black",
       strokeWidth: 1,
     });
-    layer.add(rect);
+    layer.add(this.mainShape);
 
     this.drawRails(layer);
-    // this.drawChildren(layer);
   }
 
   drawRails(layer) {
@@ -381,9 +405,7 @@ class OTDeck extends Deck {
     super(resource_data, undefined);
   }
 
-  draw(layer) {
-    super.draw(layer);
-
+  drawMainShape(layer) {
     // Draw the sites
     for (let i = 0; i < otDeckSiteLocations.length; i++) {
       const siteLocation = otDeckSiteLocations[i];
@@ -428,6 +450,7 @@ class OTDeck extends Deck {
 }
 
 let snapLine = undefined;
+let snappingBox = undefined;
 
 class Plate extends Resource {
   constructor(resource_data, parent = undefined) {
@@ -439,7 +462,7 @@ class Plate extends Resource {
     this.color = "#2B2D42";
   }
 
-  draw(layer) {
+  drawMainShape(layer) {
     const { x, y } = this.getAbsoluteLocation();
 
     const rect = new Konva.Rect({
@@ -455,146 +478,9 @@ class Plate extends Resource {
     layer.add(rect);
     this.mainShape = rect;
 
-    this.addTooltip();
+    // rect.on("dragend", () => {
 
-    this.drawChildren(layer);
-
-    rect.on("dragstart", () => {
-      resourceLayer.add(trash);
-      // resourceLayer.draw();
-    });
-
-    // on right click, show options
-    rect.on("contextmenu", (e) => {
-      e.evt.preventDefault();
-      selectedResource = this;
-      openContextMenu();
-    });
-
-    // Update the location of the children when the plate is dragged
-    rect.on("dragmove", () => {
-      let { x, y } = rect.position();
-
-      // Snap to grid
-      let { x: snapX, y: snapY } = getSnappingGrid(x, y);
-      if (snapLine !== undefined) {
-        snapLine.destroy();
-      }
-      if (snapX !== undefined) {
-        x = snapX;
-
-        // Draw a vertical line
-        snapLine = new Konva.Line({
-          points: [x, 0, x, canvasHeight],
-          stroke: "red",
-          strokeWidth: 1,
-          dash: [10, 5],
-        });
-        layer.add(snapLine);
-      }
-      if (snapY !== undefined) {
-        y = snapY;
-      }
-      rect.position({ x: x, y: y }); // snap to grid
-
-      // Update the UI location of children.
-      this.updateChildrenLocation(x, y);
-
-      // If we have a snapping match, show an indicator.
-      const { x: rectX, y: rectY } = rect.position();
-      const snapResult = getSnappingResourceAndLocationAndSnappingBox(
-        rectX + this.size_x / 2,
-        rectY + this.size_y / 2
-      );
-
-      if (this._snappingBox !== undefined) {
-        this._snappingBox.destroy();
-      }
-
-      if (snapResult !== undefined) {
-        const {
-          snappingBox: { x, y, width, height },
-        } = snapResult;
-
-        this._snappingBox = new Konva.Rect({
-          x: x,
-          y: y,
-          width: width,
-          height: height,
-          fill: "rgba(0, 0, 0, 0.1)",
-          stroke: "red",
-          strokeWidth: 1,
-          dash: [10, 5],
-        });
-        layer.add(this._snappingBox);
-      }
-    });
-
-    rect.on("dragend", () => {
-      let { x: rectX, y: rectY } = rect.position();
-
-      const snapResult = getSnappingResourceAndLocationAndSnappingBox(
-        rectX + this.size_x / 2,
-        rectY + this.size_y / 2
-      );
-
-      if (snapResult !== undefined) {
-        const { resource: parent, location } = snapResult;
-
-        if (parent === trash) {
-          // special case for trash
-          // Delete the plate.
-          this.destroy();
-        } else {
-          const { x, y } = location;
-          const { x: parentX, y: parentY } = parent.getAbsoluteLocation();
-          rectX = parentX + x;
-          rectY = parentY + y;
-
-          // Snap to position in UI.
-          rect.position({ x: rectX, y: rectY });
-          this.updateChildrenLocation(rectX, rectY);
-
-          // Update the deck layout with the new parent.
-          if (this.parent !== undefined) {
-            this.parent.unassignChild(this);
-          }
-          parent.assignChild(this);
-        }
-      }
-
-      if (this._snappingBox !== undefined) {
-        this._snappingBox.destroy();
-      }
-
-      if (snapLine !== undefined) {
-        snapLine.destroy();
-      }
-
-      // Update the deck layout with the new location.
-      if (this.parent === undefined) {
-        // not in the tree, so no need to update
-        this.location = undefined;
-      } else {
-        this.location.x = rectX - this.parent.getAbsoluteLocation().x;
-        this.location.y = rectY - this.parent.getAbsoluteLocation().y;
-      }
-
-      // hide the trash icon
-      trash.remove();
-
-      save();
-    });
-  }
-
-  updateChildrenLocation(x, y) {
-    // Update the UI location of children.
-    for (let i = 0; i < this.children.length; i++) {
-      const child = this.children[i];
-
-      child.mainShape.x(child.location.x + x + child.size_x / 2);
-      child.mainShape.y(child.location.y + y + child.size_y / 2);
-    }
+    // });
   }
 
   serialize() {
@@ -619,11 +505,7 @@ class Well extends Resource {
     return `rgba(239, 35, 60, ${volume / maxVolume})`;
   }
 
-  draw(layer) {
-    if (this.mainShape !== undefined) {
-      this.mainShape.destroy();
-    }
-
+  drawMainShape(layer) {
     const { x, y } = this.getAbsoluteLocation();
     this.mainShape = new Konva.Circle({
       x: x + this.size_x / 2,
@@ -634,9 +516,6 @@ class Well extends Resource {
       strokeWidth: 1,
     });
     layer.add(this.mainShape);
-
-    super.drawChildren(layer);
-    this.addTooltip();
   }
 
   setVolume(volume, layer) {
@@ -675,7 +554,7 @@ class TipRack extends Resource {
     this.color = "#2B2D42";
   }
 
-  draw(layer) {
+  drawMainShape(layer) {
     const { x, y } = this.getAbsoluteLocation();
 
     const rect = new Konva.Rect({
@@ -688,9 +567,6 @@ class TipRack extends Resource {
       strokeWidth: 1,
     });
     layer.add(rect);
-
-    this.drawChildren(layer);
-    this.addTooltip();
   }
 }
 
@@ -704,13 +580,12 @@ class TipSpot extends Resource {
     this._circles = [];
   }
 
-  draw(layer) {
+  drawMainShape(layer) {
     for (let i = 0; i < this._circles.length; i++) {
       this._circles[i].destroy();
     }
 
     const { x, y } = this.getAbsoluteLocation();
-    const magicTipOffset = system === SYSTEM_OPENTRONS ? 1 : 5; // what is this?
     const circ = new Konva.Circle({
       x: x + this.size_x / 2,
       y: y + this.size_y / 2,
@@ -721,9 +596,6 @@ class TipSpot extends Resource {
     });
     layer.add(circ);
     this._circles.push(circ);
-
-    super.drawChildren(layer);
-    this.addTooltip();
   }
 
   setTip(has_tip, layer) {
@@ -752,10 +624,144 @@ class Trash extends Resource {
     this.color = "red";
   }
 
-  draw(layer) {
+  drawMainShape(layer) {
     // Don't draw trash
   }
 }
+
+resourceLayer.on("dragstart", () => {
+  resourceLayer.add(trash);
+
+  // I think we can set resourceBeingDragged somewhere, and use that in the handler. This will allow
+  // us to drag a plate when in reality a well is being dragged.
+});
+
+resourceLayer.on("dragmove", (e) => {
+  if (tooltip !== undefined) {
+    tooltip.destroy();
+  }
+
+  let { x, y } = e.target.position();
+  let resource = e.target.resource;
+
+  // Snap to grid
+  let { x: snapX, y: snapY } = getSnappingGrid(x, y);
+  if (snapLine !== undefined) {
+    snapLine.destroy();
+  }
+  if (snapX !== undefined) {
+    x = snapX;
+
+    // Draw a vertical line
+    snapLine = new Konva.Line({
+      points: [x, 0, x, canvasHeight],
+      stroke: "red",
+      strokeWidth: 1,
+      dash: [10, 5],
+    });
+    layer.add(snapLine);
+  }
+  if (snapY !== undefined) {
+    y = snapY;
+  }
+  e.target.position({ x: x, y: y }); // snap to grid
+
+  // Update the UI location of children.
+  resource.updateChildrenLocation(x, y);
+
+  // If we have a snapping match, show an indicator.
+  const snapResult = getSnappingResourceAndLocationAndSnappingBox(
+    x + resource.size_x / 2,
+    y + resource.size_y / 2
+  );
+
+  if (snappingBox !== undefined) {
+    snappingBox.destroy();
+  }
+
+  if (snapResult !== undefined) {
+    const {
+      snappingBox: { x, y, width, height },
+    } = snapResult;
+
+    snappingBox = new Konva.Rect({
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      fill: "rgba(0, 0, 0, 0.1)",
+      stroke: "red",
+      strokeWidth: 1,
+      dash: [10, 5],
+    });
+    resourceLayer.add(snappingBox);
+  }
+});
+
+resourceLayer.on("dragend", (e) => {
+  let { x: rectX, y: rectY } = e.target.position();
+  let resource = e.target.resource;
+  console.log("resource", resource);
+
+  const snapResult = getSnappingResourceAndLocationAndSnappingBox(
+    rectX + resource.size_x / 2,
+    rectY + resource.size_y / 2
+  );
+
+  if (snapResult !== undefined) {
+    const { resource: parent, location } = snapResult;
+
+    if (parent === trash) {
+      // special case for trash
+      // Delete the plate.
+      resource.destroy();
+    } else {
+      const { x, y } = location;
+      const { x: parentX, y: parentY } = parent.getAbsoluteLocation();
+      rectX = parentX + x;
+      rectY = parentY + y;
+
+      // Snap to position in UI.
+      e.target.position({ x: rectX, y: rectY });
+      resource.updateChildrenLocation(rectX, rectY);
+
+      // Update the deck layout with the new parent.
+      if (resource.parent !== undefined) {
+        resource.parent.unassignChild(this);
+      }
+      parent.assignChild(resource);
+    }
+  }
+
+  if (snappingBox !== undefined) {
+    snappingBox.destroy();
+  }
+
+  if (snapLine !== undefined) {
+    snapLine.destroy();
+  }
+
+  // Update the deck layout with the new location.
+  if (resource.parent === undefined) {
+    // not in the tree, so no need to update
+    resource.location = undefined;
+  } else {
+    resource.location.x = rectX - resource.parent.getAbsoluteLocation().x;
+    resource.location.y = rectY - resource.parent.getAbsoluteLocation().y;
+  }
+
+  // hide the trash icon
+  trash.remove();
+
+  save();
+});
+
+// on right click, show options
+resourceLayer.on("contextmenu", (e) => {
+  e.evt.preventDefault();
+  selectedResource = e.target.resource;
+  openContextMenu();
+});
 
 function classForResourceType(type) {
   switch (type) {
