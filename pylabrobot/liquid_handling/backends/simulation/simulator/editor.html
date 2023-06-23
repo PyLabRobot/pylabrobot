@@ -24,17 +24,53 @@
     <link href="/gui.css" rel="stylesheet" />
   </head>
   <body>
-    <nav class="navbar bg-light">
+    <nav class="navbar bg-light navbar-expand-sm">
       <div class="container-fluid">
         <div class="title">
           PyLabRobot Graphical Labware Editor
           <span class="fs-6 text-muted">(v0.1)</span>
         </div>
 
-        <div>
-          <p id="save-label" style="display: none">
-            <i class="bi bi-hourglass-split"></i> Saving
-          </p>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                Editor
+              </a>
+              <ul class="dropdown-menu">
+                <li>
+                  <button class="dropdown-item enabled" id="enable-snapping">
+                    <i class="bi bi-check"></i>
+                    <i class="bi bi-x"></i>
+                    Snapping
+                  </button>
+                </li>
+                <li>
+                  <button class="dropdown-item enabled" id="enable-auto-save">
+                    <i class="bi bi-check"></i>
+                    <i class="bi bi-x"></i>
+                    Auto saving
+                  </button>
+                </li>
+                <!-- <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a class="dropdown-item" href="#">Something else here</a>
+                </li> -->
+              </ul>
+            </li>
+
+            <li class="nav-item">
+              <p id="save-label" style="display: none">
+                <i class="bi bi-hourglass-split"></i> Saving
+              </p>
+            </li>
+          </ul>
         </div>
       </div>
     </nav>

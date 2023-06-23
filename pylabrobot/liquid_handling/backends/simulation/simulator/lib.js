@@ -23,6 +23,10 @@ function getSnappingResourceAndLocationAndSnappingBox(x, y) {
   // This can probably be simplified a lot.
   // Returns {resource, location wrt resource}
 
+  if (!snappingEnabled) {
+    return undefined;
+  }
+
   // Check if the resource is in the trash.
   if (
     x > trash.x() &&
@@ -97,6 +101,10 @@ function getSnappingGrid(x, y, width, height) {
   // Returns {resourceX, resourceY, snapX, snapY} where resourceX and resourceY are the
   // location where the resource should be snapped to, and snapX and snapY are the
   // snapping lines that should be drawn.
+
+  if (!snappingEnabled) {
+    return {};
+  }
 
   const SNAP_MARGIN = 5;
 
@@ -812,7 +820,7 @@ resourceLayer.on("dragend", (e) => {
   // hide the trash icon
   trash.remove();
 
-  save();
+  autoSave();
 });
 
 // on right click, show options
