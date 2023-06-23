@@ -92,24 +92,59 @@ function getSnappingResourceAndLocationAndSnappingBox(x, y) {
   return undefined;
 }
 
-function getSnappingGrid(x, y) {
-  // Get snapping lines. Returns {x, y}. Either x or y may be undefined when snapping, or both when
-  // no snapping occurs.
+function getSnappingGrid(x, y, width, height) {
+  // Get the snapping lines for the given resource (defined by x, y, width, height).
+  // Returns {resourceX, resourceY, snapX, snapY} where resourceX and resourceY are the
+  // location where the resource should be snapped to, and snapX and snapY are the
+  // snapping lines that should be drawn.
 
   const SNAP_MARGIN = 5;
 
-  // Check if the resource is on a Hamilton deck rail. (100 + 22.5 * i)
+  let snappingLines = {};
+
   const deck = resources["deck"];
   if (deck.constructor.name === "HamiltonDeck") {
+    if (Math.abs(y - deck.location.y - 63) < SNAP_MARGIN) {
+      snappingLines.resourceY = deck.location.y + 63;
+    }
+
+    if (
+      Math.abs(y - deck.location.y - 63 - deck.railHeight + height) <
+      SNAP_MARGIN
+    ) {
+      snappingLines.resourceY = deck.location.y + 63 + deck.railHeight - height;
+      snappingLines.snappingY = deck.location.y + 63 + deck.railHeight;
+    }
+
+    if (Math.abs(x - deck.location.x) < SNAP_MARGIN) {
+      snappingLines.resourceX = deck.location.x;
+    }
+
+    // Check if the resource is on a Hamilton deck rail. (100 + 22.5 * i)
     for (let rail = 0; rail < deck.num_rails; rail++) {
       const railX = 100 + 22.5 * rail;
       if (Math.abs(x - railX) < SNAP_MARGIN) {
-        return { x: railX, y: undefined };
+        snappingLines.resourceX = railX;
       }
     }
   }
 
-  return { x: undefined, y: undefined };
+  // if resource snapping position defined, but not the snapping line, set the snapping line to the
+  // resource snapping position.
+  if (
+    snappingLines.resourceX !== undefined &&
+    snappingLines.snappingX === undefined
+  ) {
+    snappingLines.snappingX = snappingLines.resourceX;
+  }
+  if (
+    snappingLines.resourceY !== undefined &&
+    snappingLines.snappingY === undefined
+  ) {
+    snappingLines.snappingY = snappingLines.resourceY;
+  }
+
+  return snappingLines;
 }
 
 class Resource {
@@ -449,7 +484,7 @@ class OTDeck extends Deck {
   }
 }
 
-let snapLine = undefined;
+let snapLines = [];
 let snappingBox = undefined;
 
 class Plate extends Resource {
@@ -645,24 +680,47 @@ resourceLayer.on("dragmove", (e) => {
   let resource = e.target.resource;
 
   // Snap to grid
-  let { x: snapX, y: snapY } = getSnappingGrid(x, y);
-  if (snapLine !== undefined) {
-    snapLine.destroy();
+  // Remove any existing snap lines.
+  if (snapLines.length > 0) {
+    for (let i = snapLines.length - 1; i >= 0; i--) {
+      snapLines[i].destroy();
+    }
   }
-  if (snapX !== undefined) {
-    x = snapX;
+
+  // Find the snapping lines for the resource.
+  let { snappingX, snappingY, resourceX, resourceY } = getSnappingGrid(
+    x,
+    y,
+    resource.size_x,
+    resource.size_y
+  );
+
+  // If we have a snapping match, show an indicator and snap to the grid.
+  if (snappingX !== undefined) {
+    x = resourceX;
 
     // Draw a vertical line
-    snapLine = new Konva.Line({
-      points: [x, 0, x, canvasHeight],
+    let snapLine = new Konva.Line({
+      points: [snappingX, 0, snappingX, canvasHeight],
       stroke: "red",
-      strokeWidth: 1,
+      strokeWidth: 2,
       dash: [10, 5],
     });
-    layer.add(snapLine);
+    resourceLayer.add(snapLine);
+    snapLines.push(snapLine);
   }
-  if (snapY !== undefined) {
-    y = snapY;
+  if (snappingY !== undefined) {
+    y = resourceY;
+
+    // Draw a vertical line
+    let snapLine = new Konva.Line({
+      points: [0, snappingY, canvasWidth, snappingY],
+      stroke: "red",
+      strokeWidth: 2,
+      dash: [10, 5],
+    });
+    resourceLayer.add(snapLine);
+    snapLines.push(snapLine);
   }
   e.target.position({ x: x, y: y }); // snap to grid
 
@@ -701,7 +759,6 @@ resourceLayer.on("dragmove", (e) => {
 resourceLayer.on("dragend", (e) => {
   let { x: rectX, y: rectY } = e.target.position();
   let resource = e.target.resource;
-  console.log("resource", resource);
 
   const snapResult = getSnappingResourceAndLocationAndSnappingBox(
     rectX + resource.size_x / 2,
@@ -737,8 +794,10 @@ resourceLayer.on("dragend", (e) => {
     snappingBox.destroy();
   }
 
-  if (snapLine !== undefined) {
-    snapLine.destroy();
+  if (snapLines.length > 0) {
+    for (let i = snapLines.length - 1; i >= 0; i--) {
+      snapLines[i].destroy();
+    }
   }
 
   // Update the deck layout with the new location.
