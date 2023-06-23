@@ -100,3 +100,21 @@
 #file-not-found a {
   margin-top: 20px;
 }
+
+/* menu bar */
+
+button.dropdown-item {
+  box-sizing: border-box;
+}
+button.dropdown-item.enabled .bi-x {
+  display: none;
+}
+button.dropdown-item.enabled .bi-check {
+  display: inline;
+}
+button.dropdown-item:not(.enabled) .bi-check {
+  display: none;
+}
+button.dropdown-item:not(.enabled) .bi-x {
+  display: inline;
+}

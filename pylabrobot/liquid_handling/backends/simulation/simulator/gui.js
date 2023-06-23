@@ -58,6 +58,12 @@ function save() {
     });
 }
 
+function autoSave() {
+  if (autoSaveEnabled) {
+    save();
+  }
+}
+
 window.addEventListener("keydown", (e) => {
   if (e.key === "s" && e.metaKey) {
     e.preventDefault();
@@ -70,6 +76,57 @@ window.onbeforeunload = function () {
     return "You have unsaved changes. Are you sure you want to leave?";
   }
 };
+
+// Settings
+
+let autoSaveEnabled = undefined;
+let snappingEnabled = undefined;
+
+function loadSettings() {
+  // Load settings from local storage
+  autoSaveEnabled = localStorage.getItem("autoSave") === "true";
+  snappingEnabled = localStorage.getItem("snapping") === "true";
+
+  // Set UI elements
+  const enableSnapping = document.getElementById("enable-snapping");
+  if (snappingEnabled) {
+    enableSnapping.classList.add("enabled");
+  } else {
+    enableSnapping.classList.remove("enabled");
+  }
+
+  const enableAutoSave = document.getElementById("enable-auto-save");
+  if (autoSaveEnabled) {
+    enableAutoSave.classList.add("enabled");
+  } else {
+    enableAutoSave.classList.remove("enabled");
+  }
+}
+
+function saveSettings() {
+  // Save settings to local storage
+  localStorage.setItem("autoSave", autoSaveEnabled);
+  localStorage.setItem("snapping", snappingEnabled);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const enableSnapping = document.getElementById("enable-snapping");
+  const enableAutoSave = document.getElementById("enable-auto-save");
+
+  loadSettings();
+
+  enableAutoSave.addEventListener("click", () => {
+    autoSaveEnabled = !autoSaveEnabled;
+    enableAutoSave.classList.toggle("enabled");
+    saveSettings();
+  });
+
+  enableSnapping.addEventListener("click", () => {
+    snappingEnabled = !snappingEnabled;
+    enableSnapping.classList.toggle("enabled");
+    saveSettings();
+  });
+});
 
 // Search bar
 
@@ -303,7 +360,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("delete").addEventListener("click", () => {
     selectedResource.destroy();
-    save();
+    autoSave();
     closeContextMenu();
   });
 });
