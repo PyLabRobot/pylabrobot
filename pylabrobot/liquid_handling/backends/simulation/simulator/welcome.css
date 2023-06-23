@@ -48,22 +48,35 @@
   font-size: 1.5rem;
 }
 
-.open-existing {
+.open-recent {
   margin-top: 2rem;
   text-align: center;
 }
 
-.open-existing p {
+.open-recent > p:first-of-type {
   font-size: 1.5rem;
   margin: 2rem 0;
 }
-
+/*
 .open-existing input {
   font-size: 1.5rem;
   padding: 0.5rem 1rem;
   border-radius: 10px;
   border: 1px solid #ccc;
   font-family: monospace;
+} */
+
+.open-recent .recent-deck {
+  font-size: 1.4rem;
+  text-decoration: none;
+  color: #000;
+  display: block;
+  margin: 0.5rem 0;
+}
+
+.open-recent .open-existing {
+  margin: 1rem 0;
+  text-align: center;
 }
 
 #filename {

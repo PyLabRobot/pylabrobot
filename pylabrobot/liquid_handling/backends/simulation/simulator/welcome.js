@@ -145,3 +145,38 @@ window.addEventListener("load", () => {
       });
   });
 });
+
+// open recent
+
+document.addEventListener("DOMContentLoaded", () => {
+  fetch("/recents")
+    .then((res) => res.json())
+    .then((data) => {
+      const recentFiles = document.getElementById("recent-files");
+      console.log(data);
+
+      const files = data.files;
+      if (files.length === 0) {
+        recentFiles.innerHTML = "<p>No recent files</p>";
+        return;
+      }
+
+      for (let i = 0; i < files.length; i++) {
+        let file = files[i];
+
+        const a = document.createElement("a");
+        a.classList.add("recent-deck");
+        a.href = `/editor/${file}`;
+
+        const icon = document.createElement("i");
+        icon.classList.add("bi", "bi-file-earmark");
+
+        const code = document.createElement("code");
+        code.innerText = file;
+
+        a.appendChild(icon);
+        a.appendChild(code);
+        recentFiles.appendChild(a);
+      }
+    });
+});
