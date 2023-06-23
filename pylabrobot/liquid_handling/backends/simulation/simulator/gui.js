@@ -22,9 +22,10 @@ function addResource(resourceIdentifier) {
         x: deck.location.x + deck.size_x / 2,
         y: deck.location.y + deck.size_y / 2,
       };
-      console.log(deckCenter);
 
       data.location = deckCenter;
+      data.parent_name = "deck";
+      // Hijack the parent_name field to store the name of the deck. Should refactor this.
       drawResource(data);
     });
 }
@@ -112,12 +113,11 @@ function filterResults(query) {
     return false;
   }
 
-  let tipRacks = allTipRackNames.filter(match);
-  let plates = allPlateNames.filter(match);
-
   const sections = [
-    { title: "Tip Racks", names: tipRacks },
-    { title: "Plates", names: plates },
+    { title: "Tip Racks", names: allTipRackNames.filter(match) },
+    { title: "Plates", names: allPlateNames.filter(match) },
+    { title: "Plate Carriers", names: allPlateCarriers.filter(match) },
+    { title: "Tip Rack Carriers", names: allTipRackCarriers.filter(match) },
   ];
 
   // if no results, show "No results found"
@@ -177,10 +177,12 @@ document.querySelector("#search-bar input").addEventListener("input", (e) => {
 
 let allPlateNames = [];
 let allTipRackNames = [];
+let allPlateCarriers = [];
+let allTipRackCarriers = [];
 
 function addResourceListToSidebar(resourceList, title) {
   let labwareList = document.getElementById("labware-list");
-  const sectionId = `labware-list-${title}`.replace(" ", "-");
+  const sectionId = `labware-list-${title}`.replaceAll(" ", "-");
 
   labwareList.innerHTML += `
   <li class="mb-1">
@@ -218,18 +220,20 @@ function addResourceListToSidebar(resourceList, title) {
 }
 
 function loadResourceNames() {
-  fetch("/plates")
+  fetch("/resources")
     .then((response) => response.json())
     .then((data) => {
-      allPlateNames = data;
+      allPlateNames = data.plates;
       addResourceListToSidebar(allPlateNames, "Plates");
-    });
 
-  fetch("/tip_racks")
-    .then((response) => response.json())
-    .then((data) => {
-      allTipRackNames = data;
+      allTipRackNames = data.tip_racks;
       addResourceListToSidebar(allTipRackNames, "Tip Racks");
+
+      allPlateCarriers = data.plate_carriers;
+      addResourceListToSidebar(allPlateCarriers, "Plate Carriers");
+
+      allTipRackCarriers = data.tip_carriers;
+      addResourceListToSidebar(allTipRackCarriers, "Tip Rack Carriers");
     });
 }
 
