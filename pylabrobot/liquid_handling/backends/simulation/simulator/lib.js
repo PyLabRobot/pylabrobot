@@ -17,7 +17,7 @@ var resources = {}; // name -> Resource object
 
 let trash;
 
-function getSnappingResourceAndLocationAndSnappingBox(x, y) {
+function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
   // A snapping resource is a spot within a plate/tip carrier or the OT deck.
   // This can probably be simplified a lot.
@@ -49,7 +49,10 @@ function getSnappingResourceAndLocationAndSnappingBox(x, y) {
   // Check if the resource is in a CarrierSite.
   for (let resource_name in resources) {
     const resource = resources[resource_name];
-    if (resource.type === "CarrierSite") {
+    if (
+      resource.constructor.name === "CarrierSite" &&
+      resourceToSnap.constructor.name !== "Carrier"
+    ) {
       const { x: resourceX, y: resourceY } = resource.getAbsoluteLocation();
       return {
         resource: resource,
@@ -283,9 +286,8 @@ class Resource {
         x: parentLocation.x + this.location.x,
         y: parentLocation.y + this.location.y,
       };
-    } else {
-      return this.location;
     }
+    return this.location;
   }
 
   serialize() {
@@ -308,6 +310,11 @@ class Resource {
   }
 
   assignChild(child) {
+    if (child === this) {
+      console.error("Cannot assign a resource to itself", this);
+      return;
+    }
+
     child.parent = this;
     this.children.push(child);
   }
@@ -672,6 +679,14 @@ class Trash extends Resource {
   }
 }
 
+class Carrier extends Resource {
+  // Nothing special.
+}
+
+class CarrierSite extends Resource {
+  // Nothing special.
+}
+
 resourceLayer.on("dragstart", () => {
   resourceLayer.add(trash);
 
@@ -737,6 +752,7 @@ resourceLayer.on("dragmove", (e) => {
 
   // If we have a snapping match, show an indicator.
   const snapResult = getSnappingResourceAndLocationAndSnappingBox(
+    resource,
     x + resource.size_x / 2,
     y + resource.size_y / 2
   );
@@ -769,6 +785,7 @@ resourceLayer.on("dragend", (e) => {
   let resource = e.target.resource;
 
   const snapResult = getSnappingResourceAndLocationAndSnappingBox(
+    resource,
     rectX + resource.size_x / 2,
     rectY + resource.size_y / 2
   );
@@ -848,6 +865,12 @@ function classForResourceType(type) {
       return TipRack;
     case "TipSpot":
       return TipSpot;
+    case "CarrierSite":
+      return CarrierSite;
+    case "Carrier":
+    case "PlateCarrier":
+    case "TipCarrier":
+      return Carrier;
     default:
       return Resource;
   }
