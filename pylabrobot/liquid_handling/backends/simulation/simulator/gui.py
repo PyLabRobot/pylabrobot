@@ -272,6 +272,13 @@ def create():
   return jsonify({"success": True})
 
 
+@app.route("/recents")
+def recents():
+  # list all json files in the current directory
+  files = [f for f in os.listdir(".") if f.endswith(".json")]
+  return jsonify(files=files)
+
+
 # catch all for static
 @app.route("/<path:path>")
 def static_proxy(path):
