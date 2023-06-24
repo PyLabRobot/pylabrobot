@@ -49,28 +49,43 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Check if the resource is in a CarrierSite.
   for (let resource_name in resources) {
     const resource = resources[resource_name];
+
+    // Check carrier sites.
+    if (resource.constructor.name !== "CarrierSite") {
+      continue;
+    }
+
+    // Only snap a plate to a plate carrier, or a tip rack to a tip carrier.
     if (
-      resource.constructor.name === "CarrierSite" &&
-      resourceToSnap.constructor.name !== "Carrier"
+      resource.parent.constructor.name === "PlateCarrier" &&
+      resourceToSnap.constructor.name !== "Plate"
     ) {
-      const { x: resourceX, y: resourceY } = resource.getAbsoluteLocation();
-      if (
-        x > resourceX &&
-        x < resourceX + resource.size_x &&
-        y > resourceY &&
-        y < resourceY + resource.size_y
-      ) {
-        return {
-          resource: resource,
-          location: { x: 0, y: 0 },
-          snappingBox: {
-            x: resourceX,
-            y: resourceY,
-            width: resource.size_x,
-            height: resource.size_y,
-          },
-        };
-      }
+      continue;
+    }
+    if (
+      resource.parent.constructor.name === "TipCarrier" &&
+      resourceToSnap.constructor.name !== "TipRack"
+    ) {
+      continue;
+    }
+
+    const { x: resourceX, y: resourceY } = resource.getAbsoluteLocation();
+    if (
+      x > resourceX &&
+      x < resourceX + resource.size_x &&
+      y > resourceY &&
+      y < resourceY + resource.size_y
+    ) {
+      return {
+        resource: resource,
+        location: { x: 0, y: 0 },
+        snappingBox: {
+          x: resourceX,
+          y: resourceY,
+          width: resource.size_x,
+          height: resource.size_y,
+        },
+      };
     }
   }
 
@@ -725,9 +740,10 @@ class Trash extends Resource {
   }
 }
 
-class Carrier extends Resource {
-  // Nothing special.
-}
+// Nothing special.
+class Carrier extends Resource {}
+class PlateCarrier extends Carrier {}
+class TipCarrier extends Carrier {}
 
 class CarrierSite extends Resource {
   constructor(resourceData, parent) {
@@ -976,9 +992,11 @@ function classForResourceType(type) {
     case "CarrierSite":
       return CarrierSite;
     case "Carrier":
-    case "PlateCarrier":
-    case "TipCarrier":
       return Carrier;
+    case "PlateCarrier":
+      return PlateCarrier;
+    case "TipCarrier":
+      return TipCarrier;
     default:
       return Resource;
   }
