@@ -21,12 +21,13 @@ function addResource(resourceIdentifier) {
       const deckCenter = {
         x: deck.location.x + deck.size_x / 2,
         y: deck.location.y + deck.size_y / 2,
+        z: 0,
       };
 
-      data.location = deckCenter;
-      data.parent_name = "deck";
-      // Hijack the parent_name field to store the name of the deck. Should refactor this.
-      drawResource(data);
+      resource = loadResource(data);
+      resource.location = deckCenter;
+      deck.assignChild(resource);
+      resource.draw(resourceLayer);
     });
 }
 
@@ -306,14 +307,6 @@ function hideEditor() {
   editor.style.display = "none";
 }
 
-function recursivelyDrawAllResources(resource) {
-  drawResource(resource);
-  console.log("resource", resource);
-  for (let child of resource.children) {
-    recursivelyDrawAllResources(child);
-  }
-}
-
 function openContextMenu() {
   // Open the context menu at the mouse position.
 
@@ -351,7 +344,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const data = response.data;
-      recursivelyDrawAllResources(data);
+      let resource = loadResource(data);
+      resource.draw(resourceLayer);
     })
     .catch((error) => {
       console.log(error);

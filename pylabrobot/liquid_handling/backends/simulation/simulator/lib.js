@@ -54,16 +54,23 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
       resourceToSnap.constructor.name !== "Carrier"
     ) {
       const { x: resourceX, y: resourceY } = resource.getAbsoluteLocation();
-      return {
-        resource: resource,
-        location: { x: 0, y: 0 },
-        snappingBox: {
-          x: resourceX,
-          y: resourceY,
-          width: resource.size_x,
-          height: resource.size_y,
-        },
-      };
+      if (
+        x > resourceX &&
+        x < resourceX + resource.size_x &&
+        y > resourceY &&
+        y < resourceY + resource.size_y
+      ) {
+        return {
+          resource: resource,
+          location: { x: 0, y: 0 },
+          snappingBox: {
+            x: resourceX,
+            y: resourceY,
+            width: resource.size_x,
+            height: resource.size_y,
+          },
+        };
+      }
     }
   }
 
@@ -159,8 +166,8 @@ function getSnappingGrid(x, y, width, height) {
 }
 
 class Resource {
-  constructor(resource_data, parent = undefined) {
-    const { name, location, size_x, size_y, size_z, children } = resource_data;
+  constructor(resourceData, parent = undefined) {
+    const { name, location, size_x, size_y, size_z, children } = resourceData;
     this.name = name;
     this.size_x = size_x;
     this.size_y = size_y;
@@ -175,7 +182,7 @@ class Resource {
       const child = children[i];
       const childClass = classForResourceType(child.type);
       const childInstance = new childClass(child, this);
-      this.children.push(childInstance);
+      this.assignChild(childInstance);
 
       // Save in global lookup
       resources[child.name] = childInstance;
@@ -366,9 +373,9 @@ class Deck extends Resource {
 }
 
 class HamiltonDeck extends Deck {
-  constructor(resource_data) {
-    super(resource_data, undefined);
-    const { num_rails } = resource_data;
+  constructor(resourceData) {
+    super(resourceData, undefined);
+    const { num_rails } = resourceData;
     this.num_rails = num_rails;
   }
 
@@ -450,9 +457,9 @@ const otDeckSiteLocations = [
 ];
 
 class OTDeck extends Deck {
-  constructor(resource_data) {
-    resource_data.location = { x: 115.65, y: 68.03 };
-    super(resource_data, undefined);
+  constructor(resourceData) {
+    resourceData.location = { x: 115.65, y: 68.03 };
+    super(resourceData, undefined);
   }
 
   drawMainShape(layer) {
@@ -503,9 +510,9 @@ let snapLines = [];
 let snappingBox = undefined;
 
 class Plate extends Resource {
-  constructor(resource_data, parent = undefined) {
-    super(resource_data, parent);
-    const { num_items_x, num_items_y } = resource_data;
+  constructor(resourceData, parent = undefined) {
+    super(resourceData, parent);
+    const { num_items_x, num_items_y } = resourceData;
     this.num_items_x = num_items_x;
     this.num_items_y = num_items_y;
 
@@ -527,10 +534,6 @@ class Plate extends Resource {
     });
     layer.add(rect);
     this.mainShape = rect;
-
-    // rect.on("dragend", () => {
-
-    // });
   }
 
   serialize() {
@@ -545,10 +548,10 @@ class Plate extends Resource {
 }
 
 class Well extends Resource {
-  constructor(resource_data, parent) {
-    super(resource_data, parent);
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
     this.volume = 0;
-    this.maxVolume = resource_data.max_volume;
+    this.maxVolume = resourceData.max_volume;
   }
 
   static colorForVolume(volume, maxVolume) {
@@ -595,9 +598,9 @@ class Well extends Resource {
 }
 
 class TipRack extends Resource {
-  constructor(resource_data, parent) {
-    super(resource_data, parent);
-    const { num_items_x, num_items_y } = resource_data;
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
+    const { num_items_x, num_items_y } = resourceData;
     this.num_items_x = num_items_x;
     this.num_items_y = num_items_y;
 
@@ -621,11 +624,11 @@ class TipRack extends Resource {
 }
 
 class TipSpot extends Resource {
-  constructor(resource_data, parent) {
-    super(resource_data, parent);
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
     this.color = "#40CDA1";
     this.has_tip = false;
-    this.tip = resource_data.prototype_tip; // not really a creator, but good enough for now.
+    this.tip = resourceData.prototype_tip; // not really a creator, but good enough for now.
 
     this._circles = [];
   }
@@ -669,8 +672,8 @@ class TipSpot extends Resource {
 }
 
 class Trash extends Resource {
-  constructor(resource_data, parent) {
-    super(resource_data, parent);
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
     this.color = "red";
   }
 
@@ -876,19 +879,19 @@ function classForResourceType(type) {
   }
 }
 
-function drawResource(resource) {
-  const resourceClass = classForResourceType(resource.type);
+function loadResource(resourceData) {
+  const resourceClass = classForResourceType(resourceData.type);
 
-  const parentName = resource.parent_name;
+  const parentName = resourceData.parent_name;
   var parent = undefined;
   if (parentName !== undefined) {
     parent = resources[parentName];
   }
 
-  const resourceInstance = new resourceClass(resource, parent);
-  resourceInstance.draw(resourceLayer);
+  const resource = new resourceClass(resourceData, parent);
+  resources[resource.name] = resource;
 
-  resources[resource.name] = resourceInstance;
+  return resource;
 }
 
 // ===========================================================================
