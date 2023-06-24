@@ -59,9 +59,20 @@ function save() {
     });
 }
 
+var autoSaveTimeout = undefined;
+const SAVING_WAIT_TIME = 1000; // ms
 function autoSave() {
+  // Save the file after a delay.
+  // This is to batch multiple changes into one save.
+
   if (autoSaveEnabled) {
-    save();
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+
+    autoSaveTimeout = setTimeout(() => {
+      save();
+    }, SAVING_WAIT_TIME);
   }
 }
 
@@ -322,20 +333,52 @@ document.getElementById("resource-z").addEventListener("input", (event) => {
 });
 
 // If the user has not changed a property for 1 second, save the file.
-var autoSaveTimeout = undefined;
-const SAVING_WAIT_TIME = 1000; // ms
 
 for (let input of document.querySelectorAll("#right-sidebar input")) {
   input.addEventListener("input", () => {
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
-    }
-
-    autoSaveTimeout = setTimeout(() => {
-      autoSave();
-    }, SAVING_WAIT_TIME);
+    autoSave();
   });
 }
+
+// Some keyboard shortcuts
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowRight") {
+    e.preventDefault();
+    if (selectedResource) {
+      selectedResource.location.x += 1;
+      selectedResource.update();
+      autoSave();
+    }
+  } else if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    if (selectedResource) {
+      selectedResource.location.x -= 1;
+      selectedResource.update();
+      autoSave();
+    }
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    if (selectedResource) {
+      selectedResource.location.y -= 1;
+      selectedResource.update();
+      autoSave();
+    }
+  } else if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (selectedResource) {
+      selectedResource.location.y += 1;
+      selectedResource.update();
+      autoSave();
+    }
+  } else if (e.key === "Delete") {
+    e.preventDefault();
+    if (selectedResource) {
+      selectedResource.destroy();
+      autoSave();
+    }
+  }
+});
 
 // Loading the library
 
