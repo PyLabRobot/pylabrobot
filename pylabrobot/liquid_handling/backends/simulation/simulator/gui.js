@@ -142,30 +142,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Search bar
 
+var searchOpen = false;
+
 function openSearchBar() {
   document.getElementById("search-bar-background").style.display = "block";
   document.querySelector("#search-bar input").focus();
+  searchOpen = true;
 }
 
 function closeSearchBar() {
   document.getElementById("search-bar-background").style.display = "none";
   document.querySelector("#search-bar input").value = "";
+  searchOpen = false;
 }
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "k" && e.metaKey) {
-    e.preventDefault();
-    openSearchBar();
-  }
-});
+var highlightedResultIndex = 0;
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    closeSearchBar();
-  }
-});
-
-// filter results based on search query
 function filterResults(query) {
   function match(name) {
     // match if query is a substring of name
@@ -232,7 +224,56 @@ function filterResults(query) {
 
     results.appendChild(sectionElement);
   });
+
+  highlightedResultIndex = 0;
+  highlightSearchResult(0);
 }
+
+function highlightSearchResult(idx) {
+  const results = document.querySelectorAll("#search-bar .result");
+  if (results.length === 0) {
+    return;
+  }
+
+  if (idx < 0) {
+    idx = results.length - 1;
+  } else if (idx >= results.length) {
+    idx = 0;
+  }
+
+  for (let result of results) {
+    result.classList.remove("highlighted");
+  }
+
+  results[idx].classList.add("highlighted");
+  highlightedResultIndex = idx;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "k" && e.metaKey) {
+    e.preventDefault();
+    openSearchBar();
+  } else if (e.key === "Escape") {
+    closeSearchBar();
+  } else if (["ArrowUp", "ArrowDown", "Enter"].includes(e.key)) {
+    // Search bar navigation
+    e.preventDefault();
+    if (!searchOpen) {
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      highlightSearchResult(highlightedResultIndex - 1);
+    } else if (e.key === "ArrowDown") {
+      highlightSearchResult(highlightedResultIndex + 1);
+    } else if (e.key === "Enter") {
+      const results = document.querySelectorAll("#search-bar .result");
+      if (results.length === 0) {
+        return;
+      }
+      results[highlightedResultIndex].click();
+    }
+  }
+});
 
 document.querySelector("#search-bar input").addEventListener("input", (e) => {
   if (e.target.value === "") {

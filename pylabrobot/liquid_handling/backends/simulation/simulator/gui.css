@@ -68,6 +68,10 @@
 #search-bar .result:first-of-type {
   border-top: 1px solid black;
 }
+#search-bar .result.highlighted {
+  background-color: #007bff;
+  color: white;
+}
 
 #search-bar .footer {
   flex: 0 1 auto;
