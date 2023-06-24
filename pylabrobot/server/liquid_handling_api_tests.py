@@ -1,4 +1,3 @@
-import time
 from typing import cast
 import unittest
 
@@ -10,7 +9,8 @@ from pylabrobot.resources import (
   HTF_L,
   Cos_96_EZWash,
   TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00
+  PLT_CAR_L5AC_A00,
+  no_tip_tracking,
 )
 from pylabrobot.resources.hamilton import HamiltonDeck, STARLetDeck
 from pylabrobot.liquid_handling.standard import (
@@ -121,7 +121,8 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
     with self.app.test_client() as client:
       tip_rack = cast(TipRack, self.lh.deck.get_resource("tip_rack_01"))
       tip_spot = tip_rack.get_item("A1")
-      tip = tip_spot.get_tip()
+      with no_tip_tracking():
+        tip = tip_spot.get_tip()
       pickup = Pickup(resource=tip_spot, tip=tip)
       response = client.post(
         self.base_url + "/pick-up-tips",
@@ -133,7 +134,8 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
     with self.app.test_client() as client:
       tip_rack = cast(TipRack, self.lh.deck.get_resource("tip_rack_01"))
       tip_spot = tip_rack.get_item("A1")
-      tip = tip_spot.get_tip()
+      with no_tip_tracking():
+        tip = tip_spot.get_tip()
 
       self.test_tip_pickup() # Pick up a tip first
 
@@ -145,7 +147,8 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       self.assertEqual(response.status_code, 200)
 
   def test_aspirate(self):
-    tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
+    with no_tip_tracking():
+      tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
     self.test_tip_pickup() # pick up a tip first
     with self.app.test_client() as client:
       well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
@@ -157,7 +160,8 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       self.assertEqual(response.status_code, 200)
 
   def test_dispense(self):
-    tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
+    with no_tip_tracking():
+      tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
     self.test_aspirate() # aspirate first
     with self.app.test_client() as client:
       well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")

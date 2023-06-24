@@ -709,7 +709,6 @@ class TipSpot extends Resource {
       ...super.serialize(),
       ...{
         prototype_tip: this.tip,
-        has_tip: this.has_tip,
       },
     };
   }
