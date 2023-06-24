@@ -17,7 +17,7 @@ class TipSpot(Resource):
   """ A tip spot, a location in a tip rack where there may or may not be a tip. """
 
   def __init__(self, name: str, size_x: float, size_y: float, make_tip: TipCreator,
-    size_z: float = 0, start_with_tip: bool = True, category: str = "tip_spot"):
+    size_z: float = 0, category: str = "tip_spot"):
     """ Initialize a tip spot.
 
     Args:
@@ -35,9 +35,6 @@ class TipSpot(Resource):
     self.parent: Optional["TipRack"] = None
 
     self.make_tip = make_tip
-
-    if start_with_tip:
-      self.tracker.add_tip(self.make_tip())
 
   def get_tip(self) -> Tip:
     """ Get a tip from the tip spot. """
@@ -62,7 +59,6 @@ class TipSpot(Resource):
     return {
       **super().serialize(),
       "prototype_tip": self.make_tip().serialize(),
-      "has_tip": self.has_tip()
     }
 
   @classmethod
@@ -82,8 +78,7 @@ class TipSpot(Resource):
       size_y=data["size_y"],
       size_z=data["size_z"],
       make_tip=make_tip,
-      start_with_tip=data["has_tip"],
-      category=data["category"]
+      category=data.get("category", "tip_spot")
     )
 
 
