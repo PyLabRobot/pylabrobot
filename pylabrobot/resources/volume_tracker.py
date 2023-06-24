@@ -1,20 +1,11 @@
-from abc import ABC, abstractmethod
+# from abc import ABC, abstractmethod
 import contextlib
 import sys
-from typing import List, Tuple, Optional, TYPE_CHECKING
+from typing import List, Tuple, Optional
 
-from pylabrobot.resources.errors import (
-  ContainerTooLittleLiquidError,
-  ContainerTooLittleVolumeError,
-  TipTooLittleLiquidError,
-  TipTooLittleVolumeError,
-)
+from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError
+from pylabrobot.resources.liquid import Liquid
 
-from pylabrobot.liquid_handling.liquid_classes.abstract import Liquid
-from pylabrobot.liquid_handling.standard import LiquidHandlingOp, Aspiration, Dispense
-
-if TYPE_CHECKING:
-  from pylabrobot.resources.container import Container
 
 this = sys.modules[__name__]
 this.volume_tracking_enabled = False # type: ignore
@@ -33,13 +24,11 @@ def no_volume_tracking():
   this.volume_tracking_enabled = old_value # type: ignore
 
 
-class VolumeTracker(ABC):
+class VolumeTracker():
   """ A volume tracker tracks operations that change the volume in a container and raises errors
   if the volume operations are invalid. """
 
   def __init__(self, max_volume: float):
-    self._ops: List["LiquidHandlingOp"] = []
-    self.pending: List["LiquidHandlingOp"] = []
     self._is_disabled = False
     self.max_volume = max_volume
 
@@ -61,45 +50,42 @@ class VolumeTracker(ABC):
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]) -> None:
     """ Set the liquids in the container. """
     self.liquids = liquids
-    self.pending_liquids.clear()
+    self.pending_liquids = liquids
 
-  @property
-  def _current_volume(self) -> float:
-    return sum(volume for _, volume in self.liquids)
+  def remove_liquid(self, volume: float) -> None:
+    """ Remove liquid from the container. Top to bottom. """
 
-  @property
-  def _pending_volume(self) -> float:
-    return sum(volume for _, volume in self.pending_liquids) + self._current_volume
+    if volume > self.get_used_volume():
+      raise TooLittleLiquidError(
+        f"Container has too little liquid: {volume}uL > {self.get_used_volume()}uL.")
 
-  @property
-  def history(self) -> List["LiquidHandlingOp"]:
-    """ The past operations. """
-    return self._ops
+    removed_volume = 0.0
+    while removed_volume < volume:
+      liquid, volume = self.liquids.pop()
+      removed_volume += volume
 
-  @abstractmethod
-  def handle_aspiration(self, op: "Aspiration") -> None:
-    """ Update the pending state with the operation. """
+      # If we have more liquid than we need, put the excess back.
+      if removed_volume > volume:
+        self.liquids.append((liquid, removed_volume - volume))
 
-  @abstractmethod
-  def handle_dispense(self, op: "Dispense") -> None:
-    """ Update the pending state with the operation. """
+  def add_liquid(self, liquid: Optional["Liquid"], volume: float) -> None:
+    """ Add liquid to the container. """
 
-  def queue_aspiration(self, op: "Aspiration") -> None:
-    """ Check if the operation is valid given the current state. """
-    assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
-    self.handle_aspiration(op)
-    self.pending.append(op)
+    if volume > self.get_free_volume():
+      raise TooLittleVolumeError(
+        "Container has too little volume: {volume}uL > {self.get_free_volume()}uL.")
 
-  def queue_dispense(self, op: "Dispense") -> None:
-    """ Check if the operation is valid given the current state. """
-    assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
-    self.handle_dispense(op)
-    self.pending.append(op)
+    # If the last liquid is the same as the one we want to add, just add the volume to it.
+    if len(self.pending_liquids) > 0:
+      last_pending_liquid_tuple = self.pending_liquids[-1]
+      if last_pending_liquid_tuple[0] == liquid:
+        self.pending_liquids[-1] = (liquid, last_pending_liquid_tuple[1] + volume)
+    else:
+      self.pending_liquids.append((liquid, volume))
 
   def get_used_volume(self) -> float:
     """ Get the used volume of the container. Note that this includes pending operations. """
-
-    return self._pending_volume
+    return sum(volume for _, volume in self.pending_liquids)
 
   def get_free_volume(self) -> float:
     """ Get the free volume of the container. Note that this includes pending operations. """
@@ -109,19 +95,12 @@ class VolumeTracker(ABC):
   def commit(self) -> None:
     """ Commit the pending operations. """
     assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
-    self._ops += self.pending
-    self.pending.clear()
+
+    self.liquids = self.pending_liquids
 
   def rollback(self) -> None:
     """ Rollback the pending operations. """
     assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
-    self.pending.clear()
-
-  def clear(self) -> None:
-    """ Clear the history. """
-    self._ops.clear()
-    self.pending.clear()
-    self.liquids.clear()
     self.pending_liquids.clear()
 
   def serialize(self) -> dict:
@@ -130,93 +109,16 @@ class VolumeTracker(ABC):
     def serialize_liquid_or_none(liquid: Optional["Liquid"]) -> Optional[str]:
       return liquid.serialize() if liquid is not None else None
 
-    def serialize_op(op: "LiquidHandlingOp") -> dict:
-      return {
-        "type": op.__class__.__name__,
-        "op": op.serialize()
-      }
-
     return {
-      "history": [serialize_op(op) for op in self.history],
-      "pending": [serialize_op(op) for op in self.pending],
       "liquids": [(serialize_liquid_or_none(l), v) for l, v in self.liquids],
       "pending_liquids": [(serialize_liquid_or_none(l), v) for l, v in self.pending_liquids],
     }
 
-  def load_state(self, state: dict, resource: "Container") -> None:
+  def load_state(self, state: dict) -> None:
     """ Load the state of the volume tracker. """
 
     def load_liquid_or_none(liquid: Optional[str]) -> Optional["Liquid"]:
       return Liquid.deserialize(liquid) if liquid is not None else None
 
-    def load_op(data: dict) -> "LiquidHandlingOp":
-      op_type = data["type"]
-      op_data = data["op"]
-      del op_data["resource_name"]
-      if op_type == "Aspiration":
-        return Aspiration(**op_data, resource=resource)
-      elif op_type == "Dispense":
-        return Dispense(**op_data, resource=resource)
-      else:
-        raise ValueError(f"Unknown op type: {op_type}")
-
-    self._ops = [load_op(op) for op in state["history"]]
-    self.pending = [load_op(op) for op in state["pending"]]
     self.liquids = [(load_liquid_or_none(l), v) for l, v in state["liquids"]]
     self.pending_liquids = [(load_liquid_or_none(l), v) for l, v in state["pending_liquids"]]
-
-
-class ContainerVolumeTracker(VolumeTracker):
-  """ A container volume tracker tracks and validates volume operations for a single container. """
-
-  def handle_aspiration(self, op: "Aspiration") -> None:
-    if op.volume > self.get_used_volume():
-      raise ContainerTooLittleLiquidError(f"Container {op.resource.name} has too little liquid to "
-                                      f"aspirate {op.volume} uL ({self.get_used_volume()} uL out "
-                                      f"of {self.max_volume} uL used).")
-
-    # remove liquids top to bottom
-    aspirated_volume = 0.0
-    while aspirated_volume < op.volume:
-      liquid, volume = self.liquids.pop()
-      aspirated_volume += volume
-
-      # if we have more liquid than we need, put the excess back
-      if aspirated_volume > op.volume:
-        self.liquids.append((liquid, aspirated_volume - op.volume))
-
-  def handle_dispense(self, op: "Dispense") -> None:
-    if op.volume > self.get_free_volume():
-      raise ContainerTooLittleVolumeError(f"Container {op.resource.name} has too little volume to "
-                                      f"dispense {op.volume} uL ({self.get_used_volume()} uL out "
-                                      f"of {self.max_volume} uL used).")
-
-    self.liquids.append((op.liquid, op.volume))
-
-
-class TipVolumeTracker(VolumeTracker):
-  """ A channel volume tracker tracks and validates volume operations for a single tip. """
-
-  def handle_aspiration(self, op: "Aspiration") -> None:
-    if op.volume > self.get_free_volume():
-      raise TipTooLittleVolumeError(f"Tip has too little volume to aspirate "
-                                    f"{op.volume} uL ({self.get_used_volume()} uL out of "
-                                    f"{self.max_volume} uL used).")
-
-    self.pending_liquids.append((op.liquid, op.volume))
-
-  def handle_dispense(self, op: "Dispense") -> None:
-    if op.volume > self.get_used_volume():
-      raise TipTooLittleLiquidError(f"Tip has too little liquid to dispense "
-                                    f"{op.volume} uL ({self.get_used_volume()} uL out of "
-                                    f"{self.max_volume} uL used).")
-
-    # remove liquids top to bottom
-    dispensed_volume = 0.0
-    while dispensed_volume < op.volume:
-      liquid, volume = self.pending_liquids.pop()
-      dispensed_volume += volume
-
-      # if we have more liquid than we need, put the excess back
-      if dispensed_volume > op.volume:
-        self.pending_liquids.append((liquid, dispensed_volume - op.volume))

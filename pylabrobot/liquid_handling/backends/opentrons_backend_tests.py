@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsBackend
-from pylabrobot.liquid_handling.channel_tip_tracker import ChannelHasNoTipError
 from pylabrobot.resources import no_volume_tracking
+from pylabrobot.resources.errors import NoTipError
 from pylabrobot.resources.opentrons import (
   OTDeck,
   opentrons_96_filtertiprack_20ul,
@@ -177,9 +177,9 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
       await self.lh.drop_tips96(self.tip_rack)
 
   async def test_aspirate96(self):
-    with self.assertRaises(ChannelHasNoTipError): # FIXME: NotImplementedError?
+    with self.assertRaises(NoTipError): # FIXME: NotImplementedError?
       await self.lh.aspirate_plate(self.plate, volume=100)
 
   async def test_dispense96(self):
-    with self.assertRaises(ChannelHasNoTipError): # FIXME: NotImplementedError?
+    with self.assertRaises(NoTipError): # FIXME: NotImplementedError?
       await self.lh.dispense_plate(self.plate, volume=100)

@@ -14,9 +14,7 @@ from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set
 import warnings
 
 from pylabrobot.default import Defaultable, Default
-from pylabrobot.liquid_handling.channel_tip_tracker import ChannelHasNoTipError
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
-from pylabrobot.liquid_handling.channel_tip_tracker import ChannelTipTracker
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
   Container,
@@ -31,9 +29,11 @@ from pylabrobot.resources import (
   TipRack,
   TipSpot,
   Well,
+  TipTracker,
   does_tip_tracking,
   does_volume_tracking
 )
+from pylabrobot.resources.errors import NoTipError
 from pylabrobot.utils.list import expand
 
 from .backends import LiquidHandlerBackend
@@ -98,7 +98,7 @@ class LiquidHandler:
     self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
     self.deck.resource_unassigned_callback_callback = self.resource_unassigned_callback
 
-    self.head: Dict[int, ChannelTipTracker] = {}
+    self.head: Dict[int, TipTracker] = {}
 
   async def setup(self):
     """ Prepare the robot for use. """
@@ -109,7 +109,7 @@ class LiquidHandler:
     await self.backend.setup()
     self.setup_finished = True
 
-    self.head = {c: ChannelTipTracker() for c in range(self.backend.num_channels)}
+    self.head = {c: TipTracker() for c in range(self.backend.num_channels)}
 
     self.resource_assigned_callback(self.deck)
     for resource in self.deck.children:
@@ -129,7 +129,11 @@ class LiquidHandler:
     assert set(state.keys()).issubset(set(self.head.keys())), "Invalid channel."
 
     for channel, tip in state.items():
-      self.head[channel].set_tip(tip)
+      if tip is None:
+        if self.head[channel].has_tip:
+          self.head[channel].remove_tip()
+      else:
+        self.head[channel].add_tip(tip)
 
   def clear_head_state(self):
     """ Clear the state of the liquid handler head. """
@@ -320,9 +324,9 @@ class LiquidHandler:
 
       ValueError: If the positions are not unique.
 
-      ChannelHasTipError: If a channel already has a tip.
+      HasTipError: If a channel already has a tip.
 
-      TipSpotHasNoTipError: If a spot does not have a tip.
+      NoTipError: If a spot does not have a tip.
     """
 
     self._assert_resources_exist(tip_spots)
@@ -346,8 +350,8 @@ class LiquidHandler:
 
     for channel, op in zip(use_channels, pickups):
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
-        op.resource.tracker.queue_pickup(op)
-      self.head[channel].queue_pickup(op)
+        op.resource.tracker.remove_tip()
+      self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
 
     extras = self._check_args(self.backend.pick_up_tips, backend_kwargs,
       default={"ops", "use_channels"})
@@ -414,9 +418,9 @@ class LiquidHandler:
 
       ValueError: If the positions are not unique.
 
-      ChannelHasNoTipError: If a channel does not have a tip.
+      NoTipError: If a channel does not have a tip.
 
-      TipSpotHasTipError: If a spot already has a tip.
+      HasTipError: If a spot already has a tip.
     """
 
     self._assert_resources_exist(tip_spots)
@@ -431,8 +435,6 @@ class LiquidHandler:
     tips = []
     for channel in use_channels:
       tip = self.head[channel].get_tip()
-      if tip is None:
-        raise ChannelHasNoTipError(channel)
       if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
         raise RuntimeError(f"Cannot drop tip with volume {tip.tracker.get_used_volume()}")
       tips.append(tip)
@@ -446,8 +448,8 @@ class LiquidHandler:
     for channel, op in zip(use_channels, drops):
       if does_tip_tracking() and isinstance(op.resource, TipSpot) and \
           not op.resource.tracker.is_disabled:
-        op.resource.tracker.queue_drop(op)
-      self.head[channel].queue_drop(op)
+        op.resource.tracker.add_tip(op.tip, commit=False)
+      self.head[channel].remove_tip()
 
     extras = self._check_args(self.backend.drop_tips, backend_kwargs,
       default={"ops", "use_channels"})
@@ -488,7 +490,10 @@ class LiquidHandler:
 
     for channel, tracker in self.head.items():
       if tracker.has_tip:
-        tip_spots.append(tracker.get_last_pickup_location())
+        origin = tracker.get_tip_origin()
+        if origin is None:
+          raise RuntimeError("No tip origin found.")
+        tip_spots.append(origin)
         channels.append(channel)
 
     if len(tip_spots) == 0:
@@ -651,9 +656,10 @@ class LiquidHandler:
 
     for op in aspirations:
       if does_volume_tracking():
-        if not op.resource.tracker.is_disabled:
-          op.resource.tracker.queue_aspiration(op)
-        op.tip.tracker.queue_aspiration(op)
+        if not op.resource.tracker.is_disabled: # TODO: why do we check this here but not in op.tip?
+          op.resource.tracker.remove_liquid(op.volume)
+        # TODO: get liquid from container
+        op.tip.tracker.add_liquid(liquid=op.liquid, volume=op.volume)
 
     extras = self._check_args(self.backend.aspirate, backend_kwargs,
       default={"ops", "use_channels"})
@@ -793,9 +799,10 @@ class LiquidHandler:
 
     for op in dispenses:
       if does_volume_tracking():
+        # TODO: get liquid from tracker instead of the op
         if not op.resource.tracker.is_disabled:
-          op.resource.tracker.queue_dispense(op)
-        op.tip.tracker.queue_dispense(op)
+          op.resource.tracker.add_liquid(liquid=op.liquid, volume=op.volume)
+        op.tip.tracker.remove_liquid(op.volume)
 
     extras = self._check_args(self.backend.dispense, backend_kwargs,
       default={"ops", "use_channels"})
@@ -1011,7 +1018,7 @@ class LiquidHandler:
       del backend_kwargs[extra]
 
     if self._picked_up_tips96 is None:
-      raise ChannelHasNoTipError("No tips have been picked up with the 96 head")
+      raise NoTipError("No tips have been picked up with the 96 head")
     tips = self._picked_up_tips96.get_all_tips()
 
     if plate.has_lid():
@@ -1063,7 +1070,7 @@ class LiquidHandler:
       del backend_kwargs[extra]
 
     if self._picked_up_tips96 is None:
-      raise ChannelHasNoTipError("No tips have been picked up with the 96 head")
+      raise NoTipError("No tips have been picked up with the 96 head")
     tips = self._picked_up_tips96.get_all_tips()
 
     if plate.has_lid():

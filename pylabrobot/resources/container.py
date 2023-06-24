@@ -2,7 +2,7 @@ from abc import ABCMeta
 from typing import Optional
 
 from .resource import Resource
-from .volume_tracker import ContainerVolumeTracker
+from .volume_tracker import VolumeTracker
 
 
 class Container(Resource, metaclass=ABCMeta):
@@ -28,7 +28,7 @@ class Container(Resource, metaclass=ABCMeta):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
     self.max_volume = max_volume
-    self.tracker = ContainerVolumeTracker(max_volume=max_volume)
+    self.tracker = VolumeTracker(max_volume=max_volume)
 
   def serialize(self) -> dict:
     return {

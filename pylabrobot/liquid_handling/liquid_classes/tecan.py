@@ -1,7 +1,7 @@
 import re
 from typing import Dict, Tuple, Optional
 
-from pylabrobot.liquid_handling.liquid_classes import Liquid
+from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.tecan import TipType
 
 

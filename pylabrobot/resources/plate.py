@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Callable, List, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
+from typing import Callable, List, Optional, Sequence, Tuple, Union, cast
 
 
+from .liquid import Liquid
+from .itemized_resource import ItemizedResource
 from .resource import Resource, Coordinate
 from .well import Well
-from .itemized_resource import ItemizedResource
 
-if TYPE_CHECKING:
-  from pylabrobot.liquid_handling.liquid_classes import Liquid
 
 
 class Lid(Resource):
