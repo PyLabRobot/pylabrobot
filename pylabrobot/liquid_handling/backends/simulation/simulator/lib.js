@@ -585,6 +585,7 @@ class Well extends Resource {
   constructor(resourceData, parent) {
     super(resourceData, parent);
     this.volume = 0;
+    this.liquids = resourceData.liquids || [];
     this.maxVolume = resourceData.max_volume;
   }
 

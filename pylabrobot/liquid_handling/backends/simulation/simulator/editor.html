@@ -146,9 +146,20 @@
       <div class="col-2 border-start sidebar" id="right-sidebar">
         <div class="flex-shrink-0 p-3">
           <div class="pb-3 mb-3 link-body-emphasis border-bottom">
-            <span class="fs-5 fw-semibold"
-              ><span id="resource-type">Resource</span> Properties</span
+            <div
+              class="d-flex flex-row justify-content-between align-items-center"
             >
+              <span class="fs-5 fw-semibold">Resource Properties</span>
+
+              <button
+                class="btn btn-light"
+                id="close-detail-editor"
+                style="width: 50px; height: 50px"
+                onclick="unselectResource()"
+              >
+                <i class="bi bi-x" style="font-size: 1.3rem"></i>
+              </button>
+            </div>
           </div>
 
           <div class="form-floating mb-3">
@@ -191,6 +202,97 @@
                   placeholder="Z"
                 />
               </div>
+            </div>
+          </div>
+
+          <div id="tip-rack-detail-editor">
+            <div class="mt-5 pb-3 mb-3 link-body-emphasis border-bottom">
+              <span class="fs-5 fw-semibold">TipRack Properties</span>
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">State</p>
+              <button class="btn btn-secondary w-100 mb-2" id="fill-tip-rack">
+                Fill with tips
+              </button>
+              <button class="btn btn-secondary w-100 mb-2" id="empty-tip-rack">
+                Empty tips
+              </button>
+            </div>
+          </div>
+
+          <div id="tip-spot-detail-editor">
+            <div class="mt-5 pb-3 mb-3 link-body-emphasis border-bottom">
+              <span class="fs-5 fw-semibold">TipSpot Properties</span>
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">State</p>
+              <button class="btn btn-secondary w-100 mb-2" id="fill-tip-spot">
+                Add tip
+              </button>
+              <button class="btn btn-secondary w-100 mb-2" id="empty-tip-spot">
+                Remove tip
+              </button>
+            </div>
+          </div>
+
+          <div id="well-detail-editor">
+            <div class="mt-5 pb-3 mb-3 link-body-emphasis border-bottom">
+              <span class="fs-5 fw-semibold">Well Properties</span>
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">Max Volume</p>
+              <input
+                type="number"
+                class="form-control"
+                id="well-max-volume"
+                placeholder="Max Volume"
+              />
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">State</p>
+
+              <div class="liquids" id="well-liquids"></div>
+
+              <button class="btn btn-secondary w-100 mb-2" id="add-well-liquid">
+                Add liquid
+              </button>
+            </div>
+          </div>
+
+          <div id="plate-detail-editor">
+            <div class="mt-5 pb-3 mb-3 link-body-emphasis border-bottom">
+              <span class="fs-5 fw-semibold">Plate Properties</span>
+              <p>
+                Warning: the well properties here apply to all wells in the
+                plate and override existing data.
+              </p>
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">Max Volume</p>
+              <input
+                type="number"
+                class="form-control"
+                id="plate-max-volume"
+                placeholder="Max Volume"
+              />
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">State</p>
+
+              <div class="liquids" id="plate-liquids"></div>
+
+              <button
+                class="btn btn-secondary w-100 mb-2"
+                id="add-plate-liquid"
+              >
+                Add liquid
+              </button>
             </div>
           </div>
         </div>

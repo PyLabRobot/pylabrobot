@@ -335,14 +335,164 @@ function closeRightSidebar() {
   rightSidebar.style.display = "none";
   rightSidebarOpened = false;
 
+  // Close the detail editors
+  document.getElementById("tip-rack-detail-editor").style.display = "none";
+  document.getElementById("tip-spot-detail-editor").style.display = "none";
+  document.getElementById("plate-detail-editor").style.display = "none";
+  document.getElementById("well-detail-editor").style.display = "none";
+
   fixEditorWidth();
+}
+
+function openTipRackEditor(tipRack) {
+  const tipRackEditor = document.getElementById("tip-rack-detail-editor");
+  tipRackEditor.style.display = "block";
+
+  // Disable the option to empty the tip rack if none of the tip spots have a tip.
+  document.getElementById("empty-tip-rack").disabled = tipRack.children.every(
+    (tipSpot) => !tipSpot.has_tip
+  );
+
+  // Disable the option to fill the tip rack if all tip spots have a tip.
+  document.getElementById("fill-tip-rack").disabled = tipRack.children.every(
+    (tipSpot) => tipSpot.has_tip
+  );
+}
+
+function openTipSpotEditor(tipSpot) {
+  const tipSpotEditor = document.getElementById("tip-spot-detail-editor");
+  tipSpotEditor.style.display = "block";
+
+  // If the tip spot has a tip, enable the option to remove the tip.
+  document.getElementById("empty-tip-spot").disabled = !tipSpot.has_tip;
+
+  // If the tip spot does not have a tip, enable the option to add a tip.
+  document.getElementById("fill-tip-spot").disabled = tipSpot.has_tip;
+}
+
+function addLiquids(liquidsElement, liquids) {
+  // liquidsElement is in the DOM
+
+  liquidsElement.innerHTML = "";
+  for (let i = 0; i < liquids.length; i++) {
+    let liquid = liquids[i];
+
+    let liquidElement = document.createElement("div");
+    liquidElement.classList.add("liquid", "mb-3");
+
+    liquidElement.innerHTML = `
+      <input
+        type="text"
+        class="form-control mb-2 liquid-name"
+        placeholder="Liquid Name"
+        data-liquid-index="${i}"
+        value="${liquid.name}"
+      />
+
+      <div class="input-group">
+        <input
+          type="number"
+          class="form-control liquid-volume"
+          placeholder="Volume"
+          value="${liquid.volume}"
+          data-liquid-index="${i}"
+        />
+
+        <span class="input-group-text">uL</span>
+      </div>
+    `;
+
+    liquidsElement.appendChild(liquidElement);
+  }
+}
+
+function openWellEditor(well) {
+  const wellEditor = document.getElementById("well-detail-editor");
+  wellEditor.style.display = "block";
+
+  // Set the well volume
+  document.getElementById("well-max-volume").value = well.maxVolume;
+
+  // Add liquid inputs to the DOM
+  const liquids = document.getElementById("well-liquids");
+  addLiquids(liquids, well.liquids);
+
+  // Add event listeners to liquid inputs
+  for (let input of document.querySelectorAll("#well-liquids input")) {
+    input.addEventListener("input", (event) => {
+      const liquidIndex = parseInt(event.target.dataset.liquidIndex);
+      const liquid = well.liquids[liquidIndex];
+
+      if (event.target.classList.contains("liquid-name")) {
+        liquid.name = event.target.value;
+      } else if (event.target.classList.contains("liquid-volume")) {
+        liquid.volume = parseFloat(event.target.value);
+      }
+
+      // TODO: just set the liquid, the well should update itself
+      well.setVolume(
+        well.liquids.reduce((a, b) => a + b.volume, 0),
+        resourceLayer
+      );
+
+      well.update();
+      autoSave();
+    });
+  }
+}
+
+function openPlateEditor(plate) {
+  const plateEditor = document.getElementById("plate-detail-editor");
+  plateEditor.style.display = "block";
+
+  // Use A1 to get information about wells in the plate
+  const well = plate.children[0];
+
+  // Set the plate volume
+  document.getElementById("plate-max-volume").value = well.maxVolume;
+
+  // Add liquid inputs to the DOM
+  const liquids = document.getElementById("plate-liquids");
+  addLiquids(liquids, well.liquids);
+
+  // Add event listeners to liquid inputs
+  for (let input of document.querySelectorAll("#plate-liquids input")) {
+    input.addEventListener("input", (event) => {
+      const liquidIndex = parseInt(event.target.dataset.liquidIndex);
+      const liquid = well.liquids[liquidIndex];
+
+      if (event.target.classList.contains("liquid-name")) {
+        liquid.name = event.target.value;
+      } else if (event.target.classList.contains("liquid-volume")) {
+        liquid.volume = parseFloat(event.target.value);
+      }
+
+      // Copy the liquid information from the first well to all wells so that
+      // they may be edited together.
+      for (let well of plate.children) {
+        let liquidsCopy = plate.children[0].liquids.map((liquid) => {
+          return { ...liquid };
+        });
+        well.liquids = liquidsCopy;
+      }
+
+      for (let well of plate.children) {
+        well.setVolume(
+          well.liquids.reduce((a, b) => a + b.volume, 0),
+          resourceLayer
+        );
+        // TODO: just set the liquid, the well should update itself
+
+        well.update();
+      }
+
+      autoSave();
+    });
+  }
 }
 
 function loadEditor(resource) {
   openRightSidebar();
-
-  document.getElementById("resource-type").innerText =
-    resource.constructor.name;
 
   // Update resource name
   document.getElementById("resource-name").value = resource.name;
@@ -351,6 +501,17 @@ function loadEditor(resource) {
   document.getElementById("resource-x").value = resource.location.x;
   document.getElementById("resource-y").value = resource.location.y;
   document.getElementById("resource-z").value = resource.location.z;
+
+  // Open detailed editor, if available
+  if (resource.constructor.name === "TipRack") {
+    openTipRackEditor(resource);
+  } else if (resource.constructor.name === "TipSpot") {
+    openTipSpotEditor(resource);
+  } else if (resource.constructor.name === "Plate") {
+    openPlateEditor(resource);
+  } else if (resource.constructor.name === "Well") {
+    openWellEditor(resource);
+  }
 }
 
 closeRightSidebar();
@@ -376,13 +537,105 @@ document.getElementById("resource-z").addEventListener("input", (event) => {
   selectedResource.update();
 });
 
-// If the user has not changed a property for 1 second, save the file.
-
 for (let input of document.querySelectorAll("#right-sidebar input")) {
   input.addEventListener("input", () => {
     autoSave();
   });
 }
+
+document.getElementById("fill-tip-rack").addEventListener("click", () => {
+  if (selectedResource.constructor.name !== "TipRack") {
+    return;
+  }
+  for (let tipSpot of selectedResource.children) {
+    tipSpot.has_tip = true;
+  }
+  selectedResource.update();
+  openTipRackEditor(selectedResource); // reopen editor to reload, bit hacky
+  autoSave();
+});
+document.getElementById("empty-tip-rack").addEventListener("click", () => {
+  if (selectedResource.constructor.name !== "TipRack") {
+    return;
+  }
+  for (let tipSpot of selectedResource.children) {
+    tipSpot.has_tip = false;
+  }
+  selectedResource.update();
+  openTipRackEditor(selectedResource); // reopen editor to reload, bit hacky
+  autoSave();
+});
+
+document.getElementById("empty-tip-spot").addEventListener("click", () => {
+  if (selectedResource.constructor.name !== "TipSpot") {
+    return;
+  }
+  selectedResource.has_tip = false;
+  selectedResource.update();
+  openTipSpotEditor(selectedResource); // reopen editor to reload, bit hacky
+  autoSave();
+});
+document.getElementById("fill-tip-spot").addEventListener("click", () => {
+  if (selectedResource.constructor.name !== "TipSpot") {
+    return;
+  }
+  selectedResource.has_tip = true;
+  selectedResource.update();
+  openTipSpotEditor(selectedResource); // reopen editor to reload, bit hacky
+  autoSave();
+});
+
+document
+  .getElementById("well-max-volume")
+  .addEventListener("input", (event) => {
+    if (selectedResource.constructor.name !== "Well") {
+      return;
+    }
+    selectedResource.maxVolume = parseFloat(event.target.value);
+    selectedResource.update();
+    autoSave();
+  });
+document.getElementById("add-well-liquid").addEventListener("click", () => {
+  if (selectedResource.constructor.name !== "Well") {
+    return;
+  }
+  selectedResource.liquids.push({ name: "Untitled Liquid", volume: 0 });
+  selectedResource.update();
+  openWellEditor(selectedResource); // reopen editor to reload, bit hacky
+  autoSave();
+});
+
+document
+  .getElementById("plate-max-volume")
+  .addEventListener("input", (event) => {
+    if (selectedResource.constructor.name !== "Plate") {
+      return;
+    }
+    let volume = parseFloat(event.target.value);
+    for (let well of selectedResource.children) {
+      well.maxVolume = volume;
+    }
+    selectedResource.update();
+    autoSave();
+  });
+document.getElementById("add-plate-liquid").addEventListener("click", () => {
+  if (selectedResource.constructor.name !== "Plate") {
+    return;
+  }
+
+  // Add the liquid to all wells in the plate
+  for (let well of selectedResource.children) {
+    well.liquids.push({ name: "Untitled Liquid", volume: 0 });
+    well.setVolume(
+      well.liquids.reduce((a, b) => a + b.volume, 0),
+      resourceLayer
+    );
+    well.update();
+  }
+
+  openPlateEditor(selectedResource); // reopen editor to reload, bit hacky
+  autoSave();
+});
 
 // Some keyboard shortcuts
 
