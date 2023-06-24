@@ -891,7 +891,7 @@ resourceLayer.on("dragend", (e) => {
   autoSave();
 });
 
-resourceLayer.on("click", (e) => {
+function handleClick(e) {
   if (tooltip !== undefined) {
     tooltip.destroy();
   }
@@ -906,17 +906,29 @@ resourceLayer.on("click", (e) => {
       )
     ) {
       closeRightSidebar();
+      closeContextMenu();
     } else {
       loadEditor(selectedResource);
     }
+  } else {
+    closeRightSidebar();
+    closeContextMenu();
   }
-});
+}
 
 // on right click, show options
 resourceLayer.on("contextmenu", (e) => {
   e.evt.preventDefault();
   selectedResource = e.target.resource;
-  openContextMenu();
+
+  // If the resource is not the deck or the trash, show the context menu.
+  let deck = resources["deck"];
+  if (
+    selectedResource !== undefined &&
+    ![trash, deck].includes(selectedResource)
+  ) {
+    openContextMenu();
+  }
 });
 
 function classForResourceType(type) {
@@ -994,6 +1006,9 @@ window.addEventListener("load", function () {
   });
 
   scaleStage(stage);
+
+  // Add click handler to stage
+  stage.on("click", handleClick);
 
   // add the layer to the stage
   stage.add(layer);
