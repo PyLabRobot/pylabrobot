@@ -931,28 +931,52 @@ resourceLayer.on("dragend", (e) => {
   autoSave();
 });
 
+function selectResource(resource) {
+  selectedResource = resource;
+  loadEditor(selectedResource);
+
+  // Draw a selection box around the resource.
+  selectedResource.mainShape.stroke("orange");
+  selectedResource.mainShape.strokeWidth(1);
+  selectedResource.mainShape.strokeEnabled(true);
+}
+
+function unselectResource() {
+  closeRightSidebar();
+  closeContextMenu();
+
+  if (selectedResource !== undefined) {
+    // Redraw the resource layer to remove the selection box.
+    selectedResource.draw(resourceLayer);
+  }
+
+  selectedResource = undefined;
+}
+
 function handleClick(e) {
   if (tooltip !== undefined) {
     tooltip.destroy();
   }
 
-  selectedResource = e.target.resource;
+  let resourceClicked = e.target.resource;
 
-  // Open the editor for the resource.
-  if (selectedResource !== undefined) {
-    if (
-      ["HamiltonDeck", "OTDeck", "Deck"].includes(
-        selectedResource.constructor.name
-      )
-    ) {
-      closeRightSidebar();
-      closeContextMenu();
-    } else {
-      loadEditor(selectedResource);
-    }
+  if (resourceClicked === undefined) {
+    // If the user clicked on the background, unselect the current resource.
+    unselectResource(selectedResource);
+  } else if (resourceClicked === selectedResource) {
+    // If the user clicked on the selected resource, unselect it.
+    unselectResource(selectedResource);
+  } else if (
+    ["HamiltonDeck", "OTDeck", "Deck"].includes(
+      resourceClicked.constructor.name
+    )
+  ) {
+    // The deck cannot be selected. If the user clicks on it, unselect the current resource.
+    unselectResource();
   } else {
-    closeRightSidebar();
-    closeContextMenu();
+    unselectResource();
+    // Select the resource.
+    selectResource(resourceClicked);
   }
 }
 
