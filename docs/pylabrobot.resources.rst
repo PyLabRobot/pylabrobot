@@ -103,7 +103,6 @@ See :doc:`Using trackers <using-trackers>` for a tutorial.
   pylabrobot.resources.no_tip_tracking
   pylabrobot.resources.set_tip_tracking
   pylabrobot.resources.tip_tracker.TipTracker
-  pylabrobot.resources.tip_tracker.SpotTipTracker
 
 
 Volume trackers
@@ -119,5 +118,3 @@ See :doc:`Using trackers <using-trackers>` for a tutorial.
   pylabrobot.resources.no_volume_tracking
   pylabrobot.resources.set_volume_tracking
   pylabrobot.resources.volume_tracker.VolumeTracker
-  pylabrobot.resources.volume_tracker.ContainerVolumeTracker
-  pylabrobot.resources.volume_tracker.TipVolumeTracker

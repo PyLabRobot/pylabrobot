@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from typing import Callable
 
-from pylabrobot.resources.volume_tracker import TipVolumeTracker
+from pylabrobot.resources.volume_tracker import VolumeTracker
 
 if sys.version_info >= (3, 11):
   from typing import Self
@@ -33,7 +33,7 @@ class Tip:
     self.maximal_volume = maximal_volume
     self.fitting_depth = fitting_depth
 
-    self.tracker = TipVolumeTracker(max_volume=self.maximal_volume)
+    self.tracker = VolumeTracker(max_volume=self.maximal_volume)
 
   def __eq__(self, other: object) -> bool:
     return (

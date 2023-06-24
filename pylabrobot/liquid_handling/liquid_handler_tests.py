@@ -6,17 +6,10 @@ from typing import Any, Dict, List, Optional, cast
 import unittest
 import unittest.mock
 
-from pylabrobot.liquid_handling.channel_tip_tracker import (
-  ChannelHasTipError,
-  ChannelHasNoTipError,
-)
-from pylabrobot.liquid_handling.liquid_classes import Liquid
 from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
 from pylabrobot.resources import no_tip_tracking, set_tip_tracking
-from pylabrobot.resources.tip_tracker import (
-  TipSpotHasTipError,
-  TipSpotHasNoTipError,
-)
+from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.volume_tracker import set_volume_tracking
 
 from . import backends
@@ -415,30 +408,34 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_tip_tracking_double_pickup(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])
 
-    with self.assertRaises(ChannelHasTipError):
+    with self.assertRaises(HasTipError):
       await self.lh.pick_up_tips(self.tip_rack["A2"])
 
   async def test_tip_tracking_empty_drop(self):
-    with self.assertRaises(ChannelHasNoTipError):
+    with self.assertRaises(NoTipError):
       await self.lh.drop_tips(self.tip_rack["A1"])
 
     await self.lh.pick_up_tips(self.tip_rack["A2"])
-    with self.assertRaises(TipSpotHasTipError):
+    with self.assertRaises(HasTipError):
       await self.lh.drop_tips(self.tip_rack["A3"])
 
   async def test_tip_tracking_empty_pickup(self):
     self.tip_rack.get_item("A1").empty()
 
-    with self.assertRaises(TipSpotHasNoTipError):
+    set_tip_tracking(enabled=True)
+    with self.assertRaises(NoTipError):
       await self.lh.pick_up_tips(self.tip_rack["A1"])
+    set_tip_tracking(enabled=False)
 
   async def test_tip_tracking_full_spot(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])
-    with self.assertRaises(TipSpotHasTipError):
+    with self.assertRaises(HasTipError):
+      set_tip_tracking(enabled=True)
       await self.lh.drop_tips(self.tip_rack["A2"])
+      set_tip_tracking(enabled=False)
 
   async def test_tip_tracking_double_pickup_single_command(self):
-    with self.assertRaises(TipSpotHasNoTipError):
+    with self.assertRaises(NoTipError):
       await self.lh.pick_up_tips(self.tip_rack["A1", "A1"])
 
   async def test_disable_tip_tracking(self):
@@ -448,18 +445,18 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # Disable tip tracking globally with context manager
     with no_tip_tracking():
-      with self.assertRaises(ChannelHasTipError):
+      with self.assertRaises(HasTipError):
         await self.lh.pick_up_tips(self.tip_rack["A1"])
 
     # Disable tip tracking globally and manually
     set_tip_tracking(enabled=False)
-    with self.assertRaises(ChannelHasTipError):
+    with self.assertRaises(HasTipError):
       await self.lh.pick_up_tips(self.tip_rack["A1"])
     set_tip_tracking(enabled=True)
 
     # Disable tip tracking for a single tip rack
     self.tip_rack.get_item("A1").tracker.disable()
-    with self.assertRaises(ChannelHasTipError):
+    with self.assertRaises(HasTipError):
       await self.lh.pick_up_tips(self.tip_rack["A1"])
     self.tip_rack.get_item("A1").tracker.enable()
 

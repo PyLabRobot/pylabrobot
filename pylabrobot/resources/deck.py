@@ -174,5 +174,4 @@ class Deck(Resource):
     for resource_name, resource_state in state.items():
       resource = self.get_resource(resource_name)
       assert hasattr(resource, "tracker")
-      resource.tracker.clear()
-      resource.tracker.load_state(resource_state, resource=resource)
+      resource.tracker.load_state(resource_state)

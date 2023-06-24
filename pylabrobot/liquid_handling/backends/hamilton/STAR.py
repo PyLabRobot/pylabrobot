@@ -17,7 +17,6 @@ from typing import Callable, Dict, List, Optional, Tuple, Sequence, TypeVar, Uni
 from pylabrobot.default import Default, get_value, is_default, is_not_default
 import pylabrobot.liquid_handling.backends.hamilton.errors as herrors
 from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
-from pylabrobot.liquid_handling.channel_tip_tracker import  ChannelHasTipError, ChannelHasNoTipError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import get_liquid_class
 from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
 from pylabrobot.liquid_handling.standard import (
@@ -41,9 +40,10 @@ from pylabrobot.resources import (
   Well
 )
 from pylabrobot.resources.errors import (
-  TipTooLittleVolumeError,
-  ContainerTooLittleLiquidError,
-  TipSpotHasNoTipError
+  TooLittleVolumeError,
+  TooLittleLiquidError,
+  HasTipError,
+  NoTipError
 )
 from pylabrobot.resources.ml_star import (
   HamiltonTip,
@@ -743,7 +743,6 @@ class STAR(HamiltonLiquidHandler):
     try:
       tip = ops[0].tip
       assert isinstance(tip, HamiltonTip), "Tip type must be HamiltonTip."
-      print(f"Pick up tip {tip}")
       return await self.pick_up_tip(
         x_positions=x_positions,
         y_positions=y_positions,
@@ -766,10 +765,10 @@ class STAR(HamiltonLiquidHandler):
         elif channel_error.trace_information in [75]:
           no_tip_present_errors.append(i-1)
       if len(tip_already_fitted_errors) > 0:
-        raise ChannelHasTipError(f"Tip already fitted on channels {tip_already_fitted_errors}") \
+        raise HasTipError(f"Tip already fitted on channels {tip_already_fitted_errors}") \
           from e
       elif len(no_tip_present_errors) > 0:
-        raise TipSpotHasNoTipError("No tip present in locations for channels "
+        raise NoTipError("No tip present in locations for channels "
                                   f"{no_tip_present_errors}") from e
 
       raise e
@@ -822,7 +821,7 @@ class STAR(HamiltonLiquidHandler):
           tip_errors.append(i-1)
 
       if len(tip_errors) > 0:
-        raise ChannelHasNoTipError(f"No tip present on channels {tip_errors}") from e
+        raise NoTipError(f"No tip present on channels {tip_errors}") from e
 
       raise e
 
@@ -1102,10 +1101,10 @@ class STAR(HamiltonLiquidHandler):
           tlv.append(i-1)
 
       if len(tll) > 0:
-        raise ContainerTooLittleLiquidError(f"There is not enough liquid in containers where the "
+        raise TooLittleLiquidError(f"There is not enough liquid in containers where the "
                                       f"following channels were trying to aspirate: {tll}") from e
       if len(tlv) > 0:
-        raise TipTooLittleVolumeError(f"There is too much liquid in the following channels: {tlv}")\
+        raise TooLittleVolumeError(f"There is too much liquid in the following channels: {tlv}") \
           from e
 
       raise e
@@ -1331,7 +1330,7 @@ class STAR(HamiltonLiquidHandler):
 
       if len(tll) > 0:
         raise \
-          TipTooLittleVolumeError(f"There is not enough liquid in the following channels: {tll}") \
+          TooLittleVolumeError(f"There is not enough liquid in the following channels: {tll}") \
           from e
 
       raise e

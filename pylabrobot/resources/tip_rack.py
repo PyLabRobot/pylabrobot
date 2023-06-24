@@ -7,7 +7,7 @@ from typing import List, Union, Optional, Sequence
 
 from pylabrobot import utils
 from pylabrobot.resources.tip import Tip, TipCreator
-from pylabrobot.resources.tip_tracker import SpotTipTracker, does_tip_tracking
+from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
 
 from .itemized_resource import ItemizedResource
 from .resource import Resource
@@ -31,12 +31,13 @@ class TipSpot(Resource):
 
     super().__init__(name, size_x=size_y, size_y=size_x, size_z=size_z,
       category=category)
-    self.tracker = SpotTipTracker()
+    self.tracker = TipTracker()
     self.parent: Optional["TipRack"] = None
 
     self.make_tip = make_tip
 
-    self.tracker.set_tip(self.make_tip() if start_with_tip else None)
+    if start_with_tip:
+      self.tracker.add_tip(self.make_tip())
 
   def get_tip(self) -> Tip:
     """ Get a tip from the tip spot. """
@@ -44,7 +45,7 @@ class TipSpot(Resource):
     # Tracker will raise an error if there is no tip. We spawn a new tip if tip tracking is disabled
     tracks = does_tip_tracking() and not self.tracker.is_disabled
     if not self.tracker.has_tip and not tracks:
-      self.tracker.set_tip(self.make_tip())
+      self.tracker.add_tip(self.make_tip())
 
     return self.tracker.get_tip()
 
@@ -54,7 +55,7 @@ class TipSpot(Resource):
 
   def empty(self) -> None:
     """ Empty the tip spot. """
-    self.tracker.set_tip(None)
+    self.tracker.remove_tip()
 
   def serialize(self) -> dict:
     """ Serialize the tip spot. """
@@ -155,9 +156,9 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       # If the tip state is different from the current state, update it by either creating or
       # removing the tip.
       if has_tip[i] and not self.get_item(i).has_tip():
-        self.get_item(i).tracker.set_tip(self.get_item(i).make_tip())
+        self.get_item(i).tracker.add_tip(self.get_item(i).make_tip())
       elif not has_tip[i] and self.get_item(i).has_tip():
-        self.get_item(i).tracker.set_tip(None)
+        self.get_item(i).tracker.remove_tip()
 
   def empty(self):
     """ Empty the tip rack. This is useful when tip tracking is enabled and you are modifying

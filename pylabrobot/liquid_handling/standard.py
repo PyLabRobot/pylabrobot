@@ -7,7 +7,7 @@ import enum
 from typing import List, Optional, TYPE_CHECKING
 
 from pylabrobot.default import Defaultable, Default, is_not_default
-from pylabrobot.liquid_handling.liquid_classes.abstract import Liquid
+from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.coordinate import Coordinate
 if TYPE_CHECKING:
   from pylabrobot.resources import Container, Plate, Resource, TipRack
