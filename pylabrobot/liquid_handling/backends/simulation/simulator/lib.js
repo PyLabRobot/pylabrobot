@@ -272,6 +272,8 @@ class Resource {
       // why was child.size_x / 2 needed?
       child.mainShape.x(child.location.x + x); // + child.size_x / 2);
       child.mainShape.y(child.location.y + y); // + child.size_y / 2);
+
+      child.updateChildrenLocation(child.location.x + x, child.location.y + y);
     }
   }
 
