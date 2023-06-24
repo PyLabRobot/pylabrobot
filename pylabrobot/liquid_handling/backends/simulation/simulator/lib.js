@@ -294,6 +294,7 @@ class Resource {
       return {
         x: parentLocation.x + this.location.x,
         y: parentLocation.y + this.location.y,
+        z: parentLocation.z + this.location.z,
       };
     }
     return this.location;
@@ -721,8 +722,21 @@ class CarrierSite extends Resource {
   }
 }
 
-resourceLayer.on("dragstart", () => {
+function moveToTop(resource) {
+  // Recursively move the resource and its children to the top of the layer.
+  resource.mainShape.moveToTop();
+  for (let i = 0; i < resource.children.length; i++) {
+    moveToTop(resource.children[i]);
+  }
+}
+
+resourceLayer.on("dragstart", (e) => {
   resourceLayer.add(trash);
+
+  let resource = e.target.resource;
+
+  // Move dragged resource to top of layer
+  moveToTop(resource);
 
   // I think we can set resourceBeingDragged somewhere, and use that in the handler. This will allow
   // us to drag a plate when in reality a well is being dragged.
@@ -736,64 +750,26 @@ resourceLayer.on("dragmove", (e) => {
   let { x, y } = e.target.position();
   let resource = e.target.resource;
 
-  // Snap to grid
-  // Remove any existing snap lines.
+  // Snap children to position in UI.
+  resource.updateChildrenLocation(x, y);
+
+  // Remove any existing snap lines and boxes.
   if (snapLines.length > 0) {
     for (let i = snapLines.length - 1; i >= 0; i--) {
       snapLines[i].destroy();
     }
   }
 
-  // Find the snapping lines for the resource.
-  let { snappingX, snappingY, resourceX, resourceY } = getSnappingGrid(
-    x,
-    y,
-    resource.size_x,
-    resource.size_y
-  );
-
-  // If we have a snapping match, show an indicator and snap to the grid.
-  if (snappingX !== undefined) {
-    x = resourceX;
-
-    // Draw a vertical line
-    let snapLine = new Konva.Line({
-      points: [snappingX, 0, snappingX, canvasHeight],
-      stroke: "red",
-      strokeWidth: 2,
-      dash: [10, 5],
-    });
-    resourceLayer.add(snapLine);
-    snapLines.push(snapLine);
+  if (snappingBox !== undefined) {
+    snappingBox.destroy();
   }
-  if (snappingY !== undefined) {
-    y = resourceY;
 
-    // Draw a vertical line
-    let snapLine = new Konva.Line({
-      points: [0, snappingY, canvasWidth, snappingY],
-      stroke: "red",
-      strokeWidth: 2,
-      dash: [10, 5],
-    });
-    resourceLayer.add(snapLine);
-    snapLines.push(snapLine);
-  }
-  e.target.position({ x: x, y: y }); // snap to grid
-
-  // Update the UI location of children.
-  resource.updateChildrenLocation(x, y);
-
-  // If we have a snapping match, show an indicator.
+  // If we have a snapping box match, draw a snapping box indicator around the area.
   const snapResult = getSnappingResourceAndLocationAndSnappingBox(
     resource,
     x + resource.size_x / 2,
     y + resource.size_y / 2
   );
-
-  if (snappingBox !== undefined) {
-    snappingBox.destroy();
-  }
 
   if (snapResult !== undefined) {
     const {
@@ -811,6 +787,47 @@ resourceLayer.on("dragmove", (e) => {
       dash: [10, 5],
     });
     resourceLayer.add(snappingBox);
+  } else {
+    // If there is no box snapping match, check if there is a grid snapping match.
+    // Find the snapping lines for the resource.
+    let { snappingX, snappingY, resourceX, resourceY } = getSnappingGrid(
+      x,
+      y,
+      resource.size_x,
+      resource.size_y
+    );
+
+    // If we have a snapping match, show an indicator and snap to the grid.
+    if (snappingX !== undefined) {
+      x = resourceX;
+
+      // Draw a vertical line
+      let snapLine = new Konva.Line({
+        points: [snappingX, 0, snappingX, canvasHeight],
+        stroke: "red",
+        strokeWidth: 2,
+        dash: [10, 5],
+      });
+      resourceLayer.add(snapLine);
+      snapLines.push(snapLine);
+    }
+    if (snappingY !== undefined) {
+      y = resourceY;
+
+      // Draw a vertical line
+      let snapLine = new Konva.Line({
+        points: [0, snappingY, canvasWidth, snappingY],
+        stroke: "red",
+        strokeWidth: 2,
+        dash: [10, 5],
+      });
+      resourceLayer.add(snapLine);
+      snapLines.push(snapLine);
+    }
+
+    // Snap the box to the grid.
+    e.target.position({ x: x, y: y });
+    resource.updateChildrenLocation(x, y);
   }
 });
 
