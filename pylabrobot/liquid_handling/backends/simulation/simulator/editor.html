@@ -91,7 +91,7 @@
     </noscript>
 
     <div class="row content" id="editor">
-      <div class="col-md-2 border-end" id="sidebar">
+      <div class="col-2 border-end sidebar" id="left-sidebar">
         <div class="flex-shrink-0 p-3">
           <div class="pb-3 mb-3 link-body-emphasis border-bottom">
             <span class="fs-5 fw-semibold">Labware Library</span>
@@ -101,7 +101,7 @@
         </div>
       </div>
 
-      <main class="col-10">
+      <main class="col-8" id="editor-column">
         <div id="context-menu">
           <button id="delete">
             <i class="bi bi-trash"></i>
@@ -142,6 +142,57 @@
 
         <div id="kanvas"></div>
       </main>
+
+      <div class="col-2 border-start sidebar" id="right-sidebar">
+        <div class="flex-shrink-0 p-3">
+          <div class="pb-3 mb-3 link-body-emphasis border-bottom">
+            <span class="fs-5 fw-semibold">Resource Properties</span>
+          </div>
+
+          <div class="form-floating mb-3">
+            <input
+              type="text"
+              class="form-control"
+              id="resource-name"
+              placeholder="Resource Name"
+            />
+            <label for="resource-name">Resource Name</label>
+          </div>
+
+          <div class="mb-3">
+            <p class="fw-semibold">Location</p>
+            <div class="row g-3">
+              <div class="col">
+                <label for="resource-x" class="form-label">X</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="resource-x"
+                  placeholder="X"
+                />
+              </div>
+              <div class="col">
+                <label for="resource-y" class="form-label">Y</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="resource-y"
+                  placeholder="Y"
+                />
+              </div>
+              <div class="col">
+                <label for="resource-y" class="form-label">Z</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="resource-z"
+                  placeholder="Z"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="file-not-found" style="display: none">

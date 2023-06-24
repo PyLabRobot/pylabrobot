@@ -354,6 +354,10 @@ class Resource {
       this.parent.unassignChild(this);
     }
   }
+
+  update() {
+    this.draw(resourceLayer);
+  }
 }
 
 class Deck extends Resource {
@@ -545,6 +549,18 @@ class Plate extends Resource {
       },
     };
   }
+
+  update() {
+    super.update();
+
+    // Rename the children
+    for (let i = 0; i < this.num_items_x; i++) {
+      for (let j = 0; j < this.num_items_y; j++) {
+        const child = this.children[i * this.num_items_y + j];
+        child.name = `${this.name}_well_${i}_${j}`;
+      }
+    }
+  }
 }
 
 class Well extends Resource {
@@ -687,7 +703,20 @@ class Carrier extends Resource {
 }
 
 class CarrierSite extends Resource {
-  // Nothing special.
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
+    const { spot } = resourceData;
+    this.spot = spot;
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        spot: this.spot,
+      },
+    };
+  }
 }
 
 resourceLayer.on("dragstart", () => {
@@ -812,7 +841,7 @@ resourceLayer.on("dragend", (e) => {
 
       // Update the deck layout with the new parent.
       if (resource.parent !== undefined) {
-        resource.parent.unassignChild(this);
+        resource.parent.unassignChild(resource);
       }
       parent.assignChild(resource);
     }
@@ -841,6 +870,27 @@ resourceLayer.on("dragend", (e) => {
   trash.remove();
 
   autoSave();
+});
+
+resourceLayer.on("click", (e) => {
+  if (tooltip !== undefined) {
+    tooltip.destroy();
+  }
+
+  selectedResource = e.target.resource;
+
+  // Open the editor for the resource.
+  if (selectedResource !== undefined) {
+    if (
+      ["HamiltonDeck", "OTDeck", "Deck"].includes(
+        selectedResource.constructor.name
+      )
+    ) {
+      closeRightSidebar();
+    } else {
+      loadEditor(selectedResource);
+    }
+  }
 });
 
 // on right click, show options
