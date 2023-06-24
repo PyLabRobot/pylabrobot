@@ -580,13 +580,15 @@ class Well extends Resource {
   drawMainShape(layer) {
     const { x, y } = this.getAbsoluteLocation();
     this.mainShape = new Konva.Circle({
-      x: x + this.size_x / 2,
-      y: y + this.size_y / 2,
+      x: x,
+      y: y,
       radius: this.size_x / 2,
       fill: Well.colorForVolume(this.volume, this.maxVolume),
       stroke: "black",
       strokeWidth: 1,
     });
+    this.mainShape.offsetX(-this.size_x / 2);
+    this.mainShape.offsetY(-this.size_y / 2);
     layer.add(this.mainShape);
   }
 
@@ -629,7 +631,7 @@ class TipRack extends Resource {
   drawMainShape(layer) {
     const { x, y } = this.getAbsoluteLocation();
 
-    const rect = new Konva.Rect({
+    this.mainShape = new Konva.Rect({
       x: x,
       y: y,
       width: this.size_x,
@@ -637,8 +639,19 @@ class TipRack extends Resource {
       fill: this.color,
       stroke: "black",
       strokeWidth: 1,
+      draggable: true,
     });
-    layer.add(rect);
+    layer.add(this.mainShape);
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        num_items_x: this.num_items_x,
+        num_items_y: this.num_items_y,
+      },
+    };
   }
 }
 
@@ -658,16 +671,18 @@ class TipSpot extends Resource {
     }
 
     const { x, y } = this.getAbsoluteLocation();
-    const circ = new Konva.Circle({
-      x: x + this.size_x / 2,
-      y: y + this.size_y / 2,
-      radius: this.size_x,
+    this.mainShape = new Konva.Circle({
+      x: x,
+      y: y,
+      radius: this.size_x / 2,
       fill: this.has_tip ? this.color : "white",
       stroke: "black",
       strokeWidth: 1,
     });
-    layer.add(circ);
-    this._circles.push(circ);
+    this.mainShape.offsetX(-this.size_x / 2);
+    this.mainShape.offsetY(-this.size_y / 2);
+    layer.add(this.mainShape);
+    this._circles.push(this.mainShape);
   }
 
   setTip(has_tip, layer) {
@@ -687,6 +702,16 @@ class TipSpot extends Resource {
       throw new Error("Already has tip");
     }
     this.setTip(true, layer);
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        prototype_tip: this.tip,
+        has_tip: this.has_tip,
+      },
+    };
   }
 }
 
