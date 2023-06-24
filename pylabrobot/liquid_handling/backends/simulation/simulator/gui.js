@@ -341,6 +341,9 @@ function closeRightSidebar() {
 function loadEditor(resource) {
   openRightSidebar();
 
+  document.getElementById("resource-type").innerText =
+    resource.constructor.name;
+
   // Update resource name
   document.getElementById("resource-name").value = resource.name;
 
