@@ -231,6 +231,112 @@ document.querySelector("#search-bar input").addEventListener("input", (e) => {
   }
 });
 
+// The sidebars
+
+var leftSidebarOpened = true;
+var rightSidebarOpened = true;
+
+function fixEditorWidth() {
+  const editor = document.getElementById("editor-column");
+
+  // Remove all possible col-* classes.
+  editor.classList.remove("col-12");
+  editor.classList.remove("col-10");
+  editor.classList.remove("col-8");
+
+  // Add the correct class.
+  if (leftSidebarOpened && rightSidebarOpened) {
+    editor.classList.add("col-8");
+  } else if (leftSidebarOpened || rightSidebarOpened) {
+    editor.classList.add("col-10");
+  } else {
+    editor.classList.add("col-12");
+  }
+}
+
+function openLeftSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  sidebar.style.display = "block";
+  leftSidebarOpened = true;
+
+  fixEditorWidth();
+}
+
+function closeLeftSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  sidebar.style.display = "none";
+  leftSidebarOpened = false;
+
+  fixEditorWidth();
+}
+
+function openRightSidebar() {
+  const rightSidebar = document.getElementById("right-sidebar");
+  rightSidebar.style.display = "block";
+  rightSidebarOpened = true;
+
+  fixEditorWidth();
+}
+
+function closeRightSidebar() {
+  const rightSidebar = document.getElementById("right-sidebar");
+  rightSidebar.style.display = "none";
+  rightSidebarOpened = false;
+
+  fixEditorWidth();
+}
+
+function loadEditor(resource) {
+  openRightSidebar();
+
+  // Update resource name
+  document.getElementById("resource-name").value = resource.name;
+
+  // Update resource location
+  document.getElementById("resource-x").value = resource.location.x;
+  document.getElementById("resource-y").value = resource.location.y;
+  document.getElementById("resource-z").value = resource.location.z;
+}
+
+closeRightSidebar();
+
+// Add event listeners to resource properties
+document.getElementById("resource-name").addEventListener("input", (event) => {
+  selectedResource.name = event.target.value;
+  selectedResource.update();
+});
+
+document.getElementById("resource-x").addEventListener("input", (event) => {
+  selectedResource.location.x = parseFloat(event.target.value);
+  selectedResource.update();
+});
+
+document.getElementById("resource-y").addEventListener("input", (event) => {
+  selectedResource.location.y = parseFloat(event.target.value);
+  selectedResource.update();
+});
+
+document.getElementById("resource-z").addEventListener("input", (event) => {
+  selectedResource.location.z = parseFloat(event.target.value);
+  selectedResource.update();
+});
+
+// If the user has not changed a property for 1 second, save the file.
+var autoSaveTimeout = undefined;
+const SAVING_WAIT_TIME = 1000; // ms
+
+for (let input of document.querySelectorAll("#right-sidebar input")) {
+  input.addEventListener("input", () => {
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
+    }
+
+    autoSaveTimeout = setTimeout(() => {
+      autoSave();
+    }, SAVING_WAIT_TIME);
+  });
+}
+
 // Loading the library
 
 let allPlateNames = [];
