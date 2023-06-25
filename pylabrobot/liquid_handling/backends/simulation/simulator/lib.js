@@ -204,6 +204,8 @@ class Resource {
     }
   }
 
+  draggable = true;
+
   draw(layer) {
     // On draw, destroy the old shape.
     if (this.mainShape !== undefined) {
@@ -274,7 +276,7 @@ class Resource {
       fill: this.color,
       stroke: "black",
       strokeWidth: 1,
-      draggable: true,
+      draggable: this.draggable,
     });
     layer.add(this.mainShape);
   }
@@ -789,6 +791,8 @@ class CarrierSite extends Resource {
     const { spot } = resourceData;
     this.spot = spot;
   }
+
+  draggable = false;
 
   serialize() {
     return {
