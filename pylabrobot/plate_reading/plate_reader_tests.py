@@ -4,7 +4,7 @@ import unittest
 
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.backend import PlateReaderBackend
-from pylabrobot.resources import Plate, Well, create_equally_spaced
+from pylabrobot.resources import Plate
 
 
 class MockPlateReaderBackend(PlateReaderBackend):
@@ -34,28 +34,23 @@ class TestPlateReaderResource(unittest.TestCase):
 
   def test_add_plate(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1,
-      items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
-        num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1))
+      items=[])
     plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
     plate_reader.assign_child_resource(plate)
 
   def test_add_plate_full(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1,
-      items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
-        num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1))
+      items=[])
     plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
     plate_reader.assign_child_resource(plate)
 
     another_plate = Plate("another_plate", size_x=1, size_y=1, size_z=1, one_dot_max=1,
-      lid_height=1, items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
-        num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1))
+      lid_height=1, items=[])
     with self.assertRaises(ValueError):
       plate_reader.assign_child_resource(another_plate)
 
   def test_get_plate(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1,
-      items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
-        num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1))
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1, items=[])
     plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
     plate_reader.assign_child_resource(plate)
 

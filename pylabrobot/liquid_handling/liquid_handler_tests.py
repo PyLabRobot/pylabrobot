@@ -472,10 +472,10 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "kwargs": {
         "use_channels": [0, 1, 3, 4],
         "ops": [
-          Drop(self.deck.get_trash_area(), tip=tips[0], offset=offsets[3]),
-          Drop(self.deck.get_trash_area(), tip=tips[1], offset=offsets[2]),
-          Drop(self.deck.get_trash_area(), tip=tips[2], offset=offsets[1]),
           Drop(self.deck.get_trash_area(), tip=tips[3], offset=offsets[0]),
+          Drop(self.deck.get_trash_area(), tip=tips[2], offset=offsets[1]),
+          Drop(self.deck.get_trash_area(), tip=tips[1], offset=offsets[2]),
+          Drop(self.deck.get_trash_area(), tip=tips[0], offset=offsets[3]),
         ]}})
 
     # test tip tracking
