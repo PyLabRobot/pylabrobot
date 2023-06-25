@@ -98,6 +98,112 @@
             <p class="text-muted mb-0 ms-auto">Use cmd/ctrl + k to search</p>
           </div>
           <ul class="list-unstyled ps-0" id="labware-list"></ul>
+          <button
+            class="btn btn-secondary w-100 mt-3"
+            id="open-custom-resource-modal"
+          >
+            Add custom resource
+          </button>
+        </div>
+      </div>
+
+      <div
+        id="custom-resource-modal"
+        class="modal-background"
+        style="display: none"
+      >
+        <div class="modal-content">
+          <h2>Add custom resource</h2>
+
+          <div class="form-floating mb-3">
+            <input
+              type="text"
+              class="form-control"
+              id="custom-resource-name"
+              placeholder="Resource Name"
+            />
+            <label for="custom-resource-name">Resource Name</label>
+          </div>
+
+          <!-- size -->
+          <div class="row">
+            <div class="col">
+              <div class="mb-3">
+                <label for="custom-resource-size_x" class="mb-1"
+                  >size_x (mm)</label
+                >
+                <input
+                  type="number"
+                  class="form-control"
+                  id="custom-resource-size_x"
+                  placeholder="size_x"
+                  value="10"
+                />
+              </div>
+            </div>
+            <div class="col">
+              <div class="mb-3">
+                <label for="custom-resource-size_y" class="mb-1"
+                  >size_y (mm)</label
+                >
+                <input
+                  type="number"
+                  class="form-control"
+                  id="custom-resource-size_y"
+                  placeholder="size_y"
+                  value="10"
+                />
+              </div>
+            </div>
+            <div class="col">
+              <div class="mb-3">
+                <label for="custom-resource-size_z" class="mb-1"
+                  >size_z (mm)</label
+                >
+                <input
+                  type="number"
+                  class="form-control"
+                  id="custom-resource-size_z"
+                  placeholder="size_z"
+                  value="10"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <div>
+              <input
+                type="checkbox"
+                class="form-check-input"
+                id="custom-resource-aspiratable"
+                placeholder="aspiratable"
+                value="true"
+              />
+              <label for="custom-resource-aspiratable" class="mb-1">
+                Aspiratable
+              </label>
+            </div>
+
+            <div id="custom-resource-max-volume-div" style="display: none">
+              <label for="custom-resource-max-volume" class="mb-1">
+                max_volume (mL)
+              </label>
+              <input
+                type="number"
+                class="form-control"
+                id="custom-resource-max-volume"
+                placeholder="max_volume"
+                value="1000"
+              />
+            </div>
+          </div>
+
+          <button class="btn btn-primary w-100" id="add-custom-resource">
+            Add custom resource
+          </button>
+
+          <div class="footer">Press ESC to close</div>
         </div>
       </div>
 
@@ -318,8 +424,12 @@
       </div>
     </div>
 
-    <div id="search-bar-background" style="display: none">
-      <div id="search-bar">
+    <div
+      id="search-bar-background"
+      class="modal-background"
+      style="display: none"
+    >
+      <div id="search-bar" class="modal-content">
         <input type="text" placeholder="Search Labware Library" />
 
         <div class="results"></div>

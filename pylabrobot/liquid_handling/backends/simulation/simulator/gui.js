@@ -691,6 +691,114 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// Custom resources
+var customResourceModalOpen = false;
+
+function openCustomResourceModal() {
+  let customResourceModal = document.getElementById("custom-resource-modal");
+  customResourceModal.style.display = "block";
+  customResourceModalOpen = true;
+
+  // Set default resource name
+  document.getElementById("custom-resource-name").value = newResourceName();
+}
+
+function closeCustomResourceModal() {
+  let customResourceModal = document.getElementById("custom-resource-modal");
+  customResourceModal.style.display = "none";
+  customResourceModalOpen = false;
+}
+
+document
+  .getElementById("open-custom-resource-modal")
+  .addEventListener("click", function (e) {
+    openCustomResourceModal();
+  });
+
+document.addEventListener("keydown", function (e) {
+  if (e.key == "Escape" && customResourceModalOpen) {
+    closeCustomResourceModal();
+  }
+});
+
+document
+  .getElementById("custom-resource-aspiratable")
+  .addEventListener("change", function (e) {
+    let aspiratable = document.getElementById(
+      "custom-resource-aspiratable"
+    ).checked;
+
+    if (aspiratable) {
+      document.getElementById("custom-resource-max-volume-div").style.display =
+        "block";
+
+      // set default value to size_x * size_y * size_z
+      let size_x = parseFloat(
+        document.getElementById("custom-resource-size_x").value
+      );
+      let size_y = parseFloat(
+        document.getElementById("custom-resource-size_y").value
+      );
+      let size_z = parseFloat(
+        document.getElementById("custom-resource-size_z").value
+      );
+      document.getElementById("custom-resource-max-volume").value =
+        (size_x * size_y * size_z) / 1000;
+    } else {
+      document.getElementById("custom-resource-max-volume-div").style.display =
+        "none";
+    }
+  });
+
+document
+  .getElementById("add-custom-resource")
+  .addEventListener("click", function () {
+    const deck = resources["deck"];
+    const deckCenter = {
+      x: deck.location.x + deck.size_x / 2,
+      y: deck.location.y + deck.size_y / 2,
+      z: 0,
+    };
+
+    let resourceName = document.getElementById("custom-resource-name").value;
+
+    let size_x = parseFloat(
+      document.getElementById("custom-resource-size_x").value
+    );
+    let size_y = parseFloat(
+      document.getElementById("custom-resource-size_y").value
+    );
+    let size_z = parseFloat(
+      document.getElementById("custom-resource-size_z").value
+    );
+
+    let aspiratable = document.getElementById(
+      "custom-resource-aspiratable"
+    ).checked;
+
+    let resourceData = {
+      name: resourceName,
+      location: deckCenter,
+      size_x: size_x,
+      size_y: size_y,
+      size_z: size_z,
+      children: [],
+    };
+
+    let resource;
+    if (aspiratable) {
+      resource = new Container(resourceData);
+    } else {
+      resource = new Resource(resourceData);
+    }
+    // TODO: there should be a better way to do the three below.
+    resources[resourceName] = resource;
+    deck.assignChild(resource);
+    resource.draw(resourceLayer);
+
+    closeCustomResourceModal();
+  });
+
 // Loading the library
 
 let allPlateNames = [];
