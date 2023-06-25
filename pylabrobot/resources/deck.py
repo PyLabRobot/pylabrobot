@@ -142,7 +142,7 @@ class Deck(Resource):
       summary_ += f"{resource.name}: {resource}\n"
     return summary_
 
-  def save_state(self, filename: str) -> None:
+  def save_state_to_file(self, filename: str) -> None:
     """ Save the state of the deck to a file. The state includes volumes and operations in wells.
 
     Note: this does not include the resources on the deck. To safe the deck layout instead, use
@@ -165,13 +165,17 @@ class Deck(Resource):
     with open(filename, "w", encoding="utf-8") as f:
       f.write(json.dumps(state, indent=2))
 
-  def load_state(self, filename: str) -> None:
-    """ Load the state of the deck from a file. """
+  def load_state(self, data: dict) -> None:
+    """ Load state from a data dictionary. """
 
-    with open(filename, "r", encoding="utf-8") as f:
-      state = json.load(f)
-
-    for resource_name, resource_state in state.items():
+    for resource_name, resource_state in data.items():
       resource = self.get_resource(resource_name)
       assert hasattr(resource, "tracker")
       resource.tracker.load_state(resource_state)
+
+  def load_state_from_file(self, filename: str) -> None:
+    """ Load the state of the deck from a file. """
+
+    with open(filename, "r", encoding="utf-8") as f:
+      data = json.load(f)
+    self.load_state(data)
