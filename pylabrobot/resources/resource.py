@@ -274,16 +274,20 @@ class Resource:
     raise ValueError(f"Resource with name '{name}' does not exist.")
 
   def get_2d_center_offsets(self, n: int = 1) -> List[Coordinate]:
-    """ Get the offsets (from bottom left) of the center(s) of this resoure. If `n` is greater than
-    one, the offsets are equally spaced along a column (the y axis), all having the same x and z
-    coordinates. The z coordinate is the bottom of the resource. """
+    """ Get the offsets (from bottom left) of the center(s) of this resource.
+
+    If `n` is greater than one, the offsets are equally spaced along a column (the y axis), all
+    having the same x and z coordinates. The z coordinate is the bottom of the resource.
+
+    The offsets are returned from high y (back) to low y (front).
+    """
 
     dx = self.get_size_x() / 2
     dy = self.get_size_y() / (n+1)
     if dy < 9: # TODO: too specific?
       raise ValueError(f"Resource is too small to space {n} channels evenly.")
     offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
-    return offsets
+    return list(reversed(offsets))
 
   def rotate(self, degrees: int):
     """ Rotate counter clockwise by the given number of degrees.

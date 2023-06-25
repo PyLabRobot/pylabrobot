@@ -26,8 +26,10 @@ def Cos_1536_10ul(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=0.5,
-      item_size_x=2.25,
-      item_size_y=2.25,
+      item_dx=2.25,
+      item_dy=2.25,
+      size_x=2.25,
+      size_y=2.25,
     ),
   )
 
@@ -63,8 +65,10 @@ def Cos_384_DW(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5,
     ),
   )
 
@@ -100,8 +104,10 @@ def Cos_384_PCR(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5,
     ),
   )
 
@@ -137,8 +143,10 @@ def Cos_384_Sq(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5,
     ),
   )
 
@@ -174,8 +182,10 @@ def Cos_384_Sq_Rd(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5,
     ),
   )
 
@@ -211,8 +221,10 @@ def Cos_96_DW_1mL(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -248,8 +260,10 @@ def Cos_96_DW_2mL(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -285,8 +299,10 @@ def Cos_96_DW_500ul(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=2.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -322,8 +338,10 @@ def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -359,8 +377,10 @@ def Cos_96_FL(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -386,8 +406,10 @@ def Cos_96_Filter(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=2.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -423,8 +445,10 @@ def Cos_96_HalfArea(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -460,8 +484,10 @@ def Cos_96_PCR(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=0.5,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -497,8 +523,10 @@ def Cos_96_ProtCryst(name: str, with_lid: bool = False) -> Plate:
       dx=9.45,
       dy=7.0,
       dz=10.0,
-      item_size_x=4.5,
-      item_size_y=9.0,
+      item_dx=4.5,
+      item_dy=9.0,
+      size_x=4.5,
+      size_y=9.0,
     ),
   )
 
@@ -534,8 +562,10 @@ def Cos_96_Rd(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=0.75,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -571,8 +601,10 @@ def Cos_96_SpecOps(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=0.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -608,8 +640,10 @@ def Cos_96_UV(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 
@@ -645,8 +679,10 @@ def Cos_96_Vb(name: str, with_lid: bool = False) -> Plate:
       dx=9.5,
       dy=7.0,
       dz=1.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
     ),
   )
 

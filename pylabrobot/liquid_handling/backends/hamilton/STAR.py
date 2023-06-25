@@ -431,7 +431,19 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
 
     cmd, id_ = self._assemble_command(module=module, command=command, tip_pattern=tip_pattern,
       **kwargs)
+    return await self._write_and_read_command(id_=id_, cmd=cmd, fmt=fmt,
+      write_timeout=write_timeout, read_timeout=read_timeout, wait=wait)
 
+  async def _write_and_read_command(
+    self,
+    id_: str,
+    cmd: str,
+    fmt: str = "",
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait: bool = True
+  ) -> Optional[dict]:
+    """ Write a command to the Hamilton machine and read the response. """
     self.write(cmd, timeout=write_timeout)
 
     if not wait:
@@ -444,7 +456,8 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     loop = asyncio.get_event_loop()
     fut = loop.create_future()
     self._start_reading(id_, loop, fut, cmd, fmt, read_timeout)
-    return await fut
+    result = await fut
+    return cast(dict, result) # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
 
   def _start_reading(
     self,
@@ -497,7 +510,8 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
         parsed_response = self.parse_fw_string(resp)
         logger.info("Received response: %s", resp)
       except ValueError:
-        logger.warning("Could not parse response: %s", resp)
+        if resp != "":
+          logger.warning("Could not parse response: %s", resp)
         continue
 
       for id_, (loop, fut, cmd, fmt, timeout_time) in self._waiting_tasks.items():
@@ -838,6 +852,13 @@ class STAR(HamiltonLiquidHandler):
         5420.0: 5000.0,
       }.get(op.tip.maximal_volume, op.tip.maximal_volume) for op in ops]
 
+  def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
+    """ Assert that resources are in a valid location for pipetting. """
+    for resource in resources:
+      if resource.get_absolute_location().z < 100:
+        raise ValueError(
+          f"Resource {resource} is too low: {resource.get_absolute_location().z} < 100")
+
   class LLDMode(enum.Enum):
     """ Liquid level detection mode. """
 
@@ -971,14 +992,16 @@ class STAR(HamiltonLiquidHandler):
         empty=False # for aspiration
       ) for tmv, op in zip(tip_max_volumes, ops)]
 
+    self._assert_valid_resources([op.resource for op in ops])
+
     # correct volumes using the liquid class
     for op, hlc in zip(ops, hamilton_liquid_classes):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
     well_bottoms = [op.get_absolute_location().z + \
                     (op.offset.z if is_not_default(op.offset) else 0) for op in ops]
-    liquid_surfaces_no_lld = [ls + (op.liquid_height if is_not_default(op.liquid_height) else 1)
-                              for ls, op in zip(well_bottoms, ops)]
+    liquid_surfaces_no_lld = [wb + (op.liquid_height if is_not_default(op.liquid_height) else 1)
+                              for wb, op in zip(well_bottoms, ops)]
     lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
 
     aspiration_volumes = [int(op.volume * 10) for op in ops]
@@ -991,6 +1014,7 @@ class STAR(HamiltonLiquidHandler):
     second_section_ratio = _fill_in_defaults(second_section_ratio, [6180]*n)
     minimum_height = \
       _fill_in_defaults(minimum_height, [int((ls-5) * 10) for ls in liquid_surfaces_no_lld])
+    # TODO: I think minimum height should be the minimum height of the well
     immersion_depth = _fill_in_defaults(immersion_depth, [0]*n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0]*n)

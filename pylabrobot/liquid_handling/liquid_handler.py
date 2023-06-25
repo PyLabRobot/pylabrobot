@@ -534,7 +534,6 @@ class LiquidHandler:
 
     trash = self.deck.get_trash_area()
     offsets = trash.get_2d_center_offsets(n=n)
-    offsets = list(reversed(offsets))
 
     return await self.drop_tips(
         tip_spots=[trash]*n,
@@ -623,7 +622,6 @@ class LiquidHandler:
                            "from a resource.")
       else:
         offsets = resources.get_2d_center_offsets(n=n)
-        offsets = list(reversed(offsets))
 
       resources = [resources] * n
     else:
@@ -751,7 +749,7 @@ class LiquidHandler:
     # which case all channels will dispense to there, or a list of resources.
     if isinstance(resources, Resource): # if single resource, space channels evenly
       if use_channels is None:
-        use_channels = [0]
+        use_channels = list(range(len(vols))) if isinstance(vols, list) else [0]
 
       self._make_sure_channels_exist(use_channels)
 
@@ -766,7 +764,6 @@ class LiquidHandler:
                           "to a resource.")
       else:
         offsets = resources.get_2d_center_offsets(n=n)
-        offsets = list(reversed(offsets))
 
       resources = [resources] * n
     else:

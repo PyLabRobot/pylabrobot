@@ -4,15 +4,12 @@
 import unittest
 
 from .coordinate import Coordinate
-from .itemized_resource import create_equally_spaced
-from .plate import Plate, Lid, Well
+from .plate import Plate, Lid
 
 
 class TestLid(unittest.TestCase):
   def test_initialize_with_lid(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=15, one_dot_max=1, lid_height=10,
-      items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
-        num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1),
+    plate = Plate("plate", size_x=1, size_y=1, size_z=15, one_dot_max=1, lid_height=10, items=[],
       with_lid=True)
     plate.location = Coordinate.zero()
 
@@ -22,9 +19,7 @@ class TestLid(unittest.TestCase):
     self.assertEqual(plate.lid.get_absolute_location(), Coordinate(0, 0, 5))
 
   def test_add_lid(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=10,
-      items=create_equally_spaced(Well, dx=0, dy=0, dz=0,
-        num_items_x=1, num_items_y=1, item_size_x=1, item_size_y=1))
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=10, items=[])
     lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
       size_z=plate.get_size_z())
     plate.assign_child_resource(lid, location=Coordinate(0, 0, 0))
