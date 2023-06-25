@@ -6,7 +6,7 @@ import traceback
 from flask import Flask, jsonify, render_template, request
 
 import pylabrobot.resources as resources_module
-from pylabrobot.resources import Resource, STARDeck, STARLetDeck, OTDeck
+from pylabrobot.resources import Resource, STARDeck, STARLetDeck, OTDeck, Deck
 
 app = Flask(__name__, template_folder=".", static_folder=".")
 
@@ -216,10 +216,13 @@ def resource(resource_id):
 
 @app.route("/editor/<string:filename>/save", methods=["POST"])
 def save(filename):
+  # Passing data to a PLR class validates data, but the output should be the same as what we receive
   data = request.get_json()
 
+  # Save deck
+  deck_data = data["deck"]
   try:
-    deck = Resource.deserialize(data)
+    deck = Deck.deserialize(deck_data)
   except Exception as e:
     traceback.print_exc()
     return jsonify({"error": str(e), "success": False}), 400
@@ -228,6 +231,12 @@ def save(filename):
     serialized = deck.serialize()
     serialized_data = json.dumps(serialized, indent=2)
     f.write(serialized_data)
+
+  # Save state
+  state_data = data["state"]
+  deck.load_state(state_data)
+  state_filename = filename.replace(".json", "_state.json")
+  deck.save_state_to_file(state_filename)
 
   return jsonify({"success": True})
 

@@ -632,6 +632,13 @@ class Well extends Resource {
 
     this.setVolume(this.volume + volume, layer);
   }
+
+  serializeState() {
+    return {
+      liquids: this.liquids,
+      pending_liquids: this.liquids,
+    };
+  }
 }
 
 class TipRack extends Resource {
@@ -726,6 +733,19 @@ class TipSpot extends Resource {
       ...{
         prototype_tip: this.tip,
       },
+    };
+  }
+
+  serializeState() {
+    if (this.has_tip) {
+      return {
+        tip: this.tip,
+        pending_tip: this.tip,
+      };
+    }
+    return {
+      tip: null,
+      pending_tip: null,
     };
   }
 }

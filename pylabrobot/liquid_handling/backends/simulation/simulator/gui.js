@@ -31,12 +31,26 @@ function addResource(resourceIdentifier) {
     });
 }
 
+function serializeState() {
+  let state = {};
+  for (let name in resources) {
+    let resource = resources[name];
+    if (resource.serializeState) {
+      state[name] = resource.serializeState();
+    }
+  }
+  return state;
+}
+
 var saving = false;
 function save() {
   const saveLabel = document.getElementById("save-label");
   saveLabel.style.display = "block";
 
-  const data = resources["deck"].serialize();
+  const data = {
+    deck: resources["deck"].serialize(),
+    state: serializeState(),
+  };
   saving = true;
   fetch(`/editor/${filename}/save`, {
     method: "POST",
