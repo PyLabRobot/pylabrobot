@@ -761,6 +761,23 @@ class Trash extends Resource {
   }
 }
 
+class Container extends Resource {
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
+    const { max_volume } = resourceData;
+    this.maxVolume = max_volume;
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        max_volume: this.maxVolume,
+      },
+    };
+  }
+}
+
 // Nothing special.
 class Carrier extends Resource {}
 class PlateCarrier extends Carrier {}
@@ -1042,6 +1059,8 @@ function classForResourceType(type) {
       return PlateCarrier;
     case "TipCarrier":
       return TipCarrier;
+    case "Container":
+      return Container;
     default:
       return Resource;
   }
