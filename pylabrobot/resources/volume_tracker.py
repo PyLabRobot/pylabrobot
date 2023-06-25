@@ -1,7 +1,7 @@
 # from abc import ABC, abstractmethod
 import contextlib
 import sys
-from typing import List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional, cast
 
 from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError
 from pylabrobot.resources.liquid import Liquid
@@ -106,19 +106,25 @@ class VolumeTracker():
   def serialize(self) -> dict:
     """ Serialize the volume tracker. """
 
-    def serialize_liquid_or_none(liquid: Optional["Liquid"]) -> Optional[str]:
-      return liquid.serialize() if liquid is not None else None
+    def serialize_liquid(liquid: Optional["Liquid"], volume: float) -> Dict[str, Any]:
+      return {
+        "liquid": liquid.serialize() if liquid is not None else None,
+        "volume": volume
+      }
 
     return {
-      "liquids": [(serialize_liquid_or_none(l), v) for l, v in self.liquids],
-      "pending_liquids": [(serialize_liquid_or_none(l), v) for l, v in self.pending_liquids],
+      "liquids": [serialize_liquid(l, v) for l, v in self.liquids],
+      "pending_liquids": [serialize_liquid(l, v) for l, v in self.pending_liquids],
     }
 
   def load_state(self, state: dict) -> None:
     """ Load the state of the volume tracker. """
 
-    def load_liquid_or_none(liquid: Optional[str]) -> Optional["Liquid"]:
-      return Liquid.deserialize(liquid) if liquid is not None else None
+    def load_liquid(data: Dict[str, Optional[str]]) -> Tuple[Optional["Liquid"], float]:
+      liquid_data = data.get("liquid", None)
+      return (
+        Liquid.deserialize(liquid_data) if liquid_data is not None else None,
+        cast(float, data["volume"]))
 
-    self.liquids = [(load_liquid_or_none(l), v) for l, v in state["liquids"]]
-    self.pending_liquids = [(load_liquid_or_none(l), v) for l, v in state["pending_liquids"]]
+    self.liquids = [load_liquid(l) for l in state["liquids"]]
+    self.pending_liquids = [load_liquid(l) for l in state["pending_liquids"]]
