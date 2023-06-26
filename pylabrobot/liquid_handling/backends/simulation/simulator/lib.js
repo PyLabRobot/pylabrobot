@@ -46,50 +46,45 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   }
 
   // Check if the resource is in a CarrierSite.
-  for (let resource_name in resources) {
-    const resource = resources[resource_name];
+  let deck = resources["deck"];
+  for (let resource_name in deck.children) {
+    const resource = deck.children[resource_name];
 
-    // Check carrier sites.
-    if (resource.constructor.name !== "CarrierSite") {
+    // Check if we have a resource to snap
+    let canSnapPlate =
+      resourceToSnap.constructor.name === "Plate" &&
+      resource.constructor.name === "PlateCarrier";
+    let canSnapTipRack =
+      resourceToSnap.constructor.name === "TipRack" &&
+      resource.constructor.name === "TipCarrier";
+    if (!(canSnapPlate || canSnapTipRack)) {
       continue;
     }
 
-    // Only snap a plate to a plate carrier, or a tip rack to a tip carrier.
-    if (
-      resource.parent.constructor.name === "PlateCarrier" &&
-      resourceToSnap.constructor.name !== "Plate"
-    ) {
-      continue;
-    }
-    if (
-      resource.parent.constructor.name === "TipCarrier" &&
-      resourceToSnap.constructor.name !== "TipRack"
-    ) {
-      continue;
-    }
-
-    const { x: resourceX, y: resourceY } = resource.getAbsoluteLocation();
-    if (
-      x > resourceX &&
-      x < resourceX + resource.size_x &&
-      y > resourceY &&
-      y < resourceY + resource.size_y
-    ) {
-      return {
-        resource: resource,
-        location: { x: 0, y: 0 },
-        snappingBox: {
-          x: resourceX,
-          y: resourceY,
-          width: resource.size_x,
-          height: resource.size_y,
-        },
-      };
+    for (let carrier_site_name in resource.children) {
+      let carrier_site = resource.children[carrier_site_name];
+      const { x: resourceX, y: resourceY } = carrier_site.getAbsoluteLocation();
+      if (
+        x > resourceX &&
+        x < resourceX + carrier_site.size_x &&
+        y > resourceY &&
+        y < resourceY + carrier_site.size_y
+      ) {
+        return {
+          resource: carrier_site,
+          location: { x: 0, y: 0 },
+          snappingBox: {
+            x: resourceX,
+            y: resourceY,
+            width: carrier_site.size_x,
+            height: carrier_site.size_y,
+          },
+        };
+      }
     }
   }
 
   // Check if the resource is in the OT Deck.
-  const deck = resources["deck"];
   if (deck.constructor.name === "OTDeck") {
     const siteWidth = 128.0;
     const siteHeight = 86.0;
