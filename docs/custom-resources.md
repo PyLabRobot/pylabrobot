@@ -146,7 +146,7 @@ class TubePlate(ItemizedResource[Tube]):
     )
 ```
 
-The {meth}`pylabrobot.resources.ItemizedResource.create_equally_spaced` function creates a list of items, equally spaced in a grid.
+The {meth}`pylabrobot.resources.create_equally_spaced` function creates a list of items, equally spaced in a grid.
 
 This resource is automatically compatible with the rest of PyLabRobot. For example, we can aspirate from the plate:
 
