@@ -86,6 +86,7 @@ function autoSave() {
 
     autoSaveTimeout = setTimeout(() => {
       save();
+      autoSaveTimeout = undefined;
     }, SAVING_WAIT_TIME);
   }
 }
@@ -98,7 +99,7 @@ window.addEventListener("keydown", (e) => {
 });
 
 window.onbeforeunload = function () {
-  if (saving) {
+  if (saving || autoSaveTimeout !== undefined) {
     return "You have unsaved changes. Are you sure you want to leave?";
   }
 };

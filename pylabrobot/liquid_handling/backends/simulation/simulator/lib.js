@@ -1,6 +1,5 @@
 var layer = new Konva.Layer();
 var resourceLayer = new Konva.Layer();
-var tooltipLayer = new Konva.Layer();
 var tooltip;
 var stage;
 var selectedResource;
@@ -208,22 +207,31 @@ class Resource {
 
   draw(layer) {
     // On draw, destroy the old shape.
-    if (this.mainShape !== undefined) {
-      this.mainShape.destroy();
+    if (this.group !== undefined) {
+      this.group.destroy();
     }
 
-    this.drawMainShape(layer);
-
-    this.drawChildren(layer);
+    // Add all children to this shape's group.
+    this.group = new Konva.Group({
+      x: this.location.x,
+      y: this.location.y,
+      draggable: this.draggable,
+    });
+    this.mainShape = this.drawMainShape();
+    this.group.add(this.mainShape);
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i];
+      child.draw(layer);
+      this.group.add(child.group);
+    }
+    layer.add(this.group);
+    // Add a reference to this to the shape (so that it may be accessed in event handlers)
+    this.group.resource = this;
 
     // If a shape is drawn, add event handlers and other things.
     if (this.mainShape !== undefined) {
-      // Add a reference to this to the shape (so that it may be accessed in event handlers)
-      this.mainShape.resource = this;
-
-      // Add a tooltip
       this.mainShape.on("mouseover", () => {
-        const { x, y } = this.mainShape.position();
+        const { x, y } = this.getAbsoluteLocation();
         if (tooltip !== undefined) {
           tooltip.destroy();
         }
@@ -254,55 +262,27 @@ class Resource {
             fill: "white",
           })
         );
-        tooltipLayer.add(tooltip);
-        tooltipLayer.draw();
         tooltip.scaleY(-1);
+        layer.add(tooltip);
       });
-
       this.mainShape.on("mouseout", () => {
         tooltip.destroy();
       });
     }
   }
 
-  drawMainShape(layer) {
-    // Draw the main shape of the resource.
-    const { x, y } = this.getAbsoluteLocation();
-    this.mainShape = new Konva.Rect({
-      x: x,
-      y: y,
+  drawMainShape() {
+    return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
       fill: this.color,
       stroke: "black",
       strokeWidth: 1,
-      draggable: this.draggable,
     });
-    layer.add(this.mainShape);
-  }
-
-  updateChildrenLocation(x, y) {
-    // Update the UI location of children.
-    for (let i = 0; i < this.children.length; i++) {
-      const child = this.children[i];
-
-      // why was child.size_x / 2 needed?
-      child.mainShape.x(child.location.x + x); // + child.size_x / 2);
-      child.mainShape.y(child.location.y + y); // + child.size_y / 2);
-
-      child.updateChildrenLocation(child.location.x + x, child.location.y + y);
-    }
   }
 
   tooltipLabel() {
     return `${this.name} (${this.constructor.name})`;
-  }
-
-  drawChildren(layer) {
-    for (let i = 0; i < this.children.length; i++) {
-      const child = this.children[i];
-      child.draw(layer);
-    }
   }
 
   getAbsoluteLocation() {
@@ -342,8 +322,14 @@ class Resource {
       return;
     }
 
+    // Update layout tree.
     child.parent = this;
     this.children.push(child);
+
+    // Add child group to UI.
+    if (this.group !== undefined && child.group !== undefined) {
+      this.group.add(child.group);
+    }
   }
 
   unassignChild(child) {
@@ -365,8 +351,8 @@ class Resource {
     delete resources[this.name];
 
     // Remove from UI
-    if (this.mainShape !== undefined) {
-      this.mainShape.destroy();
+    if (this.group !== undefined) {
+      this.group.destroy();
     }
 
     // Remove from parent
@@ -381,19 +367,7 @@ class Resource {
 }
 
 class Deck extends Resource {
-  mainResource(layer) {
-    // Draw a transparent rectangle with an outline
-    this.mainResource = new Konva.Rect({
-      x: 0,
-      y: 0,
-      width: this.size_x,
-      height: this.size_y,
-      fill: "white",
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    layer.add(this.mainResource);
-  }
+  draggable = false;
 }
 
 class HamiltonDeck extends Deck {
@@ -401,57 +375,51 @@ class HamiltonDeck extends Deck {
     super(resourceData, undefined);
     const { num_rails } = resourceData;
     this.num_rails = num_rails;
-  }
-
-  drawMainShape(layer) {
-    // Draw a transparent rectangle with an outline
-    const { x, y } = this.getAbsoluteLocation();
-
     this.railHeight = 497;
-
-    this.mainShape = new Konva.Rect({
-      x: x,
-      y: y + 63,
-      width: this.size_x,
-      height: this.railHeight,
-      fill: "white",
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    layer.add(this.mainShape);
-
-    this.drawRails(layer);
   }
 
-  drawRails(layer) {
+  drawMainShape() {
+    // Draw a transparent rectangle with an outline
+    let mainShape = new Konva.Group();
+    mainShape.add(
+      new Konva.Rect({
+        y: 63,
+        width: this.size_x,
+        height: this.railHeight,
+        fill: "white",
+        stroke: "black",
+        strokeWidth: 1,
+      })
+    );
     // Draw vertical rails as lines
     for (let i = 0; i < numRails; i++) {
       const rail = new Konva.Line({
         points: [
           100 + i * 22.5, // 22.5 mm per rail
-          this.location.y + 63,
+          63,
           100 + i * 22.5, // 22.5 mm per rail
-          this.location.y + this.railHeight + 63,
+          this.railHeight + 63,
         ],
         stroke: "black",
         strokeWidth: 1,
       });
-      layer.add(rail);
+      mainShape.add(rail);
 
       // Add a text label every 5 rails. Rails are 1-indexed.
       // Keep in mind that the stage is flipped vertically.
       if ((i + 1) % 5 === 0) {
         const railLabel = new Konva.Text({
           x: 100 + i * 22.5, // 22.5 mm per rail
-          y: this.location.y - 10,
+          y: 50,
           text: i + 1,
           fontSize: 12,
           fill: "black",
         });
         railLabel.scaleY(-1); // Flip the text vertically
-        layer.add(railLabel);
+        mainShape.add(railLabel);
       }
     }
+    return mainShape;
   }
 
   serialize() {
@@ -486,12 +454,13 @@ class OTDeck extends Deck {
     super(resourceData, undefined);
   }
 
-  drawMainShape(layer) {
+  drawMainShape() {
+    let group = new Konva.Group();
+    const width = 128.0;
+    const height = 86.0;
     // Draw the sites
     for (let i = 0; i < otDeckSiteLocations.length; i++) {
       const siteLocation = otDeckSiteLocations[i];
-      const width = 128.0;
-      const height = 86.0;
       const site = new Konva.Rect({
         x: this.location.x + siteLocation.x,
         y: this.location.y + siteLocation.y,
@@ -501,7 +470,7 @@ class OTDeck extends Deck {
         stroke: "black",
         strokeWidth: 1,
       });
-      layer.add(site);
+      group.add(site);
 
       // Add a text label in the site
       const siteLabel = new Konva.Text({
@@ -514,9 +483,9 @@ class OTDeck extends Deck {
         fill: "black",
         align: "center",
         verticalAlign: "middle",
+        scaleY: -1, // Flip the text vertically
       });
-      siteLabel.scaleY(-1); // Flip the text vertically
-      layer.add(siteLabel);
+      group.add(siteLabel);
     }
   }
 
@@ -539,25 +508,16 @@ class Plate extends Resource {
     const { num_items_x, num_items_y } = resourceData;
     this.num_items_x = num_items_x;
     this.num_items_y = num_items_y;
-
-    this.color = "#2B2D42";
   }
 
-  drawMainShape(layer) {
-    const { x, y } = this.getAbsoluteLocation();
-
-    const rect = new Konva.Rect({
-      x: x,
-      y: y,
+  drawMainShape() {
+    return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
-      fill: this.color,
+      fill: "#2B2D42",
       stroke: "black",
       strokeWidth: 1,
-      draggable: true,
     });
-    layer.add(rect);
-    this.mainShape = rect;
   }
 
   serialize() {
@@ -595,19 +555,17 @@ class Well extends Resource {
     return `rgba(239, 35, 60, ${volume / maxVolume})`;
   }
 
-  drawMainShape(layer) {
-    const { x, y } = this.getAbsoluteLocation();
-    this.mainShape = new Konva.Circle({
-      x: x,
-      y: y,
+  draggable = false;
+
+  drawMainShape() {
+    return new Konva.Circle({
       radius: this.size_x / 2,
       fill: Well.colorForVolume(this.volume, this.maxVolume),
       stroke: "black",
       strokeWidth: 1,
+      offsetX: -this.size_x / 2,
+      offsetY: -this.size_y / 2,
     });
-    this.mainShape.offsetX(-this.size_x / 2);
-    this.mainShape.offsetY(-this.size_y / 2);
-    layer.add(this.mainShape);
   }
 
   setVolume(volume, layer) {
@@ -649,24 +607,17 @@ class TipRack extends Resource {
     const { num_items_x, num_items_y } = resourceData;
     this.num_items_x = num_items_x;
     this.num_items_y = num_items_y;
-
-    this.color = "#2B2D42";
   }
 
-  drawMainShape(layer) {
-    const { x, y } = this.getAbsoluteLocation();
-
+  drawMainShape() {
     this.mainShape = new Konva.Rect({
-      x: x,
-      y: y,
       width: this.size_x,
       height: this.size_y,
-      fill: this.color,
+      fill: "#2B2D42",
       stroke: "black",
       strokeWidth: 1,
       draggable: true,
     });
-    layer.add(this.mainShape);
   }
 
   serialize() {
@@ -683,31 +634,19 @@ class TipRack extends Resource {
 class TipSpot extends Resource {
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    this.color = "#40CDA1";
     this.has_tip = false;
     this.tip = resourceData.prototype_tip; // not really a creator, but good enough for now.
-
-    this._circles = [];
   }
 
-  drawMainShape(layer) {
-    for (let i = 0; i < this._circles.length; i++) {
-      this._circles[i].destroy();
-    }
-
-    const { x, y } = this.getAbsoluteLocation();
-    this.mainShape = new Konva.Circle({
-      x: x,
-      y: y,
+  drawMainShape() {
+    return new Konva.Circle({
       radius: this.size_x / 2,
-      fill: this.has_tip ? this.color : "white",
+      fill: this.has_tip ? "#40CDA1" : "white",
       stroke: "black",
       strokeWidth: 1,
+      offsetX: -this.size_x / 2,
+      offsetY: -this.size_y / 2,
     });
-    this.mainShape.offsetX(-this.size_x / 2);
-    this.mainShape.offsetY(-this.size_y / 2);
-    layer.add(this.mainShape);
-    this._circles.push(this.mainShape);
   }
 
   setTip(has_tip, layer) {
@@ -752,16 +691,8 @@ class TipSpot extends Resource {
   }
 }
 
-class Trash extends Resource {
-  constructor(resourceData, parent) {
-    super(resourceData, parent);
-    this.color = "red";
-  }
-
-  drawMainShape(layer) {
-    // Don't draw trash
-  }
-}
+// Nothing special.
+class Trash extends Resource {}
 
 class Container extends Resource {
   constructor(resourceData, parent) {
@@ -805,46 +736,46 @@ class CarrierSite extends Resource {
 }
 
 function moveToTop(resource) {
-  // Recursively move the resource and its children to the top of the layer.
-  resource.mainShape.moveToTop();
-  for (let i = 0; i < resource.children.length; i++) {
-    moveToTop(resource.children[i]);
+  // Recursively move the resource to the top of the layer.
+  resource.group.moveToTop();
+  if (resource.parent !== undefined) {
+    moveToTop(resource.parent);
   }
 }
 
 resourceLayer.on("dragstart", (e) => {
   resourceLayer.add(trash);
 
-  let resource = e.target.resource;
-
   // Move dragged resource to top of layer
+  let resource = e.target.resource;
   moveToTop(resource);
-
-  // I think we can set resourceBeingDragged somewhere, and use that in the handler. This will allow
-  // us to drag a plate when in reality a well is being dragged.
 });
 
-resourceLayer.on("dragmove", (e) => {
-  if (tooltip !== undefined) {
-    tooltip.destroy();
-  }
-
-  let { x, y } = e.target.position();
-  let resource = e.target.resource;
-
-  // Snap children to position in UI.
-  resource.updateChildrenLocation(x, y);
-
-  // Remove any existing snap lines and boxes.
+function _deleteSnappingLines() {
   if (snapLines.length > 0) {
     for (let i = snapLines.length - 1; i >= 0; i--) {
       snapLines[i].destroy();
+      snapLines.splice(i, 1);
     }
   }
 
   if (snappingBox !== undefined) {
     snappingBox.destroy();
   }
+}
+
+resourceLayer.on("dragmove", (e) => {
+  if (tooltip !== undefined) {
+    tooltip.destroy();
+  }
+
+  _deleteSnappingLines();
+
+  // Get the absolute location of this resource in this drag. We replace the resource's relative
+  // location with its drag location (drag is relative to the parent too).
+  let resource = e.target.resource;
+  x = resource.parent.getAbsoluteLocation().x + e.target.position().x;
+  y = resource.parent.getAbsoluteLocation().y + e.target.position().y;
 
   // If we have a snapping box match, draw a snapping box indicator around the area.
   const snapResult = getSnappingResourceAndLocationAndSnappingBox(
@@ -854,13 +785,13 @@ resourceLayer.on("dragmove", (e) => {
   );
 
   if (snapResult !== undefined) {
-    const {
-      snappingBox: { x, y, width, height },
+    let {
+      snappingBox: { x: snapX, y: snapY, width, height },
     } = snapResult;
 
     snappingBox = new Konva.Rect({
-      x: x,
-      y: y,
+      x: snapX,
+      y: snapY,
       width: width,
       height: height,
       fill: "rgba(0, 0, 0, 0.1)",
@@ -871,7 +802,6 @@ resourceLayer.on("dragmove", (e) => {
     resourceLayer.add(snappingBox);
   } else {
     // If there is no box snapping match, check if there is a grid snapping match.
-    // Find the snapping lines for the resource.
     let { snappingX, snappingY, resourceX, resourceY } = getSnappingGrid(
       x,
       y,
@@ -881,7 +811,7 @@ resourceLayer.on("dragmove", (e) => {
 
     // If we have a snapping match, show an indicator and snap to the grid.
     if (snappingX !== undefined) {
-      x = resourceX;
+      e.target.x(resourceX - resource.parent.getAbsoluteLocation().x);
 
       // Draw a vertical line
       let snapLine = new Konva.Line({
@@ -894,7 +824,7 @@ resourceLayer.on("dragmove", (e) => {
       snapLines.push(snapLine);
     }
     if (snappingY !== undefined) {
-      y = resourceY;
+      e.target.y(resourceY - resource.parent.getAbsoluteLocation().y);
 
       // Draw a vertical line
       let snapLine = new Konva.Line({
@@ -906,65 +836,54 @@ resourceLayer.on("dragmove", (e) => {
       resourceLayer.add(snapLine);
       snapLines.push(snapLine);
     }
-
-    // Snap the box to the grid.
-    e.target.position({ x: x, y: y });
-    resource.updateChildrenLocation(x, y);
   }
 });
 
 resourceLayer.on("dragend", (e) => {
-  let { x: rectX, y: rectY } = e.target.position();
+  _deleteSnappingLines();
+
+  // Get the absolute location of this resource in this drag. We replace the resource's relative
+  // location with its drag location (drag is relative to the parent too).
   let resource = e.target.resource;
+  x = resource.parent.getAbsoluteLocation().x + e.target.position().x;
+  y = resource.parent.getAbsoluteLocation().y + e.target.position().y;
 
   const snapResult = getSnappingResourceAndLocationAndSnappingBox(
     resource,
-    rectX + resource.size_x / 2,
-    rectY + resource.size_y / 2
+    x + resource.size_x / 2,
+    y + resource.size_y / 2
   );
 
   if (snapResult !== undefined) {
     const { resource: parent, location } = snapResult;
 
     if (parent === trash) {
-      // special case for trash
       // Delete the plate.
       resource.destroy();
     } else {
       const { x, y } = location;
-      const { x: parentX, y: parentY } = parent.getAbsoluteLocation();
-      rectX = parentX + x;
-      rectY = parentY + y;
-
-      // Snap to position in UI.
-      e.target.position({ x: rectX, y: rectY });
-      resource.updateChildrenLocation(rectX, rectY);
 
       // Update the deck layout with the new parent.
       if (resource.parent !== undefined) {
         resource.parent.unassignChild(resource);
       }
+      resource.location.x = x;
+      resource.location.y = y;
       parent.assignChild(resource);
+
+      // Snap to position in UI after it has been added to the new UI group by assignChild.
+      e.target.position({ x: x, y: y });
     }
-  }
-
-  if (snappingBox !== undefined) {
-    snappingBox.destroy();
-  }
-
-  if (snapLines.length > 0) {
-    for (let i = snapLines.length - 1; i >= 0; i--) {
-      snapLines[i].destroy();
-    }
-  }
-
-  // Update the deck layout with the new location.
-  if (resource.parent === undefined) {
-    // not in the tree, so no need to update
-    resource.location = undefined;
   } else {
-    resource.location.x = rectX - resource.parent.getAbsoluteLocation().x;
-    resource.location.y = rectY - resource.parent.getAbsoluteLocation().y;
+    // Update the deck layout with the new location.
+    resource.location.x = x;
+    resource.location.y = y;
+    // Assign resource to deck.
+    if (resource.parent !== undefined) {
+      resource.parent.unassignChild(resource);
+    }
+    resources["deck"].assignChild(resource);
+    e.target.position({ x: x, y: y });
   }
 
   // hide the trash icon
@@ -1123,7 +1042,6 @@ window.addEventListener("load", function () {
   // add the layer to the stage
   stage.add(layer);
   stage.add(resourceLayer);
-  stage.add(tooltipLayer);
 
   // add a trash icon for deleting resources
   var imageObj = new Image();
