@@ -921,8 +921,12 @@ function handleClick(e) {
     // If the user clicked on the background, unselect the current resource.
     unselectResource(selectedResource);
   } else if (resourceClicked === selectedResource) {
-    // If the user clicked on the selected resource, unselect it.
-    unselectResource(selectedResource);
+    if (!contextMenuOpen) {
+      // If the user clicked on the selected resource, unselect it.
+      // We check if the context menu is not open, because sometimes the click handler is fired after
+      // opening it, which would close it immediately. We don't want that.
+      unselectResource(selectedResource);
+    }
   } else if (
     ["HamiltonDeck", "OTDeck", "Deck"].includes(
       resourceClicked.constructor.name

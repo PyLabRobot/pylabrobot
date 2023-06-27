@@ -876,9 +876,11 @@ function hideEditor() {
   editor.style.display = "none";
 }
 
+var contextMenuOpen = false;
 function openContextMenu() {
-  // Open the context menu at the mouse position.
+  contextMenuOpen = true;
 
+  // Open the context menu at the mouse position.
   const menu = document.getElementById("context-menu");
   var containerRect = stage.container().getBoundingClientRect();
 
@@ -890,6 +892,7 @@ function openContextMenu() {
 
 function closeContextMenu() {
   document.getElementById("context-menu").style.display = "none";
+  contextMenuOpen = false;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
