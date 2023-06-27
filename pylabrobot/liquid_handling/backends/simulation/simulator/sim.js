@@ -214,7 +214,7 @@ function aspirate(channels) {
     let { resource_name, volume } = channels[i];
 
     const well = resources[resource_name];
-    well.aspirate(volume, resourceLayer);
+    well.aspirate(volume);
 
     if (system === SYSTEM_HAMILTON) {
       const pipError = checkPipHeadReach(well.getAbsoluteLocation().x);
@@ -237,7 +237,7 @@ function dispense(channels) {
     let { resource_name, volume } = channels[i];
 
     const well = resources[resource_name];
-    well.dispense(volume, resourceLayer);
+    well.dispense(volume);
 
     if (system === SYSTEM_HAMILTON) {
       const pipError = checkPipHeadReach(well.getAbsoluteLocation().x);
@@ -367,7 +367,7 @@ function aspirate96(aspiration) {
     for (let j = 0; j < plate.num_items_x; j++) {
       const well = plate.children[i * plate.num_items_x + j];
       CoRe96Head[i][j].aspirate(aspiration.volume);
-      well.aspirate(aspiration.volume, resourceLayer);
+      well.aspirate(aspiration.volume);
     }
   }
 
@@ -410,7 +410,7 @@ function dispense96(dispense) {
     for (let j = 0; j < plate.num_items_x; j++) {
       const well = plate.children[i * plate.num_items_x + j];
       CoRe96Head[i][j].dispense(dispense.volume);
-      well.dispense(dispense.volume, resourceLayer);
+      well.dispense(dispense.volume);
     }
   }
 
