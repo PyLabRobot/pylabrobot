@@ -217,11 +217,15 @@ class Resource {
     for (let i = 0; i < this.children.length; i++) {
       const child = this.children[i];
       child.draw(layer);
-      this.group.add(child.group);
     }
     layer.add(this.group);
     // Add a reference to this to the shape (so that it may be accessed in event handlers)
     this.group.resource = this;
+
+    // Add this group to parent group.
+    if (this.parent !== undefined) {
+      this.parent.group.add(this.group);
+    }
 
     // If a shape is drawn, add event handlers and other things.
     if (this.mainShape !== undefined) {
@@ -539,29 +543,24 @@ class Plate extends Resource {
   }
 }
 
-class Well extends Resource {
+class Container extends Resource {
   constructor(resourceData, parent) {
     super(resourceData, parent);
+    const { max_volume } = resourceData;
+    this.maxVolume = max_volume;
     this.volume = 0;
     this.liquids = resourceData.liquids || [];
-    this.maxVolume = resourceData.max_volume;
   }
 
   static colorForVolume(volume, maxVolume) {
     return `rgba(239, 35, 60, ${volume / maxVolume})`;
   }
 
-  draggable = false;
-
-  drawMainShape() {
-    return new Konva.Circle({
-      radius: this.size_x / 2,
-      fill: Well.colorForVolume(this.volume, this.maxVolume),
-      stroke: "black",
-      strokeWidth: 1,
-      offsetX: -this.size_x / 2,
-      offsetY: -this.size_y / 2,
-    });
+  serializeState() {
+    return {
+      liquids: this.liquids,
+      pending_liquids: this.liquids,
+    };
   }
 
   setVolume(volume, layer) {
@@ -589,11 +588,28 @@ class Well extends Resource {
     this.setVolume(this.volume + volume, layer);
   }
 
-  serializeState() {
+  serialize() {
     return {
-      liquids: this.liquids,
-      pending_liquids: this.liquids,
+      ...super.serialize(),
+      ...{
+        max_volume: this.maxVolume,
+      },
     };
+  }
+}
+
+class Well extends Container {
+  draggable = false;
+
+  drawMainShape() {
+    return new Konva.Circle({
+      radius: this.size_x / 2,
+      fill: Well.colorForVolume(this.volume, this.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+      offsetX: -this.size_x / 2,
+      offsetY: -this.size_y / 2,
+    });
   }
 }
 
@@ -606,7 +622,7 @@ class TipRack extends Resource {
   }
 
   drawMainShape() {
-    this.mainShape = new Konva.Rect({
+    return new Konva.Rect({
       width: this.size_x,
       height: this.size_y,
       fill: "#2B2D42",
@@ -689,23 +705,6 @@ class TipSpot extends Resource {
 
 // Nothing special.
 class Trash extends Resource {}
-
-class Container extends Resource {
-  constructor(resourceData, parent) {
-    super(resourceData, parent);
-    const { max_volume } = resourceData;
-    this.maxVolume = max_volume;
-  }
-
-  serialize() {
-    return {
-      ...super.serialize(),
-      ...{
-        max_volume: this.maxVolume,
-      },
-    };
-  }
-}
 
 // Nothing special.
 class Carrier extends Resource {}
