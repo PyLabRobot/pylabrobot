@@ -3,6 +3,11 @@
   overflow-y: scroll;
 }
 
+.labware-list {
+  max-height: 480px;
+  overflow-y: scroll;
+}
+
 /* search */
 
 .modal-background {

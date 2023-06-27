@@ -823,7 +823,7 @@ function addResourceListToSidebar(resourceList, title) {
     </button>
 
     <div class="collapse" id="${sectionId}-collapse">
-      <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small" id="${sectionId}">
+      <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small labware-list" id="${sectionId}">
       </ul>
     </div>
   </li>

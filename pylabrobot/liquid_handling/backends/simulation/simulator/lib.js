@@ -225,6 +225,7 @@ class Resource {
 
     // If a shape is drawn, add event handlers and other things.
     if (this.mainShape !== undefined) {
+      this.mainShape.resource = this;
       this.mainShape.on("mouseover", () => {
         const { x, y } = this.getAbsoluteLocation();
         if (tooltip !== undefined) {
