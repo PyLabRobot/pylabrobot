@@ -548,7 +548,6 @@ class Container extends Resource {
     super(resourceData, parent);
     const { max_volume } = resourceData;
     this.maxVolume = max_volume;
-    this.volume = 0;
     this.liquids = resourceData.liquids || [];
   }
 
@@ -556,36 +555,56 @@ class Container extends Resource {
     return `rgba(239, 35, 60, ${volume / maxVolume})`;
   }
 
-  serializeState() {
-    return {
-      liquids: this.liquids,
-      pending_liquids: this.liquids,
-    };
+  getVolume() {
+    return this.liquids.reduce((acc, liquid) => acc + liquid.volume, 0);
   }
 
-  setVolume(volume, layer) {
-    this.volume = volume;
-    this.draw(layer);
-  }
-
-  aspirate(volume, layer) {
-    if (volume > this.volume) {
+  aspirate(volume) {
+    if (volume > this.getVolume()) {
       throw new Error(
         `Aspirating ${volume}uL from well ${this.name} with ${this.volume}uL`
       );
     }
 
-    this.setVolume(this.volume - volume, layer);
+    // Remove liquids top down until we have removed the desired volume.
+    let volumeToRemove = volume;
+    for (let i = this.liquids.length - 1; i >= 0; i--) {
+      const liquid = this.liquids[i];
+      if (volumeToRemove >= liquid.volume) {
+        volumeToRemove -= liquid.volume;
+        this.liquids.splice(i, 1);
+      } else {
+        liquid.volume -= volumeToRemove;
+        volumeToRemove = 0;
+      }
+    }
+
+    this.update();
   }
 
-  dispense(volume, layer) {
+  addLiquid(liquid) {
+    this.liquids.push(liquid);
+    this.update();
+  }
+
+  dispense(volume) {
     if (volume + this.volume > this.maxVolume) {
       throw new Error(
         `Adding ${volume}uL to well ${this.name} with ${this.volume}uL would exceed max volume of ${this.maxVolume}uL`
       );
     }
 
-    this.setVolume(this.volume + volume, layer);
+    this.addLiquid({
+      volume: volume,
+      name: "Unknown liquid", // TODO: get liquid name from parameter?
+    });
+  }
+
+  serializeState() {
+    return {
+      liquids: this.liquids,
+      pending_liquids: this.liquids,
+    };
   }
 
   serialize() {
@@ -604,7 +623,7 @@ class Well extends Container {
   drawMainShape() {
     return new Konva.Circle({
       radius: this.size_x / 2,
-      fill: Well.colorForVolume(this.volume, this.maxVolume),
+      fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
       stroke: "black",
       strokeWidth: 1,
       offsetX: -this.size_x / 2,

@@ -444,12 +444,6 @@ function openContainerEditor(container) {
         liquid.volume = parseFloat(event.target.value);
       }
 
-      // TODO: just set the liquid, the container should update itself
-      container.setVolume(
-        container.liquids.reduce((a, b) => a + b.volume, 0),
-        resourceLayer
-      );
-
       container.update();
       autoSave();
     });
@@ -491,16 +485,7 @@ function openPlateEditor(plate) {
         well.liquids = liquidsCopy;
       }
 
-      for (let well of plate.children) {
-        well.setVolume(
-          well.liquids.reduce((a, b) => a + b.volume, 0),
-          resourceLayer
-        );
-        // TODO: just set the liquid, the well should update itself
-
-        well.update();
-      }
-
+      plate.update();
       autoSave();
     });
   }
@@ -642,11 +627,7 @@ document.getElementById("add-plate-liquid").addEventListener("click", () => {
 
   // Add the liquid to all wells in the plate
   for (let well of selectedResource.children) {
-    well.liquids.push({ name: "Untitled Liquid", volume: 0 });
-    well.setVolume(
-      well.liquids.reduce((a, b) => a + b.volume, 0),
-      resourceLayer
-    );
+    well.addLiquid({ name: "Untitled Liquid", volume: 0 });
     well.update();
   }
 
