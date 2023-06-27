@@ -354,7 +354,7 @@ function closeRightSidebar() {
   document.getElementById("tip-rack-detail-editor").style.display = "none";
   document.getElementById("tip-spot-detail-editor").style.display = "none";
   document.getElementById("plate-detail-editor").style.display = "none";
-  document.getElementById("well-detail-editor").style.display = "none";
+  document.getElementById("container-detail-editor").style.display = "none";
 
   fixEditorWidth();
 }
@@ -421,22 +421,22 @@ function addLiquids(liquidsElement, liquids) {
   }
 }
 
-function openWellEditor(well) {
-  const wellEditor = document.getElementById("well-detail-editor");
-  wellEditor.style.display = "block";
+function openContainerEditor(container) {
+  const containerEditor = document.getElementById("container-detail-editor");
+  containerEditor.style.display = "block";
 
-  // Set the well volume
-  document.getElementById("well-max-volume").value = well.maxVolume;
+  // Set the container volume
+  document.getElementById("container-max-volume").value = container.maxVolume;
 
   // Add liquid inputs to the DOM
-  const liquids = document.getElementById("well-liquids");
-  addLiquids(liquids, well.liquids);
+  const liquids = document.getElementById("container-liquids");
+  addLiquids(liquids, container.liquids);
 
   // Add event listeners to liquid inputs
-  for (let input of document.querySelectorAll("#well-liquids input")) {
+  for (let input of document.querySelectorAll("#container-liquids input")) {
     input.addEventListener("input", (event) => {
       const liquidIndex = parseInt(event.target.dataset.liquidIndex);
-      const liquid = well.liquids[liquidIndex];
+      const liquid = container.liquids[liquidIndex];
 
       if (event.target.classList.contains("liquid-name")) {
         liquid.name = event.target.value;
@@ -444,13 +444,13 @@ function openWellEditor(well) {
         liquid.volume = parseFloat(event.target.value);
       }
 
-      // TODO: just set the liquid, the well should update itself
-      well.setVolume(
-        well.liquids.reduce((a, b) => a + b.volume, 0),
+      // TODO: just set the liquid, the container should update itself
+      container.setVolume(
+        container.liquids.reduce((a, b) => a + b.volume, 0),
         resourceLayer
       );
 
-      well.update();
+      container.update();
       autoSave();
     });
   }
@@ -524,8 +524,8 @@ function loadEditor(resource) {
     openTipSpotEditor(resource);
   } else if (resource.constructor.name === "Plate") {
     openPlateEditor(resource);
-  } else if (resource.constructor.name === "Well") {
-    openWellEditor(resource);
+  } else if (["Container", "Well"].includes(resource.constructor.name)) {
+    openContainerEditor(resource);
   }
 }
 
@@ -601,7 +601,7 @@ document.getElementById("fill-tip-spot").addEventListener("click", () => {
 });
 
 document
-  .getElementById("well-max-volume")
+  .getElementById("container-max-volume")
   .addEventListener("input", (event) => {
     if (selectedResource.constructor.name !== "Well") {
       return;
@@ -610,15 +610,17 @@ document
     selectedResource.update();
     autoSave();
   });
-document.getElementById("add-well-liquid").addEventListener("click", () => {
-  if (selectedResource.constructor.name !== "Well") {
-    return;
-  }
-  selectedResource.liquids.push({ name: "Untitled Liquid", volume: 0 });
-  selectedResource.update();
-  openWellEditor(selectedResource); // reopen editor to reload, bit hacky
-  autoSave();
-});
+document
+  .getElementById("add-container-liquid")
+  .addEventListener("click", () => {
+    if (selectedResource.constructor.name !== "Well") {
+      return;
+    }
+    selectedResource.liquids.push({ name: "Untitled Liquid", volume: 0 });
+    selectedResource.update();
+    openContainerEditor(selectedResource); // reopen editor to reload, bit hacky
+    autoSave();
+  });
 
 document
   .getElementById("plate-max-volume")
