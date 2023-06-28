@@ -78,7 +78,7 @@ class OTDeck(Deck):
     if location not in self.slot_locations:
       super().assign_child_resource(resource, location=location)
     else:
-      slot = self.slot_locations.index(location)
+      slot = self.slot_locations.index(location) + 1
       self.assign_child_at_slot(resource, slot)
 
   def assign_child_at_slot(self, resource: Resource, slot: int):
