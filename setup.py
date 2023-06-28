@@ -78,6 +78,7 @@ setup(
   entry_points={
     "console_scripts": [
       "lh-server=pylabrobot.server.liquid_handling_server:main",
+      "plr-gui=pylabrobot.liquid_handling.backends.simulation.simulator.gui:main",
     ],
   }
 )
