@@ -199,6 +199,7 @@ class Resource {
   }
 
   draggable = true;
+  canDelete = true;
 
   draw(layer) {
     // On draw, destroy the old shape.
@@ -213,7 +214,9 @@ class Resource {
       draggable: this.draggable,
     });
     this.mainShape = this.drawMainShape();
-    this.group.add(this.mainShape);
+    if (this.mainShape !== undefined) {
+      this.group.add(this.mainShape);
+    }
     for (let i = 0; i < this.children.length; i++) {
       const child = this.children[i];
       child.draw(layer);
@@ -368,6 +371,7 @@ class Resource {
 
 class Deck extends Resource {
   draggable = false;
+  canDelete = false;
 }
 
 class HamiltonDeck extends Deck {
@@ -455,15 +459,15 @@ class OTDeck extends Deck {
   }
 
   drawMainShape() {
-    let group = new Konva.Group();
+    let group = new Konva.Group({});
     const width = 128.0;
     const height = 86.0;
     // Draw the sites
     for (let i = 0; i < otDeckSiteLocations.length; i++) {
       const siteLocation = otDeckSiteLocations[i];
       const site = new Konva.Rect({
-        x: this.location.x + siteLocation.x,
-        y: this.location.y + siteLocation.y,
+        x: siteLocation.x,
+        y: siteLocation.y,
         width: width,
         height: height,
         fill: "white",
@@ -474,8 +478,8 @@ class OTDeck extends Deck {
 
       // Add a text label in the site
       const siteLabel = new Konva.Text({
-        x: this.location.x + siteLocation.x,
-        y: this.location.y + siteLocation.y + height,
+        x: siteLocation.x,
+        y: siteLocation.y + height,
         text: i + 1,
         width: width,
         height: height,
@@ -487,6 +491,7 @@ class OTDeck extends Deck {
       });
       group.add(siteLabel);
     }
+    return group;
   }
 
   serialize() {
@@ -619,6 +624,7 @@ class Container extends Resource {
 
 class Well extends Container {
   draggable = false;
+  canDelete = false;
 
   drawMainShape() {
     return new Konva.Circle({
@@ -723,7 +729,14 @@ class TipSpot extends Resource {
 }
 
 // Nothing special.
-class Trash extends Resource {}
+class Trash extends Resource {
+  drawMainShape() {
+    if (resources["deck"].constructor.name) {
+      return undefined;
+    }
+    return super.drawMainShape();
+  }
+}
 
 // Nothing special.
 class Carrier extends Resource {}
@@ -738,6 +751,7 @@ class CarrierSite extends Resource {
   }
 
   draggable = false;
+  canDelete = false;
 
   serialize() {
     return {
@@ -758,11 +772,13 @@ function moveToTop(resource) {
 }
 
 resourceLayer.on("dragstart", (e) => {
-  resourceLayer.add(trash);
-
   // Move dragged resource to top of layer
   let resource = e.target.resource;
   moveToTop(resource);
+
+  // Show the trash icon
+  resourceLayer.add(trash);
+  trash.moveToTop();
 });
 
 function _deleteSnappingLines() {

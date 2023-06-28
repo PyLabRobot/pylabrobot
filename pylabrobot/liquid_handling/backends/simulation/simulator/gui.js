@@ -104,6 +104,14 @@ window.onbeforeunload = function () {
   }
 };
 
+function deleteResource(resource) {
+  if (resource.canDelete) {
+    selectedResource.destroy();
+    autoSave();
+    selectedResource = undefined;
+  }
+}
+
 // Settings
 
 let autoSaveEnabled = undefined;
@@ -152,6 +160,10 @@ document.addEventListener("DOMContentLoaded", () => {
     snappingEnabled = !snappingEnabled;
     enableSnapping.classList.toggle("enabled");
     saveSettings();
+  });
+
+  document.getElementById("save-button").addEventListener("click", () => {
+    save();
   });
 });
 
@@ -655,23 +667,20 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "ArrowUp") {
     e.preventDefault();
     if (selectedResource) {
-      selectedResource.location.y -= 1;
+      selectedResource.location.y += 1;
       selectedResource.update();
       autoSave();
     }
   } else if (e.key === "ArrowDown") {
     e.preventDefault();
     if (selectedResource) {
-      selectedResource.location.y += 1;
+      selectedResource.location.y -= 1;
       selectedResource.update();
       autoSave();
     }
   } else if (e.key === "Delete") {
     e.preventDefault();
-    if (selectedResource) {
-      selectedResource.destroy();
-      autoSave();
-    }
+    deleteResource(selectResource);
   }
 });
 
@@ -861,6 +870,11 @@ function hideEditor() {
 
 var contextMenuOpen = false;
 function openContextMenu() {
+  // Don't open the context menu if there are no available actions (currently just delete).
+  if (!selectedResource.canDelete) {
+    return;
+  }
+
   contextMenuOpen = true;
 
   // Open the context menu at the mouse position.
@@ -908,8 +922,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
   document.getElementById("delete").addEventListener("click", () => {
-    selectedResource.destroy();
-    autoSave();
+    deleteResource(selectedResource);
     closeContextMenu();
   });
 });
