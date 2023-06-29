@@ -36,7 +36,7 @@ function serializeState() {
   for (let name in resources) {
     let resource = resources[name];
     if (resource.serializeState) {
-      state[name] = resource.serializeState();
+      state[resource.name] = resource.serializeState();
     }
   }
   return state;
@@ -681,6 +681,19 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "Delete") {
     e.preventDefault();
     deleteResource(selectResource);
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    unselectResource();
+    closeContextMenu();
+  } else if (e.key === "c" && e.metaKey) {
+    e.preventDefault();
+    copyResource(selectedResource);
+  } else if (e.key === "x" && e.metaKey) {
+    e.preventDefault();
+    cutResource(selectedResource);
+  } else if (e.key === "v" && e.metaKey) {
+    e.preventDefault();
+    pasteResource();
   }
 });
 
@@ -870,10 +883,20 @@ function hideEditor() {
 
 var contextMenuOpen = false;
 function openContextMenu() {
-  // Don't open the context menu if there are no available actions (currently just delete).
-  if (!selectedResource.canDelete) {
-    return;
-  }
+  // Show paste if we have a copied resource.
+  let pasteElement = document.getElementById("context-menu-paste");
+  pasteElement.style.display = copiedResource ? "initial" : "none";
+
+  // Show cut / copy if there is a selected resource.
+  let cutElement = document.getElementById("context-menu-cut");
+  let copyElement = document.getElementById("context-menu-copy");
+  cutElement.style.display = selectedResource ? "initial" : "none";
+  copyElement.style.display = selectedResource ? "initial" : "none";
+
+  // Show delete if the selected resource can be deleted.
+  let deleteElement = document.getElementById("context-menu-delete");
+  deleteElement.style.display =
+    selectedResource && selectedResource.canDelete ? "initial" : "none";
 
   contextMenuOpen = true;
 
@@ -890,6 +913,43 @@ function openContextMenu() {
 function closeContextMenu() {
   document.getElementById("context-menu").style.display = "none";
   contextMenuOpen = false;
+}
+
+var copiedResource;
+
+function copyResource(resource) {
+  copiedResource = resource;
+}
+
+function cutResource(resource) {
+  resource = loadResource(resource.serialize()); // make a copy before deleting
+  copyResource(resource);
+  deleteResource(resource);
+}
+
+function pasteResource() {
+  if (copiedResource === undefined) {
+    return;
+  }
+
+  // Only make a copy of resource once we actually paste it (supports multiple pastes & is faster)
+  copiedResource = loadResource(copiedResource.serialize());
+
+  let deck = resources["deck"];
+  let pointerLocation = resourceLayer.getRelativePointerPosition();
+  copiedResource.location = {
+    x: pointerLocation.x - deck.getAbsoluteLocation().x,
+    y: pointerLocation.y - deck.getAbsoluteLocation().y,
+    z: 0,
+  };
+
+  copiedResource.name = newResourceName();
+
+  // Below should be abstracted.
+  copiedResource.update();
+  resources[copiedResource.name] = copiedResource;
+  resources["deck"].assignChild(copiedResource);
+  autoSave();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -921,8 +981,27 @@ document.addEventListener("DOMContentLoaded", () => {
       alert(error);
     });
 
-  document.getElementById("delete").addEventListener("click", () => {
-    deleteResource(selectedResource);
+  document
+    .getElementById("context-menu-delete")
+    .addEventListener("click", () => {
+      deleteResource(selectedResource);
+      closeContextMenu();
+    });
+
+  document.getElementById("context-menu-copy").addEventListener("click", () => {
+    copyResource(selectedResource);
     closeContextMenu();
   });
+
+  document.getElementById("context-menu-cut").addEventListener("click", () => {
+    cutResource(selectedResource);
+    closeContextMenu();
+  });
+
+  document
+    .getElementById("context-menu-paste")
+    .addEventListener("click", () => {
+      pasteResource();
+      closeContextMenu();
+    });
 });
