@@ -945,6 +945,11 @@ function unselectResource() {
 }
 
 function handleClick(e) {
+  // ignore if it is a context menu click
+  if (e.evt.button === 2) {
+    return;
+  }
+
   if (tooltip !== undefined) {
     tooltip.destroy();
   }
@@ -953,14 +958,10 @@ function handleClick(e) {
 
   if (resourceClicked === undefined) {
     // If the user clicked on the background, unselect the current resource.
-    unselectResource(selectedResource);
+    unselectResource();
   } else if (resourceClicked === selectedResource) {
-    if (!contextMenuOpen) {
-      // If the user clicked on the selected resource, unselect it.
-      // We check if the context menu is not open, because sometimes the click handler is fired after
-      // opening it, which would close it immediately. We don't want that.
-      unselectResource(selectedResource);
-    }
+    // If the user clicked on the selected resource, unselect it.
+    unselectResource();
   } else if (
     ["HamiltonDeck", "OTDeck", "Deck"].includes(
       resourceClicked.constructor.name
@@ -980,12 +981,8 @@ resourceLayer.on("contextmenu", (e) => {
   e.evt.preventDefault();
   selectedResource = e.target.resource;
 
-  // If the resource is not the deck or the trash, show the context menu.
-  let deck = resources["deck"];
-  if (
-    selectedResource !== undefined &&
-    ![trash, deck].includes(selectedResource)
-  ) {
+  // If the resource is not the trash, show the context menu.
+  if (selectResource !== trash) {
     openContextMenu();
   }
 });
