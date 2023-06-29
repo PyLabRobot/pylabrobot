@@ -144,6 +144,30 @@ function saveSettings() {
   localStorage.setItem("snapping", snappingEnabled);
 }
 
+function saveAs(filename) {
+  fetch(`/editor/${filename}/save`, {
+    method: "POST",
+    body: JSON.stringify({
+      deck: resources["deck"].serialize(),
+      state: serializeState(),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
+    .then((response) => response.json())
+    .then((response) => {
+      if (!response.success) {
+        alert(`Error saving: ${response.error}`);
+      } else {
+        window.location = `/editor/${filename}`;
+      }
+    })
+    .catch((error) => {
+      alert(`Error saving: ${error}`);
+    });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const enableSnapping = document.getElementById("enable-snapping");
   const enableAutoSave = document.getElementById("enable-auto-save");
@@ -164,6 +188,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("save-button").addEventListener("click", () => {
     save();
+  });
+
+  document.getElementById("save-as-button").addEventListener("click", () => {
+    let filename = prompt("Enter a filename to save as:");
+    if (filename) {
+      saveAs(filename);
+    }
   });
 });
 
