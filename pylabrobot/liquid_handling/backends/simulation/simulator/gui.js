@@ -918,11 +918,13 @@ function openContextMenu() {
   let pasteElement = document.getElementById("context-menu-paste");
   pasteElement.style.display = copiedResource ? "initial" : "none";
 
-  // Show cut / copy if there is a selected resource.
+  // Show cut / copy if there is a selected resource and it's deletable.
   let cutElement = document.getElementById("context-menu-cut");
   let copyElement = document.getElementById("context-menu-copy");
-  cutElement.style.display = selectedResource ? "initial" : "none";
-  copyElement.style.display = selectedResource ? "initial" : "none";
+  cutElement.style.display =
+    selectedResource && selectedResource.canDelete ? "initial" : "none";
+  copyElement.style.display =
+    selectedResource && selectedResource.canDelete ? "initial" : "none";
 
   // Show delete if the selected resource can be deleted.
   let deleteElement = document.getElementById("context-menu-delete");
