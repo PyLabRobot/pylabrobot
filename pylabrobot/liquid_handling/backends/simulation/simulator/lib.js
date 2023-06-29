@@ -653,7 +653,6 @@ class TipRack extends Resource {
       fill: "#2B2D42",
       stroke: "black",
       strokeWidth: 1,
-      draggable: true,
     });
   }
 
@@ -666,6 +665,18 @@ class TipRack extends Resource {
       },
     };
   }
+
+  update() {
+    super.update();
+
+    // Rename the children
+    for (let i = 0; i < this.num_items_x; i++) {
+      for (let j = 0; j < this.num_items_y; j++) {
+        const child = this.children[i * this.num_items_y + j];
+        child.name = `${this.name}_tipspot_${i}_${j}`;
+      }
+    }
+  }
 }
 
 class TipSpot extends Resource {
@@ -674,6 +685,9 @@ class TipSpot extends Resource {
     this.has_tip = false;
     this.tip = resourceData.prototype_tip; // not really a creator, but good enough for now.
   }
+
+  draggable = false;
+  canDelete = false;
 
   drawMainShape() {
     return new Konva.Circle({
