@@ -51,12 +51,3 @@ class Liquid(enum.Enum):
       s = "DMSO"
 
     return Liquid(s)
-
-  def serialize(self) -> str:
-    """ Serialize a liquid. """
-    return self.value
-
-  @classmethod
-  def deserialize(cls, s: str) -> "Liquid":
-    """ Deserialize a liquid. """
-    return Liquid(s)

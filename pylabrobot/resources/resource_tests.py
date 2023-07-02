@@ -121,6 +121,40 @@ class TestResource(unittest.TestCase):
       "model": None,
     })
 
+  def test_child_serialize(self):
+    r = Resource("test", size_x=10, size_y=10, size_z=10)
+    child = Resource("child", size_x=1, size_y=1, size_z=1)
+    r.assign_child_resource(child, location=Coordinate(5, 5, 5))
+    self.maxDiff = None
+    self.assertEqual(r.serialize(), {
+      "name": "test",
+      "location": None,
+      "size_x": 10,
+      "size_y": 10,
+      "size_z": 10,
+      "type": "Resource",
+      "children": [
+        {
+          "name": "child",
+          "location": {
+            "type": "Coordinate",
+            "x": 5, "y": 5, "z": 5,
+          },
+          "size_x": 1,
+          "size_y": 1,
+          "size_z": 1,
+          "type": "Resource",
+          "children": [],
+          "category": None,
+          "parent_name": "test",
+          "model": None,
+        }
+      ],
+      "category": None,
+      "parent_name": None,
+      "model": None,
+    })
+
   def test_deserialize(self):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
     self.assertEqual(Resource.deserialize(r.serialize()), r)

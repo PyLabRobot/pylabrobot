@@ -13,7 +13,6 @@ import time
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set
 import warnings
 
-from pylabrobot.default import Defaultable, Default
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
@@ -282,7 +281,7 @@ class LiquidHandler:
     self,
     tip_spots: List[TipSpot],
     use_channels: Optional[List[int]] = None,
-    offsets: Defaultable[Union[Coordinate, List[Defaultable[Coordinate]]]] = Default,
+    offsets: Optional[Union[Coordinate, List[Optional[Coordinate]]]] = None,
     **backend_kwargs
   ):
     """ Pick up tips from a resource.
@@ -377,7 +376,7 @@ class LiquidHandler:
     self,
     tip_spots: List[Union[TipSpot, Resource]],
     use_channels: Optional[List[int]] = None,
-    offsets: Defaultable[Union[Coordinate, List[Defaultable[Coordinate]]]] = Default,
+    offsets: Optional[Union[Coordinate, List[Optional[Coordinate]]]] = None,
     allow_nonzero_volume: bool = False,
     **backend_kwargs
   ):
@@ -547,10 +546,10 @@ class LiquidHandler:
     resources: Union[Container, Sequence[Container]],
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
-    flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
+    flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
     end_delay: float = 0,
-    offsets: Union[Defaultable[Coordinate], Sequence[Defaultable[Coordinate]]] = Default,
-    liquid_height: Union[Defaultable[float], List[Defaultable[float]]] = Default,
+    offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
+    liquid_height: Union[Optional[float], List[Optional[float]]] = None,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified wells.
@@ -589,7 +588,7 @@ class LiquidHandler:
         all channels will aspirate that volume.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(wells)` channels will be used.
-      flow_rates: the aspiration speed. In ul/s. If `Default`, the backend default will be used.
+      flow_rates: the aspiration speed. In ul/s. If `None`, the backend default will be used.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
@@ -616,7 +615,7 @@ class LiquidHandler:
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
-      if offsets is not Default:
+      if offsets is not None:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when aspirating "
                            "from a resource.")
@@ -648,7 +647,8 @@ class LiquidHandler:
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
-    aspirations = [Aspiration(r, v, offset=o, flow_rate=fr, liquid_height=lh, tip=t)
+    aspirations = [Aspiration(resource=r, volume=v, offset=o, flow_rate=fr, liquid_height=lh, tip=t,
+                              blow_out_air_volume=0, liquid=None)
                    for r, v, o, fr, lh, t in
                     zip(resources, vols, offsets, flow_rates, liquid_height, tips)]
 
@@ -687,10 +687,10 @@ class LiquidHandler:
     resources: Union[Container, Sequence[Container]],
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
-    flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
+    flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
     end_delay: float = 0,
-    offsets: Union[Defaultable[Coordinate], Sequence[Defaultable[Coordinate]]] = Default,
-    liquid_height: Union[Defaultable[float], List[Defaultable[float]]] = Default,
+    offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
+    liquid_height: Union[Optional[float], List[Optional[float]]] = None,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
@@ -729,7 +729,7 @@ class LiquidHandler:
         units of ul.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
-      flow_rates: the flow rates, in ul/s. If `Default`, the backend default will be used.
+      flow_rates: the flow rates, in ul/s. If `None`, the backend default will be used.
       end_delay: The delay after the last dispense in seconds, optional. This is useful for when
         the tips used in the dispense are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
@@ -758,7 +758,7 @@ class LiquidHandler:
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
-      if offsets is not Default:
+      if offsets is not None:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when dispensing "
                           "to a resource.")
@@ -790,7 +790,8 @@ class LiquidHandler:
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
-    dispenses = [Dispense(r, v, offset=o, flow_rate=fr, liquid_height=lh, tip=t)
+    dispenses = [Dispense(resource=r, volume=v, offset=o, flow_rate=fr, liquid_height=lh, tip=t,
+                          liquid=None, blow_out_air_volume=0) # TODO: get blow_out_air_volume
                  for r, v, o, fr, lh, t in
                   zip(resources, vols, offsets, flow_rates, liquid_height, tips)]
 
@@ -830,8 +831,8 @@ class LiquidHandler:
     source_vol: Optional[float] = None,
     ratios: Optional[List[float]] = None,
     target_vols: Optional[List[float]] = None,
-    aspiration_flow_rate: Defaultable[float] = Default,
-    dispense_flow_rates: Defaultable[Union[float, List[Defaultable[float]]]] = Default,
+    aspiration_flow_rate: Optional[float] = None,
+    dispense_flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
     **backend_kwargs
   ):
     """Transfer liquid from one well to another.
@@ -862,9 +863,9 @@ class LiquidHandler:
         the volumes will be distributed equally.
       target_vols: The volumes to transfer to the target wells. If specified, `source_vols` and
         `ratios` must be `None`.
-      aspiration_flow_rate: The flow rate to use when aspirating, in ul/s. If `Default`, the backend
+      aspiration_flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend
         default will be used.
-      dispense_flow_rates: The flow rates to use when dispensing, in ul/s. If `Default`, the backend
+      dispense_flow_rates: The flow rates to use when dispensing, in ul/s. If `None`, the backend
         default will be used. Either a single flow rate for all channels, or a list of flow rates,
         one for each target well.
 
@@ -987,7 +988,7 @@ class LiquidHandler:
     self,
     plate: Plate,
     volume: float,
-    flow_rate: Defaultable[float] = Default,
+    flow_rate: Optional[float] = None,
     end_delay: float = 0,
     **backend_kwargs
   ):
@@ -1003,7 +1004,7 @@ class LiquidHandler:
       pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
         represent columns, or a string representing a range of positions. Default all.
       volume: The volume to aspirate from each well.
-      flow_rate: The flow rate to use when aspirating, in ul/s. If `Default`, the backend default
+      flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend default
         will be used.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
@@ -1025,8 +1026,12 @@ class LiquidHandler:
       await self.backend.aspirate96(aspiration=AspirationPlate(
         resource=plate,
         volume=volume,
+        offset=Coordinate.zero(),
         flow_rate=flow_rate,
-        tips=tips),
+        tips=tips,
+        liquid_height=None,
+        blow_out_air_volume=0,
+        liquid=None),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
@@ -1039,7 +1044,7 @@ class LiquidHandler:
     self,
     plate: Plate,
     volume: float,
-    flow_rate: Defaultable[float] = Default,
+    flow_rate: Optional[float] = None,
     end_delay: float = 0,
     **backend_kwargs
   ):
@@ -1055,7 +1060,7 @@ class LiquidHandler:
       pattern: Either a list of lists of booleans where inner lists represent rows and outer lists
         represent columns, or a string representing a range of positions. Default all.
       volume: The volume to dispense to each well.
-      flow_rate: The flow rate to use when aspirating, in ul/s. If `Default`, the backend default
+      flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend default
         will be used.
       end_delay: The delay after the last dispense in seconds, optional. This is useful for when
         the tips used in the dispense are dripping.
@@ -1077,8 +1082,12 @@ class LiquidHandler:
       await self.backend.dispense96(dispense=DispensePlate(
         resource=plate,
         volume=volume,
+        offset=Coordinate.zero(),
         flow_rate=flow_rate,
-        tips=tips),
+        tips=tips,
+        liquid_height=None,
+        blow_out_air_volume=0,
+        liquid=None),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "
@@ -1092,8 +1101,8 @@ class LiquidHandler:
     source: Plate,
     target: Plate,
     volume: float,
-    aspiration_flow_rate: Defaultable[float] = Default,
-    dispense_flow_rate: Defaultable[float] = Default,
+    aspiration_flow_rate: Optional[float] = None,
+    dispense_flow_rate: Optional[float] = None,
   ):
     """ Stamp (aspiration and dispense) one plate onto another.
 
@@ -1101,9 +1110,9 @@ class LiquidHandler:
       source: the source plate
       target: the target plate
       volume: the volume to be transported
-      aspiration_flow_rate: the flow rate for the aspiration, in ul/s. If `Default`, the backend
+      aspiration_flow_rate: the flow rate for the aspiration, in ul/s. If `None`, the backend
         default will be used.
-      dispense_flow_rate: the flow rate for the dispense, in ul/s. If `Default`, the backend default
+      dispense_flow_rate: the flow rate for the dispense, in ul/s. If `None`, the backend default
         will be used.
     """
 
@@ -1141,6 +1150,7 @@ class LiquidHandler:
     Args:
       resource: The Resource object.
       to: The absolute coordinate (meaning relative to deck) to move the resource to.
+      intermediate_locations: A list of intermediate locations to move the resource through.
       resource_offset: The offset from the resource's origin, optional (rarely necessary).
       to_offset: The offset from the location's origin, optional (rarely necessary).
       pickup_distance_from_top: The distance from the top of the resource to pick up from.
@@ -1155,7 +1165,7 @@ class LiquidHandler:
     return await self.backend.move_resource(move=Move(
       resource=resource,
       to=to,
-      intermediate_locations=intermediate_locations,
+      intermediate_locations=intermediate_locations or [],
       resource_offset=resource_offset,
       to_offset=to_offset,
       pickup_distance_from_top=pickup_distance_from_top,

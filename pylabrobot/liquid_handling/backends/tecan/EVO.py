@@ -24,6 +24,7 @@ from pylabrobot.liquid_handling.standard import (
 from pylabrobot.resources import (
   Resource,
   Coordinate,
+  Liquid,
   TecanTipRack,
   TecanPlate,
   TecanTip,
@@ -294,7 +295,7 @@ class EVO(TecanLiquidHandler):
     tecan_liquid_classes = [
       get_liquid_class(
         target_volume=op.volume,
-        liquid_class=op.liquid,
+        liquid_class=op.liquid or Liquid.WATER,
         tip_type=op.tip.tip_type
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
@@ -383,7 +384,7 @@ class EVO(TecanLiquidHandler):
     tecan_liquid_classes = [
       get_liquid_class(
         target_volume=op.volume,
-        liquid_class=op.liquid,
+        liquid_class=op.liquid or Liquid.WATER,
         tip_type=op.tip.tip_type
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
 

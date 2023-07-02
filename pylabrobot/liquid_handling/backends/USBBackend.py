@@ -63,7 +63,6 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
     self.write_timeout = write_timeout
-    self.id_ = 0
 
     self.dev: Optional["usb.core.Device"] = None # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
