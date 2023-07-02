@@ -4,9 +4,10 @@ import copy
 import json
 import logging
 import sys
-from typing import List, Optional, Type
+from typing import List, Optional, Type, cast
 
 from .coordinate import Coordinate
+from pylabrobot.serializer import serialize, deserialize
 
 if sys.version_info >= (3, 11):
   from typing import Self
@@ -59,7 +60,7 @@ class Resource:
       "size_x": self._size_x,
       "size_y": self._size_y,
       "size_z": self._size_z,
-      "location": self.location.serialize() if self.location is not None else None,
+      "location": serialize(self.location),
       "category": self.category,
       "model": self.model,
       "children": [child.serialize() for child in self.children],
@@ -386,7 +387,7 @@ class Resource:
       child = child_cls.deserialize(child_data)
       location_data = child_data.get("location", None)
       if location_data is not None:
-        location = Coordinate.deserialize(location_data)
+        location = cast(Coordinate, deserialize(location_data))
       else:
         location = None
       resource.assign_child_resource(child, location=location)
@@ -413,7 +414,6 @@ class Resource:
     return cls.deserialize(content)
 
 
-# Recursively find a subclass with the correct name
 def get_resource_class_from_string(
   class_name: str,
   cls: Type[Resource] = Resource

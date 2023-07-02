@@ -175,6 +175,7 @@ class CarrierTests(unittest.TestCase):
           "size_y": 10,
           "size_z": 0,
           "location": {
+            "type": "Coordinate",
             "x": 10,
             "y": 20,
             "z": 30
@@ -192,6 +193,7 @@ class CarrierTests(unittest.TestCase):
           "size_y": 10,
           "size_z": 0,
           "location": {
+            "type": "Coordinate",
             "x": 10,
             "y": 50,
             "z": 30
@@ -209,6 +211,7 @@ class CarrierTests(unittest.TestCase):
           "size_y": 10,
           "size_z": 0,
           "location": {
+            "type": "Coordinate",
             "x": 10,
             "y": 80,
             "z": 30
@@ -226,6 +229,7 @@ class CarrierTests(unittest.TestCase):
           "size_y": 10,
           "size_z": 0,
           "location": {
+            "type": "Coordinate",
             "x": 10,
             "y": 130,
             "z": 30
@@ -243,6 +247,7 @@ class CarrierTests(unittest.TestCase):
           "size_y": 10,
           "size_z": 0,
           "location": {
+            "type": "Coordinate",
             "x": 10,
             "y": 160,
             "z": 30

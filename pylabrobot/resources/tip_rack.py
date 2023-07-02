@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from abc import ABCMeta
-from typing import List, Union, Optional, Sequence
+from typing import List, Union, Optional, Sequence, cast
 
 from pylabrobot import utils
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
+from pylabrobot.serializer import deserialize
 
 from .itemized_resource import ItemizedResource
 from .resource import Resource
@@ -65,12 +66,8 @@ class TipSpot(Resource):
   def deserialize(cls, data: dict) -> TipSpot:
     """ Deserialize a tip spot. """
     tip_data = data["prototype_tip"]
-    tip_class_name = tip_data["type"]
-    tip_classes = {cls.__name__: cls for cls in Tip.__subclasses__()}
-    tip_class = tip_classes[tip_class_name]
-
-    def make_tip():
-      return tip_class.deserialize(tip_data)
+    def make_tip() -> Tip:
+      return cast(Tip, deserialize(tip_data))
 
     return cls(
       name=data["name"],

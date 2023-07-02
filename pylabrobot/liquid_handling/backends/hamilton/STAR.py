@@ -14,7 +14,6 @@ import threading
 import time
 from typing import Callable, Dict, List, Optional, Tuple, Sequence, TypeVar, Union, cast
 
-from pylabrobot.default import Default, get_value, is_default, is_not_default
 import pylabrobot.liquid_handling.backends.hamilton.errors as herrors
 from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import get_liquid_class
@@ -32,25 +31,15 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
-from pylabrobot.resources import (
-  Coordinate,
-  Plate,
-  Resource,
-  TipSpot,
-  Well
-)
+from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot, Well
 from pylabrobot.resources.errors import (
   TooLittleVolumeError,
   TooLittleLiquidError,
   HasTipError,
   NoTipError
 )
-from pylabrobot.resources.ml_star import (
-  HamiltonTip,
-  TipDropMethod,
-  TipPickupMethod,
-  TipSize,
-)
+from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
 
 
 T = TypeVar("T")
@@ -707,16 +696,20 @@ class STAR(HamiltonLiquidHandler):
         x_positions.append(0)
         y_positions.append(0)
       channels_involved.append(True)
+      offset = ops[i].offset
+
       x_pos = ops[i].resource.get_absolute_location().x
-      if ops[i].offset is Default or isinstance(ops[i].resource, (TipSpot, Well)):
+      if offset is None or isinstance(ops[i].resource, (TipSpot, Well)):
         x_pos += ops[i].resource.center().x
-      x_pos += get_value(ops[i].offset, Coordinate.zero()).x
+      if offset is not None:
+        x_pos += offset.x
       x_positions.append(int(x_pos*10))
 
       y_pos = ops[i].resource.get_absolute_location().y
-      if ops[i].offset is Default or isinstance(ops[i].resource, (TipSpot, Well)):
+      if offset is None or isinstance(ops[i].resource, (TipSpot, Well)):
         y_pos += ops[i].resource.center().y
-      y_pos += get_value(ops[i].offset, Coordinate.zero()).y
+      if offset is not None:
+        y_pos += offset.y
       y_positions.append(int(y_pos*10))
 
     if len(ops) > self.num_channels:
@@ -746,7 +739,8 @@ class STAR(HamiltonLiquidHandler):
 
     ttti = await self.get_ttti([op.resource for op in ops])
 
-    max_z = max(op.get_absolute_location().z for op in ops)
+    max_z = max(op.resource.get_absolute_location().z + \
+                 (op.offset.z if op.offset is not None else 0) for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
     max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
 
@@ -812,7 +806,8 @@ class STAR(HamiltonLiquidHandler):
       self._ops_to_fw_positions(ops, use_channels)
 
     # get highest z position
-    max_z = max(op.get_absolute_location().z for op in ops)
+    max_z = max(op.resource.get_absolute_location().z + \
+                (op.offset.z if op.offset is not None else 0) for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
     max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
 
@@ -987,7 +982,7 @@ class STAR(HamiltonLiquidHandler):
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
-        liquid=op.liquid,
+        liquid=op.liquid or Liquid.WATER,
         jet=False, # for aspiration
         empty=False # for aspiration
       ) for tmv, op in zip(tip_max_volumes, ops)]
@@ -998,9 +993,9 @@ class STAR(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hamilton_liquid_classes):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.get_absolute_location().z + \
-                    (op.offset.z if is_not_default(op.offset) else 0) for op in ops]
-    liquid_surfaces_no_lld = [wb + (op.liquid_height if is_not_default(op.liquid_height) else 1)
+    well_bottoms = [op.resource.get_absolute_location().z + \
+                    (op.offset.z if op.offset is not None else 0) for op in ops]
+    liquid_surfaces_no_lld = [wb + (op.liquid_height or 1)
                               for wb, op in zip(well_bottoms, ops)]
     lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
 
@@ -1019,7 +1014,7 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0]*n)
     flow_rates = [
-      get_value(op.flow_rate, default=hlc.aspiration_flow_rate if hlc is not None else 100)
+      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
         for op, hlc in zip(ops, hamilton_liquid_classes)]
     aspiration_speed = [int(fr * 10) for fr in flow_rates]
     transport_air_volume = _fill_in_defaults(transport_air_volume,
@@ -1226,16 +1221,23 @@ class STAR(HamiltonLiquidHandler):
     # convert max volumes
     tip_max_volumes = self._get_tip_max_volumes(ops)
 
+    def should_jet(op):
+      if op.liquid_height is None:
+        return True
+      if op.liquid_height is not None and op.liquid_height > 0:
+        return True
+      if hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0:
+        return True
+      return False
+
     hamilton_liquid_classes = [
       get_liquid_class(
         tip_volume=int(tmv),
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
-        liquid=op.liquid,
-        # jet if liquid height is known, or if we are dispensing to an empty well
-        jet=(hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0) or
-        (is_default(op.liquid_height) or is_not_default(op.liquid_height) and op.liquid_height > 0),
+        liquid=op.liquid or Liquid.WATER,
+        jet=should_jet(op),
         # dispensing all, get_used_volume includes pending
         empty=op.tip.tracker.get_used_volume() == 0
       ) for tmv, op in zip(tip_max_volumes, ops)]
@@ -1244,21 +1246,19 @@ class STAR(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hamilton_liquid_classes):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.get_absolute_location().z + \
-                    (op.offset.z if is_not_default(op.offset) else 0) for op in ops]
-    liquid_surfaces_no_lld = [ls + (op.liquid_height if is_not_default(op.liquid_height) else 1)
-                              for ls, op in zip(well_bottoms, ops)]
+    well_bottoms = [op.resource.get_absolute_location().z + \
+                    (op.offset.z if op.offset is not None else 0) for op in ops]
+    liquid_surfaces_no_lld = [ls + (op.liquid_height or 1) for ls, op in zip(well_bottoms, ops)]
     lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
 
-    dispensing_mode = [{
-      (False, True): 0,
-      (True, True): 1,
-      (True, False): 2,
-      (False, False): 3,
-    }[(op.tip.tracker.get_used_volume() == 0, # empty
-      (is_default(op.liquid_height) or is_not_default(op.liquid_height) and op.liquid_height > 0) or
-      (hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0))] # jet
-      for op in ops]
+    def dispensing_mode_for_op(op: Dispense) -> int:
+      return {
+        (False, True): 0,
+        (True, True): 1,
+        (True, False): 2,
+        (False, False): 3,
+      }[(op.tip.tracker.get_used_volume() == 0, should_jet(op))]
+    dispensing_modes = dispensing_mode or [dispensing_mode_for_op(op) for op in ops]
 
     dispense_volumes = [int(op.volume*10) for op in ops]
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [100]*n)
@@ -1270,7 +1270,7 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0]*n)
     flow_rates = [
-      get_value(op.flow_rate, default=hlc.aspiration_flow_rate if hlc is not None else 120)
+      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
         for op, hlc in zip(ops, hamilton_liquid_classes)]
     dispense_speed = [int(fr*10) for fr in flow_rates]
     cut_off_speed = _fill_in_defaults(cut_off_speed, [50]*n)
@@ -1309,7 +1309,7 @@ class STAR(HamiltonLiquidHandler):
         x_positions=x_positions,
         y_positions=y_positions,
 
-        dispensing_mode=dispensing_mode,
+        dispensing_mode=dispensing_modes,
         dispense_volumes=dispense_volumes,
         lld_search_height=[int(sh*10) for sh in lld_search_heights],
         liquid_surface_no_lld=[int(ls*10) for ls in liquid_surfaces_no_lld],
@@ -1494,7 +1494,7 @@ class STAR(HamiltonLiquidHandler):
 
     liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
 
-    flow_rate = int(get_value(aspiration.flow_rate, 250)*10)
+    flow_rate = int((aspiration.flow_rate or 250)*10)
 
     aspiration_volumes = int(aspiration.volume * 10)
 
@@ -1648,7 +1648,7 @@ class STAR(HamiltonLiquidHandler):
       (False, True): 3,
     }[(jet, blow_out)]
 
-    flow_rate = get_value(dispense.flow_rate, 120)
+    flow_rate = dispense.flow_rate or 120
 
     liquid_surface_at_function_without_lld: int = int(liquid_height*10)
     pull_out_distance_to_take_transport_air_in_function_without_lld = air_transport_retract_dist*10
@@ -4334,36 +4334,36 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.12.1 Initialization --------------
 
-  # TODO:(commandL:NI)
-  # TODO:(commandL:NV)
-  # TODO:(commandL:NP)
+  # TODO:(command:NI)
+  # TODO:(command:NV)
+  # TODO:(command:NP)
 
   # -------------- 3.12.2 Nano pipettor liquid handling commands --------------
 
-  # TODO:(commandL:NA)
-  # TODO:(commandL:ND)
-  # TODO:(commandL:NF)
+  # TODO:(command:NA)
+  # TODO:(command:ND)
+  # TODO:(command:NF)
 
   # -------------- 3.12.3 Nano pipettor wash & clean commands --------------
 
-  # TODO:(commandL:NW)
-  # TODO:(commandL:NU)
+  # TODO:(command:NW)
+  # TODO:(command:NU)
 
   # -------------- 3.12.4 Nano pipettor adjustment & movements --------------
 
-  # TODO:(commandL:NM)
-  # TODO:(commandL:NT)
+  # TODO:(command:NM)
+  # TODO:(command:NT)
 
   # -------------- 3.12.5 Nano pipettor query --------------
 
-  # TODO:(commandL:QL)
-  # TODO:(commandL:QN)
-  # TODO:(commandL:RN)
-  # TODO:(commandL:QQ)
-  # TODO:(commandL:QR)
-  # TODO:(commandL:QO)
-  # TODO:(commandL:RR)
-  # TODO:(commandL:QU)
+  # TODO:(command:QL)
+  # TODO:(command:QN)
+  # TODO:(command:RN)
+  # TODO:(command:QQ)
+  # TODO:(command:QR)
+  # TODO:(command:QO)
+  # TODO:(command:RR)
+  # TODO:(command:QU)
 
   # -------------- 3.13 Auto load commands --------------
 

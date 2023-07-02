@@ -1,4 +1,3 @@
-import copy
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
@@ -13,15 +12,7 @@ from pylabrobot.resources import (
   no_tip_tracking,
   no_volume_tracking,
 )
-from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  Drop,
-  Aspiration,
-  AspirationPlate,
-  Dispense,
-  DispensePlate,
-  Move,
-)
+from pylabrobot.serializer import serialize
 
 
 class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
@@ -53,8 +44,11 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "pick_up_tips")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
-      "channels": [Pickup(resource=tip_spot, tip=tip).serialize()],
-      "use_channels": [0]})
+      "channels": [{
+        "resource_name": tip_spot.name,
+        "offset": None,
+        "tip": serialize(tip),
+      }], "use_channels": [0]})
 
   async def test_drop_tips(self):
     tip_spot = self.tip_rack.get_item("A1")
@@ -67,8 +61,11 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "drop_tips")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
-      "channels": [Drop(resource=tip_spot, tip=tip).serialize()],
-      "use_channels": [0]})
+      "channels": [{
+        "resource_name": tip_spot.name,
+        "offset": None,
+        "tip": serialize(tip),
+      }], "use_channels": [0]})
 
   async def test_aspirate(self):
     well = self.plate.get_item("A1")
@@ -82,7 +79,16 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
-      "channels": [Aspiration(resource=well, volume=10, tip=tip).serialize()], "use_channels": [0]})
+      "channels": [{
+        "resource_name": well.name,
+        "offset": None,
+        "tip": tip.serialize(),
+        "volume": 10,
+        "flow_rate": None,
+        "liquid_height": None,
+        "blow_out_air_volume": 0,
+        "liquid": None,
+      }], "use_channels": [0]})
 
   async def test_dispense(self):
     wells = self.plate["A1"]
@@ -96,16 +102,23 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
-      "channels": [Dispense(resource=wells[0], volume=10, tip=tip).serialize()],
-      "use_channels": [0]})
+      "channels": [{
+        "resource_name": wells[0].name,
+        "offset": None,
+        "tip": tip.serialize(),
+        "volume": 10,
+        "flow_rate": None,
+        "liquid_height": None,
+        "blow_out_air_volume": 0,
+        "liquid": None,
+      }], "use_channels": [0]})
 
   async def test_pick_up_tips96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "pick_up_tips96")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
-      "resource_name": self.tip_rack.name,
-      "offset": Coordinate.zero().serialize()
+      "resource_name": self.tip_rack.name, "offset": serialize(Coordinate.zero())
     })
 
   async def test_drop_tips96(self):
@@ -113,8 +126,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "drop_tips96")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
-      "resource_name": self.tip_rack.name,
-      "offset": Coordinate.zero().serialize()
+      "resource_name": self.tip_rack.name, "offset": serialize(Coordinate.zero())
     })
 
   async def test_aspirate96(self):
@@ -128,8 +140,16 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.lh.aspirate_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate96")
-    self.assertEqual(self.backend.sent_commands[0]["data"], {"aspiration":
-      AspirationPlate(resource=self.plate, volume=10, tips=tips).serialize()})
+    self.assertEqual(self.backend.sent_commands[0]["data"], {"aspiration": {
+      "resource_name": self.plate.name,
+      "offset": serialize(Coordinate.zero()),
+      "volume": 10,
+      "flow_rate": None,
+      "liquid_height": None,
+      "blow_out_air_volume": 0,
+      "liquid": None,
+      "tips": [serialize(tip) for tip in tips],
+    }})
 
   async def test_dispense96(self):
     await self.test_pick_up_tips96() # pick up tips first
@@ -142,18 +162,30 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.lh.dispense_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense96")
-    self.assertEqual(self.backend.sent_commands[0]["data"], {"dispense":
-      DispensePlate(resource=self.plate, volume=10, tips=tips).serialize()})
+    self.assertEqual(self.backend.sent_commands[0]["data"], {"dispense": {
+      "resource_name": self.plate.name,
+      "offset": serialize(Coordinate.zero()),
+      "volume": 10,
+      "flow_rate": None,
+      "liquid_height": None,
+      "blow_out_air_volume": 0,
+      "liquid": None,
+      "tips": [serialize(tip) for tip in tips],
+    }})
 
   async def test_move(self):
     to = Coordinate(600, 200, 200)
-    plate_before = copy.deepcopy(self.plate) # we need to copy the plate because it will be modified
     await self.lh.move_plate(self.plate, to=to)
     self.assertEqual(len(self.backend.sent_commands), 3) # move + resource unassign + assign
     self.assertEqual(self.backend.sent_commands[0]["command"], "move")
     self.assertEqual(self.backend.get_first_data_for_command("move"), {"move":
-      Move(
-        resource=plate_before,
-        to=to,
-        pickup_distance_from_top=13.2,
-      ).serialize()})
+      {
+        "resource_name": self.plate.name,
+        "to": serialize(to),
+        "intermediate_locations": [],
+        "resource_offset": serialize(Coordinate.zero()),
+        "to_offset": serialize(Coordinate.zero()),
+        "pickup_distance_from_top": 13.2,
+        "get_direction": "FRONT",
+        "put_direction": "FRONT",
+      }})

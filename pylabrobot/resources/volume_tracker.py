@@ -1,10 +1,11 @@
 # from abc import ABC, abstractmethod
 import contextlib
 import sys
-from typing import Any, Dict, List, Tuple, Optional, cast
+from typing import List, Tuple, Optional, cast
 
 from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.serializer import serialize, deserialize
 
 
 this = sys.modules[__name__]
@@ -24,16 +25,21 @@ def no_volume_tracking():
   this.volume_tracking_enabled = old_value # type: ignore
 
 
-class VolumeTracker():
+class VolumeTracker:
   """ A volume tracker tracks operations that change the volume in a container and raises errors
   if the volume operations are invalid. """
 
-  def __init__(self, max_volume: float):
+  def __init__(
+      self,
+      max_volume: float,
+      liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None,
+      pending_liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None
+  ) -> None:
     self._is_disabled = False
     self.max_volume = max_volume
 
-    self.liquids: List[Tuple[Optional[Liquid], float]] = []
-    self.pending_liquids: List[Tuple[Optional[Liquid], float]] = []
+    self.liquids: List[Tuple[Optional[Liquid], float]] = liquids or []
+    self.pending_liquids: List[Tuple[Optional[Liquid], float]] = pending_liquids or []
 
   @property
   def is_disabled(self) -> bool:
@@ -106,25 +112,16 @@ class VolumeTracker():
   def serialize(self) -> dict:
     """ Serialize the volume tracker. """
 
-    def serialize_liquid(liquid: Optional["Liquid"], volume: float) -> Dict[str, Any]:
-      return {
-        "liquid": liquid.serialize() if liquid is not None else None,
-        "volume": volume
-      }
-
     return {
-      "liquids": [serialize_liquid(l, v) for l, v in self.liquids],
-      "pending_liquids": [serialize_liquid(l, v) for l, v in self.pending_liquids],
+      "liquids": [serialize(l) for l in self.liquids],
+      "pending_liquids": [serialize(l) for l in self.pending_liquids],
     }
 
   def load_state(self, state: dict) -> None:
     """ Load the state of the volume tracker. """
 
-    def load_liquid(data: Dict[str, Optional[str]]) -> Tuple[Optional["Liquid"], float]:
-      liquid_data = data.get("liquid", None)
-      return (
-        Liquid.deserialize(liquid_data) if liquid_data is not None else None,
-        cast(float, data["volume"]))
+    def load_liquid(data) -> Tuple[Optional["Liquid"], float]:
+      return cast(Tuple["Liquid", float], tuple(deserialize(data)))
 
     self.liquids = [load_liquid(l) for l in state["liquids"]]
     self.pending_liquids = [load_liquid(l) for l in state["pending_liquids"]]
