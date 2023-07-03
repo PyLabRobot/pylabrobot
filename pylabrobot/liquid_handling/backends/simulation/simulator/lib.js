@@ -310,7 +310,12 @@ class Resource {
     return {
       name: this.name,
       type: this.constructor.name,
-      location: this.location,
+      location: {
+        ...this.location,
+        ...{
+          type: "Coordinate",
+        },
+      },
       size_x: this.size_x,
       size_y: this.size_y,
       size_z: this.size_z,
