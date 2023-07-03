@@ -75,10 +75,21 @@ function save() {
 
 var autoSaveTimeout = undefined;
 const SAVING_WAIT_TIME = 1000; // ms
+var previousDecks = [];
 function autoSave() {
-  // Save the file after a delay.
-  // This is to batch multiple changes into one save.
+  // Save the state if it has changed.
+  const deck = resources["deck"].serialize();
+  let lastDeck = previousDecks[previousDecks.length - 1];
+  if (JSON.stringify(deck) === JSON.stringify(lastDeck)) {
+    return;
+  }
+  // max length of previous states is 30
+  if (previousDecks.length >= 30) {
+    previousDecks.shift();
+  }
+  previousDecks.push(deck);
 
+  // Save the file after a delay to batch multiple changes into one save.
   if (autoSaveEnabled) {
     if (autoSaveTimeout) {
       clearTimeout(autoSaveTimeout);
@@ -91,12 +102,21 @@ function autoSave() {
   }
 }
 
-window.addEventListener("keydown", (e) => {
-  if (e.key === "s" && e.metaKey) {
-    e.preventDefault();
-    save();
+function undo() {
+  if (previousDecks.length < 2) {
+    return;
   }
-});
+
+  // The last entry is the current state, so we need to go back two.
+  previousDecks.pop();
+  let lastDeck = previousDecks.pop();
+
+  resources["deck"].destroy();
+  resources["deck"] = loadResource(lastDeck);
+  resources["deck"].draw(resourceLayer);
+
+  autoSave();
+}
 
 window.onbeforeunload = function () {
   if (saving || autoSaveTimeout !== undefined) {
@@ -725,6 +745,12 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "v" && e.metaKey) {
     e.preventDefault();
     pasteResource();
+  } else if (e.key === "s" && e.metaKey) {
+    e.preventDefault();
+    save();
+  } else if (e.key === "z" && e.metaKey) {
+    e.preventDefault();
+    undo();
   }
 });
 
@@ -1005,9 +1031,10 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      const data = response.data;
-      let resource = loadResource(data);
+      const deckData = response.data;
+      let resource = loadResource(deckData);
       resource.draw(resourceLayer);
+      previousDecks.push(resource.serialize());
     })
     .catch((error) => {
       console.log(error);
