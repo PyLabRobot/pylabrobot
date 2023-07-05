@@ -127,8 +127,8 @@ class Move:
   resource: Resource
   to: Coordinate
   intermediate_locations: List[Coordinate] = field(default_factory=list)
-  resource_offset: Coordinate = Coordinate.zero()
-  to_offset: Coordinate = Coordinate.zero()
+  resource_offset: Coordinate = field(default=Coordinate.zero())
+  to_offset: Coordinate = field(default=Coordinate.zero())
   pickup_distance_from_top: float = 0
   get_direction: GripDirection = GripDirection.FRONT
   put_direction: GripDirection = GripDirection.FRONT
