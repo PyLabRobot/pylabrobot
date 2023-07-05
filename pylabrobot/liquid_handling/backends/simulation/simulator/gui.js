@@ -328,7 +328,7 @@ function highlightSearchResult(idx) {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "k" && e.metaKey) {
+  if ((e.key === "k" && e.metaKey) || (e.key === "k" && e.ctrlKey)) {
     e.preventDefault();
     openSearchBar();
   } else if (e.key === "Escape") {
@@ -736,19 +736,19 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     unselectResource();
     closeContextMenu();
-  } else if (e.key === "c" && e.metaKey) {
+  } else if ((e.key === "c" && e.metaKey) || (e.key === "c" && e.ctrlKey)) {
     e.preventDefault();
     copyResource(selectedResource);
-  } else if (e.key === "x" && e.metaKey) {
+  } else if ((e.key === "x" && e.metaKey) || (e.key === "x" && e.ctrlKey)) {
     e.preventDefault();
     cutResource(selectedResource);
-  } else if (e.key === "v" && e.metaKey) {
+  } else if ((e.key === "v" && e.metaKey) || (e.key === "v" && e.ctrlKey)) {
     e.preventDefault();
     pasteResource();
-  } else if (e.key === "s" && e.metaKey) {
+  } else if ((e.key === "s" && e.metaKey) || (e.key === "s" && e.ctrlKey)) {
     e.preventDefault();
     save();
-  } else if (e.key === "z" && e.metaKey) {
+  } else if ((e.key === "z" && e.metaKey) || (e.key === "z" && e.ctrlKey)) {
     e.preventDefault();
     undo();
   }
