@@ -65,6 +65,27 @@ Hamilton
     pylabrobot.resources.hamilton.STARDeck
     pylabrobot.resources.hamilton.STARLetDeck
 
+
+
+Tecan
+-----
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.tecan
+    pylabrobot.resources.tecan.plates
+    pylabrobot.resources.tecan.plate_carriers
+    pylabrobot.resources.tecan.tecan_decks
+    pylabrobot.resources.tecan.tecan_resource
+    pylabrobot.resources.tecan.tip_carriers
+    pylabrobot.resources.tecan.tip_creators
+    pylabrobot.resources.tecan.tip_racks
+    pylabrobot.resources.tecan.wash
+
+
 VWR
 ---
 
