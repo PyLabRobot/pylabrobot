@@ -8,9 +8,9 @@ class Coordinate:
   relative to its parent resource.
   """
 
-  x: float
-  y: float
-  z: float
+  x: float = 0
+  y: float = 0
+  z: float = 0
 
   def __post_init__(self):
     # Round to 4 decimal places to minimize floating point errors (100nm)
