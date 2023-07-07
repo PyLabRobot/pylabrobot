@@ -916,8 +916,7 @@ resourceLayer.on("dragend", (e) => {
       if (resource.parent !== undefined) {
         resource.parent.unassignChild(resource);
       }
-      resource.location.x = x;
-      resource.location.y = y;
+      resource.location = { x: x, y: y, z: 0 };
       parent.assignChild(resource);
 
       // Snap to position in UI after it has been added to the new UI group by assignChild.

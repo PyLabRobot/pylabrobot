@@ -18,10 +18,11 @@ function addResource(resourceIdentifier) {
     .then((data) => {
       // Get the center of the deck.
       const deck = resources["deck"];
+      const isHamilton = deck.constructor.name === "HamiltonDeck";
       const deckCenter = {
         x: deck.location.x + deck.size_x / 2,
         y: deck.location.y + deck.size_y / 2,
-        z: 0,
+        z: isHamilton ? 100 : 0,
       };
 
       resource = loadResource(data);
