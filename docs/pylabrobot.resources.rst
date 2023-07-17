@@ -106,6 +106,7 @@ Opentrons
   :recursive:
 
     pylabrobot.resources.opentrons
+    pylabrobot.resources.opentrons.deck
     pylabrobot.resources.opentrons.load
     pylabrobot.resources.opentrons.tip_racks
     pylabrobot.resources.opentrons.plates
