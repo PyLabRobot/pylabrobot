@@ -117,7 +117,14 @@ function adjustVolume(pattern) {
   for (let i = 0; i < pattern.length; i++) {
     const { well_name, volume } = pattern[i];
     const wellInstance = resources[well_name];
-    wellInstance.setVolume(volume, resourceLayer);
+    const wellVolume = wellInstance.getVolume()
+    if(wellVolume > volume){
+      wellInstance.aspirate(wellVolume - volume)
+    }
+    else{
+      wellInstance.dispense(volume - wellVolume)
+    }
+    wellInstance.update()
   }
 
   return null;
