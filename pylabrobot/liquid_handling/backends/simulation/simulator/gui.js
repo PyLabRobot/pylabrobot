@@ -1,3 +1,5 @@
+mode = MODE_GUI;
+
 function newResourceName() {
   let i = 1;
   while (true) {
@@ -1012,6 +1014,229 @@ function pasteResource() {
   autoSave();
 }
 
+function moveToTop(resource) {
+  // Recursively move the resource to the top of the layer.
+  resource.group.moveToTop();
+  if (resource.parent !== undefined) {
+    moveToTop(resource.parent);
+  }
+}
+
+resourceLayer.on("dragstart", (e) => {
+  // Move dragged resource to top of layer
+  let resource = e.target.resource;
+  moveToTop(resource);
+
+  // Show the trash icon
+  resourceLayer.add(trash);
+  trash.moveToTop();
+});
+
+function _deleteSnappingLines() {
+  if (snapLines.length > 0) {
+    for (let i = snapLines.length - 1; i >= 0; i--) {
+      snapLines[i].destroy();
+      snapLines.splice(i, 1);
+    }
+  }
+
+  if (snappingBox !== undefined) {
+    snappingBox.destroy();
+  }
+}
+
+resourceLayer.on("dragmove", (e) => {
+  if (tooltip !== undefined) {
+    tooltip.destroy();
+  }
+
+  _deleteSnappingLines();
+
+  // Get the absolute location of this resource in this drag. We replace the resource's relative
+  // location with its drag location (drag is relative to the parent too).
+  let resource = e.target.resource;
+  x = resource.parent.getAbsoluteLocation().x + e.target.position().x;
+  y = resource.parent.getAbsoluteLocation().y + e.target.position().y;
+
+  // If we have a snapping box match, draw a snapping box indicator around the area.
+  const snapResult = getSnappingResourceAndLocationAndSnappingBox(
+    resource,
+    x + resource.size_x / 2,
+    y + resource.size_y / 2
+  );
+
+  if (snapResult !== undefined) {
+    let {
+      snappingBox: { x: snapX, y: snapY, width, height },
+    } = snapResult;
+
+    snappingBox = new Konva.Rect({
+      x: snapX,
+      y: snapY,
+      width: width,
+      height: height,
+      fill: "rgba(0, 0, 0, 0.1)",
+      stroke: "red",
+      strokeWidth: 1,
+      dash: [10, 5],
+    });
+    resourceLayer.add(snappingBox);
+  } else {
+    // If there is no box snapping match, check if there is a grid snapping match.
+    let { snappingX, snappingY, resourceX, resourceY } = getSnappingGrid(
+      x,
+      y,
+      resource.size_x,
+      resource.size_y
+    );
+
+    // If we have a snapping match, show an indicator and snap to the grid.
+    if (snappingX !== undefined) {
+      e.target.x(resourceX - resource.parent.getAbsoluteLocation().x);
+
+      // Draw a vertical line
+      let snapLine = new Konva.Line({
+        points: [snappingX, 0, snappingX, canvasHeight],
+        stroke: "red",
+        strokeWidth: 2,
+        dash: [10, 5],
+      });
+      resourceLayer.add(snapLine);
+      snapLines.push(snapLine);
+    }
+    if (snappingY !== undefined) {
+      e.target.y(resourceY - resource.parent.getAbsoluteLocation().y);
+
+      // Draw a vertical line
+      let snapLine = new Konva.Line({
+        points: [0, snappingY, canvasWidth, snappingY],
+        stroke: "red",
+        strokeWidth: 2,
+        dash: [10, 5],
+      });
+      resourceLayer.add(snapLine);
+      snapLines.push(snapLine);
+    }
+  }
+});
+
+resourceLayer.on("dragend", (e) => {
+  _deleteSnappingLines();
+
+  // Get the absolute location of this resource in this drag. We replace the resource's relative
+  // location with its drag location (drag is relative to the parent too).
+  let resource = e.target.resource;
+  x = resource.parent.getAbsoluteLocation().x + e.target.position().x;
+  y = resource.parent.getAbsoluteLocation().y + e.target.position().y;
+
+  const snapResult = getSnappingResourceAndLocationAndSnappingBox(
+    resource,
+    x + resource.size_x / 2,
+    y + resource.size_y / 2
+  );
+
+  if (snapResult !== undefined) {
+    const { resource: parent, location } = snapResult;
+
+    if (parent === trash) {
+      // Delete the plate.
+      resource.destroy();
+    } else {
+      const { x, y } = location;
+
+      // Update the deck layout with the new parent.
+      if (resource.parent !== undefined) {
+        resource.parent.unassignChild(resource);
+      }
+      resource.location = { x: x, y: y, z: 0 };
+      parent.assignChild(resource);
+
+      // Snap to position in UI after it has been added to the new UI group by assignChild.
+      e.target.position({ x: x, y: y });
+    }
+  } else {
+    // Update the deck layout with the new location.
+    resource.location.x = x;
+    resource.location.y = y;
+    // Assign resource to deck.
+    if (resource.parent !== undefined) {
+      resource.parent.unassignChild(resource);
+    }
+    resources["deck"].assignChild(resource);
+    e.target.position({ x: x, y: y });
+  }
+
+  // hide the trash icon
+  trash.remove();
+
+  autoSave();
+});
+
+function selectResource(resource) {
+  selectedResource = resource;
+  loadEditor(selectedResource);
+
+  // Draw a selection box around the resource.
+  selectedResource.mainShape.stroke("orange");
+  selectedResource.mainShape.strokeWidth(1);
+  selectedResource.mainShape.strokeEnabled(true);
+}
+
+function unselectResource() {
+  closeRightSidebar();
+  closeContextMenu();
+
+  if (selectedResource !== undefined) {
+    // Redraw the resource layer to remove the selection box.
+    selectedResource.draw(resourceLayer);
+  }
+
+  selectedResource = undefined;
+}
+
+function handleClick(e) {
+  // ignore if it is a context menu click
+  if (e.evt.button === 2) {
+    return;
+  }
+
+  if (tooltip !== undefined) {
+    tooltip.destroy();
+  }
+
+  let resourceClicked = e.target.resource;
+
+  if (resourceClicked === undefined) {
+    // If the user clicked on the background, unselect the current resource.
+    unselectResource();
+  } else if (resourceClicked === selectedResource) {
+    // If the user clicked on the selected resource, unselect it.
+    unselectResource();
+  } else if (
+    ["HamiltonDeck", "OTDeck", "Deck"].includes(
+      resourceClicked.constructor.name
+    )
+  ) {
+    // The deck cannot be selected. If the user clicks on it, unselect the current resource.
+    unselectResource();
+  } else {
+    unselectResource();
+    // Select the resource.
+    selectResource(resourceClicked);
+  }
+}
+
+// on right click, show options
+resourceLayer.on("contextmenu", (e) => {
+  e.evt.preventDefault();
+  selectedResource = e.target.resource;
+
+  // If the resource is not the trash, show the context menu.
+  if (selectResource !== trash) {
+    openContextMenu();
+  }
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   fetch(`/data/${filename}`)
     .then((response) => response.json())
@@ -1066,3 +1291,22 @@ document.addEventListener("DOMContentLoaded", () => {
       closeContextMenu();
     });
 });
+
+function afterStageSetup() {
+  // Add click handler to stage
+  stage.on("click", handleClick);
+
+  // add a trash icon for deleting resources
+  var imageObj = new Image();
+  trash = new Konva.Image({
+    x: 700,
+    y: 100,
+    image: imageObj,
+    width: 50,
+    height: 50,
+  });
+  imageObj.src = "/trash3.svg";
+  // Flip the image vertically in place
+  trash.scaleY(-1);
+  trash.offsetY(50);
+}

@@ -30,10 +30,10 @@ class VolumeTracker:
   if the volume operations are invalid. """
 
   def __init__(
-      self,
-      max_volume: float,
-      liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None,
-      pending_liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None
+    self,
+    max_volume: float,
+    liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None,
+    pending_liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None
   ) -> None:
     self._is_disabled = False
     self.max_volume = max_volume

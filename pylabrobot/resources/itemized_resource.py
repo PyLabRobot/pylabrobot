@@ -375,7 +375,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     return None
 
   def get_all_items(self) -> List[T]:
-    """ Get all items in the resource."""
+    """ Get all items in the resource. Items are in a 1D list, starting from the top left and going
+    down, then right. """
 
     return self.get_items(range(self.num_items))
 
