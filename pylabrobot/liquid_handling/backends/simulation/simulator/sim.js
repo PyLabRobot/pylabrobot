@@ -1,3 +1,5 @@
+mode = MODE_SIMULATOR;
+
 var config = {
   pip_aspiration_duration: 2,
   pip_dispense_duration: 2,
@@ -14,8 +16,6 @@ var config = {
   min_core_head_location: -1,
   max_core_head_location: -1,
 };
-
-var canvasWidth, canvasHeight;
 
 class PipettingChannel {
   constructor(identifier) {
@@ -113,13 +113,12 @@ function sleep(s) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function adjustVolume(pattern) {
+function adjustLiquids(pattern) {
   for (let i = 0; i < pattern.length; i++) {
-    const { well_name, volume } = pattern[i];
+    const { well_name, liquids } = pattern[i];
     const wellInstance = resources[well_name];
-    wellInstance.setVolume(volume, resourceLayer);
+    wellInstance.setLiquids(liquids);
   }
-
   return null;
 }
 
@@ -472,8 +471,8 @@ async function handleEvent(event, data) {
       ret.error = editTips(data.pattern);
       break;
 
-    case "adjust_well_volume":
-      ret.error = adjustVolume(data.pattern);
+    case "adjust_well_liquids":
+      ret.error = adjustLiquids(data.pattern);
       break;
 
     case "aspirate":
@@ -504,6 +503,9 @@ async function handleEvent(event, data) {
     case "dispense96":
       await sleep(config.core_dispense_duration);
       ret.error = dispense96(data.dispense);
+      break;
+
+    case "pong":
       break;
 
     default:

@@ -121,10 +121,10 @@ class SimulatorBackendCommandTests(unittest.IsolatedAsyncioTestCase):
     await super().asyncTearDown()
     await self.lh.stop()
 
-  async def test_adjust_volume(self):
-    await self.backend.adjust_well_volume(self.plate, [[100]*12]*8)
+  async def test_adjust_wells_liquids(self):
+    await self.backend.adjust_wells_liquids(self.plate, liquids=[[(None, 100.0)]]*(12*8))
     self.assertEqual(len(self.backend.sent_commands), 1)
-    self.assertEqual(self.backend.sent_commands[0]["command"], "adjust_well_volume")
+    self.assertEqual(self.backend.sent_commands[0]["command"], "adjust_well_liquids")
 
   async def test_edit_tips(self):
     await self.backend.edit_tips(self.tip_rack, [[True]*12]*8)

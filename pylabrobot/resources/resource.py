@@ -332,7 +332,7 @@ class Resource:
     return new_resource
 
   def center(self) -> Coordinate:
-    """ Get the center of this resource. """
+    """ Get the center of the bottom plane of this resource. """
 
     return Coordinate(self.get_size_x() / 2, self.get_size_y() / 2, 0)
 
