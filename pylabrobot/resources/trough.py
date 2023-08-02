@@ -13,7 +13,6 @@ class Trough(Container):
     size_y: float,
     size_z: float,
     max_volume: float,
-    volume: float = 0,
     category: Optional[str] = "trough",
     model: Optional[str] = None
   ):
@@ -23,7 +22,6 @@ class Trough(Container):
       size_y=size_y,
       size_z=size_z,
       max_volume=max_volume,
-      volume=volume,
       category=category,
       model=model
     )

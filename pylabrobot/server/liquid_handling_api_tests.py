@@ -1,4 +1,3 @@
-import time
 from typing import cast
 import unittest
 
@@ -10,15 +9,11 @@ from pylabrobot.resources import (
   HTF_L,
   Cos_96_EZWash,
   TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00
+  PLT_CAR_L5AC_A00,
+  no_tip_tracking,
 )
 from pylabrobot.resources.hamilton import HamiltonDeck, STARLetDeck
-from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  Drop,
-  Aspiration,
-  Dispense,
-)
+from pylabrobot.serializer import serialize
 from pylabrobot.server.liquid_handling_server import create_app
 
 
@@ -29,7 +24,7 @@ def build_layout() -> HamiltonDeck:
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
   plt_car[0] = plate = Cos_96_EZWash(name="aspiration plate")
-  plate.get_item("A1").tracker.set_used_volume(400)
+  plate.get_item("A1").tracker.set_liquids([(None, 400)])
 
   deck = STARLetDeck()
   deck.assign_child_resource(tip_car, rails=1)
@@ -82,7 +77,8 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
   def test_load_labware(self):
     with self.app.test_client() as client:
       # Post with no data
-      response = client.post(self.base_url + "/labware")
+      response = client.post(self.base_url + "/labware",
+                             headers={"Content-Type": "application/json"})
       self.assertEqual(response.status_code, 400)
       self.assertEqual(response.json, {"error": "json data must be a dict"})
 
@@ -120,11 +116,16 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
     with self.app.test_client() as client:
       tip_rack = cast(TipRack, self.lh.deck.get_resource("tip_rack_01"))
       tip_spot = tip_rack.get_item("A1")
-      tip = tip_spot.get_tip()
-      pickup = Pickup(resource=tip_spot, tip=tip)
+      with no_tip_tracking():
+        tip = tip_spot.get_tip()
       response = client.post(
         self.base_url + "/pick-up-tips",
-        json={"channels": [pickup.serialize()], "use_channels": [0]})
+        json={"channels": [{
+          "resource_name": tip_spot.name,
+          "tip": serialize(tip),
+          "offset": None,
+        }], "use_channels": [0]})
+      print(response)
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
@@ -132,37 +133,59 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
     with self.app.test_client() as client:
       tip_rack = cast(TipRack, self.lh.deck.get_resource("tip_rack_01"))
       tip_spot = tip_rack.get_item("A1")
-      tip = tip_spot.get_tip()
+      with no_tip_tracking():
+        tip = tip_spot.get_tip()
 
       self.test_tip_pickup() # Pick up a tip first
 
-      drop = Drop(resource=tip_spot, tip=tip)
       response = client.post(
         self.base_url + "/drop-tips",
-        json={"channels": [drop.serialize()], "use_channels": [0]})
+        json={"channels": [{
+          "resource_name": tip_spot.name,
+          "tip": serialize(tip),
+          "offset": None,
+        }], "use_channels": [0]})
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
   def test_aspirate(self):
-    tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
+    with no_tip_tracking():
+      tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
     self.test_tip_pickup() # pick up a tip first
     with self.app.test_client() as client:
       well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
-      aspirate = Aspiration(resource=well, volume=10, tip=tip)
       response = client.post(
         self.base_url + "/aspirate",
-        json={"channels": [aspirate.serialize()], "use_channels": [0]})
+        json={"channels": [{
+          "resource_name": well.name,
+          "volume": 10,
+          "tip": serialize(tip),
+          "offset": None,
+          "liquid": None,
+          "flow_rate": None,
+          "liquid_height": None,
+          "blow_out_air_volume": 0,
+        }], "use_channels": [0]})
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
   def test_dispense(self):
-    tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
+    with no_tip_tracking():
+      tip = cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_tip("A1")
     self.test_aspirate() # aspirate first
     with self.app.test_client() as client:
       well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
-      dispense = Dispense(resource=well, volume=10, tip=tip)
       response = client.post(
         self.base_url + "/dispense",
-        json={"channels": [dispense.serialize()], "use_channels": [0]})
+        json={"channels": [{
+          "resource_name": well.name,
+          "volume": 10,
+          "tip": serialize(tip),
+          "offset": None,
+          "liquid": None,
+          "flow_rate": None,
+          "liquid_height": None,
+          "blow_out_air_volume": 0,
+        }], "use_channels": [0]})
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)

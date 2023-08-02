@@ -6,20 +6,20 @@
 
 button {
   cursor: pointer;
-  box-sizing: content-box;
+  box-sizing: border-box;
 }
 
-.navbar {
-  height: 50px;
+nav.navbar {
+  height: 60px;
 }
 
 .content {
-  height: calc(100vh - 50px);
+  height: calc(100vh - 60px);
   margin: 0;
 }
 
 main {
-  padding: 0 !important;
+  padding: 20px !important;
 }
 
 #canvas {

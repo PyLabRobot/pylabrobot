@@ -11,7 +11,7 @@ class OTDeck(Deck):
     resource_assigned_callback: Optional[Callable] = None,
     resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 0, 0),
-    no_trash: bool = False):
+    no_trash: bool = False, name: str = "deck"):
     # size_z is probably wrong
 
     super().__init__(size_x=size_x, size_y=size_y, size_z=size_z,
@@ -78,7 +78,7 @@ class OTDeck(Deck):
     if location not in self.slot_locations:
       super().assign_child_resource(resource, location=location)
     else:
-      slot = self.slot_locations.index(location)
+      slot = self.slot_locations.index(location) + 1
       self.assign_child_at_slot(resource, slot)
 
   def assign_child_at_slot(self, resource: Resource, slot: int):

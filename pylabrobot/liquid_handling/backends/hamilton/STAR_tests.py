@@ -282,21 +282,20 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     tip_f1 = self.tip_rack.get_item("F1")
     tip = self.tip_rack.get_tip("A1")
 
-    op = Pickup(resource=tip_a1, tip=tip)
+    op1 = Pickup(resource=tip_a1, tip=tip, offset=Coordinate.zero())
+    op2 = Pickup(resource=tip_f1, tip=tip, offset=Coordinate.zero())
     self.assertEqual(
-      self.mockSTAR._ops_to_fw_positions((op,), use_channels=[0]),
+      self.mockSTAR._ops_to_fw_positions((op1,), use_channels=[0]),
       ([1179, 0], [2418, 0], [True, False])
     )
 
-    ops = (Pickup(resource=tip_a1, tip=tip), Pickup(resource=tip_f1, tip=tip))
     self.assertEqual(
-      self.mockSTAR._ops_to_fw_positions(ops, use_channels=[0, 1]),
+      self.mockSTAR._ops_to_fw_positions((op1, op2), use_channels=[0, 1]),
       ([1179, 1179, 0], [2418, 1968, 0], [True, True, False])
     )
 
-    ops = (Pickup(resource=tip_a1, tip=tip), Pickup(resource=tip_f1, tip=tip))
     self.assertEqual(
-      self.mockSTAR._ops_to_fw_positions(ops, use_channels=[1, 2]),
+      self.mockSTAR._ops_to_fw_positions((op1, op2), use_channels=[1, 2]),
       ([0, 1179, 1179, 0], [0, 2418, 1968, 0], [False, True, True, False])
     )
 
@@ -341,7 +340,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     for well in self.plate.get_items(["A1", "B1"]):
-      well.tracker.set_used_volume(100 * 1.072) # liquid class correction
+      well.tracker.set_liquids([(None, 100 * 1.072)]) # liquid class correction
     await self.lh.aspirate(self.plate["A1", "B1"], vols=[100, 100], use_channels=[4, 5])
     self._assert_command_sent_once("C0ASid0004at0 0 0 0 0 0 0&tm0 0 0 0 1 1 0&xp00000 00000 00000 "
       "00000 02980 02980 00000&yp0000 0000 0000 0000 1460 1370 0000&th2450te2450lp2011 2011 2011 "
@@ -365,7 +364,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     well = self.plate.get_item("A1")
-    well.tracker.set_used_volume(100 * 1.072) # liquid class correction
+    well.tracker.set_liquids([(None, 100 * 1.072)]) # liquid class correction
     await self.lh.aspirate([well], vols=[100])
 
     # This passes the test, but is not the real command.
@@ -384,7 +383,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     well = self.plate.get_item("A1")
-    well.tracker.set_used_volume(100 * 1.072) # liquid class correction
+    well.tracker.set_liquids([(None, 100 * 1.072)]) # liquid class correction
     await self.lh.aspirate([well], vols=[100], liquid_height=10)
 
     # This passes the test, but is not the real command.
@@ -404,7 +403,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate.lid.unassign()
     wells = self.plate.get_items("A1:B1")
     for well in wells:
-      well.tracker.set_used_volume(100 * 1.072) # liquid class correction
+      well.tracker.set_liquids([(None, 100 * 1.072)]) # liquid class correction
     await self.lh.aspirate(self.plate["A1:B1"], vols=100)
 
     # This passes the test, but is not the real command.
@@ -421,8 +420,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate_single_resource(self):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
-    self.bb.tracker.set_used_volume(96 * 10 * 1.072) # liquid class correction
-    await self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
+    with no_volume_tracking():
+      await self.lh.aspirate(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1)
     self._assert_command_sent_once(
       "C0ASid0002at0 0 0 0 0 0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 "
       "1825 1688 1551 0000&th2450te2450lp2000 2000 2000 2000 2000 2000&ch000 000 000 000 000 000&"
@@ -448,8 +447,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "1825 1688 1551 0000&zx1260 1260 1260 1260 1260 1260&lp2000 2000 2000 2000 2000 2000&zl1210 "
       "1210 1210 1210 1210 1210&po0100 0100 0100 0100 0100 0100&ip0000 0000 0000 0000 0000 0000&"
       "it0 0 0 0 0 0&fp0000 0000 0000 0000 0000 0000&zu0032 0032 0032 0032 0032 0032&zr06180 06180 "
-      "06180 06180 06180 06180&th2450te2450dv00116 00116 00116 00116 00116 00116&ds1000 1000 1000 "
-      "1000 1000 1000&ss0050 0050 0050 0050 0050 0050&rv000 000 000 000 000 000&ta050 050 050 050 "
+      "06180 06180 06180 06180&th2450te2450dv00116 00116 00116 00116 00116 00116&ds1800 1800 1800 "
+      "1800 1800 1800&ss0050 0050 0050 0050 0050 0050&rv000 000 000 000 000 000&ta050 050 050 050 "
       "050 050&ba0000 0000 0000 0000 0000 0000&lm0 0 0 0 0 0&dj00zo000 000 000 000 000 000&ll1 1 1 "
       "1 1 1&lv1 1 1 1 1 1&de0010 0010 0010 0010 0010 0010&wt00 00 00 00 00 00&mv00000 00000 00000 "
       "00000 00000 00000&mc00 00 00 00 00 00&mp000 000 000 000 000 000&ms0010 0010 0010 0010 0010 "
@@ -465,7 +464,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self._assert_command_sent_once(
       "C0DSid0002dm1 1&tm1 0&xp02980 00000&yp1460 0000&zx1931 1931&lp2011 2011&zl1881 1881&"
       "po0100 0100&ip0000 0000&it0 0&fp0000 0000&zu0032 0032&zr06180 06180&th2450te2450"
-      "dv01072 01072&ds1000 1000&ss0050 0050&rv000 000&ta050 050&ba0000 0000&lm0 0&"
+      "dv01072 01072&ds1800 1800&ss0050 0050&rv000 000&ta050 050&ba0000 0000&lm0 0&"
       "dj00zo000 000&ll1 1&lv1 1&de0010 0010&wt00 00&mv00000 00000&mc00 00&mp000 000&"
       "ms0010 0010&mh0000 0000&gi000 000&gj0gk0",
       fmt=DISPENSE_RESPONSE_FORMAT)
@@ -481,7 +480,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self._assert_command_sent_once(
       "C0DSid0002dm1 1 1&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&zx1931 1931 1931&lp2011 2011 "
       "2011&zl1881 1881 1881&po0100 0100 0100&ip0000 0000 0000&it0 0 0&fp0000 0000 0000&zu0032 "
-      "0032 0032&zr06180 06180 06180&th2450te2450dv01072 01072 01072&ds1000 1000 1000&"
+      "0032 0032&zr06180 06180 06180&th2450te2450dv01072 01072 01072&ds1800 1800 1800&"
       "ss0050 0050 0050&rv000 000 000&ta050 050 050&ba0000 0000 0000&lm0 0 0&dj00zo000 000 000&"
       "ll1 1 1&lv1 1 1&de0010 0010 0010&wt00 00 00&mv00000 00000 00000&mc00 00 00&mp000 000 000&"
       "ms0010 0010 0010&mh0000 0000 0000&gi000 000 000&gj0gk0",

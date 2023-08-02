@@ -28,20 +28,6 @@ Backends
   pylabrobot.liquid_handling.backends
 
 
-
-Tip trackers
-------------
-
-See :doc:`Using trackers <using-trackers>` for a tutorial.
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-  pylabrobot.liquid_handling.channel_tip_tracker.ChannelTipTracker
-
-
 Operations
 ----------
 

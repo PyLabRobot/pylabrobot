@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from abc import ABCMeta
-from typing import List, Union, Optional, Sequence
+from typing import List, Union, Optional, Sequence, cast
 
 from pylabrobot import utils
 from pylabrobot.resources.tip import Tip, TipCreator
-from pylabrobot.resources.tip_tracker import SpotTipTracker, does_tip_tracking
+from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
+from pylabrobot.serializer import deserialize
 
 from .itemized_resource import ItemizedResource
 from .resource import Resource
@@ -17,7 +18,7 @@ class TipSpot(Resource):
   """ A tip spot, a location in a tip rack where there may or may not be a tip. """
 
   def __init__(self, name: str, size_x: float, size_y: float, make_tip: TipCreator,
-    size_z: float = 0, start_with_tip: bool = True, category: str = "tip_spot"):
+    size_z: float = 0, category: str = "tip_spot"):
     """ Initialize a tip spot.
 
     Args:
@@ -31,12 +32,10 @@ class TipSpot(Resource):
 
     super().__init__(name, size_x=size_y, size_y=size_x, size_z=size_z,
       category=category)
-    self.tracker = SpotTipTracker()
+    self.tracker = TipTracker()
     self.parent: Optional["TipRack"] = None
 
     self.make_tip = make_tip
-
-    self.tracker.set_tip(self.make_tip() if start_with_tip else None)
 
   def get_tip(self) -> Tip:
     """ Get a tip from the tip spot. """
@@ -44,7 +43,7 @@ class TipSpot(Resource):
     # Tracker will raise an error if there is no tip. We spawn a new tip if tip tracking is disabled
     tracks = does_tip_tracking() and not self.tracker.is_disabled
     if not self.tracker.has_tip and not tracks:
-      self.tracker.set_tip(self.make_tip())
+      self.tracker.add_tip(self.make_tip())
 
     return self.tracker.get_tip()
 
@@ -54,26 +53,21 @@ class TipSpot(Resource):
 
   def empty(self) -> None:
     """ Empty the tip spot. """
-    self.tracker.set_tip(None)
+    self.tracker.remove_tip()
 
   def serialize(self) -> dict:
     """ Serialize the tip spot. """
     return {
       **super().serialize(),
       "prototype_tip": self.make_tip().serialize(),
-      "has_tip": self.has_tip()
     }
 
   @classmethod
   def deserialize(cls, data: dict) -> TipSpot:
     """ Deserialize a tip spot. """
     tip_data = data["prototype_tip"]
-    tip_class_name = tip_data["type"]
-    tip_classes = {cls.__name__: cls for cls in Tip.__subclasses__()}
-    tip_class = tip_classes[tip_class_name]
-
-    def make_tip():
-      return tip_class.deserialize(tip_data)
+    def make_tip() -> Tip:
+      return cast(Tip, deserialize(tip_data))
 
     return cls(
       name=data["name"],
@@ -81,8 +75,7 @@ class TipSpot(Resource):
       size_y=data["size_y"],
       size_z=data["size_z"],
       make_tip=make_tip,
-      start_with_tip=data["has_tip"],
-      category=data["category"]
+      category=data.get("category", "tip_spot")
     )
 
 
@@ -155,9 +148,9 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       # If the tip state is different from the current state, update it by either creating or
       # removing the tip.
       if has_tip[i] and not self.get_item(i).has_tip():
-        self.get_item(i).tracker.set_tip(self.get_item(i).make_tip())
+        self.get_item(i).tracker.add_tip(self.get_item(i).make_tip())
       elif not has_tip[i] and self.get_item(i).has_tip():
-        self.get_item(i).tracker.set_tip(None)
+        self.get_item(i).tracker.remove_tip()
 
   def empty(self):
     """ Empty the tip rack. This is useful when tip tracking is enabled and you are modifying

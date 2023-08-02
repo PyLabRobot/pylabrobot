@@ -1,6 +1,5 @@
 from typing import Dict, Optional, List, cast
 
-from pylabrobot.default import get_value, is_not_default
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.resources import (
@@ -271,9 +270,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
 
-    offset = op.offset
-    if is_not_default(offset):
-      offset_x, offset_y, offset_z = offset.x, offset.y, offset.z
+    if op.offset is not None:
+      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
     else:
       offset_x = offset_y = offset_z = 0
 
@@ -303,9 +301,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
 
-    offset = op.offset
-    if is_not_default(offset):
-      offset_x, offset_y, offset_z = offset.x, offset.y, offset.z
+    if op.offset is not None:
+      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
     else:
       offset_x = offset_y = offset_z = 0
 
@@ -396,13 +393,12 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoChannelError("No pipette channel of right type with tip available.")
 
     pipette_name = self.get_pipette_name(pipette_id)
-    flow_rate = get_value(op.flow_rate, self._get_default_aspiration_flow_rate(pipette_name))
+    flow_rate = op.flow_rate or self._get_default_aspiration_flow_rate(pipette_name)
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
-    offset = op.offset
-    if is_not_default(offset):
-      offset_x, offset_y, offset_z = offset.x, offset.y, offset.z
+    if op.offset is not None:
+      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
     else:
       offset_x = offset_y = offset_z = 0
 
@@ -450,13 +446,12 @@ class OpentronsBackend(LiquidHandlerBackend):
       raise NoChannelError("No pipette channel of right type with tip available.")
 
     pipette_name = self.get_pipette_name(pipette_id)
-    flow_rate = get_value(op.flow_rate, self._get_default_dispense_flow_rate(pipette_name))
+    flow_rate = op.flow_rate or self._get_default_dispense_flow_rate(pipette_name)
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
-    offset = op.offset
-    if is_not_default(offset):
-      offset_x, offset_y, offset_z = offset.x, offset.y, offset.z
+    if op.offset is not None:
+      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
     else:
       offset_x = offset_y = offset_z = 0
 

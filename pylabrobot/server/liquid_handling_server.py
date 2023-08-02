@@ -1,3 +1,4 @@
+""" Needs some refactoring. """
 # mypy: disable-error-code = attr-defined
 
 import asyncio
@@ -11,14 +12,9 @@ import werkzeug
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.standard import (
-  PipettingOp,
-  Pickup,
-  Aspiration,
-  Dispense,
-  Drop,
-)
-from pylabrobot.resources import Deck, Tip
+from pylabrobot.liquid_handling.standard import PipettingOp, Pickup, Aspiration, Dispense, Drop
+from pylabrobot.resources import Coordinate, Deck, Tip, Liquid
+from pylabrobot.serializer import serialize, deserialize
 
 
 lh_api = Blueprint("liquid handling", __name__)
@@ -117,48 +113,26 @@ class ErrorResponse(Exception):
     self.data = data
     self.status_code = status_code
 
-T = TypeVar("T", bound=PipettingOp)
-def deserialize_liquid_handling_op_from_request(
-  op: Type[T]
-) -> Tuple[List[T], List[int]]:
-  data = request.get_json()
-  if not isinstance(data, dict):
-    raise ErrorResponse({"error": "json data must be a list"}, 400)
-
-  serialized_channels = data.get("channels")
-  if not isinstance(serialized_channels, list):
-    raise ErrorResponse({"error": "'channels' must be a list"}, 400)
-
-  ops = []
-  for sc in serialized_channels:
-    try:
-      try:
-        resource = current_app.lh.deck.get_resource(sc["resource_name"])
-      except ValueError:
-        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"}, 404) \
-          from None
-      tip = Tip.deserialize(sc.pop("tip"))
-      op_ = op.deserialize(sc, resource=resource, tip=tip)
-      ops.append(op_)
-    except KeyError as e:
-      raise ErrorResponse({"error": f"missing key in json data: {e}"}, 400) from e
-
-  use_channels = data.get("use_channels")
-  if use_channels is not None:
-    if not isinstance(use_channels, list):
-      raise ErrorResponse({"error": "'use_channels' must be a list"}, 400)
-    if len(use_channels) != len(ops):
-      raise ErrorResponse({"error": "'use_channels' must have the same length as 'pickups'"}, 400)
-    for channel in use_channels:
-      if not isinstance(channel, int):
-        raise ErrorResponse({"error": "'use_channels' must be a list of integers"}, 400)
-
-  return cast(List[T], ops), cast(List[int], use_channels) # right types, but mypy doesn't know
 
 @lh_api.route("/pick-up-tips", methods=["POST"])
 async def pick_up_tips():
   try:
-    pickups, use_channels = deserialize_liquid_handling_op_from_request(Pickup)
+    data = request.get_json()
+    pickups = []
+    for sc in data["channels"]:
+      try:
+        resource = current_app.lh.deck.get_resource(sc["resource_name"])
+      except ValueError as exc:
+        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"},
+                            404) from exc
+      if not "tip" in sc:
+        raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
+      tip = cast(Tip, deserialize(sc["tip"]))
+      if not "offset" in sc:
+        raise ErrorResponse({"error": "missing key in json data: offset"}, 400)
+      offset = cast(Coordinate, deserialize(sc["offset"]))
+      pickups.append(Pickup(resource=resource, tip=tip, offset=offset))
+    use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
 
@@ -171,20 +145,57 @@ async def pick_up_tips():
 @lh_api.route("/drop-tips", methods=["POST"])
 async def drop_tips():
   try:
-    drops, use_channels = deserialize_liquid_handling_op_from_request(Drop)
+    data = request.get_json()
+    drops = []
+    for sc in data["channels"]:
+      try:
+        resource = current_app.lh.deck.get_resource(sc["resource_name"])
+      except ValueError as exc:
+        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"},
+                            404) from exc
+      if not "tip" in sc:
+        raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
+      tip = cast(Tip, deserialize(sc["tip"]))
+      if not "offset" in sc:
+        raise ErrorResponse({"error": "missing key in json data: offset"}, 400)
+      offset = cast(Coordinate, deserialize(sc["offset"]))
+      drops.append(Drop(resource=resource, tip=tip, offset=offset))
+    use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
 
   return add_and_run_task(Task(current_app.lh.drop_tips(
-    tip_spots=[p.resource for p in drops],
-    offsets=[p.offset for p in drops],
+    tip_spots=[d.resource for d in drops],
+    offsets=[d.offset for d in drops],
     use_channels=use_channels
   )))
 
 @lh_api.route("/aspirate", methods=["POST"])
 async def aspirate():
   try:
-    aspirations, use_channels = deserialize_liquid_handling_op_from_request(Aspiration)
+    data = request.get_json()
+    aspirations = []
+    for sc in data["channels"]:
+      try:
+        resource = current_app.lh.deck.get_resource(sc["resource_name"])
+      except ValueError as exc:
+        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"},
+                            404) from exc
+      if not "tip" in sc:
+        raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
+      tip = cast(Tip, deserialize(sc["tip"]))
+      if not "offset" in sc:
+        raise ErrorResponse({"error": "missing key in json data: offset"}, 400)
+      offset = cast(Coordinate, deserialize(sc["offset"]))
+      volume = sc["volume"]
+      flow_rate = sc["flow_rate"]
+      liquid_height = sc["liquid_height"]
+      blow_out_air_volume = sc["blow_out_air_volume"]
+      liquid = cast(Liquid, deserialize(sc["liquid"]))
+      aspirations.append(Aspiration(resource=resource, tip=tip, offset=offset, volume=volume,
+        flow_rate=flow_rate, liquid_height=liquid_height, blow_out_air_volume=blow_out_air_volume,
+        liquid=liquid))
+    use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
 
@@ -199,7 +210,29 @@ async def aspirate():
 @lh_api.route("/dispense", methods=["POST"])
 async def dispense():
   try:
-    dispenses, use_channels = deserialize_liquid_handling_op_from_request(Dispense)
+    data = request.get_json()
+    dispenses = []
+    for sc in data["channels"]:
+      try:
+        resource = current_app.lh.deck.get_resource(sc["resource_name"])
+      except ValueError as exc:
+        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"},
+                            404) from exc
+      if not "tip" in sc:
+        raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
+      tip = cast(Tip, deserialize(sc["tip"]))
+      if not "offset" in sc:
+        raise ErrorResponse({"error": "missing key in json data: offset"}, 400)
+      offset = cast(Coordinate, deserialize(sc["offset"]))
+      volume = sc["volume"]
+      flow_rate = sc["flow_rate"]
+      liquid_height = sc["liquid_height"]
+      blow_out_air_volume = sc["blow_out_air_volume"]
+      liquid = cast(Liquid, deserialize(sc["liquid"]))
+      dispenses.append(Dispense(resource=resource, tip=tip, offset=offset, volume=volume,
+        flow_rate=flow_rate, liquid_height=liquid_height, blow_out_air_volume=blow_out_air_volume,
+        liquid=liquid))
+    use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
 

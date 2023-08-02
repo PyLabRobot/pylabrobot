@@ -2,6 +2,7 @@ import unittest
 
 from pylabrobot.resources.tip import Tip
 from pylabrobot.resources.ml_star import HamiltonTip, TipSize, TipPickupMethod
+from pylabrobot.serializer import serialize, deserialize
 
 
 class TipTests(unittest.TestCase):
@@ -9,7 +10,7 @@ class TipTests(unittest.TestCase):
 
   def test_serialize(self):
     tip = Tip(False, 10.0, 10.0, 1.0)
-    self.assertEqual(tip.serialize(), {
+    self.assertEqual(serialize(tip), {
       "type": "Tip",
       "has_filter": False,
       "total_tip_length": 10.0,
@@ -19,7 +20,7 @@ class TipTests(unittest.TestCase):
 
   def test_deserialize(self):
     tip = Tip(False, 10.0, 10.0, 1.0)
-    self.assertEqual(Tip.deserialize(tip.serialize()), tip)
+    self.assertEqual(deserialize(serialize(tip)), tip)
 
   def test_serialize_subclass(self):
     tip = HamiltonTip(False, 10.0, 10.0, TipSize.HIGH_VOLUME, TipPickupMethod.OUT_OF_RACK)

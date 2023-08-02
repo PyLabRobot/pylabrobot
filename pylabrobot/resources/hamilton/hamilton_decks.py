@@ -131,7 +131,7 @@ class HamiltonDeck(Deck):
     else:
       resource_location = None # unknown resource location
 
-    if resource_location is not None: # collision detection only if known location
+    if resource_location is not None: # collision detection
       if resource_location.x + resource.get_size_x() > \
           self._x_coordinate_for_rails(self.num_rails) and \
         rails is not None:
@@ -154,7 +154,7 @@ class HamiltonDeck(Deck):
           raise ValueError(f"Location {resource_location} is already occupied by resource "
                             f"'{og_resource.name}'.")
 
-    return super().assign_child_resource(resource, location=resource_location)
+    return super().assign_child_resource(resource, location=resource_location, reassign=reassign)
 
   def _x_coordinate_for_rails(self, rails: int):
     """ Convert a rail identifier to an x coordinate. """

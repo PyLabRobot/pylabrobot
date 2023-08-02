@@ -1,0 +1,132 @@
+.sidebar {
+  height: calc(100vh - 60px);
+  overflow-y: scroll;
+}
+
+.labware-list {
+  max-height: 480px;
+  overflow-y: scroll;
+}
+
+/* search */
+
+.modal-background {
+  width: 100vw;
+  height: 100vh;
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.modal-content {
+  width: 600px;
+  min-height: 300px;
+  max-height: 600px;
+  overflow-y: scroll;
+
+  display: flex;
+  flex-flow: column;
+
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: white;
+
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.modal-content .footer {
+  flex: 0 1 auto;
+  font-size: 12px;
+  color: gray;
+}
+
+#search-bar input {
+  flex: 0 1 auto;
+
+  width: 100%;
+  height: 60px;
+  border: none;
+  border-bottom: 1px solid black;
+  font-size: 20px;
+  padding: 0 10px;
+  margin-bottom: 10px;
+}
+
+#search-bar .results {
+  width: 100%;
+  overflow-y: scroll;
+
+  flex: 1 1 auto;
+}
+
+#search-bar .result-section {
+  margin: 10px 0;
+}
+
+#search-bar .result-section-title {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+#search-bar .result {
+  width: 100%;
+  height: 30px;
+  border-bottom: 1px solid black;
+  padding: 0 10px;
+}
+#search-bar .result:first-of-type {
+  border-top: 1px solid black;
+}
+#search-bar .result.highlighted {
+  background-color: #007bff;
+  color: white;
+}
+
+/* not found */
+
+#file-not-found {
+  margin-top: 100px;
+  text-align: center;
+}
+
+#file-not-found i.triangle {
+  font-size: 100px;
+  color: #dc3545;
+}
+
+#file-not-found h1 {
+  font-size: 50px;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+#file-not-found p {
+  font-size: 20px;
+}
+
+#file-not-found a {
+  margin-top: 20px;
+}
+
+/* menu bar */
+
+button.dropdown-item {
+  box-sizing: border-box;
+}
+button.dropdown-item.enabled .bi-x {
+  display: none;
+}
+button.dropdown-item.enabled .bi-check {
+  display: inline;
+}
+button.dropdown-item:not(.enabled) .bi-check {
+  display: none;
+}
+button.dropdown-item:not(.enabled) .bi-x {
+  display: inline;
+}

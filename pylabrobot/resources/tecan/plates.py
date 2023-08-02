@@ -44,17 +44,49 @@ class TecanPlate(Plate, TecanResource):
 
 
 def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
-  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306 """
+  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306
+
+  Coley
+
+  .. code-block:: python
+
+      return TecanPlate(
+        name=name,
+        size_x=129.9,
+        size_y=83.9,
+        size_z=5.6,
+        with_lid=with_lid,
+        lid_height=8,
+        model="Microplate_96_Well",
+        z_travel=1750.0,
+        z_start=1800.0,
+        z_dispense=1970.0,
+        z_max=2026.0,
+        area=33.2,
+        items=create_equally_spaced(Well,
+          num_items_x=12,
+          num_items_y=8,
+          dx=10.8,
+          dy=6.2,
+          dz=0.0,
+          item_dx=9.0,
+          item_dy=9.0,
+          size_x=9.0,
+          size_y=9.0
+        ),
+      )
+  """
+
   return TecanPlate(
     name=name,
-    size_x=133.3,
-    size_y=87.6,
-    size_z=3.0,
+    size_x=127.8,
+    size_y=85.4,
+    size_z=7.6,
     with_lid=with_lid,
     lid_height=8,
     model="Microplate_96_Well",
-    z_travel=1850.0,
-    z_start=1925.0,
+    z_travel=1900.0,
+    z_start=1957.0,
     z_dispense=1975.0,
     z_max=2005.0,
     area=33.2,
@@ -64,8 +96,10 @@ def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=12.5,
       dy=7.6,
       dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -90,8 +124,10 @@ def Microplate_portrait_96_Well(name: str, with_lid: bool = False) -> TecanPlate
       dx=6.7,
       dy=9.9,
       dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -116,8 +152,10 @@ def DeepWell_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=9.9,
       dy=6.7,
       dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -142,8 +180,10 @@ def HalfDeepWell_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=9.85,
       dy=6.75,
       dz=0.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -168,8 +208,10 @@ def DeepWell_portait_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=6.7,
       dy=9.9,
       dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -194,8 +236,10 @@ def Plate_portrait_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=6.75,
       dy=9.85,
       dz=0.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -220,8 +264,10 @@ def Macherey_Nagel_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlat
       dx=22.25,
       dy=29.75,
       dz=0.0,
-      item_size_x=8.9,
-      item_size_y=8.9,
+      item_dx=8.9,
+      item_dy=8.9,
+      size_x=8.9,
+      size_y=8.9
     ),
   )
 
@@ -246,8 +292,10 @@ def Qiagen_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=22.25,
       dy=30.05,
       dz=0.0,
-      item_size_x=8.9,
-      item_size_y=8.9,
+      item_dx=8.9,
+      item_dy=8.9,
+      size_x=8.9,
+      size_y=8.9
     ),
   )
 
@@ -272,8 +320,10 @@ def AB_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=11.4,
       dy=28.0,
       dz=-0.5,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -298,8 +348,10 @@ def PCR_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=10.1,
       dy=5.3,
       dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -324,8 +376,10 @@ def DeepWell_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=9.85,
       dy=6.75,
       dz=0.0,
-      item_size_x=2.3,
-      item_size_y=2.3,
+      item_dx=2.3,
+      item_dy=2.3,
+      size_x=2.3,
+      size_y=2.3
     ),
   )
 
@@ -350,8 +404,10 @@ def Hibase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=9.85,
       dy=6.75,
       dz=0.0,
-      item_size_x=2.3,
-      item_size_y=2.3,
+      item_dx=2.3,
+      item_dy=2.3,
+      size_x=2.3,
+      size_y=2.3
     ),
   )
 
@@ -376,8 +432,10 @@ def Lowbase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=9.85,
       dy=6.75,
       dz=0.0,
-      item_size_x=2.3,
-      item_size_y=2.3,
+      item_dx=2.3,
+      item_dy=2.3,
+      size_x=2.3,
+      size_y=2.3
     ),
   )
 
@@ -402,8 +460,10 @@ def Separation_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=22.25,
       dy=30.05,
       dz=0.0,
-      item_size_x=8.9,
-      item_size_y=8.9,
+      item_dx=8.9,
+      item_dy=8.9,
+      size_x=8.9,
+      size_y=8.9
     ),
   )
 
@@ -428,8 +488,10 @@ def DeepWell_square_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=9.9,
       dy=6.7,
       dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -454,8 +516,10 @@ def CaCo2_Plate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=4.75,
       dy=5.95,
       dz=0.0,
-      item_size_x=19.3,
-      item_size_y=19.3,
+      item_dx=19.3,
+      item_dy=19.3,
+      size_x=9.3,
+      size_y=19.3
     ),
   )
 
@@ -481,8 +545,10 @@ def Plate_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=11.75,
       dy=9.05,
       dz=0.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -508,8 +574,10 @@ def Microplate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=1.8,
       dy=-1.0,
       dz=0.0,
-      item_size_x=21.0,
-      item_size_y=21.0,
+      item_dx=19.6,
+      item_dy=19.6,
+      size_x=9.6,
+      size_y=19.6
     ),
   )
 
@@ -534,8 +602,10 @@ def TecanExtractionPlate_96_Well(name: str, with_lid: bool = False) -> TecanPlat
       dx=10.9,
       dy=9.7,
       dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -561,8 +631,10 @@ def Microplate_48_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=13.5,
       dy=3.8,
       dz=0.0,
-      item_size_x=13.0,
-      item_size_y=13.0,
+      item_dx=13.0,
+      item_dy=13.0,
+      size_x=3.0,
+      size_y=13.0
     ),
   )
 

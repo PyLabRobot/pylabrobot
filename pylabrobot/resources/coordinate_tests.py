@@ -4,6 +4,7 @@
 import unittest
 
 from .coordinate import Coordinate
+from pylabrobot.serializer import serialize, deserialize
 
 
 class TestCoordinate(unittest.TestCase):
@@ -22,5 +23,5 @@ class TestCoordinate(unittest.TestCase):
     self.assertEqual(f"{self.a}", "(001.000, 002.000, 003.000)")
 
   def test_serialization(self):
-    self.assertEqual(self.a.serialize(), {"x": 1, "y": 2, "z": 3})
-    self.assertEqual(self.a, Coordinate.deserialize(self.a.serialize()))
+    self.assertEqual(serialize(self.a), {"x": 1, "y": 2, "z": 3, "type": "Coordinate"})
+    self.assertEqual(self.a, deserialize(serialize(self.a)))

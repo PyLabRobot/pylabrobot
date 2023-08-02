@@ -1,3 +1,5 @@
+mode = MODE_SIMULATOR;
+
 var config = {
   pip_aspiration_duration: 2,
   pip_dispense_duration: 2,
@@ -14,22 +16,6 @@ var config = {
   min_core_head_location: -1,
   max_core_head_location: -1,
 };
-
-var layer = new Konva.Layer();
-var resourceLayer = new Konva.Layer();
-var tooltipLayer = new Konva.Layer();
-var tooltip;
-var stage;
-
-var canvasWidth, canvasHeight;
-
-const robotWidthMM = 100 + 30 * 22.5; // mm, just the deck
-const robotHeightMM = 653.5; // mm
-var scaleX, scaleY;
-
-const numRails = 30;
-
-var resources = {}; // name -> Resource object
 
 class PipettingChannel {
   constructor(identifier) {
@@ -127,417 +113,12 @@ function sleep(s) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-class Resource {
-  constructor(resource_data, parent = undefined) {
-    const { name, location, size_x, size_y, children } = resource_data;
-    this.name = name;
-    this.size_x = size_x;
-    this.size_y = size_y;
-    this.location = location;
-    this.parent = parent;
-
-    this.color = "#5B6D8F";
-
-    this.children = [];
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i];
-      const childClass = classForResourceType(child.type);
-      const childInstance = new childClass(child, this);
-      this.children.push(childInstance);
-
-      // Save in global lookup
-      resources[child.name] = childInstance;
-    }
-  }
-
-  draw(layer) {
-    const { x, y } = this.getAbsoluteLocation();
-
-    const rect = new Konva.Rect({
-      x: x,
-      y: y,
-      width: this.size_x,
-      height: this.size_y,
-      fill: this.color,
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    layer.add(rect);
-
-    this.drawChildren(layer);
-  }
-
-  drawChildren(layer) {
-    for (let i = 0; i < this.children.length; i++) {
-      const child = this.children[i];
-      child.draw(layer);
-    }
-  }
-
-  getAbsoluteLocation() {
-    if (this.parent !== undefined) {
-      const parentLocation = this.parent.getAbsoluteLocation();
-      return {
-        x: parentLocation.x + this.location.x,
-        y: parentLocation.y + this.location.y,
-      };
-    } else {
-      return this.location;
-    }
-  }
-}
-
-class Deck extends Resource {
-  draw(layer) {
-    // Draw a transparent rectangle with an outline
-    const rect = new Konva.Rect({
-      x: 0,
-      y: 0,
-      width: this.size_x,
-      height: this.size_y,
-      fill: "white",
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    layer.add(rect);
-  }
-}
-
-class HamiltonDeck extends Deck {
-  draw(layer) {
-    // Draw a transparent rectangle with an outline
-    const { x, y } = this.getAbsoluteLocation();
-
-    this.railHeight = 497;
-
-    const rect = new Konva.Rect({
-      x: x,
-      y: y + 63,
-      width: this.size_x,
-      height: this.railHeight,
-      fill: "white",
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    layer.add(rect);
-
-    this.drawRails(layer);
-    // this.drawChildren(layer);
-  }
-
-  drawRails(layer) {
-    // Draw vertical rails as lines
-    for (let i = 0; i < numRails; i++) {
-      const rail = new Konva.Line({
-        points: [
-          100 + i * 22.5, // 22.5 mm per rail
-          this.location.y + 63,
-          100 + i * 22.5, // 22.5 mm per rail
-          this.location.y + this.railHeight + 63,
-        ],
-        stroke: "black",
-        strokeWidth: 1,
-      });
-      layer.add(rail);
-
-      // Add a text label every 5 rails. Rails are 1-indexed.
-      // Keep in mind that the stage is flipped vertically.
-      if ((i + 1) % 5 === 0) {
-        const railLabel = new Konva.Text({
-          x: 100 + i * 22.5, // 22.5 mm per rail
-          y: this.location.y - 10,
-          text: i + 1,
-          fontSize: 12,
-          fill: "black",
-        });
-        railLabel.scaleY(-1); // Flip the text vertically
-        layer.add(railLabel);
-      }
-    }
-  }
-}
-
-class OTDeck extends Deck {
-  constructor(resource_data) {
-    resource_data.location = { x: 115.65, y: 68.03 };
-    super(resource_data, undefined);
-  }
-
-  draw(layer) {
-    super.draw(layer);
-
-    // Draw the sites
-    const siteLocations = [
-      { x: 0.0, y: 0.0 },
-      { x: 132.5, y: 0.0 },
-      { x: 265.0, y: 0.0 },
-      { x: 0.0, y: 90.5 },
-      { x: 132.5, y: 90.5 },
-      { x: 265.0, y: 90.5 },
-      { x: 0.0, y: 181.0 },
-      { x: 132.5, y: 181.0 },
-      { x: 265.0, y: 181.0 },
-      { x: 0.0, y: 271.5 },
-      { x: 132.5, y: 271.5 },
-      { x: 265.0, y: 271.5 },
-    ];
-
-    for (let i = 0; i < siteLocations.length; i++) {
-      const siteLocation = siteLocations[i];
-      const width = 128.0;
-      const height = 86.0;
-      const site = new Konva.Rect({
-        x: this.location.x + siteLocation.x,
-        y: this.location.y + siteLocation.y,
-        width: width,
-        height: height,
-        fill: "white",
-        stroke: "black",
-        strokeWidth: 1,
-      });
-      layer.add(site);
-
-      // Add a text label in the site
-      const siteLabel = new Konva.Text({
-        x: this.location.x + siteLocation.x,
-        y: this.location.y + siteLocation.y + height,
-        text: i + 1,
-        width: width,
-        height: height,
-        fontSize: 16,
-        fill: "black",
-        align: "center",
-        verticalAlign: "middle",
-      });
-      siteLabel.scaleY(-1); // Flip the text vertically
-      layer.add(siteLabel);
-    }
-  }
-}
-
-class Plate extends Resource {
-  constructor(resource_data, parent = undefined) {
-    super(resource_data, parent);
-    const { num_items_x, num_items_y } = resource_data;
-    this.num_items_x = num_items_x;
-    this.num_items_y = num_items_y;
-
-    this.color = "#2B2D42";
-  }
-
-  draw(layer) {
-    const { x, y } = this.getAbsoluteLocation();
-
-    const rect = new Konva.Rect({
-      x: x,
-      y: y,
-      width: this.size_x,
-      height: this.size_y,
-      fill: this.color,
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    layer.add(rect);
-
-    this.drawChildren(layer);
-  }
-}
-
-class Well extends Resource {
-  constructor(resource_data, parent) {
-    super(resource_data, parent);
-    this.volume = 0;
-    this.maxVolume = resource_data.max_volume;
-
-    this._circles = [];
-  }
-
-  static colorForVolume(volume, maxVolume) {
-    return `rgba(239, 35, 60, ${volume / maxVolume})`;
-  }
-
-  draw(layer) {
-    for (let i = 0; i < this._circles.length; i++) {
-      this._circles[i].destroy();
-    }
-
-    const { x, y } = this.getAbsoluteLocation();
-    const circ = new Konva.Circle({
-      x: x + 5,
-      y: y + 5,
-      radius: 4,
-      fill: Well.colorForVolume(this.volume, this.maxVolume),
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    layer.add(circ);
-    this._circles.push(circ);
-
-    super.drawChildren(layer);
-  }
-
-  setVolume(volume, layer) {
-    this.volume = volume;
-    this.draw(layer);
-  }
-
-  aspirate(volume, layer) {
-    if (volume > this.volume) {
-      throw new Error(
-        `Aspirating ${volume}uL from well ${this.name} with ${this.volume}uL`
-      );
-    }
-
-    this.setVolume(this.volume - volume, layer);
-  }
-
-  dispense(volume, layer) {
-    if (volume + this.volume > this.maxVolume) {
-      throw new Error(
-        `Adding ${volume}uL to well ${this.name} with ${this.volume}uL would exceed max volume of ${this.maxVolume}uL`
-      );
-    }
-
-    this.setVolume(this.volume + volume, layer);
-  }
-}
-
-class TipRack extends Resource {
-  constructor(resource_data, parent) {
-    super(resource_data, parent);
-    const { num_items_x, num_items_y } = resource_data;
-    this.num_items_x = num_items_x;
-    this.num_items_y = num_items_y;
-
-    this.color = "#2B2D42";
-  }
-
-  draw(layer) {
-    const { x, y } = this.getAbsoluteLocation();
-
-    const rect = new Konva.Rect({
-      x: x,
-      y: y,
-      width: this.size_x,
-      height: this.size_y,
-      fill: this.color,
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    layer.add(rect);
-
-    this.drawChildren(layer);
-  }
-}
-
-class TipSpot extends Resource {
-  constructor(resource_data, parent) {
-    super(resource_data, parent);
-    this.color = "#40CDA1";
-    this.has_tip = false;
-    this.tip = resource_data.prototype_tip; // not really a creator, but good enough for now.
-
-    this._circles = [];
-  }
-
-  draw(layer) {
-    for (let i = 0; i < this._circles.length; i++) {
-      this._circles[i].destroy();
-    }
-
-    const { x, y } = this.getAbsoluteLocation();
-    const magicTipOffset = system === SYSTEM_OPENTRONS ? 1 : 5; // what is this?
-    const circ = new Konva.Circle({
-      x: x + magicTipOffset,
-      y: y + magicTipOffset,
-      radius: 4,
-      fill: this.has_tip ? this.color : "white",
-      stroke: "black",
-      strokeWidth: 1,
-    });
-    layer.add(circ);
-    this._circles.push(circ);
-
-    super.drawChildren(layer);
-  }
-
-  setTip(has_tip, layer) {
-    this.has_tip = has_tip;
-    this.draw(layer);
-  }
-
-  pickUpTip(layer) {
-    if (!this.has_tip) {
-      throw new Error("No tip to pick up");
-    }
-    this.setTip(false, layer);
-  }
-
-  dropTip(layer) {
-    if (this.has_tip) {
-      throw new Error("Already has tip");
-    }
-    this.setTip(true, layer);
-  }
-}
-
-class Trash extends Resource {
-  constructor(resource_data, parent) {
-    super(resource_data, parent);
-    this.color = "red";
-  }
-
-  draw(layer) {
-    // Don't draw trash
-  }
-}
-
-function classForResourceType(type) {
-  switch (type) {
-    case "Deck":
-      return Deck;
-    case "HamiltonDeck":
-      return HamiltonDeck;
-    case "Trash":
-      return Trash;
-    case "OTDeck":
-      return OTDeck;
-    case "Plate":
-      return Plate;
-    case "Well":
-      return Well;
-    case "TipRack":
-      return TipRack;
-    case "TipSpot":
-      return TipSpot;
-    default:
-      return Resource;
-  }
-}
-
-function drawResource(data) {
-  const resource = data.resource;
-  const resourceClass = classForResourceType(resource.type);
-
-  const parentName = resource.parent_name;
-  var parent = undefined;
-  if (parentName !== undefined) {
-    parent = resources[parentName];
-  }
-
-  const resourceInstance = new resourceClass(resource, parent);
-  resourceInstance.draw(resourceLayer);
-
-  resources[resource.name] = resourceInstance;
-}
-
-function adjustVolume(pattern) {
+function adjustLiquids(pattern) {
   for (let i = 0; i < pattern.length; i++) {
-    const { well_name, volume } = pattern[i];
+    const { well_name, liquids } = pattern[i];
     const wellInstance = resources[well_name];
-    wellInstance.setVolume(volume, resourceLayer);
+    wellInstance.setLiquids(liquids);
   }
-
   return null;
 }
 
@@ -632,7 +213,7 @@ function aspirate(channels) {
     let { resource_name, volume } = channels[i];
 
     const well = resources[resource_name];
-    well.aspirate(volume, resourceLayer);
+    well.aspirate(volume);
 
     if (system === SYSTEM_HAMILTON) {
       const pipError = checkPipHeadReach(well.getAbsoluteLocation().x);
@@ -655,7 +236,7 @@ function dispense(channels) {
     let { resource_name, volume } = channels[i];
 
     const well = resources[resource_name];
-    well.dispense(volume, resourceLayer);
+    well.dispense(volume);
 
     if (system === SYSTEM_HAMILTON) {
       const pipError = checkPipHeadReach(well.getAbsoluteLocation().x);
@@ -785,7 +366,7 @@ function aspirate96(aspiration) {
     for (let j = 0; j < plate.num_items_x; j++) {
       const well = plate.children[i * plate.num_items_x + j];
       CoRe96Head[i][j].aspirate(aspiration.volume);
-      well.aspirate(aspiration.volume, resourceLayer);
+      well.aspirate(aspiration.volume);
     }
   }
 
@@ -828,7 +409,7 @@ function dispense96(dispense) {
     for (let j = 0; j < plate.num_items_x; j++) {
       const well = plate.children[i * plate.num_items_x + j];
       CoRe96Head[i][j].dispense(dispense.volume);
-      well.dispense(dispense.volume, resourceLayer);
+      well.dispense(dispense.volume);
     }
   }
 
@@ -854,7 +435,9 @@ async function handleEvent(event, data) {
 
   switch (event) {
     case "resource_assigned":
-      drawResource(data);
+      resource = loadResource(data.resource);
+      resource.draw(resourceLayer);
+
       if (data.resource.name === "deck") {
         // infer the system from the deck.
         if (data.resource.type === "OTDeck") {
@@ -888,8 +471,8 @@ async function handleEvent(event, data) {
       ret.error = editTips(data.pattern);
       break;
 
-    case "adjust_well_volume":
-      ret.error = adjustVolume(data.pattern);
+    case "adjust_well_liquids":
+      ret.error = adjustLiquids(data.pattern);
       break;
 
     case "aspirate":
@@ -920,6 +503,9 @@ async function handleEvent(event, data) {
     case "dispense96":
       await sleep(config.core_dispense_duration);
       ret.error = dispense96(data.dispense);
+      break;
+
+    case "pong":
       break;
 
     default:
@@ -1037,47 +623,10 @@ function closeSettings() {
   settingsWindow.style.display = "none";
 }
 
-function scaleStage(stage) {
-  const canvas = document.getElementById("kanvas");
-  canvasWidth = canvas.offsetWidth;
-  canvasHeight = canvas.offsetHeight;
-
-  scaleX = canvasWidth / robotWidthMM;
-  scaleY = canvasHeight / robotHeightMM;
-
-  const effectiveScale = Math.min(scaleX, scaleY);
-
-  stage.scaleX(effectiveScale);
-  stage.scaleY(-1 * effectiveScale);
-  stage.offsetY(canvasHeight / effectiveScale);
-}
-
 window.addEventListener("load", function () {
-  const canvas = document.getElementById("kanvas");
-  canvasWidth = canvas.offsetWidth;
-  canvasHeight = canvas.offsetHeight;
-
-  stage = new Konva.Stage({
-    container: "kanvas",
-    width: canvasWidth,
-    height: canvasHeight,
-  });
-
-  scaleStage(stage);
-
-  // add the layer to the stage
-  stage.add(layer);
-  stage.add(resourceLayer);
-  stage.add(tooltipLayer);
-  tooltipLayer.scaleY(-1);
-  tooltipLayer.offsetY(canvasHeight);
   updateStatusLabel("disconnected");
 
   openSocket();
 
   loadSettings();
-});
-
-window.addEventListener("resize", function () {
-  scaleStage(stage);
 });
