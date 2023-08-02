@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, Tuple, Optional
 
-from pylabrobot.liquid_handling.liquid_classes import LiquidClass
+from pylabrobot.resources.liquid import Liquid
 
 
 class HamiltonLiquidClass:
@@ -117,23 +117,23 @@ class HamiltonLiquidClass:
     }
 
 
-mapping: Dict[Tuple[int, bool, bool, bool, LiquidClass, bool, bool], HamiltonLiquidClass] = {}
+mapping: Dict[Tuple[int, bool, bool, bool, Liquid, bool, bool], HamiltonLiquidClass] = {}
 
 def get_liquid_class(
   tip_volume: int,
   is_core: bool,
   is_tip: bool,
   has_filter: bool,
-  liquid_class: LiquidClass,
+  liquid: Liquid,
   jet: bool,
   empty: bool
 ) -> Optional[HamiltonLiquidClass]:
   """ Get the liquid class for the given parameters. """
 
-  return mapping.get((tip_volume, is_core, is_tip, has_filter, liquid_class, jet, empty), None)
+  return mapping.get((tip_volume, is_core, is_tip, has_filter, liquid, jet, empty), None)
 
 
-mapping[(1000, False, False, False, LiquidClass.WATER, True, True)] = \
+mapping[(1000, False, False, False, Liquid.WATER, True, True)] = \
 _1000ulNeedleCRWater_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 520.0, 50.0: 61.2, 0.0: 0.0, 20.0: 22.5, 100.0: 113.0, 10.0: 11.1, 200.0: 214.0, 1000.0: 1032.0},
   aspiration_flow_rate=500.0,
@@ -156,7 +156,7 @@ _1000ulNeedleCRWater_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, False, False, Liquid.WATER, True, False)] = \
 _1000ulNeedleCRWater_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 520.0, 50.0: 62.2, 0.0: 0.0, 20.0: 32.0, 100.0: 115.5, 1000.0: 1032.0},
   aspiration_flow_rate=500.0,
@@ -180,7 +180,7 @@ _1000ulNeedleCRWater_DispenseJet_Part = HamiltonLiquidClass(
 
 
 #
-mapping[(1000, False, False, False, LiquidClass.WATER, False, True)] = \
+mapping[(1000, False, False, False, Liquid.WATER, False, True)] = \
 _1000ulNeedleCRWater_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={50.0: 59.0, 0.0: 0.0, 20.0: 25.9, 10.0: 12.9, 1000.0: 1000.0},
   aspiration_flow_rate=50.0,
@@ -204,7 +204,7 @@ _1000ulNeedleCRWater_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 #
-mapping[(1000, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(1000, False, False, False, Liquid.WATER, False, False)] = \
 _1000ulNeedleCRWater_DispenseSurface_Part = HamiltonLiquidClass(
   curve={50.0: 55.0, 0.0: 0.0, 20.0: 25.9, 10.0: 12.9, 1000.0: 1000.0},
   aspiration_flow_rate=50.0,
@@ -241,7 +241,7 @@ _1000ulNeedleCRWater_DispenseSurface_Part = HamiltonLiquidClass(
 #     200                       1.25                 - 0.51
 #     500                       0.91                   0.02
 #   1000                       0.66                 - 0.46
-mapping[(1000, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, False, False, Liquid.WATER, True, False)] = \
 _1000ulNeedle_Water_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 530.0, 50.0: 56.0, 0.0: 0.0, 100.0: 110.0, 20.0: 22.5, 1000.0: 1055.0, 200.0: 214.0},
   aspiration_flow_rate=500.0,
@@ -279,7 +279,7 @@ _1000ulNeedle_Water_DispenseJet = HamiltonLiquidClass(
 #       20                     10.12                 - 4.66
 #       50                       3.79                 - 1.18
 #
-mapping[(1000, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(1000, False, False, False, Liquid.WATER, False, False)] = \
 _1000ulNeedle_Water_DispenseSurface = HamiltonLiquidClass(
   curve={50.0: 59.0, 0.0: 0.0, 20.0: 25.9, 1000.0: 1000.0},
   aspiration_flow_rate=500.0,
@@ -302,7 +302,7 @@ _1000ulNeedle_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, False, False, LiquidClass.WATER, False, True)] = \
+mapping[(10, False, False, False, Liquid.WATER, False, True)] = \
 _10ulNeedleCRWater_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.7, 0.5: 0.5, 0.0: 0.0, 1.0: 1.2, 2.0: 2.4, 10.0: 11.4},
   aspiration_flow_rate=60.0,
@@ -325,7 +325,7 @@ _10ulNeedleCRWater_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, False, False, False, Liquid.WATER, False, False)] = \
 _10ulNeedleCRWater_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.7, 0.5: 0.5, 0.0: 0.0, 1.0: 1.2, 2.0: 2.4, 10.0: 11.4},
   aspiration_flow_rate=60.0,
@@ -348,7 +348,7 @@ _10ulNeedleCRWater_DispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(50, False, True, True, Liquid.DMSO, True, False)] = \
 _150ul_Piercing_Tip_Filter_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={150.0: 150.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=180.0,
@@ -371,7 +371,7 @@ _150ul_Piercing_Tip_Filter_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(50, False, True, True, Liquid.DMSO, True, True)] = \
 _150ul_Piercing_Tip_Filter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={150.0: 154.0, 50.0: 52.9, 0.0: 0.0, 20.0: 21.8},
   aspiration_flow_rate=180.0,
@@ -394,7 +394,7 @@ _150ul_Piercing_Tip_Filter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(50, False, True, True, Liquid.DMSO, False, True)] = \
 _150ul_Piercing_Tip_Filter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 4.5, 5.0: 6.5, 150.0: 155.0, 50.0: 53.7, 0.0: 0.0, 10.0: 12.0, 2.0: 3.0},
   aspiration_flow_rate=100.0,
@@ -434,7 +434,7 @@ _150ul_Piercing_Tip_Filter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 #     100                       1.67                  -0.35
 #     300                       0.46                  -0.61
 #
-mapping[(50, False, True, True, LiquidClass.ETHANOL, True, True)] = \
+mapping[(50, False, True, True, Liquid.ETHANOL, True, True)] = \
 _150ul_Piercing_Tip_Filter_Ethanol_DispenseJet_Empty = HamiltonLiquidClass(
   curve={150.0: 166.0, 50.0: 58.3, 0.0: 0.0, 20.0: 25.5},
   aspiration_flow_rate=250.0,
@@ -475,7 +475,7 @@ _150ul_Piercing_Tip_Filter_Ethanol_DispenseJet_Empty = HamiltonLiquidClass(
 #       20                       0.95                   2.97
 #       50                       0.31                  -0.10
 #
-mapping[(50, False, True, True, LiquidClass.ETHANOL, False, True)] = \
+mapping[(50, False, True, True, Liquid.ETHANOL, False, True)] = \
 _150ul_Piercing_Tip_Filter_Ethanol_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 5.0, 5.0: 7.6, 150.0: 165.0, 50.0: 56.9, 0.0: 0.0, 10.0: 13.2, 2.0: 3.3},
   aspiration_flow_rate=50.0,
@@ -517,7 +517,7 @@ _150ul_Piercing_Tip_Filter_Ethanol_DispenseSurface_Empty = HamiltonLiquidClass(
 #     300                       1.08                  -0.87
 #
 #
-mapping[(50, False, True, True, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(50, False, True, True, Liquid.GLYCERIN80, False, True)] = \
 _150ul_Piercing_Tip_Filter_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 4.5, 5.0: 7.2, 150.0: 167.5, 50.0: 60.0, 0.0: 0.0, 1.0: 2.7, 10.0: 13.0, 2.0: 2.5},
   aspiration_flow_rate=50.0,
@@ -556,7 +556,7 @@ _150ul_Piercing_Tip_Filter_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClas
 #     100                       0.81                   0.99
 #     300                       1.00                   0.65
 #
-mapping[(50, False, True, True, LiquidClass.SERUM, True, True)] = \
+mapping[(50, False, True, True, Liquid.SERUM, True, True)] = \
 _150ul_Piercing_Tip_Filter_Serum_DispenseJet_Empty = HamiltonLiquidClass(
   curve={150.0: 162.0, 50.0: 55.9, 0.0: 0.0, 20.0: 23.0},
   aspiration_flow_rate=250.0,
@@ -598,7 +598,7 @@ _150ul_Piercing_Tip_Filter_Serum_DispenseJet_Empty = HamiltonLiquidClass(
 #       50                       1.39                  -0.12
 #
 #
-mapping[(50, False, True, True, LiquidClass.SERUM, False, True)] = \
+mapping[(50, False, True, True, Liquid.SERUM, False, True)] = \
 _150ul_Piercing_Tip_Filter_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 3.4, 5.0: 5.9, 150.0: 161.5, 50.0: 56.2, 0.0: 0.0, 10.0: 11.6, 2.0: 2.2},
   aspiration_flow_rate=50.0,
@@ -621,7 +621,7 @@ _150ul_Piercing_Tip_Filter_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(50, False, True, True, Liquid.WATER, True, False)] = \
 _150ul_Piercing_Tip_Filter_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={150.0: 150.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -644,7 +644,7 @@ _150ul_Piercing_Tip_Filter_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(50, False, True, True, Liquid.WATER, True, True)] = \
 _150ul_Piercing_Tip_Filter_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={5.0: 6.6, 150.0: 159.1, 50.0: 55.0, 0.0: 0.0, 100.0: 107.0, 1.0: 1.6, 20.0: 22.9, 10.0: 12.2},
   aspiration_flow_rate=100.0,
@@ -667,7 +667,7 @@ _150ul_Piercing_Tip_Filter_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(50, False, True, True, Liquid.WATER, False, True)] = \
 _150ul_Piercing_Tip_Filter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 3.5, 5.0: 6.5, 150.0: 158.1, 50.0: 54.5, 0.0: 0.0, 1.0: 1.6, 10.0: 11.9, 2.0: 2.8},
   aspiration_flow_rate=100.0,
@@ -690,7 +690,7 @@ _150ul_Piercing_Tip_Filter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(50, False, True, False, Liquid.DMSO, True, True)] = \
 _250ul_Piercing_Tip_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={250.0: 255.5, 50.0: 52.9, 0.0: 0.0, 20.0: 21.8},
   aspiration_flow_rate=180.0,
@@ -713,7 +713,7 @@ _250ul_Piercing_Tip_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(50, False, True, False, Liquid.DMSO, False, True)] = \
 _250ul_Piercing_Tip_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 4.2, 5.0: 6.5, 250.0: 256.0, 50.0: 53.7, 0.0: 0.0, 10.0: 12.0, 2.0: 3.0},
   aspiration_flow_rate=100.0,
@@ -753,7 +753,7 @@ _250ul_Piercing_Tip_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 #     100                       1.67                  -0.35
 #     300                       0.46                  -0.61
 #
-mapping[(50, False, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(50, False, True, False, Liquid.ETHANOL, True, True)] = \
 _250ul_Piercing_Tip_Ethanol_DispenseJet_Empty = HamiltonLiquidClass(
   curve={250.0: 270.2, 50.0: 59.2, 0.0: 0.0, 20.0: 27.3},
   aspiration_flow_rate=250.0,
@@ -794,7 +794,7 @@ _250ul_Piercing_Tip_Ethanol_DispenseJet_Empty = HamiltonLiquidClass(
 #       20                       0.95                   2.97
 #       50                       0.31                  -0.10
 #
-mapping[(50, False, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(50, False, True, False, Liquid.ETHANOL, False, True)] = \
 _250ul_Piercing_Tip_Ethanol_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 5.0, 5.0: 9.6, 250.0: 270.5, 50.0: 58.0, 0.0: 0.0, 10.0: 14.8},
   aspiration_flow_rate=50.0,
@@ -836,7 +836,7 @@ _250ul_Piercing_Tip_Ethanol_DispenseSurface_Empty = HamiltonLiquidClass(
 #     300                       1.08                  -0.87
 #
 #
-mapping[(50, False, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(50, False, True, False, Liquid.GLYCERIN80, False, True)] = \
 _250ul_Piercing_Tip_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 4.5, 5.0: 7.2, 250.0: 289.0, 50.0: 65.0, 0.0: 0.0, 1.0: 2.7, 10.0: 13.9},
   aspiration_flow_rate=50.0,
@@ -875,7 +875,7 @@ _250ul_Piercing_Tip_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 #     100                       0.81                   0.99
 #     300                       1.00                   0.65
 #
-mapping[(50, False, True, False, LiquidClass.SERUM, True, True)] = \
+mapping[(50, False, True, False, Liquid.SERUM, True, True)] = \
 _250ul_Piercing_Tip_Serum_DispenseJet_Empty = HamiltonLiquidClass(
   curve={250.0: 265.0, 50.0: 56.4, 0.0: 0.0, 20.0: 23.0},
   aspiration_flow_rate=250.0,
@@ -917,7 +917,7 @@ _250ul_Piercing_Tip_Serum_DispenseJet_Empty = HamiltonLiquidClass(
 #       50                       1.39                  -0.12
 #
 #
-mapping[(50, False, True, False, LiquidClass.SERUM, False, True)] = \
+mapping[(50, False, True, False, Liquid.SERUM, False, True)] = \
 _250ul_Piercing_Tip_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 3.4, 5.0: 5.9, 250.0: 264.2, 50.0: 56.2, 0.0: 0.0, 10.0: 11.6},
   aspiration_flow_rate=50.0,
@@ -940,7 +940,7 @@ _250ul_Piercing_Tip_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(50, False, True, False, Liquid.WATER, True, True)] = \
 _250ul_Piercing_Tip_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={5.0: 6.6, 250.0: 260.0, 50.0: 55.0, 0.0: 0.0, 100.0: 107.0, 1.0: 1.6, 20.0: 22.5, 10.0: 12.2},
   aspiration_flow_rate=100.0,
@@ -963,7 +963,7 @@ _250ul_Piercing_Tip_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(50, False, True, False, Liquid.WATER, False, True)] = \
 _250ul_Piercing_Tip_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={3.0: 4.0, 5.0: 6.5, 250.0: 259.0, 50.0: 55.1, 0.0: 0.0, 1.0: 1.6, 10.0: 12.6, 2.0: 2.8},
   aspiration_flow_rate=100.0,
@@ -1003,7 +1003,7 @@ _250ul_Piercing_Tip_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 #     100                       1.04                   0.05
 #     300                       0.63                  -0.07
 #
-mapping[(300, False, False, False, LiquidClass.ACETONITRIL80WATER20, True, False)] = \
+mapping[(300, False, False, False, Liquid.ACETONITRIL80WATER20, True, False)] = \
 _300ulNeedleAcetonitril80Water20DispenseJet = HamiltonLiquidClass(
   curve={300.0: 310.0, 50.0: 57.8, 0.0: 0.0, 100.0: 106.5, 20.0: 26.8, 10.0: 16.5},
   aspiration_flow_rate=250.0,
@@ -1026,7 +1026,7 @@ _300ulNeedleAcetonitril80Water20DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, False, False, LiquidClass.WATER, True, True)] = \
+mapping[(300, False, False, False, Liquid.WATER, True, True)] = \
 _300ulNeedleCRWater_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 313.0, 50.0: 53.5, 0.0: 0.0, 100.0: 104.0, 20.0: 22.3},
   aspiration_flow_rate=250.0,
@@ -1049,7 +1049,7 @@ _300ulNeedleCRWater_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, False, False, Liquid.WATER, True, False)] = \
 _300ulNeedleCRWater_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 313.0, 50.0: 59.5, 0.0: 0.0, 100.0: 109.0, 20.0: 29.3},
   aspiration_flow_rate=250.0,
@@ -1072,7 +1072,7 @@ _300ulNeedleCRWater_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, False, False, LiquidClass.WATER, False, True)] = \
+mapping[(300, False, False, False, Liquid.WATER, False, True)] = \
 _300ulNeedleCRWater_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 308.4, 5.0: 6.8, 50.0: 52.3, 0.0: 0.0, 100.0: 102.9, 20.0: 22.3, 1.0: 2.3, 200.0: 205.8, 10.0: 11.7, 2.0: 3.0},
   aspiration_flow_rate=50.0,
@@ -1095,7 +1095,7 @@ _300ulNeedleCRWater_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, False, False, False, Liquid.WATER, False, False)] = \
 _300ulNeedleCRWater_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 308.4, 5.0: 6.8, 50.0: 52.3, 0.0: 0.0, 100.0: 102.9, 20.0: 22.3, 1.0: 2.3, 200.0: 205.8, 10.0: 11.7, 2.0: 3.0},
   aspiration_flow_rate=50.0,
@@ -1134,7 +1134,7 @@ _300ulNeedleCRWater_DispenseSurface_Part = HamiltonLiquidClass(
 #     100                       0.55                  -0.01
 #     300                       0.71                   0.39
 #
-mapping[(300, False, False, False, LiquidClass.DIMETHYLSULFOXID, True, False)] = \
+mapping[(300, False, False, False, Liquid.DIMETHYLSULFOXID, True, False)] = \
 _300ulNeedleDMSODispenseJet = HamiltonLiquidClass(
   curve={300.0: 317.0, 50.0: 53.5, 0.0: 0.0, 100.0: 106.5, 20.0: 21.3},
   aspiration_flow_rate=250.0,
@@ -1174,7 +1174,7 @@ _300ulNeedleDMSODispenseJet = HamiltonLiquidClass(
 #       50                       1.32                  -1.05
 #
 #
-mapping[(300, False, False, False, LiquidClass.DIMETHYLSULFOXID, False, False)] = \
+mapping[(300, False, False, False, Liquid.DIMETHYLSULFOXID, False, False)] = \
 _300ulNeedleDMSODispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.0, 50.0: 52.3, 0.0: 0.0, 20.0: 22.3, 10.0: 11.4, 2.0: 2.5},
   aspiration_flow_rate=50.0,
@@ -1214,7 +1214,7 @@ _300ulNeedleDMSODispenseSurface = HamiltonLiquidClass(
 #     100                       1.67                  -0.35
 #     300                       0.46                  -0.61
 #
-mapping[(300, False, False, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(300, False, False, False, Liquid.ETHANOL, True, False)] = \
 _300ulNeedleEtOHDispenseJet = HamiltonLiquidClass(
   curve={300.0: 317.0, 50.0: 57.8, 0.0: 0.0, 100.0: 109.0, 20.0: 25.3},
   aspiration_flow_rate=250.0,
@@ -1255,7 +1255,7 @@ _300ulNeedleEtOHDispenseJet = HamiltonLiquidClass(
 #       20                       0.95                   2.97
 #       50                       0.31                  -0.10
 #
-mapping[(300, False, False, False, LiquidClass.ETHANOL, False, False)] = \
+mapping[(300, False, False, False, Liquid.ETHANOL, False, False)] = \
 _300ulNeedleEtOHDispenseSurface = HamiltonLiquidClass(
   curve={5.0: 7.2, 50.0: 55.0, 0.0: 0.0, 20.0: 24.5, 10.0: 13.1},
   aspiration_flow_rate=50.0,
@@ -1297,7 +1297,7 @@ _300ulNeedleEtOHDispenseSurface = HamiltonLiquidClass(
 #     300                       1.08                  -0.87
 #
 #
-mapping[(300, False, False, False, LiquidClass.GLYCERIN80, False, False)] = \
+mapping[(300, False, False, False, Liquid.GLYCERIN80, False, False)] = \
 _300ulNeedleGlycerin80DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 325.0, 5.0: 8.0, 50.0: 61.3, 0.0: 0.0, 100.0: 117.0, 20.0: 26.0, 1.0: 2.7, 10.0: 13.9, 2.0: 4.2},
   aspiration_flow_rate=50.0,
@@ -1336,7 +1336,7 @@ _300ulNeedleGlycerin80DispenseSurface = HamiltonLiquidClass(
 #     100                       0.81                   0.99
 #     300                       1.00                   0.65
 #
-mapping[(300, False, False, False, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, False, False, Liquid.SERUM, True, False)] = \
 _300ulNeedleSerumDispenseJet = HamiltonLiquidClass(
   curve={300.0: 313.0, 50.0: 53.5, 0.0: 0.0, 100.0: 105.0, 20.0: 21.3},
   aspiration_flow_rate=250.0,
@@ -1378,7 +1378,7 @@ _300ulNeedleSerumDispenseJet = HamiltonLiquidClass(
 #       50                       1.39                  -0.12
 #
 #
-mapping[(300, False, False, False, LiquidClass.SERUM, False, False)] = \
+mapping[(300, False, False, False, Liquid.SERUM, False, False)] = \
 _300ulNeedleSerumDispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.0, 50.0: 52.3, 0.0: 0.0, 20.0: 22.3, 1.0: 2.2, 10.0: 11.9, 2.0: 3.2},
   aspiration_flow_rate=50.0,
@@ -1417,7 +1417,7 @@ _300ulNeedleSerumDispenseSurface = HamiltonLiquidClass(
 #     100                       0.81                   0.99
 #     300                       1.00                   0.65
 #
-mapping[(300, False, False, False, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, False, False, Liquid.SERUM, True, False)] = \
 _300ulNeedle_Serum_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 313.0, 50.0: 53.5, 0.0: 0.0, 100.0: 105.0, 20.0: 21.3},
   aspiration_flow_rate=250.0,
@@ -1459,7 +1459,7 @@ _300ulNeedle_Serum_DispenseJet = HamiltonLiquidClass(
 #       50                       1.39                  -0.12
 #
 #
-mapping[(300, False, False, False, LiquidClass.SERUM, False, False)] = \
+mapping[(300, False, False, False, Liquid.SERUM, False, False)] = \
 _300ulNeedle_Serum_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 350.0, 5.0: 6.0, 50.0: 52.3, 0.0: 0.0, 20.0: 22.3, 1.0: 2.2, 10.0: 11.9, 2.0: 3.2},
   aspiration_flow_rate=50.0,
@@ -1499,7 +1499,7 @@ _300ulNeedle_Serum_DispenseSurface = HamiltonLiquidClass(
 #     200                       0.16                   0.55
 #     300                       0.17                   0.35
 #
-mapping[(300, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, False, False, Liquid.WATER, True, False)] = \
 _300ulNeedle_Water_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 313.0, 50.0: 53.5, 0.0: 0.0, 100.0: 105.0, 20.0: 22.3},
   aspiration_flow_rate=250.0,
@@ -1540,7 +1540,7 @@ _300ulNeedle_Water_DispenseJet = HamiltonLiquidClass(
 #       20                       0.63                   0.73
 #
 #
-mapping[(300, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, False, False, False, Liquid.WATER, False, False)] = \
 _300ulNeedle_Water_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 308.4, 5.0: 6.5, 50.0: 52.3, 0.0: 0.0, 100.0: 102.9, 20.0: 22.3, 1.0: 1.1, 200.0: 205.8, 10.0: 12.0, 2.0: 2.1},
   aspiration_flow_rate=50.0,
@@ -1564,7 +1564,7 @@ _300ulNeedle_Water_DispenseSurface = HamiltonLiquidClass(
 
 
 # Liquid class for washing rocket tips with CO-RE 384 head in 96 DC wash station.
-mapping[(300, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, False)] = \
 _300ul_RocketTip_384COREHead_96Washer_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 330.0, 5.0: 6.3, 0.5: 0.9, 50.0: 55.1, 0.0: 0.0, 1.0: 1.6, 20.0: 23.2, 100.0: 107.2, 2.0: 2.8, 10.0: 11.9, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -1588,7 +1588,7 @@ _300ul_RocketTip_384COREHead_96Washer_DispenseSurface = HamiltonLiquidClass(
 
 
 # Evaluation
-mapping[(300, True, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, False)] = \
 _300ul_RocketTip_384COREHead_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 150.0: 150.0, 50.0: 50.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
   aspiration_flow_rate=100.0,
@@ -1612,7 +1612,7 @@ _300ul_RocketTip_384COREHead_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 
 
 # Evaluation
-mapping[(300, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, True)] = \
 _300ul_RocketTip_384COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 303.5, 0.0: 0.0, 100.0: 105.8, 200.0: 209.5, 10.0: 11.4},
   aspiration_flow_rate=100.0,
@@ -1636,7 +1636,7 @@ _300ul_RocketTip_384COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 
 
 # Evaluation
-mapping[(300, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, False, True)] = \
 _300ul_RocketTip_384COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 308.0, 0.0: 0.0, 100.0: 105.5, 200.0: 209.0, 10.0: 12.0},
   aspiration_flow_rate=100.0,
@@ -1660,7 +1660,7 @@ _300ul_RocketTip_384COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 # Evaluation
-mapping[(300, True, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, False)] = \
 _300ul_RocketTip_384COREHead_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 309.0, 0.0: 0.0, 100.0: 106.5, 20.0: 22.3, 200.0: 207.0},
   aspiration_flow_rate=100.0,
@@ -1684,7 +1684,7 @@ _300ul_RocketTip_384COREHead_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 
 
 # Evaluation
-mapping[(300, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, True)] = \
 _300ul_RocketTip_384COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 309.0, 0.0: 0.0, 100.0: 106.5, 20.0: 22.3, 200.0: 207.0},
   aspiration_flow_rate=100.0,
@@ -1708,7 +1708,7 @@ _300ul_RocketTip_384COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
 
 
 # Evaluation
-mapping[(300, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, True)] = \
 _300ul_RocketTip_384COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 314.3, 0.0: 0.0, 100.0: 109.0, 200.0: 214.7, 10.0: 12.7},
   aspiration_flow_rate=100.0,
@@ -1731,7 +1731,7 @@ _300ul_RocketTip_384COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(30, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(30, True, True, False, Liquid.DMSO, True, True)] = \
 _30ulTip_384COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={5.0: 5.0, 15.0: 15.3, 30.0: 30.7, 0.0: 0.0, 1.0: 1.0},
   aspiration_flow_rate=50.0,
@@ -1754,7 +1754,7 @@ _30ulTip_384COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(30, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(30, True, True, False, Liquid.DMSO, False, True)] = \
 _30ulTip_384COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 4.9, 15.0: 15.1, 30.0: 30.0, 0.0: 0.0, 1.0: 0.9},
   aspiration_flow_rate=50.0,
@@ -1777,7 +1777,7 @@ _30ulTip_384COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(30, True, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(30, True, True, False, Liquid.ETHANOL, True, True)] = \
 _30ulTip_384COREHead_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={5.0: 6.54, 15.0: 18.36, 30.0: 33.8, 0.0: 0.0, 1.0: 1.8},
   aspiration_flow_rate=50.0,
@@ -1800,7 +1800,7 @@ _30ulTip_384COREHead_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(30, True, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(30, True, True, False, Liquid.ETHANOL, False, True)] = \
 _30ulTip_384COREHead_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 6.2, 15.0: 16.9, 30.0: 33.1, 0.0: 0.0, 1.0: 1.5},
   aspiration_flow_rate=50.0,
@@ -1823,7 +1823,7 @@ _30ulTip_384COREHead_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(30, True, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(30, True, True, False, Liquid.GLYCERIN80, False, True)] = \
 _30ulTip_384COREHead_Glyzerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 6.3, 0.5: 0.9, 40.0: 44.0, 0.0: 0.0, 20.0: 22.2, 1.0: 1.6, 10.0: 11.9, 2.0: 2.8},
   aspiration_flow_rate=150.0,
@@ -1846,7 +1846,7 @@ _30ulTip_384COREHead_Glyzerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(30, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(30, True, True, False, Liquid.WATER, True, True)] = \
 _30ulTip_384COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={5.0: 6.0, 15.0: 16.5, 30.0: 32.3, 0.0: 0.0, 1.0: 1.6},
   aspiration_flow_rate=50.0,
@@ -1869,7 +1869,7 @@ _30ulTip_384COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(30, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(30, True, True, False, Liquid.WATER, False, True)] = \
 _30ulTip_384COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 15.0: 15.9, 30.0: 31.3, 0.0: 0.0, 1.0: 1.2},
   aspiration_flow_rate=50.0,
@@ -1892,7 +1892,7 @@ _30ulTip_384COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(30, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(30, True, True, False, Liquid.WATER, False, False)] = \
 _30ulTip_384COREWasher_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.3, 0.5: 0.9, 40.0: 44.0, 0.0: 0.0, 1.0: 1.6, 20.0: 22.2, 2.0: 2.8, 10.0: 11.9},
   aspiration_flow_rate=10.0,
@@ -1915,7 +1915,7 @@ _30ulTip_384COREWasher_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(4000, False, True, False, Liquid.DMSO, True, False)] = \
 _4mlTF_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={3500.0: 3715.0, 500.0: 631.0, 2500.0: 2691.0, 1500.0: 1667.0, 4000.0: 4224.0, 3000.0: 3202.0, 0.0: 0.0, 2000.0: 2179.0, 100.0: 211.0, 1000.0: 1151.0},
   aspiration_flow_rate=2000.0,
@@ -1938,7 +1938,7 @@ _4mlTF_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(4000, False, True, False, Liquid.DMSO, True, True)] = \
 _4mlTF_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 540.0, 50.0: 61.5, 4000.0: 4102.0, 3000.0: 3083.0, 0.0: 0.0, 2000.0: 2070.0, 100.0: 116.5, 1000.0: 1060.0},
   aspiration_flow_rate=2000.0,
@@ -1961,7 +1961,7 @@ _4mlTF_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(4000, False, True, False, Liquid.DMSO, False, True)] = \
 _4mlTF_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 536.5, 50.0: 62.3, 4000.0: 4128.0, 3000.0: 3109.0, 0.0: 0.0, 2000.0: 2069.0, 100.0: 116.6, 1000.0: 1054.0, 10.0: 15.5},
   aspiration_flow_rate=2000.0,
@@ -1985,7 +1985,7 @@ _4mlTF_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 # First two times mixing with max volume.
-mapping[(4000, False, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(4000, False, True, False, Liquid.ETHANOL, True, False)] = \
 _4mlTF_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 3500.0: 3500.0, 500.0: 500.0, 2500.0: 2500.0, 1500.0: 1500.0, 4000.0: 4000.0, 3000.0: 3000.0, 0.0: 0.0, 2000.0: 2000.0, 100.0: 100.0, 1000.0: 1000.0},
   aspiration_flow_rate=2000.0,
@@ -2008,7 +2008,7 @@ _4mlTF_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(4000, False, True, False, Liquid.ETHANOL, True, True)] = \
 _4mlTF_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 563.0, 50.0: 72.0, 4000.0: 4215.0, 3000.0: 3190.0, 0.0: 0.0, 2000.0: 2178.0, 100.0: 127.5, 1000.0: 1095.0},
   aspiration_flow_rate=2000.0,
@@ -2031,7 +2031,7 @@ _4mlTF_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(4000, False, True, False, Liquid.ETHANOL, False, True)] = \
 _4mlTF_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 555.0, 50.0: 68.0, 4000.0: 4177.0, 3000.0: 3174.0, 0.0: 0.0, 2000.0: 2151.0, 100.0: 123.5, 1000.0: 1085.0, 10.0: 18.6},
   aspiration_flow_rate=2000.0,
@@ -2054,7 +2054,7 @@ _4mlTF_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.GLYCERIN80, True, True)] = \
+mapping[(4000, False, True, False, Liquid.GLYCERIN80, True, True)] = \
 _4mlTF_Glycerin80_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 599.0, 50.0: 89.0, 4000.0: 4223.0, 3000.0: 3211.0, 0.0: 0.0, 2000.0: 2195.0, 100.0: 140.0, 1000.0: 1159.0},
   aspiration_flow_rate=1200.0,
@@ -2077,7 +2077,7 @@ _4mlTF_Glycerin80_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(4000, False, True, False, Liquid.GLYCERIN80, False, True)] = \
 _4mlTF_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 555.0, 50.0: 71.0, 4000.0: 4135.0, 3000.0: 3122.0, 0.0: 0.0, 2000.0: 2101.0, 100.0: 129.0, 1000.0: 1083.0, 10.0: 16.0},
   aspiration_flow_rate=1000.0,
@@ -2100,7 +2100,7 @@ _4mlTF_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(4000, False, True, False, Liquid.WATER, True, False)] = \
 _4mlTF_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={4000.0: 4160.0, 3000.0: 3160.0, 0.0: 0.0, 2000.0: 2160.0, 100.0: 214.0, 1000.0: 1148.0},
   aspiration_flow_rate=2000.0,
@@ -2123,7 +2123,7 @@ _4mlTF_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(4000, False, True, False, Liquid.WATER, True, True)] = \
 _4mlTF_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 551.8, 50.0: 66.4, 4000.0: 4165.0, 3000.0: 3148.0, 0.0: 0.0, 2000.0: 2128.0, 100.0: 122.7, 1000.0: 1082.0},
   aspiration_flow_rate=2000.0,
@@ -2146,7 +2146,7 @@ _4mlTF_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(4000, False, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(4000, False, True, False, Liquid.WATER, False, True)] = \
 _4mlTF_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 547.0, 50.0: 65.5, 4000.0: 4145.0, 3000.0: 3135.0, 0.0: 0.0, 2000.0: 2125.0, 100.0: 120.9, 1000.0: 1075.0, 10.0: 14.5},
   aspiration_flow_rate=2000.0,
@@ -2169,7 +2169,7 @@ _4mlTF_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(50, True, True, False, Liquid.DMSO, True, True)] = \
 _50ulTip_384COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 52.0, 0.0: 0.0, 20.0: 21.1, 10.0: 10.5},
   aspiration_flow_rate=50.0,
@@ -2192,7 +2192,7 @@ _50ulTip_384COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(50, True, True, False, Liquid.DMSO, False, True)] = \
 _50ulTip_384COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.0, 50.0: 51.1, 30.0: 30.7, 0.0: 0.0, 1.0: 0.9, 10.0: 10.1},
   aspiration_flow_rate=50.0,
@@ -2215,7 +2215,7 @@ _50ulTip_384COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(50, True, True, False, Liquid.ETHANOL, True, True)] = \
 _50ulTip_384COREHead_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={5.0: 6.54, 15.0: 18.36, 50.0: 53.0, 30.0: 33.8, 0.0: 0.0, 1.0: 1.8},
   aspiration_flow_rate=50.0,
@@ -2238,7 +2238,7 @@ _50ulTip_384COREHead_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(50, True, True, False, Liquid.ETHANOL, False, True)] = \
 _50ulTip_384COREHead_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 6.2, 15.0: 16.9, 0.5: 1.0, 50.0: 54.0, 30.0: 33.1, 0.0: 0.0, 1.0: 1.5},
   aspiration_flow_rate=50.0,
@@ -2261,7 +2261,7 @@ _50ulTip_384COREHead_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(50, True, True, False, Liquid.GLYCERIN80, False, True)] = \
 _50ulTip_384COREHead_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 0.5: 0.65, 50.0: 55.0, 0.0: 0.0, 30.0: 31.5, 1.0: 1.2, 10.0: 10.9},
   aspiration_flow_rate=30.0,
@@ -2284,7 +2284,7 @@ _50ulTip_384COREHead_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(50, True, True, False, Liquid.WATER, True, True)] = \
 _50ulTip_384COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 53.6, 0.0: 0.0, 20.0: 22.4, 10.0: 11.9},
   aspiration_flow_rate=50.0,
@@ -2307,7 +2307,7 @@ _50ulTip_384COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(50, True, True, False, Liquid.WATER, False, True)] = \
 _50ulTip_384COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.5, 50.0: 52.2, 30.0: 31.5, 0.0: 0.0, 1.0: 1.2, 10.0: 11.3},
   aspiration_flow_rate=50.0,
@@ -2330,7 +2330,7 @@ _50ulTip_384COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(50, True, True, False, Liquid.WATER, False, False)] = \
 _50ulTip_384COREWasher_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.3, 0.5: 0.9, 50.0: 55.0, 40.0: 44.0, 0.0: 0.0, 20.0: 22.2, 1.0: 1.6, 10.0: 11.9, 2.0: 2.8},
   aspiration_flow_rate=20.0,
@@ -2353,7 +2353,7 @@ _50ulTip_384COREWasher_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(50, True, True, False, Liquid.DMSO, True, True)] = \
 _50ulTip_conductive_384COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={5.0: 5.2, 50.0: 50.6, 30.0: 30.4, 0.0: 0.0, 1.0: 0.9, 20.0: 21.1, 10.0: 9.3},
   aspiration_flow_rate=50.0,
@@ -2376,7 +2376,7 @@ _50ulTip_conductive_384COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(50, True, True, False, Liquid.DMSO, True, True)] = \
 _50ulTip_conductive_384COREHead_DMSO_DispenseJet_Empty_below5ul = HamiltonLiquidClass(
   curve={5.0: 5.2, 50.0: 50.6, 30.0: 30.4, 0.0: 0.0, 1.0: 0.9, 20.0: 21.1, 10.0: 9.3},
   aspiration_flow_rate=50.0,
@@ -2399,7 +2399,7 @@ _50ulTip_conductive_384COREHead_DMSO_DispenseJet_Empty_below5ul = HamiltonLiquid
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(50, True, True, False, Liquid.DMSO, True, False)] = \
 _50ulTip_conductive_384COREHead_DMSO_DispenseJet_Part = HamiltonLiquidClass(
   curve={50.0: 50.0, 0.0: 0.0, 10.0: 10.0},
   aspiration_flow_rate=50.0,
@@ -2422,7 +2422,7 @@ _50ulTip_conductive_384COREHead_DMSO_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(50, True, True, False, Liquid.DMSO, False, True)] = \
 _50ulTip_conductive_384COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={0.1: 0.05, 0.25: 0.1, 5.0: 4.95, 0.5: 0.22, 50.0: 50.0, 30.0: 30.6, 0.0: 0.0, 1.0: 0.74, 10.0: 9.95},
   aspiration_flow_rate=50.0,
@@ -2445,7 +2445,7 @@ _50ulTip_conductive_384COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass
 )
 
 
-mapping[(50, True, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(50, True, True, False, Liquid.ETHANOL, True, True)] = \
 _50ulTip_conductive_384COREHead_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={5.0: 6.85, 15.0: 18.36, 50.0: 54.3, 30.0: 33.6, 0.0: 0.0, 1.0: 1.5, 10.0: 12.1},
   aspiration_flow_rate=50.0,
@@ -2468,7 +2468,7 @@ _50ulTip_conductive_384COREHead_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(50, True, True, False, Liquid.ETHANOL, True, True)] = \
 _50ulTip_conductive_384COREHead_EtOH_DispenseJet_Empty_below5ul = HamiltonLiquidClass(
   curve={5.0: 6.85, 15.0: 18.36, 50.0: 54.3, 30.0: 33.6, 0.0: 0.0, 1.0: 1.5, 10.0: 12.1},
   aspiration_flow_rate=50.0,
@@ -2491,7 +2491,7 @@ _50ulTip_conductive_384COREHead_EtOH_DispenseJet_Empty_below5ul = HamiltonLiquid
 )
 
 
-mapping[(50, True, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(50, True, True, False, Liquid.ETHANOL, True, False)] = \
 _50ulTip_conductive_384COREHead_EtOH_DispenseJet_Part = HamiltonLiquidClass(
   curve={50.0: 50.0, 0.0: 0.0, 10.0: 10.0},
   aspiration_flow_rate=50.0,
@@ -2514,7 +2514,7 @@ _50ulTip_conductive_384COREHead_EtOH_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(50, True, True, False, Liquid.ETHANOL, False, True)] = \
 _50ulTip_conductive_384COREHead_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={0.25: 0.3, 5.0: 6.1, 0.5: 0.65, 15.0: 16.9, 50.0: 52.7, 30.0: 32.1, 0.0: 0.0, 1.0: 1.35, 10.0: 11.3},
   aspiration_flow_rate=50.0,
@@ -2537,7 +2537,7 @@ _50ulTip_conductive_384COREHead_EtOH_DispenseSurface_Empty = HamiltonLiquidClass
 )
 
 
-mapping[(50, True, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(50, True, True, False, Liquid.GLYCERIN80, False, True)] = \
 _50ulTip_conductive_384COREHead_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={0.25: 0.05, 5.0: 5.5, 0.5: 0.3, 50.0: 51.9, 30.0: 31.8, 0.0: 0.0, 1.0: 1.0, 10.0: 10.9},
   aspiration_flow_rate=30.0,
@@ -2560,7 +2560,7 @@ _50ulTip_conductive_384COREHead_Glycerin80_DispenseSurface_Empty = HamiltonLiqui
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(50, True, True, False, Liquid.WATER, True, True)] = \
 _50ulTip_conductive_384COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={5.0: 5.67, 0.5: 0.27, 50.0: 51.9, 30.0: 31.5, 0.0: 0.0, 1.0: 1.06, 20.0: 20.0, 10.0: 10.9},
   aspiration_flow_rate=50.0,
@@ -2583,7 +2583,7 @@ _50ulTip_conductive_384COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(50, True, True, False, Liquid.WATER, True, True)] = \
 _50ulTip_conductive_384COREHead_Water_DispenseJet_Empty_below5ul = HamiltonLiquidClass(
   curve={5.0: 5.67, 0.5: 0.27, 50.0: 51.9, 30.0: 31.5, 0.0: 0.0, 1.0: 1.06, 20.0: 20.0, 10.0: 10.9},
   aspiration_flow_rate=50.0,
@@ -2606,7 +2606,7 @@ _50ulTip_conductive_384COREHead_Water_DispenseJet_Empty_below5ul = HamiltonLiqui
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(50, True, True, False, Liquid.WATER, True, False)] = \
 _50ulTip_conductive_384COREHead_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={50.0: 50.0, 0.0: 0.0, 10.0: 10.0},
   aspiration_flow_rate=50.0,
@@ -2629,7 +2629,7 @@ _50ulTip_conductive_384COREHead_Water_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(50, True, True, False, Liquid.WATER, False, True)] = \
 _50ulTip_conductive_384COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={0.1: 0.1, 0.25: 0.15, 5.0: 5.6, 0.5: 0.45, 50.0: 51.0, 30.0: 31.0, 0.0: 0.0, 1.0: 0.98, 10.0: 10.7},
   aspiration_flow_rate=50.0,
@@ -2652,7 +2652,7 @@ _50ulTip_conductive_384COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClas
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(50, True, True, False, Liquid.WATER, False, False)] = \
 _50ulTip_conductive_384COREWasher_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.3, 0.5: 0.9, 50.0: 55.0, 40.0: 44.0, 0.0: 0.0, 1.0: 1.6, 20.0: 22.2, 65.0: 65.0, 10.0: 11.9, 2.0: 2.8},
   aspiration_flow_rate=20.0,
@@ -2675,7 +2675,7 @@ _50ulTip_conductive_384COREWasher_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(5000, False, True, False, Liquid.DMSO, True, False)] = \
 _5mlT_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={4500.0: 4606.0, 3500.0: 3591.0, 500.0: 525.0, 2500.0: 2576.0, 1500.0: 1559.0, 5000.0: 5114.0, 4000.0: 4099.0, 3000.0: 3083.0, 0.0: 0.0, 2000.0: 2068.0, 100.0: 105.0, 1000.0: 1044.0},
   aspiration_flow_rate=2000.0,
@@ -2698,7 +2698,7 @@ _5mlT_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(5000, False, True, False, Liquid.DMSO, True, True)] = \
 _5mlT_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 540.0, 50.0: 62.0, 5000.0: 5095.0, 4000.0: 4075.0, 0.0: 0.0, 3000.0: 3065.0, 100.0: 117.0, 2000.0: 2060.0, 1000.0: 1060.0},
   aspiration_flow_rate=2000.0,
@@ -2721,7 +2721,7 @@ _5mlT_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(5000, False, True, False, Liquid.DMSO, False, True)] = \
 _5mlT_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 535.0, 50.0: 60.3, 5000.0: 5090.0, 4000.0: 4078.0, 0.0: 0.0, 3000.0: 3066.0, 100.0: 115.0, 2000.0: 2057.0, 10.0: 12.5, 1000.0: 1054.0},
   aspiration_flow_rate=2000.0,
@@ -2745,7 +2745,7 @@ _5mlT_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 # First two times mixing with max volume.
-mapping[(5000, False, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(5000, False, True, False, Liquid.ETHANOL, True, False)] = \
 _5mlT_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 312.0, 4500.0: 4573.0, 3500.0: 3560.0, 500.0: 519.0, 2500.0: 2551.0, 1500.0: 1542.0, 5000.0: 5081.0, 4000.0: 4066.0, 3000.0: 3056.0, 0.0: 0.0, 2000.0: 2047.0, 100.0: 104.0, 1000.0: 1033.0},
   aspiration_flow_rate=2000.0,
@@ -2768,7 +2768,7 @@ _5mlT_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(5000, False, True, False, Liquid.ETHANOL, True, True)] = \
 _5mlT_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 563.0, 50.0: 72.0, 5000.0: 5230.0, 4000.0: 4215.0, 0.0: 0.0, 3000.0: 3190.0, 100.0: 129.5, 2000.0: 2166.0, 1000.0: 1095.0},
   aspiration_flow_rate=2000.0,
@@ -2791,7 +2791,7 @@ _5mlT_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(5000, False, True, False, Liquid.ETHANOL, False, True)] = \
 _5mlT_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 555.0, 50.0: 68.0, 5000.0: 5204.0, 4000.0: 4200.0, 0.0: 0.0, 3000.0: 3180.0, 100.0: 123.5, 2000.0: 2160.0, 10.0: 22.0, 1000.0: 1085.0},
   aspiration_flow_rate=2000.0,
@@ -2814,7 +2814,7 @@ _5mlT_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.GLYCERIN80, True, True)] = \
+mapping[(5000, False, True, False, Liquid.GLYCERIN80, True, True)] = \
 _5mlT_Glycerin80_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 597.0, 50.0: 89.0, 5000.0: 5240.0, 4000.0: 4220.0, 0.0: 0.0, 3000.0: 3203.0, 100.0: 138.0, 2000.0: 2195.0, 1000.0: 1166.0},
   aspiration_flow_rate=1200.0,
@@ -2837,7 +2837,7 @@ _5mlT_Glycerin80_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(5000, False, True, False, Liquid.GLYCERIN80, False, True)] = \
 _5mlT_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 555.0, 50.0: 71.0, 5000.0: 5135.0, 4000.0: 4115.0, 0.0: 0.0, 3000.0: 3127.0, 100.0: 127.0, 2000.0: 2115.0, 10.0: 15.5, 1000.0: 1075.0},
   aspiration_flow_rate=1000.0,
@@ -2860,7 +2860,7 @@ _5mlT_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(5000, False, True, False, Liquid.WATER, True, False)] = \
 _5mlT_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={5000.0: 5030.0, 4000.0: 4040.0, 0.0: 0.0, 3000.0: 3050.0, 100.0: 104.0, 2000.0: 2050.0, 1000.0: 1040.0},
   aspiration_flow_rate=2000.0,
@@ -2883,7 +2883,7 @@ _5mlT_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(5000, False, True, False, Liquid.WATER, True, True)] = \
 _5mlT_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 551.8, 50.0: 66.4, 5000.0: 5180.0, 4000.0: 4165.0, 0.0: 0.0, 3000.0: 3148.0, 100.0: 122.7, 2000.0: 2128.0, 1000.0: 1082.0},
   aspiration_flow_rate=2000.0,
@@ -2906,7 +2906,7 @@ _5mlT_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(5000, False, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(5000, False, True, False, Liquid.WATER, False, True)] = \
 _5mlT_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 547.0, 50.0: 65.5, 5000.0: 5145.0, 4000.0: 4145.0, 0.0: 0.0, 3000.0: 3130.0, 100.0: 120.9, 2000.0: 2125.0, 10.0: 15.1, 1000.0: 1075.0},
   aspiration_flow_rate=2000.0,
@@ -2930,7 +2930,7 @@ _5mlT_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, False, False, Liquid.WATER, True, False)] = \
 HighNeedle_Water_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 527.3, 50.0: 56.8, 0.0: 0.0, 100.0: 110.4, 20.0: 24.7, 1000.0: 1046.5, 200.0: 214.6, 10.0: 13.2},
   aspiration_flow_rate=250.0,
@@ -2953,7 +2953,7 @@ HighNeedle_Water_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, False, False, LiquidClass.WATER, True, True)] = \
+mapping[(1000, False, False, False, Liquid.WATER, True, True)] = \
 HighNeedle_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 527.3, 50.0: 56.8, 0.0: 0.0, 100.0: 110.4, 20.0: 24.7, 1000.0: 1046.5, 200.0: 214.6, 10.0: 13.2},
   aspiration_flow_rate=250.0,
@@ -2976,7 +2976,7 @@ HighNeedle_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, False, False, Liquid.WATER, True, False)] = \
 HighNeedle_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 527.3, 50.0: 56.8, 0.0: 0.0, 100.0: 110.4, 20.0: 24.7, 1000.0: 1046.5, 200.0: 214.6, 10.0: 13.2},
   aspiration_flow_rate=250.0,
@@ -3000,7 +3000,7 @@ HighNeedle_Water_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120
-mapping[(1000, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(1000, False, False, False, Liquid.WATER, False, False)] = \
 HighNeedle_Water_DispenseSurface = HamiltonLiquidClass(
   curve={50.0: 53.1, 0.0: 0.0, 20.0: 22.3, 1000.0: 1000.0, 10.0: 10.8},
   aspiration_flow_rate=250.0,
@@ -3023,7 +3023,7 @@ HighNeedle_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, False, False, LiquidClass.WATER, False, True)] = \
+mapping[(1000, False, False, False, Liquid.WATER, False, True)] = \
 HighNeedle_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={50.0: 53.1, 0.0: 0.0, 20.0: 22.3, 1000.0: 1000.0, 10.0: 10.8},
   aspiration_flow_rate=250.0,
@@ -3046,7 +3046,7 @@ HighNeedle_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(1000, False, False, False, Liquid.WATER, False, False)] = \
 HighNeedle_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={50.0: 53.1, 0.0: 0.0, 20.0: 22.3, 1000.0: 1000.0, 10.0: 10.8},
   aspiration_flow_rate=250.0,
@@ -3084,7 +3084,7 @@ HighNeedle_Water_DispenseSurface_Part = HamiltonLiquidClass(
 #     100                       0.32                   0.54
 #     500                       0.13                  -0.06
 #   1000                       0.11                   0.17
-mapping[(1000, False, True, False, LiquidClass.ACETONITRIL80WATER20, True, False)] = \
+mapping[(1000, False, True, False, Liquid.ACETONITRIL80WATER20, True, False)] = \
 HighVolumeAcetonitril80Water20DispenseJet = HamiltonLiquidClass(
   curve={500.0: 514.5, 50.0: 57.5, 0.0: 0.0, 20.0: 25.0, 100.0: 110.5, 1000.0: 1020.8},
   aspiration_flow_rate=250.0,
@@ -3122,7 +3122,7 @@ HighVolumeAcetonitril80Water20DispenseJet = HamiltonLiquidClass(
 #     200                       0.22                   0.71
 #     500                       0.14                   0.01
 #   1000                       0.17                   0.02
-mapping[(1000, False, True, False, LiquidClass.ACETONITRILE, True, False)] = \
+mapping[(1000, False, True, False, Liquid.ACETONITRILE, True, False)] = \
 HighVolumeAcetonitrilDispenseJet = HamiltonLiquidClass(
   curve={500.0: 526.5, 250.0: 269.0, 50.0: 60.5, 0.0: 0.0, 20.0: 25.5, 100.0: 112.7, 1000.0: 1045.0},
   aspiration_flow_rate=250.0,
@@ -3145,7 +3145,7 @@ HighVolumeAcetonitrilDispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.ACETONITRILE, True, True)] = \
+mapping[(1000, False, True, False, Liquid.ACETONITRILE, True, True)] = \
 HighVolumeAcetonitrilDispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 526.5, 250.0: 269.0, 50.0: 60.5, 0.0: 0.0, 100.0: 112.7, 20.0: 25.5, 1000.0: 1045.0},
   aspiration_flow_rate=250.0,
@@ -3168,7 +3168,7 @@ HighVolumeAcetonitrilDispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.ACETONITRILE, True, False)] = \
+mapping[(1000, False, True, False, Liquid.ACETONITRILE, True, False)] = \
 HighVolumeAcetonitrilDispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 526.5, 250.0: 269.0, 50.0: 60.5, 0.0: 0.0, 100.0: 112.7, 20.0: 25.5, 1000.0: 1045.0},
   aspiration_flow_rate=250.0,
@@ -3207,7 +3207,7 @@ HighVolumeAcetonitrilDispenseJet_Part = HamiltonLiquidClass(
 #     200                       0.18                   0.69
 #     500                       0.23                   0.04
 #   1000                       0.22                   0.05
-mapping[(1000, False, True, False, LiquidClass.ACETONITRILE, False, False)] = \
+mapping[(1000, False, True, False, Liquid.ACETONITRILE, False, False)] = \
 HighVolumeAcetonitrilDispenseSurface = HamiltonLiquidClass(
   curve={500.0: 525.4, 250.0: 267.0, 50.0: 57.6, 0.0: 0.0, 20.0: 23.8, 100.0: 111.2, 10.0: 12.1, 1000.0: 1048.8},
   aspiration_flow_rate=250.0,
@@ -3230,7 +3230,7 @@ HighVolumeAcetonitrilDispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.ACETONITRILE, False, True)] = \
+mapping[(1000, False, True, False, Liquid.ACETONITRILE, False, True)] = \
 HighVolumeAcetonitrilDispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 525.4, 250.0: 267.0, 50.0: 57.6, 0.0: 0.0, 100.0: 111.2, 20.0: 23.8, 1000.0: 1048.8, 10.0: 12.1},
   aspiration_flow_rate=250.0,
@@ -3253,7 +3253,7 @@ HighVolumeAcetonitrilDispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.ACETONITRILE, False, False)] = \
+mapping[(1000, False, True, False, Liquid.ACETONITRILE, False, False)] = \
 HighVolumeAcetonitrilDispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 525.4, 250.0: 267.0, 50.0: 57.6, 0.0: 0.0, 100.0: 111.2, 20.0: 23.8, 1000.0: 1048.8},
   aspiration_flow_rate=250.0,
@@ -3279,7 +3279,7 @@ HighVolumeAcetonitrilDispenseSurface_Part = HamiltonLiquidClass(
 # -  Submerge depth: Aspiration 2.0mm
 #    (bei Schaumbildung durch mischen/vorbenetzen evtl.5mm, LLD-Erkennung)
 # -  Mischen 3-5 x 950µl, mix position 0.5mm, je nach Volumen im Tube
-mapping[(1000, False, True, False, LiquidClass.BLOOD, True, False)] = \
+mapping[(1000, False, True, False, Liquid.BLOOD, True, False)] = \
 HighVolumeBloodDispenseJet = HamiltonLiquidClass(
   curve={500.0: 536.3, 250.0: 275.6, 50.0: 59.8, 0.0: 0.0, 20.0: 26.2, 100.0: 115.3, 10.0: 12.2, 1000.0: 1061.6},
   aspiration_flow_rate=250.0,
@@ -3319,7 +3319,7 @@ HighVolumeBloodDispenseJet = HamiltonLiquidClass(
 #     100                       0.23                   0.93
 #     200                       0.15                   0.41
 #
-mapping[(1000, False, True, False, LiquidClass.BRAINHOMOGENATE, True, False)] = \
+mapping[(1000, False, True, False, Liquid.BRAINHOMOGENATE, True, False)] = \
 HighVolumeBrainHomogenateDispenseJet = HamiltonLiquidClass(
   curve={50.0: 57.9, 0.0: 0.0, 20.0: 25.3, 100.0: 111.3, 10.0: 14.2, 200.0: 214.5, 1000.0: 1038.6},
   aspiration_flow_rate=100.0,
@@ -3358,7 +3358,7 @@ HighVolumeBrainHomogenateDispenseJet = HamiltonLiquidClass(
 #
 #
 #
-mapping[(1000, False, True, False, LiquidClass.CHLOROFORM, True, False)] = \
+mapping[(1000, False, True, False, Liquid.CHLOROFORM, True, False)] = \
 HighVolumeChloroformDispenseJet = HamiltonLiquidClass(
   curve={500.0: 520.5, 250.0: 269.0, 50.0: 62.9, 0.0: 0.0, 100.0: 116.3, 1000.0: 1030.0},
   aspiration_flow_rate=250.0,
@@ -3398,7 +3398,7 @@ HighVolumeChloroformDispenseJet = HamiltonLiquidClass(
 #     100  (  9 Aliquots)          0.25                  -4.81
 #
 #
-mapping[(1000, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = \
 HighVolumeDMSOAliquotJet = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 0.0: 0.0, 30.0: 30.0, 20.0: 20.0, 100.0: 100.0, 10.0: 10.0, 750.0: 750.0, 1000.0: 1000.0},
   aspiration_flow_rate=250.0,
@@ -3421,7 +3421,7 @@ HighVolumeDMSOAliquotJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(1000, True, True, True, Liquid.DMSO, True, True)] = \
 HighVolumeFilter_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 508.2, 0.0: 0.0, 20.0: 21.7, 100.0: 101.7, 1000.0: 1017.0},
   aspiration_flow_rate=250.0,
@@ -3444,7 +3444,7 @@ HighVolumeFilter_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(1000, True, True, True, Liquid.DMSO, False, True)] = \
 HighVolumeFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 512.5, 0.0: 0.0, 100.0: 105.8, 10.0: 12.7, 1000.0: 1024.5},
   aspiration_flow_rate=250.0,
@@ -3467,7 +3467,7 @@ HighVolumeFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidCla
 )
 
 
-mapping[(1000, True, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(1000, True, True, True, Liquid.WATER, True, True)] = \
 HighVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 524.0, 0.0: 0.0, 20.0: 24.0, 100.0: 109.2, 1000.0: 1040.0},
   aspiration_flow_rate=250.0,
@@ -3490,7 +3490,7 @@ HighVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(1000, True, True, True, Liquid.WATER, False, True)] = \
 HighVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 522.0, 0.0: 0.0, 100.0: 108.3, 1000.0: 1034.0, 10.0: 12.5},
   aspiration_flow_rate=250.0,
@@ -3530,7 +3530,7 @@ HighVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidCl
 #     100  (  9 Aliquots)          0.25                  -4.81
 #
 #
-mapping[(1000, False, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(1000, False, True, True, Liquid.DMSO, True, False)] = \
 HighVolumeFilter_DMSO_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0, 1000.0: 1000.0, 750.0: 750.0, 10.0: 10.0},
   aspiration_flow_rate=250.0,
@@ -3554,7 +3554,7 @@ HighVolumeFilter_DMSO_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(1000, False, True, True, Liquid.DMSO, True, False)] = \
 HighVolumeFilter_DMSO_DispenseJet = HamiltonLiquidClass(
   curve={5.0: 5.1, 500.0: 511.2, 250.0: 256.2, 50.0: 52.2, 0.0: 0.0, 20.0: 21.3, 100.0: 103.4, 10.0: 10.7, 1000.0: 1021.0},
   aspiration_flow_rate=250.0,
@@ -3577,7 +3577,7 @@ HighVolumeFilter_DMSO_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(1000, False, True, True, Liquid.DMSO, True, True)] = \
 HighVolumeFilter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 511.2, 5.0: 5.1, 250.0: 256.2, 50.0: 52.2, 0.0: 0.0, 100.0: 103.4, 20.0: 21.3, 1000.0: 1021.0, 10.0: 10.7},
   aspiration_flow_rate=250.0,
@@ -3600,7 +3600,7 @@ HighVolumeFilter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(1000, False, True, True, Liquid.DMSO, True, False)] = \
 HighVolumeFilter_DMSO_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 517.2, 0.0: 0.0, 100.0: 109.5, 20.0: 27.0, 1000.0: 1027.0},
   aspiration_flow_rate=250.0,
@@ -3624,7 +3624,7 @@ HighVolumeFilter_DMSO_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120
-mapping[(1000, False, True, True, LiquidClass.DMSO, False, False)] = \
+mapping[(1000, False, True, True, Liquid.DMSO, False, False)] = \
 HighVolumeFilter_DMSO_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 514.3, 250.0: 259.0, 50.0: 54.4, 0.0: 0.0, 20.0: 22.8, 100.0: 105.8, 10.0: 12.1, 1000.0: 1024.5},
   aspiration_flow_rate=250.0,
@@ -3647,7 +3647,7 @@ HighVolumeFilter_DMSO_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(1000, False, True, True, Liquid.DMSO, False, True)] = \
 HighVolumeFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 514.3, 250.0: 259.0, 50.0: 54.4, 0.0: 0.0, 100.0: 105.8, 20.0: 22.8, 1000.0: 1024.5, 10.0: 12.1},
   aspiration_flow_rate=250.0,
@@ -3671,7 +3671,7 @@ HighVolumeFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 #
-mapping[(1000, False, True, True, LiquidClass.DMSO, False, False)] = \
+mapping[(1000, False, True, True, Liquid.DMSO, False, False)] = \
 HighVolumeFilter_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 514.3, 250.0: 259.0, 50.0: 54.4, 0.0: 0.0, 100.0: 105.8, 20.0: 22.8, 1000.0: 1024.5, 10.0: 12.1},
   aspiration_flow_rate=250.0,
@@ -3695,7 +3695,7 @@ HighVolumeFilter_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250, Stop back volume = 0
-mapping[(1000, False, True, True, LiquidClass.ETHANOL, True, False)] = \
+mapping[(1000, False, True, True, Liquid.ETHANOL, True, False)] = \
 HighVolumeFilter_EtOH_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 534.8, 250.0: 273.0, 50.0: 62.9, 0.0: 0.0, 20.0: 27.8, 100.0: 116.3, 10.0: 15.8, 1000.0: 1053.9},
   aspiration_flow_rate=250.0,
@@ -3718,7 +3718,7 @@ HighVolumeFilter_EtOH_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.ETHANOL, True, True)] = \
+mapping[(1000, False, True, True, Liquid.ETHANOL, True, True)] = \
 HighVolumeFilter_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 534.8, 250.0: 273.0, 50.0: 62.9, 0.0: 0.0, 100.0: 116.3, 20.0: 27.8, 1000.0: 1053.9, 10.0: 15.8},
   aspiration_flow_rate=250.0,
@@ -3741,7 +3741,7 @@ HighVolumeFilter_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.ETHANOL, True, False)] = \
+mapping[(1000, False, True, True, Liquid.ETHANOL, True, False)] = \
 HighVolumeFilter_EtOH_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 534.8, 250.0: 273.0, 50.0: 62.9, 0.0: 0.0, 100.0: 116.3, 20.0: 27.8, 1000.0: 1053.9},
   aspiration_flow_rate=250.0,
@@ -3765,7 +3765,7 @@ HighVolumeFilter_EtOH_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120
-mapping[(1000, False, True, True, LiquidClass.ETHANOL, False, False)] = \
+mapping[(1000, False, True, True, Liquid.ETHANOL, False, False)] = \
 HighVolumeFilter_EtOH_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 528.4, 250.0: 269.2, 50.0: 61.2, 0.0: 0.0, 20.0: 27.6, 100.0: 114.0, 10.0: 15.7, 1000.0: 1044.3},
   aspiration_flow_rate=250.0,
@@ -3788,7 +3788,7 @@ HighVolumeFilter_EtOH_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.ETHANOL, False, True)] = \
+mapping[(1000, False, True, True, Liquid.ETHANOL, False, True)] = \
 HighVolumeFilter_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 528.4, 250.0: 269.2, 50.0: 61.2, 0.0: 0.0, 100.0: 114.0, 20.0: 27.6, 1000.0: 1044.3, 10.0: 15.7},
   aspiration_flow_rate=250.0,
@@ -3811,7 +3811,7 @@ HighVolumeFilter_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.ETHANOL, False, False)] = \
+mapping[(1000, False, True, True, Liquid.ETHANOL, False, False)] = \
 HighVolumeFilter_EtOH_DispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 528.4, 250.0: 269.2, 50.0: 61.2, 0.0: 0.0, 100.0: 114.0, 20.0: 27.6, 1000.0: 1044.3, 10.0: 15.7},
   aspiration_flow_rate=250.0,
@@ -3835,7 +3835,7 @@ HighVolumeFilter_EtOH_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 200
-mapping[(1000, False, True, True, LiquidClass.GLYCERIN80, True, False)] = \
+mapping[(1000, False, True, True, Liquid.GLYCERIN80, True, False)] = \
 HighVolumeFilter_Glycerin80_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 537.8, 250.0: 277.0, 50.0: 63.3, 0.0: 0.0, 20.0: 28.0, 100.0: 118.8, 10.0: 15.2, 1000.0: 1060.0},
   aspiration_flow_rate=200.0,
@@ -3859,7 +3859,7 @@ HighVolumeFilter_Glycerin80_DispenseJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 200
-mapping[(1000, False, True, True, LiquidClass.GLYCERIN80, True, True)] = \
+mapping[(1000, False, True, True, Liquid.GLYCERIN80, True, True)] = \
 HighVolumeFilter_Glycerin80_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 537.8, 250.0: 277.0, 50.0: 63.3, 0.0: 0.0, 100.0: 118.8, 20.0: 28.0, 1000.0: 1060.0, 10.0: 15.2},
   aspiration_flow_rate=200.0,
@@ -3883,7 +3883,7 @@ HighVolumeFilter_Glycerin80_DispenseJet_Empty = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120
-mapping[(1000, False, True, True, LiquidClass.GLYCERIN80, False, False)] = \
+mapping[(1000, False, True, True, Liquid.GLYCERIN80, False, False)] = \
 HighVolumeFilter_Glycerin80_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 513.5, 250.0: 257.2, 50.0: 55.0, 0.0: 0.0, 20.0: 22.7, 100.0: 105.5, 10.0: 12.2, 1000.0: 1027.2},
   aspiration_flow_rate=150.0,
@@ -3906,7 +3906,7 @@ HighVolumeFilter_Glycerin80_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(1000, False, True, True, Liquid.GLYCERIN80, False, True)] = \
 HighVolumeFilter_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 513.5, 250.0: 257.2, 50.0: 55.0, 0.0: 0.0, 100.0: 105.5, 20.0: 22.7, 1000.0: 1027.2, 10.0: 12.2},
   aspiration_flow_rate=150.0,
@@ -3929,7 +3929,7 @@ HighVolumeFilter_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.GLYCERIN80, False, False)] = \
+mapping[(1000, False, True, True, Liquid.GLYCERIN80, False, False)] = \
 HighVolumeFilter_Glycerin80_DispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 513.5, 250.0: 257.2, 50.0: 55.0, 0.0: 0.0, 100.0: 105.5, 20.0: 22.7, 1000.0: 1027.2, 10.0: 12.2},
   aspiration_flow_rate=150.0,
@@ -3953,7 +3953,7 @@ HighVolumeFilter_Glycerin80_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, True, LiquidClass.SERUM, True, False)] = \
+mapping[(1000, False, True, True, Liquid.SERUM, True, False)] = \
 HighVolumeFilter_Serum_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0, 1000.0: 1000.0, 750.0: 750.0, 10.0: 10.0},
   aspiration_flow_rate=250.0,
@@ -3977,7 +3977,7 @@ HighVolumeFilter_Serum_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, True, LiquidClass.SERUM, True, False)] = \
+mapping[(1000, False, True, True, Liquid.SERUM, True, False)] = \
 HighVolumeFilter_Serum_AliquotJet = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 0.0: 0.0, 30.0: 30.0, 20.0: 20.0, 100.0: 100.0, 10.0: 10.0, 750.0: 750.0, 1000.0: 1000.0},
   aspiration_flow_rate=250.0,
@@ -4001,7 +4001,7 @@ HighVolumeFilter_Serum_AliquotJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250, Settling time = 0
-mapping[(1000, False, True, True, LiquidClass.SERUM, True, False)] = \
+mapping[(1000, False, True, True, Liquid.SERUM, True, False)] = \
 HighVolumeFilter_Serum_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 525.3, 250.0: 266.6, 50.0: 57.9, 0.0: 0.0, 20.0: 24.2, 100.0: 111.3, 10.0: 12.2, 1000.0: 1038.6},
   aspiration_flow_rate=250.0,
@@ -4024,7 +4024,7 @@ HighVolumeFilter_Serum_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.SERUM, True, True)] = \
+mapping[(1000, False, True, True, Liquid.SERUM, True, True)] = \
 HighVolumeFilter_Serum_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 525.3, 250.0: 266.6, 50.0: 57.9, 0.0: 0.0, 100.0: 111.3, 20.0: 24.2, 1000.0: 1038.6, 10.0: 12.2},
   aspiration_flow_rate=250.0,
@@ -4047,7 +4047,7 @@ HighVolumeFilter_Serum_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.SERUM, True, False)] = \
+mapping[(1000, False, True, True, Liquid.SERUM, True, False)] = \
 HighVolumeFilter_Serum_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 525.3, 0.0: 0.0, 100.0: 111.3, 20.0: 27.3, 1000.0: 1046.6},
   aspiration_flow_rate=250.0,
@@ -4071,7 +4071,7 @@ HighVolumeFilter_Serum_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120
-mapping[(1000, False, True, True, LiquidClass.SERUM, False, False)] = \
+mapping[(1000, False, True, True, Liquid.SERUM, False, False)] = \
 HighVolumeFilter_Serum_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 517.5, 250.0: 261.9, 50.0: 55.9, 0.0: 0.0, 20.0: 23.2, 100.0: 108.2, 10.0: 11.8, 1000.0: 1026.7},
   aspiration_flow_rate=250.0,
@@ -4094,7 +4094,7 @@ HighVolumeFilter_Serum_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.SERUM, False, True)] = \
+mapping[(1000, False, True, True, Liquid.SERUM, False, True)] = \
 HighVolumeFilter_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 517.5, 250.0: 261.9, 50.0: 55.9, 0.0: 0.0, 100.0: 108.2, 20.0: 23.2, 1000.0: 1026.7, 10.0: 11.8},
   aspiration_flow_rate=250.0,
@@ -4117,7 +4117,7 @@ HighVolumeFilter_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.SERUM, False, False)] = \
+mapping[(1000, False, True, True, Liquid.SERUM, False, False)] = \
 HighVolumeFilter_Serum_DispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 523.5, 0.0: 0.0, 100.0: 111.2, 20.0: 23.2, 1000.0: 1038.7, 10.0: 11.8},
   aspiration_flow_rate=250.0,
@@ -4141,7 +4141,7 @@ HighVolumeFilter_Serum_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, True, True, Liquid.WATER, True, False)] = \
 HighVolumeFilter_Water_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0, 1000.0: 1000.0, 750.0: 750.0, 10.0: 10.0},
   aspiration_flow_rate=250.0,
@@ -4165,7 +4165,7 @@ HighVolumeFilter_Water_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, True, True, Liquid.WATER, True, False)] = \
 HighVolumeFilter_Water_AliquotJet = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 0.0: 0.0, 30.0: 30.0, 20.0: 20.0, 100.0: 100.0, 10.0: 10.0, 750.0: 750.0, 1000.0: 1000.0},
   aspiration_flow_rate=250.0,
@@ -4189,7 +4189,7 @@ HighVolumeFilter_Water_AliquotJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, True, True, Liquid.WATER, True, False)] = \
 HighVolumeFilter_Water_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 521.7, 50.0: 57.2, 0.0: 0.0, 20.0: 24.6, 100.0: 109.6, 10.0: 13.3, 200.0: 212.9, 1000.0: 1034.0},
   aspiration_flow_rate=250.0,
@@ -4212,7 +4212,7 @@ HighVolumeFilter_Water_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(1000, False, True, True, Liquid.WATER, True, True)] = \
 HighVolumeFilter_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 521.7, 50.0: 57.2, 0.0: 0.0, 100.0: 109.6, 20.0: 24.6, 1000.0: 1034.0, 200.0: 212.9, 10.0: 13.3},
   aspiration_flow_rate=250.0,
@@ -4235,7 +4235,7 @@ HighVolumeFilter_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, True, True, Liquid.WATER, True, False)] = \
 HighVolumeFilter_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 521.7, 50.0: 57.2, 0.0: 0.0, 100.0: 109.6, 20.0: 27.0, 1000.0: 1034.0, 200.0: 212.9},
   aspiration_flow_rate=250.0,
@@ -4259,7 +4259,7 @@ HighVolumeFilter_Water_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120, Clot retract hight = 0
-mapping[(1000, False, True, True, LiquidClass.WATER, False, False)] = \
+mapping[(1000, False, True, True, Liquid.WATER, False, False)] = \
 HighVolumeFilter_Water_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 518.3, 50.0: 56.3, 0.0: 0.0, 20.0: 23.9, 100.0: 108.3, 10.0: 12.5, 200.0: 211.0, 1000.0: 1028.5},
   aspiration_flow_rate=250.0,
@@ -4282,7 +4282,7 @@ HighVolumeFilter_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(1000, False, True, True, Liquid.WATER, False, True)] = \
 HighVolumeFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 518.3, 50.0: 56.3, 0.0: 0.0, 20.0: 23.9, 100.0: 108.3, 10.0: 12.5, 200.0: 211.0, 1000.0: 1028.5},
   aspiration_flow_rate=250.0,
@@ -4305,7 +4305,7 @@ HighVolumeFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, True, LiquidClass.WATER, False, False)] = \
+mapping[(1000, False, True, True, Liquid.WATER, False, False)] = \
 HighVolumeFilter_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 518.3, 50.0: 56.3, 0.0: 0.0, 100.0: 108.3, 20.0: 23.9, 1000.0: 1028.5, 200.0: 211.0, 10.0: 12.7},
   aspiration_flow_rate=250.0,
@@ -4348,7 +4348,7 @@ HighVolumeFilter_Water_DispenseSurface_Part = HamiltonLiquidClass(
 #     500                       0.49                 - 0.17
 #   1000                       0.55                   0.712
 #
-mapping[(1000, False, True, False, LiquidClass.METHANOL, True, False)] = \
+mapping[(1000, False, True, False, Liquid.METHANOL, True, False)] = \
 HighVolumeMeOHDispenseJet = HamiltonLiquidClass(
   curve={500.0: 520.5, 250.0: 269.0, 50.0: 62.9, 0.0: 0.0, 100.0: 116.3, 1000.0: 1030.0},
   aspiration_flow_rate=250.0,
@@ -4393,7 +4393,7 @@ HighVolumeMeOHDispenseJet = HamiltonLiquidClass(
 #     200                       0.48                   0.18
 #     500                       0.17                   0.22
 #   1000                       0.75                   0.29
-mapping[(1000, False, True, False, LiquidClass.METHANOL, False, False)] = \
+mapping[(1000, False, True, False, Liquid.METHANOL, False, False)] = \
 HighVolumeMeOHDispenseSurface = HamiltonLiquidClass(
   curve={500.0: 518.0, 50.0: 61.3, 0.0: 0.0, 20.0: 29.3, 100.0: 111.0, 10.0: 19.3, 200.0: 215.0, 1000.0: 1030.0},
   aspiration_flow_rate=250.0,
@@ -4434,7 +4434,7 @@ HighVolumeMeOHDispenseSurface = HamiltonLiquidClass(
 #     200                       0.14                   0.06
 #     500                       0.12                 - 0.07
 #   1000                       0.16                   0.08
-mapping[(1000, False, True, False, LiquidClass.METHANOL70WATER030, True, False)] = \
+mapping[(1000, False, True, False, Liquid.METHANOL70WATER030, True, False)] = \
 HighVolumeMeOHH2ODispenseJet = HamiltonLiquidClass(
   curve={500.0: 528.5, 250.0: 269.0, 50.0: 60.5, 0.0: 0.0, 100.0: 114.3, 1000.0: 1050.0},
   aspiration_flow_rate=250.0,
@@ -4466,14 +4466,14 @@ HighVolumeMeOHH2ODispenseJet = HamiltonLiquidClass(
 #
 # Typical performance data under laboratory conditions:
 #
-# (Liquidclass adapting with parameters like DMSO, correctioncurve like Glycerin80%)
+# (Liquid adapting with parameters like DMSO, correctioncurve like Glycerin80%)
 # tested two volumes
 #
 # Volume µl            Precision %        Trueness %
 #       20                       2.85                   2.92
 #     200                       0.14                   0.59
 #
-mapping[(1000, False, True, False, LiquidClass.OCTANOL, True, False)] = \
+mapping[(1000, False, True, False, Liquid.OCTANOL, True, False)] = \
 HighVolumeOctanol100DispenseJet = HamiltonLiquidClass(
   curve={500.0: 537.8, 250.0: 277.0, 50.0: 63.3, 0.0: 0.0, 20.0: 28.0, 100.0: 118.8, 10.0: 15.2, 1000.0: 1060.0},
   aspiration_flow_rate=250.0,
@@ -4513,7 +4513,7 @@ HighVolumeOctanol100DispenseJet = HamiltonLiquidClass(
 #     200                       0.30                   1.30
 #     500                       0.31                   0.01
 #   1000                       0.33                   0.01
-mapping[(1000, False, True, False, LiquidClass.OCTANOL, False, False)] = \
+mapping[(1000, False, True, False, Liquid.OCTANOL, False, False)] = \
 HighVolumeOctanol100DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 531.3, 250.0: 265.0, 50.0: 54.4, 0.0: 0.0, 20.0: 23.3, 100.0: 108.8, 10.0: 12.1, 1000.0: 1058.0},
   aspiration_flow_rate=250.0,
@@ -4536,7 +4536,7 @@ HighVolumeOctanol100DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(1000, True, True, False, Liquid.DMSO, True, False)] = \
 HighVolume_96COREHead1000ul_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={500.0: 524.0, 0.0: 0.0, 100.0: 107.2, 20.0: 24.0, 1000.0: 1025.0},
   aspiration_flow_rate=250.0,
@@ -4559,7 +4559,7 @@ HighVolume_96COREHead1000ul_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(1000, True, True, False, Liquid.DMSO, True, True)] = \
 HighVolume_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 508.2, 0.0: 0.0, 100.0: 101.7, 20.0: 21.7, 1000.0: 1017.0},
   aspiration_flow_rate=250.0,
@@ -4582,7 +4582,7 @@ HighVolume_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(1000, True, True, False, Liquid.DMSO, False, True)] = \
 HighVolume_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 512.5, 0.0: 0.0, 100.0: 105.8, 1000.0: 1024.5, 10.0: 12.7},
   aspiration_flow_rate=250.0,
@@ -4606,7 +4606,7 @@ HighVolume_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 # to prevent drop's, mix 2x with e.g. 500ul
-mapping[(1000, True, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(1000, True, True, False, Liquid.ETHANOL, True, False)] = \
 HighVolume_96COREHead1000ul_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 500.0: 500.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0, 1000.0: 1000.0},
   aspiration_flow_rate=250.0,
@@ -4629,7 +4629,7 @@ HighVolume_96COREHead1000ul_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(1000, True, True, False, Liquid.ETHANOL, True, True)] = \
 HighVolume_96COREHead1000ul_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 516.5, 0.0: 0.0, 100.0: 108.3, 20.0: 24.0, 1000.0: 1027.0},
   aspiration_flow_rate=250.0,
@@ -4653,7 +4653,7 @@ HighVolume_96COREHead1000ul_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 
 
 # to prevent drop's, mix 2x with e.g. 500ul
-mapping[(1000, True, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(1000, True, True, False, Liquid.ETHANOL, False, True)] = \
 HighVolume_96COREHead1000ul_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 516.5, 0.0: 0.0, 100.0: 107.0, 1000.0: 1027.0, 10.0: 14.0},
   aspiration_flow_rate=250.0,
@@ -4676,7 +4676,7 @@ HighVolume_96COREHead1000ul_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(1000, True, True, False, Liquid.GLYCERIN80, False, True)] = \
 HighVolume_96COREHead1000ul_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 522.0, 0.0: 0.0, 100.0: 115.3, 1000.0: 1034.0, 10.0: 12.5},
   aspiration_flow_rate=150.0,
@@ -4699,7 +4699,7 @@ HighVolume_96COREHead1000ul_Glycerin80_DispenseSurface_Empty = HamiltonLiquidCla
 )
 
 
-mapping[(1000, True, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(1000, True, True, False, Liquid.WATER, True, False)] = \
 HighVolume_96COREHead1000ul_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={500.0: 524.0, 0.0: 0.0, 100.0: 107.2, 20.0: 24.0, 1000.0: 1025.0},
   aspiration_flow_rate=250.0,
@@ -4722,7 +4722,7 @@ HighVolume_96COREHead1000ul_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(1000, True, True, False, Liquid.WATER, True, True)] = \
 HighVolume_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 524.0, 0.0: 0.0, 100.0: 107.2, 20.0: 24.0, 1000.0: 1025.0},
   aspiration_flow_rate=250.0,
@@ -4745,7 +4745,7 @@ HighVolume_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(1000, True, True, False, Liquid.WATER, False, True)] = \
 HighVolume_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 522.0, 0.0: 0.0, 100.0: 108.3, 1000.0: 1034.0, 10.0: 12.5},
   aspiration_flow_rate=250.0,
@@ -4769,7 +4769,7 @@ HighVolume_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 # Liquid class for wash high volume tips with CO-RE 96 Head in CO-RE 96 Head Washer.
-mapping[(1000, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(1000, True, True, False, Liquid.WATER, False, False)] = \
 HighVolume_Core96Washer_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 520.0, 50.0: 56.3, 0.0: 0.0, 100.0: 110.0, 20.0: 23.9, 1000.0: 1050.0, 200.0: 212.0, 10.0: 12.5},
   aspiration_flow_rate=250.0,
@@ -4809,7 +4809,7 @@ HighVolume_Core96Washer_DispenseSurface = HamiltonLiquidClass(
 #     100  (  9 Aliquots)          0.25                  -4.81
 #
 #
-mapping[(1000, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = \
 HighVolume_DMSO_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0, 1000.0: 1000.0, 750.0: 750.0, 10.0: 10.0},
   aspiration_flow_rate=250.0,
@@ -4833,7 +4833,7 @@ HighVolume_DMSO_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = \
 HighVolume_DMSO_DispenseJet = HamiltonLiquidClass(
   curve={5.0: 5.1, 500.0: 511.2, 250.0: 256.2, 50.0: 52.2, 0.0: 0.0, 20.0: 21.3, 100.0: 103.4, 10.0: 10.7, 1000.0: 1021.0},
   aspiration_flow_rate=250.0,
@@ -4856,7 +4856,7 @@ HighVolume_DMSO_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(1000, False, True, False, Liquid.DMSO, True, True)] = \
 HighVolume_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 511.2, 5.0: 5.1, 250.0: 256.2, 50.0: 52.2, 0.0: 0.0, 100.0: 103.4, 20.0: 21.3, 1000.0: 1021.0, 10.0: 10.7},
   aspiration_flow_rate=250.0,
@@ -4879,7 +4879,7 @@ HighVolume_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = \
 HighVolume_DMSO_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 520.2, 0.0: 0.0, 100.0: 112.0, 20.0: 27.0, 1000.0: 1031.0},
   aspiration_flow_rate=250.0,
@@ -4903,7 +4903,7 @@ HighVolume_DMSO_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120
-mapping[(1000, False, True, False, LiquidClass.DMSO, False, False)] = \
+mapping[(1000, False, True, False, Liquid.DMSO, False, False)] = \
 HighVolume_DMSO_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 514.3, 250.0: 259.0, 50.0: 54.4, 0.0: 0.0, 20.0: 22.8, 100.0: 105.8, 10.0: 12.1, 1000.0: 1024.5},
   aspiration_flow_rate=250.0,
@@ -4926,7 +4926,7 @@ HighVolume_DMSO_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(1000, False, True, False, Liquid.DMSO, False, True)] = \
 HighVolume_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 514.3, 250.0: 259.0, 50.0: 54.4, 0.0: 0.0, 100.0: 105.8, 20.0: 22.8, 1000.0: 1024.5, 10.0: 12.1},
   aspiration_flow_rate=250.0,
@@ -4949,7 +4949,7 @@ HighVolume_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.DMSO, False, False)] = \
+mapping[(1000, False, True, False, Liquid.DMSO, False, False)] = \
 HighVolume_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 514.3, 250.0: 259.0, 50.0: 54.4, 0.0: 0.0, 100.0: 105.8, 20.0: 22.8, 1000.0: 1024.5, 10.0: 12.4},
   aspiration_flow_rate=250.0,
@@ -4973,7 +4973,7 @@ HighVolume_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set Stop back volume to 0
-mapping[(1000, False, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(1000, False, True, False, Liquid.ETHANOL, True, False)] = \
 HighVolume_EtOH_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 534.8, 250.0: 273.0, 50.0: 62.9, 0.0: 0.0, 20.0: 27.8, 100.0: 116.3, 10.0: 15.8, 1000.0: 1053.9},
   aspiration_flow_rate=250.0,
@@ -4996,7 +4996,7 @@ HighVolume_EtOH_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(1000, False, True, False, Liquid.ETHANOL, True, True)] = \
 HighVolume_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 534.8, 250.0: 273.0, 50.0: 62.9, 0.0: 0.0, 100.0: 116.3, 20.0: 27.8, 1000.0: 1053.9, 10.0: 15.8},
   aspiration_flow_rate=250.0,
@@ -5019,7 +5019,7 @@ HighVolume_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(1000, False, True, False, Liquid.ETHANOL, True, False)] = \
 HighVolume_EtOH_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 529.0, 50.0: 62.9, 0.0: 0.0, 100.0: 114.5, 20.0: 27.8, 1000.0: 1053.9},
   aspiration_flow_rate=250.0,
@@ -5042,7 +5042,7 @@ HighVolume_EtOH_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.ETHANOL, False, False)] = \
+mapping[(1000, False, True, False, Liquid.ETHANOL, False, False)] = \
 HighVolume_EtOH_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 528.4, 250.0: 269.2, 50.0: 61.2, 0.0: 0.0, 100.0: 114.0, 20.0: 27.6, 1000.0: 1044.3, 10.0: 15.7},
   aspiration_flow_rate=250.0,
@@ -5065,7 +5065,7 @@ HighVolume_EtOH_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(1000, False, True, False, Liquid.ETHANOL, False, True)] = \
 HighVolume_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 528.4, 250.0: 269.2, 50.0: 61.2, 0.0: 0.0, 20.0: 27.6, 100.0: 114.0, 10.0: 15.7, 1000.0: 1044.3},
   aspiration_flow_rate=250.0,
@@ -5088,7 +5088,7 @@ HighVolume_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.ETHANOL, False, False)] = \
+mapping[(1000, False, True, False, Liquid.ETHANOL, False, False)] = \
 HighVolume_EtOH_DispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 528.4, 250.0: 269.2, 50.0: 61.2, 0.0: 0.0, 100.0: 114.0, 20.0: 27.6, 1000.0: 1044.3, 10.0: 14.7},
   aspiration_flow_rate=250.0,
@@ -5112,7 +5112,7 @@ HighVolume_EtOH_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 200
-mapping[(1000, False, True, False, LiquidClass.GLYCERIN80, True, False)] = \
+mapping[(1000, False, True, False, Liquid.GLYCERIN80, True, False)] = \
 HighVolume_Glycerin80_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 537.8, 250.0: 277.0, 50.0: 63.3, 0.0: 0.0, 20.0: 28.0, 100.0: 118.8, 10.0: 15.2, 1000.0: 1060.0},
   aspiration_flow_rate=200.0,
@@ -5135,7 +5135,7 @@ HighVolume_Glycerin80_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.GLYCERIN80, True, True)] = \
+mapping[(1000, False, True, False, Liquid.GLYCERIN80, True, True)] = \
 HighVolume_Glycerin80_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 537.8, 250.0: 277.0, 50.0: 63.3, 0.0: 0.0, 100.0: 118.8, 20.0: 28.0, 1000.0: 1060.0, 10.0: 15.2},
   aspiration_flow_rate=200.0,
@@ -5159,7 +5159,7 @@ HighVolume_Glycerin80_DispenseJet_Empty = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120
-mapping[(1000, False, True, False, LiquidClass.GLYCERIN80, False, False)] = \
+mapping[(1000, False, True, False, Liquid.GLYCERIN80, False, False)] = \
 HighVolume_Glycerin80_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 513.5, 250.0: 257.2, 50.0: 55.0, 0.0: 0.0, 20.0: 22.7, 100.0: 105.5, 10.0: 12.2, 1000.0: 1027.2},
   aspiration_flow_rate=150.0,
@@ -5182,7 +5182,7 @@ HighVolume_Glycerin80_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(1000, False, True, False, Liquid.GLYCERIN80, False, True)] = \
 HighVolume_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 513.5, 250.0: 257.2, 50.0: 55.0, 0.0: 0.0, 100.0: 105.5, 20.0: 22.7, 1000.0: 1027.2, 10.0: 12.2},
   aspiration_flow_rate=150.0,
@@ -5205,7 +5205,7 @@ HighVolume_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.GLYCERIN80, False, False)] = \
+mapping[(1000, False, True, False, Liquid.GLYCERIN80, False, False)] = \
 HighVolume_Glycerin80_DispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 513.5, 250.0: 257.2, 50.0: 55.0, 0.0: 0.0, 100.0: 105.5, 20.0: 22.7, 1000.0: 1027.2, 10.0: 12.2},
   aspiration_flow_rate=150.0,
@@ -5229,7 +5229,7 @@ HighVolume_Glycerin80_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, False, LiquidClass.SERUM, True, False)] = \
+mapping[(1000, False, True, False, Liquid.SERUM, True, False)] = \
 HighVolume_Serum_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0, 1000.0: 1000.0, 750.0: 750.0, 10.0: 10.0},
   aspiration_flow_rate=250.0,
@@ -5253,7 +5253,7 @@ HighVolume_Serum_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, False, LiquidClass.SERUM, True, False)] = \
+mapping[(1000, False, True, False, Liquid.SERUM, True, False)] = \
 HighVolume_Serum_AliquotJet = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 0.0: 0.0, 30.0: 30.0, 20.0: 20.0, 100.0: 100.0, 10.0: 10.0, 750.0: 750.0, 1000.0: 1000.0},
   aspiration_flow_rate=250.0,
@@ -5277,7 +5277,7 @@ HighVolume_Serum_AliquotJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250, settling time = 0
-mapping[(1000, False, True, False, LiquidClass.SERUM, True, False)] = \
+mapping[(1000, False, True, False, Liquid.SERUM, True, False)] = \
 HighVolume_Serum_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 525.3, 250.0: 266.6, 50.0: 57.9, 0.0: 0.0, 20.0: 24.2, 100.0: 111.3, 10.0: 12.2, 1000.0: 1038.6},
   aspiration_flow_rate=250.0,
@@ -5300,7 +5300,7 @@ HighVolume_Serum_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.SERUM, True, True)] = \
+mapping[(1000, False, True, False, Liquid.SERUM, True, True)] = \
 HighVolume_Serum_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 525.3, 250.0: 266.6, 50.0: 57.9, 0.0: 0.0, 100.0: 111.3, 20.0: 24.2, 1000.0: 1038.6, 10.0: 12.2},
   aspiration_flow_rate=250.0,
@@ -5323,7 +5323,7 @@ HighVolume_Serum_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.SERUM, True, False)] = \
+mapping[(1000, False, True, False, Liquid.SERUM, True, False)] = \
 HighVolume_Serum_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 525.3, 0.0: 0.0, 100.0: 111.3, 20.0: 27.3, 1000.0: 1046.6},
   aspiration_flow_rate=250.0,
@@ -5347,7 +5347,7 @@ HighVolume_Serum_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120
-mapping[(1000, False, True, False, LiquidClass.SERUM, False, False)] = \
+mapping[(1000, False, True, False, Liquid.SERUM, False, False)] = \
 HighVolume_Serum_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 517.5, 250.0: 261.9, 50.0: 55.9, 0.0: 0.0, 20.0: 23.2, 100.0: 108.2, 10.0: 11.8, 1000.0: 1026.7},
   aspiration_flow_rate=250.0,
@@ -5370,7 +5370,7 @@ HighVolume_Serum_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.SERUM, False, True)] = \
+mapping[(1000, False, True, False, Liquid.SERUM, False, True)] = \
 HighVolume_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 517.5, 250.0: 261.9, 50.0: 55.9, 0.0: 0.0, 100.0: 108.2, 20.0: 23.2, 1000.0: 1026.7, 10.0: 11.8},
   aspiration_flow_rate=250.0,
@@ -5393,7 +5393,7 @@ HighVolume_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.SERUM, False, False)] = \
+mapping[(1000, False, True, False, Liquid.SERUM, False, False)] = \
 HighVolume_Serum_DispenseSurface_Part = HamiltonLiquidClass(
   curve={50.0: 55.9, 0.0: 0.0, 100.0: 108.2, 20.0: 23.2, 1000.0: 1037.7, 10.0: 11.8},
   aspiration_flow_rate=250.0,
@@ -5417,7 +5417,7 @@ HighVolume_Serum_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, True, False, Liquid.WATER, True, False)] = \
 HighVolume_Water_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0, 1000.0: 1000.0, 750.0: 750.0, 10.0: 10.0},
   aspiration_flow_rate=250.0,
@@ -5441,7 +5441,7 @@ HighVolume_Water_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, True, False, Liquid.WATER, True, False)] = \
 HighVolume_Water_AliquotJet = HamiltonLiquidClass(
   curve={500.0: 500.0, 250.0: 250.0, 0.0: 0.0, 30.0: 30.0, 20.0: 20.0, 100.0: 100.0, 10.0: 10.0, 750.0: 750.0, 1000.0: 1000.0},
   aspiration_flow_rate=250.0,
@@ -5465,7 +5465,7 @@ HighVolume_Water_AliquotJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 250
-mapping[(1000, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, True, False, Liquid.WATER, True, False)] = \
 HighVolume_Water_DispenseJet = HamiltonLiquidClass(
   curve={500.0: 521.7, 50.0: 57.2, 0.0: 0.0, 20.0: 24.6, 100.0: 109.6, 10.0: 13.3, 200.0: 212.9, 1000.0: 1034.0},
   aspiration_flow_rate=250.0,
@@ -5488,7 +5488,7 @@ HighVolume_Water_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(1000, False, True, False, Liquid.WATER, True, True)] = \
 HighVolume_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={500.0: 521.7, 50.0: 57.2, 0.0: 0.0, 100.0: 109.6, 20.0: 24.6, 1000.0: 1034.0, 200.0: 212.9, 10.0: 13.3},
   aspiration_flow_rate=250.0,
@@ -5511,7 +5511,7 @@ HighVolume_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(1000, False, True, False, Liquid.WATER, True, False)] = \
 HighVolume_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={500.0: 521.7, 0.0: 0.0, 100.0: 109.6, 20.0: 26.9, 1000.0: 1040.0},
   aspiration_flow_rate=250.0,
@@ -5535,7 +5535,7 @@ HighVolume_Water_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 120, clot retract height = 0
-mapping[(1000, False, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(1000, False, True, False, Liquid.WATER, False, False)] = \
 HighVolume_Water_DispenseSurface = HamiltonLiquidClass(
   curve={500.0: 518.3, 50.0: 56.3, 0.0: 0.0, 20.0: 23.9, 100.0: 108.3, 10.0: 12.5, 200.0: 211.0, 1000.0: 1028.5},
   aspiration_flow_rate=250.0,
@@ -5558,7 +5558,7 @@ HighVolume_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(1000, False, True, False, Liquid.WATER, False, True)] = \
 HighVolume_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={500.0: 518.3, 50.0: 56.3, 0.0: 0.0, 100.0: 108.3, 20.0: 23.9, 1000.0: 1028.5, 200.0: 211.0, 10.0: 12.5},
   aspiration_flow_rate=250.0,
@@ -5581,7 +5581,7 @@ HighVolume_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(1000, False, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(1000, False, True, False, Liquid.WATER, False, False)] = \
 HighVolume_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={500.0: 518.3, 50.0: 56.3, 0.0: 0.0, 100.0: 108.3, 20.0: 23.9, 1000.0: 1036.5, 200.0: 211.0, 10.0: 12.5},
   aspiration_flow_rate=250.0,
@@ -5610,7 +5610,7 @@ HighVolume_Water_DispenseSurface_Part = HamiltonLiquidClass(
 # - fix height from bottom between 0.5-0.7mm
 # - dispense mode jet empty tip
 # - also with higher DNA concentration
-mapping[(10, False, False, False, LiquidClass.DNA_TRIS_EDTA, True, False)] = \
+mapping[(10, False, False, False, Liquid.DNA_TRIS_EDTA, True, False)] = \
 LowNeedleDNADispenseJet = HamiltonLiquidClass(
   curve={5.0: 5.7, 0.5: 1.0, 50.0: 53.0, 0.0: 0.0, 20.0: 22.1, 1.0: 1.5, 10.0: 10.8, 2.0: 2.7},
   aspiration_flow_rate=80.0,
@@ -5638,7 +5638,7 @@ LowNeedleDNADispenseJet = HamiltonLiquidClass(
 # - for Disp. in empty PCR-Plate/on empty Plate from 1µl up
 # - fix height from bottom between 0.5-0.7mm
 # - also with higher DNA concentration
-mapping[(10, False, False, False, LiquidClass.DNA_TRIS_EDTA, False, False)] = \
+mapping[(10, False, False, False, Liquid.DNA_TRIS_EDTA, False, False)] = \
 LowNeedleDNADispenseSurface = HamiltonLiquidClass(
   curve={5.0: 5.7, 0.5: 1.0, 50.0: 53.0, 0.0: 0.0, 20.0: 22.1, 1.0: 1.5, 10.0: 10.8, 2.0: 2.7},
   aspiration_flow_rate=80.0,
@@ -5662,7 +5662,7 @@ LowNeedleDNADispenseSurface = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 60
-mapping[(10, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, False, False, False, Liquid.WATER, False, False)] = \
 LowNeedle_SysFlWater_DispenseSurface = HamiltonLiquidClass(
   curve={35.0: 35.6, 60.0: 62.7, 50.0: 51.3, 40.0: 40.9, 30.0: 30.0, 0.0: 0.0, 31.0: 31.4, 32.0: 32.7},
   aspiration_flow_rate=60.0,
@@ -5685,7 +5685,7 @@ LowNeedle_SysFlWater_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(10, False, False, False, Liquid.WATER, True, False)] = \
 LowNeedle_Water_DispenseJet = HamiltonLiquidClass(
   curve={50.0: 52.7, 30.0: 31.7, 0.0: 0.0, 20.0: 20.5, 10.0: 10.3},
   aspiration_flow_rate=100.0,
@@ -5708,7 +5708,7 @@ LowNeedle_Water_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, False, False, LiquidClass.WATER, True, True)] = \
+mapping[(10, False, False, False, Liquid.WATER, True, True)] = \
 LowNeedle_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={70.0: 70.0, 50.0: 52.7, 30.0: 31.7, 0.0: 0.0, 20.0: 20.5, 10.0: 10.3},
   aspiration_flow_rate=100.0,
@@ -5731,7 +5731,7 @@ LowNeedle_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(10, False, False, False, Liquid.WATER, True, False)] = \
 LowNeedle_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={70.0: 70.0, 50.0: 52.7, 30.0: 31.7, 0.0: 0.0, 20.0: 20.5, 10.0: 10.3},
   aspiration_flow_rate=100.0,
@@ -5755,7 +5755,7 @@ LowNeedle_Water_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 60
-mapping[(10, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, False, False, False, Liquid.WATER, False, False)] = \
 LowNeedle_Water_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 5.0, 0.5: 0.5, 50.0: 50.0, 0.0: 0.0, 20.0: 20.5, 1.0: 1.0, 10.0: 10.0, 2.0: 2.0},
   aspiration_flow_rate=60.0,
@@ -5778,7 +5778,7 @@ LowNeedle_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, False, False, LiquidClass.WATER, False, True)] = \
+mapping[(10, False, False, False, Liquid.WATER, False, True)] = \
 LowNeedle_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.0, 0.5: 0.5, 70.0: 70.0, 50.0: 50.0, 0.0: 0.0, 20.0: 20.5, 1.0: 1.0, 10.0: 10.0, 2.0: 2.0},
   aspiration_flow_rate=60.0,
@@ -5801,7 +5801,7 @@ LowNeedle_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, False, False, False, Liquid.WATER, False, False)] = \
 LowNeedle_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.0, 0.5: 0.5, 70.0: 70.0, 50.0: 50.0, 0.0: 0.0, 20.0: 20.5, 1.0: 1.0, 10.0: 10.0, 2.0: 2.0},
   aspiration_flow_rate=60.0,
@@ -5824,7 +5824,7 @@ LowNeedle_Water_DispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(10, True, True, True, Liquid.DMSO, False, True)] = \
 LowVolumeFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.3, 0.0: 0.0, 1.0: 0.8, 10.0: 10.0},
   aspiration_flow_rate=25.0,
@@ -5847,7 +5847,7 @@ LowVolumeFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClas
 )
 
 
-mapping[(10, True, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(10, True, True, True, Liquid.WATER, False, True)] = \
 LowVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.8, 0.0: 0.0, 1.0: 1.0, 10.0: 10.0},
   aspiration_flow_rate=25.0,
@@ -5870,7 +5870,7 @@ LowVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidCla
 )
 
 
-mapping[(10, True, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(10, True, True, True, Liquid.DMSO, False, True)] = \
 LowVolumeFilter_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.1, 0.0: 0.0, 1.0: 0.8, 10.0: 10.0},
   aspiration_flow_rate=25.0,
@@ -5893,7 +5893,7 @@ LowVolumeFilter_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, True, LiquidClass.DMSO, False, False)] = \
+mapping[(10, True, True, True, Liquid.DMSO, False, False)] = \
 LowVolumeFilter_96COREHead_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.7, 0.0: 0.0, 1.0: 1.5, 10.0: 10.3},
   aspiration_flow_rate=25.0,
@@ -5916,7 +5916,7 @@ LowVolumeFilter_96COREHead_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(10, True, True, True, Liquid.WATER, False, True)] = \
 LowVolumeFilter_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 0.0: 0.0, 1.0: 1.2, 10.0: 10.0},
   aspiration_flow_rate=25.0,
@@ -5939,7 +5939,7 @@ LowVolumeFilter_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, True, LiquidClass.WATER, False, False)] = \
+mapping[(10, True, True, True, Liquid.WATER, False, False)] = \
 LowVolumeFilter_96COREHead_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.8, 0.0: 0.0, 1.0: 1.5, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -5963,7 +5963,7 @@ LowVolumeFilter_96COREHead_Water_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 75
-mapping[(10, False, True, True, LiquidClass.DMSO, False, False)] = \
+mapping[(10, False, True, True, Liquid.DMSO, False, False)] = \
 LowVolumeFilter_DMSO_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.5: 0.8, 15.0: 16.4, 0.0: 0.0, 1.0: 1.4, 2.0: 2.6, 10.0: 11.2},
   aspiration_flow_rate=100.0,
@@ -5986,7 +5986,7 @@ LowVolumeFilter_DMSO_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(10, False, True, True, Liquid.DMSO, False, True)] = \
 LowVolumeFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 10.0, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6009,7 +6009,7 @@ LowVolumeFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, True, LiquidClass.DMSO, False, False)] = \
+mapping[(10, False, True, True, Liquid.DMSO, False, False)] = \
 LowVolumeFilter_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.0: 0.0, 1.0: 1.4, 10.0: 10.0, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6033,7 +6033,7 @@ LowVolumeFilter_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 75
-mapping[(10, False, True, True, LiquidClass.ETHANOL, False, False)] = \
+mapping[(10, False, True, True, Liquid.ETHANOL, False, False)] = \
 LowVolumeFilter_EtOH_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 8.4, 0.5: 1.9, 0.0: 0.0, 1.0: 2.7, 2.0: 4.1, 10.0: 13.0},
   aspiration_flow_rate=100.0,
@@ -6056,7 +6056,7 @@ LowVolumeFilter_EtOH_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, True, LiquidClass.ETHANOL, False, True)] = \
+mapping[(10, False, True, True, Liquid.ETHANOL, False, True)] = \
 LowVolumeFilter_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 6.6, 0.0: 0.0, 1.0: 1.8, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -6079,7 +6079,7 @@ LowVolumeFilter_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, True, LiquidClass.ETHANOL, False, False)] = \
+mapping[(10, False, True, True, Liquid.ETHANOL, False, False)] = \
 LowVolumeFilter_EtOH_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 6.4, 0.0: 0.0, 1.0: 1.8, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -6103,7 +6103,7 @@ LowVolumeFilter_EtOH_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 10
-mapping[(10, False, True, True, LiquidClass.GLYCERIN, False, False)] = \
+mapping[(10, False, True, True, Liquid.GLYCERIN, False, False)] = \
 LowVolumeFilter_Glycerin_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.5, 0.5: 1.4, 15.0: 17.0, 0.0: 0.0, 1.0: 2.0, 2.0: 3.2, 10.0: 11.8},
   aspiration_flow_rate=50.0,
@@ -6126,7 +6126,7 @@ LowVolumeFilter_Glycerin_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, True, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(10, False, True, True, Liquid.GLYCERIN80, False, True)] = \
 LowVolumeFilter_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 6.5, 0.0: 0.0, 1.0: 0.6, 10.0: 10.0},
   aspiration_flow_rate=50.0,
@@ -6150,7 +6150,7 @@ LowVolumeFilter_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 75
-mapping[(10, False, True, True, LiquidClass.WATER, False, False)] = \
+mapping[(10, False, True, True, Liquid.WATER, False, False)] = \
 LowVolumeFilter_Water_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.0, 0.5: 0.8, 15.0: 16.7, 0.0: 0.0, 1.0: 1.4, 2.0: 2.6, 10.0: 11.5},
   aspiration_flow_rate=100.0,
@@ -6173,7 +6173,7 @@ LowVolumeFilter_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(10, False, True, True, Liquid.WATER, False, True)] = \
 LowVolumeFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 6.0, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 10.0, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6196,7 +6196,7 @@ LowVolumeFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, True, LiquidClass.WATER, False, False)] = \
+mapping[(10, False, True, True, Liquid.WATER, False, False)] = \
 LowVolumeFilter_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.0: 0.0, 1.0: 1.2, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -6236,7 +6236,7 @@ LowVolumeFilter_Water_DispenseSurface_Part = HamiltonLiquidClass(
 #      5.0                       1.08                  -1.29
 #    10.0                       0.62                   0.53
 #
-mapping[(10, False, True, False, LiquidClass.PLASMA, False, False)] = \
+mapping[(10, False, True, False, Liquid.PLASMA, False, False)] = \
 LowVolumePlasmaDispenseSurface = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.5, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6259,7 +6259,7 @@ LowVolumePlasmaDispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.PLASMA, False, True)] = \
+mapping[(10, False, True, False, Liquid.PLASMA, False, True)] = \
 LowVolumePlasmaDispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 0.5: 0.2, 0.0: 0.0, 1.0: 0.9, 10.0: 11.3, 2.0: 2.2},
   aspiration_flow_rate=100.0,
@@ -6282,7 +6282,7 @@ LowVolumePlasmaDispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.PLASMA, False, False)] = \
+mapping[(10, False, True, False, Liquid.PLASMA, False, False)] = \
 LowVolumePlasmaDispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.0: 0.0, 1.0: 1.3, 10.0: 11.5},
   aspiration_flow_rate=100.0,
@@ -6322,7 +6322,7 @@ LowVolumePlasmaDispenseSurface_Part = HamiltonLiquidClass(
 #      5.0                       1.08                  -1.29
 #    10.0                       0.62                   0.53
 #
-mapping[(10, False, True, False, LiquidClass.SERUM, False, False)] = \
+mapping[(10, False, True, False, Liquid.SERUM, False, False)] = \
 LowVolumeSerumDispenseSurface = HamiltonLiquidClass(
   curve={5.0: 5.6, 0.5: 0.2, 0.0: 0.0, 1.0: 0.9, 10.0: 11.3, 2.0: 2.2},
   aspiration_flow_rate=100.0,
@@ -6345,7 +6345,7 @@ LowVolumeSerumDispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.SERUM, False, True)] = \
+mapping[(10, False, True, False, Liquid.SERUM, False, True)] = \
 LowVolumeSerumDispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 0.5: 0.2, 0.0: 0.0, 1.0: 0.9, 10.0: 11.3, 2.0: 2.2},
   aspiration_flow_rate=100.0,
@@ -6368,7 +6368,7 @@ LowVolumeSerumDispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.SERUM, False, False)] = \
+mapping[(10, False, True, False, Liquid.SERUM, False, False)] = \
 LowVolumeSerumDispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.0: 0.0, 1.0: 1.3, 10.0: 11.5},
   aspiration_flow_rate=100.0,
@@ -6391,7 +6391,7 @@ LowVolumeSerumDispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(10, True, True, False, Liquid.DMSO, False, True)] = \
 LowVolume_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.3, 0.0: 0.0, 1.0: 0.8, 10.0: 10.6},
   aspiration_flow_rate=25.0,
@@ -6414,7 +6414,7 @@ LowVolume_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(10, True, True, False, Liquid.WATER, False, True)] = \
 LowVolume_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.8, 0.0: 0.0, 1.0: 1.0, 10.0: 11.2},
   aspiration_flow_rate=25.0,
@@ -6437,7 +6437,7 @@ LowVolume_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(10, True, True, False, Liquid.DMSO, False, True)] = \
 LowVolume_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.1, 0.0: 0.0, 1.0: 0.8, 10.0: 10.3},
   aspiration_flow_rate=25.0,
@@ -6460,7 +6460,7 @@ LowVolume_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, False, LiquidClass.DMSO, False, False)] = \
+mapping[(10, True, True, False, Liquid.DMSO, False, False)] = \
 LowVolume_96COREHead_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.0: 0.0, 1.0: 1.5, 10.0: 11.0},
   aspiration_flow_rate=25.0,
@@ -6483,7 +6483,7 @@ LowVolume_96COREHead_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(10, True, True, False, Liquid.WATER, False, True)] = \
 LowVolume_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.8, 0.0: 0.0, 1.0: 1.3, 10.0: 11.1},
   aspiration_flow_rate=25.0,
@@ -6506,7 +6506,7 @@ LowVolume_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, True, True, False, Liquid.WATER, False, False)] = \
 LowVolume_96COREHead_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.7, 0.0: 0.0, 1.0: 1.4, 10.0: 10.8},
   aspiration_flow_rate=25.0,
@@ -6530,7 +6530,7 @@ LowVolume_96COREHead_Water_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # Liquid class for wash low volume tips with CO-RE 96 Head in CO-RE 96 Head Washer.
-mapping[(10, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, True, True, False, Liquid.WATER, False, False)] = \
 LowVolume_Core96Washer_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.0, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 15.0, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6554,7 +6554,7 @@ LowVolume_Core96Washer_DispenseSurface = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 75
-mapping[(10, False, True, False, LiquidClass.DMSO, False, False)] = \
+mapping[(10, False, True, False, Liquid.DMSO, False, False)] = \
 LowVolume_DMSO_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 5.9, 15.0: 16.4, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.2, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6577,7 +6577,7 @@ LowVolume_DMSO_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(10, False, True, False, Liquid.DMSO, False, True)] = \
 LowVolume_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.2, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6600,7 +6600,7 @@ LowVolume_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.DMSO, False, False)] = \
+mapping[(10, False, True, False, Liquid.DMSO, False, False)] = \
 LowVolume_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.0: 0.0, 1.0: 1.4, 10.0: 11.2, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6624,7 +6624,7 @@ LowVolume_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 75
-mapping[(10, False, True, False, LiquidClass.ETHANOL, False, False)] = \
+mapping[(10, False, True, False, Liquid.ETHANOL, False, False)] = \
 LowVolume_EtOH_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 8.4, 0.5: 1.9, 0.0: 0.0, 1.0: 2.7, 10.0: 13.0, 2.0: 4.1},
   aspiration_flow_rate=100.0,
@@ -6647,7 +6647,7 @@ LowVolume_EtOH_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(10, False, True, False, Liquid.ETHANOL, False, True)] = \
 LowVolume_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 7.3, 0.0: 0.0, 1.0: 2.4, 10.0: 13.0},
   aspiration_flow_rate=100.0,
@@ -6670,7 +6670,7 @@ LowVolume_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.ETHANOL, False, False)] = \
+mapping[(10, False, True, False, Liquid.ETHANOL, False, False)] = \
 LowVolume_EtOH_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 7.0, 0.0: 0.0, 1.0: 2.4, 10.0: 13.0},
   aspiration_flow_rate=100.0,
@@ -6694,7 +6694,7 @@ LowVolume_EtOH_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 10
-mapping[(10, False, True, False, LiquidClass.GLYCERIN, False, False)] = \
+mapping[(10, False, True, False, Liquid.GLYCERIN, False, False)] = \
 LowVolume_Glycerin_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.5, 15.0: 17.0, 0.5: 1.4, 0.0: 0.0, 1.0: 2.0, 10.0: 11.8, 2.0: 3.2},
   aspiration_flow_rate=50.0,
@@ -6718,7 +6718,7 @@ LowVolume_Glycerin_DispenseSurface = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 75
-mapping[(10, False, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, False, True, False, Liquid.WATER, False, False)] = \
 LowVolume_Water_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 6.0, 15.0: 16.7, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.5, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6741,7 +6741,7 @@ LowVolume_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, True, True, False, Liquid.WATER, False, False)] = \
 LowVolume_Water_DispenseSurface96Head = HamiltonLiquidClass(
   curve={5.0: 6.0, 0.0: 0.0, 1.0: 1.0, 10.0: 11.5},
   aspiration_flow_rate=25.0,
@@ -6764,7 +6764,7 @@ LowVolume_Water_DispenseSurface96Head = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(10, True, True, False, Liquid.WATER, False, True)] = \
 LowVolume_Water_DispenseSurfaceEmpty96Head = HamiltonLiquidClass(
   curve={5.0: 6.0, 0.0: 0.0, 1.0: 1.0, 10.0: 10.9},
   aspiration_flow_rate=25.0,
@@ -6787,7 +6787,7 @@ LowVolume_Water_DispenseSurfaceEmpty96Head = HamiltonLiquidClass(
 )
 
 
-mapping[(10, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, True, True, False, Liquid.WATER, False, False)] = \
 LowVolume_Water_DispenseSurfacePart96Head = HamiltonLiquidClass(
   curve={5.0: 6.0, 0.0: 0.0, 1.0: 1.0, 10.0: 10.9},
   aspiration_flow_rate=25.0,
@@ -6810,7 +6810,7 @@ LowVolume_Water_DispenseSurfacePart96Head = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(10, False, True, False, Liquid.WATER, False, True)] = \
 LowVolume_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 6.0, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.5, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -6833,7 +6833,7 @@ LowVolume_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(10, False, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(10, False, True, False, Liquid.WATER, False, False)] = \
 LowVolume_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={5.0: 5.9, 0.0: 0.0, 1.0: 1.2, 10.0: 11.5},
   aspiration_flow_rate=100.0,
@@ -6868,7 +6868,7 @@ LowVolume_Water_DispenseSurface_Part = HamiltonLiquidClass(
 # 12 x 20ul =   approximately 19.2 ul
 # 4 x 50 ul =    approximately 48.1 ul
 # 2 x 100 ul =  approximately 95.3 ul
-mapping[(300, True, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(300, True, True, True, Liquid.DMSO, True, False)] = \
 SlimTipFilter_96COREHead1000ul_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0},
   aspiration_flow_rate=200.0,
@@ -6891,7 +6891,7 @@ SlimTipFilter_96COREHead1000ul_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(300, True, True, True, Liquid.DMSO, True, True)] = \
 SlimTipFilter_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 312.3, 50.0: 55.3, 0.0: 0.0, 100.0: 107.7, 20.0: 22.4, 200.0: 210.5},
   aspiration_flow_rate=250.0,
@@ -6914,7 +6914,7 @@ SlimTipFilter_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(300, True, True, True, Liquid.DMSO, False, True)] = \
 SlimTipFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 311.9, 50.0: 54.1, 0.0: 0.0, 100.0: 107.5, 20.0: 22.5, 10.0: 11.1, 200.0: 209.4},
   aspiration_flow_rate=250.0,
@@ -6950,7 +6950,7 @@ SlimTipFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 # 4 x 50 ul =    approximately 48.9 ul
 # 2 x 100 ul =  approximately 97.2 ul
 #
-mapping[(300, True, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(300, True, True, True, Liquid.WATER, True, False)] = \
 SlimTipFilter_96COREHead1000ul_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
   aspiration_flow_rate=200.0,
@@ -6973,7 +6973,7 @@ SlimTipFilter_96COREHead1000ul_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, True, Liquid.WATER, True, True)] = \
 SlimTipFilter_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 317.0, 50.0: 55.8, 0.0: 0.0, 100.0: 109.4, 20.0: 22.7, 200.0: 213.7},
   aspiration_flow_rate=250.0,
@@ -6996,7 +6996,7 @@ SlimTipFilter_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, True, Liquid.WATER, False, True)] = \
 SlimTipFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 318.7, 50.0: 54.9, 0.0: 0.0, 100.0: 110.4, 10.0: 11.7, 200.0: 210.5},
   aspiration_flow_rate=250.0,
@@ -7032,7 +7032,7 @@ SlimTipFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass
 # 4 x 50 ul =    approximately 48.3 ul
 # 2 x 100 ul =  approximately 95.7 ul
 #
-mapping[(300, True, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(300, True, True, True, Liquid.DMSO, True, False)] = \
 SlimTipFilter_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0},
   aspiration_flow_rate=250.0,
@@ -7055,7 +7055,7 @@ SlimTipFilter_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(300, True, True, True, Liquid.DMSO, True, True)] = \
 SlimTipFilter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 309.5, 50.0: 54.4, 0.0: 0.0, 100.0: 106.4, 20.0: 22.1, 200.0: 208.2},
   aspiration_flow_rate=250.0,
@@ -7078,7 +7078,7 @@ SlimTipFilter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(300, True, True, True, Liquid.DMSO, False, True)] = \
 SlimTipFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 309.7, 5.0: 5.6, 50.0: 53.8, 0.0: 0.0, 100.0: 105.4, 20.0: 22.2, 10.0: 11.3, 200.0: 207.5},
   aspiration_flow_rate=250.0,
@@ -7113,7 +7113,7 @@ SlimTipFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 # 12 x 20ul =   approximately 21.3 ul
 # 4 x 50 ul =    approximately 54.3 ul
 # 2 x 100 ul =  approximately 105.2 ul
-mapping[(300, True, True, True, LiquidClass.ETHANOL, True, False)] = \
+mapping[(300, True, True, True, Liquid.ETHANOL, True, False)] = \
 SlimTipFilter_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
   aspiration_flow_rate=250.0,
@@ -7136,7 +7136,7 @@ SlimTipFilter_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.ETHANOL, True, True)] = \
+mapping[(300, True, True, True, Liquid.ETHANOL, True, True)] = \
 SlimTipFilter_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 320.4, 50.0: 57.2, 0.0: 0.0, 100.0: 110.5, 20.0: 24.5, 200.0: 215.0},
   aspiration_flow_rate=250.0,
@@ -7159,7 +7159,7 @@ SlimTipFilter_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.ETHANOL, False, True)] = \
+mapping[(300, True, True, True, Liquid.ETHANOL, False, True)] = \
 SlimTipFilter_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 313.9, 50.0: 55.4, 0.0: 0.0, 100.0: 107.7, 20.0: 23.2, 10.0: 12.4, 200.0: 210.6},
   aspiration_flow_rate=250.0,
@@ -7182,7 +7182,7 @@ SlimTipFilter_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(300, True, True, True, Liquid.GLYCERIN80, False, True)] = \
 SlimTipFilter_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 312.0, 50.0: 55.0, 0.0: 0.0, 100.0: 107.8, 20.0: 22.9, 10.0: 11.8, 200.0: 210.0},
   aspiration_flow_rate=30.0,
@@ -7217,7 +7217,7 @@ SlimTipFilter_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
 # 12 x 20ul =   approximately 19.6 ul
 # 4 x 50 ul =    approximately 49.2 ul
 # 2 x 100 ul =  approximately 97.5 ul
-mapping[(300, True, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(300, True, True, True, Liquid.WATER, True, False)] = \
 SlimTipFilter_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
   aspiration_flow_rate=200.0,
@@ -7240,7 +7240,7 @@ SlimTipFilter_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, True, Liquid.WATER, True, True)] = \
 SlimTipFilter_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 317.2, 50.0: 55.6, 0.0: 0.0, 100.0: 108.6, 20.0: 22.6, 200.0: 212.8},
   aspiration_flow_rate=250.0,
@@ -7263,7 +7263,7 @@ SlimTipFilter_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, True, Liquid.WATER, False, True)] = \
 SlimTipFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 314.1, 5.0: 6.2, 50.0: 54.7, 0.0: 0.0, 100.0: 108.0, 20.0: 22.7, 10.0: 11.9, 200.0: 211.3},
   aspiration_flow_rate=250.0,
@@ -7298,7 +7298,7 @@ SlimTipFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 # 12 x 20ul =   approximately 19.2 ul
 # 4 x 50 ul =    approximately 48.1 ul
 # 2 x 100 ul =  approximately 95.3 ul
-mapping[(300, True, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, False)] = \
 SlimTip_96COREHead1000ul_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0},
   aspiration_flow_rate=200.0,
@@ -7321,7 +7321,7 @@ SlimTip_96COREHead1000ul_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, True)] = \
 SlimTip_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 313.8, 50.0: 55.8, 0.0: 0.0, 100.0: 109.2, 20.0: 23.1, 200.0: 212.7},
   aspiration_flow_rate=250.0,
@@ -7344,7 +7344,7 @@ SlimTip_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, False, True)] = \
 SlimTip_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 312.9, 50.0: 54.1, 0.0: 0.0, 20.0: 22.5, 100.0: 108.8, 200.0: 210.9, 10.0: 11.1},
   aspiration_flow_rate=250.0,
@@ -7379,7 +7379,7 @@ SlimTip_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 # 12 x 20ul =   approximately 21.8 ul
 # 4 x 50 ul =    approximately 53.6 ul
 # 2 x 100 ul =  approximately 105.2 ul
-mapping[(300, True, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(300, True, True, False, Liquid.ETHANOL, True, False)] = \
 SlimTip_96COREHead1000ul_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
   aspiration_flow_rate=250.0,
@@ -7402,7 +7402,7 @@ SlimTip_96COREHead1000ul_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(300, True, True, False, Liquid.ETHANOL, True, True)] = \
 SlimTip_96COREHead1000ul_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 326.2, 50.0: 58.8, 0.0: 0.0, 100.0: 112.7, 20.0: 25.0, 200.0: 218.2},
   aspiration_flow_rate=250.0,
@@ -7425,7 +7425,7 @@ SlimTip_96COREHead1000ul_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(300, True, True, False, Liquid.ETHANOL, False, True)] = \
 SlimTip_96COREHead1000ul_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 320.3, 50.0: 56.7, 0.0: 0.0, 100.0: 109.5, 10.0: 12.4, 200.0: 213.9},
   aspiration_flow_rate=250.0,
@@ -7448,7 +7448,7 @@ SlimTip_96COREHead1000ul_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(300, True, True, False, Liquid.GLYCERIN80, False, True)] = \
 SlimTip_96COREHead1000ul_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 319.3, 50.0: 58.2, 0.0: 0.0, 100.0: 112.1, 20.0: 23.9, 10.0: 12.1, 200.0: 216.9},
   aspiration_flow_rate=50.0,
@@ -7484,7 +7484,7 @@ SlimTip_96COREHead1000ul_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 # 4 x 50 ul =    approximately 48.9 ul
 # 2 x 100 ul =  approximately 97.2 ul
 #
-mapping[(300, True, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, False)] = \
 SlimTip_96COREHead1000ul_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
   aspiration_flow_rate=200.0,
@@ -7507,7 +7507,7 @@ SlimTip_96COREHead1000ul_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, True)] = \
 SlimTip_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 315.0, 50.0: 55.5, 0.0: 0.0, 100.0: 107.2, 20.0: 22.8, 200.0: 211.0},
   aspiration_flow_rate=250.0,
@@ -7530,7 +7530,7 @@ SlimTip_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, True)] = \
 SlimTip_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 322.7, 50.0: 56.4, 0.0: 0.0, 100.0: 110.4, 10.0: 11.9, 200.0: 215.5},
   aspiration_flow_rate=250.0,
@@ -7566,7 +7566,7 @@ SlimTip_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 # 4 x 50 ul =    approximately 48.3 ul
 # 2 x 100 ul =  approximately 95.7 ul
 #
-mapping[(300, True, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, False)] = \
 SlimTip_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0},
   aspiration_flow_rate=250.0,
@@ -7589,7 +7589,7 @@ SlimTip_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, True)] = \
 SlimTip_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 309.5, 50.0: 54.7, 0.0: 0.0, 100.0: 107.2, 20.0: 22.5, 200.0: 209.7},
   aspiration_flow_rate=250.0,
@@ -7612,7 +7612,7 @@ SlimTip_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, False, True)] = \
 SlimTip_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 310.2, 5.0: 5.6, 50.0: 54.1, 0.0: 0.0, 100.0: 106.2, 20.0: 22.5, 10.0: 11.3, 200.0: 208.7},
   aspiration_flow_rate=250.0,
@@ -7647,7 +7647,7 @@ SlimTip_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 # 12 x 20ul =   approximately 21.3 ul
 # 4 x 50 ul =    approximately 54.3 ul
 # 2 x 100 ul =  approximately 105.2 ul
-mapping[(300, True, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(300, True, True, False, Liquid.ETHANOL, True, False)] = \
 SlimTip_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
   aspiration_flow_rate=250.0,
@@ -7670,7 +7670,7 @@ SlimTip_EtOH_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(300, True, True, False, Liquid.ETHANOL, True, True)] = \
 SlimTip_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 323.4, 50.0: 57.2, 0.0: 0.0, 100.0: 110.5, 20.0: 24.7, 200.0: 211.9},
   aspiration_flow_rate=250.0,
@@ -7693,7 +7693,7 @@ SlimTip_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(300, True, True, False, Liquid.ETHANOL, False, True)] = \
 SlimTip_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 312.9, 5.0: 6.2, 50.0: 55.4, 0.0: 0.0, 100.0: 107.7, 20.0: 23.2, 10.0: 11.9, 200.0: 210.6},
   aspiration_flow_rate=250.0,
@@ -7716,7 +7716,7 @@ SlimTip_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(300, True, True, False, Liquid.GLYCERIN80, False, True)] = \
 SlimTip_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 313.3, 5.0: 6.0, 50.0: 55.7, 0.0: 0.0, 100.0: 107.8, 20.0: 22.9, 10.0: 11.5, 200.0: 210.0},
   aspiration_flow_rate=30.0,
@@ -7751,7 +7751,7 @@ SlimTip_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
 # 12 x 20ul =   approximately 19.6 ul
 # 4 x 50 ul =    approximately 50.0 ul
 # 2 x 100 ul =  approximately 98.4 ul
-mapping[(300, True, True, False, LiquidClass.SERUM, True, False)] = \
+mapping[(300, True, True, False, Liquid.SERUM, True, False)] = \
 SlimTip_Serum_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0},
   aspiration_flow_rate=250.0,
@@ -7774,7 +7774,7 @@ SlimTip_Serum_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.SERUM, True, True)] = \
+mapping[(300, True, True, False, Liquid.SERUM, True, True)] = \
 SlimTip_Serum_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 321.5, 50.0: 56.0, 0.0: 0.0, 100.0: 109.7, 20.0: 22.8, 200.0: 215.7},
   aspiration_flow_rate=250.0,
@@ -7797,7 +7797,7 @@ SlimTip_Serum_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.SERUM, False, True)] = \
+mapping[(300, True, True, False, Liquid.SERUM, False, True)] = \
 SlimTip_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 320.2, 5.0: 5.5, 50.0: 55.4, 0.0: 0.0, 20.0: 22.6, 100.0: 109.7, 200.0: 214.9, 10.0: 11.3},
   aspiration_flow_rate=250.0,
@@ -7832,7 +7832,7 @@ SlimTip_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
 # 12 x 20ul =   approximately 19.6 ul
 # 4 x 50 ul =    approximately 49.2 ul
 # 2 x 100 ul =  approximately 97.5 ul
-mapping[(300, True, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, False)] = \
 SlimTip_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
   aspiration_flow_rate=200.0,
@@ -7855,7 +7855,7 @@ SlimTip_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, True)] = \
 SlimTip_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 317.2, 50.0: 55.6, 0.0: 0.0, 20.0: 22.6, 100.0: 108.6, 200.0: 212.8},
   aspiration_flow_rate=250.0,
@@ -7878,7 +7878,7 @@ SlimTip_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, True)] = \
 SlimTip_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 317.1, 5.0: 6.2, 50.0: 55.1, 0.0: 0.0, 100.0: 108.0, 20.0: 22.9, 10.0: 11.9, 200.0: 213.0},
   aspiration_flow_rate=250.0,
@@ -7903,7 +7903,7 @@ SlimTip_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 
 # V1.1: Set mix flow rate to 80
 # V1.2: Stop back volume = 0 (previous value: 15)
-mapping[(300, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, False, False, Liquid.WATER, True, False)] = \
 StandardNeedle_Water_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 311.2, 50.0: 51.3, 0.0: 0.0, 100.0: 103.4, 20.0: 19.5},
   aspiration_flow_rate=80.0,
@@ -7926,7 +7926,7 @@ StandardNeedle_Water_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, False, False, LiquidClass.WATER, True, True)] = \
+mapping[(300, False, False, False, Liquid.WATER, True, True)] = \
 StandardNeedle_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 311.2, 50.0: 51.3, 0.0: 0.0, 100.0: 103.4, 20.0: 19.5},
   aspiration_flow_rate=80.0,
@@ -7949,7 +7949,7 @@ StandardNeedle_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, False, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, False, False, Liquid.WATER, True, False)] = \
 StandardNeedle_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 311.2, 50.0: 51.3, 0.0: 0.0, 100.0: 103.4, 20.0: 19.5},
   aspiration_flow_rate=80.0,
@@ -7972,7 +7972,7 @@ StandardNeedle_Water_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, False, False, False, Liquid.WATER, False, False)] = \
 StandardNeedle_Water_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 308.4, 5.0: 6.5, 50.0: 52.3, 0.0: 0.0, 100.0: 102.9, 20.0: 22.3, 1.0: 1.1, 200.0: 205.8, 10.0: 12.0, 2.0: 2.1},
   aspiration_flow_rate=80.0,
@@ -7995,7 +7995,7 @@ StandardNeedle_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, False, False, LiquidClass.WATER, False, True)] = \
+mapping[(300, False, False, False, Liquid.WATER, False, True)] = \
 StandardNeedle_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 308.4, 5.0: 6.5, 50.0: 52.3, 0.0: 0.0, 100.0: 102.9, 20.0: 22.3, 1.0: 1.1, 200.0: 205.8, 10.0: 12.0, 2.0: 2.1},
   aspiration_flow_rate=80.0,
@@ -8018,7 +8018,7 @@ StandardNeedle_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, False, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, False, False, False, Liquid.WATER, False, False)] = \
 StandardNeedle_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 308.4, 5.0: 6.5, 50.0: 52.3, 0.0: 0.0, 100.0: 102.9, 20.0: 22.3, 1.0: 1.1, 200.0: 205.8, 10.0: 12.0, 2.0: 2.1},
   aspiration_flow_rate=80.0,
@@ -8061,7 +8061,7 @@ StandardNeedle_Water_DispenseSurface_Part = HamiltonLiquidClass(
 #     200                       0.16                   0.55
 #     300                       0.17                   0.35
 #
-mapping[(300, False, True, False, LiquidClass.ACETONITRILE, True, False)] = \
+mapping[(300, False, True, False, Liquid.ACETONITRILE, True, False)] = \
 StandardVolumeAcetonitrilDispenseJet = HamiltonLiquidClass(
   curve={300.0: 326.2, 50.0: 57.3, 0.0: 0.0, 100.0: 111.5, 20.0: 24.6, 200.0: 217.0},
   aspiration_flow_rate=100.0,
@@ -8084,7 +8084,7 @@ StandardVolumeAcetonitrilDispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.ACETONITRILE, True, True)] = \
+mapping[(300, False, True, False, Liquid.ACETONITRILE, True, True)] = \
 StandardVolumeAcetonitrilDispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 326.2, 50.0: 57.3, 0.0: 0.0, 100.0: 111.5, 20.0: 24.6, 200.0: 217.0},
   aspiration_flow_rate=100.0,
@@ -8107,7 +8107,7 @@ StandardVolumeAcetonitrilDispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.ACETONITRILE, True, False)] = \
+mapping[(300, False, True, False, Liquid.ACETONITRILE, True, False)] = \
 StandardVolumeAcetonitrilDispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 321.2, 50.0: 57.3, 0.0: 0.0, 100.0: 110.5},
   aspiration_flow_rate=100.0,
@@ -8150,7 +8150,7 @@ StandardVolumeAcetonitrilDispenseJet_Part = HamiltonLiquidClass(
 #     200                       0.65                   0.65
 #     300                       0.21                   0.88
 #
-mapping[(300, False, True, False, LiquidClass.ACETONITRILE, False, False)] = \
+mapping[(300, False, True, False, Liquid.ACETONITRILE, False, False)] = \
 StandardVolumeAcetonitrilDispenseSurface = HamiltonLiquidClass(
   curve={300.0: 328.0, 5.0: 6.8, 50.0: 58.5, 0.0: 0.0, 100.0: 112.7, 20.0: 24.8, 1.0: 1.3, 200.0: 220.0, 10.0: 13.0, 2.0: 3.0},
   aspiration_flow_rate=100.0,
@@ -8173,7 +8173,7 @@ StandardVolumeAcetonitrilDispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.ACETONITRILE, False, True)] = \
+mapping[(300, False, True, False, Liquid.ACETONITRILE, False, True)] = \
 StandardVolumeAcetonitrilDispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 328.0, 5.0: 6.8, 50.0: 58.5, 0.0: 0.0, 100.0: 112.7, 20.0: 24.8, 1.0: 1.3, 200.0: 220.0, 10.0: 13.0, 2.0: 3.0},
   aspiration_flow_rate=100.0,
@@ -8196,7 +8196,7 @@ StandardVolumeAcetonitrilDispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.ACETONITRILE, False, False)] = \
+mapping[(300, False, True, False, Liquid.ACETONITRILE, False, False)] = \
 StandardVolumeAcetonitrilDispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 328.0, 5.0: 7.3, 0.0: 0.0, 100.0: 112.7, 10.0: 13.5},
   aspiration_flow_rate=100.0,
@@ -8235,7 +8235,7 @@ StandardVolumeAcetonitrilDispenseSurface_Part = HamiltonLiquidClass(
 #       20  (12 Aliquots)          2.53                 -2.97
 #       50  (  4 Aliquots)          0.84                 -2.57
 #
-mapping[(300, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(300, False, True, False, Liquid.DMSO, True, False)] = \
 StandardVolumeDMSOAliquotJet = HamiltonLiquidClass(
   curve={350.0: 350.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -8275,7 +8275,7 @@ StandardVolumeDMSOAliquotJet = HamiltonLiquidClass(
 #     200                       0.53                   0.08
 #     300                       0.54                   0.22
 #
-mapping[(300, False, True, False, LiquidClass.ETHANOL, False, False)] = \
+mapping[(300, False, True, False, Liquid.ETHANOL, False, False)] = \
 StandardVolumeEtOHDispenseSurface = HamiltonLiquidClass(
   curve={300.0: 309.2, 50.0: 54.8, 0.0: 0.0, 100.0: 106.5, 20.0: 23.7, 200.0: 208.2},
   aspiration_flow_rate=100.0,
@@ -8298,7 +8298,7 @@ StandardVolumeEtOHDispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(300, False, True, False, Liquid.ETHANOL, False, True)] = \
 StandardVolumeEtOHDispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 309.2, 50.0: 54.8, 0.0: 0.0, 100.0: 106.5, 20.0: 23.7, 200.0: 208.2},
   aspiration_flow_rate=100.0,
@@ -8321,7 +8321,7 @@ StandardVolumeEtOHDispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.ETHANOL, False, False)] = \
+mapping[(300, False, True, False, Liquid.ETHANOL, False, False)] = \
 StandardVolumeEtOHDispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 315.2, 0.0: 0.0, 100.0: 108.5, 20.0: 23.7},
   aspiration_flow_rate=100.0,
@@ -8344,7 +8344,7 @@ StandardVolumeEtOHDispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(300, True, True, True, Liquid.DMSO, True, True)] = \
 StandardVolumeFilter_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 302.5, 0.0: 0.0, 100.0: 101.0, 20.0: 20.4, 200.0: 201.5},
   aspiration_flow_rate=100.0,
@@ -8367,7 +8367,7 @@ StandardVolumeFilter_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidCla
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(300, True, True, True, Liquid.DMSO, False, True)] = \
 StandardVolumeFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 306.0, 0.0: 0.0, 100.0: 104.3, 200.0: 205.0, 10.0: 12.2},
   aspiration_flow_rate=100.0,
@@ -8390,7 +8390,7 @@ StandardVolumeFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiqui
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, True, Liquid.WATER, True, True)] = \
 StandardVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -8413,7 +8413,7 @@ StandardVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidCl
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, True, Liquid.WATER, False, True)] = \
 StandardVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 210.0, 10.0: 11.9},
   aspiration_flow_rate=100.0,
@@ -8436,7 +8436,7 @@ StandardVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiqu
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(300, True, True, True, Liquid.DMSO, True, True)] = \
 StandardVolumeFilter_96COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 303.5, 0.0: 0.0, 100.0: 101.8, 10.0: 10.2, 200.0: 200.5},
   aspiration_flow_rate=100.0,
@@ -8459,7 +8459,7 @@ StandardVolumeFilter_96COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(300, True, True, True, Liquid.DMSO, True, False)] = \
 StandardVolumeFilter_96COREHead_DMSO_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 305.0, 0.0: 0.0, 100.0: 103.6, 10.0: 11.5, 200.0: 206.0},
   aspiration_flow_rate=100.0,
@@ -8482,7 +8482,7 @@ StandardVolumeFilter_96COREHead_DMSO_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(300, True, True, True, Liquid.DMSO, False, True)] = \
 StandardVolumeFilter_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 303.0, 0.0: 0.0, 100.0: 101.3, 10.0: 10.6, 200.0: 202.0},
   aspiration_flow_rate=100.0,
@@ -8505,7 +8505,7 @@ StandardVolumeFilter_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass
 )
 
 
-mapping[(300, True, True, True, LiquidClass.DMSO, False, False)] = \
+mapping[(300, True, True, True, Liquid.DMSO, False, False)] = \
 StandardVolumeFilter_96COREHead_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 303.0, 0.0: 0.0, 100.0: 101.3, 10.0: 10.1, 200.0: 202.0},
   aspiration_flow_rate=100.0,
@@ -8528,7 +8528,7 @@ StandardVolumeFilter_96COREHead_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, True, Liquid.WATER, True, True)] = \
 StandardVolumeFilter_96COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 309.0, 0.0: 0.0, 20.0: 22.3, 100.0: 104.2, 10.0: 11.9, 200.0: 207.0},
   aspiration_flow_rate=100.0,
@@ -8551,7 +8551,7 @@ StandardVolumeFilter_96COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(300, True, True, True, Liquid.WATER, True, False)] = \
 StandardVolumeFilter_96COREHead_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 309.0, 0.0: 0.0, 20.0: 22.3, 100.0: 104.2, 10.0: 11.9, 200.0: 207.0},
   aspiration_flow_rate=100.0,
@@ -8574,7 +8574,7 @@ StandardVolumeFilter_96COREHead_Water_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, True, Liquid.WATER, False, True)] = \
 StandardVolumeFilter_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 306.3, 0.0: 0.0, 100.0: 104.5, 10.0: 11.9, 200.0: 205.7},
   aspiration_flow_rate=100.0,
@@ -8597,7 +8597,7 @@ StandardVolumeFilter_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClas
 )
 
 
-mapping[(300, True, True, True, LiquidClass.WATER, False, False)] = \
+mapping[(300, True, True, True, Liquid.WATER, False, False)] = \
 StandardVolumeFilter_96COREHead_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 304.0, 0.0: 0.0, 100.0: 105.3, 10.0: 11.9, 200.0: 205.7},
   aspiration_flow_rate=100.0,
@@ -8636,7 +8636,7 @@ StandardVolumeFilter_96COREHead_Water_DispenseSurface_Part = HamiltonLiquidClass
 #       20  (12 Aliquots)          2.53                 -2.97
 #       50  (  4 Aliquots)          0.84                 -2.57
 #
-mapping[(300, False, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(300, False, True, True, Liquid.DMSO, True, False)] = \
 StandardVolumeFilter_DMSO_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -8660,7 +8660,7 @@ StandardVolumeFilter_DMSO_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(300, False, True, True, Liquid.DMSO, True, False)] = \
 StandardVolumeFilter_DMSO_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 304.6, 50.0: 51.1, 0.0: 0.0, 20.0: 20.7, 100.0: 101.8, 200.0: 203.0},
   aspiration_flow_rate=100.0,
@@ -8683,7 +8683,7 @@ StandardVolumeFilter_DMSO_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(300, False, True, True, Liquid.DMSO, True, True)] = \
 StandardVolumeFilter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 304.6, 50.0: 51.1, 0.0: 0.0, 100.0: 101.8, 20.0: 20.7, 200.0: 203.0},
   aspiration_flow_rate=100.0,
@@ -8706,7 +8706,7 @@ StandardVolumeFilter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.DMSO, True, False)] = \
+mapping[(300, False, True, True, Liquid.DMSO, True, False)] = \
 StandardVolumeFilter_DMSO_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 315.6, 0.0: 0.0, 100.0: 112.8, 20.0: 29.0},
   aspiration_flow_rate=100.0,
@@ -8729,7 +8729,7 @@ StandardVolumeFilter_DMSO_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.DMSO, False, False)] = \
+mapping[(300, False, True, True, Liquid.DMSO, False, False)] = \
 StandardVolumeFilter_DMSO_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 308.8, 5.0: 6.6, 50.0: 52.9, 0.0: 0.0, 1.0: 1.8, 20.0: 22.1, 100.0: 103.8, 2.0: 3.0, 10.0: 11.9, 200.0: 205.0},
   aspiration_flow_rate=100.0,
@@ -8752,7 +8752,7 @@ StandardVolumeFilter_DMSO_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(300, False, True, True, Liquid.DMSO, False, True)] = \
 StandardVolumeFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 308.8, 5.0: 6.6, 50.0: 52.9, 0.0: 0.0, 1.0: 1.8, 20.0: 22.1, 100.0: 103.8, 2.0: 3.0, 10.0: 11.9, 200.0: 205.0},
   aspiration_flow_rate=100.0,
@@ -8775,7 +8775,7 @@ StandardVolumeFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.DMSO, False, False)] = \
+mapping[(300, False, True, True, Liquid.DMSO, False, False)] = \
 StandardVolumeFilter_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 306.8, 5.0: 6.4, 50.0: 52.9, 0.0: 0.0, 100.0: 103.8, 20.0: 22.1, 10.0: 11.9},
   aspiration_flow_rate=100.0,
@@ -8799,7 +8799,7 @@ StandardVolumeFilter_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100,  Stop back volume=0
-mapping[(300, False, True, True, LiquidClass.ETHANOL, True, False)] = \
+mapping[(300, False, True, True, Liquid.ETHANOL, True, False)] = \
 StandardVolumeFilter_EtOH_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 310.2, 50.0: 55.8, 0.0: 0.0, 20.0: 24.6, 100.0: 107.5, 200.0: 209.2},
   aspiration_flow_rate=100.0,
@@ -8822,7 +8822,7 @@ StandardVolumeFilter_EtOH_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.ETHANOL, True, True)] = \
+mapping[(300, False, True, True, Liquid.ETHANOL, True, True)] = \
 StandardVolumeFilter_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 310.2, 50.0: 55.8, 0.0: 0.0, 100.0: 107.5, 20.0: 24.6, 200.0: 209.2},
   aspiration_flow_rate=100.0,
@@ -8845,7 +8845,7 @@ StandardVolumeFilter_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.ETHANOL, True, False)] = \
+mapping[(300, False, True, True, Liquid.ETHANOL, True, False)] = \
 StandardVolumeFilter_EtOH_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 317.2, 0.0: 0.0, 100.0: 110.5, 20.0: 25.6},
   aspiration_flow_rate=100.0,
@@ -8869,7 +8869,7 @@ StandardVolumeFilter_EtOH_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 20, dispense settling time=0, Stop back volume=0
-mapping[(300, False, True, True, LiquidClass.GLYCERIN, True, False)] = \
+mapping[(300, False, True, True, Liquid.GLYCERIN, True, False)] = \
 StandardVolumeFilter_Glycerin_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 309.0, 50.0: 53.6, 0.0: 0.0, 20.0: 22.3, 100.0: 104.9, 200.0: 207.2},
   aspiration_flow_rate=100.0,
@@ -8893,7 +8893,7 @@ StandardVolumeFilter_Glycerin_DispenseJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 20, dispense settling time=0, Stop back volume=0
-mapping[(300, False, True, True, LiquidClass.GLYCERIN80, True, True)] = \
+mapping[(300, False, True, True, Liquid.GLYCERIN80, True, True)] = \
 StandardVolumeFilter_Glycerin_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 309.0, 50.0: 53.6, 0.0: 0.0, 100.0: 104.9, 20.0: 22.3, 200.0: 207.2},
   aspiration_flow_rate=100.0,
@@ -8917,7 +8917,7 @@ StandardVolumeFilter_Glycerin_DispenseJet_Empty = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 10
-mapping[(300, False, True, True, LiquidClass.GLYCERIN, False, False)] = \
+mapping[(300, False, True, True, Liquid.GLYCERIN, False, False)] = \
 StandardVolumeFilter_Glycerin_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 307.9, 5.0: 6.5, 50.0: 53.6, 0.0: 0.0, 20.0: 22.5, 100.0: 105.7, 2.0: 3.2, 10.0: 12.0, 200.0: 207.0},
   aspiration_flow_rate=50.0,
@@ -8940,7 +8940,7 @@ StandardVolumeFilter_Glycerin_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(300, False, True, True, Liquid.GLYCERIN80, False, True)] = \
 StandardVolumeFilter_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 307.9, 5.0: 6.5, 50.0: 53.6, 0.0: 0.0, 100.0: 105.7, 20.0: 22.5, 200.0: 207.0, 10.0: 12.0, 2.0: 3.2},
   aspiration_flow_rate=50.0,
@@ -8963,7 +8963,7 @@ StandardVolumeFilter_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.GLYCERIN80, False, False)] = \
+mapping[(300, False, True, True, Liquid.GLYCERIN80, False, False)] = \
 StandardVolumeFilter_Glycerin_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 307.9, 5.0: 6.1, 0.0: 0.0, 100.0: 104.7, 200.0: 207.0, 10.0: 11.5},
   aspiration_flow_rate=50.0,
@@ -8987,7 +8987,7 @@ StandardVolumeFilter_Glycerin_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, True, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, True, True, Liquid.SERUM, True, False)] = \
 StandardVolumeFilter_Serum_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -9011,7 +9011,7 @@ StandardVolumeFilter_Serum_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, True, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, True, True, Liquid.SERUM, True, False)] = \
 StandardVolumeFilter_Serum_AliquotJet = HamiltonLiquidClass(
   curve={300.0: 300.0, 0.0: 0.0, 30.0: 30.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -9035,7 +9035,7 @@ StandardVolumeFilter_Serum_AliquotJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, True, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, True, True, Liquid.SERUM, True, False)] = \
 StandardVolumeFilter_Serum_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 20.0: 23.2, 100.0: 108.1, 200.0: 212.1},
   aspiration_flow_rate=100.0,
@@ -9058,7 +9058,7 @@ StandardVolumeFilter_Serum_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.SERUM, True, True)] = \
+mapping[(300, False, True, True, Liquid.SERUM, True, True)] = \
 StandardVolumeFilter_Serum_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 100.0: 108.1, 20.0: 23.2, 200.0: 212.1},
   aspiration_flow_rate=100.0,
@@ -9081,7 +9081,7 @@ StandardVolumeFilter_Serum_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, True, True, Liquid.SERUM, True, False)] = \
 StandardVolumeFilter_Serum_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 315.2, 0.0: 0.0, 100.0: 111.5, 20.0: 29.2},
   aspiration_flow_rate=100.0,
@@ -9104,7 +9104,7 @@ StandardVolumeFilter_Serum_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.SERUM, False, False)] = \
+mapping[(300, False, True, True, Liquid.SERUM, False, False)] = \
 StandardVolumeFilter_Serum_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 313.4, 5.0: 6.3, 50.0: 54.9, 0.0: 0.0, 20.0: 23.0, 100.0: 107.1, 2.0: 2.6, 10.0: 12.0, 200.0: 210.5},
   aspiration_flow_rate=100.0,
@@ -9127,7 +9127,7 @@ StandardVolumeFilter_Serum_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.SERUM, False, False)] = \
+mapping[(300, False, True, True, Liquid.SERUM, False, False)] = \
 StandardVolumeFilter_Serum_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 313.4, 0.0: 0.0, 100.0: 109.1, 10.0: 12.5},
   aspiration_flow_rate=100.0,
@@ -9151,7 +9151,7 @@ StandardVolumeFilter_Serum_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, True, True, Liquid.WATER, True, False)] = \
 StandardVolumeFilter_Water_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -9175,7 +9175,7 @@ StandardVolumeFilter_Water_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, True, True, Liquid.WATER, True, False)] = \
 StandardVolumeFilter_Water_AliquotJet = HamiltonLiquidClass(
   curve={300.0: 300.0, 0.0: 0.0, 30.0: 30.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -9199,7 +9199,7 @@ StandardVolumeFilter_Water_AliquotJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, True, True, Liquid.WATER, True, False)] = \
 StandardVolumeFilter_Water_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 313.5, 50.0: 55.1, 0.0: 0.0, 20.0: 23.2, 100.0: 107.2, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -9222,7 +9222,7 @@ StandardVolumeFilter_Water_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(300, False, True, True, Liquid.WATER, True, True)] = \
 StandardVolumeFilter_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 313.5, 50.0: 55.1, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -9245,7 +9245,7 @@ StandardVolumeFilter_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, True, True, Liquid.WATER, True, False)] = \
 StandardVolumeFilter_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 110.2, 20.0: 27.2},
   aspiration_flow_rate=100.0,
@@ -9269,7 +9269,7 @@ StandardVolumeFilter_Water_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, True, LiquidClass.WATER, False, False)] = \
+mapping[(300, False, True, True, Liquid.WATER, False, False)] = \
 StandardVolumeFilter_Water_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 313.5, 5.0: 6.3, 0.5: 0.9, 50.0: 55.1, 0.0: 0.0, 1.0: 1.6, 20.0: 23.2, 100.0: 107.2, 2.0: 2.8, 10.0: 11.9, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -9292,7 +9292,7 @@ StandardVolumeFilter_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(300, False, True, True, Liquid.WATER, False, True)] = \
 StandardVolumeFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 313.5, 5.0: 6.3, 0.5: 0.9, 50.0: 55.1, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 1.0: 1.6, 200.0: 211.0, 10.0: 11.9, 2.0: 2.8},
   aspiration_flow_rate=100.0,
@@ -9315,7 +9315,7 @@ StandardVolumeFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, True, LiquidClass.WATER, False, False)] = \
+mapping[(300, False, True, True, Liquid.WATER, False, False)] = \
 StandardVolumeFilter_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 313.5, 5.0: 6.5, 50.0: 55.1, 0.0: 0.0, 20.0: 23.2, 100.0: 107.2, 10.0: 11.9, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -9359,7 +9359,7 @@ StandardVolumeFilter_Water_DispenseSurface_Part = HamiltonLiquidClass(
 #     200                       0.56                   0.07
 #     300                       0.54                   1.12
 #
-mapping[(300, False, True, False, LiquidClass.METHANOL, True, False)] = \
+mapping[(300, False, True, False, Liquid.METHANOL, True, False)] = \
 StandardVolumeMeOHDispenseJet = HamiltonLiquidClass(
   curve={300.0: 336.0, 50.0: 63.0, 0.0: 0.0, 100.0: 119.5, 20.0: 28.3, 200.0: 230.0},
   aspiration_flow_rate=100.0,
@@ -9405,7 +9405,7 @@ StandardVolumeMeOHDispenseJet = HamiltonLiquidClass(
 #     200                       0.51                   0.59
 #     300                       0.81                   0.22
 #
-mapping[(300, False, True, False, LiquidClass.METHANOL, False, False)] = \
+mapping[(300, False, True, False, Liquid.METHANOL, False, False)] = \
 StandardVolumeMeOHDispenseSurface = HamiltonLiquidClass(
   curve={300.0: 310.2, 5.0: 8.0, 50.0: 55.8, 0.0: 0.0, 100.0: 107.5, 20.0: 24.6, 200.0: 209.2, 10.0: 14.0},
   aspiration_flow_rate=100.0,
@@ -9445,7 +9445,7 @@ StandardVolumeMeOHDispenseSurface = HamiltonLiquidClass(
 #     200                       0.29                   0.17
 #     300                       0.16                   0.80
 #
-mapping[(300, False, True, False, LiquidClass.OCTANOL, True, False)] = \
+mapping[(300, False, True, False, Liquid.OCTANOL, True, False)] = \
 StandardVolumeOctanol100DispenseJet = HamiltonLiquidClass(
   curve={300.0: 319.3, 50.0: 56.6, 0.0: 0.0, 100.0: 109.9, 20.0: 23.8, 200.0: 216.2},
   aspiration_flow_rate=100.0,
@@ -9489,7 +9489,7 @@ StandardVolumeOctanol100DispenseJet = HamiltonLiquidClass(
 #     200                       0.02                   0.12
 #     300                       0.11                   0.29
 #
-mapping[(300, False, True, False, LiquidClass.OCTANOL, False, False)] = \
+mapping[(300, False, True, False, Liquid.OCTANOL, False, False)] = \
 StandardVolumeOctanol100DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 315.0, 5.0: 6.6, 50.0: 55.9, 0.0: 0.0, 100.0: 106.8, 20.0: 22.1, 1.0: 0.8, 200.0: 212.0, 10.0: 12.6, 2.0: 3.7},
   aspiration_flow_rate=100.0,
@@ -9527,7 +9527,7 @@ StandardVolumeOctanol100DispenseSurface = HamiltonLiquidClass(
 #       10                       1.99                   4.39
 #
 #
-mapping[(300, False, True, False, LiquidClass.PBS_BUFFER, False, False)] = \
+mapping[(300, False, True, False, Liquid.PBS_BUFFER, False, False)] = \
 StandardVolumePBSDispenseSurface = HamiltonLiquidClass(
   curve={300.0: 313.5, 5.0: 7.5, 50.0: 55.1, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 1.0: 2.6, 200.0: 211.0, 10.0: 12.8},
   aspiration_flow_rate=100.0,
@@ -9566,7 +9566,7 @@ StandardVolumePBSDispenseSurface = HamiltonLiquidClass(
 #     100                       0.08                   1.09
 #     200                       0.09                   0.91
 #
-mapping[(300, False, True, False, LiquidClass.PLASMA, True, False)] = \
+mapping[(300, False, True, False, Liquid.PLASMA, True, False)] = \
 StandardVolumePlasmaDispenseJet = HamiltonLiquidClass(
   curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 100.0: 108.1, 20.0: 23.2, 200.0: 212.1, 10.0: 12.3},
   aspiration_flow_rate=100.0,
@@ -9589,7 +9589,7 @@ StandardVolumePlasmaDispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.PLASMA, True, True)] = \
+mapping[(300, False, True, False, Liquid.PLASMA, True, True)] = \
 StandardVolumePlasmaDispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 20.0: 23.2, 100.0: 108.1, 200.0: 212.1},
   aspiration_flow_rate=100.0,
@@ -9612,7 +9612,7 @@ StandardVolumePlasmaDispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.PLASMA, True, False)] = \
+mapping[(300, False, True, False, Liquid.PLASMA, True, False)] = \
 StandardVolumePlasmaDispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 315.2, 0.0: 0.0, 20.0: 29.2, 100.0: 111.5},
   aspiration_flow_rate=100.0,
@@ -9652,7 +9652,7 @@ StandardVolumePlasmaDispenseJet_Part = HamiltonLiquidClass(
 #       60                       0.55                   2.06
 #
 #
-mapping[(300, False, True, False, LiquidClass.PLASMA, False, False)] = \
+mapping[(300, False, True, False, Liquid.PLASMA, False, False)] = \
 StandardVolumePlasmaDispenseSurface = HamiltonLiquidClass(
   curve={300.0: 313.4, 5.0: 6.3, 50.0: 54.9, 0.0: 0.0, 100.0: 107.1, 20.0: 23.0, 200.0: 210.5, 10.0: 12.0, 2.0: 2.6},
   aspiration_flow_rate=100.0,
@@ -9675,7 +9675,7 @@ StandardVolumePlasmaDispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.PLASMA, False, True)] = \
+mapping[(300, False, True, False, Liquid.PLASMA, False, True)] = \
 StandardVolumePlasmaDispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 313.4, 5.0: 6.3, 50.0: 54.9, 0.0: 0.0, 20.0: 23.0, 100.0: 107.1, 2.0: 2.6, 10.0: 12.0, 200.0: 210.5},
   aspiration_flow_rate=100.0,
@@ -9698,7 +9698,7 @@ StandardVolumePlasmaDispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.PLASMA, False, False)] = \
+mapping[(300, False, True, False, Liquid.PLASMA, False, False)] = \
 StandardVolumePlasmaDispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 313.4, 5.0: 6.8, 0.0: 0.0, 100.0: 109.1, 10.0: 12.5},
   aspiration_flow_rate=100.0,
@@ -9721,7 +9721,7 @@ StandardVolumePlasmaDispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, False)] = \
 StandardVolume_96COREHead1000ul_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 150.0: 150.0, 50.0: 50.0, 0.0: 0.0, 20.0: 20.0},
   aspiration_flow_rate=100.0,
@@ -9744,7 +9744,7 @@ StandardVolume_96COREHead1000ul_DMSO_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, True)] = \
 StandardVolume_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 302.5, 0.0: 0.0, 100.0: 101.0, 20.0: 20.4, 200.0: 201.5},
   aspiration_flow_rate=100.0,
@@ -9767,7 +9767,7 @@ StandardVolume_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, False, True)] = \
 StandardVolume_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 306.0, 0.0: 0.0, 100.0: 104.3, 200.0: 205.0, 10.0: 12.2},
   aspiration_flow_rate=100.0,
@@ -9790,7 +9790,7 @@ StandardVolume_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, False)] = \
 StandardVolume_96COREHead1000ul_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
   curve={300.0: 300.0, 150.0: 150.0, 50.0: 50.0, 0.0: 0.0, 20.0: 20.0},
   aspiration_flow_rate=100.0,
@@ -9813,7 +9813,7 @@ StandardVolume_96COREHead1000ul_Water_DispenseJet_Aliquot = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, True)] = \
 StandardVolume_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 200.0: 207.5},
   aspiration_flow_rate=100.0,
@@ -9836,7 +9836,7 @@ StandardVolume_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, True)] = \
 StandardVolume_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 210.0, 10.0: 11.9},
   aspiration_flow_rate=100.0,
@@ -9859,7 +9859,7 @@ StandardVolume_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClas
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, True)] = \
 StandardVolume_96COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 303.5, 0.0: 0.0, 100.0: 101.8, 10.0: 10.2, 200.0: 200.5},
   aspiration_flow_rate=100.0,
@@ -9882,7 +9882,7 @@ StandardVolume_96COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(300, True, True, False, Liquid.DMSO, True, False)] = \
 StandardVolume_96COREHead_DMSO_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 306.0, 0.0: 0.0, 100.0: 105.6, 10.0: 12.2, 200.0: 207.0},
   aspiration_flow_rate=100.0,
@@ -9905,7 +9905,7 @@ StandardVolume_96COREHead_DMSO_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(300, True, True, False, Liquid.DMSO, False, True)] = \
 StandardVolume_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 303.0, 0.0: 0.0, 100.0: 101.3, 10.0: 10.6, 200.0: 202.0},
   aspiration_flow_rate=100.0,
@@ -9928,7 +9928,7 @@ StandardVolume_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.DMSO, False, False)] = \
+mapping[(300, True, True, False, Liquid.DMSO, False, False)] = \
 StandardVolume_96COREHead_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 303.0, 0.0: 0.0, 100.0: 101.3, 10.0: 10.1, 200.0: 202.0},
   aspiration_flow_rate=100.0,
@@ -9951,7 +9951,7 @@ StandardVolume_96COREHead_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, True)] = \
 StandardVolume_96COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 309.0, 0.0: 0.0, 20.0: 22.3, 100.0: 104.2, 10.0: 11.9, 200.0: 207.0},
   aspiration_flow_rate=100.0,
@@ -9974,7 +9974,7 @@ StandardVolume_96COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, False)] = \
 StandardVolume_96COREHead_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 309.0, 0.0: 0.0, 20.0: 22.3, 100.0: 104.2, 10.0: 11.9},
   aspiration_flow_rate=100.0,
@@ -9997,7 +9997,7 @@ StandardVolume_96COREHead_Water_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, True)] = \
 StandardVolume_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 306.3, 0.0: 0.0, 100.0: 104.5, 10.0: 11.9, 200.0: 205.7},
   aspiration_flow_rate=100.0,
@@ -10020,7 +10020,7 @@ StandardVolume_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, False)] = \
 StandardVolume_96COREHead_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 304.0, 0.0: 0.0, 100.0: 105.3, 10.0: 11.9, 200.0: 205.7},
   aspiration_flow_rate=100.0,
@@ -10044,7 +10044,7 @@ StandardVolume_96COREHead_Water_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # Liquid class for wash standard volume tips with CO-RE 96 Head in CO-RE 96 Head Washer.
-mapping[(300, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, False)] = \
 StandardVolume_Core96Washer_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 330.0, 5.0: 6.3, 0.5: 0.9, 50.0: 55.1, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 1.0: 1.6, 200.0: 211.0, 10.0: 11.9, 2.0: 2.8},
   aspiration_flow_rate=100.0,
@@ -10083,7 +10083,7 @@ StandardVolume_Core96Washer_DispenseSurface = HamiltonLiquidClass(
 #       20  (12 Aliquots)          2.53                 -2.97
 #       50  (  4 Aliquots)          0.84                 -2.57
 #
-mapping[(300, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(300, False, True, False, Liquid.DMSO, True, False)] = \
 StandardVolume_DMSO_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -10107,7 +10107,7 @@ StandardVolume_DMSO_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(300, False, True, False, Liquid.DMSO, True, False)] = \
 StandardVolume_DMSO_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 304.6, 350.0: 355.2, 50.0: 51.1, 0.0: 0.0, 100.0: 101.8, 20.0: 20.7, 200.0: 203.0},
   aspiration_flow_rate=100.0,
@@ -10130,7 +10130,7 @@ StandardVolume_DMSO_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(300, False, True, False, Liquid.DMSO, True, True)] = \
 StandardVolume_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 304.6, 50.0: 51.1, 0.0: 0.0, 20.0: 20.7, 100.0: 101.8, 200.0: 203.0},
   aspiration_flow_rate=100.0,
@@ -10153,7 +10153,7 @@ StandardVolume_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.DMSO, True, False)] = \
+mapping[(300, False, True, False, Liquid.DMSO, True, False)] = \
 StandardVolume_DMSO_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 320.0, 0.0: 0.0, 20.0: 30.5, 100.0: 116.0},
   aspiration_flow_rate=100.0,
@@ -10176,7 +10176,7 @@ StandardVolume_DMSO_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.DMSO, False, False)] = \
+mapping[(300, False, True, False, Liquid.DMSO, False, False)] = \
 StandardVolume_DMSO_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 308.8, 5.0: 6.6, 50.0: 52.9, 350.0: 360.5, 0.0: 0.0, 1.0: 1.8, 20.0: 22.1, 100.0: 103.8, 2.0: 3.0, 10.0: 11.9, 200.0: 205.0},
   aspiration_flow_rate=100.0,
@@ -10199,7 +10199,7 @@ StandardVolume_DMSO_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(300, False, True, False, Liquid.DMSO, False, True)] = \
 StandardVolume_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 308.8, 5.0: 6.6, 50.0: 52.9, 0.0: 0.0, 1.0: 1.8, 20.0: 22.1, 100.0: 103.8, 2.0: 3.0, 10.0: 11.9, 200.0: 205.0},
   aspiration_flow_rate=100.0,
@@ -10222,7 +10222,7 @@ StandardVolume_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.DMSO, False, False)] = \
+mapping[(300, False, True, False, Liquid.DMSO, False, False)] = \
 StandardVolume_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 308.8, 5.0: 6.4, 50.0: 52.9, 0.0: 0.0, 20.0: 22.1, 100.0: 103.8, 10.0: 11.9, 200.0: 205.0},
   aspiration_flow_rate=100.0,
@@ -10246,7 +10246,7 @@ StandardVolume_DMSO_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100, stop back volume = 0
-mapping[(300, False, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(300, False, True, False, Liquid.ETHANOL, True, False)] = \
 StandardVolume_EtOH_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 310.2, 350.0: 360.5, 50.0: 55.8, 0.0: 0.0, 100.0: 107.5, 20.0: 24.6, 200.0: 209.2},
   aspiration_flow_rate=100.0,
@@ -10269,7 +10269,7 @@ StandardVolume_EtOH_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(300, False, True, False, Liquid.ETHANOL, True, True)] = \
 StandardVolume_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 310.2, 50.0: 55.8, 0.0: 0.0, 20.0: 24.6, 100.0: 107.5, 200.0: 209.2},
   aspiration_flow_rate=100.0,
@@ -10292,7 +10292,7 @@ StandardVolume_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.ETHANOL, True, False)] = \
+mapping[(300, False, True, False, Liquid.ETHANOL, True, False)] = \
 StandardVolume_EtOH_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 317.2, 0.0: 0.0, 20.0: 25.6, 100.0: 110.5},
   aspiration_flow_rate=100.0,
@@ -10316,7 +10316,7 @@ StandardVolume_EtOH_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 20, dispense settling time=0, stop back volume = 0
-mapping[(300, False, True, False, LiquidClass.GLYCERIN, True, False)] = \
+mapping[(300, False, True, False, Liquid.GLYCERIN, True, False)] = \
 StandardVolume_Glycerin_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 309.0, 350.0: 360.0, 50.0: 53.6, 0.0: 0.0, 100.0: 104.9, 20.0: 22.3, 200.0: 207.2},
   aspiration_flow_rate=100.0,
@@ -10340,7 +10340,7 @@ StandardVolume_Glycerin_DispenseJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 20, dispense settling time=0, stop back volume = 0
-mapping[(300, False, True, False, LiquidClass.GLYCERIN80, True, True)] = \
+mapping[(300, False, True, False, Liquid.GLYCERIN80, True, True)] = \
 StandardVolume_Glycerin_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 309.0, 50.0: 53.6, 0.0: 0.0, 100.0: 104.9, 20.0: 22.3, 200.0: 207.2},
   aspiration_flow_rate=100.0,
@@ -10364,7 +10364,7 @@ StandardVolume_Glycerin_DispenseJet_Empty = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 10
-mapping[(300, False, True, False, LiquidClass.GLYCERIN, False, False)] = \
+mapping[(300, False, True, False, Liquid.GLYCERIN, False, False)] = \
 StandardVolume_Glycerin_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 307.9, 5.0: 6.5, 350.0: 358.4, 50.0: 53.6, 0.0: 0.0, 100.0: 105.7, 20.0: 22.5, 200.0: 207.0, 10.0: 12.0, 2.0: 3.2},
   aspiration_flow_rate=50.0,
@@ -10387,7 +10387,7 @@ StandardVolume_Glycerin_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(300, False, True, False, Liquid.GLYCERIN80, False, True)] = \
 StandardVolume_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 307.9, 5.0: 6.5, 50.0: 53.6, 0.0: 0.0, 100.0: 105.7, 20.0: 22.5, 200.0: 207.0, 10.0: 12.0, 2.0: 3.2},
   aspiration_flow_rate=50.0,
@@ -10410,7 +10410,7 @@ StandardVolume_Glycerin_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.GLYCERIN80, False, False)] = \
+mapping[(300, False, True, False, Liquid.GLYCERIN80, False, False)] = \
 StandardVolume_Glycerin_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 307.9, 5.0: 6.2, 50.0: 53.6, 0.0: 0.0, 100.0: 105.7, 20.0: 22.5, 200.0: 207.0, 10.0: 12.0},
   aspiration_flow_rate=50.0,
@@ -10434,7 +10434,7 @@ StandardVolume_Glycerin_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, False, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, True, False, Liquid.SERUM, True, False)] = \
 StandardVolume_Serum_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -10458,7 +10458,7 @@ StandardVolume_Serum_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, False, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, True, False, Liquid.SERUM, True, False)] = \
 StandardVolume_Serum_AliquotJet = HamiltonLiquidClass(
   curve={350.0: 350.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -10482,7 +10482,7 @@ StandardVolume_Serum_AliquotJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, False, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, True, False, Liquid.SERUM, True, False)] = \
 StandardVolume_Serum_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 100.0: 108.1, 20.0: 23.2, 200.0: 212.1},
   aspiration_flow_rate=100.0,
@@ -10505,7 +10505,7 @@ StandardVolume_Serum_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.SERUM, True, True)] = \
+mapping[(300, False, True, False, Liquid.SERUM, True, True)] = \
 StandardVolume_Serum_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 20.0: 23.2, 100.0: 108.1, 200.0: 212.1},
   aspiration_flow_rate=100.0,
@@ -10528,7 +10528,7 @@ StandardVolume_Serum_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.SERUM, True, False)] = \
+mapping[(300, False, True, False, Liquid.SERUM, True, False)] = \
 StandardVolume_Serum_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 315.2, 0.0: 0.0, 20.0: 29.2, 100.0: 111.5},
   aspiration_flow_rate=100.0,
@@ -10551,7 +10551,7 @@ StandardVolume_Serum_DispenseJet_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.SERUM, False, False)] = \
+mapping[(300, False, True, False, Liquid.SERUM, False, False)] = \
 StandardVolume_Serum_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 313.4, 5.0: 6.3, 50.0: 54.9, 0.0: 0.0, 20.0: 23.0, 100.0: 107.1, 2.0: 2.6, 10.0: 12.0, 200.0: 210.5},
   aspiration_flow_rate=100.0,
@@ -10574,7 +10574,7 @@ StandardVolume_Serum_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.SERUM, False, True)] = \
+mapping[(300, False, True, False, Liquid.SERUM, False, True)] = \
 StandardVolume_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 313.4, 5.0: 6.3, 50.0: 54.9, 0.0: 0.0, 20.0: 23.0, 100.0: 107.1, 2.0: 2.6, 10.0: 12.0, 200.0: 210.5},
   aspiration_flow_rate=100.0,
@@ -10597,7 +10597,7 @@ StandardVolume_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.SERUM, False, False)] = \
+mapping[(300, False, True, False, Liquid.SERUM, False, False)] = \
 StandardVolume_Serum_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 313.4, 5.0: 6.8, 0.0: 0.0, 100.0: 109.1, 10.0: 12.5},
   aspiration_flow_rate=100.0,
@@ -10621,7 +10621,7 @@ StandardVolume_Serum_DispenseSurface_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, True, False, Liquid.WATER, True, False)] = \
 StandardVolume_Water_AliquotDispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -10645,7 +10645,7 @@ StandardVolume_Water_AliquotDispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, True, False, Liquid.WATER, True, False)] = \
 StandardVolume_Water_AliquotJet = HamiltonLiquidClass(
   curve={350.0: 350.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
   aspiration_flow_rate=100.0,
@@ -10669,7 +10669,7 @@ StandardVolume_Water_AliquotJet = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, True, False, Liquid.WATER, True, False)] = \
 StandardVolume_Water_DispenseJet = HamiltonLiquidClass(
   curve={300.0: 313.5, 350.0: 364.3, 50.0: 55.1, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -10692,7 +10692,7 @@ StandardVolume_Water_DispenseJet = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, True)] = \
 StandardVolume_Water_DispenseJetEmpty96Head = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 205.3, 10.0: 11.9},
   aspiration_flow_rate=100.0,
@@ -10715,7 +10715,7 @@ StandardVolume_Water_DispenseJetEmpty96Head = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, True, False)] = \
 StandardVolume_Water_DispenseJetPart96Head = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 205.3, 10.0: 11.9},
   aspiration_flow_rate=100.0,
@@ -10738,7 +10738,7 @@ StandardVolume_Water_DispenseJetPart96Head = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(300, False, True, False, Liquid.WATER, True, True)] = \
 StandardVolume_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={300.0: 313.5, 50.0: 55.1, 0.0: 0.0, 20.0: 23.2, 100.0: 107.2, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -10761,7 +10761,7 @@ StandardVolume_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.WATER, True, False)] = \
+mapping[(300, False, True, False, Liquid.WATER, True, False)] = \
 StandardVolume_Water_DispenseJet_Part = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 20.0: 28.2, 100.0: 111.5},
   aspiration_flow_rate=100.0,
@@ -10785,7 +10785,7 @@ StandardVolume_Water_DispenseJet_Part = HamiltonLiquidClass(
 
 
 # V1.1: Set mix flow rate to 100
-mapping[(300, False, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, False, True, False, Liquid.WATER, False, False)] = \
 StandardVolume_Water_DispenseSurface = HamiltonLiquidClass(
   curve={300.0: 313.5, 5.0: 6.3, 0.5: 0.9, 350.0: 364.3, 50.0: 55.1, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 1.0: 1.6, 200.0: 211.0, 10.0: 11.9, 2.0: 2.8},
   aspiration_flow_rate=100.0,
@@ -10808,7 +10808,7 @@ StandardVolume_Water_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, False)] = \
 StandardVolume_Water_DispenseSurface96Head = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 10.0: 11.9},
   aspiration_flow_rate=100.0,
@@ -10831,7 +10831,7 @@ StandardVolume_Water_DispenseSurface96Head = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, True)] = \
 StandardVolume_Water_DispenseSurfaceEmpty96Head = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 205.7, 10.0: 11.9},
   aspiration_flow_rate=100.0,
@@ -10854,7 +10854,7 @@ StandardVolume_Water_DispenseSurfaceEmpty96Head = HamiltonLiquidClass(
 )
 
 
-mapping[(300, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, True, True, False, Liquid.WATER, False, False)] = \
 StandardVolume_Water_DispenseSurfacePart96Head = HamiltonLiquidClass(
   curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 205.7, 10.0: 11.9},
   aspiration_flow_rate=100.0,
@@ -10877,7 +10877,7 @@ StandardVolume_Water_DispenseSurfacePart96Head = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(300, False, True, False, Liquid.WATER, False, True)] = \
 StandardVolume_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={300.0: 313.5, 5.0: 6.3, 0.5: 0.9, 50.0: 55.1, 0.0: 0.0, 1.0: 1.6, 20.0: 23.2, 100.0: 107.2, 2.0: 2.8, 10.0: 11.9, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -10900,7 +10900,7 @@ StandardVolume_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(300, False, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(300, False, True, False, Liquid.WATER, False, False)] = \
 StandardVolume_Water_DispenseSurface_Part = HamiltonLiquidClass(
   curve={300.0: 313.5, 5.0: 6.8, 50.0: 55.1, 0.0: 0.0, 20.0: 23.2, 100.0: 107.2, 10.0: 12.3, 200.0: 211.0},
   aspiration_flow_rate=100.0,
@@ -10923,7 +10923,7 @@ StandardVolume_Water_DispenseSurface_Part = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(50, True, True, True, Liquid.DMSO, True, True)] = \
 Tip_50ulFilter_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 52.1, 30.0: 31.7, 0.0: 0.0, 20.0: 21.5},
   aspiration_flow_rate=100.0,
@@ -10946,7 +10946,7 @@ Tip_50ulFilter_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(50, True, True, True, Liquid.DMSO, False, True)] = \
 Tip_50ulFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.4, 50.0: 52.1, 30.0: 31.5, 0.0: 0.0, 1.0: 0.7, 10.0: 10.8},
   aspiration_flow_rate=100.0,
@@ -10969,7 +10969,7 @@ Tip_50ulFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass
 )
 
 
-mapping[(50, True, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(50, True, True, True, Liquid.WATER, True, True)] = \
 Tip_50ulFilter_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 54.2, 30.0: 33.2, 0.0: 0.0, 20.0: 22.5},
   aspiration_flow_rate=100.0,
@@ -10992,7 +10992,7 @@ Tip_50ulFilter_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(50, True, True, True, Liquid.WATER, False, True)] = \
 Tip_50ulFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 50.0: 53.6, 30.0: 32.6, 0.0: 0.0, 1.0: 0.8, 10.0: 11.3},
   aspiration_flow_rate=100.0,
@@ -11015,7 +11015,7 @@ Tip_50ulFilter_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClas
 )
 
 
-mapping[(50, True, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(50, True, True, True, Liquid.DMSO, True, True)] = \
 Tip_50ulFilter_96COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 51.4, 0.0: 0.0, 30.0: 31.3, 20.0: 21.0},
   aspiration_flow_rate=100.0,
@@ -11038,7 +11038,7 @@ Tip_50ulFilter_96COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(50, True, True, True, Liquid.DMSO, False, True)] = \
 Tip_50ulFilter_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 50.0: 51.1, 0.0: 0.0, 30.0: 31.0, 1.0: 0.8, 10.0: 10.7},
   aspiration_flow_rate=100.0,
@@ -11061,7 +11061,7 @@ Tip_50ulFilter_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(50, True, True, True, Liquid.WATER, True, True)] = \
 Tip_50ulFilter_96COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 54.0, 30.0: 33.0, 0.0: 0.0, 20.0: 22.4},
   aspiration_flow_rate=100.0,
@@ -11084,7 +11084,7 @@ Tip_50ulFilter_96COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(50, True, True, True, Liquid.WATER, False, True)] = \
 Tip_50ulFilter_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 50.0: 53.5, 30.0: 32.9, 0.0: 0.0, 1.0: 0.8, 10.0: 11.4},
   aspiration_flow_rate=100.0,
@@ -11107,7 +11107,7 @@ Tip_50ulFilter_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.DMSO, True, True)] = \
+mapping[(50, False, True, True, Liquid.DMSO, True, True)] = \
 Tip_50ulFilter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 52.5, 0.0: 0.0, 30.0: 31.4, 20.0: 21.5},
   aspiration_flow_rate=100.0,
@@ -11130,7 +11130,7 @@ Tip_50ulFilter_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.DMSO, False, True)] = \
+mapping[(50, False, True, True, Liquid.DMSO, False, True)] = \
 Tip_50ulFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.5, 50.0: 52.6, 0.0: 0.0, 30.0: 32.0, 1.0: 0.7, 10.0: 11.0},
   aspiration_flow_rate=100.0,
@@ -11153,7 +11153,7 @@ Tip_50ulFilter_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.ETHANOL, True, True)] = \
+mapping[(50, False, True, True, Liquid.ETHANOL, True, True)] = \
 Tip_50ulFilter_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 57.5, 0.0: 0.0, 30.0: 35.8, 20.0: 24.4},
   aspiration_flow_rate=50.0,
@@ -11176,7 +11176,7 @@ Tip_50ulFilter_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.ETHANOL, False, True)] = \
+mapping[(50, False, True, True, Liquid.ETHANOL, False, True)] = \
 Tip_50ulFilter_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 6.5, 50.0: 54.1, 0.0: 0.0, 30.0: 33.8, 1.0: 1.9, 10.0: 12.0},
   aspiration_flow_rate=100.0,
@@ -11199,7 +11199,7 @@ Tip_50ulFilter_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(50, False, True, True, Liquid.GLYCERIN80, False, True)] = \
 Tip_50ulFilter_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.5, 50.0: 57.0, 0.0: 0.0, 30.0: 35.9, 1.0: 0.6, 10.0: 12.0},
   aspiration_flow_rate=50.0,
@@ -11222,7 +11222,7 @@ Tip_50ulFilter_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.SERUM, True, True)] = \
+mapping[(50, False, True, True, Liquid.SERUM, True, True)] = \
 Tip_50ulFilter_Serum_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 54.6, 30.0: 33.5, 0.0: 0.0, 20.0: 22.6},
   aspiration_flow_rate=100.0,
@@ -11245,7 +11245,7 @@ Tip_50ulFilter_Serum_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.SERUM, False, True)] = \
+mapping[(50, False, True, True, Liquid.SERUM, False, True)] = \
 Tip_50ulFilter_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.7, 50.0: 54.9, 30.0: 33.0, 0.0: 0.0, 1.0: 0.7, 10.0: 11.3},
   aspiration_flow_rate=100.0,
@@ -11268,7 +11268,7 @@ Tip_50ulFilter_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.WATER, True, True)] = \
+mapping[(50, False, True, True, Liquid.WATER, True, True)] = \
 Tip_50ulFilter_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 54.0, 30.0: 33.6, 0.0: 0.0, 20.0: 22.7},
   aspiration_flow_rate=100.0,
@@ -11291,7 +11291,7 @@ Tip_50ulFilter_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, True, LiquidClass.WATER, False, True)] = \
+mapping[(50, False, True, True, Liquid.WATER, False, True)] = \
 Tip_50ulFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.7, 50.0: 54.2, 30.0: 33.1, 0.0: 0.0, 1.0: 0.65, 10.0: 11.4},
   aspiration_flow_rate=100.0,
@@ -11314,7 +11314,7 @@ Tip_50ulFilter_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(50, True, True, False, Liquid.DMSO, True, True)] = \
 Tip_50ul_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 52.1, 30.0: 31.7, 0.0: 0.0, 20.0: 21.5},
   aspiration_flow_rate=100.0,
@@ -11337,7 +11337,7 @@ Tip_50ul_96COREHead1000ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(50, True, True, False, Liquid.DMSO, False, True)] = \
 Tip_50ul_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.4, 50.0: 52.1, 30.0: 31.5, 0.0: 0.0, 1.0: 0.7, 10.0: 10.8},
   aspiration_flow_rate=100.0,
@@ -11360,7 +11360,7 @@ Tip_50ul_96COREHead1000ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(50, True, True, False, Liquid.WATER, True, True)] = \
 Tip_50ul_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 52.8, 0.0: 0.0, 30.0: 33.2, 20.0: 22.5},
   aspiration_flow_rate=100.0,
@@ -11383,7 +11383,7 @@ Tip_50ul_96COREHead1000ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(50, True, True, False, Liquid.WATER, False, True)] = \
 Tip_50ul_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.8, 50.0: 53.6, 30.0: 32.6, 0.0: 0.0, 1.0: 0.8, 10.0: 11.3},
   aspiration_flow_rate=100.0,
@@ -11406,7 +11406,7 @@ Tip_50ul_96COREHead1000ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(50, True, True, False, Liquid.DMSO, True, True)] = \
 Tip_50ul_96COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 51.4, 30.0: 31.3, 0.0: 0.0, 20.0: 21.1},
   aspiration_flow_rate=100.0,
@@ -11429,7 +11429,7 @@ Tip_50ul_96COREHead_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(50, True, True, False, Liquid.DMSO, False, True)] = \
 Tip_50ul_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 50.0: 52.1, 30.0: 31.6, 0.0: 0.0, 1.0: 0.8, 10.0: 11.0},
   aspiration_flow_rate=100.0,
@@ -11452,7 +11452,7 @@ Tip_50ul_96COREHead_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(50, True, True, False, Liquid.WATER, True, True)] = \
 Tip_50ul_96COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 54.1, 0.0: 0.0, 30.0: 33.0, 20.0: 22.4},
   aspiration_flow_rate=100.0,
@@ -11475,7 +11475,7 @@ Tip_50ul_96COREHead_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, True, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(50, True, True, False, Liquid.WATER, False, True)] = \
 Tip_50ul_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 50.0: 53.6, 30.0: 32.9, 0.0: 0.0, 1.0: 0.7, 10.0: 11.4},
   aspiration_flow_rate=100.0,
@@ -11499,7 +11499,7 @@ Tip_50ul_96COREHead_Water_DispenseSurface_Empty = HamiltonLiquidClass(
 
 
 # Liquid class for wash 50ul tips with CO-RE 96 Head in CO-RE 96 Head Washer.
-mapping[(50, True, True, False, LiquidClass.WATER, False, False)] = \
+mapping[(50, True, True, False, Liquid.WATER, False, False)] = \
 Tip_50ul_Core96Washer_DispenseSurface = HamiltonLiquidClass(
   curve={5.0: 5.7, 50.0: 54.2, 30.0: 33.2, 0.0: 0.0, 1.0: 0.5, 10.0: 11.4},
   aspiration_flow_rate=100.0,
@@ -11522,7 +11522,7 @@ Tip_50ul_Core96Washer_DispenseSurface = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.DMSO, True, True)] = \
+mapping[(50, False, True, False, Liquid.DMSO, True, True)] = \
 Tip_50ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 52.5, 30.0: 32.2, 0.0: 0.0, 20.0: 21.4},
   aspiration_flow_rate=100.0,
@@ -11545,7 +11545,7 @@ Tip_50ul_DMSO_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.DMSO, False, True)] = \
+mapping[(50, False, True, False, Liquid.DMSO, False, True)] = \
 Tip_50ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.6, 50.0: 52.6, 30.0: 32.1, 0.0: 0.0, 1.0: 0.7, 10.0: 11.0},
   aspiration_flow_rate=100.0,
@@ -11568,7 +11568,7 @@ Tip_50ul_DMSO_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.ETHANOL, True, True)] = \
+mapping[(50, False, True, False, Liquid.ETHANOL, True, True)] = \
 Tip_50ul_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 58.4, 0.0: 0.0, 30.0: 36.0, 20.0: 24.2},
   aspiration_flow_rate=50.0,
@@ -11591,7 +11591,7 @@ Tip_50ul_EtOH_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.ETHANOL, False, True)] = \
+mapping[(50, False, True, False, Liquid.ETHANOL, False, True)] = \
 Tip_50ul_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 6.7, 50.0: 54.1, 0.0: 0.0, 30.0: 33.7, 1.0: 2.1, 10.0: 12.1},
   aspiration_flow_rate=100.0,
@@ -11614,7 +11614,7 @@ Tip_50ul_EtOH_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.GLYCERIN80, False, True)] = \
+mapping[(50, False, True, False, Liquid.GLYCERIN80, False, True)] = \
 Tip_50ul_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.7, 50.0: 59.4, 0.0: 0.0, 30.0: 36.0, 1.0: 0.3, 10.0: 11.8},
   aspiration_flow_rate=50.0,
@@ -11637,7 +11637,7 @@ Tip_50ul_Glycerin80_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.SERUM, True, True)] = \
+mapping[(50, False, True, False, Liquid.SERUM, True, True)] = \
 Tip_50ul_Serum_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 54.6, 30.0: 33.5, 0.0: 0.0, 20.0: 22.6},
   aspiration_flow_rate=100.0,
@@ -11660,7 +11660,7 @@ Tip_50ul_Serum_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.SERUM, False, True)] = \
+mapping[(50, False, True, False, Liquid.SERUM, False, True)] = \
 Tip_50ul_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.7, 50.0: 54.9, 30.0: 33.0, 0.0: 0.0, 1.0: 0.7, 10.0: 11.3},
   aspiration_flow_rate=100.0,
@@ -11683,7 +11683,7 @@ Tip_50ul_Serum_DispenseSurface_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.WATER, True, True)] = \
+mapping[(50, False, True, False, Liquid.WATER, True, True)] = \
 Tip_50ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
   curve={50.0: 54.0, 30.0: 33.5, 0.0: 0.0, 20.0: 22.5},
   aspiration_flow_rate=100.0,
@@ -11706,7 +11706,7 @@ Tip_50ul_Water_DispenseJet_Empty = HamiltonLiquidClass(
 )
 
 
-mapping[(50, False, True, False, LiquidClass.WATER, False, True)] = \
+mapping[(50, False, True, False, Liquid.WATER, False, True)] = \
 Tip_50ul_Water_DispenseSurface_Empty = HamiltonLiquidClass(
   curve={5.0: 5.7, 50.0: 54.2, 30.0: 33.2, 0.0: 0.0, 1.0: 0.7, 10.0: 11.4},
   aspiration_flow_rate=100.0,

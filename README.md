@@ -89,6 +89,24 @@ data = await pr.read_luminescence()
 - [forums.pylabrobot.org](https://forums.pylabrobot.org) for questions and discussions.
 - [GitHub Issues](https://github.com/pylabrobot/pylabrobot/issues) for bug reports and feature requests.
 
+## Citing
+
+If you use PyLabRobot in your research, please cite the following preprint:
+
+```bibtex
+@article {Wierenga2023.07.10.547733,
+	author = {Rick Wierenga and Stefan Golas and Wilson Ho and Connor Coley and Kevin Esvelt},
+	title = {PyLabRobot: An Open-Source, Hardware Agnostic Interface for Liquid-Handling Robots and Accessories},
+	elocation-id = {2023.07.10.547733},
+	year = {2023},
+	doi = {10.1101/2023.07.10.547733},
+	publisher = {Cold Spring Harbor Laboratory},
+	URL = {https://www.biorxiv.org/content/early/2023/07/15/2023.07.10.547733},
+	eprint = {https://www.biorxiv.org/content/early/2023/07/15/2023.07.10.547733.full.pdf},
+	journal = {bioRxiv}
+}
+```
+
 ---
 
 **Disclaimer:** PyLabRobot is not officially endorsed or supported by any robot manufacturer. If you use a firmware driver such as the STAR driver provided here, you do so at your own risk. Usage of a firmware driver such as STAR may invalidate your warranty. Please contact us with any questions.

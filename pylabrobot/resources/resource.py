@@ -4,9 +4,10 @@ import copy
 import json
 import logging
 import sys
-from typing import List, Optional, Type
+from typing import List, Optional, Type, cast
 
 from .coordinate import Coordinate
+from pylabrobot.serializer import serialize, deserialize
 
 if sys.version_info >= (3, 11):
   from typing import Self
@@ -14,6 +15,7 @@ else:
   from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
+
 
 class Resource:
   """ Base class for deck resources.
@@ -58,7 +60,7 @@ class Resource:
       "size_x": self._size_x,
       "size_y": self._size_y,
       "size_z": self._size_z,
-      "location": self.location.serialize() if self.location is not None else None,
+      "location": serialize(self.location),
       "category": self.category,
       "model": self.model,
       "children": [child.serialize() for child in self.children],
@@ -138,14 +140,14 @@ class Resource:
     """ Assign a child resource to this resource.
 
     Will use :meth:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
-    if parent is not `None`.  Note that the resource to be assigned may have child resources, in
+    if parent is not `None`. Note that the resource to be assigned may have child resources, in
     which case you will be responsible for handling any checking, if necessary.
 
     Args:
       resource: The resource to assign.
       location: The location of the resource, relative to this resource.
-      reassign: If `True`, will not raise an error if the resource is already assigned to this
-        resource.
+      reassign: If `False`, an error will be raised if the resource to be assigned is already
+        assigned to this resource. Defaults to `True`.
     """
 
     # Check for unsupported resource assignment operations
@@ -273,16 +275,20 @@ class Resource:
     raise ValueError(f"Resource with name '{name}' does not exist.")
 
   def get_2d_center_offsets(self, n: int = 1) -> List[Coordinate]:
-    """ Get the offsets (from bottom left) of the center(s) of this resoure. If `n` is greater than
-    one, the offsets are equally spaced along a column (the y axis), all having the same x and z
-    coordinates. The z coordinate is the bottom of the resource. """
+    """ Get the offsets (from bottom left) of the center(s) of this resource.
+
+    If `n` is greater than one, the offsets are equally spaced along a column (the y axis), all
+    having the same x and z coordinates. The z coordinate is the bottom of the resource.
+
+    The offsets are returned from high y (back) to low y (front).
+    """
 
     dx = self.get_size_x() / 2
     dy = self.get_size_y() / (n+1)
     if dy < 9: # TODO: too specific?
       raise ValueError(f"Resource is too small to space {n} channels evenly.")
     offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
-    return offsets
+    return list(reversed(offsets))
 
   def rotate(self, degrees: int):
     """ Rotate counter clockwise by the given number of degrees.
@@ -326,7 +332,7 @@ class Resource:
     return new_resource
 
   def center(self) -> Coordinate:
-    """ Get the center of this resource. """
+    """ Get the center of the bottom plane of this resource. """
 
     return Coordinate(self.get_size_x() / 2, self.get_size_y() / 2, 0)
 
@@ -350,7 +356,7 @@ class Resource:
       json.dump(serialized, f, indent=indent)
 
   @classmethod
-  def deserialize(cls, data: dict) -> Self: # type: ignore
+  def deserialize(cls, data: dict) -> Self:
     """ Deserialize a resource from a dictionary.
 
     Examples:
@@ -364,19 +370,9 @@ class Resource:
 
     data_copy = data.copy() # copy data because we will be modifying it
 
-    # Recursively find a subclass with the correct name
-    def find_subclass(cls: Type[Self], name: str) -> Optional[Type[Self]]:
-      if cls.__name__ == name:
-        return cls
-      for subclass in cls.__subclasses__():
-        subclass_ = find_subclass(subclass, name)
-        if subclass_ is not None:
-          return subclass_
-      return None
-
-    subclass = find_subclass(Resource, data["type"])
+    subclass = get_resource_class_from_string(data["type"])
     if subclass is None:
-      raise ValueError(f"Could not find subclass with name {data['type']}")
+      raise ValueError(f"Could not find subclass with name '{data['type']}'")
     assert issubclass(subclass, cls) # mypy does not know the type after the None check...
 
     for key in ["type", "parent_name", "location"]: # delete meta keys
@@ -385,13 +381,13 @@ class Resource:
     resource = subclass(**data_copy)
 
     for child_data in children_data:
-      child_cls = find_subclass(Resource, child_data["type"])
+      child_cls = get_resource_class_from_string(child_data["type"])
       if child_cls is None:
         raise ValueError(f"Could not find subclass with name {child_data['type']}")
       child = child_cls.deserialize(child_data)
       location_data = child_data.get("location", None)
       if location_data is not None:
-        location = Coordinate.deserialize(location_data)
+        location = cast(Coordinate, deserialize(location_data))
       else:
         location = None
       resource.assign_child_resource(child, location=location)
@@ -416,3 +412,26 @@ class Resource:
       content = json.load(f)
 
     return cls.deserialize(content)
+
+
+def get_resource_class_from_string(
+  class_name: str,
+  cls: Type[Resource] = Resource
+) -> Optional[Type[Resource]]:
+  """ Recursively find a subclass with the correct name.
+
+  Args:
+    class_name: The name of the class to find.
+    cls: The class to search in.
+
+  Returns:
+    The class with the given name, or `None` if no such class exists.
+  """
+
+  if cls.__name__ == class_name:
+    return cls
+  for subclass in cls.__subclasses__():
+    subclass_ = get_resource_class_from_string(class_name=class_name, cls=subclass)
+    if subclass_ is not None:
+      return subclass_
+  return None

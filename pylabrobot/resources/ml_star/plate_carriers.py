@@ -4,8 +4,7 @@
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
 
-from pylabrobot.resources import PlateCarrier, Coordinate, create_homogenous_carrier_sites
-
+from pylabrobot.resources import PlateCarrier, Coordinate, create_homogeneous_carrier_sites
 
 
 def PLT_CAR_L4HD(name: str) -> PlateCarrier:
@@ -15,7 +14,7 @@ def PLT_CAR_L4HD(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(4.1, 36.1, 118.25),
         Coordinate(4.1, 146.1, 118.25),
         Coordinate(4.1, 256.1, 118.25),
@@ -35,7 +34,7 @@ def PLT_CAR_L5AC(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(4.0, 8.5, 86.15),
         Coordinate(4.0, 104.5, 86.15),
         Coordinate(4.0, 200.5, 86.15),
@@ -56,7 +55,7 @@ def PLT_CAR_L5AC_A00(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(4.0, 8.5, 86.15),
         Coordinate(4.0, 104.5, 86.15),
         Coordinate(4.0, 200.5, 86.15),
@@ -77,7 +76,7 @@ def PLT_CAR_L5FLEX_AC(name: str) -> PlateCarrier:
     size_x=157.5,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(15.25, 8.5, 89.1),
         Coordinate(15.25, 104.5, 89.1),
         Coordinate(15.25, 200.5, 89.1),
@@ -98,7 +97,7 @@ def PLT_CAR_L5FLEX_AC_A00(name: str) -> PlateCarrier:
     size_x=157.5,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(15.25, 8.5, 89.1),
         Coordinate(15.25, 104.5, 89.1),
         Coordinate(15.25, 200.5, 89.1),
@@ -119,7 +118,7 @@ def PLT_CAR_L5FLEX_MD(name: str) -> PlateCarrier:
     size_x=157.5,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(15.25, 8.5, 115.8),
         Coordinate(15.25, 104.5, 115.8),
         Coordinate(15.25, 200.5, 115.8),
@@ -140,7 +139,7 @@ def PLT_CAR_L5FLEX_MD_A00(name: str) -> PlateCarrier:
     size_x=157.5,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(15.25, 8.5, 115.8),
         Coordinate(15.25, 104.5, 115.8),
         Coordinate(15.25, 200.5, 115.8),
@@ -161,7 +160,7 @@ def PLT_CAR_L5MD(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(4.0, 8.5, 111.75),
         Coordinate(4.0, 104.5, 111.75),
         Coordinate(4.0, 200.5, 111.75),
@@ -182,7 +181,7 @@ def PLT_CAR_L5MD_A00(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(4.0, 8.5, 111.75),
         Coordinate(4.0, 104.5, 111.75),
         Coordinate(4.0, 200.5, 111.75),
@@ -203,7 +202,7 @@ def PLT_CAR_L5PCR(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(4.0, 8.5, 107.5),
         Coordinate(4.0, 104.5, 107.5),
         Coordinate(4.0, 200.5, 107.5),
@@ -224,7 +223,7 @@ def PLT_CAR_L5PCR_A00(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(5.0, 9.5, 109.2),
         Coordinate(5.0, 105.5, 109.2),
         Coordinate(5.0, 201.5, 109.2),
@@ -245,7 +244,7 @@ def PLT_CAR_L5PCR_A01(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(5.0, 9.5, 109.2),
         Coordinate(5.0, 105.5, 109.2),
         Coordinate(5.0, 201.5, 109.2),
@@ -266,7 +265,7 @@ def PLT_CAR_P3AC_A00(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(43.85, 37.5, 86.15),
         Coordinate(43.85, 183.5, 86.15),
         Coordinate(43.85, 329.5, 86.15)
@@ -285,7 +284,7 @@ def PLT_CAR_P3AC_A01(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(44.1, 37.5, 85.9),
         Coordinate(44.1, 183.5, 85.9),
         Coordinate(44.1, 329.5, 85.9)
@@ -304,7 +303,7 @@ def PLT_CAR_P3HD(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(43.9, 27.05, 117.65),
         Coordinate(43.9, 173.05, 117.65),
         Coordinate(43.9, 319.05, 117.65)
@@ -323,7 +322,7 @@ def PLT_CAR_P3MD(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(44.1, 37.5, 111.5),
         Coordinate(44.1, 183.5, 111.5),
         Coordinate(44.1, 329.5, 111.5)
@@ -342,7 +341,7 @@ def PLT_CAR_P3MD_A00(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(44.1, 37.5, 111.5),
         Coordinate(44.1, 183.5, 111.5),
         Coordinate(44.1, 329.5, 111.5)
@@ -361,7 +360,7 @@ def PLT_CAR_P3MD_A01(name: str) -> PlateCarrier:
     size_x=135.0,
     size_y=497.0,
     size_z=130.0,
-    sites=create_homogenous_carrier_sites([
+    sites=create_homogeneous_carrier_sites([
         Coordinate(44.1, 37.5, 111.5),
         Coordinate(44.1, 183.5, 111.5),
         Coordinate(44.1, 329.5, 111.5)

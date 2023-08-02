@@ -62,8 +62,10 @@ def DiTi_100ul_Te_MO(name: str) -> TecanTipRack:
       dx=10.0,
       dy=6.9,
       dz=42.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -86,8 +88,10 @@ def DiTi_50ul_Te_MO(name: str) -> TecanTipRack:
       dx=10.0,
       dy=6.9,
       dz=28.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -110,8 +114,10 @@ def DiTi_200ul_Te_MO(name: str) -> TecanTipRack:
       dx=10.0,
       dy=6.9,
       dz=42.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -134,8 +140,10 @@ def DiTi_100ul_Filter_Te_MO(name: str) -> TecanTipRack:
       dx=10.0,
       dy=6.9,
       dz=42.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -158,8 +166,10 @@ def DiTi_200ul_Filter_Te_MO(name: str) -> TecanTipRack:
       dx=10.0,
       dy=6.9,
       dz=42.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -183,8 +193,10 @@ def Adapter_96_DiTi_MCA384(name: str) -> TecanTipRack:
       dx=7.7,
       dy=4.2,
       dz=15.9,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -208,8 +220,10 @@ def Adapter_DiTi_Combo_MCA384(name: str) -> TecanTipRack:
       dx=9.95,
       dy=6.45,
       dz=15.9,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -233,8 +247,10 @@ def Adapter_DiTi_MCA384(name: str) -> TecanTipRack:
       dx=9.95,
       dy=6.45,
       dz=15.9,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -258,8 +274,10 @@ def DiTi_100ul_Filter_MCA96(name: str) -> TecanTipRack:
       dx=6.3,
       dy=5.8,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -283,8 +301,10 @@ def DiTi_100ul_MCA96(name: str) -> TecanTipRack:
       dx=6.3,
       dy=5.8,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -308,8 +328,10 @@ def DiTi_200ul_Filter_MCA96(name: str) -> TecanTipRack:
       dx=6.3,
       dy=5.8,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -333,8 +355,10 @@ def DiTi_200ul_MCA96(name: str) -> TecanTipRack:
       dx=6.3,
       dy=5.8,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -358,8 +382,10 @@ def DiTi_50ul_MCA96(name: str) -> TecanTipRack:
       dx=6.3,
       dy=5.8,
       dz=29.6,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -383,8 +409,10 @@ def Base_Nested_DiTi_MCA96(name: str) -> TecanTipRack:
       dx=-3.6,
       dy=-3.7,
       dz=43.1,
-      item_size_x=33.0,
-      item_size_y=33.0,
+      item_dx=33.0,
+      item_dy=33.0,
+      size_x=33.0,
+      size_y=3.0
     ),
   )
 
@@ -408,8 +436,10 @@ def DiTi_100ul_Nested_MCA96(name: str) -> TecanTipRack:
       dx=10.1,
       dy=6.5,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -432,8 +462,10 @@ def DiTi_100ul_SBS_MCA96(name: str) -> TecanTipRack:
       dx=10.1,
       dy=7.8,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -456,8 +488,10 @@ def DiTi_200ul_SBS_MCA96(name: str) -> TecanTipRack:
       dx=10.1,
       dy=7.8,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -480,8 +514,10 @@ def DiTi_50ul_SBS_MCA96(name: str) -> TecanTipRack:
       dx=10.1,
       dy=7.8,
       dz=29.6,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -505,8 +541,10 @@ def DiTi_50ul_Nested_MCA96(name: str) -> TecanTipRack:
       dx=10.1,
       dy=6.5,
       dz=29.6,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -530,8 +568,10 @@ def Adapter_96_DiTi_1to1_MCA384(name: str) -> TecanTipRack:
       dx=7.45,
       dy=3.95,
       dz=25.2,
-      item_size_x=9.5,
-      item_size_y=9.5,
+      item_dx=9.5,
+      item_dy=9.5,
+      size_x=9.5,
+      size_y=9.5
     ),
   )
 
@@ -555,8 +595,10 @@ def DiTi_200ul_Nested_MCA96(name: str) -> TecanTipRack:
       dx=10.0,
       dy=6.4,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -580,8 +622,10 @@ def DiTi_200ul_w_b_filter_MCA96(name: str) -> TecanTipRack:
       dx=10.1,
       dy=7.8,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -605,8 +649,10 @@ def DiTi_200ul_wide_bore_MCA96(name: str) -> TecanTipRack:
       dx=10.1,
       dy=7.8,
       dz=43.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -630,8 +676,10 @@ def Adapter_96_DiTi_4to1_MCA384(name: str) -> TecanTipRack:
       dx=7.85,
       dy=3.95,
       dz=25.2,
-      item_size_x=9.5,
-      item_size_y=9.5,
+      item_dx=9.5,
+      item_dy=9.5,
+      size_x=9.5,
+      size_y=9.5
     ),
   )
 
@@ -654,8 +702,10 @@ def DiTi_500ul_Filter_SBS_MCA96(name: str) -> TecanTipRack:
       dx=10.8,
       dy=6.9,
       dz=54.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -678,8 +728,10 @@ def DiTi_500ul_SBS_MCA96(name: str) -> TecanTipRack:
       dx=10.6,
       dy=6.9,
       dz=54.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -703,8 +755,10 @@ def DiTi_Nested_Waste_MCA384(name: str) -> TecanTipRack:
       dx=29.0,
       dy=11.5,
       dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -727,8 +781,10 @@ def DiTi_1000ul_SBS_LiHa(name: str) -> TecanTipRack:
       dx=10.0,
       dy=6.9,
       dz=32.6,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -751,8 +807,10 @@ def DiTi_200ul_SBS_LiHa(name: str) -> TecanTipRack:
       dx=10.1,
       dy=7.4,
       dz=-5.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -775,8 +833,10 @@ def DiTi_50ul_SBS_LiHa(name: str) -> TecanTipRack:
       dx=10.1,
       dy=7.0,
       dz=-5.3,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -800,8 +860,10 @@ def DiTi_5000ul_LiHa(name: str) -> TecanTipRack:
       dx=10.5,
       dy=7.6,
       dz=46.6,
-      item_size_x=18.0,
-      item_size_y=18.0,
+      item_dx=18.0,
+      item_dy=18.0,
+      size_x=18.0,
+      size_y=8.0
     ),
   )
 
@@ -825,8 +887,10 @@ def DiTi_5000ul_Filter_LiHa(name: str) -> TecanTipRack:
       dx=10.5,
       dy=7.6,
       dz=46.6,
-      item_size_x=18.0,
-      item_size_y=18.0,
+      item_dx=18.0,
+      item_dy=18.0,
+      size_x=18.0,
+      size_y=8.0
     ),
   )
 
@@ -850,8 +914,10 @@ def DiTi_125ul_Filter_MCA384(name: str) -> TecanTipRack:
       dx=9.65,
       dy=6.65,
       dz=47.3,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -875,8 +941,10 @@ def DiTi_125ul_MCA384(name: str) -> TecanTipRack:
       dx=9.85,
       dy=6.45,
       dz=47.3,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -900,8 +968,10 @@ def DiTi_15ul_Filter_MCA384(name: str) -> TecanTipRack:
       dx=9.95,
       dy=6.45,
       dz=28.6,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -925,8 +995,10 @@ def DiTi_15ul_MCA384(name: str) -> TecanTipRack:
       dx=9.95,
       dy=6.45,
       dz=28.6,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -950,8 +1022,10 @@ def DiTi_50ul_Filter_MCA384(name: str) -> TecanTipRack:
       dx=9.65,
       dy=6.65,
       dz=41.4,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -975,8 +1049,10 @@ def DiTi_50ul_MCA384(name: str) -> TecanTipRack:
       dx=9.65,
       dy=6.65,
       dz=41.4,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -1000,8 +1076,10 @@ def DiTi_1000ul_Filter_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=32.6,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1025,8 +1103,10 @@ def DiTi_1000ul_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=32.6,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
       make_tip=diti_1000ul_liha
     ),
   )
@@ -1051,8 +1131,10 @@ def DiTi_10ul_Filter_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-31.3,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1076,8 +1158,10 @@ def DiTi_10ul_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-31.3,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
       make_tip=diti_10ul_liha
     ),
   )
@@ -1102,8 +1186,10 @@ def DiTi_200ul_Filter_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-5.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1127,8 +1213,10 @@ def DiTi_200ul_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-5.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1152,8 +1240,10 @@ def DiTi_50ul_Filter_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-5.3,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1177,8 +1267,10 @@ def DiTi_50ul_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-5.3,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1202,8 +1294,10 @@ def DiTi_350ul_Nested_LiHa(name: str) -> TecanTipRack:
       dx=11.2,
       dy=7.1,
       dz=-5.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1227,8 +1321,10 @@ def DiTi_10ul_Filter_LiHa_L(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-28.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1252,8 +1348,10 @@ def DiTi_10ul_Filter_Nested_LiHa(name: str) -> TecanTipRack:
       dx=9.8,
       dy=7.0,
       dz=-28.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1277,8 +1375,10 @@ def DiTi_10ul_LiHa_L(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-28.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1302,8 +1402,10 @@ def DiTi_10ul_Nested_LiHa(name: str) -> TecanTipRack:
       dx=9.8,
       dy=7.7,
       dz=-28.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1327,8 +1429,10 @@ def DiTi_10ul_SBS_Filter_LiHa(name: str) -> TecanTipRack:
       dx=10.1,
       dy=7.4,
       dz=-28.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1352,8 +1456,10 @@ def DiTi_10ul_SBS_LiHa(name: str) -> TecanTipRack:
       dx=10.5,
       dy=5.8,
       dz=-28.1,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1377,8 +1483,10 @@ def DiTi_1000ul_W_B_Filter_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=9.6,
       dz=32.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1402,8 +1510,10 @@ def DiTi_1000ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
       dx=9.8,
       dy=8.1,
       dz=32.6,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1427,8 +1537,10 @@ def DiTi_1000ul_CL_LiHa(name: str) -> TecanTipRack:
       dx=9.8,
       dy=8.1,
       dz=32.6,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1452,8 +1564,10 @@ def DiTi_200ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
       dx=10.7,
       dy=7.7,
       dz=-5.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1477,8 +1591,10 @@ def DiTi_200ul_CL_LiHa(name: str) -> TecanTipRack:
       dx=10.7,
       dy=7.7,
       dz=-5.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1502,8 +1618,10 @@ def DiTi_50ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-5.3,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )
 
@@ -1527,7 +1645,9 @@ def DiTi_50ul_CL_LiHa(name: str) -> TecanTipRack:
       dx=7.7,
       dy=8.7,
       dz=-5.3,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0
     ),
   )

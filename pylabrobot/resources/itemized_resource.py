@@ -375,7 +375,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     return None
 
   def get_all_items(self) -> List[T]:
-    """ Get all items in the resource."""
+    """ Get all items in the resource. Items are in a 1D list, starting from the top left and going
+    down, then right. """
 
     return self.get_items(range(self.num_items))
 
@@ -384,7 +385,7 @@ def create_equally_spaced(
     klass: Type[T],
     num_items_x: int, num_items_y: int,
     dx: float, dy: float, dz: float,
-    item_size_x: float, item_size_y: float,
+    item_dx: float, item_dy: float,
     **kwargs
 ) -> List[List[T]]:
   """ Make equally spaced resources.
@@ -398,8 +399,8 @@ def create_equally_spaced(
     dx: The bottom left corner for items in the left column
     dy: The bottom left corner for items in the top row
     dz: The z coordinate for all items
-    item_size_x: The size of the items in the x direction
-    item_size_y: The size of the items in the y direction
+    item_dx: The size of the items in the x direction
+    item_dy: The size of the items in the y direction
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:
@@ -416,11 +417,9 @@ def create_equally_spaced(
       name = f"{klass.__name__.lower()}_{i}_{j}"
       item = klass(
         name=name,
-        size_x=item_size_x,
-        size_y=item_size_y,
         **kwargs
       )
-      item.location=Coordinate(x=dx + i * item_size_x, y=dy + (num_items_y-j-1) * item_size_y, z=dz)
+      item.location=Coordinate(x=dx + i * item_dx, y=dy + (num_items_y-j-1) * item_dy, z=dz)
       items[i].append(item)
 
   return items

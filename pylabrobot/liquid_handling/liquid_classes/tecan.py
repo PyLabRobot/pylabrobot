@@ -1,12 +1,12 @@
-from typing import Dict, Tuple, Optional
 import re
+from typing import Dict, Tuple, Optional
 
-from pylabrobot.liquid_handling.liquid_classes import LiquidClass
+from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.tecan import TipType
 
 
-def from_str(s: str) -> Optional[LiquidClass]:
-  """ Parses a Tecan liquid class name and creates a LiquidClass object. """
+def from_str(s: str) -> Optional[Liquid]:
+  """ Parses a Tecan liquid class name and creates a Liquid object. """
 
   m = re.match(r"(\w+) free dispense$", s)
   if m is None:
@@ -15,7 +15,7 @@ def from_str(s: str) -> Optional[LiquidClass]:
   lc = m.group(1)
   if lc in {"Ethanol", "Serum"}:
     lc += " 100%"
-  return LiquidClass(lc)
+  return Liquid(lc)
 
 
 class TecanLiquidClass:
@@ -133,11 +133,11 @@ class TecanLiquidClass:
     return self.calibration_factor * target_volume + self.calibration_offset
 
 
-mapping: Dict[Tuple[float, float, LiquidClass, TipType], TecanLiquidClass] = {}
+mapping: Dict[Tuple[float, float, Liquid, TipType], TecanLiquidClass] = {}
 
 def get_liquid_class(
   target_volume: float,
-  liquid_class: LiquidClass,
+  liquid_class: Liquid,
   tip_type: TipType,
 ) -> Optional[TecanLiquidClass]:
   for (mnv, mxv, lc, tt), tlc in mapping.items():
@@ -146,7 +146,7 @@ def get_liquid_class(
   return None
 
 
-mapping[(3, 15.01, LiquidClass.DMSO, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(3, 15.01, Liquid.DMSO, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -199,7 +199,7 @@ mapping[(3, 15.01, LiquidClass.DMSO, TipType.STANDARD)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 200.01, LiquidClass.DMSO, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(15.01, 200.01, Liquid.DMSO, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -252,7 +252,7 @@ mapping[(15.01, 200.01, LiquidClass.DMSO, TipType.STANDARD)] = TecanLiquidClass(
 )
 
 
-mapping[(200.01, 1000.01, LiquidClass.DMSO, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(200.01, 1000.01, Liquid.DMSO, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -305,7 +305,7 @@ mapping[(200.01, 1000.01, LiquidClass.DMSO, TipType.STANDARD)] = TecanLiquidClas
 )
 
 
-mapping[(3, 15.01, LiquidClass.DMSO, TipType.DITI)] = TecanLiquidClass(
+mapping[(3, 15.01, Liquid.DMSO, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -358,7 +358,7 @@ mapping[(3, 15.01, LiquidClass.DMSO, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 200.01, LiquidClass.DMSO, TipType.DITI)] = TecanLiquidClass(
+mapping[(15.01, 200.01, Liquid.DMSO, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -411,7 +411,7 @@ mapping[(15.01, 200.01, LiquidClass.DMSO, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(200.01, 1000.01, LiquidClass.DMSO, TipType.DITI)] = TecanLiquidClass(
+mapping[(200.01, 1000.01, Liquid.DMSO, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -464,7 +464,7 @@ mapping[(200.01, 1000.01, LiquidClass.DMSO, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(0.5, 3.01, LiquidClass.DMSO, TipType.STDLOWVOL)] = TecanLiquidClass(
+mapping[(0.5, 3.01, Liquid.DMSO, TipType.STDLOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -517,7 +517,7 @@ mapping[(0.5, 3.01, LiquidClass.DMSO, TipType.STDLOWVOL)] = TecanLiquidClass(
 )
 
 
-mapping[(3.01, 15.01, LiquidClass.DMSO, TipType.STDLOWVOL)] = TecanLiquidClass(
+mapping[(3.01, 15.01, Liquid.DMSO, TipType.STDLOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -570,7 +570,7 @@ mapping[(3.01, 15.01, LiquidClass.DMSO, TipType.STDLOWVOL)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 300.01, LiquidClass.DMSO, TipType.STDLOWVOL)] = TecanLiquidClass(
+mapping[(15.01, 300.01, Liquid.DMSO, TipType.STDLOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -623,7 +623,7 @@ mapping[(15.01, 300.01, LiquidClass.DMSO, TipType.STDLOWVOL)] = TecanLiquidClass
 )
 
 
-mapping[(1, 7.51, LiquidClass.DMSO, TipType.MCADITI)] = TecanLiquidClass(
+mapping[(1, 7.51, Liquid.DMSO, TipType.MCADITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -676,7 +676,7 @@ mapping[(1, 7.51, LiquidClass.DMSO, TipType.MCADITI)] = TecanLiquidClass(
 )
 
 
-mapping[(7.51, 20.01, LiquidClass.DMSO, TipType.MCADITI)] = TecanLiquidClass(
+mapping[(7.51, 20.01, Liquid.DMSO, TipType.MCADITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -729,7 +729,7 @@ mapping[(7.51, 20.01, LiquidClass.DMSO, TipType.MCADITI)] = TecanLiquidClass(
 )
 
 
-mapping[(20.01, 200.01, LiquidClass.DMSO, TipType.MCADITI)] = TecanLiquidClass(
+mapping[(20.01, 200.01, Liquid.DMSO, TipType.MCADITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -782,7 +782,7 @@ mapping[(20.01, 200.01, LiquidClass.DMSO, TipType.MCADITI)] = TecanLiquidClass(
 )
 
 
-mapping[(3, 15.01, LiquidClass.DMSO, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(3, 15.01, Liquid.DMSO, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -835,7 +835,7 @@ mapping[(3, 15.01, LiquidClass.DMSO, TipType.AIRDITI)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 200.01, LiquidClass.DMSO, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(15.01, 200.01, Liquid.DMSO, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -888,7 +888,7 @@ mapping[(15.01, 200.01, LiquidClass.DMSO, TipType.AIRDITI)] = TecanLiquidClass(
 )
 
 
-mapping[(200.01, 1000.01, LiquidClass.DMSO, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(200.01, 1000.01, Liquid.DMSO, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -941,7 +941,7 @@ mapping[(200.01, 1000.01, LiquidClass.DMSO, TipType.AIRDITI)] = TecanLiquidClass
 )
 
 
-mapping[(3, 1000.01, LiquidClass.ETHANOL, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(3, 1000.01, Liquid.ETHANOL, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -994,7 +994,7 @@ mapping[(3, 1000.01, LiquidClass.ETHANOL, TipType.STANDARD)] = TecanLiquidClass(
 )
 
 
-mapping[(3, 1000.01, LiquidClass.ETHANOL, TipType.DITI)] = TecanLiquidClass(
+mapping[(3, 1000.01, Liquid.ETHANOL, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -1047,7 +1047,7 @@ mapping[(3, 1000.01, LiquidClass.ETHANOL, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(0.5, 3.01, LiquidClass.ETHANOL, TipType.STDLOWVOL)] = TecanLiquidClass(
+mapping[(0.5, 3.01, Liquid.ETHANOL, TipType.STDLOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -1100,7 +1100,7 @@ mapping[(0.5, 3.01, LiquidClass.ETHANOL, TipType.STDLOWVOL)] = TecanLiquidClass(
 )
 
 
-mapping[(3.01, 15.01, LiquidClass.ETHANOL, TipType.STDLOWVOL)] = TecanLiquidClass(
+mapping[(3.01, 15.01, Liquid.ETHANOL, TipType.STDLOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -1153,7 +1153,7 @@ mapping[(3.01, 15.01, LiquidClass.ETHANOL, TipType.STDLOWVOL)] = TecanLiquidClas
 )
 
 
-mapping[(15.01, 300.01, LiquidClass.ETHANOL, TipType.STDLOWVOL)] = TecanLiquidClass(
+mapping[(15.01, 300.01, Liquid.ETHANOL, TipType.STDLOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -1206,7 +1206,7 @@ mapping[(15.01, 300.01, LiquidClass.ETHANOL, TipType.STDLOWVOL)] = TecanLiquidCl
 )
 
 
-mapping[(3, 5, LiquidClass.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(3, 5, Liquid.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -1259,7 +1259,7 @@ mapping[(3, 5, LiquidClass.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
 )
 
 
-mapping[(5, 15.01, LiquidClass.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(5, 15.01, Liquid.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -1312,7 +1312,7 @@ mapping[(5, 15.01, LiquidClass.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 200.01, LiquidClass.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(15.01, 200.01, Liquid.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -1365,7 +1365,7 @@ mapping[(15.01, 200.01, LiquidClass.ETHANOL, TipType.AIRDITI)] = TecanLiquidClas
 )
 
 
-mapping[(200.01, 1000.01, LiquidClass.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(200.01, 1000.01, Liquid.ETHANOL, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=2,
   lld_speed=60,
@@ -1418,7 +1418,7 @@ mapping[(200.01, 1000.01, LiquidClass.ETHANOL, TipType.AIRDITI)] = TecanLiquidCl
 )
 
 
-mapping[(3, 15.01, LiquidClass.SERUM, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(3, 15.01, Liquid.SERUM, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1471,7 +1471,7 @@ mapping[(3, 15.01, LiquidClass.SERUM, TipType.STANDARD)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 300.01, LiquidClass.SERUM, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(15.01, 300.01, Liquid.SERUM, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1524,7 +1524,7 @@ mapping[(15.01, 300.01, LiquidClass.SERUM, TipType.STANDARD)] = TecanLiquidClass
 )
 
 
-mapping[(300.01, 1000.01, LiquidClass.SERUM, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(300.01, 1000.01, Liquid.SERUM, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1577,7 +1577,7 @@ mapping[(300.01, 1000.01, LiquidClass.SERUM, TipType.STANDARD)] = TecanLiquidCla
 )
 
 
-mapping[(3, 15.01, LiquidClass.SERUM, TipType.DITI)] = TecanLiquidClass(
+mapping[(3, 15.01, Liquid.SERUM, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1630,7 +1630,7 @@ mapping[(3, 15.01, LiquidClass.SERUM, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 200.01, LiquidClass.SERUM, TipType.DITI)] = TecanLiquidClass(
+mapping[(15.01, 200.01, Liquid.SERUM, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1683,7 +1683,7 @@ mapping[(15.01, 200.01, LiquidClass.SERUM, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(200.01, 1000.01, LiquidClass.SERUM, TipType.DITI)] = TecanLiquidClass(
+mapping[(200.01, 1000.01, Liquid.SERUM, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1736,7 +1736,7 @@ mapping[(200.01, 1000.01, LiquidClass.SERUM, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(3, 15.01, LiquidClass.SERUM, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(3, 15.01, Liquid.SERUM, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1789,7 +1789,7 @@ mapping[(3, 15.01, LiquidClass.SERUM, TipType.AIRDITI)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 200.01, LiquidClass.SERUM, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(15.01, 200.01, Liquid.SERUM, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1842,7 +1842,7 @@ mapping[(15.01, 200.01, LiquidClass.SERUM, TipType.AIRDITI)] = TecanLiquidClass(
 )
 
 
-mapping[(200.01, 1000.01, LiquidClass.SERUM, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(200.01, 1000.01, Liquid.SERUM, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1895,7 +1895,7 @@ mapping[(200.01, 1000.01, LiquidClass.SERUM, TipType.AIRDITI)] = TecanLiquidClas
 )
 
 
-mapping[(3, 15.01, LiquidClass.WATER, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(3, 15.01, Liquid.WATER, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -1948,7 +1948,7 @@ mapping[(3, 15.01, LiquidClass.WATER, TipType.STANDARD)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 500.01, LiquidClass.WATER, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(15.01, 500.01, Liquid.WATER, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2001,7 +2001,7 @@ mapping[(15.01, 500.01, LiquidClass.WATER, TipType.STANDARD)] = TecanLiquidClass
 )
 
 
-mapping[(500.01, 1000.01, LiquidClass.WATER, TipType.STANDARD)] = TecanLiquidClass(
+mapping[(500.01, 1000.01, Liquid.WATER, TipType.STANDARD)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2054,7 +2054,7 @@ mapping[(500.01, 1000.01, LiquidClass.WATER, TipType.STANDARD)] = TecanLiquidCla
 )
 
 
-mapping[(3, 15.01, LiquidClass.WATER, TipType.DITI)] = TecanLiquidClass(
+mapping[(3, 15.01, Liquid.WATER, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2107,7 +2107,7 @@ mapping[(3, 15.01, LiquidClass.WATER, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 200.01, LiquidClass.WATER, TipType.DITI)] = TecanLiquidClass(
+mapping[(15.01, 200.01, Liquid.WATER, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2160,7 +2160,7 @@ mapping[(15.01, 200.01, LiquidClass.WATER, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(200.01, 1000.01, LiquidClass.WATER, TipType.DITI)] = TecanLiquidClass(
+mapping[(200.01, 1000.01, Liquid.WATER, TipType.DITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2213,7 +2213,7 @@ mapping[(200.01, 1000.01, LiquidClass.WATER, TipType.DITI)] = TecanLiquidClass(
 )
 
 
-mapping[(0.5, 3.01, LiquidClass.WATER, TipType.STDLOWVOL)] = TecanLiquidClass(
+mapping[(0.5, 3.01, Liquid.WATER, TipType.STDLOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2266,7 +2266,7 @@ mapping[(0.5, 3.01, LiquidClass.WATER, TipType.STDLOWVOL)] = TecanLiquidClass(
 )
 
 
-mapping[(3.01, 15.01, LiquidClass.WATER, TipType.STDLOWVOL)] = TecanLiquidClass(
+mapping[(3.01, 15.01, Liquid.WATER, TipType.STDLOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2319,7 +2319,7 @@ mapping[(3.01, 15.01, LiquidClass.WATER, TipType.STDLOWVOL)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 300.01, LiquidClass.WATER, TipType.STDLOWVOL)] = TecanLiquidClass(
+mapping[(15.01, 300.01, Liquid.WATER, TipType.STDLOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2372,7 +2372,7 @@ mapping[(15.01, 300.01, LiquidClass.WATER, TipType.STDLOWVOL)] = TecanLiquidClas
 )
 
 
-mapping[(1, 3.01, LiquidClass.WATER, TipType.DITILOWVOL)] = TecanLiquidClass(
+mapping[(1, 3.01, Liquid.WATER, TipType.DITILOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2425,7 +2425,7 @@ mapping[(1, 3.01, LiquidClass.WATER, TipType.DITILOWVOL)] = TecanLiquidClass(
 )
 
 
-mapping[(3.01, 15.01, LiquidClass.WATER, TipType.DITILOWVOL)] = TecanLiquidClass(
+mapping[(3.01, 15.01, Liquid.WATER, TipType.DITILOWVOL)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2478,7 +2478,7 @@ mapping[(3.01, 15.01, LiquidClass.WATER, TipType.DITILOWVOL)] = TecanLiquidClass
 )
 
 
-mapping[(1, 7.51, LiquidClass.WATER, TipType.MCADITI)] = TecanLiquidClass(
+mapping[(1, 7.51, Liquid.WATER, TipType.MCADITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2531,7 +2531,7 @@ mapping[(1, 7.51, LiquidClass.WATER, TipType.MCADITI)] = TecanLiquidClass(
 )
 
 
-mapping[(7.51, 20.01, LiquidClass.WATER, TipType.MCADITI)] = TecanLiquidClass(
+mapping[(7.51, 20.01, Liquid.WATER, TipType.MCADITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2584,7 +2584,7 @@ mapping[(7.51, 20.01, LiquidClass.WATER, TipType.MCADITI)] = TecanLiquidClass(
 )
 
 
-mapping[(20.01, 200.01, LiquidClass.WATER, TipType.MCADITI)] = TecanLiquidClass(
+mapping[(20.01, 200.01, Liquid.WATER, TipType.MCADITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2637,7 +2637,7 @@ mapping[(20.01, 200.01, LiquidClass.WATER, TipType.MCADITI)] = TecanLiquidClass(
 )
 
 
-mapping[(3, 15.01, LiquidClass.WATER, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(3, 15.01, Liquid.WATER, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2690,7 +2690,7 @@ mapping[(3, 15.01, LiquidClass.WATER, TipType.AIRDITI)] = TecanLiquidClass(
 )
 
 
-mapping[(15.01, 200.01, LiquidClass.WATER, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(15.01, 200.01, Liquid.WATER, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
@@ -2743,7 +2743,7 @@ mapping[(15.01, 200.01, LiquidClass.WATER, TipType.AIRDITI)] = TecanLiquidClass(
 )
 
 
-mapping[(200.01, 1000.01, LiquidClass.WATER, TipType.AIRDITI)] = TecanLiquidClass(
+mapping[(200.01, 1000.01, Liquid.WATER, TipType.AIRDITI)] = TecanLiquidClass(
   lld_mode=7,
   lld_conductivity=1,
   lld_speed=60,
