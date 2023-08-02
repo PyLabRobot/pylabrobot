@@ -660,8 +660,10 @@ def Microplate_Nuncflat_96_Well(name: str, with_lid: bool = False) -> TecanPlate
       dx=13.15,
       dy=8.45,
       dz=0.0,
-      item_size_x=8.9,
-      item_size_y=8.9,
+      item_dx=8.9,
+      item_dy=8.9,
+      size_x=8.9,
+      size_y=8.9
     ),
   )
 
@@ -687,8 +689,10 @@ def Plate_ARTEL_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=12.45,
       dy=9.15,
       dz=0.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_x=4.5,
+      size_y=4.5
     ),
   )
 
@@ -714,8 +718,10 @@ def Plate_greiner_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=11.95,
       dy=9.15,
       dz=0.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_dx=4.5,
+      size_dy=4.5
     ),
   )
 
@@ -741,8 +747,10 @@ def greiner_no_change_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=11.95,
       dy=9.15,
       dz=0.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_dx=4.5,
+      size_dy=4.5
     ),
   )
 
@@ -768,8 +776,10 @@ def Microplate_Nunc_v_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=11.9,
       dy=8.5,
       dz=0.0,
-      item_size_x=9.0,
-      item_size_y=9.0,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_dx=4.5,
+      size_dy=4.5
     ),
   )
 
@@ -795,8 +805,10 @@ def Microplate_Nunc_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=13.15,
       dy=8.45,
       dz=0.0,
-      item_size_x=8.9,
-      item_size_y=8.9,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_dx=4.5,
+      size_dy=4.5
     ),
   )
 
@@ -822,8 +834,10 @@ def Plate_Corning_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=12.35,
       dy=7.95,
       dz=0.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_dx=4.5,
+      size_dy=4.5
     ),
   )
 
@@ -849,7 +863,9 @@ def Plate_Corning_No_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dx=12.45,
       dy=7.95,
       dz=0.0,
-      item_size_x=4.5,
-      item_size_y=4.5,
+      item_dx=4.5,
+      item_dy=4.5,
+      size_dx=4.5,
+      size_dy=4.5
     ),
   )
