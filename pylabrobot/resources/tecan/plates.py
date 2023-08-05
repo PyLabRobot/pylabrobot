@@ -518,7 +518,7 @@ def CaCo2_Plate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dz=0.0,
       item_dx=19.3,
       item_dy=19.3,
-      size_x=9.3,
+      size_x=19.3,
       size_y=19.3
     ),
   )
@@ -576,7 +576,7 @@ def Microplate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dz=0.0,
       item_dx=19.6,
       item_dy=19.6,
-      size_x=9.6,
+      size_x=19.6,
       size_y=19.6
     ),
   )
@@ -633,7 +633,7 @@ def Microplate_48_Well(name: str, with_lid: bool = False) -> TecanPlate:
       dz=0.0,
       item_dx=13.0,
       item_dy=13.0,
-      size_x=3.0,
+      size_x=13.0,
       size_y=13.0
     ),
   )
