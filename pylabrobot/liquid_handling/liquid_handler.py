@@ -247,7 +247,7 @@ class LiquidHandler:
     args = {arg: param for arg, param in sig.parameters.items() if arg not in default_args}
     vars_keyword = {arg for arg, param in sig.parameters.items() # **kwargs
                     if param.kind == inspect.Parameter.VAR_KEYWORD}
-    args = {arg: param for arg, param in args.items() # filter *args and **kwargs
+    args = {arg: param for arg, param in args.items() # keep only *args and **kwargs
             if param.kind not in {inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD}}
     non_default = {arg for arg, param in args.items() if param.default == inspect.Parameter.empty}
 
@@ -259,7 +259,8 @@ class LiquidHandler:
     if len(missing) > 0:
       raise TypeError(f"Missing arguments to backend.{method.__name__}: {missing}")
 
-    extra = backend_kws - non_default
+    extra = backend_kws - set(args.keys())
+
     if len(extra) > 0 and len(vars_keyword) == 0:
       if strictness == Strictness.STRICT:
         raise TypeError(f"Extra arguments to backend.{method.__name__}: {extra}")
