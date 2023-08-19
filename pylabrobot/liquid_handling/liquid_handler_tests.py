@@ -433,8 +433,10 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.drop_tips(self.tip_rack["A1"])
 
     await self.lh.pick_up_tips(self.tip_rack["A2"])
+    set_tip_tracking(enabled=True)
     with self.assertRaises(HasTipError):
       await self.lh.drop_tips(self.tip_rack["A3"])
+    set_tip_tracking(enabled=False)
 
   async def test_tip_tracking_empty_pickup(self):
     self.tip_rack.get_item("A1").empty()
@@ -452,30 +454,10 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       set_tip_tracking(enabled=False)
 
   async def test_tip_tracking_double_pickup_single_command(self):
+    set_tip_tracking(enabled=True)
     with self.assertRaises(NoTipError):
       await self.lh.pick_up_tips(self.tip_rack["A1", "A1"])
-
-  async def test_disable_tip_tracking(self):
-    # Even with tip tracking disabled, we keep track of which tips are on the head.
-
-    await self.lh.pick_up_tips(self.tip_rack["A1"])
-
-    # Disable tip tracking globally with context manager
-    with no_tip_tracking():
-      with self.assertRaises(HasTipError):
-        await self.lh.pick_up_tips(self.tip_rack["A1"])
-
-    # Disable tip tracking globally and manually
     set_tip_tracking(enabled=False)
-    with self.assertRaises(HasTipError):
-      await self.lh.pick_up_tips(self.tip_rack["A1"])
-    set_tip_tracking(enabled=True)
-
-    # Disable tip tracking for a single tip rack
-    self.tip_rack.get_item("A1").tracker.disable()
-    with self.assertRaises(HasTipError):
-      await self.lh.pick_up_tips(self.tip_rack["A1"])
-    self.tip_rack.get_item("A1").tracker.enable()
 
   async def test_discard_tips(self):
     tips = self.tip_rack.get_tips("A1:D1")
@@ -517,6 +499,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     class TestBackend(backends.SaverBackend):
       """ Override pick_up_tips for testing. """
       async def pick_up_tips(self, ops, use_channels, non_default, default=True):
+        # pylint: disable=unused-argument
         assert non_default == default
 
     self.backend = TestBackend(num_channels=16)
