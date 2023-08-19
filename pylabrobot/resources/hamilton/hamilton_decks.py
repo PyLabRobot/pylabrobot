@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABCMeta, abstractmethod
 import inspect
 import logging
 from typing import Callable, Optional, cast
@@ -37,7 +38,7 @@ def _rails_for_x_coordinate(x: int):
   return int((x - 100.0) / _RAILS_WIDTH) + 1
 
 
-class HamiltonDeck(Deck):
+class HamiltonDeck(Deck, metaclass=ABCMeta):
   """ Hamilton decks. Currently only STARLet and STAR are supported. """
 
   def __init__(
@@ -65,6 +66,10 @@ class HamiltonDeck(Deck):
       self.assign_child_resource(
         resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
         location=Coordinate(x=trash_x, y=190.6, z=137.1)) # z I am not sure about
+
+  @abstractmethod
+  def rails_to_location(self, rails: int) -> Coordinate:
+    """ Convert a rail identifier to an absolute (x, y, z) coordinate. """
 
   def serialize(self) -> dict:
     """ Serialize this deck. """
@@ -125,7 +130,7 @@ class HamiltonDeck(Deck):
         raise ValueError(f"Resource with name '{resource.name}' already defined.")
 
     if rails is not None:
-      resource_location = Coordinate(x=self._x_coordinate_for_rails(rails), y=63, z=100)
+      resource_location = self.rails_to_location(rails)
     elif location is not None:
       resource_location = location
     else:
@@ -133,7 +138,7 @@ class HamiltonDeck(Deck):
 
     if resource_location is not None: # collision detection
       if resource_location.x + resource.get_size_x() > \
-          self._x_coordinate_for_rails(self.num_rails) and \
+          self.rails_to_location(self.num_rails).x and \
         rails is not None:
         raise ValueError(f"Resource with width {resource.get_size_x()} does not "
                         f"fit at rails {rails}.")
@@ -155,10 +160,6 @@ class HamiltonDeck(Deck):
                             f"'{og_resource.name}'.")
 
     return super().assign_child_resource(resource, location=resource_location, reassign=reassign)
-
-  def _x_coordinate_for_rails(self, rails: int):
-    """ Convert a rail identifier to an x coordinate. """
-    return 100.0 + (rails - 1) * _RAILS_WIDTH
 
   @classmethod
   def load_from_lay_file(cls, fn: str) -> HamiltonDeck:
@@ -310,17 +311,25 @@ class HamiltonDeck(Deck):
     return summary_
 
 
+class HamiltonSTARDeck(HamiltonDeck): # pylint: disable=invalid-name
+  """ Base class for a Hamilton STAR(let) deck. """
+
+  def rails_to_location(self, rails: int) -> Coordinate:
+    x = 100.0 + (rails - 1) * _RAILS_WIDTH
+    return Coordinate(x=x, y=63, z=100)
+
+
 def STARLetDeck( # pylint: disable=invalid-name
   resource_assigned_callback: Optional[Callable] = None,
   resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate.zero(),
-) -> HamiltonDeck:
-  """ A STARLet deck.
+) -> HamiltonSTARDeck:
+  """ Create a new STARLet deck.
 
   Sizes from `HAMILTON\\Config\\ML_Starlet.dck`
   """
 
-  return HamiltonDeck(
+  return HamiltonSTARDeck(
     num_rails=STARLET_NUM_RAILS,
     size_x=STARLET_SIZE_X,
     size_y=STARLET_SIZE_Y,
@@ -334,13 +343,13 @@ def STARDeck( # pylint: disable=invalid-name
   resource_assigned_callback: Optional[Callable] = None,
   resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate.zero(),
-) -> HamiltonDeck:
-  """ The Hamilton STAR deck.
+) -> HamiltonSTARDeck:
+  """ Create a new STAR deck.
 
   Sizes from `HAMILTON\\Config\\ML_STAR2.dck`
   """
 
-  return HamiltonDeck(
+  return HamiltonSTARDeck(
     num_rails=STAR_NUM_RAILS,
     size_x=STAR_SIZE_X,
     size_y=STAR_SIZE_Y,

@@ -1,4 +1,4 @@
-""" Tests for Hamilton backend. """
+""" Tests for the Hamilton STAR backend. """
 
 from typing import cast
 import unittest
@@ -172,7 +172,7 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
 
 
 class STARCommandCatcher(STAR):
-  """ Mock backend for star that catches commands and saves them instad of sending them to the
+  """ Mock backend for star that catches commands and saves them instead of sending them to the
   machine. """
 
   def __init__(self):

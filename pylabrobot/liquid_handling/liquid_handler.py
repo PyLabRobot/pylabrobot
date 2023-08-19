@@ -108,7 +108,7 @@ class LiquidHandler:
     await self.backend.setup()
     self.setup_finished = True
 
-    self.head = {c: TipTracker() for c in range(self.backend.num_channels)}
+    self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 
     self.resource_assigned_callback(self.deck)
     for resource in self.deck.children:

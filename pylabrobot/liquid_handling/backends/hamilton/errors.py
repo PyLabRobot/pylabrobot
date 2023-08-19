@@ -611,7 +611,7 @@ def _module_id_to_module_name(id_):
     "D0": "384 dispensing head",
     "NP": "Nano disp. pressure controller",
     "M1": "Reserved for module 1"
-  }[id_]
+  }.get(id_, "Unknown Module")
 
 
 def error_code_to_exception(code: int) -> Type[HamiltonModuleError]:
