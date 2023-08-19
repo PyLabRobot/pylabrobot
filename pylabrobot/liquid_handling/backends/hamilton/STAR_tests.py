@@ -25,7 +25,7 @@ from pylabrobot.liquid_handling.standard import Pickup, GripDirection
 
 from tests.usb import MockDev, MockEndpoint
 
-from .STAR import STAR
+from .STAR import STAR, parse_star_fw_string
 from .errors import (
   CommandSyntaxError,
   HamiltonFirmwareError,
@@ -64,45 +64,45 @@ class TestSTARResponseParsing(unittest.TestCase):
     self.star = STAR()
 
   def test_parse_response_params(self):
-    parsed = self.star.parse_response("C0QMid1111", "")
+    parsed = parse_star_fw_string("C0QMid1111", "")
     self.assertEqual(parsed, {"id": 1111})
 
-    parsed = self.star.parse_response("C0QMid1111", "id####")
+    parsed = parse_star_fw_string("C0QMid1111", "id####")
     self.assertEqual(parsed, {"id": 1111})
 
-    parsed = self.star.parse_response("C0QMid1112aaabc", "aa&&&")
+    parsed = parse_star_fw_string("C0QMid1112aaabc", "aa&&&")
     self.assertEqual(parsed, {"id": 1112, "aa": "abc"})
 
-    parsed = self.star.parse_response("C0QMid1112aa-21", "aa##")
+    parsed = parse_star_fw_string("C0QMid1112aa-21", "aa##")
     self.assertEqual(parsed, {"id": 1112, "aa": -21})
 
-    parsed = self.star.parse_response("C0QMid1113pqABC", "pq***")
+    parsed = parse_star_fw_string("C0QMid1113pqABC", "pq***")
     self.assertEqual(parsed, {"id": 1113, "pq": int("ABC", base=16)})
 
     with self.assertRaises(ValueError):
       # should fail with auto-added id.
-      parsed = self.star.parse_response("C0QMaaabc", "")
+      parsed = parse_star_fw_string("C0QMaaabc", "")
       self.assertEqual(parsed, "")
 
     with self.assertRaises(ValueError):
-      self.star.parse_response("C0QM", "id####") # pylint: disable=expression-not-assigned
+      parse_star_fw_string("C0QM", "id####") # pylint: disable=expression-not-assigned
 
     with self.assertRaises(ValueError):
-      self.star.parse_response("C0RV", "") # pylint: disable=expression-not-assigned
+      parse_star_fw_string("C0RV", "") # pylint: disable=expression-not-assigned
 
   def test_parse_response_no_errors(self):
-    parsed = self.star.parse_response("C0QMid1111", "")
+    parsed = parse_star_fw_string("C0QMid1111", "")
     self.assertEqual(parsed, {"id": 1111})
 
-    parsed = self.star.parse_response("C0QMid1111 er00/00", "")
+    parsed = parse_star_fw_string("C0QMid1111 er00/00", "")
     self.assertEqual(parsed, {"id": 1111})
 
-    parsed = self.star.parse_response("C0QMid1111 er00/00 P100/00", "")
+    parsed = parse_star_fw_string("C0QMid1111 er00/00 P100/00", "")
     self.assertEqual(parsed, {"id": 1111})
 
   def test_parse_response_master_error(self):
     with self.assertRaises(HamiltonFirmwareError) as ctx:
-      self.star.parse_response("C0QMid1111 er01/30", "")
+      self.star.check_fw_string_error("C0QMid1111 er01/30")
     e = ctx.exception
     self.assertEqual(len(e), 1)
     assert "Master" in e
@@ -111,7 +111,7 @@ class TestSTARResponseParsing(unittest.TestCase):
 
   def test_parse_response_slave_errors(self):
     with self.assertRaises(HamiltonFirmwareError) as ctx:
-      self.star.parse_response("C0QMid1111 er99/00 P100/00 P235/00 P402/98 PG08/76", "")
+      self.star.check_fw_string_error("C0QMid1111 er99/00 P100/00 P235/00 P402/98 PG08/76")
     e = ctx.exception
     self.assertEqual(len(e), 3)
     assert "Master" not in e
@@ -130,7 +130,7 @@ class TestSTARResponseParsing(unittest.TestCase):
 
   def test_parse_slave_response_errors(self):
     with self.assertRaises(HamiltonFirmwareError) as ctx:
-      self.star.parse_response("P1OQid1111er30", "")
+      self.star.check_fw_string_error("P1OQid1111er30")
 
     e = ctx.exception
     self.assertEqual(len(e), 1)
@@ -243,7 +243,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # Command that fits the format, but is not the same as the command we are looking for.
     similar = None
 
-    parsed_cmd = self.mockSTAR.parse_fw_string(cmd, fmt)
+    parsed_cmd = parse_star_fw_string(cmd, fmt)
     parsed_cmd.pop("id")
 
     for sent_cmd in self.mockSTAR.commands:
@@ -252,7 +252,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         continue
 
       try:
-        parsed_sent_cmd = self.mockSTAR.parse_fw_string(sent_cmd, fmt)
+        parsed_sent_cmd = parse_star_fw_string(sent_cmd, fmt)
         parsed_sent_cmd.pop("id")
 
         if parsed_cmd == parsed_sent_cmd:

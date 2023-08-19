@@ -7,12 +7,13 @@ import datetime
 import enum
 import functools
 import logging
-from typing import Callable, List, Optional, Sequence, TypeVar, Union, cast
+import re
+from typing import Callable, List, Optional, Sequence, TypeVar, cast
 
 from pylabrobot.liquid_handling.backends.hamilton import HamiltonLiquidHandler
 import pylabrobot.liquid_handling.backends.hamilton.errors as herrors
 from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
-from pylabrobot.liquid_handling.liquid_classes.hamilton import get_liquid_class
+from pylabrobot.liquid_handling.liquid_classes.hamilton import get_star_liquid_class
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   PickupTipRack,
@@ -71,6 +72,129 @@ def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
   return default
 
 
+def parse_star_fw_string(resp: str, fmt: str = "") -> dict:
+  """ Parse a machine command or response string according to a format string.
+
+  The format contains names of parameters (always length 2),
+  followed by an arbitrary number of the following, but always
+  the same:
+  - '&': char
+  - '#': decimal
+  - '*': hex
+
+  The order of parameters in the format and response string do not
+  have to (and often do not) match.
+
+  The identifier parameter (id####) is added automatically.
+
+  TODO: string parsing
+  The firmware docs mention strings in the following format: '...'
+  However, the length of these is always known (except when reading
+  barcodes), so it is easier to convert strings to the right number
+  of '&'. With barcode reading the length of the barcode is included
+  with the response string. We'll probably do a custom implementation
+  for that.
+
+  TODO: spaces
+  We should also parse responses where integers are separated by spaces,
+  like this: `ua#### #### ###### ###### ###### ######`
+
+  Args:
+    resp: The response string to parse.
+    fmt: The format string.
+
+  Raises:
+    ValueError: if the format string is incompatible with the response.
+
+  Returns:
+    A dictionary containing the parsed values.
+
+  Examples:
+    Parsing a string containing decimals (`1111`), hex (`0xB0B`) and chars (`'rw'`):
+
+    ```
+    >>> parse_fw_string("aa1111bbrwccB0B", "aa####bb&&cc***")
+    {'aa': 1111, 'bb': 'rw', 'cc': 2827}
+    ```
+  """
+
+  # Remove device and cmd identifier from response.
+  resp = resp[4:]
+
+  # Parse the parameters in the fmt string.
+  info = {}
+
+  def find_param(param):
+    name, data = param[0:2], param[2:]
+    type_ = {
+      "#": "int",
+      "*": "hex",
+      "&": "str"
+    }[data[0]]
+
+    # Build a regex to match this parameter.
+    exp = {
+      "int": r"[-+]?[\d ]",
+      "hex": r"[\da-fA-F ]",
+      "str": ".",
+    }[type_]
+    len_ = len(data.split(" ")[0]) # Get length of first block.
+    regex = f"{name}((?:{exp}{ {len_} }"
+
+    if param.endswith(" (n)"):
+      regex += " ?)+)"
+      is_list = True
+    else:
+      regex += "))"
+      is_list = False
+
+    # Match response against regex, save results in right datatype.
+    r = re.search(regex, resp)
+    if r is None:
+      raise ValueError(f"could not find matches for parameter {name}")
+
+    g = r.groups()
+    if len(g) == 0:
+      raise ValueError(f"could not find value for parameter {name}")
+    m = g[0]
+
+    if is_list:
+      m = m.split(" ")
+
+      if type_ == "str":
+        info[name] = m
+      elif type_ == "int":
+        info[name] = [int(m_) for m_ in m if m_ != ""]
+      elif type_ == "hex":
+        info[name] = [int(m_, base=16) for m_ in m if m_ != ""]
+    else:
+      if type_ == "str":
+        info[name] = m
+      elif type_ == "int":
+        info[name] = int(m)
+      elif type_ == "hex":
+        info[name] = int(m, base=16)
+
+  # Find params in string. All params are identified by 2 lowercase chars.
+  param = ""
+  prevchar = None
+  for char in fmt:
+    if char.islower() and prevchar != "(":
+      if len(param) > 2:
+        find_param(param)
+        param = ""
+    param += char
+    prevchar = char
+  if param != "":
+    find_param(param) # last parameter is not closed by loop.
+
+  # If id not in fmt, add it.
+  if "id" not in info:
+    find_param("id####")
+
+  return info
+
+
 class STAR(HamiltonLiquidHandler):
   """
   Interface for the Hamilton STAR.
@@ -126,6 +250,92 @@ class STAR(HamiltonLiquidHandler):
   @property
   def iswap_parked(self) -> bool:
     return self._iswap_parked is True
+
+  def get_id_from_fw_response(self, resp: str) -> Optional[int]:
+    """ Get the id from a firmware response. """
+    parsed = parse_star_fw_string(resp, "id####")
+    if "id" in parsed and parsed["id"] is not None:
+      return int(parsed["id"])
+    return None
+
+  def check_fw_string_error(self, resp: str):
+    """ Raise an error if the firmware response is an error response.
+
+    Raises:
+      ValueError: if the format string is incompatible with the response.
+      HamiltonException: if the response contains an error.
+    """
+
+    # Parse errors.
+    module = resp[:2]
+    if module == "C0":
+      # C0 sends errors as er##/##. P1 raises errors as er## where the first group is the error
+      # code, and the second group is the trace information.
+      # Beyond that, specific errors may be added for individual channels and modules. These
+      # are formatted as P1##/## H0##/##, etc. These items are added programmatically as
+      # named capturing groups to the regex.
+
+      exp = r"er(?P<C0>[0-9]{2}/[0-9]{2})"
+      for module in ["X0", "I0", "W1", "W2", "T1", "T2", "R0", "P1", "P2", "P3", "P4", "P5", "P6",
+                    "P7", "P8", "P9", "PA", "PB", "PC", "PD", "PE", "PF", "PG", "H0", "HW", "HU",
+                    "HV", "N0", "D0", "NP", "M1"]:
+        exp += f" ?(?:{module}(?P<{module}>[0-9]{{2}}/[0-9]{{2}}))?"
+      errors = re.search(exp, resp)
+    else:
+      # Other modules send errors as er##, and do not contain slave errors.
+      exp = f"er(?P<{module}>[0-9]{{2}})"
+      errors = re.search(exp, resp)
+
+    if errors is not None:
+      # filter None elements
+      errors_dict = {k:v for k,v in errors.groupdict().items() if v is not None}
+      # filter 00 and 00/00 elements, which mean no error.
+      errors_dict = {k:v for k,v in errors_dict.items() if v not in ["00", "00/00"]}
+
+    has_error = not (errors is None or len(errors_dict) == 0)
+    if has_error:
+      he = HamiltonFirmwareError(errors_dict, raw_response=resp)
+
+      # If there is a faulty parameter error, request which parameter that is.
+      for module_name, error in he.items():
+        if error.message == "Unknown parameter":
+          # temp. disabled until we figure out how to handle async in parse response (the
+          # background thread does not have an event loop, and I'm not sure if it should.)
+          # vp = await self.send_command(module=error.raw_module, command="VP", fmt="vp&&")["vp"]
+          # he[module_name].message += f" ({vp})" # pylint: disable=unnecessary-dict-index-lookup
+
+          # pylint: disable=unnecessary-dict-index-lookup
+          he[module_name].message += " (call lh.backend.request_name_of_last_faulty_parameter)"
+
+      raise he
+
+  async def send_command(
+    self,
+    module: str,
+    command: str,
+    tip_pattern: Optional[List[bool]] = None,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait = True,
+    fmt: str = "",
+    **kwargs
+  ):
+    """ Send a command to the machine. Parse the response if `fmt != ""`, else return the raw
+    response. """
+
+    resp = await super().send_command(
+      module=module,
+      command=command,
+      tip_pattern=tip_pattern,
+      write_timeout=write_timeout,
+      read_timeout=read_timeout,
+      wait=wait,
+      **kwargs
+    )
+    if fmt != "":
+      parsed = parse_star_fw_string(resp, fmt)
+      return parsed
+    return resp
 
   async def setup(self):
     """ setup
@@ -292,19 +502,6 @@ class STAR(HamiltonLiquidHandler):
 
       raise e
 
-  def _get_tip_max_volumes(self, ops: Sequence[Union[Aspiration, Dispense]]) -> List[float]:
-    """ These tip volumes (mostly with filters) are slightly different form the ones in the
-    liquid class mapping, so we need to map them here. If no mapping is found, we use the
-    given maximal volume of the tip. """
-
-    return [
-      { 360.0: 300.0,
-        1065.0: 1000.0,
-        1250.0: 1000.0,
-        4367.0: 4000.0,
-        5420.0: 5000.0,
-      }.get(op.tip.maximal_volume, op.tip.maximal_volume) for op in ops]
-
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """ Assert that resources are in a valid location for pipetting. """
     for resource in resources:
@@ -431,19 +628,16 @@ class STAR(HamiltonLiquidHandler):
 
     n = len(ops)
 
-    # convert max volumes
-    tip_max_volumes = self._get_tip_max_volumes(ops)
-
     hamilton_liquid_classes = [
-      get_liquid_class(
-        tip_volume=int(tmv),
+      get_star_liquid_class(
+        tip_volume=op.tip.maximal_volume,
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
         liquid=op.liquid or Liquid.WATER,
         jet=False, # for aspiration
         empty=False # for aspiration
-      ) for tmv, op in zip(tip_max_volumes, ops)]
+      ) for op in ops]
 
     self._assert_valid_resources([op.resource for op in ops])
 
@@ -676,9 +870,6 @@ class STAR(HamiltonLiquidHandler):
 
     n = len(ops)
 
-    # convert max volumes
-    tip_max_volumes = self._get_tip_max_volumes(ops)
-
     def should_jet(op):
       if op.liquid_height is None:
         return True
@@ -689,8 +880,8 @@ class STAR(HamiltonLiquidHandler):
       return False
 
     hamilton_liquid_classes = [
-      get_liquid_class(
-        tip_volume=int(tmv),
+      get_star_liquid_class(
+        tip_volume=op.tip.maximal_volume,
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
@@ -698,7 +889,7 @@ class STAR(HamiltonLiquidHandler):
         jet=should_jet(op),
         # dispensing all, get_used_volume includes pending
         empty=op.tip.tracker.get_used_volume() == 0
-      ) for tmv, op in zip(tip_max_volumes, ops)]
+      ) for op in ops]
 
     # correct volumes using the liquid class
     for op, hlc in zip(ops, hamilton_liquid_classes):

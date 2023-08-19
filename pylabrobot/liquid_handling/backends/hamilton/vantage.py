@@ -1,9 +1,11 @@
 # pylint: disable=invalid-name
 
+import re
 import sys
-from typing import List, Optional, Union, cast
+from typing import Dict, List, Optional, Sequence, Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton import HamiltonLiquidHandler
+from pylabrobot.liquid_handling.liquid_classes.hamilton import get_vantage_liquid_class
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   PickupTipRack,
@@ -15,7 +17,7 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move
 )
-from pylabrobot.resources import Resource
+from pylabrobot.resources import Liquid, Resource
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 
@@ -23,6 +25,65 @@ if sys.version_info >= (3, 8):
   from typing import Literal
 else:
   from typing_extensions import Literal
+
+
+def parse_vantage_fw_string(s: str, fmt: Optional[Dict[str, str]] = None) -> dict:
+  """ Parse a Vantage firmware string into a dict.
+
+  The identifier parameter (id<int>) is added automatically.
+
+  `fmt` is a dict that specifies the format of the string. The keys are the parameter names and the
+  values are the types. The following types are supported:
+
+    - `"int"`: a single integer
+    - `"str"`: a string
+    - `"[int]"`: a list of integers
+    - `"hex"`: a hexadecimal number
+
+  Example:
+    >>> parse_fw_string("id0xs30 -100 +1 1000", {"id": "int", "x": "[int]"})
+    {"id": 0, "x": [30, -100, 1, 1000]}
+
+    >>> parse_fw_string("es\"error string\"", {"es": "str"})
+    {"es": "error string"}
+  """
+
+  parsed: dict = {}
+
+  if fmt is None:
+    fmt = {}
+
+  if not isinstance(fmt, dict):
+    raise TypeError(f"invalid fmt for fmt: expected dict, got {type(fmt)}")
+
+  if "id" not in fmt:
+    fmt["id"] = "int"
+
+  for key, data_type in fmt.items():
+    if data_type == "int":
+      matches = re.findall(fr"{key}([-+]?\d+)", s)
+      if len(matches) != 1:
+        raise ValueError(f"Expected exactly one match for {key} in {s}")
+      parsed[key] = int(matches[0])
+    elif data_type == "str":
+      matches = re.findall(fr"{key}\"(.*)\"", s)
+      if len(matches) != 1:
+        raise ValueError(f"Expected exactly one match for {key} in {s}")
+      parsed[key] = matches[0]
+    elif data_type == "[int]":
+      matches = re.findall(fr"{key}((?:[-+]?[\d ]+)+)", s)
+      if len(matches) != 1:
+        raise ValueError(f"Expected exactly one match for {key} in {s}")
+      parsed[key] = [int(x) for x in matches[0].split()]
+    elif data_type == "hex":
+      matches = re.findall(fr"{key}([0-9a-fA-F]+)", s)
+      if len(matches) != 1:
+        raise ValueError(f"Expected exactly one match for {key} in {s}")
+      parsed[key] = int(matches[0], 16)
+    else:
+      raise ValueError(f"Unknown data type {data_type}")
+
+  return parsed
 
 
 class Vantage(HamiltonLiquidHandler):
@@ -60,6 +121,21 @@ class Vantage(HamiltonLiquidHandler):
   def module_id_length(self) -> int:
     return  4
 
+  def get_id_from_fw_response(self, resp: str) -> Optional[int]:
+    """ Get the id from a firmware response. """
+    parsed = parse_vantage_fw_string(resp, {"id": "int"})
+    if "id" in parsed and parsed["id"] is not None:
+      return int(parsed["id"])
+    return None
+
+  def check_fw_string_error(self, resp: str):
+    """ Raise an error if the firmware response is an error response. """
+
+    # TODO: proper error handling
+
+    if "er" in resp and not "er00" in resp:
+      raise RuntimeError(f"Error response: '{resp}'")
+
   async def setup(self):
     """ setup
 
@@ -94,12 +170,6 @@ class Vantage(HamiltonLiquidHandler):
     return self._num_channels
 
   # ============== LiquidHandlerBackend methods ==============
-
-  async def assigned_resource_callback(self, resource: Resource):
-    print(f"Resource {resource.name} was assigned to the robot.")
-
-  async def unassigned_resource_callback(self, name: str):
-    print(f"Resource {name} was unassigned from the robot.")
 
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     x_positions, y_positions, tip_pattern = \
@@ -166,13 +236,275 @@ class Vantage(HamiltonLiquidHandler):
     except Exception as e:
       raise e
 
-  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
-    print(f"Aspirating {ops}.")
-    raise NotImplementedError()
+  def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
+    """ Assert that resources are in a valid location for pipetting. """
+    for resource in resources:
+      if resource.get_absolute_location().z < 100:
+        raise ValueError(
+          f"Resource {resource} is too low: {resource.get_absolute_location().z} < 100")
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
-    print(f"Dispensing {ops}.")
-    raise NotImplementedError()
+  async def aspirate(
+    self,
+    ops: List[Aspiration],
+    use_channels: List[int],
+    type_of_aspiration: Optional[List[int]] = None,
+    minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
+    minimal_height_at_command_end: Optional[List[int]] = None,
+    lld_search_height: Optional[List[int]] = None,
+    clot_detection_height: Optional[List[int]] = None,
+    liquid_surface_at_function_without_lld: Optional[List[int]] = None,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[int]] = None,
+    tube_2nd_section_height_measured_from_zm: Optional[List[int]] = None,
+    tube_2nd_section_ratio: Optional[List[int]] = None,
+    minimum_height: Optional[List[int]] = None,
+    immersion_depth: Optional[List[int]] = None,
+    surface_following_distance: Optional[List[int]] = None,
+    transport_air_volume: Optional[List[int]] = None,
+    pre_wetting_volume: Optional[List[int]] = None,
+    lld_mode: Optional[List[int]] = None,
+    lld_sensitivity: Optional[List[int]] = None,
+    pressure_lld_sensitivity: Optional[List[int]] = None,
+    aspirate_position_above_z_touch_off: Optional[List[int]] = None,
+    swap_speed: Optional[List[int]] = None,
+    settling_time: Optional[List[int]] = None,
+    mix_volume: Optional[List[int]] = None,
+    mix_cycles: Optional[List[int]] = None,
+    mix_position_in_z_direction_from_liquid_surface: Optional[List[int]] = None,
+    mix_speed: Optional[List[int]] = None,
+    surface_following_distance_during_mixing: Optional[List[int]] = None,
+    TODO_DA_5: Optional[List[int]] = None,
+    capacitive_mad_supervision_on_off: Optional[List[int]] = None,
+    pressure_mad_supervision_on_off: Optional[List[int]] = None,
+    tadm_algorithm_on_off: int = 0,
+    limit_curve_index: Optional[List[int]] = None,
+    recording_mode: int = 0,
+  ):
+    """ Aspirate from (a) resource(s).
+
+    See :meth:`pip_aspirate` (the firmware command) for parameter documentation. This method serves
+    as a wrapper for that command, and will convert operations into the appropriate format. This
+    method additionally provides default values based on firmware instructions sent by Venus on
+    Vantage, rather than machine default values (which are often not what you want).
+
+    Args:
+      ops: The aspiration operations.
+      use_channels: The channels to use.
+    """
+
+    x_positions, y_positions, channels_involved = \
+      self._ops_to_fw_positions(ops, use_channels)
+
+    hamilton_liquid_classes = [
+      get_vantage_liquid_class(
+        tip_volume=op.tip.maximal_volume,
+        is_core=False,
+        is_tip=True,
+        has_filter=op.tip.has_filter,
+        liquid=op.liquid or Liquid.WATER,
+        jet=False, # for aspiration
+        empty=False # for aspiration
+      ) for op in ops]
+
+    self._assert_valid_resources([op.resource for op in ops])
+
+    # correct volumes using the liquid class
+    for op, hlc in zip(ops, hamilton_liquid_classes):
+      op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+
+    well_bottoms = [op.resource.get_absolute_location().z + \
+                    (op.offset.z if op.offset is not None else 0) for op in ops]
+    liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
+                              for wb, op in zip(well_bottoms, ops)]
+    # -1 compared to STAR?
+    lld_search_heights = [wb + op.resource.get_size_z()+5-1 for wb, op in zip(well_bottoms, ops)]
+
+    flow_rates = [
+      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
+        for op, hlc in zip(ops, hamilton_liquid_classes)]
+
+    return await self.pip_aspirate(
+      x_position=x_positions,
+      y_position=y_positions,
+      type_of_aspiration=type_of_aspiration or [0]*len(ops),
+      tip_pattern=channels_involved,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
+        [2450]*len(ops),
+      minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+      lld_search_height=lld_search_height or [int(ls*10) for ls in lld_search_heights],
+      clot_detection_height=clot_detection_height or [0]*len(ops),
+      liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld or
+        [int(lsn * 10) for lsn in liquid_surfaces_no_lld],
+      pull_out_distance_to_take_transport_air_in_function_without_lld=\
+        pull_out_distance_to_take_transport_air_in_function_without_lld or [109]*len(ops),
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm or
+        [0]*len(ops),
+      tube_2nd_section_ratio=tube_2nd_section_ratio or [0]*len(ops),
+      minimum_height=minimum_height or [1871]*len(ops),
+      immersion_depth=immersion_depth or [0]*len(ops),
+      surface_following_distance=surface_following_distance or [0]*len(ops),
+      aspiration_volume=[int(op.volume*100) for op in ops],
+      aspiration_speed=[int(fr * 10) for fr in flow_rates],
+      transport_air_volume=transport_air_volume or
+        [int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0
+          for hlc in hamilton_liquid_classes],
+      blow_out_air_volume=[int(op.blow_out_air_volume*100) for op in ops],
+      pre_wetting_volume=pre_wetting_volume or [0]*len(ops),
+      lld_mode=lld_mode or [0]*len(ops),
+      lld_sensitivity=lld_sensitivity or [4]*len(ops),
+      pressure_lld_sensitivity=pressure_lld_sensitivity or [4]*len(ops),
+      aspirate_position_above_z_touch_off=aspirate_position_above_z_touch_off or [5]*len(ops),
+      swap_speed=swap_speed or [20]*len(ops),
+      settling_time=settling_time or [10]*len(ops),
+      mix_volume=mix_volume or [0]*len(ops),
+      mix_cycles=mix_cycles or [0]*len(ops),
+      mix_position_in_z_direction_from_liquid_surface=
+        mix_position_in_z_direction_from_liquid_surface or [0]*len(ops),
+      mix_speed=mix_speed or [2500]*len(ops),
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing or
+        [0]*len(ops),
+      TODO_DA_5=TODO_DA_5 or [0]*len(ops),
+      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off or [0]*len(ops),
+      pressure_mad_supervision_on_off=pressure_mad_supervision_on_off or [0]*len(ops),
+      tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
+      limit_curve_index=limit_curve_index or [0]*len(ops),
+      recording_mode=recording_mode or 0,
+    )
+
+  async def dispense(
+    self,
+    ops: List[Dispense],
+    use_channels: List[int],
+    jet: Optional[List[bool]] = None,
+    type_of_dispensing_mode: Optional[List[int]] = None,
+    minimum_height: Optional[List[int]] = None,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[int]] = None,
+    immersion_depth: Optional[List[int]] = None,
+    surface_following_distance: Optional[List[int]] = None,
+    tube_2nd_section_height_measured_from_zm: Optional[List[int]] = None,
+    tube_2nd_section_ratio: Optional[List[int]] = None,
+    minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
+    minimal_height_at_command_end: Optional[List[int]] = None,
+    cut_off_speed: Optional[List[int]] = None,
+    stop_back_volume: Optional[List[int]] = None,
+    transport_air_volume: Optional[List[int]] = None,
+    lld_mode: Optional[List[int]] = None,
+    side_touch_off_distance: int = 0,
+    dispense_position_above_z_touch_off: Optional[List[int]] = None,
+    lld_sensitivity: Optional[List[int]] = None,
+    pressure_lld_sensitivity: Optional[List[int]] = None,
+    swap_speed: Optional[List[int]] = None,
+    settling_time: Optional[List[int]] = None,
+    mix_volume: Optional[List[int]] = None,
+    mix_cycles: Optional[List[int]] = None,
+    mix_position_in_z_direction_from_liquid_surface: Optional[List[int]] = None,
+    mix_speed: Optional[List[int]] = None,
+    surface_following_distance_during_mixing: Optional[List[int]] = None,
+    TODO_DD_2: Optional[List[int]] = None,
+    tadm_algorithm_on_off: int = 0,
+    limit_curve_index: Optional[List[int]] = None,
+    recording_mode: int = 0,
+  ):
+    """ Dispense to (a) resource(s).
+
+    See :meth:`pip_dispense` (the firmware command) for parameter documentation. This method serves
+    as a wrapper for that command, and will convert operations into the appropriate format. This
+    method additionally provides default values based on firmware instructions sent by Venus on
+    Vantage, rather than machine default values (which are often not what you want).
+
+    Args:
+      ops: The aspiration operations.
+      use_channels: The channels to use.
+      jet: Whether to jet. If `True`, jet dispense will be used. If `False`, surface dispense will
+        be used. If `None`, dispense will be jet if the liquid_height for an operation is greater
+        than 0, or if the tip is empty. Otherwise, surface dispense will be used.
+    """
+
+    x_positions, y_positions, channels_involved = \
+      self._ops_to_fw_positions(ops, use_channels)
+
+    def should_jet(op):
+      if op.liquid_height is not None and op.liquid_height > 0:
+        return True
+      if hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0:
+        return True
+      return False
+
+    if jet is None:
+      jet = [should_jet(op) for op in ops]
+
+    hamilton_liquid_classes = [
+      get_vantage_liquid_class(
+        tip_volume=op.tip.maximal_volume,
+        is_core=False,
+        is_tip=True,
+        has_filter=op.tip.has_filter,
+        liquid=op.liquid or Liquid.WATER,
+        jet=jet,
+        # dispensing all, get_used_volume includes pending
+        empty=op.tip.tracker.get_used_volume() == 0
+      ) for jet, op in zip(jet, ops)]
+    self._assert_valid_resources([op.resource for op in ops])
+
+    # correct volumes using the liquid class
+    for op, hlc in zip(ops, hamilton_liquid_classes):
+      op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+
+    well_bottoms = [op.resource.get_absolute_location().z + \
+                    (op.offset.z if op.offset is not None else 0) for op in ops]
+    liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
+                              for wb, op in zip(well_bottoms, ops)]
+    # -1 compared to STAR?
+    lld_search_heights = [wb + op.resource.get_size_z()+5-1 for wb, op in zip(well_bottoms, ops)]
+
+    flow_rates = [
+      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100)
+        for op, hlc in zip(ops, hamilton_liquid_classes)]
+
+    return await self.pip_dispense(
+      x_position=x_positions,
+      y_position=y_positions,
+      tip_pattern=channels_involved,
+      type_of_dispensing_mode=type_of_dispensing_mode or [1]*len(ops),
+      minimum_height=minimum_height or [int(wb*10) for wb in well_bottoms],
+      lld_search_height=[int(sh*10) for sh in lld_search_heights],
+      liquid_surface_at_function_without_lld=[int(ls*10) for ls in liquid_surfaces_no_lld],
+      pull_out_distance_to_take_transport_air_in_function_without_lld=
+        pull_out_distance_to_take_transport_air_in_function_without_lld or [50]*len(ops),
+      immersion_depth=immersion_depth or [0]*len(ops),
+      surface_following_distance=surface_following_distance or [21]*len(ops),
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm or
+        [0]*len(ops),
+      tube_2nd_section_ratio=tube_2nd_section_ratio or [0]*len(ops),
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
+        [2450]*len(ops),
+      minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+      dispense_volume=[int(op.volume * 100) for op in ops],
+      dispense_speed=[int(fr*10) for fr in flow_rates],
+      cut_off_speed=cut_off_speed or [2500]*len(ops),
+      stop_back_volume=stop_back_volume or [0]*len(ops),
+      transport_air_volume=transport_air_volume or
+        [int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0
+        for hlc in hamilton_liquid_classes],
+      blow_out_air_volume=[int(op.blow_out_air_volume*100) for op in ops],
+      lld_mode=lld_mode or [0]*len(ops),
+      side_touch_off_distance=side_touch_off_distance or 0,
+      dispense_position_above_z_touch_off=dispense_position_above_z_touch_off or [5]*len(ops),
+      lld_sensitivity=lld_sensitivity or [1]*len(ops),
+      pressure_lld_sensitivity=pressure_lld_sensitivity or [1]*len(ops),
+      swap_speed=swap_speed or [10]*len(ops),
+      settling_time=settling_time or [0]*len(ops),
+      mix_volume=mix_volume or [0]*len(ops),
+      mix_cycles=mix_cycles or [0]*len(ops),
+      mix_position_in_z_direction_from_liquid_surface=
+        mix_position_in_z_direction_from_liquid_surface or [0]*len(ops),
+      mix_speed=mix_speed or [10]*len(ops),
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing or
+        [0]*len(ops),
+      TODO_DD_2=TODO_DD_2 or [0]*len(ops),
+      tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
+      limit_curve_index=limit_curve_index or [0]*len(ops),
+      recording_mode=recording_mode or 0,
+    )
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     print(f"Picking up tips from {pickup.resource.name}.")
@@ -382,7 +714,7 @@ class Vantage(HamiltonLiquidHandler):
       tu=pickup_method.value
     )
 
-  async def aspiration_of_liquid(
+  async def pip_aspirate(
     self,
     x_position: List[int],
     y_position: List[int],
@@ -468,9 +800,7 @@ class Vantage(HamiltonLiquidHandler):
       pressure_mad_supervision_on_off: Pressure MAD supervision on/off (0 = OFF).
       tadm_algorithm_on_off: TADM algorithm on/off (0 = off).
       limit_curve_index: Limit curve index.
-      recording_mode:
-          Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements)
-        .
+      recording_mode: Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements).
     """
 
     if type_of_aspiration is None:
@@ -683,7 +1013,7 @@ class Vantage(HamiltonLiquidHandler):
       ip=immersion_depth,
       fp=surface_following_distance,
       av=aspiration_volume,
-      ar=TODO_DA_2,
+      # ar=TODO_DA_2, # this parameters is not used by VoV
       as_=aspiration_speed,
       ta=transport_air_volume,
       ba=blow_out_air_volume,
@@ -692,7 +1022,7 @@ class Vantage(HamiltonLiquidHandler):
       ll=lld_sensitivity,
       lv=pressure_lld_sensitivity,
       zo=aspirate_position_above_z_touch_off,
-      lg=TODO_DA_4,
+      # lg=TODO_DA_4,
       de=swap_speed,
       wt=settling_time,
       mv=mix_volume,
@@ -708,7 +1038,7 @@ class Vantage(HamiltonLiquidHandler):
       gk=recording_mode,
     )
 
-  async def dispensing_of_liquid(
+  async def pip_dispense(
     self,
     x_position: List[int],
     y_position: List[int],
@@ -2614,4 +2944,3 @@ class Vantage(HamiltonLiquidHandler):
       module="A1PM",
       command="QF",
     )
-

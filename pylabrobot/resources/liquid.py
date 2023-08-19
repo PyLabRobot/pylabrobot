@@ -2,7 +2,12 @@ import enum
 
 
 class Liquid(enum.Enum):
-  """ A liquid class (eg water, ethanol, etc.). """
+  """ A type of liquid (eg water, ethanol, etc.).
+
+  Backends use this information to determine optimal parameters for aspirating and dispensing. In
+  software like VENUS and EvoWare, this information is part of "Liquid Classes". In PyLabRobot,
+  liquid classes are simply groups of parameters passed to lh.
+  """
 
   ACETONITRIL80WATER20 = "Acetonitril/Water 80:20" # TODO: need a better way to represent this.
   WATER = "Water"

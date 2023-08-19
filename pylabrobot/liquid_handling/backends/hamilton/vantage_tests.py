@@ -1,5 +1,3 @@
-""" Tests for the Hamilton Vantage backend. """
-
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
@@ -14,23 +12,64 @@ from pylabrobot.resources import (
 from pylabrobot.resources.hamilton import VantageDeck
 from pylabrobot.liquid_handling.standard import Pickup
 
-from tests.usb import MockDev, MockEndpoint
-
-from .vantage import Vantage
+from .vantage import Vantage, parse_vantage_fw_string
 
 
+PICKUP_TIP_FORMAT = {"xp": "[int]", "yp": "[int]", "tm": "[int]", "tt": "[int]", "tp": "[int]",
+  "tz": "[int]", "th": "[int]", "ba": "[int]", "td": "[int]"}
 
-PICKUP_TIP_FORMAT = "xp##### (n)yp#### (n)tm# (n)tt# (n)tp####tz####th####ba# (n)td# (n)"
-DROP_TIP_FORMAT = "xp##### (n)yp#### (n)tm# (n)tp#### (n)tz#### (n)th#### (n)te#### (n)ts#td# (n)"
+DROP_TIP_FORMAT = {"xp": "[int]", "yp": "[int]", "tm": "[int]", "tp": "[int]", "tz": "[int]",
+  "th": "[int]", "te": "[int]", "ts": "[int]", "td": "[int]"}
+
+# "dj": "int" = side_touch_off_distance, only documented for dispense, but for some reason VoV also
+# sends it for aspirate.
+ASPIRATE_FORMAT = {
+  "at": "[int]", "tm": "[int]", "xp": "[int]", "yp": "[int]", "th": "[int]", "te": "[int]",
+  "lp": "[int]", "ch": "[int]", "zl": "[int]", "zx": "[int]", "ip": "[int]", "fp": "[int]",
+  "av": "[int]", "as": "[int]", "ta": "[int]", "ba": "[int]", "oa": "[int]", "lm": "[int]",
+  "ll": "[int]", "lv": "[int]", "de": "[int]", "wt": "[int]", "mv": "[int]", "mc": "[int]",
+  "mp": "[int]", "ms": "[int]", "gi": "[int]", "gj": "[int]", "gk": "[int]", "zu": "[int]",
+  "zr": "[int]", "mh": "[int]", "zo": "[int]", "po": "[int]",  "la": "[int]",
+  "lb": "[int]", "lc": "[int]", "id": "int" }
+
+DISPENSE_FORMAT = {
+  "dm": "[int]", "tm": "[int]", "xp": "[int]", "yp": "[int]", "zx": "[int]", "lp": "[int]",
+  "zl": "[int]", "ip": "[int]", "fp": "[int]", "th": "[int]", "te": "[int]", "dv": "[int]",
+  "ds": "[int]", "ss": "[int]", "rv": "[int]", "ta": "[int]", "ba": "[int]", "lm": "[int]",
+  "zo": "[int]", "ll": "[int]", "lv": "[int]", "de": "[int]", "mv": "[int]", "mc": "[int]",
+  "mp": "[int]", "ms": "[int]", "wt": "[int]", "gi": "[int]", "gj": "[int]", "gk": "[int]",
+  "zu": "[int]", "zr": "[int]", "dj": "[int]", "mh": "[int]", "po": "[int]", "la": "[int]"}
 
 
-class VantageUSBCommsMocker(Vantage):
-  """ Mocks PyUSB """
+class TestVantageResponseParsing(unittest.TestCase):
+  """ Test parsing of response from Hamilton. """
 
-  async def setup(self, send_response):
-    self.dev = MockDev(send_response)
-    self.read_endpoint = MockEndpoint()
-    self.write_endpoint = MockEndpoint()
+  def test_parse_response_params(self):
+    parsed = parse_vantage_fw_string("A1PMDAid1111", None)
+    self.assertEqual(parsed, {"id": 1111})
+
+    parsed = parse_vantage_fw_string("A1PMDAid1111", {"id": "int"})
+    self.assertEqual(parsed, {"id": 1111})
+
+    parsed = parse_vantage_fw_string("A1PMDAid1112rw\"abc\"", {"rw": "str"})
+    self.assertEqual(parsed, {"id": 1112, "rw": "abc"})
+
+    parsed = parse_vantage_fw_string("A1PMDAid1112rw-21", {"rw": "int"})
+    self.assertEqual(parsed, {"id": 1112, "rw": -21})
+
+    parsed = parse_vantage_fw_string("A1PMDAid1113rwABC", {"rw": "hex"})
+    self.assertEqual(parsed, {"id": 1113, "rw": int("ABC", base=16)})
+
+    parsed = parse_vantage_fw_string("A1PMDAid1113rw1 -2 +3", {"rw": "[int]"})
+    self.assertEqual(parsed, {"id": 1113, "rw": [1, -2, 3]})
+
+    with self.assertRaises(ValueError):
+      # should fail with auto-added id.
+      parsed = parse_vantage_fw_string("A1PMDrwbc", None)
+      self.assertEqual(parsed, "")
+
+    with self.assertRaises(ValueError):
+      parse_vantage_fw_string("A1PMDA", {"id": "int"})
 
 
 class VantageCommandCatcher(Vantage):
@@ -47,7 +86,7 @@ class VantageCommandCatcher(Vantage):
     self.iswap_installed = True
     self.core96_head_installed = True
 
-  async def send_command(self, module, command, tip_pattern=None, fmt="", read_timeout=0,
+  async def send_command(self, module, command, tip_pattern=None, read_timeout=0,
     write_timeout=0, **kwargs):
     cmd, _ = self._assemble_command(module, command, tip_pattern, **kwargs)
     self.commands.append(cmd)
@@ -71,9 +110,9 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=18)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=True)
-    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
-    self.deck.assign_child_resource(self.plt_car, rails=26)
+    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=False)
+    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=False)
+    self.deck.assign_child_resource(self.plt_car, rails=24)
 
     self.maxDiff = None
 
@@ -82,7 +121,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def asyncTearDown(self):
     await self.lh.stop()
 
-  def _assert_command_in_command_buffer(self, cmd: str, should_be: bool, fmt: str):
+  def _assert_command_in_command_buffer(self, cmd: str, should_be: bool, fmt: dict):
     """ Assert that the given command was sent to the backend. The ordering of the parameters is not
     taken into account, but the values and formatting should match. The id parameter of the command
     is ignored.
@@ -99,16 +138,16 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # Command that fits the format, but is not the same as the command we are looking for.
     similar = None
 
-    parsed_cmd = self.mockVantage.parse_fw_string(cmd, fmt)
+    parsed_cmd = parse_vantage_fw_string(cmd, fmt)
     parsed_cmd.pop("id")
 
     for sent_cmd in self.mockVantage.commands:
       # When the module and command do not match, there is no point in comparing the parameters.
-      if sent_cmd[0:4] != cmd[0:4]:
+      if sent_cmd[0:6] != cmd[0:6]:
         continue
 
       try:
-        parsed_sent_cmd = self.mockVantage.parse_fw_string(sent_cmd, fmt)
+        parsed_sent_cmd = parse_vantage_fw_string(sent_cmd, fmt)
         parsed_sent_cmd.pop("id")
 
         if parsed_cmd == parsed_sent_cmd:
@@ -119,12 +158,12 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
           similar = parsed_sent_cmd
       except ValueError as e:
         # The command could not be parsed.
-        print(e)
+        print("Could not parse command", e)
         continue
 
     if should_be and not found:
       if similar is not None:
-        # These will not be equal, but this method does give a better error message than `fail`.
+        # similar != parsed_cmd, but assertEqual gives a better error message than `fail`.
         self.assertEqual(similar, parsed_cmd)
       else:
         self.fail(f"Command {cmd} not found in sent commands: {self.mockVantage.commands}")
@@ -155,7 +194,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ([0, 4329, 4329, 0], [0, 1458, 1008, 0], [False, True, True, False])
     )
 
-  def _assert_command_sent_once(self, cmd: str, fmt: str):
+  def _assert_command_sent_once(self, cmd: str, fmt: dict):
     """ Assert that the given command was sent to the backend exactly once. """
     self._assert_command_in_command_buffer(cmd, True, fmt)
     self._assert_command_in_command_buffer(cmd, False, fmt)
@@ -175,7 +214,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.drop_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
       "A1PMTRid013xp04329 04329 0&yp1458 1368 0&tm1 1 0&tp1414 1414&tz1314 1314&th2450 2450&"
-      "te2450 2450&ts0 0&td0 0&",
+      "te2450 2450&ts0td0 0&",
       DROP_TIP_FORMAT)
 
   async def test_small_tip_pickup(self):
@@ -190,3 +229,26 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self._assert_command_sent_once(
       "A1PMTRid0012xp4329 0&yp2418 0&tp2024&tz1924&th2450&te2450&tm1 0&ts0td0&",
       DROP_TIP_FORMAT)
+
+  async def test_aspirate(self):
+    await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
+    await self.lh.aspirate(self.plate["A1"], vols=100)
+
+    self._assert_command_sent_once(
+      "A1PMDAid0248at0&tm1 0&xp05680 0&yp1460 0 &th2450&te2450&lp2001&"
+      "ch000&zl1871&zx1871&ip0000&fp0000&av010830&as2500&ta000&ba00000&oa000&lm0&ll4&lv4&de0020&"
+      "wt10&mv00000&mc00&mp000&ms2500&gi000&gj0gk0zu0000&zr00000&mh0000&zo005&po0109&dj0la0&lb0&"
+      "lc0&",
+      ASPIRATE_FORMAT)
+
+  async def test_dispense(self):
+    await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
+    await self.lh.aspirate(self.plate["A1"], vols=100)
+    print("\n"*9)
+    await self.lh.dispense(self.plate["A2"], vols=100, liquid_height=[5], jet=[False])
+
+    self._assert_command_sent_once(
+      "A1PMDDid0253dm1&tm1 0&xp05770 0&yp1460 0&zx1871&lp2001&zl1921&"
+      "ip0000&fp0021&th2450&te2450&dv010830&ds1200&ss2500&rv000&ta050&ba00000&lm0&zo005&ll1&lv1&"
+      "de0010&mv00000&mc00&mp000&ms0010&wt00&gi000&gj0gk0zu0000&dj00zr00000&mh0000&po0050&la0&",
+      DISPENSE_FORMAT)

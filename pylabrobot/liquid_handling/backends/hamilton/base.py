@@ -2,7 +2,6 @@ from abc import ABCMeta, abstractmethod
 import asyncio
 import datetime
 import logging
-import re
 import threading
 import time
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, cast
@@ -53,8 +52,8 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     self.id_ = 0
 
     self._reading_thread: Optional[threading.Thread] = None
-    self._waiting_tasks: Dict[str,
-      Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, str, float]] = {}
+    self._waiting_tasks: Dict[int,
+      Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, float]] = {}
     self._tth2tti: dict[int, int] = {} # hash to tip type index
 
   async def stop(self):
@@ -66,10 +65,10 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
   def module_id_length(self) -> int:
     """ The length of the module identifier in firmware commands. """
 
-  def _generate_id(self) -> str:
+  def _generate_id(self) -> int:
     """ continuously generate unique ids 0 <= x < 10000. """
     self.id_ += 1
-    return f"{self.id_ % 10000:04}"
+    return self.id_ % 10000
 
   def _to_list(self, val: List[T], tip_pattern: List[bool]) -> List[T]:
     """ Convert a list of values to a list of values with the correct length.
@@ -100,7 +99,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
         result.append(val[arg_index])
         arg_index += 1
       else:
-        # this value will be ignored, and using the first value silences mypy
+        # this value will be ignored, so just use a value we know is valid
         result.append(val[0])
     if arg_index < len(val):
       raise ValueError(f"Too many values for tip pattern {tip_pattern}: {val}")
@@ -111,7 +110,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     module: str,
     command: str,
     tip_pattern: Optional[List[bool]],
-    **kwargs) -> Tuple[str, str]:
+    **kwargs) -> Tuple[str, int]:
     """ Assemble a firmware command to the Hamilton machine.
 
     Args:
@@ -127,8 +126,8 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     """
 
     cmd = module + command
-    id_ = self._generate_id()
-    cmd += f"id{id_}" # has to be first param
+    cmd_id = self._generate_id()
+    cmd += f"id{cmd_id:04}" # id has to be the first param
 
     for k, v in kwargs.items():
       if type(v) is datetime.datetime:
@@ -153,200 +152,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       assert len(k) == 2, "Keyword arguments should be 2 characters long, but got: " + k
       cmd += f"{k}{v}"
 
-    return cmd, id_
-
-  def parse_fw_string(self, resp: str, fmt: str = "") -> dict:
-    """ Parse a machine command or response string according to a format string.
-
-    The format contains names of parameters (always length 2),
-    followed by an arbitrary number of the following, but always
-    the same:
-    - '&': char
-    - '#': decimal
-    - '*': hex
-
-    The order of parameters in the format and response string do not
-    have to (and often do not) match.
-
-    The identifier parameter (id####) is added automatically.
-
-    TODO: string parsing
-    The firmware docs mention strings in the following format: '...'
-    However, the length of these is always known (except when reading
-    barcodes), so it is easier to convert strings to the right number
-    of '&'. With barcode reading the length of the barcode is included
-    with the response string. We'll probably do a custom implementation
-    for that.
-
-    TODO: spaces
-    We should also parse responses where integers are separated by spaces,
-    like this: `ua#### #### ###### ###### ###### ######`
-
-    Args:
-      resp: The response string to parse.
-      fmt: The format string.
-
-    Raises:
-      ValueError: if the format string is incompatible with the response.
-
-    Returns:
-      A dictionary containing the parsed values.
-
-    Examples:
-      Parsing a string containing decimals (`1111`), hex (`0xB0B`) and chars (`'rw'`):
-
-      ```
-      >>> parse_fw_string("aa1111bbrwccB0B", "aa####bb&&cc***")
-      {'aa': 1111, 'bb': 'rw', 'cc': 2827}
-      ```
-    """
-
-    # Remove device and cmd identifier from response.
-    resp = resp[(self.module_id_length + 2):]
-
-    # Parse the parameters in the fmt string.
-    info = {}
-
-    def find_param(param):
-      name, data = param[0:2], param[2:]
-      type_ = {
-        "#": "int",
-        "*": "hex",
-        "&": "str"
-      }[data[0]]
-
-      # Build a regex to match this parameter.
-      exp = {
-        "int": r"[-+]?[\d ]",
-        "hex": r"[\da-fA-F ]",
-        "str": ".",
-      }[type_]
-      len_ = len(data.split(" ")[0]) # Get length of first block.
-      regex = f"{name}((?:{exp}{ {len_} }"
-
-      if param.endswith(" (n)"):
-        regex += " ?)+)"
-        is_list = True
-      else:
-        regex += "))"
-        is_list = False
-
-      # Match response against regex, save results in right datatype.
-      r = re.search(regex, resp)
-      if r is None:
-        raise ValueError(f"could not find matches for parameter {name}")
-
-      g = r.groups()
-      if len(g) == 0:
-        raise ValueError(f"could not find value for parameter {name}")
-      m = g[0]
-
-      if is_list:
-        m = m.split(" ")
-
-        if type_ == "str":
-          info[name] = m
-        elif type_ == "int":
-          info[name] = [int(m_) for m_ in m if m_ != ""]
-        elif type_ == "hex":
-          info[name] = [int(m_, base=16) for m_ in m if m_ != ""]
-      else:
-        if type_ == "str":
-          info[name] = m
-        elif type_ == "int":
-          info[name] = int(m)
-        elif type_ == "hex":
-          info[name] = int(m, base=16)
-
-    # Find params in string. All params are identified by 2 lowercase chars.
-    param = ""
-    prevchar = None
-    for char in fmt:
-      if char.islower() and prevchar != "(":
-        if len(param) > 2:
-          find_param(param)
-          param = ""
-      param += char
-      prevchar = char
-    if param != "":
-      find_param(param) # last parameter is not closed by loop.
-
-    # id can be 4, 3, 2 or 1 char long. Try in that order, and fail if none of them work.
-    if "id" not in info:
-      for id_length in [4, 3, 2, 1]:
-        try:
-          find_param(f"id{'#' * id_length}")
-          break
-        except ValueError:
-          pass
-      else: # no break
-        raise ValueError("could not find id in response")
-
-    return info
-
-  def parse_response(self, resp: str, fmt: str) -> dict:
-    """ Parse a response from the Hamilton machine.
-
-    This method uses the `parse_fw_string` method to get the info from the response string.
-    Additionally, it finds any errors in the response.
-
-    Args:
-      response: A string containing the response from the Hamilton machine.
-      fmt: A string containing the format of the response.
-
-    Raises:
-      ValueError: if the format string is incompatible with the response.
-      HamiltonException: if the response contains an error.
-
-    Returns:
-      A dictionary containing the parsed response.
-    """
-
-    # Parse errors.
-    module = resp[:2]
-    if module == "C0":
-      # C0 sends errors as er##/##. P1 raises errors as er## where the first group is the error
-      # code, and the second group is the trace information.
-      # Beyond that, specific errors may be added for individual channels and modules. These
-      # are formatted as P1##/## H0##/##, etc. These items are added programmatically as
-      # named capturing groups to the regex.
-
-      exp = r"er(?P<C0>[0-9]{2}/[0-9]{2})"
-      for module in ["X0", "I0", "W1", "W2", "T1", "T2", "R0", "P1", "P2", "P3", "P4", "P5", "P6",
-                    "P7", "P8", "P9", "PA", "PB", "PC", "PD", "PE", "PF", "PG", "H0", "HW", "HU",
-                    "HV", "N0", "D0", "NP", "M1"]:
-        exp += f" ?(?:{module}(?P<{module}>[0-9]{{2}}/[0-9]{{2}}))?"
-      errors = re.search(exp, resp)
-    else:
-      # Other modules send errors as er##, and do not contain slave errors.
-      exp = f"er(?P<{module}>[0-9]{{2}})"
-      errors = re.search(exp, resp)
-
-    if errors is not None:
-      # filter None elements
-      errors_dict = {k:v for k,v in errors.groupdict().items() if v is not None}
-      # filter 00 and 00/00 elements, which mean no error.
-      errors_dict = {k:v for k,v in errors_dict.items() if v not in ["00", "00/00"]}
-
-    has_error = not (errors is None or len(errors_dict) == 0)
-    if has_error:
-      he = HamiltonFirmwareError(errors_dict, raw_response=resp)
-
-      # If there is a faulty parameter error, request which parameter that is.
-      for module_name, error in he.items():
-        if error.message == "Unknown parameter":
-          # temp. disabled until we figure out how to handle async in parse response (the
-          # background thread does not have an event loop, and I'm not sure if it should.)
-          # vp = await self.send_command(module=error.raw_module, command="VP", fmt="vp&&")["vp"]
-          # he[module_name].message += f" ({vp})" # pylint: disable=unnecessary-dict-index-lookup
-
-          # pylint: disable=unnecessary-dict-index-lookup
-          he[module_name].message += " (call lh.backend.request_name_of_last_faulty_parameter)"
-
-      raise he
-
-    info = self.parse_fw_string(resp, fmt)
-    return info
+    return cmd, cmd_id
 
   async def send_command(
     self,
@@ -355,7 +161,6 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     tip_pattern: Optional[List[bool]] = None,
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
-    fmt: str = "",
     wait = True,
     **kwargs
   ):
@@ -366,7 +171,6 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       command: 2 character command identifier (QM for request status)
       write_timeout: write timeout in seconds. If None, `self.write_timeout` is used.
       read_timeout: read timeout in seconds. If None, `self.read_timeout` is used.
-      fmt: A string containing the format of the response. If None, just the id parameter is read.
       wait: If True, wait for a response. If False, return `None` immediately after sending the
         command.
       kwargs: any named parameters. The parameter name should also be 2 characters long. The value
@@ -381,15 +185,13 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
 
     cmd, id_ = self._assemble_command(module=module, command=command, tip_pattern=tip_pattern,
       **kwargs)
-    print("cmd", cmd)
-    return await self._write_and_read_command(id_=id_, cmd=cmd, fmt=fmt,
-      write_timeout=write_timeout, read_timeout=read_timeout, wait=wait)
+    return await self._write_and_read_command(id_=id_, cmd=cmd, write_timeout=write_timeout,
+                    read_timeout=read_timeout, wait=wait)
 
   async def _write_and_read_command(
     self,
-    id_: str,
+    id_: int,
     cmd: str,
-    fmt: str = "",
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
     wait: bool = True
@@ -406,27 +208,34 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
 
     loop = asyncio.get_event_loop()
     fut = loop.create_future()
-    self._start_reading(id_, loop, fut, cmd, fmt, read_timeout)
+    self._start_reading(id_, loop, fut, cmd, read_timeout)
     result = await fut
     return cast(dict, result) # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
 
   def _start_reading(
     self,
-    id_: str,
+    id_: int,
     loop: asyncio.AbstractEventLoop,
     fut: asyncio.Future,
     cmd: str,
-    fmt: str,
     timeout: int) -> None:
     """ Submit a task to the reading thread. Starts reading thread if it is not already running. """
 
     timeout_time = time.time() + timeout
-    self._waiting_tasks[id_] = (loop, fut, cmd, fmt, timeout_time)
+    self._waiting_tasks[id_] = (loop, fut, cmd, timeout_time)
 
     # Start reading thread if it is not already running.
     if len(self._waiting_tasks) == 1:
       self._reading_thread = threading.Thread(target=self._continuously_read)
       self._reading_thread.start()
+
+  @abstractmethod
+  def get_id_from_fw_response(self, resp: str) -> Optional[int]:
+    """ Get the id from a firmware response. """
+
+  @abstractmethod
+  def check_fw_string_error(self, resp: str):
+    """ Raise an error if the firmware response is an error response. """
 
   def _continuously_read(self) -> None:
     """ Continuously read from the USB port until all tasks are completed.
@@ -443,7 +252,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     logger.debug("Starting reading thread...")
 
     while len(self._waiting_tasks) > 0:
-      for id_, (loop, fut, cmd, fmt, timeout_time) in self._waiting_tasks.items():
+      for id_, (loop, fut, cmd, timeout_time) in self._waiting_tasks.items():
         if time.time() > timeout_time:
           logger.warning("Timeout while waiting for response to command %s.", cmd)
           loop.call_soon_threadsafe(fut.set_exception,
@@ -456,26 +265,24 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       except TimeoutError:
         continue
 
+      logger.info("Received response: %s", resp)
+
       # Parse response.
       try:
-        parsed_response = self.parse_fw_string(resp)
-        logger.info("Received response: %s", resp)
+        response_id = self.get_id_from_fw_response(resp)
       except ValueError as e:
         if resp != "":
           logger.warning("Could not parse response: %s (%s)", resp, e)
         continue
 
-      for id_, (loop, fut, cmd, fmt, timeout_time) in self._waiting_tasks.items():
-        if "id" in parsed_response and f"{parsed_response['id']:04}" == id_:
+      for id_, (loop, fut, cmd, timeout_time) in self._waiting_tasks.items():
+        if response_id == id_:
           try:
-            parsed = self.parse_response(resp, fmt)
+            self.check_fw_string_error(resp)
           except HamiltonFirmwareError as e:
             loop.call_soon_threadsafe(fut.set_exception, e)
           else:
-            if fmt is not None and fmt != "":
-              loop.call_soon_threadsafe(fut.set_result, parsed)
-            else:
-              loop.call_soon_threadsafe(fut.set_result, resp)
+            loop.call_soon_threadsafe(fut.set_result, resp)
           del self._waiting_tasks[id_]
           break
 
@@ -539,7 +346,6 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     pickup_method: TipPickupMethod
   ):
     """ Tip/needle definition in firmware. """
-
 
   async def get_or_assign_tip_type_index(self, tip: HamiltonTip) -> int:
     """ Get a tip type table index for the tip.
