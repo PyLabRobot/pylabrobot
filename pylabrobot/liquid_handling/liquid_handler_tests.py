@@ -420,7 +420,12 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_tip_tracking_double_pickup(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])
 
+    set_tip_tracking(enabled=True)
     with self.assertRaises(HasTipError):
+      await self.lh.pick_up_tips(self.tip_rack["A2"])
+    set_tip_tracking(enabled=False)
+
+    with no_tip_tracking():
       await self.lh.pick_up_tips(self.tip_rack["A2"])
 
   async def test_tip_tracking_empty_drop(self):
