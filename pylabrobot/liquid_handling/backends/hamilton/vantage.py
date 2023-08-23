@@ -17,7 +17,7 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move
 )
-from pylabrobot.resources import Liquid, Resource
+from pylabrobot.resources import Liquid, Resource, Plate
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 
@@ -133,7 +133,7 @@ class Vantage(HamiltonLiquidHandler):
 
     # TODO: proper error handling
 
-    if "er" in resp and not "er00" in resp:
+    if "er" in resp and not "er0" in resp:
       raise RuntimeError(f"Error response: '{resp}'")
 
   async def setup(self):
@@ -161,6 +161,14 @@ class Vantage(HamiltonLiquidHandler):
     )
 
     await self.loading_cover_initialize()
+
+    await self.core96_initialize(
+      x_position=7347, # TODO: get trash location from deck.
+      y_position=2684, # TODO: get trash location from deck.
+      minimal_traverse_height_at_begin_of_command=2450,
+      minimal_height_at_command_end=2450,
+      end_z_deposit_position=2020,
+    )
 
   @property
   def num_channels(self) -> int:
@@ -375,6 +383,7 @@ class Vantage(HamiltonLiquidHandler):
     ops: List[Dispense],
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
+    empty: Optional[List[bool]] = None,
     type_of_dispensing_mode: Optional[List[int]] = None,
     minimum_height: Optional[List[int]] = None,
     pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[int]] = None,
@@ -429,8 +438,13 @@ class Vantage(HamiltonLiquidHandler):
         return True
       return False
 
+    def should_empty(op):
+      return op.tip.tracker.get_used_volume() == 0
+
     if jet is None:
       jet = [should_jet(op) for op in ops]
+    if empty is None:
+      empty = [should_empty(op) for op in ops]
 
     hamilton_liquid_classes = [
       get_vantage_liquid_class(
@@ -440,9 +454,8 @@ class Vantage(HamiltonLiquidHandler):
         has_filter=op.tip.has_filter,
         liquid=op.liquid or Liquid.WATER,
         jet=jet,
-        # dispensing all, get_used_volume includes pending
-        empty=op.tip.tracker.get_used_volume() == 0
-      ) for jet, op in zip(jet, ops)]
+        empty=empty
+      ) for jet, empty, op in zip(jet, empty, ops)]
     self._assert_valid_resources([op.resource for op in ops])
 
     # correct volumes using the liquid class
@@ -506,21 +519,260 @@ class Vantage(HamiltonLiquidHandler):
       recording_mode=recording_mode or 0,
     )
 
-  async def pick_up_tips96(self, pickup: PickupTipRack):
-    print(f"Picking up tips from {pickup.resource.name}.")
-    raise NotImplementedError()
+  async def pick_up_tips96(
+    self,
+    pickup: PickupTipRack,
+    tip_handling_method: int = 0,
+    z_deposit_position: int = 2164,
+    minimal_traverse_height_at_begin_of_command: int = 2450,
+    minimal_height_at_command_end: int = 2450,
+  ):
+    # assert self.core96_head_installed, "96 head must be installed"
+    tip_spot_a1 = pickup.resource.get_item("A1")
+    tip_a1 = tip_spot_a1.get_tip()
+    assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
+    ttti = await self.get_or_assign_tip_type_index(tip_a1)
+    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
 
-  async def drop_tips96(self, drop: DropTipRack):
-    print(f"Dropping tips to {drop.resource.name}.")
-    raise NotImplementedError()
+    return await self.core96_tip_pick_up(
+      x_position=int(position.x * 10),
+      y_position=int(position.y * 10),
+      tip_type=ttti,
+      tip_handling_method=tip_handling_method,
+      z_deposit_position=z_deposit_position,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+      minimal_height_at_command_end=minimal_height_at_command_end,
+    )
 
-  async def aspirate96(self, aspiration: AspirationPlate):
-    print(f"Aspirating {aspiration.volume} from {aspiration.resource}.")
-    raise NotImplementedError()
+  async def drop_tips96(
+    self,
+    drop: DropTipRack,
+    z_deposit_position: int = 2164,
+    minimal_traverse_height_at_begin_of_command: int = 2450,
+    minimal_height_at_command_end: int = 2450
+  ):
+    # assert self.core96_head_installed, "96 head must be installed"
+    tip_spot_a1 = drop.resource.get_item("A1")
+    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
 
-  async def dispense96(self, dispense: DispensePlate):
-    print(f"Dispensing {dispense.volume} to {dispense.resource}.")
-    raise NotImplementedError()
+    return await self.core96_tip_discard(
+      x_position=int(position.x * 10),
+      y_position=int(position.y * 10),
+      z_deposit_position=z_deposit_position,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+      minimal_height_at_command_end=minimal_height_at_command_end,
+    )
+
+  async def aspirate96(
+    self,
+    aspiration: AspirationPlate,
+    jet: bool = True,
+    empty: bool = True,
+    type_of_aspiration: int = 0,
+    minimal_traverse_height_at_begin_of_command: int = 2450,
+    minimal_height_at_command_end: int = 2450,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
+    tube_2nd_section_height_measured_from_zm: int = 0,
+    tube_2nd_section_ratio: int = 0,
+    immersion_depth: int = 0,
+    surface_following_distance: int = 0,
+    transport_air_volume: Optional[int] = None,
+    blow_out_air_volume: Optional[int] = None,
+    pre_wetting_volume: int = 0,
+    lld_mode: int = 0,
+    lld_sensitivity: int = 4,
+    swap_speed: Optional[int] = None,
+    settling_time: Optional[int] = None,
+    mix_volume: int = 0,
+    mix_cycles: int = 0,
+    mix_position_in_z_direction_from_liquid_surface: int = 0,
+    surface_following_distance_during_mixing: int = 0,
+    mix_speed: int = 2000,
+    limit_curve_index: int = 0,
+    tadm_channel_pattern: Optional[List[bool]] = None,
+    tadm_algorithm_on_off: int = 0,
+    recording_mode: int = 0,
+  ):
+    # assert self.core96_head_installed, "96 head must be installed"
+
+    assert isinstance(aspiration.resource, Plate), "Only Plate is supported."
+    well_a1 = aspiration.resource.get_item("A1")
+    position = well_a1.get_absolute_location() + well_a1.center()
+
+    liquid_height = well_a1.get_absolute_location().z + (aspiration.liquid_height or 0)
+
+    well_bottoms = well_a1.get_absolute_location().z + \
+      (aspiration.offset.z if aspiration.offset is not None else 0)
+
+    tip = aspiration.tips[0]
+    hlc = get_vantage_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=True,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      liquid=aspiration.liquid or Liquid.WATER,
+      jet=jet,
+      empty=empty
+    )
+    volume = hlc.compute_corrected_volume(aspiration.volume) if hlc is not None \
+      else aspiration.volume
+
+    lld_search_height = well_bottoms + well_a1.get_size_z() + 4
+
+    transport_air_volume = transport_air_volume or \
+      (int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0)
+    blow_out_air_volume = blow_out_air_volume or \
+      (int(hlc.aspiration_blow_out_volume * 100) if hlc is not None else 0)
+    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
+    swap_speed = swap_speed or (int(hlc.aspiration_swap_speed*10) if hlc is not None else 100)
+    settling_time = settling_time or \
+      (int(hlc.aspiration_settling_time*10) if hlc is not None else 5)
+
+    return await self.core96_aspiration_of_liquid(
+      x_position=int(position.x * 10),
+      y_position=int(position.y * 10),
+      type_of_aspiration=type_of_aspiration,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+      minimal_height_at_command_end=minimal_height_at_command_end,
+      lld_search_height=int(lld_search_height * 10),
+      liquid_surface_at_function_without_lld=int(liquid_height * 10),
+      pull_out_distance_to_take_transport_air_in_function_without_lld=\
+        pull_out_distance_to_take_transport_air_in_function_without_lld,
+      minimum_height=int(well_bottoms * 10),
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      immersion_depth=immersion_depth,
+      surface_following_distance=surface_following_distance,
+      aspiration_volume=int(volume * 100),
+      aspiration_speed=int(flow_rate * 10),
+      transport_air_volume=transport_air_volume,
+      blow_out_air_volume=blow_out_air_volume,
+      pre_wetting_volume=pre_wetting_volume,
+      lld_mode=lld_mode,
+      lld_sensitivity=lld_sensitivity,
+      swap_speed=swap_speed,
+      settling_time=settling_time,
+      mix_volume=mix_volume,
+      mix_cycles=mix_cycles,
+      mix_position_in_z_direction_from_liquid_surface=\
+        mix_position_in_z_direction_from_liquid_surface,
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+      mix_speed=mix_speed,
+      limit_curve_index=limit_curve_index,
+      tadm_channel_pattern=tadm_channel_pattern,
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      recording_mode=recording_mode,
+    )
+
+  async def dispense96(
+    self,
+    dispense: DispensePlate,
+    jet: Optional[bool] = None,
+    empty: Optional[bool] = None,
+    type_of_dispensing_mode: int = 0,
+    tube_2nd_section_height_measured_from_zm: int = 0,
+    tube_2nd_section_ratio: int = 0,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
+    immersion_depth: int = 0,
+    surface_following_distance: int = 29,
+    minimal_traverse_height_at_begin_of_command: int = 2450,
+    minimal_height_at_command_end: int = 2450,
+    cut_off_speed: int = 2500,
+    stop_back_volume: int = 0,
+    transport_air_volume: Optional[int] = None,
+    blow_out_air_volume: Optional[int] = None,
+    lld_mode: int = 0,
+    lld_sensitivity: int = 4,
+    side_touch_off_distance: int = 0,
+    swap_speed: Optional[int] = None,
+    settling_time: Optional[int] = None,
+    mix_volume: int = 0,
+    mix_cycles: int = 0,
+    mix_position_in_z_direction_from_liquid_surface: int = 0,
+    surface_following_distance_during_mixing: int = 0,
+    mix_speed: Optional[int] = None,
+    limit_curve_index: int = 0,
+    tadm_channel_pattern: Optional[List[bool]] = None,
+    tadm_algorithm_on_off: int = 0,
+    recording_mode: int = 0,
+  ):
+    assert isinstance(dispense.resource, Plate), "Only Plate is supported."
+    well_a1 = dispense.resource.get_item("A1")
+    position = well_a1.get_absolute_location() + well_a1.center()
+
+    liquid_height = well_a1.get_absolute_location().z + (dispense.liquid_height or 0) + \
+      (dispense.offset.z if dispense.offset is not None else 0) + well_a1.get_size_z() + 1 # +1?
+
+    well_bottoms = well_a1.get_absolute_location().z + \
+      (dispense.offset.z if dispense.offset is not None else 0)
+
+    if jet is None:
+      jet = dispense.liquid_height is None or dispense.liquid_height > 0
+    if empty is None:
+      empty = all(tip.tracker.get_used_volume() == 0 for tip in dispense.tips)
+
+    tip = dispense.tips[0]
+    hlc = get_vantage_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=True,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      liquid=dispense.liquid or Liquid.WATER,
+      jet=jet,
+      empty=empty
+    )
+    volume = hlc.compute_corrected_volume(dispense.volume) if hlc is not None \
+      else dispense.volume
+
+    lld_search_height = well_bottoms + well_a1.get_size_z() + 4
+
+    transport_air_volume = transport_air_volume or \
+      (int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0)
+    blow_out_air_volume = blow_out_air_volume or \
+      (int(hlc.dispense_blow_out_volume * 100) if hlc is not None else 0)
+    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 250)
+    swap_speed = swap_speed or (int(hlc.dispense_swap_speed*10) if hlc is not None else 100)
+    settling_time = settling_time or \
+      (int(hlc.dispense_settling_time*10) if hlc is not None else 5)
+    mix_speed = mix_speed or (int(hlc.dispense_mix_flow_rate*10) if hlc is not None else 100)
+
+    return await self.core96_dispensing_of_liquid(
+      x_position=int(position.x * 10),
+      y_position=int(position.y * 10),
+      type_of_dispensing_mode=type_of_dispensing_mode,
+      minimum_height=int(well_bottoms * 10),
+      tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm,
+      tube_2nd_section_ratio=tube_2nd_section_ratio,
+      lld_search_height=int(lld_search_height * 10),
+      liquid_surface_at_function_without_lld=int(liquid_height * 10),
+      pull_out_distance_to_take_transport_air_in_function_without_lld=\
+        pull_out_distance_to_take_transport_air_in_function_without_lld,
+      immersion_depth=immersion_depth,
+      surface_following_distance=surface_following_distance,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
+      minimal_height_at_command_end=minimal_height_at_command_end,
+      dispense_volume=int(volume * 100),
+      dispense_speed=int(flow_rate * 10),
+      cut_off_speed=cut_off_speed,
+      stop_back_volume=stop_back_volume,
+      transport_air_volume=transport_air_volume,
+      blow_out_air_volume=blow_out_air_volume,
+      lld_mode=lld_mode,
+      lld_sensitivity=lld_sensitivity,
+      side_touch_off_distance=side_touch_off_distance,
+      swap_speed=swap_speed,
+      settling_time=settling_time,
+      mix_volume=mix_volume,
+      mix_cycles=mix_cycles,
+      mix_position_in_z_direction_from_liquid_surface=\
+        mix_position_in_z_direction_from_liquid_surface,
+      surface_following_distance_during_mixing=surface_following_distance_during_mixing,
+      mix_speed=mix_speed,
+      limit_curve_index=limit_curve_index,
+      tadm_channel_pattern=tadm_channel_pattern,
+      tadm_algorithm_on_off=tadm_algorithm_on_off,
+      recording_mode=recording_mode,
+    )
 
   async def move_resource(self, move: Move):
     print(f"Moving {move}.")
@@ -1080,8 +1332,7 @@ class Vantage(HamiltonLiquidHandler):
     """ Dispensing of liquid
 
     Args:
-      type_of_dispensing_mode:
-          Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
+      type_of_dispensing_mode: Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
           surface 3 = Blow at surface 4 = Empty.
       tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
       x_position: X Position [0.1mm].
@@ -1392,8 +1643,7 @@ class Vantage(HamiltonLiquidHandler):
 
     Args:
       type_of_aspiration: Type of aspiration (0 = simple 1 = sequence 2 = cup emptied).
-      type_of_dispensing_mode:
-          Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
+      type_of_dispensing_mode: Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
           surface 3 = Blow at surface 4 = Empty.
       tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
       TODO_DM_1: (0).
@@ -2943,4 +3193,797 @@ class Vantage(HamiltonLiquidHandler):
     return await self.send_command(
       module="A1PM",
       command="QF",
+    )
+
+  async def core96_initialize(
+    self,
+    x_position: int = 5000,
+    y_position: int = 5000,
+    z_position: int = 0,
+    minimal_traverse_height_at_begin_of_command: int = 3900,
+    minimal_height_at_command_end: int = 3900,
+    end_z_deposit_position: int = 0,
+    tip_type: int = 4,
+  ):
+    """ Initialize 96 head.
+
+    Args:
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      z_position: Z Position [0.1mm].
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
+        [0.1mm].
+      minimal_height_at_command_end: Minimal height at command end [0.1mm].
+      end_z_deposit_position: Z deposit position [0.1mm] (collar bearing position). (not documented,
+        but present in the log files.)
+      tip_type: Tip type (see command TT).
+    """
+
+    if not -500000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -500000 to 50000")
+
+    if not 422 <= y_position <= 5921:
+      raise ValueError("y_position must be in range 422 to 5921")
+
+    if not 0 <= z_position <= 3900:
+      raise ValueError("z_position must be in range 0 to 3900")
+
+    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+
+    if not 0 <= minimal_height_at_command_end <= 3900:
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
+
+    if not 0 <= end_z_deposit_position <= 3600:
+      raise ValueError("end_z_deposit_position must be in range 0 to 3600")
+
+    if not 0 <= tip_type <= 199:
+      raise ValueError("tip_type must be in range 0 to 199")
+
+    return await self.send_command(
+      module="A1HM",
+      command="DI",
+      xp=x_position,
+      yp=y_position,
+      zp=z_position,
+      th=minimal_traverse_height_at_begin_of_command,
+      te=minimal_height_at_command_end,
+      tz=end_z_deposit_position,
+      tt=tip_type,
+    )
+
+  async def core96_aspiration_of_liquid(
+    self,
+    type_of_aspiration: int = 0,
+    x_position: int = 5000,
+    y_position: int = 5000,
+    minimal_traverse_height_at_begin_of_command: int = 3900,
+    minimal_height_at_command_end: int = 3900,
+    lld_search_height: int = 0,
+    liquid_surface_at_function_without_lld: int = 3900,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
+    minimum_height: int = 3900,
+    tube_2nd_section_height_measured_from_zm: int = 0,
+    tube_2nd_section_ratio: int = 0,
+    immersion_depth: int = 0,
+    surface_following_distance: int = 0,
+    aspiration_volume: int = 0,
+    aspiration_speed: int = 2000,
+    transport_air_volume: int = 0,
+    blow_out_air_volume: int = 1000,
+    pre_wetting_volume: int = 0,
+    lld_mode: int = 1,
+    lld_sensitivity: int = 1,
+    swap_speed: int = 100,
+    settling_time: int = 5,
+    mix_volume: int = 0,
+    mix_cycles: int = 0,
+    mix_position_in_z_direction_from_liquid_surface: int = 0,
+    surface_following_distance_during_mixing: int = 0,
+    mix_speed: int = 2000,
+    limit_curve_index: int = 0,
+    tadm_channel_pattern: Optional[List[bool]] = None,
+    tadm_algorithm_on_off: int = 0,
+    recording_mode: int = 0,
+  ):
+    """ Aspiration of liquid using the 96 head.
+
+    Args:
+      type_of_aspiration: Type of aspiration (0 = simple 1 = sequence 2 = cup emptied).
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
+        command [0.1mm].
+      minimal_height_at_command_end: Minimal height at command end [0.1mm].
+      lld_search_height: LLD search height [0.1mm].
+      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
+      pull_out_distance_to_take_transport_air_in_function_without_lld:
+          Pull out distance to take transp. air in function without LLD [0.1mm]
+        .
+      minimum_height: Minimum height (maximum immersion depth) [0.1mm].
+      tube_2nd_section_height_measured_from_zm: Tube 2nd section height measured from zm [0.1mm].
+      tube_2nd_section_ratio: Tube 2nd section ratio.
+      immersion_depth: Immersion depth [0.1mm].
+      surface_following_distance: Surface following distance [0.1mm].
+      aspiration_volume: Aspiration volume [0.01ul].
+      aspiration_speed: Aspiration speed [0.1ul]/s.
+      transport_air_volume: Transport air volume [0.1ul].
+      blow_out_air_volume: Blow out air volume [0.01ul].
+      pre_wetting_volume: Pre wetting volume [0.1ul].
+      lld_mode: LLD Mode (0 = off).
+      lld_sensitivity: LLD sensitivity (1 = high, 4 = low).
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s].
+      settling_time: Settling time [0.1s].
+      mix_volume: Mix volume [0.1ul].
+      mix_cycles: Mix cycles.
+      mix_position_in_z_direction_from_liquid_surface: Mix position in Z direction from liquid
+        surface[0.1mm].
+      surface_following_distance_during_mixing: Surface following distance during mixing [0.1mm].
+      mix_speed: Mix speed [0.1ul/s].
+      limit_curve_index: Limit curve index.
+      tadm_channel_pattern: TADM Channel pattern.
+      tadm_algorithm_on_off: TADM algorithm on/off (0 = off).
+      recording_mode:
+          Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements)
+        .
+    """
+
+    if not 0 <= type_of_aspiration <= 2:
+      raise ValueError("type_of_aspiration must be in range 0 to 2")
+
+    if not -500000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -500000 to 50000")
+
+    if not 422 <= y_position <= 5921:
+      raise ValueError("y_position must be in range 422 to 5921")
+
+    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+
+    if not 0 <= minimal_height_at_command_end <= 3900:
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
+
+    if not 0 <= lld_search_height <= 3900:
+      raise ValueError("lld_search_height must be in range 0 to 3900")
+
+    if not 0 <= liquid_surface_at_function_without_lld <= 3900:
+      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
+
+    if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
+      raise ValueError("pull_out_distance_to_take_transport_air_in_function_without_lld must be in "
+                       "range 0 to 3900")
+
+    if not 0 <= minimum_height <= 3900:
+      raise ValueError("minimum_height must be in range 0 to 3900")
+
+    if not 0 <= tube_2nd_section_height_measured_from_zm <= 3900:
+      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3900")
+
+    if not 0 <= tube_2nd_section_ratio <= 10000:
+      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
+
+    if not -990 <= immersion_depth <= 990:
+      raise ValueError("immersion_depth must be in range -990 to 990")
+
+    if not 0 <= surface_following_distance <= 990:
+      raise ValueError("surface_following_distance must be in range 0 to 990")
+
+    if not 0 <= aspiration_volume <= 115000:
+      raise ValueError("aspiration_volume must be in range 0 to 115000")
+
+    if not 3 <= aspiration_speed <= 5000:
+      raise ValueError("aspiration_speed must be in range 3 to 5000")
+
+    if not 0 <= transport_air_volume <= 1000:
+      raise ValueError("transport_air_volume must be in range 0 to 1000")
+
+    if not 0 <= blow_out_air_volume <= 115000:
+      raise ValueError("blow_out_air_volume must be in range 0 to 115000")
+
+    if not 0 <= pre_wetting_volume <= 11500:
+      raise ValueError("pre_wetting_volume must be in range 0 to 11500")
+
+    if not 0 <= lld_mode <= 1:
+      raise ValueError("lld_mode must be in range 0 to 1")
+
+    if not 1 <= lld_sensitivity <= 4:
+      raise ValueError("lld_sensitivity must be in range 1 to 4")
+
+    if not 3 <= swap_speed <= 1000:
+      raise ValueError("swap_speed must be in range 3 to 1000")
+
+    if not 0 <= settling_time <= 99:
+      raise ValueError("settling_time must be in range 0 to 99")
+
+    if not 0 <= mix_volume <= 11500:
+      raise ValueError("mix_volume must be in range 0 to 11500")
+
+    if not 0 <= mix_cycles <= 99:
+      raise ValueError("mix_cycles must be in range 0 to 99")
+
+    if not 0 <= mix_position_in_z_direction_from_liquid_surface <= 990:
+      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 990")
+
+    if not 0 <= surface_following_distance_during_mixing <= 990:
+      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 990")
+
+    if not 3 <= mix_speed <= 5000:
+      raise ValueError("mix_speed must be in range 3 to 5000")
+
+    if not 0 <= limit_curve_index <= 999:
+      raise ValueError("limit_curve_index must be in range 0 to 999")
+
+    if tadm_channel_pattern is None:
+      tadm_channel_pattern = [True] * 96
+    elif not len(tadm_channel_pattern) < 24:
+      raise ValueError("tadm_channel_pattern must be of length 24, but is "
+                        f"'{len(tadm_channel_pattern)}'")
+    tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
+
+    if not 0 <= tadm_algorithm_on_off <= 1:
+      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
+
+    if not 0 <= recording_mode <= 2:
+      raise ValueError("recording_mode must be in range 0 to 2")
+
+    return await self.send_command(
+      module="A1HM",
+      command="DA",
+      at=type_of_aspiration,
+      xp=x_position,
+      yp=y_position,
+      th=minimal_traverse_height_at_begin_of_command,
+      te=minimal_height_at_command_end,
+      lp=lld_search_height,
+      zl=liquid_surface_at_function_without_lld,
+      po=pull_out_distance_to_take_transport_air_in_function_without_lld,
+      zx=minimum_height,
+      zu=tube_2nd_section_height_measured_from_zm,
+      zr=tube_2nd_section_ratio,
+      ip=immersion_depth,
+      fp=surface_following_distance,
+      av=aspiration_volume,
+      as_=aspiration_speed,
+      ta=transport_air_volume,
+      ba=blow_out_air_volume,
+      oa=pre_wetting_volume,
+      lm=lld_mode,
+      ll=lld_sensitivity,
+      de=swap_speed,
+      wt=settling_time,
+      mv=mix_volume,
+      mc=mix_cycles,
+      mp=mix_position_in_z_direction_from_liquid_surface,
+      mh=surface_following_distance_during_mixing,
+      ms=mix_speed,
+      gi=limit_curve_index,
+      cw=hex(tadm_channel_pattern_num)[2:].upper(),
+      gj=tadm_algorithm_on_off,
+      gk=recording_mode,
+    )
+
+  async def core96_dispensing_of_liquid(
+    self,
+    type_of_dispensing_mode: int = 0,
+    x_position: int = 5000,
+    y_position: int = 5000,
+    minimum_height: int = 3900,
+    tube_2nd_section_height_measured_from_zm: int = 0,
+    tube_2nd_section_ratio: int = 0,
+    lld_search_height: int = 0,
+    liquid_surface_at_function_without_lld: int = 3900,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
+    immersion_depth: int = 0,
+    surface_following_distance: int = 0,
+    minimal_traverse_height_at_begin_of_command: int = 3900,
+    minimal_height_at_command_end: int = 3900,
+    dispense_volume: int = 0,
+    dispense_speed: int = 2000,
+    cut_off_speed: int = 1500,
+    stop_back_volume: int = 0,
+    transport_air_volume: int = 0,
+    blow_out_air_volume: int = 1000,
+    lld_mode: int = 1,
+    lld_sensitivity: int = 1,
+    side_touch_off_distance: int = 0,
+    swap_speed: int = 100,
+    settling_time: int = 5,
+    mix_volume: int = 0,
+    mix_cycles: int = 0,
+    mix_position_in_z_direction_from_liquid_surface: int = 0,
+    surface_following_distance_during_mixing: int = 0,
+    mix_speed: int = 2000,
+    limit_curve_index: int = 0,
+    tadm_channel_pattern: Optional[List[bool]] = None,
+    tadm_algorithm_on_off: int = 0,
+    recording_mode: int = 0,
+  ):
+    """ Dispensing of liquid using the 96 head.
+
+    Args:
+      type_of_dispensing_mode: Type of dispensing mode 0 = part in jet 1 = blow in jet 2 = Part at
+          surface 3 = Blow at surface 4 = Empty.
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      minimum_height: Minimum height (maximum immersion depth) [0.1mm].
+      tube_2nd_section_height_measured_from_zm: Tube 2nd section height measured from zm [0.1mm].
+      tube_2nd_section_ratio: Tube 2nd section ratio.
+      lld_search_height: LLD search height [0.1mm].
+      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
+      pull_out_distance_to_take_transport_air_in_function_without_lld:
+          Pull out distance to take transp. air in function without LLD [0.1mm]
+        .
+      immersion_depth: Immersion depth [0.1mm].
+      surface_following_distance: Surface following distance [0.1mm].
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
+        command [0.1mm].
+      minimal_height_at_command_end: Minimal height at command end [0.1mm].
+      dispense_volume: Dispense volume [0.01ul].
+      dispense_speed: Dispense speed [0.1ul/s].
+      cut_off_speed: Cut off speed [0.1ul/s].
+      stop_back_volume: Stop back volume [0.1ul].
+      transport_air_volume: Transport air volume [0.1ul].
+      blow_out_air_volume: Blow out air volume [0.01ul].
+      lld_mode: LLD Mode (0 = off).
+      lld_sensitivity: LLD sensitivity (1 = high, 4 = low).
+      side_touch_off_distance: Side touch off distance [0.1mm].
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s].
+      settling_time: Settling time [0.1s].
+      mix_volume: Mix volume [0.1ul].
+      mix_cycles: Mix cycles.
+      mix_position_in_z_direction_from_liquid_surface: Mix position in Z direction from liquid
+        surface[0.1mm].
+      surface_following_distance_during_mixing: Surface following distance during mixing [0.1mm].
+      mix_speed: Mix speed [0.1ul/s].
+      limit_curve_index: Limit curve index.
+      tadm_channel_pattern: TADM Channel pattern.
+      tadm_algorithm_on_off: TADM algorithm on/off (0 = off).
+      recording_mode:
+          Recording mode (0 = no 1 = TADM errors only 2 = all TADM measurements)
+        .
+    """
+
+    if not 0 <= type_of_dispensing_mode <= 4:
+      raise ValueError("type_of_dispensing_mode must be in range 0 to 4")
+
+    if not -500000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -500000 to 50000")
+
+    if not 422 <= y_position <= 5921:
+      raise ValueError("y_position must be in range 422 to 5921")
+
+    if not 0 <= minimum_height <= 3900:
+      raise ValueError("minimum_height must be in range 0 to 3900")
+
+    if not 0 <= tube_2nd_section_height_measured_from_zm <= 3900:
+      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3900")
+
+    if not 0 <= tube_2nd_section_ratio <= 10000:
+      raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
+
+    if not 0 <= lld_search_height <= 3900:
+      raise ValueError("lld_search_height must be in range 0 to 3900")
+
+    if not 0 <= liquid_surface_at_function_without_lld <= 3900:
+      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
+
+    if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
+      raise ValueError("pull_out_distance_to_take_transport_air_in_function_without_lld must be in "
+                       "range 0 to 3900")
+
+    if not -990 <= immersion_depth <= 990:
+      raise ValueError("immersion_depth must be in range -990 to 990")
+
+    if not 0 <= surface_following_distance <= 990:
+      raise ValueError("surface_following_distance must be in range 0 to 990")
+
+    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+
+    if not 0 <= minimal_height_at_command_end <= 3900:
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
+
+    if not 0 <= dispense_volume <= 115000:
+      raise ValueError("dispense_volume must be in range 0 to 115000")
+
+    if not 3 <= dispense_speed <= 5000:
+      raise ValueError("dispense_speed must be in range 3 to 5000")
+
+    if not 3 <= cut_off_speed <= 5000:
+      raise ValueError("cut_off_speed must be in range 3 to 5000")
+
+    if not 0 <= stop_back_volume <= 2000:
+      raise ValueError("stop_back_volume must be in range 0 to 2000")
+
+    if not 0 <= transport_air_volume <= 1000:
+      raise ValueError("transport_air_volume must be in range 0 to 1000")
+
+    if not 0 <= blow_out_air_volume <= 115000:
+      raise ValueError("blow_out_air_volume must be in range 0 to 115000")
+
+    if not 0 <= lld_mode <= 1:
+      raise ValueError("lld_mode must be in range 0 to 1")
+
+    if not 1 <= lld_sensitivity <= 4:
+      raise ValueError("lld_sensitivity must be in range 1 to 4")
+
+    if not 0 <= side_touch_off_distance <= 30:
+      raise ValueError("side_touch_off_distance must be in range 0 to 30")
+
+    if not 3 <= swap_speed <= 1000:
+      raise ValueError("swap_speed must be in range 3 to 1000")
+
+    if not 0 <= settling_time <= 99:
+      raise ValueError("settling_time must be in range 0 to 99")
+
+    if not 0 <= mix_volume <= 11500:
+      raise ValueError("mix_volume must be in range 0 to 11500")
+
+    if not 0 <= mix_cycles <= 99:
+      raise ValueError("mix_cycles must be in range 0 to 99")
+
+    if not 0 <= mix_position_in_z_direction_from_liquid_surface <= 990:
+      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 990")
+
+    if not 0 <= surface_following_distance_during_mixing <= 990:
+      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 990")
+
+    if not 3 <= mix_speed <= 5000:
+      raise ValueError("mix_speed must be in range 3 to 5000")
+
+    if not 0 <= limit_curve_index <= 999:
+      raise ValueError("limit_curve_index must be in range 0 to 999")
+
+    if tadm_channel_pattern is None:
+      tadm_channel_pattern = [True] * 96
+    elif not len(tadm_channel_pattern) < 24:
+      raise ValueError("tadm_channel_pattern must be of length 24, but is "
+                        f"'{len(tadm_channel_pattern)}'")
+    tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
+
+    if not 0 <= tadm_algorithm_on_off <= 1:
+      raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
+
+    if not 0 <= recording_mode <= 2:
+      raise ValueError("recording_mode must be in range 0 to 2")
+
+    return await self.send_command(
+      module="A1HM",
+      command="DD",
+      dm=type_of_dispensing_mode,
+      xp=x_position,
+      yp=y_position,
+      zx=minimum_height,
+      zu=tube_2nd_section_height_measured_from_zm,
+      zr=tube_2nd_section_ratio,
+      lp=lld_search_height,
+      zl=liquid_surface_at_function_without_lld,
+      po=pull_out_distance_to_take_transport_air_in_function_without_lld,
+      ip=immersion_depth,
+      fp=surface_following_distance,
+      th=minimal_traverse_height_at_begin_of_command,
+      te=minimal_height_at_command_end,
+      dv=dispense_volume,
+      ds=dispense_speed,
+      ss=cut_off_speed,
+      rv=stop_back_volume,
+      ta=transport_air_volume,
+      ba=blow_out_air_volume,
+      lm=lld_mode,
+      ll=lld_sensitivity,
+      dj=side_touch_off_distance,
+      de=swap_speed,
+      wt=settling_time,
+      mv=mix_volume,
+      mc=mix_cycles,
+      mp=mix_position_in_z_direction_from_liquid_surface,
+      mh=surface_following_distance_during_mixing,
+      ms=mix_speed,
+      gi=limit_curve_index,
+      cw=hex(tadm_channel_pattern_num)[2:].upper(),
+      gj=tadm_algorithm_on_off,
+      gk=recording_mode,
+    )
+
+  async def core96_tip_pick_up(
+    self,
+    x_position: int = 5000,
+    y_position: int = 5000,
+    tip_type: int = 4,
+    tip_handling_method: int = 0,
+    z_deposit_position: int = 0,
+    minimal_traverse_height_at_begin_of_command: int = 3900,
+    minimal_height_at_command_end: int = 3900,
+  ):
+    """ Tip Pick up using the 96 head.
+
+    Args:
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      tip_type: Tip type (see command TT).
+      tip_handling_method: Tip handling method.
+      z_deposit_position: Z deposit position [0.1mm] (collar bearing position).
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
+        command [0.1mm].
+      minimal_height_at_command_end: Minimal height at command end [0.1mm].
+    """
+
+    if not -500000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -500000 to 50000")
+
+    if not 422 <= y_position <= 5921:
+      raise ValueError("y_position must be in range 422 to 5921")
+
+    if not 0 <= tip_type <= 199:
+      raise ValueError("tip_type must be in range 0 to 199")
+
+    if not 0 <= tip_handling_method <= 2:
+      raise ValueError("tip_handling_method must be in range 0 to 2")
+
+    if not 0 <= z_deposit_position <= 3900:
+      raise ValueError("z_deposit_position must be in range 0 to 3900")
+
+    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+
+    if not 0 <= minimal_height_at_command_end <= 3900:
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
+
+    return await self.send_command(
+      module="A1HM",
+      command="TP",
+      xp=x_position,
+      yp=y_position,
+      tt=tip_type,
+      td=tip_handling_method,
+      tz=z_deposit_position,
+      th=minimal_traverse_height_at_begin_of_command,
+      te=minimal_height_at_command_end,
+    )
+
+  async def core96_tip_discard(
+    self,
+    x_position: int = 5000,
+    y_position: int = 5000,
+    z_deposit_position: int = 0,
+    minimal_traverse_height_at_begin_of_command: int = 3900,
+    minimal_height_at_command_end: int = 3900,
+  ):
+    """ Tip Discard using the 96 head.
+
+    Args:
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      z_deposit_position: Z deposit position [0.1mm] (collar bearing position).
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
+        command [0.1mm].
+      minimal_height_at_command_end: Minimal height at command end [0.1mm].
+    """
+
+    if not -500000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -500000 to 50000")
+
+    if not 422 <= y_position <= 5921:
+      raise ValueError("y_position must be in range 422 to 5921")
+
+    if not 0 <= z_deposit_position <= 3900:
+      raise ValueError("z_deposit_position must be in range 0 to 3900")
+
+    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+
+    if not 0 <= minimal_height_at_command_end <= 3900:
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
+
+    return await self.send_command(
+      module="A1HM",
+      command="TR",
+      xp=x_position,
+      yp=y_position,
+      tz=z_deposit_position,
+      th=minimal_traverse_height_at_begin_of_command,
+      te=minimal_height_at_command_end,
+    )
+
+  async def core96_move_to_defined_position(
+    self,
+    x_position: int = 5000,
+    y_position: int = 5000,
+    z_position: int = 0,
+    minimal_traverse_height_at_begin_of_command: int = 3900,
+  ):
+    """ Move to defined position using the 96 head.
+
+    Args:
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      z_position: Z Position [0.1mm].
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
+       command [0.1mm].
+    """
+
+    if not -500000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -500000 to 50000")
+
+    if not 422 <= y_position <= 5921:
+      raise ValueError("y_position must be in range 422 to 5921")
+
+    if not 0 <= z_position <= 3900:
+      raise ValueError("z_position must be in range 0 to 3900")
+
+    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+
+    return await self.send_command(
+      module="A1HM",
+      command="DN",
+      xp=x_position,
+      yp=y_position,
+      zp=z_position,
+      th=minimal_traverse_height_at_begin_of_command,
+    )
+
+  async def core96_wash_tips(
+    self,
+    x_position: int = 5000,
+    y_position: int = 5000,
+    liquid_surface_at_function_without_lld: int = 3900,
+    minimum_height: int = 3900,
+    surface_following_distance_during_mixing: int = 0,
+    minimal_traverse_height_at_begin_of_command: int = 3900,
+    mix_volume: int = 0,
+    mix_cycles: int = 0,
+    mix_speed: int = 2000,
+  ):
+    """ Wash tips on the 96 head.
+
+    Args:
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
+      minimum_height: Minimum height (maximum immersion depth) [0.1mm].
+      surface_following_distance_during_mixing: Surface following distance during mixing [0.1mm].
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
+        [0.1mm].
+      mix_volume: Mix volume [0.1ul].
+      mix_cycles: Mix cycles.
+      mix_speed: Mix speed [0.1ul/s].
+    """
+
+    if not -500000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -500000 to 50000")
+
+    if not 422 <= y_position <= 5921:
+      raise ValueError("y_position must be in range 422 to 5921")
+
+    if not 0 <= liquid_surface_at_function_without_lld <= 3900:
+      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
+
+    if not 0 <= minimum_height <= 3900:
+      raise ValueError("minimum_height must be in range 0 to 3900")
+
+    if not 0 <= surface_following_distance_during_mixing <= 990:
+      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 990")
+
+    if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+
+    if not 0 <= mix_volume <= 11500:
+      raise ValueError("mix_volume must be in range 0 to 11500")
+
+    if not 0 <= mix_cycles <= 99:
+      raise ValueError("mix_cycles must be in range 0 to 99")
+
+    if not 3 <= mix_speed <= 5000:
+      raise ValueError("mix_speed must be in range 3 to 5000")
+
+    return await self.send_command(
+      module="A1HM",
+      command="DW",
+      xp=x_position,
+      yp=y_position,
+      zl=liquid_surface_at_function_without_lld,
+      zx=minimum_height,
+      mh=surface_following_distance_during_mixing,
+      th=minimal_traverse_height_at_begin_of_command,
+      mv=mix_volume,
+      mc=mix_cycles,
+      ms=mix_speed,
+    )
+
+  async def core96_empty_washed_tips(
+    self,
+    liquid_surface_at_function_without_lld: int = 3900,
+    minimal_height_at_command_end: int = 3900,
+  ):
+    """ Empty washed tips (end of wash procedure only) on the 96 head.
+
+    Args:
+      liquid_surface_at_function_without_lld: Liquid surface at function without LLD [0.1mm].
+      minimal_height_at_command_end: Minimal height at command end [0.1mm].
+    """
+
+    if not 0 <= liquid_surface_at_function_without_lld <= 3900:
+      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
+
+    if not 0 <= minimal_height_at_command_end <= 3900:
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
+
+    return await self.send_command(
+      module="A1HM",
+      command="EE",
+      zl=liquid_surface_at_function_without_lld,
+      te=minimal_height_at_command_end,
+    )
+
+  async def core96_search_for_teach_in_signal_in_x_direction(
+    self,
+    x_search_distance: int = 0,
+    x_speed: int = 50,
+  ):
+    """ Search for Teach in signal in X direction on the 96 head.
+
+    Args:
+      x_search_distance: X search distance [0.1mm].
+      x_speed: X speed [0.1mm/s].
+    """
+
+    if not -50000 <= x_search_distance <= 50000:
+      raise ValueError("x_search_distance must be in range -50000 to 50000")
+
+    if not 20 <= x_speed <= 25000:
+      raise ValueError("x_speed must be in range 20 to 25000")
+
+    return await self.send_command(
+      module="A1HM",
+      command="DL",
+      xs=x_search_distance,
+      xv=x_speed,
+    )
+
+  async def core96_set_any_parameter(self):
+    """ Set any parameter within the 96 head module. """
+
+    return await self.send_command(
+      module="A1HM",
+      command="AA",
+    )
+
+  async def core96_query_tip_presence(self):
+    """ Query Tip presence on the 96 head. """
+
+    return await self.send_command(
+      module="A1HM",
+      command="QA",
+    )
+
+  async def core96_request_position(self):
+    """ Request position of the 96 head. """
+
+    return await self.send_command(
+      module="A1HM",
+      command="QI",
+    )
+
+  async def core96_request_tadm_error_status(
+    self,
+    tadm_channel_pattern: Optional[List[bool]] = None,
+  ):
+    """ Request TADM error status on the 96 head.
+
+    Args:
+      tadm_channel_pattern: TADM Channel pattern.
+    """
+
+    if tadm_channel_pattern is None:
+      tadm_channel_pattern = [True] * 96
+    elif not len(tadm_channel_pattern) < 24:
+      raise ValueError("tadm_channel_pattern must be of length 24, but is "
+                        f"'{len(tadm_channel_pattern)}'")
+    tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
+
+    return await self.send_command(
+      module="A1HM",
+      command="VB",
+      cw=hex(tadm_channel_pattern_num)[2:].upper(),
     )
