@@ -116,19 +116,19 @@ class Move:
 
   Attributes:
     resource: The resource to move.
-    to: The destination of the move.
+    destination: The destination of the move.
     resource_offset: The offset of the resource.
-    to_offset: The offset of the destination.
+    destination_offset: The offset of the destination.
     pickup_distance_from_top: The distance from the top of the resource to pick up from.
     get_direction: The direction from which to grab the resource.
     put_direction: The direction from which to put the resource.
   """
 
   resource: Resource
-  to: Coordinate
+  destination: Coordinate
   intermediate_locations: List[Coordinate] = field(default_factory=list)
   resource_offset: Coordinate = field(default=Coordinate.zero())
-  to_offset: Coordinate = field(default=Coordinate.zero())
+  destination_offset: Coordinate = field(default=Coordinate.zero())
   pickup_distance_from_top: float = 0
   get_direction: GripDirection = GripDirection.FRONT
   put_direction: GripDirection = GripDirection.FRONT

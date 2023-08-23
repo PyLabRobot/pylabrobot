@@ -1137,7 +1137,7 @@ class LiquidHandler:
     to: Coordinate,
     intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
-    to_offset: Coordinate = Coordinate.zero(),
+    destination_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
     get_direction: GripDirection = GripDirection.FRONT,
     put_direction: GripDirection = GripDirection.FRONT,
@@ -1155,7 +1155,7 @@ class LiquidHandler:
       to: The absolute coordinate (meaning relative to deck) to move the resource to.
       intermediate_locations: A list of intermediate locations to move the resource through.
       resource_offset: The offset from the resource's origin, optional (rarely necessary).
-      to_offset: The offset from the location's origin, optional (rarely necessary).
+      destination_offset: The offset from the location's origin, optional (rarely necessary).
       pickup_distance_from_top: The distance from the top of the resource to pick up from.
       get_direction: The direction from which to pick up the resource.
       put_direction: The direction from which to put down the resource.
@@ -1167,10 +1167,10 @@ class LiquidHandler:
 
     return await self.backend.move_resource(move=Move(
       resource=resource,
-      to=to,
+      destination=to,
       intermediate_locations=intermediate_locations or [],
       resource_offset=resource_offset,
-      to_offset=to_offset,
+      destination_offset=destination_offset,
       pickup_distance_from_top=pickup_distance_from_top,
       get_direction=get_direction,
       put_direction=put_direction),

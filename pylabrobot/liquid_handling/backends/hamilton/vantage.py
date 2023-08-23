@@ -17,7 +17,7 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move
 )
-from pylabrobot.resources import Liquid, Resource, Plate
+from pylabrobot.resources import Coordinate, Liquid, Resource, Plate
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 
@@ -775,8 +775,90 @@ class Vantage(HamiltonLiquidHandler):
     )
 
   async def move_resource(self, move: Move):
-    print(f"Moving {move}.")
+    await self.pick_up_resource(
+      resource=move.resource,
+      offset=move.resource_offset,
+      pickup_distance_from_top=move.pickup_distance_from_top)
+
+    await self.release_picked_up_resource(
+      resource=move.resource,
+      destination=move.destination,
+      offset=move.destination_offset,
+      pickup_distance_from_top=move.pickup_distance_from_top)
+
+  async def pick_up_resource(
+    self,
+    resource: Resource,
+    offset: Coordinate,
+    pickup_distance_from_top: float,
+    grip_strength: int = 81,
+    plate_width_tolerance: int = 20,
+    acceleration_index: int = 4,
+    z_clearance_height: int = 0,
+    hotel_depth: int = 0,
+    minimal_height_at_command_end: int = 2840,
+  ):
+    """ Pick up a resource with the IPG. You probably want to use :meth:`move_resource`, which
+    allows you to pick up and move a resource with a single command. """
+
+    center = resource.get_absolute_location() + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    plate_width = resource.get_size_x()
+
+    await self.ipg_grip_plate(
+      x_position=int(center.x * 10),
+      y_position=int(center.y * 10),
+      z_position=int(grip_height * 10),
+      grip_strength=grip_strength,
+      open_gripper_position=int(plate_width*10) + 32,
+      plate_width=int(plate_width * 10) - 33,
+      plate_width_tolerance=plate_width_tolerance,
+      acceleration_index=acceleration_index,
+      z_clearance_height=z_clearance_height,
+      hotel_depth=hotel_depth,
+      minimal_height_at_command_end=minimal_height_at_command_end,
+    )
+
+  async def move_picked_up_resource(self):
+    """ Move a resource picked up with the IPG. See :meth:`pick_up_resource`.
+
+    You probably want to use :meth:`move_resource`, which allows you to pick up and move a resource
+    with a single command.
+    """
+
     raise NotImplementedError()
+
+  async def release_picked_up_resource(
+    self,
+    resource: Resource,
+    destination: Coordinate,
+    offset: Coordinate,
+    pickup_distance_from_top: float,
+    z_clearance_height: int = 0,
+    press_on_distance: int = 5,
+    hotel_depth: int = 0,
+    minimal_height_at_command_end: int = 2840
+  ):
+    """ Release a resource picked up with the IPG. See :meth:`pick_up_resource`.
+
+    You probably want to use :meth:`move_resource`, which allows you to pick up and move a resource
+    with a single command.
+    """
+
+    center = destination + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    plate_width = resource.get_size_x()
+
+    await self.ipg_put_plate(
+      x_position=int(center.x * 10),
+      y_position=int(center.y * 10),
+      z_position=int(grip_height * 10),
+      z_clearance_height=z_clearance_height,
+      open_gripper_position=int(plate_width*10) + 32,
+      press_on_distance=press_on_distance,
+      hotel_depth=hotel_depth,
+      minimal_height_at_command_end=minimal_height_at_command_end
+    )
 
   # ============== Firmware Commands ==============
 
@@ -3986,4 +4068,335 @@ class Vantage(HamiltonLiquidHandler):
       module="A1HM",
       command="VB",
       cw=hex(tadm_channel_pattern_num)[2:].upper(),
+    )
+
+  async def ipg_initialize(self):
+    """ Initialize IPG """
+
+    return await self.send_command(
+      module="A1RM",
+      command="DI",
+    )
+
+  async def ipg_park(self):
+    """ Park IPG """
+
+    return await self.send_command(
+      module="A1RM",
+      command="GP",
+    )
+
+  async def ipg_expose_channel_n(self):
+    """ Expose channel n """
+
+    return await self.send_command(
+      module="A1RM",
+      command="DQ",
+    )
+
+  async def ipg_release_object(self):
+    """ Release object """
+
+    return await self.send_command(
+      module="A1RM",
+      command="DO",
+    )
+
+  async def ipg_search_for_teach_in_signal_in_x_direction(
+    self,
+    x_search_distance: int = 0,
+    x_speed: int = 50,
+  ):
+    """ Search for Teach in signal in X direction
+
+    Args:
+      x_search_distance: X search distance [0.1mm].
+      x_speed: X speed [0.1mm/s].
+    """
+
+    if not -50000 <= x_search_distance <= 50000:
+      raise ValueError("x_search_distance must be in range -50000 to 50000")
+
+    if not 20 <= x_speed <= 25000:
+      raise ValueError("x_speed must be in range 20 to 25000")
+
+    return await self.send_command(
+      module="A1RM",
+      command="DL",
+      xs=x_search_distance,
+      xv=x_speed,
+    )
+
+  async def ipg_grip_plate(
+    self,
+    x_position: int = 5000,
+    y_position: int = 5600,
+    z_position: int = 3600,
+    grip_strength: int = 100,
+    open_gripper_position: int = 860,
+    plate_width: int = 800,
+    plate_width_tolerance: int = 20,
+    acceleration_index: int = 4,
+    z_clearance_height: int = 50,
+    hotel_depth: int = 0,
+    minimal_height_at_command_end: int = 3600,
+  ):
+    """ Grip plate
+
+    Args:
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      z_position: Z Position [0.1mm].
+      grip_strength: Grip strength (0 = low 99 = high).
+      open_gripper_position: Open gripper position [0.1mm].
+      plate_width: Plate width [0.1mm].
+      plate_width_tolerance: Plate width tolerance [0.1mm].
+      acceleration_index: Acceleration index.
+      z_clearance_height: Z clearance height [0.1mm].
+      hotel_depth: Hotel depth [0.1mm] (0 = Stack).
+      minimal_height_at_command_end: Minimal height at command end [0.1mm].
+    """
+
+    if not -50000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -50000 to 50000")
+
+    if not -10000 <= y_position <= 10000:
+      raise ValueError("y_position must be in range -10000 to 10000")
+
+    if not 0 <= z_position <= 4000:
+      raise ValueError("z_position must be in range 0 to 4000")
+
+    if not 0 <= grip_strength <= 160:
+      raise ValueError("grip_strength must be in range 0 to 160")
+
+    if not 0 <= open_gripper_position <= 9999:
+      raise ValueError("open_gripper_position must be in range 0 to 9999")
+
+    if not 0 <= plate_width <= 9999:
+      raise ValueError("plate_width must be in range 0 to 9999")
+
+    if not 0 <= plate_width_tolerance <= 99:
+      raise ValueError("plate_width_tolerance must be in range 0 to 99")
+
+    if not 0 <= acceleration_index <= 4:
+      raise ValueError("acceleration_index must be in range 0 to 4")
+
+    if not 0 <= z_clearance_height <= 999:
+      raise ValueError("z_clearance_height must be in range 0 to 999")
+
+    if not 0 <= hotel_depth <= 3000:
+      raise ValueError("hotel_depth must be in range 0 to 3000")
+
+    if not 0 <= minimal_height_at_command_end <= 4000:
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 4000")
+
+    return await self.send_command(
+      module="A1RM",
+      command="DG",
+      xp=x_position,
+      yp=y_position,
+      zp=z_position,
+      yw=grip_strength,
+      yo=open_gripper_position,
+      yg=plate_width,
+      pt=plate_width_tolerance,
+      ai=acceleration_index,
+      zc=z_clearance_height,
+      hd=hotel_depth,
+      te=minimal_height_at_command_end,
+    )
+
+  async def ipg_put_plate(
+    self,
+    x_position: int = 5000,
+    y_position: int = 5600,
+    z_position: int = 3600,
+    open_gripper_position: int = 860,
+    z_clearance_height: int = 50,
+    press_on_distance: int = 5,
+    hotel_depth: int = 0,
+    minimal_height_at_command_end: int = 3600,
+  ):
+    """ Put plate
+
+    Args:
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      z_position: Z Position [0.1mm].
+      open_gripper_position: Open gripper position [0.1mm].
+      z_clearance_height: Z clearance height [0.1mm].
+      press_on_distance: Press on distance [0.1mm].
+      hotel_depth: Hotel depth [0.1mm] (0 = Stack).
+      minimal_height_at_command_end: Minimal height at command end [0.1mm].
+    """
+
+    if not -50000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -50000 to 50000")
+
+    if not -10000 <= y_position <= 10000:
+      raise ValueError("y_position must be in range -10000 to 10000")
+
+    if not 0 <= z_position <= 4000:
+      raise ValueError("z_position must be in range 0 to 4000")
+
+    if not 0 <= open_gripper_position <= 9999:
+      raise ValueError("open_gripper_position must be in range 0 to 9999")
+
+    if not 0 <= z_clearance_height <= 999:
+      raise ValueError("z_clearance_height must be in range 0 to 999")
+
+    if not 0 <= press_on_distance <= 999:
+      raise ValueError("press_on_distance must be in range 0 to 999")
+
+    if not 0 <= hotel_depth <= 3000:
+      raise ValueError("hotel_depth must be in range 0 to 3000")
+
+    if not 0 <= minimal_height_at_command_end <= 4000:
+      raise ValueError("minimal_height_at_command_end must be in range 0 to 4000")
+
+    return await self.send_command(
+      module="A1RM",
+      command="DR",
+      xp=x_position,
+      yp=y_position,
+      zp=z_position,
+      yo=open_gripper_position,
+      zc=z_clearance_height,
+      # zi=press_on_distance, # not sent?
+      hd=hotel_depth,
+      te=minimal_height_at_command_end,
+    )
+
+  async def ipg_prepare_gripper_orientation(
+    self,
+    grip_orientation: int = 32,
+    minimal_traverse_height_at_begin_of_command: int = 3600,
+  ):
+    """ Prepare gripper orientation
+
+    Args:
+      grip_orientation: Grip orientation.
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command [0.1mm].
+    """
+
+    if not 1 <= grip_orientation <= 44:
+      raise ValueError("grip_orientation must be in range 1 to 44")
+
+    if not 0 <= minimal_traverse_height_at_begin_of_command <= 4000:
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 4000")
+
+    return await self.send_command(
+      module="A1RM",
+      command="GA",
+      gd=grip_orientation,
+      th=minimal_traverse_height_at_begin_of_command,
+    )
+
+  async def ipg_move_to_defined_position(
+    self,
+    x_position: int = 5000,
+    y_position: int = 5600,
+    z_position: int = 3600,
+    minimal_traverse_height_at_begin_of_command: int = 3600,
+  ):
+    """ Move to defined position
+
+    Args:
+      x_position: X Position [0.1mm].
+      y_position: Y Position [0.1mm].
+      z_position: Z Position [0.1mm].
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command [0.1mm].
+    """
+
+    if not -50000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -50000 to 50000")
+
+    if not -10000 <= y_position <= 10000:
+      raise ValueError("y_position must be in range -10000 to 10000")
+
+    if not 0 <= z_position <= 4000:
+      raise ValueError("z_position must be in range 0 to 4000")
+
+    if not 0 <= minimal_traverse_height_at_begin_of_command <= 4000:
+      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 4000")
+
+    return await self.send_command(
+      module="A1RM",
+      command="DN",
+      xp=x_position,
+      yp=y_position,
+      zp=z_position,
+      th=minimal_traverse_height_at_begin_of_command,
+    )
+
+  async def ipg_set_any_parameter_within_this_module(self):
+    """ Set any parameter within this module """
+
+    return await self.send_command(
+      module="A1RM",
+      command="AA",
+    )
+
+  async def ipg_get_parking_status(self):
+    """ Get parking status """
+
+    return await self.send_command(
+      module="A1RM",
+      command="RG",
+    )
+
+  async def ipg_query_tip_presence(self):
+    """ Query Tip presence """
+
+    return await self.send_command(
+      module="A1RM",
+      command="QA",
+    )
+
+  async def ipg_request_access_range(self, grip_orientation: int = 32):
+    """ Request access range
+
+    Args:
+      grip_orientation: Grip orientation.
+    """
+
+    if not 1 <= grip_orientation <= 44:
+      raise ValueError("grip_orientation must be in range 1 to 44")
+
+    return await self.send_command(
+      module="A1RM",
+      command="QR",
+      gd=grip_orientation,
+    )
+
+  async def ipg_request_position(self, grip_orientation: int = 32):
+    """ Request position
+
+    Args:
+      grip_orientation: Grip orientation.
+    """
+
+    if not 1 <= grip_orientation <= 44:
+      raise ValueError("grip_orientation must be in range 1 to 44")
+
+    return await self.send_command(
+      module="A1RM",
+      command="QI",
+      gd=grip_orientation,
+    )
+
+  async def ipg_request_actual_angular_dimensions(self):
+    """ Request actual angular dimensions """
+
+    return await self.send_command(
+      module="A1RM",
+      command="RR",
+    )
+
+  async def ipg_request_configuration(self):
+    """ Request configuration """
+
+    return await self.send_command(
+      module="A1RM",
+      command="RS",
     )

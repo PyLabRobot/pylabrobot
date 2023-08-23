@@ -1527,9 +1527,9 @@ class STAR(HamiltonLiquidHandler):
       previous_location = location
 
     await self.release_picked_up_resource(
-      location=move.to,
+      location=move.destination,
       resource=move.resource,
-      offset=move.to_offset,
+      offset=move.destination_offset,
       grip_direction=move.put_direction,
       pickup_distance_from_top=move.pickup_distance_from_top,
       minimum_traverse_height_at_beginning_of_a_command=
