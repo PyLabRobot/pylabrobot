@@ -6,7 +6,6 @@ import threading
 import time
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 
-from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
 from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
 from pylabrobot.resources import TipSpot, Well
@@ -279,7 +278,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
         if response_id == id_:
           try:
             self.check_fw_string_error(resp)
-          except HamiltonFirmwareError as e:
+          except Exception as e: # pylint: disable=broad-exception-caught
             loop.call_soon_threadsafe(fut.set_exception, e)
           else:
             loop.call_soon_threadsafe(fut.set_result, resp)

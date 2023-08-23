@@ -244,7 +244,6 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_dispense(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
     await self.lh.aspirate(self.plate["A1"], vols=100)
-    print("\n"*9)
     await self.lh.dispense(self.plate["A2"], vols=100, liquid_height=[5], jet=[False])
 
     self._assert_command_sent_once(
@@ -252,3 +251,43 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "ip0000&fp0021&th2450&te2450&dv010830&ds1200&ss2500&rv000&ta050&ba00000&lm0&zo005&ll1&lv1&"
       "de0010&mv00000&mc00&mp000&ms0010&wt00&gi000&gj0gk0zu0000&dj00zr00000&mh0000&po0050&la0&",
       DISPENSE_FORMAT)
+
+  async def test_tip_pickup96(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
+    self._assert_command_sent_once(
+      "A1HMTPid0237xp04329yp1458tt01td0tz2164th2450te2450",
+      {"xp": "int", "yp": "int", "tt": "int", "td": "int", "tz": "int", "th": "int", "te": "int"})
+
+  async def test_tip_drop96(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.drop_tips96(self.tip_rack)
+    self._assert_command_sent_once(
+      "A1HMTRid0284xp04329yp1458tz2164th2450te2450",
+      {"xp": "int", "yp": "int", "tz": "int", "th": "int", "te": "int"})
+
+  async def test_aspirate96(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate_plate(self.plate, volume=100)
+    self._assert_command_sent_once(
+      "A1HMDAid0236at0xp05680yp1460th2450te2450lp2001zl1871zx1871ip000fp000av010720as2500ta050"
+      "ba004000oa00000lm0ll4de0020wt10mv00000mc00mp000ms2500zu0000zr00000mh000gj0gk0gi000"
+      "cwFFFFFFFFFFFFFFFFFFFFFFFFpo0050",
+      {"xp": "int", "yp": "int", "th": "int", "te": "int", "lp": "int", "zl": "int", "zx": "int",
+       "ip": "int", "fp": "int", "av": "int", "as": "int", "ta": "int", "ba": "int", "oa": "int",
+       "lm": "int", "ll": "int", "de": "int", "wt": "int", "mv": "int", "mc": "int", "mp": "int",
+       "zu": "int", "zr": "int", "mh": "int", "gj": "int", "gk": "int", "gi": "int", "cw": "hex",
+       "po": "int"})
+
+  async def test_dispense96(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate_plate(self.plate, volume=100)
+    await self.lh.dispense_plate(self.plate, volume=100)
+    self._assert_command_sent_once(
+      "A1HMDDid0238dm1xp05680yp1460th2450te2450lp2001zl1971zx1871ip000fp029dv010720ds4000ta050"
+      "ba004000lm0ll4de0010wt00mv00000mc00mp000ms0010ss2500rv000zu0000dj00zr00000mh000gj0gk0gi000"
+      "cwFFFFFFFFFFFFFFFFFFFFFFFFpo0050",
+      {"xp": "int", "yp": "int", "th": "int", "te": "int", "lp": "int", "zl": "int", "zx": "int",
+        "ip": "int", "fp": "int", "dv": "int", "ds": "int", "ta": "int", "ba": "int", "lm": "int",
+        "ll": "int", "de": "int", "wt": "int", "mv": "int", "mc": "int", "mp": "int", "ms": "int",
+        "ss": "int", "rv": "int", "zu": "int", "zr": "int", "dj": "int", "mh": "int", "gj": "int",
+        "gk": "int", "gi": "int", "cw": "hex", "po": "int"})
