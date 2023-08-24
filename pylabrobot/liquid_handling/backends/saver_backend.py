@@ -19,6 +19,9 @@ class SaverBackend(LiquidHandlerBackend):
     await super().setup()
     self.commands_received = []
 
+  async def stop(self):
+    await super().stop()
+
   async def send_command(self, command: str, data: Dict[str, Any]):
     self.commands_received.append({"command": command, "data": data})
 

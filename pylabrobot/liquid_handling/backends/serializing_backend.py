@@ -45,9 +45,11 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
   async def setup(self):
     await self.send_command(command="setup")
+    await super().setup()
 
   async def stop(self):
     await self.send_command(command="stop")
+    await super().stop()
 
   async def assigned_resource_callback(self, resource: Resource):
     await self.send_command(command="resource_assigned", data={"resource": resource.serialize(),
@@ -172,10 +174,7 @@ class SerializingSavingBackend(SerializingBackend):
 
   async def setup(self):
     self.sent_commands: List[SerializingSavingBackend.Command] = []
-    self.setup_finished = True
-
-  async def stop(self):
-    self.setup_finished = False
+    await super().setup()
 
   async def send_command(self, command: str, data: Optional[Dict[str, Any]] = None):
     self.sent_commands.append({"command": command, "data": data})

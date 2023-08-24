@@ -180,7 +180,6 @@ class STARCommandCatcher(STAR):
     self.commands = []
 
   async def setup(self) -> None:
-    self.setup_finished = True
     self._num_channels = 8
     self.iswap_installed = True
     self.core96_head_installed = True
