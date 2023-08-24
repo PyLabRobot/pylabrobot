@@ -10,5 +10,6 @@ Subpackages
     :maxdepth: 1
 
     pylabrobot.liquid_handling
+    pylabrobot.pumps
     pylabrobot.resources
     pylabrobot.utils
