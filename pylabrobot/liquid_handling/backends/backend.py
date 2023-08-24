@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import List, Type, Optional
 
+from pylabrobot.machine import MachineBackend
 from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,
@@ -17,7 +18,7 @@ from pylabrobot.liquid_handling.standard import (
 )
 
 
-class LiquidHandlerBackend(object, metaclass=ABCMeta):
+class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   """
   Abstract base class for liquid handling robot backends.
 
@@ -27,15 +28,6 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
   Attributes:
     setup_finished: Whether the backend has been set up.
   """
-
-  def __init__(self):
-    self.setup_finished = False
-
-  async def setup(self):
-    self.setup_finished = True
-
-  async def stop(self):
-    self.setup_finished = False
 
   async def assigned_resource_callback(self, resource: Resource):
     """ Called when a new resource was assigned to the robot.

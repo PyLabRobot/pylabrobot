@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import functools
 import inspect
 import json
 import logging
@@ -13,6 +12,7 @@ import time
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set
 import warnings
 
+from pylabrobot.machine import MachineFrontend, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
@@ -52,33 +52,13 @@ from .standard import (
 logger = logging.getLogger("pylabrobot")
 
 
-def need_setup_finished(func: Callable): # pylint: disable=no-self-argument
-  """ Decorator for methods that require the liquid handler to be set up.
-
-  Checked by verifying `self.setup_finished` is `True`.
-
-  Raises:
-    RuntimeError: If the liquid handler is not set up.
-  """
-
-  @functools.wraps(func)
-  async def wrapper(self, *args, **kwargs):
-    if not self.setup_finished:
-      raise RuntimeError("The setup has not finished. See `LiquidHandler.setup`.")
-    await func(self, *args, **kwargs) # pylint: disable=not-callable
-  return wrapper
-
-
-class LiquidHandler:
+class LiquidHandler(MachineFrontend):
   """
   Front end for liquid handlers.
 
   This class is the front end for liquid handlers; it provides a high-level interface for
   interacting with liquid handlers. In the background, this class uses the low-level backend (
   defined in `pyhamilton.liquid_handling.backends`) to communicate with the liquid handler.
-
-  Attributes:
-    setup_finished: Whether the liquid handler has been setup.
   """
 
   def __init__(self, backend: LiquidHandlerBackend, deck: Deck):
@@ -89,8 +69,9 @@ class LiquidHandler:
       deck: Deck to use.
     """
 
-    self.backend = backend
-    self.setup_finished = False
+    super().__init__(backend=backend)
+
+    self.backend: LiquidHandlerBackend = backend
     self._picked_up_tips96: Optional[TipRack] = None # TODO: replace with tracker.
 
     self.deck = deck
@@ -99,6 +80,7 @@ class LiquidHandler:
 
     self.head: Dict[int, TipTracker] = {}
 
+
   async def setup(self):
     """ Prepare the robot for use. """
 
@@ -106,13 +88,14 @@ class LiquidHandler:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
     await self.backend.setup()
-    self.setup_finished = True
 
     self.head = {c: TipTracker() for c in range(self.backend.num_channels)}
 
     self.resource_assigned_callback(self.deck)
     for resource in self.deck.children:
       self.resource_assigned_callback(resource)
+
+    super().setup()
 
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.
@@ -138,10 +121,6 @@ class LiquidHandler:
     """ Clear the state of the liquid handler head. """
 
     self.update_head_state({c: None for c in self.head.keys()})
-
-  async def stop(self):
-    await self.backend.stop()
-    self.setup_finished = False
 
   def _run_async_in_thread(self, func, *args, **kwargs):
     def callback(*args, **kwargs):

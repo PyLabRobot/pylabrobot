@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
 import sys
 from typing import List, Optional, Type
+
+from pylabrobot.machine import MachineBackend
 
 if sys.version_info >= (3, 8):
   from typing import Literal
@@ -10,7 +12,7 @@ else:
   from typing_extensions import Literal
 
 
-class PlateReaderBackend(ABC):
+class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
   """ An abstract class for a plate reader. Plate readers are devices that can read luminescence,
   absorbance, or fluorescence from a plate. """
 
