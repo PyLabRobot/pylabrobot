@@ -46,8 +46,10 @@ class MachineFrontend(ABC):
     return self._setup_finished
 
   async def setup(self):
-    self.backend.setup()
+    await self.backend.setup()
+    self._setup_finished = True
 
   @need_setup_finished
   async def stop(self):
-    self.backend.stop()
+    await self.backend.stop()
+    self._setup_finished = False

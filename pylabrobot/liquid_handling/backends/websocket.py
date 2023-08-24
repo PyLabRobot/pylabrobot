@@ -266,7 +266,7 @@ class WebSocketBackend(SerializingBackend):
     lock = threading.Lock()
     lock.acquire() # pylint: disable=consider-using-with
     self._loop = asyncio.new_event_loop()
-    self._t = threading.Thread(target=start_loop)
+    self._t = threading.Thread(target=start_loop, daemon=True)
     self.t.start()
 
     while lock.locked():

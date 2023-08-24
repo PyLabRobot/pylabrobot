@@ -1,3 +1,4 @@
+import time
 from typing import cast
 import unittest
 
@@ -53,6 +54,7 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
 
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
 
+      time.sleep(0.1)
       assert self.lh.setup_finished
 
   def test_stop(self):
@@ -111,6 +113,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       assert self.lh.deck.resources == deck.resources
 
     client.post(self.base_url + "/setup")
+    time.sleep(0.5)
 
   def test_tip_pickup(self):
     with self.app.test_client() as client:
@@ -125,7 +128,6 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
           "tip": serialize(tip),
           "offset": None,
         }], "use_channels": [0]})
-      print(response)
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
