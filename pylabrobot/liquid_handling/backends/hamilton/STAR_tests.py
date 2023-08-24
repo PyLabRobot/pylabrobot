@@ -25,11 +25,12 @@ from pylabrobot.liquid_handling.standard import Pickup, GripDirection
 
 from tests.usb import MockDev, MockEndpoint
 
-from .STAR import STAR, parse_star_fw_string
-from .errors import (
+from .STAR import (
+  STAR,
+  parse_star_fw_string,
+  STARFirmwareError,
   CommandSyntaxError,
-  HamiltonFirmwareError,
-  NoTipError,
+  HamiltonNoTipError,
   HardwareError,
   UnknownHamiltonError
 )
@@ -101,7 +102,7 @@ class TestSTARResponseParsing(unittest.TestCase):
     self.assertEqual(parsed, {"id": 1111})
 
   def test_parse_response_master_error(self):
-    with self.assertRaises(HamiltonFirmwareError) as ctx:
+    with self.assertRaises(STARFirmwareError) as ctx:
       self.star.check_fw_string_error("C0QMid1111 er01/30")
     e = ctx.exception
     self.assertEqual(len(e), 1)
@@ -110,7 +111,7 @@ class TestSTARResponseParsing(unittest.TestCase):
     self.assertEqual(e["Master"].message, "Unknown command")
 
   def test_parse_response_slave_errors(self):
-    with self.assertRaises(HamiltonFirmwareError) as ctx:
+    with self.assertRaises(STARFirmwareError) as ctx:
       self.star.check_fw_string_error("C0QMid1111 er99/00 P100/00 P235/00 P402/98 PG08/76")
     e = ctx.exception
     self.assertEqual(len(e), 3)
@@ -122,14 +123,14 @@ class TestSTARResponseParsing(unittest.TestCase):
 
     self.assertIsInstance(e["Pipetting channel 2"], UnknownHamiltonError)
     self.assertIsInstance(e["Pipetting channel 4"], HardwareError)
-    self.assertIsInstance(e["Pipetting channel 16"], NoTipError)
+    self.assertIsInstance(e["Pipetting channel 16"], HamiltonNoTipError)
 
     self.assertEqual(e["Pipetting channel 2"].message, "No error")
     self.assertEqual(e["Pipetting channel 4"].message, "Unknown trace information code 98")
     self.assertEqual(e["Pipetting channel 16"].message, "Tip already picked up")
 
   def test_parse_slave_response_errors(self):
-    with self.assertRaises(HamiltonFirmwareError) as ctx:
+    with self.assertRaises(STARFirmwareError) as ctx:
       self.star.check_fw_string_error("P1OQid1111er30")
 
     e = ctx.exception

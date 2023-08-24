@@ -12,7 +12,12 @@ from pylabrobot.resources import (
 from pylabrobot.resources.hamilton import VantageDeck
 from pylabrobot.liquid_handling.standard import Pickup
 
-from .vantage import Vantage, parse_vantage_fw_string
+from .vantage import (
+  Vantage,
+  VantageFirmwareError,
+  parse_vantage_fw_string,
+  vantage_response_string_to_error
+)
 
 
 PICKUP_TIP_FORMAT = {"xp": "[int]", "yp": "[int]", "tm": "[int]", "tt": "[int]", "tp": "[int]",
@@ -70,6 +75,40 @@ class TestVantageResponseParsing(unittest.TestCase):
 
     with self.assertRaises(ValueError):
       parse_vantage_fw_string("A1PMDA", {"id": "int"})
+
+  def test_parse_error_response(self):
+    resp = "I1AMRQid0000er4et\"Slave not available\""
+    error = vantage_response_string_to_error(resp)
+    self.assertEqual(error, VantageFirmwareError(
+      errors={"Cover": "Slave not available"},
+      raw_response=resp))
+
+    resp = "I1AMLPid215er57et\"S-Drive: Drive not initialized\""
+    error = vantage_response_string_to_error(resp)
+    self.assertEqual(error, VantageFirmwareError(
+      errors={"Cover": "S-Drive: Drive not initialized"},
+      raw_response=resp))
+
+    resp = "A1HMDAid239er99es\"H070\""
+    error = vantage_response_string_to_error(resp)
+    self.assertEqual(error, VantageFirmwareError(
+      errors={"Core 96": "No liquid level found"},
+      raw_response=resp))
+
+    resp = "A1PMDAid262er99es\"P170 P270 P370 P470 P570 P670 P770 P870\""
+    error = vantage_response_string_to_error(resp)
+    self.assertEqual(error, VantageFirmwareError(
+      errors={
+        "Pipetting channel 1": "No liquid level found",
+        "Pipetting channel 2": "No liquid level found",
+        "Pipetting channel 3": "No liquid level found",
+        "Pipetting channel 4": "No liquid level found",
+        "Pipetting channel 5": "No liquid level found",
+        "Pipetting channel 6": "No liquid level found",
+        "Pipetting channel 7": "No liquid level found",
+        "Pipetting channel 8": "No liquid level found",
+      },
+      raw_response=resp))
 
 
 class VantageCommandCatcher(Vantage):

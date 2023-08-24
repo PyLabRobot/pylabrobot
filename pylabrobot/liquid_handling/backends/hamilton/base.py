@@ -16,6 +16,10 @@ T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 
+class HamiltonFirmwareError(Exception, metaclass=ABCMeta):
+  """ Base class for all Hamilton backend errors, raised by firmware. """
+
+
 class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.

@@ -4,7 +4,10 @@ import re
 import sys
 from typing import Dict, List, Optional, Sequence, Union, cast
 
-from pylabrobot.liquid_handling.backends.hamilton import HamiltonLiquidHandler
+from pylabrobot.liquid_handling.backends.hamilton.base import (
+  HamiltonLiquidHandler,
+  HamiltonFirmwareError
+)
 from pylabrobot.liquid_handling.liquid_classes.hamilton import get_vantage_liquid_class
 from pylabrobot.liquid_handling.standard import (
   Pickup,
@@ -85,6 +88,217 @@ def parse_vantage_fw_string(s: str, fmt: Optional[Dict[str, str]] = None) -> dic
 
   return parsed
 
+core96_errors = {
+  0: "No error",
+  21: "No communication to digital potentiometer",
+  25: "Wrong Flash EPROM data",
+  26: "Flash EPROM not programmable",
+  27: "Flash EPROM not erasable",
+  28: "Flash EPROM checksum error",
+  29: "Wrong FW loaded",
+  30: "Undefined command",
+  31: "Undefined parameter",
+  32: "Parameter out of range",
+  35: "Voltages out of range",
+  36: "Stop during command execution",
+  37: "Adjustment sensor didn't switch (no teach in signal)",
+  40: "No parallel processes on level 1 permitted",
+  41: "No parallel processes on level 2 permitted",
+  42: "No parallel processes on level 3 permitted",
+  50: "Dispensing drive initialization failed",
+  51: "Dispensing drive not initialized",
+  52: "Dispensing drive movement error",
+  53: "Maximum volume in tip reached",
+  54: "Dispensing drive position out of permitted area",
+  55: "Y drive initialization failed",
+  56: "Y drive not initialized",
+  57: "Y drive movement error",
+  58: "Y drive position out of permitted area",
+  60: "Z drive initialization failed",
+  61: "Z drive not initialized",
+  62: "Z drive movement error",
+  63: "Z drive position out of permitted area",
+  65: "Squeezer drive initialization failed",
+  66: "Squeezer drive not initialized",
+  67: "Squeezer drive movement error",
+  68: "Squeezer drive position out of permitted area",
+  70: "No liquid level found",
+  71: "Not enough liquid present",
+  75: "No tip picked up",
+  76: "Tip already picked up",
+  81: "Clot detected with LLD sensor",
+  82: "TADM measurement out of lower limit curve",
+  83: "TADM measurement out of upper limit curve",
+  84: "Not enough memory for TADM measurement",
+  90: "Limit curve not resetable",
+  91: "Limit curve not programmable",
+  92: "Limit curve name not found",
+  93: "Limit curve data incorrect",
+  94: "Not enough memory for limit curve",
+  95: "Not allowed limit curve index",
+  96: "Limit curve already stored",
+}
+
+pip_errors = {
+  22:	"Drive controller message error",
+  23:	"EC drive controller setup not executed",
+  25:	"wrong Flash EPROM data",
+  26:	"Flash EPROM not programmable",
+  27:	"Flash EPROM not erasable",
+  28:	"Flash EPROM checksum error",
+  29:	"wrong FW loaded",
+  30:	"Undefined command",
+  31:	"Undefined parameter",
+  32:	"Parameter out of range",
+  35:	"Voltages out of range",
+  36:	"Stop during command execution",
+  37:	"Adjustment sensor didn't switch (no teach in signal)",
+  38:	"Movement interrupted by partner channel",
+  39:	"Angle alignment offset error",
+  40:	"No parallel processes on level 1 permitted",
+  41:	"No parallel processes on level 2 permitted",
+  42:	"No parallel processes on level 3 permitted",
+  50:	"D drive initialization failed",
+  51:	"D drive not initialized",
+  52:	"D drive movement error",
+  53:	"Maximum volume in tip reached",
+  54:	"D drive position out of permitted area",
+  55:	"Y drive initialization failed",
+  56:	"Y drive not initialized",
+  57:	"Y drive movement error",
+  58:	"Y drive position out of permitted area",
+  59:	"Divergance Y motion controller to linear encoder to heigh",
+  60:	"Z drive initialization failed",
+  61:	"Z drive not initialized",
+  62:	"Z drive movement error",
+  63:	"Z drive position out of permitted area",
+  64:	"Limit stop not found",
+  65:	"S drive initialization failed",
+  66:	"S drive not initialized",
+  67:	"S drive movement error",
+  68:	"S drive position out of permitted area",
+  69:	"Init. position adjustment error",
+  70:	"No liquid level found",
+  71:	"Not enough liquid present",
+  74:	"Liquid at a not allowed position detected",
+  75:	"No tip picked up",
+  76:	"Tip already picked up",
+  77:	"Tip not discarded",
+  78:	"Wrong tip detected",
+  79:	"Tip not correct squeezed",
+  80:	"Liquid not correctly aspirated",
+  81:	"Clot detected",
+  82:	"TADM measurement out of lower limit curve",
+  83:	"TADM measurement out of upper limit curve",
+  84:	"Not enough memory for TADM measurement",
+  85:	"Jet dispense pressure not reached",
+  86:	"ADC algorithm error",
+  90:	"Limit curve not resetable",
+  91:	"Limit curve not programmable",
+  92:	"Limit curve name not found",
+  93:	"Limit curve data incorrect",
+  94:	"Not enough memory for limit curve",
+  95:	"Not allowed limit curve index",
+  96:	"Limit curve already stored",
+}
+
+ipg_errors = {
+  0: "No error",
+  22:	"Drive controller message error",
+  23:	"EC drive controller setup not executed",
+  25:	"Wrong Flash EPROM data",
+  26:	"Flash EPROM not programmable",
+  27:	"Flash EPROM not erasable",
+  28:	"Flash EPROM checksum error",
+  29:	"Wrong FW loaded",
+  30:	"Undefined command",
+  31:	"Undefined parameter",
+  32:	"Parameter out of range",
+  35:	"Voltages out of range",
+  36:	"Stop during command execution",
+  37:	"Adjustment sensor didn't switch (no teach in signal)",
+  39:	"Angle alignment offset error",
+  40:	"No parallel processes on level 1 permitted",
+  41:	"No parallel processes on level 2 permitted",
+  42:	"No parallel processes on level 3 permitted",
+  50:	"Y Drive initialization failed",
+  51:	"Y Drive not initialized",
+  52:	"Y Drive movement error",
+  53:	"Y Drive position out of permitted area",
+  54:	"Diff. motion controller and lin. encoder counter too high",
+  55:	"Z Drive initialization failed",
+  56:	"Z Drive not initialized",
+  57:	"Z Drive movement error",
+  58:	"Z Drive position out of permitted area",
+  59:	"Z Drive limit stop not found",
+  60:	"Rotation Drive initialization failed",
+  61:	"Rotation Drive not initialized",
+  62:	"Rotation Drive movement error",
+  63:	"Rotation Drive position out of permitted area",
+  65:	"Wrist Twist Drive initialization failed",
+  66:	"Wrist Twist Drive not initialized",
+  67:	"Wrist Twist Drive movement error",
+  68:	"Wrist Twist Drive position out of permitted area",
+  70:	"Gripper Drive initialization failed",
+  71:	"Gripper Drive not initialized",
+  72:	"Gripper Drive movement error",
+  73:	"Gripper Drive position out of permitted area",
+  80:	"Plate not found",
+  81:	"Plate is still held",
+  82:	"No plate is held",
+}
+
+
+class VantageFirmwareError(HamiltonFirmwareError):
+  def __init__(self, errors, raw_response):
+    self.errors = errors
+    self.raw_response = raw_response
+
+  def __str__(self):
+    return f"VantageFirmwareError(errors={self.errors}, raw_response={self.raw_response})"
+
+  def __eq__(self, __value: object) -> bool:
+    return isinstance(__value, VantageFirmwareError) and \
+      self.errors == __value.errors and \
+      self.raw_response == __value.raw_response
+
+
+def vantage_response_string_to_error(string: str) -> HamiltonFirmwareError:
+  """ Convert a Vantage firmware response string to a HamiltonFirmwareError. Assumes that the
+  response is an error response. """
+
+  try:
+    error_format = r"[A-Z0-9]{2}[0-9]{2}"
+    error_string = parse_vantage_fw_string(string, {"es": "str"})["es"]
+    error_codes = re.findall(error_format, error_string)
+    errors = {}
+    num_channels = 16
+    for error in error_codes:
+      module, error_code = error[:2], error[2:]
+      error_code = int(error_code)
+      for channel in range(1, num_channels + 1):
+        if module == f"P{channel}":
+          errors[f"Pipetting channel {channel}"] = pip_errors.get(error_code, "Unknown error")
+        elif module in ("H0", "HM"):
+          errors["Core 96"] = core96_errors.get(error_code, "Unknown error")
+        elif module == "RM":
+          errors["IPG"] = ipg_errors.get(error_code, "Unknown error")
+        elif module == "AM":
+          errors["Cover"] = "Unknown error"
+  except ValueError:
+    module_id = string[:4]
+    module = modules = {
+      "I1AM": "Cover",
+      "C0AM": "Master",
+      "A1PM": "Pip",
+      "A1HM": "Core 96",
+      "A1RM": "IPG",
+    }.get(module_id, "Unknown module")
+    error_string = parse_vantage_fw_string(string, {"et": "str"})["et"]
+    errors = {modules: error_string}
+
+  return VantageFirmwareError(errors, string)
+
 
 class Vantage(HamiltonLiquidHandler):
   """ A Hamilton Vantage liquid handler. """
@@ -131,10 +345,9 @@ class Vantage(HamiltonLiquidHandler):
   def check_fw_string_error(self, resp: str):
     """ Raise an error if the firmware response is an error response. """
 
-    # TODO: proper error handling
-
     if "er" in resp and not "er0" in resp:
-      raise RuntimeError(f"Error response: '{resp}'")
+      error = vantage_response_string_to_error(resp)
+      raise error
 
   async def setup(self):
     """ setup
@@ -4276,7 +4489,8 @@ class Vantage(HamiltonLiquidHandler):
 
     Args:
       grip_orientation: Grip orientation.
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command [0.1mm].
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
+        command [0.1mm].
     """
 
     if not 1 <= grip_orientation <= 44:
@@ -4305,7 +4519,8 @@ class Vantage(HamiltonLiquidHandler):
       x_position: X Position [0.1mm].
       y_position: Y Position [0.1mm].
       z_position: Z Position [0.1mm].
-      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command [0.1mm].
+      minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of
+        command [0.1mm].
     """
 
     if not -50000 <= x_position <= 50000:
