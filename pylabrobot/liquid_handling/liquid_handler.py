@@ -95,7 +95,7 @@ class LiquidHandler(MachineFrontend):
     for resource in self.deck.children:
       self.resource_assigned_callback(resource)
 
-    super().setup()
+    await super().setup()
 
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.

@@ -42,7 +42,7 @@ class SimulatorBackend(WebSocketBackend):
     >>> from pylabrobot.liquid_handling.liquid_handler import LiquidHandler
     >>> sb = simulation.SimulatorBackend()
     >>> lh = LiquidHandler(backend=sb)
-    >>> lh.setup()
+    >>> await lh.setup()
     INFO:websockets.server:server listening on 127.0.0.1:2121
     INFO:pyhamilton.liquid_handling.backends.simulation.simulation:Simulation server started at
       http://127.0.0.1:2121
@@ -127,11 +127,11 @@ class SimulatorBackend(WebSocketBackend):
 
     def start_server():
       # try to start the server. If the port is in use, try with another port until it succeeds.
-      og_path = os.getcwd()
-      os.chdir(path) # only within thread.
-
       class QuietSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         """ A simple HTTP request handler that does not log requests. """
+        def __init__(self, *args, **kwargs):
+          super().__init__(*args, directory=path, **kwargs)
+
         def log_message(self, format, *args):
           # pylint: disable=redefined-builtin
           pass
@@ -147,8 +147,6 @@ class SimulatorBackend(WebSocketBackend):
           self.fs_port += 1
 
       self.httpd.serve_forever()
-
-      os.chdir(og_path)
 
     self._fst = threading.Thread(name="simulation_fs", target=start_server, daemon=True)
     self.fst.start()

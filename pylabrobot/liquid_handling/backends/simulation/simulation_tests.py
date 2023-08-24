@@ -64,7 +64,7 @@ class SimulatorBackendServerTests(unittest.IsolatedAsyncioTestCase):
     """ Test that the index.html file is returned. """
     r = requests.get("http://localhost:1337/", timeout=10)
     self.assertEqual(r.status_code, 200)
-    self.assertEqual(r.headers["Content-Type"], "text/html")
+    self.assertIn(r.headers["Content-Type"], ["text/html", "text/html; charset=utf-8"])
 
   async def test_connect(self):
     await self.client.send('{"event": "ready"}')
