@@ -53,3 +53,14 @@ class MachineFrontend(ABC):
   async def stop(self):
     await self.backend.stop()
     self._setup_finished = False
+
+  def __del__(self):
+    if self.setup_finished:
+      self.stop()
+
+  def __enter__(self):
+    self.setup()
+    return self
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    self.stop()
