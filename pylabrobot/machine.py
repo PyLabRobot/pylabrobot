@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import functools
 from typing import Callable
 
+
 def need_setup_finished(func: Callable):
   """ Decorator for methods that require the liquid handler to be set up.
 

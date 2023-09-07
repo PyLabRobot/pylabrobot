@@ -45,6 +45,7 @@ There's a multitude of other optional dependencies that you can install. Replace
   [PyHamilton](https://github.com/dgretton/pyhamilton).
 - `opentrons`: Needed for the Opentrons backend.
 - `server`: Needed for LH server, an HTTP front end to LH.
+- `agrow`: Needed for the AgrowPumpArray backend.
 - `plate_reading`: Needed to interact with the CLARIO Star plate reader.
 - `dev`: Everything you need for development.
 - `all`: Everything. May not be available on all platforms.

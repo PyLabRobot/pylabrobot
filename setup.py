@@ -38,8 +38,12 @@ extras_server = [
   "flask[async]",
 ]
 
+extras_agrow = [
+  "pymodbus",
+]
+
 extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets + \
-    extras_simulation + extras_opentrons + extras_server + [
+    extras_simulation + extras_opentrons + extras_server + extras_agrow + [
     "sphinx_book_theme",
     "myst_nb",
     "sphinx_copybutton",
@@ -72,6 +76,7 @@ setup(
     "venus": extras_venus,
     "opentrons": extras_opentrons,
     "server": extras_server,
+    "agrow": extras_agrow,
     "dev": extras_dev,
     "all": extras_all,
   },
