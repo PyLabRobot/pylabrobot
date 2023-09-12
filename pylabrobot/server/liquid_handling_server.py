@@ -13,7 +13,7 @@ import werkzeug
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp, Pickup, Aspiration, Dispense, Drop
-from pylabrobot.resources import Coordinate, Deck, Tip, Liquid
+from pylabrobot.resources import Coordinate, Deck, Tip, Liquid, TecanTip400
 from pylabrobot.serializer import serialize, deserialize
 
 
@@ -90,6 +90,26 @@ def get_status():
   status = "running" if current_app.lh.setup_finished else "stopped"
   return jsonify({"status": status})
 
+@lh_api.route("/layout", methods=["GET"])
+def get_layout():
+  """ API Endpoint to inspect the current design of the deck
+  Bo 20230912 """
+  layout = current_app.lh.deck.serialize()
+  return jsonify({"layout": layout})
+
+@lh_api.route("/update_head_state", methods=["POST"])
+def update_head_state():
+  """ API Endpoint to update liquid handler head.
+  Useful for TECAN with non-reuable tips.
+  TO DO: Pass tip type as parameter
+  Bo 20230912 """
+
+  current_app.lh.clear_head_state()
+  current_app.lh.update_head_state({0:TecanTip400()})
+
+  result = True  
+
+  return jsonify({"result": result})
 
 @lh_api.route("/labware", methods=["POST"])
 def define_labware():
