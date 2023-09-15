@@ -16,7 +16,7 @@ class Pump(MachineFrontend):
 
   def __init__(self, backend: PumpBackend, calibration: Optional[PumpCalibration] = None):
     self.backend: PumpBackend = backend
-    self.calibration = calibration
+    self.calibration = calibration[0]
 
   async def run_revolutions(self, num_revolutions: float):
     """
@@ -47,6 +47,8 @@ class Pump(MachineFrontend):
       speed: speed in rpm/pump-specific units.
       duration: duration to run pump.
     """
+    if duration < 0:
+      raise ValueError("Duration must be positive.")
     await self.run_continuously(speed=speed)
     await asyncio.sleep(duration)
     await self.run_continuously(speed=0)
@@ -63,7 +65,7 @@ class Pump(MachineFrontend):
     if self.calibration is None:
       raise TypeError(
         "Pump is not calibrated. Volume based pumping and related functions unavailable.")
-    duration = volume / self.calibration[0]
+    duration = volume / self.calibration
     await self.run_for_duration(speed=speed, duration=duration)
 
   async def halt(self):

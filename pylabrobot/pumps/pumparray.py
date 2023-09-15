@@ -61,6 +61,8 @@ class PumpArray(MachineFrontend):
       speed = [speed] * len(use_channels)
     if isinstance(speed[0], int):
       speed = [float(x) for x in speed]
+    if len(speed) == len(use_channels):
+      raise ValueError("Speed and use_channels must be the same length.")
     await self.backend.run_continuously(speed=speed,  # type: ignore[arg-type]
                                         use_channels=use_channels)
 
@@ -75,6 +77,8 @@ class PumpArray(MachineFrontend):
       use_channels: pump array channels to run.
       duration: duration to run pumps (seconds).
     """
+    if duration < 0:
+      raise ValueError("Duration must be positive.")
     await self.run_continuously(speed=speed, use_channels=use_channels)
     await asyncio.sleep(duration)
     await self.run_continuously(speed=0, use_channels=use_channels)
@@ -101,6 +105,10 @@ class PumpArray(MachineFrontend):
       speed = [speed] * len(use_channels)
     if isinstance(volume, (float, int)):
       volume = [volume] * len(use_channels)
+    if not all(vol >= 0 for vol in volume):
+      raise ValueError("Volume must be positive.")
+    if not len(speed) == len(use_channels) == len(volume):
+      raise ValueError("Speed, use_channels, and volume must be the same length.")
     durations = [channel_volume / self.calibration[channel] for channel, channel_volume in
                  zip(use_channels, volume)]
     tasks = [asyncio.create_task(
@@ -115,10 +123,3 @@ class PumpArray(MachineFrontend):
     Halt the entire pump array.
     """
     await self.backend.halt()
-
-  async def stop(self):
-    """
-    Stop the entire pump array.
-    """
-    await self.backend.halt()
-    await self.backend.stop()

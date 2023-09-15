@@ -1,6 +1,6 @@
 import threading
 import time
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 
 from pylabrobot.pumps.backend import PumpArrayBackend
 
@@ -26,7 +26,8 @@ class AgrowPumpArray(PumpArrayBackend):
     self.port = port
     self.unit = unit
     self.pump_index_to_address = pump_index_to_address
-    self.modbus: Optional[ModbusClient] = None
+    self.modbus: Optional[Union[ModbusClient, SimulatedModbusClient]] = None
+    self.keep_alive_thread: Optional[threading.Thread] = None
 
   @property
   def num_channels(self) -> int:
@@ -38,14 +39,15 @@ class AgrowPumpArray(PumpArrayBackend):
 
     """
     if self.pump_index_to_address is None:
-      if self.modbus.connected:  # type: ignore[union-attr]
+      assert self.modbus is not None, "Modbus connection not established"
+      if self.modbus.connected:
         register_return = \
-          self.modbus.read_holding_registers(19, 2, unit=self.unit)  # type: ignore[union-attr]
+          self.modbus.read_holding_registers(19, 2, unit=self.unit)
         return int("".join(chr(r // 256) + chr(r % 256) for r in register_return.registers)[2])
       else:
-        return 0
+        return int(0)
     else:
-      return len(self.pump_index_to_address)
+      return int(len(self.pump_index_to_address))
 
   def start_keep_alive_thread(self):
 
@@ -61,13 +63,14 @@ class AgrowPumpArray(PumpArrayBackend):
       keep_alive(self): This method sends a Modbus request every 25 seconds to keep the
       connection alive.
       """
+      assert self.modbus is not None, "Modbus connection not established"
       while True:
         time.sleep(25)
 
-        self.modbus.read_holding_registers(0, 1, unit=self.unit)  # type: ignore[union-attr]
+        self.modbus.read_holding_registers(0, 1, unit=self.unit)
 
-    thread = threading.Thread(target=keep_alive, daemon=True)
-    thread.start()
+    self.keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    self.keep_alive_thread.start()
 
   async def setup(self):
     """
@@ -78,10 +81,14 @@ class AgrowPumpArray(PumpArrayBackend):
         self.modbus.connect(): This method connects to the AgrowPumpArray via Modbus.
 
     """
-    self.modbus = ModbusClient(method="rtu", port=self.port,
-                               baudrate=115200, timeout=1, stopbits=1, bytesize=8, parity="E",
-                               retry_on_empty=True)
-    await self.modbus.connect()
+    if self.port == "simulated":
+      self.modbus = SimulatedModbusClient()
+    else:
+      self.modbus = ModbusClient(method="rtu", port=self.port,
+                                 baudrate=115200, timeout=1, stopbits=1, bytesize=8, parity="E",
+                                 retry_on_empty=True)
+    assert self.modbus is not None, "Modbus connection not established"
+    await self.modbus.connect()  # type: ignore
     self.start_keep_alive_thread()
     self.pump_index_to_address = {pump: pump + 100 for pump in range(self.num_channels)}
 
@@ -109,22 +116,70 @@ class AgrowPumpArray(PumpArrayBackend):
             ValueError: Pump address out of range
             ValueError: Pump speed out of range
     """
+    assert self.modbus is not None, "Modbus connection not established"
+    assert self.pump_index_to_address is not None, "Pump address mapping not established"
     if any(channel not in range(1, self.num_channels + 1) for channel in use_channels):
-      raise ValueError("Pump address out of range")
+      raise ValueError(f"Pump address out of range for this pump array. \
+        Value should be between 1 and {self.num_channels+1}")
     for pump_index, pump_speed in zip(use_channels, speed):
       pump_speed = int(pump_speed)
       if pump_speed not in range(101):
-        raise ValueError("Pump speed out of range")
-      self.modbus.write_register(  # type: ignore[union-attr]
-        self.pump_index_to_address[pump_index], pump_speed, unit=self.unit)  # type: ignore[index]
+        raise ValueError("Pump speed out of range. Value should be between 0 and 100.")
+      self.modbus.write_register(self.pump_index_to_address[pump_index], pump_speed, unit=self.unit)
 
   async def halt(self):
     """ Halt the entire pump array. """
+    assert self.modbus is not None, "Modbus connection not established"
+    assert self.pump_index_to_address is not None, "Pump address mapping not established"
     print("Engaging shutdown routine")
-    for pump in self.pump_index_to_address:  # type: ignore[union-attr]
-      address = self.pump_index_to_address[pump]  # type: ignore[index]
-      self.modbus.write_register(address, 0, unit=self.unit)  # type: ignore[union-attr]
+    for pump in self.pump_index_to_address:
+      address = self.pump_index_to_address[pump]
+      self.modbus.write_register(address, 0, unit=self.unit)
 
   async def stop(self):
     """ Close the connection to the pump array. """
-    self.modbus.close()  # type: ignore[union-attr]
+    await self.halt()
+    assert self.modbus is not None, "Modbus connection not established"
+    self.modbus.close()
+    assert self.keep_alive_thread is not None, "Keep alive thread not established"
+    self.keep_alive_thread.join()
+
+
+class SimulatedModbusClient:
+  """
+  SimulatedModbusClient is a class that allows users to simulate Modbus communication.
+
+  Attributes:
+      connected: A boolean that indicates whether the simulated client is connected.
+
+  """
+
+  def __init__(self, connected: bool = False):
+    self.connected = connected
+
+  async def connect(self):
+    self.connected = True
+
+  def read_holding_registers(self, *args, **kwargs):
+    assert self.connected, "Modbus connection not established"
+    for arg in kwargs.items():
+      if arg == "unit":
+        continue
+    if args[0] == 19:
+      return [16708, 13824, 0, 0, 0, 0, 0][:args[1]]
+    if args[0] == 0:
+      return
+
+  def write_register(self, *args, **kwargs):
+    assert self.connected, "Modbus connection not established"
+    if "unit" not in kwargs:
+      raise ValueError("unit must be specified")
+    if args[0] in range(100, 107):
+      return
+    else:
+      raise ValueError("address out of range")
+
+  def close(self):
+    assert self.connected, "Modbus connection not established"
+    self.connected = False
+    del self
