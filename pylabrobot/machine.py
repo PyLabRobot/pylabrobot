@@ -19,6 +19,7 @@ def need_setup_finished(func: Callable):
     if not self.setup_finished:
       raise RuntimeError("The setup has not finished. See `setup`.")
     await func(self, *args, **kwargs)
+
   return wrapper
 
 
@@ -57,11 +58,18 @@ class MachineFrontend(ABC):
 
   def __del__(self):
     if self.setup_finished:
-      self.stop()
+      self.backend.stop()
 
   def __enter__(self):
     self.setup()
     return self
 
+  async def __aenter__(self):
+    await self.setup()
+    return self
+
   def __exit__(self, exc_type, exc_value, traceback):
     self.stop()
+
+  async def __aexit__(self, exc_type, exc_value, traceback):
+    await self.stop()

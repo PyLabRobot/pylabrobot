@@ -26,6 +26,9 @@ class PumpBackend(MachineBackend, metaclass=ABCMeta):
   def halt(self):
     """ Halt the pump. """
 
+  async def stop(self):
+    """ Close the connection to the pump. """
+
 
 class PumpArrayBackend(MachineBackend, metaclass=ABCMeta):
   """

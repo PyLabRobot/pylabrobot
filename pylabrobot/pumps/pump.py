@@ -47,6 +47,8 @@ class Pump(MachineFrontend):
       speed: speed in rpm/pump-specific units.
       duration: duration to run pump.
     """
+    if duration < 0:
+      raise ValueError("Duration must be positive.")
     await self.run_continuously(speed=speed)
     await asyncio.sleep(duration)
     await self.run_continuously(speed=0)

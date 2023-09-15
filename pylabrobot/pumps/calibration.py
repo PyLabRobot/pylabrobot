@@ -79,23 +79,23 @@ class PumpCalibration:
     with open(file, "rb") as f:
       calibration = json.load(f)
     if isinstance(calibration, dict):
+      calibration = {int(key): float(value) for key, value in calibration.items()}
       return PumpCalibration.load_from_dict(calibration)
     if isinstance(calibration, list):
       return PumpCalibration(calibration)
     raise TypeError(f"Calibration pulled from {file} is not a dictionary or list.")
 
   @classmethod
-  def load_from_csv(cls, file: str, fieldnames: Optional[List[str]] = None) -> PumpCalibration:
+  def load_from_csv(cls, file: str) -> PumpCalibration:
     """
     Load a calibration from a csv file.
     Args:
         file: csv file to load calibration from.
-        fieldnames: fieldnames to use for the csv reader.
     Returns:
         PumpCalibration
     """
     with open(file, encoding="utf-8", newline="") as f:
-      reader = csv.DictReader(f, fieldnames=fieldnames)
+      reader = csv.DictReader(f)
       calibration = {int(row[0]): float(row[1]) for row in reader}
     return PumpCalibration.load_from_dict(calibration)
 
