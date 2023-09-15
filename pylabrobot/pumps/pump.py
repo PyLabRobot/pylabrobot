@@ -16,7 +16,8 @@ class Pump(MachineFrontend):
 
   def __init__(self, backend: PumpBackend, calibration: Optional[PumpCalibration] = None):
     self.backend: PumpBackend = backend
-    self.calibration = calibration[0]
+    if calibration is not None:
+      self.calibration = calibration[0]
 
   async def run_revolutions(self, num_revolutions: float):
     """
