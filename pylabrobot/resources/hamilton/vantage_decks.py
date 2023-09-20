@@ -37,5 +37,6 @@ class VantageDeck(HamiltonDeck):
 
   def serialize(self) -> dict:
     return {
+      **super().serialize(),
       "size": self.size,
     }
