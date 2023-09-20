@@ -89,7 +89,7 @@ class LiquidHandler(MachineFrontend):
 
     await self.backend.setup()
 
-    self.head = {c: TipTracker() for c in range(self.backend.num_channels)}
+    self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 
     self.resource_assigned_callback(self.deck)
     for resource in self.deck.children:
@@ -226,7 +226,7 @@ class LiquidHandler(MachineFrontend):
     args = {arg: param for arg, param in sig.parameters.items() if arg not in default_args}
     vars_keyword = {arg for arg, param in sig.parameters.items() # **kwargs
                     if param.kind == inspect.Parameter.VAR_KEYWORD}
-    args = {arg: param for arg, param in args.items() # filter *args and **kwargs
+    args = {arg: param for arg, param in args.items() # keep only *args and **kwargs
             if param.kind not in {inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD}}
     non_default = {arg for arg, param in args.items() if param.default == inspect.Parameter.empty}
 
@@ -238,7 +238,8 @@ class LiquidHandler(MachineFrontend):
     if len(missing) > 0:
       raise TypeError(f"Missing arguments to backend.{method.__name__}: {missing}")
 
-    extra = backend_kws - non_default
+    extra = backend_kws - set(args.keys())
+
     if len(extra) > 0 and len(vars_keyword) == 0:
       if strictness == Strictness.STRICT:
         raise TypeError(f"Extra arguments to backend.{method.__name__}: {extra}")
@@ -329,6 +330,8 @@ class LiquidHandler(MachineFrontend):
     for channel, op in zip(use_channels, pickups):
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
         op.resource.tracker.remove_tip()
+      if not does_tip_tracking() and self.head[channel].has_tip:
+        self.head[channel].remove_tip() # override the tip if a tip exists
       self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
 
     extras = self._check_args(self.backend.pick_up_tips, backend_kwargs,
@@ -1113,7 +1116,7 @@ class LiquidHandler(MachineFrontend):
     to: Coordinate,
     intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
-    to_offset: Coordinate = Coordinate.zero(),
+    destination_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
     get_direction: GripDirection = GripDirection.FRONT,
     put_direction: GripDirection = GripDirection.FRONT,
@@ -1131,7 +1134,7 @@ class LiquidHandler(MachineFrontend):
       to: The absolute coordinate (meaning relative to deck) to move the resource to.
       intermediate_locations: A list of intermediate locations to move the resource through.
       resource_offset: The offset from the resource's origin, optional (rarely necessary).
-      to_offset: The offset from the location's origin, optional (rarely necessary).
+      destination_offset: The offset from the location's origin, optional (rarely necessary).
       pickup_distance_from_top: The distance from the top of the resource to pick up from.
       get_direction: The direction from which to pick up the resource.
       put_direction: The direction from which to put down the resource.
@@ -1143,10 +1146,10 @@ class LiquidHandler(MachineFrontend):
 
     return await self.backend.move_resource(move=Move(
       resource=resource,
-      to=to,
+      destination=to,
       intermediate_locations=intermediate_locations or [],
       resource_offset=resource_offset,
-      to_offset=to_offset,
+      destination_offset=destination_offset,
       pickup_distance_from_top=pickup_distance_from_top,
       get_direction=get_direction,
       put_direction=put_direction),

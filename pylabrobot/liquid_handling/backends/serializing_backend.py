@@ -143,10 +143,10 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   async def move_resource(self, move: Move, **backend_kwargs):
     await self.send_command(command="move", data={"move": {
       "resource_name": move.resource.name,
-      "to": serialize(move.to),
+      "to": serialize(move.destination),
       "intermediate_locations": [serialize(loc) for loc in move.intermediate_locations],
       "resource_offset": serialize(move.resource_offset),
-      "to_offset": serialize(move.to_offset),
+      "to_offset": serialize(move.destination_offset),
       "pickup_distance_from_top": move.pickup_distance_from_top,
       "get_direction": serialize(move.get_direction),
       "put_direction": serialize(move.put_direction),

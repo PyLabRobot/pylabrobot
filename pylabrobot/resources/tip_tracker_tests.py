@@ -12,11 +12,11 @@ class TestTipTracker(unittest.TestCase):
     self.tip = Tip(has_filter=False, total_tip_length=10, maximal_volume=10, fitting_depth=10)
 
   def test_init(self):
-    tracker = TipTracker()
+    tracker = TipTracker(thing="tester")
     self.assertEqual(tracker.has_tip, False)
 
   def test_add_tip(self):
-    tracker = TipTracker()
+    tracker = TipTracker(thing="tester")
     tracker.add_tip(self.tip)
     self.assertEqual(tracker.has_tip, True)
     self.assertEqual(tracker.get_tip(), self.tip)
@@ -25,7 +25,7 @@ class TestTipTracker(unittest.TestCase):
       tracker.add_tip(self.tip)
 
   def test_remove_tip(self):
-    tracker = TipTracker()
+    tracker = TipTracker(thing="tester")
     tracker.add_tip(self.tip)
     tracker.remove_tip()
     tracker.commit()

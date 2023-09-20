@@ -821,6 +821,11 @@ function classForResourceType(type) {
       return TipCarrier;
     case "Container":
       return Container;
+    case "VantageDeck":
+      alert(
+        "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"
+      );
+      return HamiltonDeck;
     default:
       return Resource;
   }

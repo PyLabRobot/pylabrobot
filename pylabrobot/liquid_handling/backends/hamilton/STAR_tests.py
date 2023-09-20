@@ -1,4 +1,4 @@
-""" Tests for Hamilton backend. """
+""" Tests for the Hamilton STAR backend. """
 
 from typing import cast
 import unittest
@@ -25,11 +25,12 @@ from pylabrobot.liquid_handling.standard import Pickup, GripDirection
 
 from tests.usb import MockDev, MockEndpoint
 
-from .STAR import STAR
-from .errors import (
+from .STAR import (
+  STAR,
+  parse_star_fw_string,
+  STARFirmwareError,
   CommandSyntaxError,
-  HamiltonFirmwareError,
-  NoTipError,
+  HamiltonNoTipError,
   HardwareError,
   UnknownHamiltonError
 )
@@ -64,45 +65,45 @@ class TestSTARResponseParsing(unittest.TestCase):
     self.star = STAR()
 
   def test_parse_response_params(self):
-    parsed = self.star.parse_response("C0QMid1111", "")
+    parsed = parse_star_fw_string("C0QMid1111", "")
     self.assertEqual(parsed, {"id": 1111})
 
-    parsed = self.star.parse_response("C0QMid1111", "id####")
+    parsed = parse_star_fw_string("C0QMid1111", "id####")
     self.assertEqual(parsed, {"id": 1111})
 
-    parsed = self.star.parse_response("C0QMid1112aaabc", "aa&&&")
+    parsed = parse_star_fw_string("C0QMid1112aaabc", "aa&&&")
     self.assertEqual(parsed, {"id": 1112, "aa": "abc"})
 
-    parsed = self.star.parse_response("C0QMid1112aa-21", "aa##")
+    parsed = parse_star_fw_string("C0QMid1112aa-21", "aa##")
     self.assertEqual(parsed, {"id": 1112, "aa": -21})
 
-    parsed = self.star.parse_response("C0QMid1113pqABC", "pq***")
+    parsed = parse_star_fw_string("C0QMid1113pqABC", "pq***")
     self.assertEqual(parsed, {"id": 1113, "pq": int("ABC", base=16)})
 
     with self.assertRaises(ValueError):
       # should fail with auto-added id.
-      parsed = self.star.parse_response("C0QMaaabc", "")
+      parsed = parse_star_fw_string("C0QMaaabc", "")
       self.assertEqual(parsed, "")
 
     with self.assertRaises(ValueError):
-      self.star.parse_response("C0QM", "id####") # pylint: disable=expression-not-assigned
+      parse_star_fw_string("C0QM", "id####") # pylint: disable=expression-not-assigned
 
     with self.assertRaises(ValueError):
-      self.star.parse_response("C0RV", "") # pylint: disable=expression-not-assigned
+      parse_star_fw_string("C0RV", "") # pylint: disable=expression-not-assigned
 
   def test_parse_response_no_errors(self):
-    parsed = self.star.parse_response("C0QMid1111", "")
+    parsed = parse_star_fw_string("C0QMid1111", "")
     self.assertEqual(parsed, {"id": 1111})
 
-    parsed = self.star.parse_response("C0QMid1111 er00/00", "")
+    parsed = parse_star_fw_string("C0QMid1111 er00/00", "")
     self.assertEqual(parsed, {"id": 1111})
 
-    parsed = self.star.parse_response("C0QMid1111 er00/00 P100/00", "")
+    parsed = parse_star_fw_string("C0QMid1111 er00/00 P100/00", "")
     self.assertEqual(parsed, {"id": 1111})
 
   def test_parse_response_master_error(self):
-    with self.assertRaises(HamiltonFirmwareError) as ctx:
-      self.star.parse_response("C0QMid1111 er01/30", "")
+    with self.assertRaises(STARFirmwareError) as ctx:
+      self.star.check_fw_string_error("C0QMid1111 er01/30")
     e = ctx.exception
     self.assertEqual(len(e), 1)
     assert "Master" in e
@@ -110,8 +111,8 @@ class TestSTARResponseParsing(unittest.TestCase):
     self.assertEqual(e["Master"].message, "Unknown command")
 
   def test_parse_response_slave_errors(self):
-    with self.assertRaises(HamiltonFirmwareError) as ctx:
-      self.star.parse_response("C0QMid1111 er99/00 P100/00 P235/00 P402/98 PG08/76", "")
+    with self.assertRaises(STARFirmwareError) as ctx:
+      self.star.check_fw_string_error("C0QMid1111 er99/00 P100/00 P235/00 P402/98 PG08/76")
     e = ctx.exception
     self.assertEqual(len(e), 3)
     assert "Master" not in e
@@ -122,15 +123,15 @@ class TestSTARResponseParsing(unittest.TestCase):
 
     self.assertIsInstance(e["Pipetting channel 2"], UnknownHamiltonError)
     self.assertIsInstance(e["Pipetting channel 4"], HardwareError)
-    self.assertIsInstance(e["Pipetting channel 16"], NoTipError)
+    self.assertIsInstance(e["Pipetting channel 16"], HamiltonNoTipError)
 
     self.assertEqual(e["Pipetting channel 2"].message, "No error")
     self.assertEqual(e["Pipetting channel 4"].message, "Unknown trace information code 98")
     self.assertEqual(e["Pipetting channel 16"].message, "Tip already picked up")
 
   def test_parse_slave_response_errors(self):
-    with self.assertRaises(HamiltonFirmwareError) as ctx:
-      self.star.parse_response("P1OQid1111er30", "")
+    with self.assertRaises(STARFirmwareError) as ctx:
+      self.star.check_fw_string_error("P1OQid1111er30")
 
     e = ctx.exception
     self.assertEqual(len(e), 1)
@@ -172,7 +173,7 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
 
 
 class STARCommandCatcher(STAR):
-  """ Mock backend for star that catches commands and saves them instad of sending them to the
+  """ Mock backend for star that catches commands and saves them instead of sending them to the
   machine. """
 
   def __init__(self):
@@ -242,7 +243,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # Command that fits the format, but is not the same as the command we are looking for.
     similar = None
 
-    parsed_cmd = self.mockSTAR.parse_fw_string(cmd, fmt)
+    parsed_cmd = parse_star_fw_string(cmd, fmt)
     parsed_cmd.pop("id")
 
     for sent_cmd in self.mockSTAR.commands:
@@ -251,7 +252,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         continue
 
       try:
-        parsed_sent_cmd = self.mockSTAR.parse_fw_string(sent_cmd, fmt)
+        parsed_sent_cmd = parse_star_fw_string(sent_cmd, fmt)
         parsed_sent_cmd.pop("id")
 
         if parsed_cmd == parsed_sent_cmd:
