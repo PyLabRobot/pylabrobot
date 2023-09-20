@@ -25,8 +25,9 @@ Hardware
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.backends.hamilton.STAR.HamiltonLiquidHandler
+    pylabrobot.liquid_handling.backends.hamilton.base.HamiltonLiquidHandler
     pylabrobot.liquid_handling.backends.hamilton.STAR.STAR
+    pylabrobot.liquid_handling.backends.hamilton.vantage.Vantage
     pylabrobot.liquid_handling.backends.opentrons_backend.OpentronsBackend
     pylabrobot.liquid_handling.backends.tecan.EVO.EVO
 

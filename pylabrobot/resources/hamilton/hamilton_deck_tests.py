@@ -15,7 +15,7 @@ from pylabrobot.resources import (
   Cos_96_DW_1mL,
   Cos_96_DW_500ul,
 )
-from pylabrobot.resources.hamilton import HamiltonDeck, STARLetDeck
+from pylabrobot.resources.hamilton import HamiltonSTARDeck, STARLetDeck
 
 
 class HamiltonDeckTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class HamiltonDeckTests(unittest.TestCase):
 
   def test_parse_lay_file(self):
     fn = "./pylabrobot/testing/test_data/test_deck.lay"
-    deck = HamiltonDeck.load_from_lay_file(fn)
+    deck = HamiltonSTARDeck.load_from_lay_file(fn)
 
     tip_car = deck.get_resource("TIP_CAR_480_A00_0001")
     assert isinstance(tip_car, TipCarrier)

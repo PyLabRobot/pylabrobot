@@ -3,23 +3,20 @@ This file defines interfaces for all supported Hamilton liquid handling robots.
 """
 # pylint: disable=invalid-sequence-index, dangerous-default-value
 
-from abc import ABCMeta, abstractmethod
-import asyncio
+from abc import ABC
 import datetime
 import enum
 import functools
 import logging
 import re
-import threading
-import time
-from typing import Callable, Dict, List, Optional, Tuple, Sequence, TypeVar, Union, cast
+from typing import Callable, Dict, ItemsView, List, Optional, Sequence, Type, TypeVar, cast
 
-import pylabrobot.liquid_handling.backends.hamilton.errors as herrors
-from pylabrobot.liquid_handling.backends.hamilton.errors import HamiltonFirmwareError
-from pylabrobot.liquid_handling.liquid_classes.hamilton import get_liquid_class
-from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
+from pylabrobot.liquid_handling.backends.hamilton.base import (
+  HamiltonLiquidHandler,
+  HamiltonFirmwareError
+)
+from pylabrobot.liquid_handling.liquid_classes.hamilton import get_star_liquid_class
 from pylabrobot.liquid_handling.standard import (
-  PipettingOp,
   Pickup,
   PickupTipRack,
   Drop,
@@ -31,7 +28,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
-from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot, Well
+from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot
 from pylabrobot.resources.errors import (
   TooLittleVolumeError,
   TooLittleLiquidError,
@@ -77,12 +74,964 @@ def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
   return default
 
 
-class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
-  """
-  Abstract base class for Hamilton liquid handling robot backends.
+def parse_star_fw_string(resp: str, fmt: str = "") -> dict:
+  """ Parse a machine command or response string according to a format string.
+
+  The format contains names of parameters (always length 2),
+  followed by an arbitrary number of the following, but always
+  the same:
+  - '&': char
+  - '#': decimal
+  - '*': hex
+
+  The order of parameters in the format and response string do not
+  have to (and often do not) match.
+
+  The identifier parameter (id####) is added automatically.
+
+  TODO: string parsing
+  The firmware docs mention strings in the following format: '...'
+  However, the length of these is always known (except when reading
+  barcodes), so it is easier to convert strings to the right number
+  of '&'. With barcode reading the length of the barcode is included
+  with the response string. We'll probably do a custom implementation
+  for that.
+
+  TODO: spaces
+  We should also parse responses where integers are separated by spaces,
+  like this: `ua#### #### ###### ###### ###### ######`
+
+  Args:
+    resp: The response string to parse.
+    fmt: The format string.
+
+  Raises:
+    ValueError: if the format string is incompatible with the response.
+
+  Returns:
+    A dictionary containing the parsed values.
+
+  Examples:
+    Parsing a string containing decimals (`1111`), hex (`0xB0B`) and chars (`'rw'`):
+
+    ```
+    >>> parse_fw_string("aa1111bbrwccB0B", "aa####bb&&cc***")
+    {'aa': 1111, 'bb': 'rw', 'cc': 2827}
+    ```
   """
 
-  @abstractmethod
+  # Remove device and cmd identifier from response.
+  resp = resp[4:]
+
+  # Parse the parameters in the fmt string.
+  info = {}
+
+  def find_param(param):
+    name, data = param[0:2], param[2:]
+    type_ = {
+      "#": "int",
+      "*": "hex",
+      "&": "str"
+    }[data[0]]
+
+    # Build a regex to match this parameter.
+    exp = {
+      "int": r"[-+]?[\d ]",
+      "hex": r"[\da-fA-F ]",
+      "str": ".",
+    }[type_]
+    len_ = len(data.split(" ")[0]) # Get length of first block.
+    regex = f"{name}((?:{exp}{ {len_} }"
+
+    if param.endswith(" (n)"):
+      regex += " ?)+)"
+      is_list = True
+    else:
+      regex += "))"
+      is_list = False
+
+    # Match response against regex, save results in right datatype.
+    r = re.search(regex, resp)
+    if r is None:
+      raise ValueError(f"could not find matches for parameter {name}")
+
+    g = r.groups()
+    if len(g) == 0:
+      raise ValueError(f"could not find value for parameter {name}")
+    m = g[0]
+
+    if is_list:
+      m = m.split(" ")
+
+      if type_ == "str":
+        info[name] = m
+      elif type_ == "int":
+        info[name] = [int(m_) for m_ in m if m_ != ""]
+      elif type_ == "hex":
+        info[name] = [int(m_, base=16) for m_ in m if m_ != ""]
+    else:
+      if type_ == "str":
+        info[name] = m
+      elif type_ == "int":
+        info[name] = int(m)
+      elif type_ == "hex":
+        info[name] = int(m, base=16)
+
+  # Find params in string. All params are identified by 2 lowercase chars.
+  param = ""
+  prevchar = None
+  for char in fmt:
+    if char.islower() and prevchar != "(":
+      if len(param) > 2:
+        find_param(param)
+        param = ""
+    param += char
+    prevchar = char
+  if param != "":
+    find_param(param) # last parameter is not closed by loop.
+
+  # If id not in fmt, add it.
+  if "id" not in info:
+    find_param("id####")
+
+  return info
+
+
+class STARModuleError(ABC):
+  """ Base class for all Hamilton backend errors, raised by a single module. """
+
+  def __init__(
+    self,
+    message: str,
+    trace_information: int,
+    raw_response: str,
+    raw_module: str,
+  ):
+    self.message = message
+    self.trace_information = trace_information
+    self.raw_response = raw_response
+    self.raw_module = raw_module
+
+  def __repr__(self) -> str:
+    return f"{self.__class__.__name__}('{self.message}')"
+
+
+class CommandSyntaxError(STARModuleError):
+  """ Command syntax error
+
+  Code: 01
+  """
+
+
+class HardwareError(STARModuleError):
+  """ Hardware error
+
+  Possible cause(s):
+    drive blocked, low power etc.
+
+  Code: 02
+  """
+
+
+class CommandNotCompletedError(STARModuleError):
+  """ Command not completed
+
+  Possible cause(s):
+    error in previous sequence (not executed)
+
+  Code: 03
+  """
+
+
+class ClotDetectedError(STARModuleError):
+  """ Clot detected
+
+  Possible cause(s):
+    LLD not interrupted
+
+  Code: 04
+  """
+
+
+class BarcodeUnreadableError(STARModuleError):
+  """ Barcode unreadable
+
+  Possible cause(s):
+    bad or missing barcode
+
+  Code: 05
+  """
+
+
+class TipTooLittleVolumeError(STARModuleError):
+  """ Too little liquid
+
+  Possible cause(s):
+    1. liquid surface is not detected,
+    2. Aspirate / Dispense conditions could not be fulfilled.
+
+  Code: 06
+  """
+
+
+class TipAlreadyFittedError(STARModuleError):
+  """ Tip already fitted
+
+  Possible cause(s):
+    Repeated attempts to fit a tip or iSwap movement with tips
+
+  Code: 07
+  """
+
+
+class HamiltonNoTipError(STARModuleError):
+  """ No tips
+
+  Possible cause(s):
+    command was started without fitting tip (tip was not fitted or fell off again)
+
+  Code: 08
+  """
+
+
+class NoCarrierError(STARModuleError):
+  """ No carrier
+
+  Possible cause(s):
+    load command without carrier
+
+  Code: 09
+  """
+
+
+class NotCompletedError(STARModuleError):
+  """ Not completed
+
+  Possible cause(s):
+    Command in command buffer was aborted due to an error in a previous command, or command stack
+    was deleted.
+
+  Code: 10
+  """
+
+
+class DispenseWithPressureLLDError(STARModuleError):
+  """ Dispense with  pressure LLD
+
+  Possible cause(s):
+    dispense with pressure LLD is not permitted
+
+  Code: 11
+  """
+
+
+class NoTeachInSignalError(STARModuleError):
+  """ No Teach  In Signal
+
+  Possible cause(s):
+    X-Movement to LLD reached maximum allowable position with- out detecting Teach in signal
+
+  Code: 12
+  """
+
+
+class LoadingTrayError(STARModuleError):
+  """ Loading  Tray error
+
+  Possible cause(s):
+    position already occupied
+
+  Code: 13
+  """
+
+
+class SequencedAspirationWithPressureLLDError(STARModuleError):
+  """ Sequenced aspiration with  pressure LLD
+
+  Possible cause(s):
+    sequenced aspiration with pressure LLD is not permitted
+
+  Code: 14
+  """
+
+
+class NotAllowedParameterCombinationError(STARModuleError):
+  """ Not allowed  parameter combination
+
+  Possible cause(s):
+    i.e. PLLD and dispense or wrong X-drive assignment
+
+  Code: 15
+  """
+
+
+class CoverCloseError(STARModuleError):
+  """Cover close error
+
+  Possible cause(s):
+    cover is not closed and couldn't be locked
+
+  Code: 16
+  """
+
+
+class AspirationError(STARModuleError):
+  """ Aspiration error
+
+  Possible cause(s):
+    aspiration liquid stream error detected
+
+  Code: 17
+  """
+
+
+class WashFluidOrWasteError(STARModuleError):
+  """Wash fluid or trash error
+
+  Possible cause(s):
+    1. missing wash fluid
+    2. trash of particular washer is full
+
+  Code: 18
+  """
+
+
+class IncubationError(STARModuleError):
+  """ Incubation error
+
+  Possible cause(s):
+    incubator temperature out of limit
+
+  Code: 19
+  """
+
+
+class TADMMeasurementError(STARModuleError):
+  """TADM measurement error
+
+  Possible cause(s):
+    overshoot of limits during aspiration or dispensation
+
+  Code: 20, 26
+  """
+
+
+class NoElementError(STARModuleError):
+  """ No element
+
+  Possible cause(s):
+    expected element not detected
+
+  Code: 21
+  """
+
+
+class ElementStillHoldingError(STARModuleError):
+  """Element still holding
+
+  Possible cause(s):
+    "Get command" is sent twice or element is not droped expected element is missing (lost)
+
+  Code: 22
+  """
+
+
+class ElementLostError(STARModuleError):
+  """ Element lost
+
+  Possible cause(s):
+    expected element is missing (lost)
+
+  Code: 23
+  """
+
+
+class IllegalTargetPlatePositionError(STARModuleError):
+  """Illegal target plate position
+
+  Possible cause(s):
+    1. over or underflow of iSWAP positions
+    2. iSWAP is not in park position during pipetting activities
+
+  Code: 24
+  """
+
+
+class IllegalUserAccessError(STARModuleError):
+  """Illegal user access
+
+  Possible cause(s):
+    carrier was manually removed or cover is open (immediate stop is executed)
+
+  Code: 25
+  """
+
+
+class PositionNotReachableError(STARModuleError):
+  """Position not reachable
+
+  Possible cause(s):
+    position out of mechanical limits using iSWAP, CoRe gripper or PIP-channels
+
+  Code: 27
+  """
+
+
+class UnexpectedLLDError(STARModuleError):
+  """ unexpected LLD
+
+  Possible cause(s):
+    liquid level is reached before LLD scanning is started (using PIP or XL channels)
+
+  Code: 28
+  """
+
+
+class AreaAlreadyOccupiedError(STARModuleError):
+  """ area already occupied
+
+  Possible cause(s):
+    Its impossible to occupy area because this area is already in use
+
+  Code: 29
+  """
+
+
+class ImpossibleToOccupyAreaError(STARModuleError):
+  """ impossible to occupy area
+
+  Possible cause(s):
+    Area cant be occupied because is no solution for arm prepositioning
+
+  Code: 30
+  """
+
+
+class AntiDropControlError(STARModuleError):
+  """
+  Anti drop controlling out of tolerance. (VENUS only)
+
+  Code: 31
+  """
+
+
+class DecapperError(STARModuleError):
+  """
+  Decapper lock error while screw / unscrew a cap by twister channels. (VENUS only)
+
+  Code: 32
+  """
+
+
+class DecapperHandlingError(STARModuleError):
+  """
+  Decapper station error while lock / unlock a cap. (VENUS only)
+
+  Code: 33
+  """
+
+
+class SlaveError(STARModuleError):
+  """ Slave error
+
+  Possible cause(s):
+    This error code indicates an error in one of slaves. (for error handling purpose using service
+    software macro code)
+
+  Code: 99
+  """
+
+
+class WrongCarrierError(STARModuleError):
+  """
+  Wrong carrier barcode detected. (VENUS only)
+
+  Code: 100
+  """
+
+
+class NoCarrierBarcodeError(STARModuleError):
+  """
+  Carrier barcode could not be read or is missing. (VENUS only)
+
+  Code: 101
+  """
+
+
+class LiquidLevelError(STARModuleError):
+  """
+  Liquid surface not detected. (VENUS only)
+
+  This error is created from main / slave error 06/70, 06/73 and 06/87.
+
+  Code: 102
+  """
+
+
+class NotDetectedError(STARModuleError):
+  """
+  Carrier not detected at deck end position. (VENUS only)
+
+  Code: 103
+  """
+
+
+class NotAspiratedError(STARModuleError):
+  """
+  Dispense volume exceeds the aspirated volume. (VENUS only)
+
+  This error is created from main / slave error 02/54.
+
+  Code: 104
+  """
+
+
+class ImproperDispensationError(STARModuleError):
+  """
+  The dispensed volume is out of tolerance (may only occur for Nano Pipettor Dispense steps).
+  (VENUS only)
+
+  This error is created from main / slave error 02/52 and 02/54.
+
+  Code: 105
+  """
+
+
+class NoLabwareError(STARModuleError):
+  """
+  The labware to be loaded was not detected by autoload module. (VENUS only)
+
+  Note:
+
+  May only occur on a Reload Carrier step if the labware property 'MlStarCarPosAreRecognizable' is
+  set to 1.
+
+  Code: 106
+  """
+
+
+class UnexpectedLabwareError(STARModuleError):
+  """
+  The labware contains unexpected barcode ( may only occur on a Reload Carrier step ). (VENUS only)
+
+  Code: 107
+  """
+
+
+class WrongLabwareError(STARModuleError):
+  """
+  The labware to be reloaded contains wrong barcode ( may only occur on a Reload Carrier step ).
+  (VENUS only)
+
+  Code: 108
+  """
+
+
+class BarcodeMaskError(STARModuleError):
+  """
+  The barcode read doesn't match the barcode mask defined. (VENUS only)
+
+  Code: 109
+  """
+
+
+class BarcodeNotUniqueError(STARModuleError):
+  """
+  The barcode read is not unique. Previously loaded labware with same barcode was loaded without
+  unique barcode check. (VENUS only)
+
+  Code: 110
+  """
+
+
+class BarcodeAlreadyUsedError(STARModuleError):
+  """
+  The barcode read is already loaded as unique barcode ( it's not possible to load the same barcode
+  twice ). (VENUS only)
+
+  Code: 111
+  """
+
+
+class KitLotExpiredError(STARModuleError):
+  """
+  Kit Lot expired. (VENUS only)
+
+  Code: 112
+  """
+
+
+class DelimiterError(STARModuleError):
+  """
+  Barcode contains character which is used as delimiter in result string. (VENUS only)
+
+  Code: 113
+  """
+
+
+class UnknownHamiltonError(STARModuleError):
+  """ Unknown error """
+
+
+def _module_id_to_module_name(id_):
+  """ Convert a module ID to a module name. """
+  return {
+    "C0": "Master",
+    "X0": "X-drives",
+    "I0": "Auto Load",
+    "W1": "Wash station 1-3",
+    "W2": "Wash station 4-6",
+    "T1": "Temperature carrier 1",
+    "T2": "Temperature carrier 2",
+    "R0": "ISWAP",
+    "P1": "Pipetting channel 1",
+    "P2": "Pipetting channel 2",
+    "P3": "Pipetting channel 3",
+    "P4": "Pipetting channel 4",
+    "P5": "Pipetting channel 5",
+    "P6": "Pipetting channel 6",
+    "P7": "Pipetting channel 7",
+    "P8": "Pipetting channel 8",
+    "P9": "Pipetting channel 9",
+    "PA": "Pipetting channel 10",
+    "PB": "Pipetting channel 11",
+    "PC": "Pipetting channel 12",
+    "PD": "Pipetting channel 13",
+    "PE": "Pipetting channel 14",
+    "PF": "Pipetting channel 15",
+    "PG": "Pipetting channel 16",
+    "H0": "CoRe 96 Head",
+    "HW": "Pump station 1 station",
+    "HU": "Pump station 2 station",
+    "HV": "Pump station 3 station",
+    "N0": "Nano dispenser",
+    "D0": "384 dispensing head",
+    "NP": "Nano disp. pressure controller",
+    "M1": "Reserved for module 1"
+  }.get(id_, "Unknown Module")
+
+
+def error_code_to_exception(code: int) -> Type[STARModuleError]:
+  """ Convert an error code to an exception. """
+  codes = {
+    1: CommandSyntaxError,
+    2: HardwareError,
+    3: CommandNotCompletedError,
+    4: ClotDetectedError,
+    5: BarcodeUnreadableError,
+    6: TipTooLittleVolumeError,
+    7: TipAlreadyFittedError,
+    8: HamiltonNoTipError,
+    9: NoCarrierError,
+    10: NotCompletedError,
+    11: DispenseWithPressureLLDError,
+    12: NoTeachInSignalError,
+    13: LoadingTrayError,
+    14: SequencedAspirationWithPressureLLDError,
+    15: NotAllowedParameterCombinationError,
+    16: CoverCloseError,
+    17: AspirationError,
+    18: WashFluidOrWasteError,
+    19: IncubationError,
+    20: TADMMeasurementError,
+    21: NoElementError,
+    22: ElementStillHoldingError,
+    23: ElementLostError,
+    24: IllegalTargetPlatePositionError,
+    25: IllegalUserAccessError,
+    26: TADMMeasurementError,
+    27: PositionNotReachableError,
+    28: UnexpectedLLDError,
+    29: AreaAlreadyOccupiedError,
+    30: ImpossibleToOccupyAreaError,
+    31: AntiDropControlError,
+    32: DecapperError,
+    33: DecapperHandlingError,
+    99: SlaveError,
+    100: WrongCarrierError,
+    101: NoCarrierBarcodeError,
+    102: LiquidLevelError,
+    103: NotDetectedError,
+    104: NotAspiratedError,
+    105: ImproperDispensationError,
+    106: NoLabwareError,
+    107: UnexpectedLabwareError,
+    108: WrongLabwareError,
+    109: BarcodeMaskError,
+    110: BarcodeNotUniqueError,
+    111: BarcodeAlreadyUsedError,
+    112: KitLotExpiredError,
+    113: DelimiterError
+  }
+  if code in codes:
+    return codes[code]
+  return UnknownHamiltonError
+
+
+def trace_information_to_string(module_identifier: str, trace_information: int) -> str:
+  """ Convert a trace identifier to an error message. """
+  table = None
+
+  if module_identifier == "C0":
+    table = {
+      10: "CAN error",
+      11: "Slave command time out",
+      20: "E2PROM error",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      33: "Parameter does not belong to command, or not all parameters were sent",
+      34: "Node name unknown",
+      35: "id parameter error",
+      37: "node name defined twice",
+      38: "faulty XL channel settings",
+      39: "faulty robotic channel settings",
+      40: "PIP task busy",
+      41: "Auto load task busy",
+      42: "Miscellaneous task busy",
+      43: "Incubator task busy",
+      44: "Washer task busy",
+      45: "iSWAP task busy",
+      46: "CoRe 96 head task busy",
+      47: "Carrier sensor doesn't work properly",
+      48: "CoRe 384 head task busy",
+      49: "Nano pipettor task busy",
+      50: "XL channel task busy",
+      51: "Tube gripper task busy",
+      52: "Imaging channel task busy",
+      53: "Robotic channel task busy"
+    }
+  elif module_identifier in ["PX", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "PA",
+                              "PB", "PC", "PD", "PE", "PF", "PG"]:
+    table = {
+      0: "No error",
+      20: "No communication to EEPROM",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      35: "Voltages outside permitted range",
+      36: "Stop during execution of command",
+      37: "Stop during execution of command",
+      40: "No parallel processes permitted (Two or more commands sent for the same control"
+          "process)",
+      50: "Dispensing drive init. position not found",
+      51: "Dispensing drive not initialized",
+      52: "Dispensing drive movement error",
+      53: "Maximum volume in tip reached",
+      54: "Position outside of permitted area",
+      55: "Y-drive blocked",
+      56: "Y-drive not initialized",
+      57: "Y-drive movement error",
+      60: "X-drive blocked",
+      61: "X-drive not initialized",
+      62: "X-drive movement error",
+      63: "X-drive limit stop not found",
+      70: "No liquid level found (possibly because no liquid was present)",
+      71: "Not enough liquid present (Immersion depth or surface following position possiby"
+          "below minimal access range)",
+      72: "Auto calibration at pressure (Sensor not possible)",
+      73: "No liquid level found with dual LLD",
+      74: "Liquid at a not allowed position detected",
+      75: "No tip picked up, possibly because no was present at specified position",
+      76: "Tip already picked up",
+      77: "Tip not droped",
+      78: "Wrong tip picked up",
+      80: "Liquid not correctly aspirated",
+      81: "Clot detected",
+      82: "TADM measurement out of lower limit curve",
+      83: "TADM measurement out of upper limit curve",
+      84: "Not enough memory for TADM measurement",
+      85: "No communication to digital potentiometer",
+      86: "ADC algorithm error",
+      87: "2nd phase of liquid nt found",
+      88: "Not enough liquid present (Immersion depth or surface following position possiby"
+          "below minimal access range)",
+      90: "Limit curve not resetable",
+      91: "Limit curve not programmable",
+      92: "Limit curve not found",
+      93: "Limit curve data incorrect",
+      94: "Not enough memory for limit curve",
+      95: "Invalid limit curve index",
+      96: "Limit curve already stored"
+    }
+  elif module_identifier == "H0": # Core 96 head
+    table = {
+      20: "No communication to EEPROM",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      35: "Voltage outside permitted range",
+      36: "Stop during execution of command",
+      37: "The adjustment sensor did not switch",
+      40: "No parallel processes permitted",
+      50: "Dispensing drive initialization failed",
+      51: "Dispensing drive not initialized",
+      52: "Dispensing drive movement error",
+      53: "Maximum volume in tip reached",
+      54: "Position out of permitted area",
+      55: "Y drive initialization failed",
+      56: "Y drive not initialized",
+      57: "Y drive movement error",
+      58: "Y drive position outside of permitted area",
+      60: "Z drive initialization failed",
+      61: "Z drive not initialized",
+      62: "Z drive movement error",
+      63: "Z drive position outside of permitted area",
+      65: "Squeezer drive initialization failed",
+      66: "Squeezer drive not initialized",
+      67: "Squeezer drive movement error: drive blocked or incremental sensor fault",
+      68: "Squeezer drive position outside of permitted area",
+      70: "No liquid level found",
+      71: "Not enough liquid present",
+      75: "No tip picked up",
+      76: "Tip already picked up",
+      81: "Clot detected",
+    }
+  elif module_identifier == "R0": # iswap
+    table = {
+      20: "No communication to EEPROM",
+      30: "Unknown command",
+      31: "Unknown parameter",
+      32: "Parameter out of range",
+      33: "FW doesn't match to HW",
+      36: "Stop during execution of command",
+      37: "The adjustment sensor did not switch",
+      38: "The adjustment sensor cannot be searched",
+      40: "No parallel processes permitted",
+      41: "No parallel processes permitted",
+      42: "No parallel processes permitted",
+      50: "Y-drive Initialization failed",
+      51: "Y-drive not initialized",
+      52: "Y-drive movement error: drive locked or incremental sensor fault",
+      53: "Y-drive movement error: position counter over/underflow",
+      60: "Z-drive initialization failed",
+      61: "Z-drive not initialized",
+      62: "Z-drive movement error: drive locked or incremental sensor fault",
+      63: "Z-drive movement error: position counter over/underflow",
+      70: "Rotation-drive initialization failed",
+      71: "Rotation-drive not initialized",
+      72: "Rotation-drive movement error: drive locked or incremental sensor fault",
+      73: "Rotation-drive movement error: position counter over/underflow",
+      80: "Wrist twist drive initialization failed",
+      81: "Wrist twist drive not initialized",
+      82: "Wrist twist drive movement error: drive locked or incremental sensor fault",
+      83: "Wrist twist drive movement error: position counter over/underflow",
+      85: "Gripper drive: communication error to gripper DMS digital potentiometer",
+      86: "Gripper drive: Auto adjustment of DMS digital potentiometer not possible",
+      89:
+        "Gripper drive movement error: drive locked or incremental sensor fault during gripping",
+      90: "Gripper drive initialized failed",
+      91: "iSWAP not initialized. Call star.initialize_iswap().",
+      92: "Gripper drive movement error: drive locked or incremental sensor fault during release",
+      93: "Gripper drive movement error: position counter over/underflow",
+      94: "Plate not found",
+      96: "Plate not available",
+      97: "Unexpected object found"
+    }
+
+  if table is not None and trace_information in table:
+    return table[trace_information]
+
+  return f"Unknown trace information code {trace_information:02}"
+
+
+class STARFirmwareError(HamiltonFirmwareError):
+  """
+  All Hamilton machine errors.
+
+  Example:
+    >>> try:
+    ...   lh.pick_up_tips([True, True, True])
+    ... except STARFirmwareError as e:
+    ...   print(e)
+    STARFirmwareError({
+      'Pipetting channel 1': NoTipError('Tip already picked up'),
+      'Pipetting channel 3': NoTipError('Tip already picked up'),
+    })
+
+    >>> try:
+    ...   lh.pick_up_tips([True, False, True])
+    ... except STARFirmwareError as e:
+    ...   if 'Pipetting channel 1' in e:
+    ...     print('Pipetting channel 1 error: ', e['Pipetting channel 1'], e.error_code)
+    Pipetting channel 1 error:  NoTipError('Tip already picked up'), '08/76'
+  """
+
+  def __init__(self, errors: Dict[str, STARModuleError], raw_response: Optional[str] = None):
+    self.raw_response = raw_response
+    self.errors = errors
+
+  def __str__(self) -> str:
+    return f"STARFirmwareError(errors={self.errors}, raw_response={self.raw_response})"
+
+  def __repr__(self) -> str:
+    return str(self)
+
+  def __len__(self) -> int:
+    return len(self.errors)
+
+  def __getitem__(self, key: str):
+    return self.errors[key]
+
+  def __setitem__(self, key: str, value: STARModuleError):
+    self.errors[key] = value
+
+  def __contains__(self, key: str) -> bool:
+    return key in self.errors
+
+  def items(self) -> ItemsView[str, STARModuleError]:
+    return self.errors.items()
+
+  def error_for_channel(self, channel: int) -> Optional[STARModuleError]:
+    """ Return the error for a given channel.
+
+    .. warning::
+      Channel here is 1-indexed, like the firmware API, but STAR uses 0-indexed channels.
+    """
+
+    return self.errors.get(f"Pipetting channel {channel}")
+
+
+def star_firmware_string_to_error(
+  error_code_dict: Dict[str, str],
+  raw_response: Optional[str] = None,
+) -> STARFirmwareError:
+  """ Convert a firmware string to a STARFirmwareError. """
+
+  errors = {}
+
+  for module_id, error in error_code_dict.items():
+    module_name = _module_id_to_module_name(module_id)
+    if "/" in error:
+      # C0 module: error code / trace information
+      error_code_str, trace_information_str = error.split("/")
+      error_code, trace_information = int(error_code_str), int(trace_information_str)
+      if error_code == 0: # No error
+        continue
+      error_class = error_code_to_exception(error_code)
+    else:
+      # Slave modules: er## (just trace information)
+      error_class = UnknownHamiltonError
+      trace_information = int(error)
+    error_description = trace_information_to_string(
+      module_identifier=module_id, trace_information=trace_information)
+    errors[module_name] = error_class(message=error_description,
+                                      trace_information=trace_information,
+                                      raw_response=error,
+                                      raw_module=module_id)
+
+  # If the master error is a SlaveError, remove it from the errors dict.
+  if isinstance(errors.get("Master"), SlaveError):
+    errors.pop("Master")
+
+  return STARFirmwareError(errors=errors, raw_response=raw_response)
+
+
+class STAR(HamiltonLiquidHandler):
+  """
+  Interface for the Hamilton STAR.
+  """
+
   def __init__(
     self,
     device_address: Optional[int] = None,
@@ -90,255 +1039,63 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     read_timeout: int = 30,
     write_timeout: int = 30,
   ):
-    """
+    """ Create a new STAR interface.
 
     Args:
-      device_address: The USB address of the Hamilton device. Only useful if using more than one
-        Hamilton device.
-      packet_read_timeout: The timeout for reading packets from the Hamilton machine in seconds.
-      read_timeout: The timeout for  from the Hamilton machine in seconds.
+      device_address: the USB device address of the Hamilton STAR. Only useful if using more than
+        one Hamilton machine over USB.
+      packet_read_timeout: timeout in seconds for reading a single packet.
+      read_timeout: timeout in seconds for reading a full response.
+      write_timeout: timeout in seconds for writing a command.
       num_channels: the number of pipette channels present on the robot.
     """
 
     super().__init__(
-      address=device_address,
+      device_address=device_address,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
-      id_vendor=0x08af,
       id_product=0x8000)
 
-    self.id_ = 0
+    self._iswap_parked: Optional[bool] = None
+    self._num_channels: Optional[int] = None
 
-    self._reading_thread: Optional[threading.Thread] = None
-    self._waiting_tasks: Dict[str,
-      Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, str, float]] = {}
+  @property
+  def num_channels(self) -> int:
+    """ The number of pipette channels present on the robot. """
+    if self._num_channels is None:
+      raise RuntimeError("has not loaded num_channels, forgot to call `setup`?")
+    return self._num_channels
 
-  def _generate_id(self) -> str:
-    """ continuously generate unique ids 0 <= x < 10000. """
-    self.id_ += 1
-    return f"{self.id_ % 10000:04}"
+  @property
+  def module_id_length(self):
+    return 2
 
-  def _to_list(self, val: List[T], tip_pattern: List[bool]) -> List[T]:
-    """ Convert a list of values to a list of values with the correct length.
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "packet_read_timeout": self.packet_read_timeout,
+      "read_timeout": self.read_timeout,
+      "write_timeout": self.write_timeout,
+    }
 
-    This is roughly one-hot encoding. STAR expects a value for a list parameter at the position
-    for the corresponding channel. If `tip_pattern` is False, there, the value itself is ignored,
-    but it must be present.
+  @property
+  def iswap_parked(self) -> bool:
+    return self._iswap_parked is True
 
-    Args:
-      val: A list of values, exactly one for each channel that is involved in the operation.
-      tip_pattern: A list of booleans indicating whether a channel is involved in the operation.
+  def get_id_from_fw_response(self, resp: str) -> Optional[int]:
+    """ Get the id from a firmware response. """
+    parsed = parse_star_fw_string(resp, "id####")
+    if "id" in parsed and parsed["id"] is not None:
+      return int(parsed["id"])
+    return None
 
-    Returns:
-      A list of values with the correct length. Each value that is not involved in the operation
-      is set to the first value in `val`, which is ignored by STAR.
-    """
-
-    # use the default value if a channel is not involved, otherwise use the value in val
-    assert len(val) > 0
-    assert len(val) <= len(tip_pattern)
-
-    result: List[T] = []
-    arg_index = 0
-    for channel_involved in tip_pattern:
-      if channel_involved:
-        if arg_index >= len(val):
-          raise ValueError(f"Too few values for tip pattern {tip_pattern}: {val}")
-        result.append(val[arg_index])
-        arg_index += 1
-      else:
-        # this value will be ignored, and using the first value silences mypy
-        result.append(val[0])
-    if arg_index < len(val):
-      raise ValueError(f"Too many values for tip pattern {tip_pattern}: {val}")
-    return result
-
-  def _assemble_command(
-    self,
-    module: str,
-    command: str,
-    tip_pattern: Optional[List[bool]],
-    **kwargs) -> Tuple[str, str]:
-    """ Assemble a firmware command to the Hamilton machine.
-
-    Args:
-      module: 2 character module identifier (C0 for master, ...)
-      command: 2 character command identifier (QM for request status, ...)
-      tip_pattern: A list of booleans indicating whether a channel is involved in the operation.
-        This value will be used to convert the list values in kwargs to the correct length.
-      kwargs: any named parameters. the parameter name should also be 2 characters long. The value
-        can be any size.
-
-    Returns:
-      A string containing the assembled command.
-    """
-
-    cmd = module + command
-    id_ = self._generate_id()
-    cmd += f"id{id_}" # has to be first param
-
-    for k, v in kwargs.items():
-      if type(v) is datetime.datetime:
-        v = v.strftime("%Y-%m-%d %h:%M")
-      elif type(v) is bool:
-        v = 1 if v else 0
-      elif type(v) is list:
-        # If this command is 'one-hot' encoded, for the channels, then the list should be the
-        # same length as the 'one-hot' encoding key (tip_pattern.) If the list is shorter than
-        # that, it will be 'one-hot encoded automatically. Note that this may raise an error if
-        # the number of values provided is not the same as the number of channels used.
-        if tip_pattern is not None:
-          if len(v) != len(tip_pattern):
-            # convert one-hot encoded list to int list
-            v = self._to_list(v, tip_pattern)
-          # list is now of length len(tip_pattern)
-        if type(v[0]) is bool: # convert bool list to int list
-          v = [int(x) for x in v]
-        v = " ".join([str(e) for e in v]) + ("&" if len(v) < self.num_channels else "")
-      if k.endswith("_"): # workaround for kwargs named in, as, ...
-        k = k[:-1]
-      assert len(k) == 2, "Keyword arguments should be 2 characters long, but got: " + k
-      cmd += f"{k}{v}"
-
-    return cmd, id_
-
-  def parse_fw_string(self, resp: str, fmt: str = "") -> dict:
-    """ Parse a machine command or response string according to a format string.
-
-    The format contains names of parameters (always length 2),
-    followed by an arbitrary number of the following, but always
-    the same:
-    - '&': char
-    - '#': decimal
-    - '*': hex
-
-    The order of parameters in the format and response string do not
-    have to (and often do not) match.
-
-    The identifier parameter (id####) is added automatically.
-
-    TODO: string parsing
-    The firmware docs mention strings in the following format: '...'
-    However, the length of these is always known (except when reading
-    barcodes), so it is easier to convert strings to the right number
-    of '&'. With barcode reading the length of the barcode is included
-    with the response string. We'll probably do a custom implementation
-    for that.
-
-    TODO: spaces
-    We should also parse responses where integers are separated by spaces,
-    like this: `ua#### #### ###### ###### ###### ######`
-
-    Args:
-      resp: The response string to parse.
-      fmt: The format string.
-
-    Raises:
-      ValueError: if the format string is incompatible with the response.
-
-    Returns:
-      A dictionary containing the parsed values.
-
-    Examples:
-      Parsing a string containing decimals (`1111`), hex (`0xB0B`) and chars (`'rw'`):
-
-      ```
-      >>> parse_fw_string("aa1111bbrwccB0B", "aa####bb&&cc***")
-      {'aa': 1111, 'bb': 'rw', 'cc': 2827}
-      ```
-    """
-
-    # Remove device and cmd identifier from response.
-    resp = resp[4:]
-
-    # Parse the parameters in the fmt string.
-    info = {}
-
-    def find_param(param):
-      name, data = param[0:2], param[2:]
-      type_ = {
-        "#": "int",
-        "*": "hex",
-        "&": "str"
-      }[data[0]]
-
-      # Build a regex to match this parameter.
-      exp = {
-        "int": r"[-+]?[\d ]",
-        "hex": r"[\da-fA-F ]",
-        "str": ".",
-      }[type_]
-      len_ = len(data.split(" ")[0]) # Get length of first block.
-      regex = f"{name}((?:{exp}{ {len_} }"
-
-      if param.endswith(" (n)"):
-        regex += " ?)+)"
-        is_list = True
-      else:
-        regex += "))"
-        is_list = False
-
-      # Match response against regex, save results in right datatype.
-      r = re.search(regex, resp)
-      if r is None:
-        raise ValueError(f"could not find matches for parameter {name}")
-
-      g = r.groups()
-      if len(g) == 0:
-        raise ValueError(f"could not find value for parameter {name}")
-      m = g[0]
-
-      if is_list:
-        m = m.split(" ")
-
-        if type_ == "str":
-          info[name] = m
-        elif type_ == "int":
-          info[name] = [int(m_) for m_ in m if m_ != ""]
-        elif type_ == "hex":
-          info[name] = [int(m_, base=16) for m_ in m if m_ != ""]
-      else:
-        if type_ == "str":
-          info[name] = m
-        elif type_ == "int":
-          info[name] = int(m)
-        elif type_ == "hex":
-          info[name] = int(m, base=16)
-
-    # Find params in string. All params are identified by 2 lowercase chars.
-    param = ""
-    prevchar = None
-    for char in fmt:
-      if char.islower() and prevchar != "(":
-        if len(param) > 2:
-          find_param(param)
-          param = ""
-      param += char
-      prevchar = char
-    if param != "":
-      find_param(param) # last parameter is not closed by loop.
-    if "id" not in info: # auto add id if we don't have it yet.
-      find_param("id####")
-
-    return info
-
-  def parse_response(self, resp: str, fmt: str) -> dict:
-    """ Parse a response from the Hamilton machine.
-
-    This method uses the `parse_fw_string` method to get the info from the response string.
-    Additionally, it finds any errors in the response.
-
-    Args:
-      response: A string containing the response from the Hamilton machine.
-      fmt: A string containing the format of the response.
+  def check_fw_string_error(self, resp: str):
+    """ Raise an error if the firmware response is an error response.
 
     Raises:
       ValueError: if the format string is incompatible with the response.
       HamiltonException: if the response contains an error.
-
-    Returns:
-      A dictionary containing the parsed response.
     """
 
     # Parse errors.
@@ -369,7 +1126,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
 
     has_error = not (errors is None or len(errors_dict) == 0)
     if has_error:
-      he = HamiltonFirmwareError(errors_dict, raw_response=resp)
+      he = star_firmware_string_to_error(error_code_dict=errors_dict, raw_response=resp)
 
       # If there is a faulty parameter error, request which parameter that is.
       for module_name, error in he.items():
@@ -384,9 +1141,6 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
 
       raise he
 
-    info = self.parse_fw_string(resp, fmt)
-    return info
-
   async def send_command(
     self,
     module: str,
@@ -394,185 +1148,26 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     tip_pattern: Optional[List[bool]] = None,
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
-    fmt: str = "",
     wait = True,
+    fmt: str = "",
     **kwargs
   ):
-    """ Send a firmware command to the Hamilton machine.
+    """ Send a command to the machine. Parse the response if `fmt != ""`, else return the raw
+    response. """
 
-    Args:
-      module: 2 character module identifier (C0 for master, ...)
-      command: 2 character command identifier (QM for request status)
-      write_timeout: write timeout in seconds. If None, `self.write_timeout` is used.
-      read_timeout: read timeout in seconds. If None, `self.read_timeout` is used.
-      fmt: A string containing the format of the response. If None, just the id parameter is read.
-      wait: If True, wait for a response. If False, return `None` immediately after sending the
-        command.
-      kwargs: any named parameters. The parameter name should also be 2 characters long. The value
-        can be of any size.
-
-    Raises:
-      HamiltonFirmwareError: if an error response is received.
-
-    Returns:
-      A dictionary containing the parsed response, or None if no response was read within `timeout`.
-    """
-
-    cmd, id_ = self._assemble_command(module=module, command=command, tip_pattern=tip_pattern,
-      **kwargs)
-    return await self._write_and_read_command(id_=id_, cmd=cmd, fmt=fmt,
-      write_timeout=write_timeout, read_timeout=read_timeout, wait=wait)
-
-  async def _write_and_read_command(
-    self,
-    id_: str,
-    cmd: str,
-    fmt: str = "",
-    write_timeout: Optional[int] = None,
-    read_timeout: Optional[int] = None,
-    wait: bool = True
-  ) -> Optional[dict]:
-    """ Write a command to the Hamilton machine and read the response. """
-    self.write(cmd, timeout=write_timeout)
-
-    if not wait:
-      return None
-
-    # Attempt to read packets until timeout, or when we identify the right id.
-    if read_timeout is None:
-      read_timeout = self.read_timeout
-
-    loop = asyncio.get_event_loop()
-    fut = loop.create_future()
-    self._start_reading(id_, loop, fut, cmd, fmt, read_timeout)
-    result = await fut
-    return cast(dict, result) # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
-
-  def _start_reading(
-    self,
-    id_: str,
-    loop: asyncio.AbstractEventLoop,
-    fut: asyncio.Future,
-    cmd: str,
-    fmt: str,
-    timeout: int) -> None:
-    """ Submit a task to the reading thread. Starts reading thread if it is not already running. """
-
-    timeout_time = time.time() + timeout
-    self._waiting_tasks[id_] = (loop, fut, cmd, fmt, timeout_time)
-
-    # Start reading thread if it is not already running.
-    if len(self._waiting_tasks) == 1:
-      self._reading_thread = threading.Thread(target=self._continuously_read)
-      self._reading_thread.start()
-
-  def _continuously_read(self) -> None:
-    """ Continuously read from the USB port until all tasks are completed.
-
-    Tasks are stored in the `self._waiting_tasks` dictionary, and contain a future that will be
-    completed when the task is finished. Tasks are submitted to the dictionary using the
-    `self._start_reading` method.
-
-    On each iteration, read the USB port. If a response is received, parse it and check if it is
-    relevant to any of the tasks. If so, complete the future and remove the task from the
-    dictionary. If a task has timed out, complete the future with a `TimeoutError`.
-    """
-
-    logger.debug("Starting reading thread...")
-
-    while len(self._waiting_tasks) > 0:
-      for id_, (loop, fut, cmd, fmt, timeout_time) in self._waiting_tasks.items():
-        if time.time() > timeout_time:
-          logger.warning("Timeout while waiting for response to command %s.", cmd)
-          loop.call_soon_threadsafe(fut.set_exception,
-            TimeoutError(f"Timeout while waiting for response to command {cmd}."))
-          del self._waiting_tasks[id_]
-          break
-
-      try:
-        resp = self.read().decode("utf-8")
-      except TimeoutError:
-        continue
-
-      # Parse response.
-      try:
-        parsed_response = self.parse_fw_string(resp)
-        logger.info("Received response: %s", resp)
-      except ValueError:
-        if resp != "":
-          logger.warning("Could not parse response: %s", resp)
-        continue
-
-      for id_, (loop, fut, cmd, fmt, timeout_time) in self._waiting_tasks.items():
-        if "id" in parsed_response and f"{parsed_response['id']:04}" == id_:
-          try:
-            parsed = self.parse_response(resp, fmt)
-          except HamiltonFirmwareError as e:
-            loop.call_soon_threadsafe(fut.set_exception, e)
-          else:
-            if fmt is not None and fmt != "":
-              loop.call_soon_threadsafe(fut.set_result, parsed)
-            else:
-              loop.call_soon_threadsafe(fut.set_result, resp)
-          del self._waiting_tasks[id_]
-          break
-
-    self._reading_thread = None
-    logger.debug("Reading thread stopped.")
-
-
-class STAR(HamiltonLiquidHandler):
-  """
-  Interface for the Hamilton STAR.
-  """
-
-  def __init__(
-    self,
-    device_address: Optional[int] = None,
-    packet_read_timeout: int = 3,
-    read_timeout: int = 30,
-    write_timeout: int = 30,
-  ):
-    """ Create a new STAR interface.
-
-    Args:
-      device_address: the USB device address of the Hamilton STAR. Only useful if using more than
-        one Hamilton machine over USB.
-      packet_read_timeout: timeout in seconds for reading a single packet.
-      read_timeout: timeout in seconds for reading a full response.
-      write_timeout: timeout in seconds for writing a command.
-      num_channels: the number of pipette channels present on the robot.
-    """
-
-    super().__init__(
-      device_address=device_address,
-      packet_read_timeout=packet_read_timeout,
+    resp = await super().send_command(
+      module=module,
+      command=command,
+      tip_pattern=tip_pattern,
+      write_timeout=write_timeout,
       read_timeout=read_timeout,
-      write_timeout=write_timeout)
-
-    self._tth2tti: dict[int, int] = {} # hash to tip type index
-    self._iswap_parked: Optional[bool] = None
-
-    self._num_channels: Optional[int] = None
-
-  @property
-  def num_channels(self) -> int:
-    """ The number of pipette channels present on the robot. """
-    if self._num_channels is None:
-      raise RuntimeError("has not loaded num_channels, forgot to call `setup`?")
-    return self._num_channels
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "packet_read_timeout": self.packet_read_timeout,
-      "read_timeout": self.read_timeout,
-      "write_timeout": self.write_timeout,
-    }
-
-  @property
-  def iswap_parked(self) -> bool:
-    return self._iswap_parked is True
+      wait=wait,
+      **kwargs
+    )
+    if fmt != "":
+      parsed = parse_star_fw_string(resp, fmt)
+      return parsed
+    return resp
 
   async def setup(self):
     """ setup
@@ -625,105 +1220,6 @@ class STAR(HamiltonLiquidHandler):
       await self.park_iswap()
       self._iswap_parked = True
 
-  async def stop(self):
-    self._waiting_tasks.clear()
-
-  # ============== Tip Types ==============
-
-  async def get_or_assign_tip_type_index(self, tip: HamiltonTip) -> int:
-    """ Get a tip type table index for the tip.
-
-    If the tip has previously been defined, used that index. Otherwise, define a new tip type.
-    """
-
-    tip_type_hash = hash(tip)
-
-    if tip_type_hash not in self._tth2tti:
-      ttti = len(self._tth2tti) + 1
-      if ttti > 99:
-        raise ValueError("Too many tip types defined.")
-
-      await self.define_tip_needle(
-        tip_type_table_index=ttti,
-        filter=tip.has_filter,
-        tip_length=int((tip.total_tip_length - tip.fitting_depth) * 10), # in 0.1mm
-        maximum_tip_volume=int(tip.maximal_volume * 10), # in 0.1ul
-        tip_size=tip.tip_size,
-        pickup_method=tip.pickup_method
-      )
-      self._tth2tti[tip_type_hash] = ttti
-
-    return self._tth2tti[tip_type_hash]
-
-  def _get_hamilton_tip(self, tip_spots: List[TipSpot]) -> HamiltonTip:
-    """ Get the single tip type for all tip spots. If it does not exist or is not a HamiltonTip,
-    raise an error. """
-    tips = set(tip_spot.get_tip() for tip_spot in tip_spots)
-    if len(tips) > 1:
-      raise ValueError("Cannot mix tips with different tip types.")
-    if len(tips) == 0:
-      raise ValueError("No tips specified.")
-    tip = tips.pop()
-    if not isinstance(tip, HamiltonTip):
-      raise ValueError(f"Tip {tip} is not a HamiltonTip.")
-    return tip
-
-  async def get_ttti(self, tip_spots: List[TipSpot]) -> int:
-    """ Get tip type table index for a list of tips.
-
-    Ensure that for all non-None tips, they have the same tip type, and return the tip type table
-    index for that tip type.
-    """
-
-    tip = self._get_hamilton_tip(tip_spots)
-    return await self.get_or_assign_tip_type_index(tip)
-
-  def _ops_to_fw_positions(
-    self,
-    ops: Sequence[PipettingOp],
-    use_channels: List[int]
-  ) -> Tuple[List[int], List[int], List[bool]]:
-    """ use_channels is a list of channels to use. STAR expects this in one-hot encoding. This is
-    method converts that, and creates a matching list of x and y positions. """
-    assert use_channels == sorted(use_channels), "Channels must be sorted."
-
-    x_positions: List[int] = []
-    y_positions: List[int] = []
-    channels_involved: List[bool] = []
-    for i, channel in enumerate(use_channels):
-      while channel > len(channels_involved):
-        channels_involved.append(False)
-        x_positions.append(0)
-        y_positions.append(0)
-      channels_involved.append(True)
-      offset = ops[i].offset
-
-      x_pos = ops[i].resource.get_absolute_location().x
-      if offset is None or isinstance(ops[i].resource, (TipSpot, Well)):
-        x_pos += ops[i].resource.center().x
-      if offset is not None:
-        x_pos += offset.x
-      x_positions.append(int(x_pos*10))
-
-      y_pos = ops[i].resource.get_absolute_location().y
-      if offset is None or isinstance(ops[i].resource, (TipSpot, Well)):
-        y_pos += ops[i].resource.center().y
-      if offset is not None:
-        y_pos += offset.y
-      y_positions.append(int(y_pos*10))
-
-    if len(ops) > self.num_channels:
-      raise ValueError(f"Too many channels specified: {len(ops)} > {self.num_channels}")
-
-    if len(x_positions) < self.num_channels:
-      # We do want to have a trailing zero on x_positions, y_positions, and channels_involved, for
-      # some reason, if the length < 8.
-      x_positions = x_positions + [0]
-      y_positions = y_positions + [0]
-      channels_involved = channels_involved + [False]
-
-    return x_positions, y_positions, channels_involved
-
   # ============== LiquidHandlerBackend methods ==============
 
   @need_iswap_parked
@@ -737,7 +1233,11 @@ class STAR(HamiltonLiquidHandler):
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
 
-    ttti = await self.get_ttti([op.resource for op in ops])
+    tip_spots = [op.resource for op in ops]
+    tips = set(cast(HamiltonTip, tip_spot.get_tip()) for tip_spot in tip_spots)
+    if len(tips) > 1:
+      raise ValueError("Cannot mix tips with different tip types.")
+    ttti = (await self.get_ttti(list(tips)))[0]
 
     max_z = max(op.resource.get_absolute_location().z + \
                  (op.offset.z if op.offset is not None else 0) for op in ops)
@@ -761,14 +1261,14 @@ class STAR(HamiltonLiquidHandler):
         minimum_traverse_height_at_beginning_of_a_command=2450,
         pickup_method=tip.pickup_method,
       )
-    except HamiltonFirmwareError as e:
+    except STARFirmwareError as e:
       tip_already_fitted_errors: List[int] = []
       no_tip_present_errors: List[int] = []
       for i in range(1, self.num_channels+1):
         channel_error = e.error_for_channel(i)
         if channel_error is None:
           continue
-        if isinstance(channel_error, herrors.TipAlreadyFittedError):
+        if isinstance(channel_error, TipAlreadyFittedError):
           tip_already_fitted_errors.append(i-1)
         elif channel_error.trace_information in [75]:
           no_tip_present_errors.append(i-1)
@@ -822,30 +1322,17 @@ class STAR(HamiltonLiquidHandler):
         z_position_at_end_of_a_command=2450,
         discarding_method=drop_method
       )
-    except HamiltonFirmwareError as e:
+    except STARFirmwareError as e:
       tip_errors: List[int] = []
       for i in range(1, self.num_channels+1):
         channel_error = e.error_for_channel(i)
-        if isinstance(channel_error, herrors.NoTipError):
+        if isinstance(channel_error, HamiltonNoTipError):
           tip_errors.append(i-1)
 
       if len(tip_errors) > 0:
         raise NoTipError(f"No tip present on channels {tip_errors}") from e
 
       raise e
-
-  def _get_tip_max_volumes(self, ops: Sequence[Union[Aspiration, Dispense]]) -> List[float]:
-    """ These tip volumes (mostly with filters) are slightly different form the ones in the
-    liquid class mapping, so we need to map them here. If no mapping is found, we use the
-    given maximal volume of the tip. """
-
-    return [
-      { 360.0: 300.0,
-        1065.0: 1000.0,
-        1250.0: 1000.0,
-        4367.0: 4000.0,
-        5420.0: 5000.0,
-      }.get(op.tip.maximal_volume, op.tip.maximal_volume) for op in ops]
 
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
     """ Assert that resources are in a valid location for pipetting. """
@@ -973,19 +1460,16 @@ class STAR(HamiltonLiquidHandler):
 
     n = len(ops)
 
-    # convert max volumes
-    tip_max_volumes = self._get_tip_max_volumes(ops)
-
     hamilton_liquid_classes = [
-      get_liquid_class(
-        tip_volume=int(tmv),
+      get_star_liquid_class(
+        tip_volume=op.tip.maximal_volume,
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
         liquid=op.liquid or Liquid.WATER,
         jet=False, # for aspiration
         empty=False # for aspiration
-      ) for tmv, op in zip(tip_max_volumes, ops)]
+      ) for op in ops]
 
     self._assert_valid_resources([op.resource for op in ops])
 
@@ -1107,7 +1591,7 @@ class STAR(HamiltonLiquidHandler):
           minimum_traverse_height_at_beginning_of_a_command,
         min_z_endpos=min_z_endpos,
       )
-    except HamiltonFirmwareError as e:
+    except STARFirmwareError as e:
       tll: List[int] = []
       tlv: List[int] = []
       for i in range(1, self.num_channels+1):
@@ -1218,9 +1702,6 @@ class STAR(HamiltonLiquidHandler):
 
     n = len(ops)
 
-    # convert max volumes
-    tip_max_volumes = self._get_tip_max_volumes(ops)
-
     def should_jet(op):
       if op.liquid_height is None:
         return True
@@ -1231,8 +1712,8 @@ class STAR(HamiltonLiquidHandler):
       return False
 
     hamilton_liquid_classes = [
-      get_liquid_class(
-        tip_volume=int(tmv),
+      get_star_liquid_class(
+        tip_volume=op.tip.maximal_volume,
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
@@ -1240,7 +1721,7 @@ class STAR(HamiltonLiquidHandler):
         jet=should_jet(op),
         # dispensing all, get_used_volume includes pending
         empty=op.tip.tracker.get_used_volume() == 0
-      ) for tmv, op in zip(tip_max_volumes, ops)]
+      ) for op in ops]
 
     # correct volumes using the liquid class
     for op, hlc in zip(ops, hamilton_liquid_classes):
@@ -1343,7 +1824,7 @@ class STAR(HamiltonLiquidHandler):
         min_z_endpos=min_z_endpos,
         side_touch_off_distance=side_touch_off_distance,
       )
-    except HamiltonFirmwareError as e:
+    except STARFirmwareError as e:
       tll: List[int] = []
       for i in range(1, self.num_channels+1):
         channel_error = e.error_for_channel(i)
@@ -1878,9 +2359,9 @@ class STAR(HamiltonLiquidHandler):
       previous_location = location
 
     await self.release_picked_up_resource(
-      location=move.to,
+      location=move.destination,
       resource=move.resource,
-      offset=move.to_offset,
+      offset=move.destination_offset,
       grip_direction=move.put_direction,
       pickup_distance_from_top=move.pickup_distance_from_top,
       minimum_traverse_height_at_beginning_of_a_command=
@@ -1917,7 +2398,7 @@ class STAR(HamiltonLiquidHandler):
   async def define_tip_needle(
     self,
     tip_type_table_index: int,
-    filter: bool,
+    has_filter: bool,
     tip_length: int,
     maximum_tip_volume: int,
     tip_size: TipSize,
@@ -1927,7 +2408,7 @@ class STAR(HamiltonLiquidHandler):
 
     Args:
       tip_type_table_index: tip_table_index
-      filter: with(out) filter
+      has_filter: with(out) filter
       tip_length: Tip length [0.1mm]
       maximum_tip_volume: Maximum volume of tip [0.1ul]
                           Note! it's automatically limited to max. channel capacity
@@ -1948,7 +2429,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="TT",
       tt=f"{tip_type_table_index:02}",
-      tf=filter,
+      tf=has_filter,
       tl=f"{tip_length:04}",
       tv=f"{maximum_tip_volume:05}",
       tg=tip_size.value,
