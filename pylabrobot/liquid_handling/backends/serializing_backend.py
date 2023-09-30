@@ -58,10 +58,10 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
   async def unassigned_resource_callback(self, name: str):
     await self.send_command(command="resource_unassigned", data={"resource_name": name})
-    
-  async def update_state(self, state: str):
+
+  async def update_state(self, state: dict):
     await self.send_command(command="update_state", data={"state":state})
-  
+
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     serialized = [{
       "resource_name": op.resource.name,

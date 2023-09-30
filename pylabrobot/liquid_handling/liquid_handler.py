@@ -135,10 +135,10 @@ class LiquidHandler(MachineFrontend):
   def load_state_from_file(self, filename: str) -> None:
     """ Load state from a data dictionary. """
     # TODO: Check if backend supports loading state
-    
+
     with open(filename, "r", encoding="utf-8") as f:
       data = json.load(f)
-      
+  
     self.deck.load_state(data)
     self._run_async_in_thread(self.backend.update_state, data)
 

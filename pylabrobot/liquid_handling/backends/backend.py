@@ -46,7 +46,15 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     Args:
       resource: The name of the resource that was unassigned from the robot.
     """
-
+  
+  async def update_state(self, state: dict):
+      """ Updates the state in a backend where the state is managed separately. 
+      
+      Args:
+          state: Dictionary where each element is a resource and its value
+          is the state for that resource.
+      """
+  
   @property
   @abstractmethod
   def num_channels(self) -> int:
