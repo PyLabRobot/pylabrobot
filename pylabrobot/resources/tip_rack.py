@@ -32,7 +32,7 @@ class TipSpot(Resource):
 
     super().__init__(name, size_x=size_y, size_y=size_x, size_z=size_z,
       category=category)
-    self.tracker = TipTracker()
+    self.tracker = TipTracker(thing="Tip spot")
     self.parent: Optional["TipRack"] = None
 
     self.make_tip = make_tip

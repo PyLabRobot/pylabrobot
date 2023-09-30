@@ -27,10 +27,11 @@ def no_tip_tracking():
   this.tip_tracking_enabled = old_value # type: ignore
 
 
-class TipTracker():
+class TipTracker:
   """ A tip tracker tracks tip operations and raises errors if the tip operations are invalid. """
 
-  def __init__(self):
+  def __init__(self, thing: str):
+    self.thing = thing
     self._is_disabled = False
     self._tip: Optional["Tip"] = None
     self._pending_tip: Optional["Tip"] = None
@@ -49,11 +50,11 @@ class TipTracker():
     """ Get the tip. Note that does includes pending operations.
 
     Raises:
-      NoTipError: If the tip spot has no tip.
+      NoTipError: If the tip spot does not have a tip.
     """
 
     if self._tip is None:
-      raise NoTipError("Tip spot has no tip.")
+      raise NoTipError(f"{self.thing} does not have a tip.")
     return self._tip
 
   def disable(self) -> None:
@@ -75,7 +76,7 @@ class TipTracker():
     if self.is_disabled:
       raise RuntimeError("Tip tracker is disabled. Call `enable()`.")
     if self._pending_tip is not None:
-      raise HasTipError("Tip spot already has a tip.")
+      raise HasTipError(f"{self.thing} already has a tip.")
     self._pending_tip = tip
 
     self._tip_origin = origin
@@ -88,7 +89,7 @@ class TipTracker():
     if self.is_disabled:
       raise RuntimeError("Tip tracker is disabled. Call `enable()`.")
     if self._pending_tip is None:
-      raise NoTipError("Tip spot has no tip.")
+      raise NoTipError(f"{self.thing} does not have a tip.")
     self._pending_tip = None
 
   def commit(self) -> None:
@@ -121,3 +122,7 @@ class TipTracker():
   def get_tip_origin(self) -> Optional["TipSpot"]:
     """ Get the origin of the current tip, if known. """
     return self._tip_origin
+
+  def __repr__(self) -> str:
+    return f"TipTracker({self.thing}, is_disabled={self.is_disabled}, has_tip={self.has_tip}" + \
+      f" tip={self._tip}, pending_tip={self._pending_tip})"

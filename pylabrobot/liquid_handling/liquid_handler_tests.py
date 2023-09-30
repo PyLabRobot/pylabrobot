@@ -420,7 +420,12 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_tip_tracking_double_pickup(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])
 
+    set_tip_tracking(enabled=True)
     with self.assertRaises(HasTipError):
+      await self.lh.pick_up_tips(self.tip_rack["A2"])
+    set_tip_tracking(enabled=False)
+
+    with no_tip_tracking():
       await self.lh.pick_up_tips(self.tip_rack["A2"])
 
   async def test_tip_tracking_empty_drop(self):
@@ -428,8 +433,10 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.drop_tips(self.tip_rack["A1"])
 
     await self.lh.pick_up_tips(self.tip_rack["A2"])
+    set_tip_tracking(enabled=True)
     with self.assertRaises(HasTipError):
       await self.lh.drop_tips(self.tip_rack["A3"])
+    set_tip_tracking(enabled=False)
 
   async def test_tip_tracking_empty_pickup(self):
     self.tip_rack.get_item("A1").empty()
@@ -447,30 +454,10 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       set_tip_tracking(enabled=False)
 
   async def test_tip_tracking_double_pickup_single_command(self):
+    set_tip_tracking(enabled=True)
     with self.assertRaises(NoTipError):
       await self.lh.pick_up_tips(self.tip_rack["A1", "A1"])
-
-  async def test_disable_tip_tracking(self):
-    # Even with tip tracking disabled, we keep track of which tips are on the head.
-
-    await self.lh.pick_up_tips(self.tip_rack["A1"])
-
-    # Disable tip tracking globally with context manager
-    with no_tip_tracking():
-      with self.assertRaises(HasTipError):
-        await self.lh.pick_up_tips(self.tip_rack["A1"])
-
-    # Disable tip tracking globally and manually
     set_tip_tracking(enabled=False)
-    with self.assertRaises(HasTipError):
-      await self.lh.pick_up_tips(self.tip_rack["A1"])
-    set_tip_tracking(enabled=True)
-
-    # Disable tip tracking for a single tip rack
-    self.tip_rack.get_item("A1").tracker.disable()
-    with self.assertRaises(HasTipError):
-      await self.lh.pick_up_tips(self.tip_rack["A1"])
-    self.tip_rack.get_item("A1").tracker.enable()
 
   async def test_discard_tips(self):
     tips = self.tip_rack.get_tips("A1:D1")
@@ -512,7 +499,8 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     class TestBackend(backends.SaverBackend):
       """ Override pick_up_tips for testing. """
       async def pick_up_tips(self, ops, use_channels, non_default, default=True):
-        pass
+        # pylint: disable=unused-argument
+        assert non_default == default
 
     self.backend = TestBackend(num_channels=16)
     self.lh = LiquidHandler(self.backend, deck=self.deck)
@@ -523,24 +511,31 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
       await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[1],
         non_default=True, does_not_exist=True)
-      with self.assertRaises(TypeError):
+      with self.assertRaises(TypeError): # missing non_default
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[2])
 
       set_strictness(Strictness.WARN)
       await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, use_channels=[3])
-      with self.assertWarns(UserWarning):
+      with self.assertWarns(UserWarning): # extra kwargs should warn
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[4],
           non_default=True, does_not_exist=True)
-      with self.assertRaises(TypeError):
+      # We override default to False, so this should raise an assertion error. To test whether
+      # overriding default to True works.
+      with self.assertRaises(AssertionError):
+        await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[4],
+          non_default=True, does_not_exist=True, default=False)
+      with self.assertRaises(TypeError): # missing non_default
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[5])
 
       set_strictness(Strictness.STRICT)
       await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, use_channels=[6])
-      with self.assertRaises(TypeError):
+      with self.assertRaises(TypeError): # cannot have extra kwargs
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[7],
           non_default=True, does_not_exist=True)
-      with self.assertRaises(TypeError):
+      with self.assertRaises(TypeError): # missing non_default
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[8])
+
+      set_strictness(Strictness.WARN)
 
   async def test_save_state(self):
     set_volume_tracking(enabled=True)

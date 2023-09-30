@@ -103,7 +103,7 @@ brew install libusb
 
 1. Download and install [Zadig](https://zadig.akeo.ie).
 
-2. Make sure the Hamilton is connected using the USB cable and that no other software is running.
+2. Make sure the Hamilton is connected using the USB cable and that no other Hamilton/VENUS software is running.
 
 3. Open Zadig and select "Options" -> "List All Devices".
 
