@@ -467,7 +467,7 @@ async function handleEvent(event, data) {
         
         if (resource instanceof Container){
           startingState = resource.liquids
-          resource.liquids = state[state_keys[i]].pending_tip != null
+          resource.liquids = state[state_keys[i]].liquids
           if (resource.liquids!=startingState){
             resource.draw(resourceLayer)
           }
