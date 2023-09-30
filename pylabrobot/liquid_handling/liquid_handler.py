@@ -138,7 +138,7 @@ class LiquidHandler(MachineFrontend):
 
     with open(filename, "r", encoding="utf-8") as f:
       data = json.load(f)
-  
+
     self.deck.load_state(data)
     self._run_async_in_thread(self.backend.update_state, data)
 
