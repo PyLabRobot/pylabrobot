@@ -698,7 +698,7 @@ class TipRack extends Resource {
 class TipSpot extends Resource {
   constructor(resourceData, parent) {
     super(resourceData, parent);
-    this.has_tip = false;
+    this.has_tip = true;
     this.tip = resourceData.prototype_tip; // not really a creator, but good enough for now.
   }
 

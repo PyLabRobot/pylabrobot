@@ -15,6 +15,7 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move,
 )
+
 from pylabrobot.serializer import serialize
 
 if sys.version_info >= (3, 8):
@@ -57,7 +58,10 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
   async def unassigned_resource_callback(self, name: str):
     await self.send_command(command="resource_unassigned", data={"resource_name": name})
-
+    
+  async def update_state(self, state: str):
+    await self.send_command(command="update_state", data={"state":state})
+  
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     serialized = [{
       "resource_name": op.resource.name,

@@ -97,7 +97,9 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
   ):
     super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
       num_items_y=num_items_y, category=category, model=model)
-
+    
+    # TipRacks are default full if we initialize programmatically, but
+    # default empty if we read in from a file
     if items is not None and len(items) > 0:
       if with_tips:
         self.fill()

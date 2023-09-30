@@ -431,8 +431,9 @@ async function handleEvent(event, data) {
     id: data.id,
   };
 
-  console.log("[event] " + event, data);
 
+
+  console.log("[event] " + event, data);
   switch (event) {
     case "resource_assigned":
       resource = loadResource(data.resource);
@@ -453,8 +454,33 @@ async function handleEvent(event, data) {
       }
       break;
 
+
     case "resource_unassigned":
       removeResource(data.resource_name);
+      break;
+
+    case "update_state":
+      state = data.state
+      state_keys = Object.keys(state)
+      for (let i = 0; i < state_keys.length; i++) {
+        resource = resources[state_keys[i]]
+        
+        if (resource instanceof Container){
+          startingState = resource.liquids
+          resource.liquids = state[state_keys[i]].pending_tip != null
+          if (resource.liquids!=startingState){
+            resource.draw(resourceLayer)
+          }
+        }
+        else if (resource instanceof TipSpot){
+          startingState = resource.has_tip
+          resource.has_tip = state[state_keys[i]].pending_tip != null
+          console.log(resource.has_tip)
+          if (resource.has_tip!=startingState){
+            resource.draw(resourceLayer)
+          }
+        }
+      }
       break;
 
     case "pick_up_tips":
