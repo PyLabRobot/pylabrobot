@@ -56,11 +56,11 @@ class MachineFrontend(ABC):
 
   def __del__(self):
     if self.setup_finished:
-      await self.stop()
+      self.stop()
 
   def __enter__(self):
     self.setup()
     return self
 
   def __exit__(self, exc_type, exc_value, traceback):
-    await self.stop()
+    self.stop()
