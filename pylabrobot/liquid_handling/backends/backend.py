@@ -54,7 +54,7 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
         state: Dictionary where each element is a resource and its value
         is the state for that resource.
     """
-  
+
   @property
   @abstractmethod
   def num_channels(self) -> int:
