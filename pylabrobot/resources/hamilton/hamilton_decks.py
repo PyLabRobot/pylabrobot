@@ -138,7 +138,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     if resource_location is not None: # collision detection
       if resource_location.x + resource.get_size_x() > \
-          self.rails_to_location(self.num_rails).x and \
+          self.rails_to_location(self.num_rails + 1).x and \
         rails is not None:
         raise ValueError(f"Resource with width {resource.get_size_x()} does not "
                         f"fit at rails {rails}.")
