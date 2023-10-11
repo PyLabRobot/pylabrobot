@@ -3837,9 +3837,110 @@ class STAR(HamiltonLiquidHandler):
 
   # TODO:(command) All CoRe gripper commands
   # TODO:(command:ZT)
+  async def get_core(self):
+    """ Get CoRe gripper tool """
+    command_output = await self.send_command(
+      module="C0",
+      command="ZT",
+      xs="07975",
+      xd="0",
+      ya="1250",
+      yb="1070",
+      pa="07", #use 7th tip as first gripper 
+      pb="08",  #use 8th tip as second gripper
+      tp="2350",
+      tz="2250",
+      th="2450",
+      tt="14"
+      )
+    return command_output
+  
   # TODO:(command:ZS)
+  async def put_core(self):
+    """ Put CoRe gripper tool """
+    command_output = await self.send_command(
+      module="C0",
+      command="ZS",
+      xs="07975",
+      xd="0",
+      ya="1250",
+      yb="1070",
+      tp="2150",
+      tz="2050",
+      th="2450",
+      te="2450"
+      )
+    return command_output
+  
   # TODO:(command:ZP)
+  async def get_plate_core(
+      self,
+      resource: Resource,
+      pickup_distance_from_top: float,
+      offset: Coordinate = Coordinate.zero()
+  ):
+    """ Pick up resource with CoRe gripper tool
+
+    Args:
+      resource: Resource to pick up.
+      pickup_distance_from_top: Distance from top of resource to pick up.
+      offset: Offset from resource position in mm.
+    """
+    # Get center of source plate. Also gripping height and plate width.
+    center = resource.get_absolute_location() + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+
+    grip_width = resource.get_size_y() #grip width is y size of resource
+
+    return await self.send_command(
+      module="C0",
+      command="ZP",
+      xs=f"{int(center.x * 10):05}",
+      xd="0",
+      yj=f"{int(center.y * 10):04}",
+      yv="0050",
+      zj=f"{int(grip_height * 10):04}",
+      zy="0500",
+      yo=f"{(int(grip_width*10) + 30):04}",
+      yg=f"{(int(grip_width*10) - 30):04}",
+      yw="15",
+      th="2750",
+      te="2750"
+    )
+  
   # TODO:(command:ZR)
+  async def put_plate_core(
+      self,
+      resource: Resource,
+      pickup_distance_from_top: float,
+      offset: Coordinate = Coordinate.zero()
+  ):
+    """ Place resource with CoRe gripper tool
+
+    Args:
+      resource: Location to place.
+      pickup_distance_from_top: Distance from top of resource to place.
+      offset: Offset from resource position in mm.
+    """
+    # Get center of destination location. Also gripping height and plate width.
+    center = resource.get_absolute_location() + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+
+    grip_width = resource.get_size_y() #grip width is y size of resource
+
+    return await self.send_command(
+      module="C0",
+      command="ZR",
+      xs=f"{int(center.x * 10):05}",
+      xd="0",
+      yj=f"{int(center.y * 10):04}",
+      zj=f"{int(grip_height * 10):04}",
+      zy="0500",
+      yo=f"{(int(grip_width*10) + 30):04}",
+      th="2750",
+      te="2750"
+    )
+
   # TODO:(command:ZM)
   # TODO:(command:ZO)
   # TODO:(command:ZB)
