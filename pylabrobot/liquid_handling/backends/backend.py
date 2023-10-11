@@ -88,6 +88,22 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   async def move_resource(self, move: Move):
     """ Move a resource to a new location. """
 
+  @abstractmethod
+  async def get_core(self):
+    """ Get the CoRe plate gripper from waste block mount. """
+
+  @abstractmethod
+  async def put_core(self):
+    """ Put the CoRe plate gripper at waste block mount. """
+
+  @abstractmethod
+  async def get_plate_core(self, resource: Resource, pickup_distance_from_top: float):
+    """ move a plate with CoRE gripper. """
+
+  @abstractmethod
+  async def put_plate_core(self, resource: Resource, pickup_distance_from_top: float):
+    """ move a plate with CoRE gripper. """
+
   def serialize(self):
     """ Serialize the backend so that an equivalent backend can be created by passing the dict
     as kwargs to the initializer. The dict must contain a key "type" that specifies the type of
