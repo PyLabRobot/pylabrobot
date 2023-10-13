@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from typing import List, Type, Optional
 
 from pylabrobot.machine import MachineBackend
-from pylabrobot.resources import Resource
+from pylabrobot.resources import Resource, Coordinate
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   PickupTipRack,
@@ -97,11 +97,15 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """ Put the CoRe plate gripper at waste block mount. """
 
   @abstractmethod
-  async def get_plate_core(self, resource: Resource, pickup_distance_from_top: float):
+  async def pick_up_resource_core(self, resource: Resource, pickup_distance_from_top: float):
     """ move a plate with CoRE gripper. """
 
   @abstractmethod
-  async def put_plate_core(self, resource: Resource, pickup_distance_from_top: float):
+  async def release_picked_up_resource_core(self, resource: Resource, pickup_distance_from_top: float):
+    """ move a plate with CoRE gripper. """
+
+  @abstractmethod
+  async def move_resource_core(self, move: Move):
     """ move a plate with CoRE gripper. """
 
   def serialize(self):
