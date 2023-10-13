@@ -101,7 +101,11 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """ move a plate with CoRE gripper. """
 
   @abstractmethod
-  async def release_picked_up_resource_core(self, resource: Resource, pickup_distance_from_top: float):
+  async def release_picked_up_resource_core(self, location: Coordinate, resource: Resource):
+    """ move a plate with CoRE gripper. """
+
+  @abstractmethod
+  async def release_picked_up_resource_core(self, location: Coordinate, resource: Resource, pickup_distance_from_top: float):
     """ move a plate with CoRE gripper. """
 
   @abstractmethod
