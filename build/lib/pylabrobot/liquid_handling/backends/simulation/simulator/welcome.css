@@ -1,0 +1,98 @@
+#welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+#welcome h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+#choose-deck h2 {
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+}
+
+.decks {
+  display: grid;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.deck {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  cursor: pointer;
+
+  border: 1px solid #ccc;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+.deck img {
+  object-fit: contain;
+  width: 100%;
+  max-height: 150px;
+}
+
+.deck .name {
+  font-size: 1.5rem;
+}
+
+.open-recent {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.open-recent > p:first-of-type {
+  font-size: 1.5rem;
+  margin: 2rem 0;
+}
+
+.open-recent .recent-deck {
+  font-size: 1.4rem;
+  text-decoration: none;
+  color: #000;
+  display: block;
+  margin: 0.5rem 0;
+}
+
+.open-recent .open-existing {
+  margin: 1rem 0;
+  text-align: center;
+}
+
+#filename {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+#filename input {
+  font-size: 1.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  font-family: monospace;
+}
+
+#filename button {
+  font-size: 1.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+}
+
+#filename button.back {
+  font-size: 1rem;
+}
