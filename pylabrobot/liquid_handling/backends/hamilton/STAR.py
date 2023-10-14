@@ -3847,7 +3847,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
-  async def get_core(self):
+  async def get_core(self, p1: int = 7, p2: int = 8):
     """ Get CoRe gripper tool from wasteblock mount. """
     command_output = await self.send_command(
       module="C0",
@@ -3856,8 +3856,8 @@ class STAR(HamiltonLiquidHandler):
       xd="0",
       ya="1250",
       yb="1070",
-      pa="07",  #use 7th tip as first gripper 
-      pb="08",  #use 8th tip as second gripper
+      pa=f"{p1:02}",
+      pb=f"{p2:02}",
       tp="2350",
       tz="2250",
       th="2450",
