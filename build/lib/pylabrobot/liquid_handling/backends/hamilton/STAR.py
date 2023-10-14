@@ -2196,7 +2196,7 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
-  async def pick_up_resource(
+  async def iswap_pick_up_resource(
     self,
     resource: Resource,
     grip_direction: GripDirection,
@@ -2226,7 +2226,7 @@ class STAR(HamiltonLiquidHandler):
     #   GripDirection.LEFT: resource.get_size_y(),
     # }[grip_direction]
 
-    await self.get_plate(
+    await self.iswap_get_plate(
       x_position=int(center.x * 10),
       x_direction=0,
       y_position=int(center.y * 10),
@@ -2252,7 +2252,7 @@ class STAR(HamiltonLiquidHandler):
       fold_up_sequence_at_the_end_of_process=fold_up_sequence_at_the_end_of_process
     )
 
-  async def move_picked_up_resource(
+  async def iswap_move_picked_up_resource(
     self,
     location: Coordinate,
     resource: Resource,
@@ -2288,7 +2288,7 @@ class STAR(HamiltonLiquidHandler):
       acceleration_index_low_acc=acceleration_index_low_acc
     )
 
-  async def release_picked_up_resource(
+  async def iswap_release_picked_up_resource(
     self,
     location: Coordinate,
     resource: Resource,
@@ -2314,7 +2314,7 @@ class STAR(HamiltonLiquidHandler):
     #   GripDirection.LEFT: resource.get_size_y(),
     # }[grip_direction]
 
-    await self.put_plate(
+    await self.iswap_put_plate(
       x_position=int(center.x * 10),
       x_direction=0,
       y_position=int(center.y * 10),
@@ -2334,44 +2334,51 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=collision_control_level,
     )
 
-  async def move_resource(self, move: Move):
-    """ Pick up a resource and move it to a new location.
-
-    Note: this looks like an LH level method, but I am not sure if other robots support such modular
-    control over the moves.
-    """
-
+  async def move_resource(self, move: Move, use_iswap: bool = False):
     minimum_traverse_height = 284.0
-    await self.pick_up_resource(
-      resource=move.resource,
-      grip_direction=move.get_direction,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-      offset=move.resource_offset,
-      minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10))
+
+    # Method Mapping
+    pickup_method = self.iswap_pick_up_resource if use_iswap else self.core_pick_up_resource
+    move_method = self.iswap_move_picked_up_resource if use_iswap else self.core_move_picked_up_resource
+    release_method = self.iswap_release_picked_up_resource if use_iswap else self.core_release_picked_up_resource
+
+    # Common Arguments
+    common_args = {
+        'resource': move.resource,
+        'pickup_distance_from_top': move.pickup_distance_from_top,
+        'offset': move.resource_offset,
+        'minimum_traverse_height_at_beginning_of_a_command': int(minimum_traverse_height * 10)
+    }
+    # Specific Arguments
+    specific_args = {
+        'iswap': {
+            'grip_direction': move.get_direction,
+            'collision_control_level': 1,
+            'acceleration_index_high_acc': 4,
+            'acceleration_index_low_acc': 1
+        },
+        'core': {
+            'acceleration_index': 4
+        }
+    }
+
+    if use_iswap:
+      await pickup_method(**common_args, **specific_args['iswap'])
+    else:
+      await pickup_method(**common_args) #core_pick_up_resource does not take in acceleration index
 
     previous_location = move.resource.get_absolute_location() + move.resource_offset
     previous_location.z = minimum_traverse_height - move.resource.get_size_z() / 2
-    for location in move.intermediate_locations:
-      await self.move_picked_up_resource(
-        location=location,
-        resource=move.resource,
-        grip_direction=move.get_direction,
-        minimum_traverse_height_at_beginning_of_a_command=
-          int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
-        collision_control_level=1,
-        acceleration_index_high_acc=4,
-        acceleration_index_low_acc=1)
-      previous_location = location
 
-    await self.release_picked_up_resource(
-      location=move.destination,
-      resource=move.resource,
-      offset=move.destination_offset,
-      grip_direction=move.put_direction,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-      minimum_traverse_height_at_beginning_of_a_command=
-        int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
-    )
+    for location in move.intermediate_locations:
+        await move_method(location=location, **common_args, **specific_args['iswap' if use_iswap else 'core'])
+        previous_location = location
+
+    if use_iswap:
+      await release_method(location=move.destination, **common_args, **specific_args['iswap'])
+    else:
+      await release_method(location=move.destination, **common_args) #core_release_picked_up_resource does not take in acceleration index
+
 
   async def prepare_for_manual_channel_operation(self):
     """ Prepare for manual operation. """
@@ -3876,7 +3883,7 @@ class STAR(HamiltonLiquidHandler):
     self._core_parked = True
     return command_output
 
-  async def pick_up_resource_core(
+  async def core_pick_up_resource(
       self,
       resource: Resource,
       pickup_distance_from_top: float,
@@ -3904,7 +3911,7 @@ class STAR(HamiltonLiquidHandler):
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
     grip_width = resource.get_size_y() #grip width is y size of resource
 
-    await self.get_plate_core(
+    await self.core_get_plate(
       x_position=int(center.x * 10),
       x_direction=0,
       y_position=int(center.y * 10),
@@ -3918,7 +3925,7 @@ class STAR(HamiltonLiquidHandler):
       minimum_z_position_at_the_command_end=minimum_z_position_at_the_command_end
     )
 
-  async def move_picked_up_resource_core(
+  async def core_move_picked_up_resource(
       self,
       location: Coordinate,
       resource: Resource,
@@ -3942,7 +3949,7 @@ class STAR(HamiltonLiquidHandler):
 
     center = location + resource.center()
 
-    await self.move_plate_to_position_core(
+    await self.core_move_plate_to_position(
       x_position=int(center.x * 10),
       x_direction=0,
       x_acceleration_index=acceleration_index,
@@ -3952,7 +3959,7 @@ class STAR(HamiltonLiquidHandler):
       minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
     )
 
-  async def release_picked_up_resource_core(
+  async def core_release_picked_up_resource(
       self,
       location: Coordinate,
       resource: Resource,
@@ -3979,7 +3986,7 @@ class STAR(HamiltonLiquidHandler):
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
     grip_width = resource.get_size_y()
 
-    await self.put_plate_core(
+    await self.core_put_plate(
       x_position=int(center.x * 10),
       x_direction=0,
       y_position=int(center.y * 10),
@@ -3991,47 +3998,15 @@ class STAR(HamiltonLiquidHandler):
       z_position_at_the_command_end=z_position_at_the_command_end,
       return_tool=True
     )
-  
-  async def move_resource_core(self, move: Move):
-    """ Pick up a resource with CoRe gripper tool and move it to a new location. """
 
-    minimum_traverse_height = 284.0
-    await self.pick_up_resource_core(
-      resource=move.resource,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-      offset=move.resource_offset,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height,
-    )
-
-    previous_location = move.resource.get_absolute_location() + move.resource_offset
-    previous_location.z = minimum_traverse_height - move.resource.get_size_z() / 2
-    for location in move.intermediate_locations:
-      await self.move_picked_up_resource_core(
-        location=location,
-        resource=move.resource,
-        minimum_traverse_height_at_beginning_of_a_command=
-          int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.,
-        acceleration_index=4,
-        z_speed= 500)
-      previous_location = location
-    
-    await self.release_picked_up_resource_core(
-      location=move.destination,
-      resource=move.resource,
-      offset=move.resource_offset,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-      minimum_traverse_height_at_beginning_of_a_command=
-        int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.,
-    )
-
-  async def open_core_gripper(self):
+  async def core_open_gripper(self):
     """ Open CoRe gripper tool. """
     command_output = await self.send_command(
       module="C0",
       command="ZO")
     return command_output
 
-  async def get_plate_core(
+  async def core_get_plate(
       self,
       x_position: int = 0,
       x_direction: int = 0,
@@ -4084,7 +4059,7 @@ class STAR(HamiltonLiquidHandler):
 
     return command_output
   
-  async def put_plate_core(
+  async def core_put_plate(
       self,
       x_position: int = 0,
       x_direction: int = 0,
@@ -4130,7 +4105,7 @@ class STAR(HamiltonLiquidHandler):
 
     return command_output
 
-  async def move_plate_to_position_core(
+  async def core_move_plate_to_position(
       self,
       x_position: int = 0,
       x_direction: int = 0,
@@ -5538,7 +5513,7 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="GI")
 
-  async def open_gripper(
+  async def iswap_open_gripper(
     self,
     open_position: int = 1320
   ):
@@ -5557,7 +5532,7 @@ class STAR(HamiltonLiquidHandler):
       go=f"{open_position:04}"
     )
 
-  async def close_gripper(
+  async def iswap_close_gripper(
     self,
     grip_strength: int = 5,
     plate_width: int = 0,
@@ -5610,7 +5585,7 @@ class STAR(HamiltonLiquidHandler):
     self._iswap_parked = True
     return command_output
 
-  async def get_plate(
+  async def iswap_get_plate(
     self,
     x_position: int = 0,
     x_direction: int = 0,
@@ -5703,7 +5678,7 @@ class STAR(HamiltonLiquidHandler):
     self._iswap_parked = False
     return command_output
 
-  async def put_plate(
+  async def iswap_put_plate(
     self,
     x_position: int = 0,
     x_direction: int = 0,

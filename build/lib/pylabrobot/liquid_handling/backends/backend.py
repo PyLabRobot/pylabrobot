@@ -85,32 +85,8 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """ Dispense to all wells in 96 well plate. """
 
   @abstractmethod
-  async def move_resource(self, move: Move):
+  async def move_resource(self, move: Move, use_iswap: bool = False):
     """ Move a resource to a new location. """
-
-  @abstractmethod
-  async def get_core(self):
-    """ Get the CoRe plate gripper from waste block mount. """
-
-  @abstractmethod
-  async def put_core(self):
-    """ Put the CoRe plate gripper at waste block mount. """
-
-  @abstractmethod
-  async def pick_up_resource_core(self, resource: Resource, pickup_distance_from_top: float):
-    """ move a plate with CoRE gripper. """
-
-  @abstractmethod
-  async def release_picked_up_resource_core(self, location: Coordinate, resource: Resource):
-    """ move a plate with CoRE gripper. """
-
-  @abstractmethod
-  async def release_picked_up_resource_core(self, location: Coordinate, resource: Resource, pickup_distance_from_top: float):
-    """ move a plate with CoRE gripper. """
-
-  @abstractmethod
-  async def move_resource_core(self, move: Move):
-    """ move a plate with CoRE gripper. """
 
   def serialize(self):
     """ Serialize the backend so that an equivalent backend can be created by passing the dict
