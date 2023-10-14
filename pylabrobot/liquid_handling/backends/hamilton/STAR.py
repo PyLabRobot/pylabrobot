@@ -2298,6 +2298,8 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 2840,
     z_position_at_the_command_end: int = 2840,
     collision_control_level: int = 0,
+    acceleration_index_high_acc: int = 4, #unused
+    acceleration_index_low_acc: int = 1   #unused
   ):
     """ After a resource is picked up, release it at the specified location. """
 
