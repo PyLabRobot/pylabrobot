@@ -444,7 +444,7 @@ async function handleEvent(event, data) {
           system = SYSTEM_OPENTRONS;
           // Just one channel for Opentrons right now. Should create a UI to select the config.
           mainHead.push(new PipettingChannel("Channel: 1"));
-        } else if (data.resource.type === "HamiltonDeck") {
+        } else if (["HamiltonSTARDeck","HamiltonDeck"].includes(data.resource.type)) {
           system = SYSTEM_HAMILTON;
           for (let i = 0; i < 8; i++) {
             mainHead.push(new PipettingChannel(`Channel: ${i + 1}`));
