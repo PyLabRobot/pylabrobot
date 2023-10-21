@@ -1083,7 +1083,7 @@ class STAR(HamiltonLiquidHandler):
   @property
   def iswap_parked(self) -> bool:
     return self._iswap_parked is True
-  
+
   @property
   def core_parked(self) -> bool:
     return self._core_parked is True
@@ -2336,51 +2336,77 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=collision_control_level,
     )
 
-  async def move_resource(self, move: Move, use_iswap: bool = False):
+  async def move_resource(self, move: Move, use_arm: str = "iswap"):
+    """ Move a resource.
+
+    Args:
+      move: The move to perform.
+      use_arm: Which arm to use. Either "iswap" or "core".
+    """
+
+    if not use_arm in {"iswap", "core"}:
+      raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
+
     minimum_traverse_height = 284.0
 
-    # Method Mapping
-    pickup_method = self.iswap_pick_up_resource if use_iswap else self.core_pick_up_resource
-    move_method = self.iswap_move_picked_up_resource if use_iswap else self.core_move_picked_up_resource
-    release_method = self.iswap_release_picked_up_resource if use_iswap else self.core_release_picked_up_resource
-
-    # Common Arguments
-    common_args = {
-        'resource': move.resource,
-        'pickup_distance_from_top': move.pickup_distance_from_top,
-        'offset': move.resource_offset,
-        'minimum_traverse_height_at_beginning_of_a_command': int(minimum_traverse_height * 10)
-    }
-    # Specific Arguments
-    specific_args = {
-        'iswap': {
-            'grip_direction': move.get_direction,
-            'collision_control_level': 1,
-            'acceleration_index_high_acc': 4,
-            'acceleration_index_low_acc': 1
-        },
-        'core': {
-            'acceleration_index': 4
-        }
-    }
-
-    if use_iswap:
-      await pickup_method(**common_args, **specific_args['iswap'])
+    if use_arm == "iswap":
+      await self.iswap_pick_up_resource(
+        resource=move.resource,
+        grip_direction=move.get_direction,
+        pickup_distance_from_top=move.pickup_distance_from_top,
+        offset=move.resource_offset,
+        minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10))
     else:
-      await pickup_method(**common_args) #core_pick_up_resource does not take in acceleration index
+      await self.core_pick_up_resource(
+        resource=move.resource,
+        pickup_distance_from_top=move.pickup_distance_from_top,
+        offset=move.resource_offset,
+        minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10),
+      )
 
     previous_location = move.resource.get_absolute_location() + move.resource_offset
     previous_location.z = minimum_traverse_height - move.resource.get_size_z() / 2
 
     for location in move.intermediate_locations:
-        await move_method(location=location, **common_args, **specific_args['iswap' if use_iswap else 'core'])
-        previous_location = location
+      if use_arm == "iswap":
+        await self.iswap_move_picked_up_resource(
+          location=location,
+          resource=move.resource,
+          grip_direction=move.get_direction,
+          minimum_traverse_height_at_beginning_of_a_command=
+            int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
+          collision_control_level=1,
+          acceleration_index_high_acc=4,
+          acceleration_index_low_acc=1)
+      else:
+        await self.core_move_picked_up_resource(
+          location=location,
+          resource=move.resource,
+          minimum_traverse_height_at_beginning_of_a_command=
+            int(previous_location.z + move.resource.get_size_z() / 2) * 10,
+          acceleration_index=4
+        )
+      previous_location = location
 
-    if use_iswap:
-      await release_method(location=move.destination, **common_args, **specific_args['iswap'])
+    if use_arm == "iswap":
+      await self.iswap_release_picked_up_resource(
+        location=move.destination,
+        resource=move.resource,
+        offset=move.destination_offset,
+        grip_direction=move.put_direction,
+        pickup_distance_from_top=move.pickup_distance_from_top,
+        minimum_traverse_height_at_beginning_of_a_command=
+          int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
+      )
     else:
-      await release_method(location=move.destination, **common_args) #core_release_picked_up_resource does not take in acceleration index
-
+      await self.core_release_picked_up_resource(
+        location=move.destination,
+        resource=move.resource,
+        offset=move.destination_offset,
+        pickup_distance_from_top=move.pickup_distance_from_top,
+        minimum_traverse_height_at_beginning_of_a_command=
+          int(previous_location.z + move.resource.get_size_z() / 2) * 10,
+      )
 
   async def prepare_for_manual_channel_operation(self):
     """ Prepare for manual operation. """
@@ -3867,7 +3893,7 @@ class STAR(HamiltonLiquidHandler):
       )
     self._core_parked = False
     return command_output
-  
+
   async def put_core(self):
     """ Put CoRe gripper tool at wasteblock mount. """
     command_output = await self.send_command(
@@ -3936,7 +3962,7 @@ class STAR(HamiltonLiquidHandler):
       z_speed: int = 500,
   ):
     """ After a ressource is picked up, move it to a new location but don't release it yet.
-    
+
     Args:
       location: Location to move to.
       resource: Resource to move.
@@ -4014,16 +4040,16 @@ class STAR(HamiltonLiquidHandler):
       x_direction: int = 0,
       y_position: int = 0,
       y_gripping_speed: int = 50,
-      z_position: int = 0, 
+      z_position: int = 0,
       z_speed: int = 500,
       open_gripper_position: int = 0,
       plate_width: int = 0,
-      grip_strength: int = 15, 
+      grip_strength: int = 15,
       minimum_traverse_height_at_beginning_of_a_command: int = 2750,
       minimum_z_position_at_the_command_end: int = 2750,
   ):
     """ Get plate with CoRe gripper tool from wasteblock mount. """\
-    
+
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
     assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
@@ -4037,10 +4063,10 @@ class STAR(HamiltonLiquidHandler):
       "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     assert 0 <= minimum_z_position_at_the_command_end <= 3600, \
       "minimum_z_position_at_the_command_end must be between 0 and 3600"
-    
+
     if self.core_parked:
       await self.get_core()
-    
+
     command_output = await self.send_command(
       module="C0",
       command="ZP",
@@ -4058,7 +4084,7 @@ class STAR(HamiltonLiquidHandler):
     )
 
     return command_output
-  
+
   async def core_put_plate(
       self,
       x_position: int = 0,
@@ -4115,7 +4141,7 @@ class STAR(HamiltonLiquidHandler):
       z_speed: int = 500,
       minimum_traverse_height_at_beginning_of_a_command: int = 3600,
   ):
-    
+
     command_output = await self.send_command(
       module="C0",
       command="ZM",
@@ -4129,7 +4155,7 @@ class STAR(HamiltonLiquidHandler):
     )
 
     return command_output
-  
+
   # TODO:(command:ZB)
 
   # -------------- 3.5.6 Adjustment & movement commands --------------

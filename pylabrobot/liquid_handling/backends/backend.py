@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from typing import List, Type, Optional
 
 from pylabrobot.machine import MachineBackend
-from pylabrobot.resources import Resource, Coordinate
+from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   PickupTipRack,
@@ -85,7 +85,7 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """ Dispense to all wells in 96 well plate. """
 
   @abstractmethod
-  async def move_resource(self, move: Move, use_iswap: bool = False):
+  async def move_resource(self, move: Move):
     """ Move a resource to a new location. """
 
   def serialize(self):
