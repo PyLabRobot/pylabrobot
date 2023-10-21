@@ -7,7 +7,7 @@
 
 ## What is PyLabRobot?
 
-PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots and other lab automation equipment.
+PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots and other lab automation equipment. Read [the paper](https://www.cell.com/device/fulltext/S2666-9986(23)00170-9) in Device.
 
 ### Liquid handling robots
 
@@ -95,17 +95,18 @@ If you use PyLabRobot in your research, please cite the following:
 
 ```bibtex
 @article{WIERENGA2023100111,
-	title = {PyLabRobot: An open-source, hardware-agnostic interface for liquid-handling robots and accessories},
-	journal = {Device},
-	volume = {1},
-	number = {4},
-	pages = {100111},
-	year = {2023},
-	issn = {2666-9986},
-	doi = {https://doi.org/10.1016/j.device.2023.100111},
-	url = {https://www.sciencedirect.com/science/article/pii/S2666998623001709},
-	author = {Rick P. Wierenga and Stefan M. Golas and Wilson Ho and Connor W. Coley and Kevin M. Esvelt},
-	keywords = {laboratory automation, open source, standardization, liquid-handling robots},
+  title = {PyLabRobot: An open-source, hardware-agnostic interface for liquid-handling robots and accessories},
+  journal = {Device},
+  volume = {1},
+  number = {4},
+  pages = {100111},
+  year = {2023},
+  issn = {2666-9986},
+  doi = {https://doi.org/10.1016/j.device.2023.100111},
+  url = {https://www.sciencedirect.com/science/article/pii/S2666998623001709},
+  author = {Rick P. Wierenga and Stefan M. Golas and Wilson Ho and Connor W. Coley and Kevin M. Esvelt},
+  keywords = {laboratory automation, open source, standardization, liquid-handling robots},
+}
 ```
 
 ---
