@@ -15,7 +15,7 @@ try:
 except ImportError:
   HAS_WEBSOCKETS = False
 
-from pylabrobot.liquid_handling.backends import SerializingBackend
+from pylabrobot.liquid_handling.backends.serializing_backend import SerializingBackend
 from pylabrobot.resources import Resource
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 

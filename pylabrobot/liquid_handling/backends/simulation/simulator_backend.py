@@ -7,7 +7,7 @@ import threading
 from typing import List, Optional, Tuple
 import webbrowser
 
-from pylabrobot.liquid_handling.backends import WebSocketBackend
+from pylabrobot.liquid_handling.backends.websocket import WebSocketBackend
 from pylabrobot.liquid_handling.standard import Move
 from pylabrobot.resources import Plate, TipRack, Liquid
 

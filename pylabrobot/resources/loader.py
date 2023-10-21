@@ -5,7 +5,7 @@ import inspect
 import lwdb
 
 import pylabrobot.resources as resources_module
-from pylabrobot.resources import Resource
+from pylabrobot.resources.resource import Resource
 
 
 client = lwdb.Client()

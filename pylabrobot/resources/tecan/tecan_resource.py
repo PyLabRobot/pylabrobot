@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pylabrobot.resources import Resource
+from pylabrobot.resources.resource import Resource
 
 
 class TecanResource(Resource):

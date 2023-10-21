@@ -11,7 +11,7 @@ from flask import Blueprint, Flask, request, jsonify, current_app
 import werkzeug
 
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp, Pickup, Aspiration, Dispense, Drop
 from pylabrobot.resources import Coordinate, Deck, Tip, Liquid
 from pylabrobot.serializer import serialize, deserialize

@@ -4,7 +4,7 @@
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
 
-from pylabrobot.resources import PlateCarrier, Coordinate, create_homogeneous_carrier_sites
+from pylabrobot.resources.carrier import PlateCarrier, Coordinate, create_homogeneous_carrier_sites
 
 
 def PLT_CAR_L4HD(name: str) -> PlateCarrier:

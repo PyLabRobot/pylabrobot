@@ -1,14 +1,12 @@
 from typing import Callable, Optional, cast
 
-from pylabrobot.resources import (
-  Coordinate,
-  Carrier,
-  Deck,
-  Plate,
-  Resource,
-  TipRack,
-)
-from pylabrobot.resources.tecan import TecanResource
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.carrier import Carrier
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.resources.tecan.tecan_resource import TecanResource
 from pylabrobot.resources.tecan.wash import (
   Wash_Station,
   Wash_Station_Cleaner_shallow,

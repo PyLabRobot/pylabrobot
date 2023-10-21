@@ -15,8 +15,9 @@ JSON: TypeAlias = Union[Dict[str, "JSON"], List["JSON"], str, int, float, bool, 
 
 
 def get_plr_class_from_string(klass_type: str):
-  import pylabrobot.resources as resource_module # pylint: disable=import-outside-toplevel
-  import pylabrobot.liquid_handling as lh_module # pylint: disable=import-outside-toplevel
+  # pylint: disable=import-outside-toplevel, cyclic-import
+  import pylabrobot.resources as resource_module
+  import pylabrobot.liquid_handling as lh_module
   for name, obj in inspect.getmembers(resource_module) + inspect.getmembers(lh_module):
     if inspect.isclass(obj) and name == klass_type:
       return obj

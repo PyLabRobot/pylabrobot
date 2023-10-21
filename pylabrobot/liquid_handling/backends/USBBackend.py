@@ -5,7 +5,7 @@ import logging
 import time
 from typing import List, Optional, TYPE_CHECKING
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 
 try:
   import usb.core
