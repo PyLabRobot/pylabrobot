@@ -5,17 +5,14 @@ import inspect
 import logging
 from typing import Callable, Optional, cast
 
-from pylabrobot.resources import (
-  Coordinate,
-  Carrier,
-  Deck,
-  Plate,
-  Resource,
-  TipRack,
-  Trash
-)
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.carrier import Carrier
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.resources.trash import Trash
 import pylabrobot.utils.file_parsing as file_parser
-import pylabrobot.resources as resources_module
 
 
 logger = logging.getLogger(__name__)
@@ -175,6 +172,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       >>> from pylabrobot.resources.hamilton import HamiltonDeck
       >>> deck = HamiltonDeck.load_from_lay_file("deck.lay")
     """
+
+    # pylint: disable=import-outside-toplevel, cyclic-import
+    import pylabrobot.resources as resources_module
 
     c = None
     with open(fn, "r", encoding="ISO-8859-1") as f:

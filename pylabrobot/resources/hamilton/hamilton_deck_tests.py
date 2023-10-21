@@ -2,20 +2,13 @@ import textwrap
 from typing import cast
 import unittest
 
-from pylabrobot.resources import (
-  Coordinate,
-  ItemizedResource,
-  TipCarrier,
-  PlateCarrier,
-  Resource,
-  STF_L,
-  HTF_L,
-  TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00,
-  Cos_96_DW_1mL,
-  Cos_96_DW_500ul,
-)
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.itemized_resource import ItemizedResource
+from pylabrobot.resources.carrier import TipCarrier, PlateCarrier
+from pylabrobot.resources.corning_costar import Cos_96_DW_1mL, Cos_96_DW_500ul
 from pylabrobot.resources.hamilton import HamiltonSTARDeck, STARLetDeck
+from pylabrobot.resources.ml_star import STF_L, HTF_L, TIP_CAR_480_A00, PLT_CAR_L5AC_A00
+from pylabrobot.resources.resource import Resource
 
 
 class HamiltonDeckTests(unittest.TestCase):

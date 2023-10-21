@@ -5,12 +5,9 @@
 # pylint: disable=line-too-long
 
 from typing import List, Optional
-from pylabrobot.resources import (
-  TipRack,
-  TipSpot,
-  create_equally_spaced
-)
-from pylabrobot.resources.tecan import TecanResource
+from pylabrobot.resources.tip_rack import TipRack, TipSpot
+from pylabrobot.resources.itemized_resource import create_equally_spaced
+from pylabrobot.resources.tecan.tecan_resource import TecanResource
 from .tip_creators import (
   diti_10ul_liha,
   diti_1000ul_liha

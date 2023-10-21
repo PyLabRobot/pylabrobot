@@ -1,4 +1,4 @@
-from pylabrobot.resources import Coordinate
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck, _RAILS_WIDTH
 
 

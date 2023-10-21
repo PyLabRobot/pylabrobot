@@ -1,7 +1,10 @@
 import textwrap
 from typing import Optional, Callable, List
 
-from pylabrobot.resources import Coordinate, Deck, Resource, Trash
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.trash import Trash
 
 
 class OTDeck(Deck):

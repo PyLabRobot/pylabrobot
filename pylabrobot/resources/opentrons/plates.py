@@ -1,7 +1,7 @@
 from typing import cast
 
-from pylabrobot.resources import Plate
 from pylabrobot.resources.opentrons.load import load_shared_opentrons_resource
+from pylabrobot.resources.plate import Plate
 
 
 def corning_384_wellplate_112ul_flat(name: str) -> Plate:

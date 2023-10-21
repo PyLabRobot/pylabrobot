@@ -5,13 +5,13 @@
 # pylint: disable=line-too-long
 
 from typing import List, Optional
-from pylabrobot.resources import (
+from pylabrobot.resources.carrier import (
   PlateCarrier,
   CarrierSite,
   Coordinate,
   create_homogeneous_carrier_sites
 )
-from pylabrobot.resources.tecan import TecanResource
+from pylabrobot.resources.tecan.tecan_resource import TecanResource
 
 
 class TecanPlateCarrier(PlateCarrier, TecanResource):
