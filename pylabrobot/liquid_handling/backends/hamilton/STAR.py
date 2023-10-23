@@ -3875,8 +3875,13 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
-  async def get_core(self, p1: int = 7, p2: int = 8):
+  async def get_core(self, p1: int, p2: int):
     """ Get CoRe gripper tool from wasteblock mount. """
+    if not 0 <= p1 < self.num_channels:
+      raise ValueError(f"channel_1 must be between 0 and {self.num_channels - 1}")
+    if not 1 <= p2 <= self.num_channels:
+      raise ValueError(f"channel_2 must be between 1 and {self.num_channels}")
+
     command_output = await self.send_command(
       module="C0",
       command="ZT",
@@ -3921,6 +3926,8 @@ class STAR(HamiltonLiquidHandler):
       grip_strength: int = 15,
       z_speed: int = 500,
       y_gripping_speed: int = 50,
+      channel_1: int = 7,
+      channel_2: int = 8,
   ):
     """ Pick up resource with CoRe gripper tool
 
@@ -3933,11 +3940,18 @@ class STAR(HamiltonLiquidHandler):
         between 0 and 3600. Default 3600.
       grip_strength: Grip strength (0 = weak, 99 = strong). Must be between 0 and 99. Default 15.
       z_speed: Z speed [0.1mm/s]. Must be between 4 and 1287. Default 500.
+      y_gripping_speed: Y gripping speed [0.1mm/s]. Must be between 0 and 3700. Default 50.
+      channel_1: Channel 1. Must be between 0 and self._num_channels - 1. Default 7.
+      channel_2: Channel 2. Must be between 1 and self._num_channels. Default 8.
     """
+
     # Get center of source plate. Also gripping height and plate width.
     center = resource.get_absolute_location() + resource.center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
     grip_width = resource.get_size_y() #grip width is y size of resource
+
+    if self.core_parked:
+      await self.get_core(p1=channel_1, p2=channel_2)
 
     await self.core_get_plate(
       x_position=int(center.x * 10),
@@ -3949,8 +3963,9 @@ class STAR(HamiltonLiquidHandler):
       open_gripper_position=int(grip_width*10) + 30,
       plate_width = int(grip_width*10) - 30,
       grip_strength=grip_strength,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
-      minimum_z_position_at_the_command_end=minimum_z_position_at_the_command_end
+      minimum_traverse_height_at_beginning_of_a_command=\
+        minimum_traverse_height_at_beginning_of_a_command,
+      minimum_z_position_at_the_command_end=minimum_z_position_at_the_command_end,
     )
 
   async def core_move_picked_up_resource(
@@ -4063,9 +4078,6 @@ class STAR(HamiltonLiquidHandler):
       "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
     assert 0 <= minimum_z_position_at_the_command_end <= 3600, \
       "minimum_z_position_at_the_command_end must be between 0 and 3600"
-
-    if self.core_parked:
-      await self.get_core()
 
     command_output = await self.send_command(
       module="C0",

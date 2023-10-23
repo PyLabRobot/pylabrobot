@@ -694,3 +694,16 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     serialized = STAR().serialize()
     deserialized = LiquidHandlerBackend.deserialize(serialized)
     self.assertEqual(deserialized.__class__.__name__, "STAR")
+
+  async def test_move_core(self):
+    await self.lh.move_plate(self.plate, self.plt_car[1], pickup_distance_from_top=13,
+                             use_arm="core")
+    self._assert_command_sent_once("C0ZTid0020xs07975xd0ya1250yb1070pa07pb08tp2350tz2250th2450tt14",
+                                   "xs#####xd#ya####yb####pa##pb##tp####tz####th####tt##")
+    self._assert_command_sent_once("C0ZPid0021xs03475xd0yj1145yv0050zj1876zy0500yo0890yg0830yw15"
+                                   "th2840te2750",
+                                   "xs#####xd#yj####yv####zj####zy####yo####yg####yw##th####te####")
+    self._assert_command_sent_once("C0ZRid0022xs03475xd0yj2105zj1876zi000zy0500yo0890th2840te2750",
+                                   "xs#####xd#yj####zj####zi###zy####yo####th####te####")
+    self._assert_command_sent_once("C0ZSid0023xs07975xd0ya1250yb1070tp2150tz2050th2450te2450",
+                                    "xs#####xd#ya####yb####tp####tz####th####te####")
