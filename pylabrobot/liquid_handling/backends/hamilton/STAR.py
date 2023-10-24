@@ -1225,6 +1225,10 @@ class STAR(HamiltonLiquidHandler):
       await self.park_iswap()
       self._iswap_parked = True
 
+    # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
+    # the core grippers.
+    self._core_parked = True
+
   # ============== LiquidHandlerBackend methods ==============
 
   @need_iswap_parked
