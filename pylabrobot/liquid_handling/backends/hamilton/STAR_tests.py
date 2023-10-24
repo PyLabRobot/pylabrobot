@@ -184,6 +184,7 @@ class STARCommandCatcher(STAR):
     self._num_channels = 8
     self.iswap_installed = True
     self.core96_head_installed = True
+    self._core_parked = True
 
   async def send_command(self, module, command, tip_pattern=None, fmt="", read_timeout=0,
     write_timeout=0, **kwargs):
