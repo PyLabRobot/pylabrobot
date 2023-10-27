@@ -1059,6 +1059,7 @@ class STAR(HamiltonLiquidHandler):
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
+    self._core_parked: Optional[bool] = None
 
   @property
   def num_channels(self) -> int:
@@ -1082,6 +1083,10 @@ class STAR(HamiltonLiquidHandler):
   @property
   def iswap_parked(self) -> bool:
     return self._iswap_parked is True
+
+  @property
+  def core_parked(self) -> bool:
+    return self._core_parked is True
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """ Get the id from a firmware response. """
@@ -1219,6 +1224,10 @@ class STAR(HamiltonLiquidHandler):
 
       await self.park_iswap()
       self._iswap_parked = True
+
+    # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
+    # the core grippers.
+    self._core_parked = True
 
   # ============== LiquidHandlerBackend methods ==============
 
@@ -2191,7 +2200,7 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
-  async def pick_up_resource(
+  async def iswap_pick_up_resource(
     self,
     resource: Resource,
     grip_direction: GripDirection,
@@ -2221,7 +2230,7 @@ class STAR(HamiltonLiquidHandler):
     #   GripDirection.LEFT: resource.get_size_y(),
     # }[grip_direction]
 
-    await self.get_plate(
+    await self.iswap_get_plate(
       x_position=int(center.x * 10),
       x_direction=0,
       y_position=int(center.y * 10),
@@ -2247,7 +2256,7 @@ class STAR(HamiltonLiquidHandler):
       fold_up_sequence_at_the_end_of_process=fold_up_sequence_at_the_end_of_process
     )
 
-  async def move_picked_up_resource(
+  async def iswap_move_picked_up_resource(
     self,
     location: Coordinate,
     resource: Resource,
@@ -2283,7 +2292,7 @@ class STAR(HamiltonLiquidHandler):
       acceleration_index_low_acc=acceleration_index_low_acc
     )
 
-  async def release_picked_up_resource(
+  async def iswap_release_picked_up_resource(
     self,
     location: Coordinate,
     resource: Resource,
@@ -2293,6 +2302,8 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 2840,
     z_position_at_the_command_end: int = 2840,
     collision_control_level: int = 0,
+    acceleration_index_high_acc: int = 4, #unused
+    acceleration_index_low_acc: int = 1   #unused
   ):
     """ After a resource is picked up, release it at the specified location. """
 
@@ -2309,7 +2320,7 @@ class STAR(HamiltonLiquidHandler):
     #   GripDirection.LEFT: resource.get_size_y(),
     # }[grip_direction]
 
-    await self.put_plate(
+    await self.iswap_put_plate(
       x_position=int(center.x * 10),
       x_direction=0,
       y_position=int(center.y * 10),
@@ -2329,44 +2340,77 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=collision_control_level,
     )
 
-  async def move_resource(self, move: Move):
-    """ Pick up a resource and move it to a new location.
+  async def move_resource(self, move: Move, use_arm: str = "iswap"):
+    """ Move a resource.
 
-    Note: this looks like an LH level method, but I am not sure if other robots support such modular
-    control over the moves.
+    Args:
+      move: The move to perform.
+      use_arm: Which arm to use. Either "iswap" or "core".
     """
 
+    if not use_arm in {"iswap", "core"}:
+      raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
+
     minimum_traverse_height = 284.0
-    await self.pick_up_resource(
-      resource=move.resource,
-      grip_direction=move.get_direction,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-      offset=move.resource_offset,
-      minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10))
+
+    if use_arm == "iswap":
+      await self.iswap_pick_up_resource(
+        resource=move.resource,
+        grip_direction=move.get_direction,
+        pickup_distance_from_top=move.pickup_distance_from_top,
+        offset=move.resource_offset,
+        minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10))
+    else:
+      await self.core_pick_up_resource(
+        resource=move.resource,
+        pickup_distance_from_top=move.pickup_distance_from_top,
+        offset=move.resource_offset,
+        minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10),
+      )
 
     previous_location = move.resource.get_absolute_location() + move.resource_offset
     previous_location.z = minimum_traverse_height - move.resource.get_size_z() / 2
+
     for location in move.intermediate_locations:
-      await self.move_picked_up_resource(
-        location=location,
-        resource=move.resource,
-        grip_direction=move.get_direction,
-        minimum_traverse_height_at_beginning_of_a_command=
-          int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
-        collision_control_level=1,
-        acceleration_index_high_acc=4,
-        acceleration_index_low_acc=1)
+      if use_arm == "iswap":
+        await self.iswap_move_picked_up_resource(
+          location=location,
+          resource=move.resource,
+          grip_direction=move.get_direction,
+          minimum_traverse_height_at_beginning_of_a_command=
+            int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
+          collision_control_level=1,
+          acceleration_index_high_acc=4,
+          acceleration_index_low_acc=1)
+      else:
+        await self.core_move_picked_up_resource(
+          location=location,
+          resource=move.resource,
+          minimum_traverse_height_at_beginning_of_a_command=
+            int(previous_location.z + move.resource.get_size_z() / 2) * 10,
+          acceleration_index=4
+        )
       previous_location = location
 
-    await self.release_picked_up_resource(
-      location=move.destination,
-      resource=move.resource,
-      offset=move.destination_offset,
-      grip_direction=move.put_direction,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-      minimum_traverse_height_at_beginning_of_a_command=
-        int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
-    )
+    if use_arm == "iswap":
+      await self.iswap_release_picked_up_resource(
+        location=move.destination,
+        resource=move.resource,
+        offset=move.destination_offset,
+        grip_direction=move.put_direction,
+        pickup_distance_from_top=move.pickup_distance_from_top,
+        minimum_traverse_height_at_beginning_of_a_command=
+          int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
+      )
+    else:
+      await self.core_release_picked_up_resource(
+        location=move.destination,
+        resource=move.resource,
+        offset=move.destination_offset,
+        pickup_distance_from_top=move.pickup_distance_from_top,
+        minimum_traverse_height_at_beginning_of_a_command=
+          int(previous_location.z + move.resource.get_size_z() / 2) * 10,
+      )
 
   async def prepare_for_manual_channel_operation(self):
     """ Prepare for manual operation. """
@@ -3835,13 +3879,299 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
-  # TODO:(command) All CoRe gripper commands
-  # TODO:(command:ZT)
-  # TODO:(command:ZS)
-  # TODO:(command:ZP)
-  # TODO:(command:ZR)
-  # TODO:(command:ZM)
-  # TODO:(command:ZO)
+  async def get_core(self, p1: int, p2: int):
+    """ Get CoRe gripper tool from wasteblock mount. """
+    if not 0 <= p1 < self.num_channels:
+      raise ValueError(f"channel_1 must be between 0 and {self.num_channels - 1}")
+    if not 1 <= p2 <= self.num_channels:
+      raise ValueError(f"channel_2 must be between 1 and {self.num_channels}")
+
+    command_output = await self.send_command(
+      module="C0",
+      command="ZT",
+      xs="07975",
+      xd="0",
+      ya="1250",
+      yb="1070",
+      pa=f"{p1:02}",
+      pb=f"{p2:02}",
+      tp="2350",
+      tz="2250",
+      th="2450",
+      tt="14"
+      )
+    self._core_parked = False
+    return command_output
+
+  async def put_core(self):
+    """ Put CoRe gripper tool at wasteblock mount. """
+    command_output = await self.send_command(
+      module="C0",
+      command="ZS",
+      xs="07975",
+      xd="0",
+      ya="1250",
+      yb="1070",
+      tp="2150",
+      tz="2050",
+      th="2450",
+      te="2450"
+      )
+    self._core_parked = True
+    return command_output
+
+  async def core_pick_up_resource(
+      self,
+      resource: Resource,
+      pickup_distance_from_top: float,
+      offset: Coordinate = Coordinate.zero(),
+      minimum_traverse_height_at_beginning_of_a_command: int = 2750,
+      minimum_z_position_at_the_command_end: int = 2750,
+      grip_strength: int = 15,
+      z_speed: int = 500,
+      y_gripping_speed: int = 50,
+      channel_1: int = 7,
+      channel_2: int = 8,
+  ):
+    """ Pick up resource with CoRe gripper tool
+
+    Args:
+      resource: Resource to pick up.
+      offset: Offset from resource position in mm.
+      pickup_distance_from_top: Distance from top of resource to pick up.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
+        command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
+        between 0 and 3600. Default 3600.
+      grip_strength: Grip strength (0 = weak, 99 = strong). Must be between 0 and 99. Default 15.
+      z_speed: Z speed [0.1mm/s]. Must be between 4 and 1287. Default 500.
+      y_gripping_speed: Y gripping speed [0.1mm/s]. Must be between 0 and 3700. Default 50.
+      channel_1: Channel 1. Must be between 0 and self._num_channels - 1. Default 7.
+      channel_2: Channel 2. Must be between 1 and self._num_channels. Default 8.
+    """
+
+    # Get center of source plate. Also gripping height and plate width.
+    center = resource.get_absolute_location() + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    grip_width = resource.get_size_y() #grip width is y size of resource
+
+    if self.core_parked:
+      await self.get_core(p1=channel_1, p2=channel_2)
+
+    await self.core_get_plate(
+      x_position=int(center.x * 10),
+      x_direction=0,
+      y_position=int(center.y * 10),
+      y_gripping_speed=y_gripping_speed,
+      z_position=int(grip_height * 10),
+      z_speed=z_speed,
+      open_gripper_position=int(grip_width*10) + 30,
+      plate_width = int(grip_width*10) - 30,
+      grip_strength=grip_strength,
+      minimum_traverse_height_at_beginning_of_a_command=\
+        minimum_traverse_height_at_beginning_of_a_command,
+      minimum_z_position_at_the_command_end=minimum_z_position_at_the_command_end,
+    )
+
+  async def core_move_picked_up_resource(
+      self,
+      location: Coordinate,
+      resource: Resource,
+      minimum_traverse_height_at_beginning_of_a_command: int = 2840,
+      acceleration_index: int = 4,
+      z_speed: int = 500,
+  ):
+    """ After a ressource is picked up, move it to a new location but don't release it yet.
+
+    Args:
+      location: Location to move to.
+      resource: Resource to move.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
+        command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
+        between 0 and 3600. Default 3600.
+      acceleration_index: Acceleration index (0 = 0.1 mm/s2, 1 = 0.2 mm/s2, 2 = 0.5 mm/s2,
+        3 = 1.0 mm/s2, 4 = 2.0 mm/s2, 5 = 5.0 mm/s2, 6 = 10.0 mm/s2, 7 = 20.0 mm/s2). Must be
+        between 0 and 7. Default 4.
+      z_speed: Z speed [0.1mm/s]. Must be between 3 and 1600. Default 500.
+      """
+
+    center = location + resource.center()
+
+    await self.core_move_plate_to_position(
+      x_position=int(center.x * 10),
+      x_direction=0,
+      x_acceleration_index=acceleration_index,
+      y_position=int(center.y * 10),
+      z_position=int(center.z * 10),
+      z_speed=z_speed,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+    )
+
+  async def core_release_picked_up_resource(
+      self,
+      location: Coordinate,
+      resource: Resource,
+      pickup_distance_from_top: float,
+      offset: Coordinate = Coordinate.zero(),
+      minimum_traverse_height_at_beginning_of_a_command: int = 2750,
+      z_position_at_the_command_end: int = 2750,
+  ):
+    """ Place resource with CoRe gripper tool
+
+    Args:
+      resource: Location to place.
+      pickup_distance_from_top: Distance from top of resource to place.
+      offset: Offset from resource position in mm.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
+        command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
+        between 0 and 3600. Default 3600.
+      z_position_at_the_command_end: Minimum z-Position at end of a command [0.1 mm] (refers to all
+        channels independent of tip pattern parameter 'tm'). Must be between 0 and 3600.  Default
+        3600.
+    """
+    # Get center of destination location. Also gripping height and plate width.
+    center = location + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    grip_width = resource.get_size_y()
+
+    await self.core_put_plate(
+      x_position=int(center.x * 10),
+      x_direction=0,
+      y_position=int(center.y * 10),
+      z_position=int(grip_height * 10),
+      z_press_on_distance=0,
+      z_speed=500,
+      open_gripper_position=int(grip_width*10) + 30,
+      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+      z_position_at_the_command_end=z_position_at_the_command_end,
+      return_tool=True
+    )
+
+  async def core_open_gripper(self):
+    """ Open CoRe gripper tool. """
+    command_output = await self.send_command(
+      module="C0",
+      command="ZO")
+    return command_output
+
+  async def core_get_plate(
+      self,
+      x_position: int = 0,
+      x_direction: int = 0,
+      y_position: int = 0,
+      y_gripping_speed: int = 50,
+      z_position: int = 0,
+      z_speed: int = 500,
+      open_gripper_position: int = 0,
+      plate_width: int = 0,
+      grip_strength: int = 15,
+      minimum_traverse_height_at_beginning_of_a_command: int = 2750,
+      minimum_z_position_at_the_command_end: int = 2750,
+  ):
+    """ Get plate with CoRe gripper tool from wasteblock mount. """\
+
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
+    assert 0 <= y_gripping_speed <= 3700, "y_gripping_speed must be between 0 and 3700"
+    assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
+    assert 0 <= z_speed <= 1287, "z_speed must be between 0 and 1287"
+    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
+    assert 0 <= plate_width <= 9999, "plate_width must be between 0 and 9999"
+    assert 0 <= grip_strength <= 99, "grip_strength must be between 0 and 99"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= minimum_z_position_at_the_command_end <= 3600, \
+      "minimum_z_position_at_the_command_end must be between 0 and 3600"
+
+    command_output = await self.send_command(
+      module="C0",
+      command="ZP",
+      xs=f"{x_position:05}",
+      xd=x_direction,
+      yj=f"{y_position:04}",
+      yv=f"{y_gripping_speed:04}",
+      zj=f"{z_position:04}",
+      zy=f"{z_speed:04}",
+      yo=f"{open_gripper_position:04}",
+      yg=f"{plate_width:04}",
+      yw=f"{grip_strength:02}",
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      te=f"{minimum_z_position_at_the_command_end:04}"
+    )
+
+    return command_output
+
+  async def core_put_plate(
+      self,
+      x_position: int = 0,
+      x_direction: int = 0,
+      y_position: int = 0,
+      z_position: int = 0,
+      z_press_on_distance: int = 0,
+      z_speed: int = 500,
+      open_gripper_position: int = 0,
+      minimum_traverse_height_at_beginning_of_a_command: int = 2750,
+      z_position_at_the_command_end: int = 2750,
+      return_tool: bool = True
+  ):
+    """ Put plate with CoRe gripper tool and return to wasteblock mount. """
+
+    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
+    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
+    assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
+    assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
+    assert 0 <= z_press_on_distance <= 50, "z_press_on_distance must be between 0 and 999"
+    assert 0 <= z_speed <= 1600, "z_speed must be between 0 and 1600"
+    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
+    assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
+      "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
+    assert 0 <= z_position_at_the_command_end <= 3600, \
+      "z_position_at_the_command_end must be between 0 and 3600"
+
+    command_output = await self.send_command(
+      module="C0",
+      command="ZR",
+      xs=f"{x_position:05}",
+      xd=x_direction,
+      yj=f"{y_position:04}",
+      zj=f"{z_position:04}",
+      zi=f"{z_press_on_distance:03}",
+      zy=f"{z_speed:04}",
+      yo=f"{open_gripper_position:04}",
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
+      te=f"{z_position_at_the_command_end:04}"
+    )
+
+    if return_tool:
+      await self.put_core()
+
+    return command_output
+
+  async def core_move_plate_to_position(
+      self,
+      x_position: int = 0,
+      x_direction: int = 0,
+      x_acceleration_index: int = 4,
+      y_position: int = 0,
+      z_position: int = 0,
+      z_speed: int = 500,
+      minimum_traverse_height_at_beginning_of_a_command: int = 3600,
+  ):
+
+    command_output = await self.send_command(
+      module="C0",
+      command="ZM",
+      xs=f"{x_position:05}",
+      xd=x_direction,
+      xg=x_acceleration_index,
+      yj=f"{y_position:04}",
+      zj=f"{z_position:04}",
+      zy=f"{z_speed:04}",
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}"
+    )
+
+    return command_output
+
   # TODO:(command:ZB)
 
   # -------------- 3.5.6 Adjustment & movement commands --------------
@@ -5225,7 +5555,7 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="GI")
 
-  async def open_gripper(
+  async def iswap_open_gripper(
     self,
     open_position: int = 1320
   ):
@@ -5244,7 +5574,7 @@ class STAR(HamiltonLiquidHandler):
       go=f"{open_position:04}"
     )
 
-  async def close_gripper(
+  async def iswap_close_gripper(
     self,
     grip_strength: int = 5,
     plate_width: int = 0,
@@ -5297,7 +5627,7 @@ class STAR(HamiltonLiquidHandler):
     self._iswap_parked = True
     return command_output
 
-  async def get_plate(
+  async def iswap_get_plate(
     self,
     x_position: int = 0,
     x_direction: int = 0,
@@ -5390,7 +5720,7 @@ class STAR(HamiltonLiquidHandler):
     self._iswap_parked = False
     return command_output
 
-  async def put_plate(
+  async def iswap_put_plate(
     self,
     x_position: int = 0,
     x_direction: int = 0,
