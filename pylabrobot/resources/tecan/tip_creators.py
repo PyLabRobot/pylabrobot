@@ -1,6 +1,6 @@
 import enum
 
-from pylabrobot.resources import Tip
+from pylabrobot.resources.tip import Tip
 
 
 class TipType(enum.Enum):

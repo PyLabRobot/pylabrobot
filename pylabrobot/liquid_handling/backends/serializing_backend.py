@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 import sys
 from typing import Any, Dict, Optional, List
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,

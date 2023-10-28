@@ -1,6 +1,6 @@
 from typing import Dict, Optional, List, cast
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.resources import (
   Coordinate,
