@@ -56,7 +56,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
   """ Tests for liquid handling ops. """
 
   @responses.activate
-  async def asyncSetUp(self) -> None:
+  async def asyncSetUp(self) -> None: # type: ignore
     responses.add(
       responses.POST,
       "http://localhost:8080/events/setup",
@@ -85,7 +85,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
     await self.lh.setup()
 
   @responses.activate
-  async def asyncTearDown(self) -> None:
+  async def asyncTearDown(self) -> None: # type: ignore
     await super().asyncTearDown()
     responses.add(
       responses.POST,
