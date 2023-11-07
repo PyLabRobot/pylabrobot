@@ -2302,8 +2302,6 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 2840,
     z_position_at_the_command_end: int = 2840,
     collision_control_level: int = 0,
-    acceleration_index_high_acc: int = 4, #unused
-    acceleration_index_low_acc: int = 1   #unused
   ):
     """ After a resource is picked up, release it at the specified location. """
 
@@ -4003,7 +4001,8 @@ class STAR(HamiltonLiquidHandler):
       y_position=int(center.y * 10),
       z_position=int(center.z * 10),
       z_speed=z_speed,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+      minimum_traverse_height_at_beginning_of_a_command=
+        minimum_traverse_height_at_beginning_of_a_command,
     )
 
   async def core_release_picked_up_resource(
@@ -4041,7 +4040,8 @@ class STAR(HamiltonLiquidHandler):
       z_press_on_distance=0,
       z_speed=500,
       open_gripper_position=int(grip_width*10) + 30,
-      minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+      minimum_traverse_height_at_beginning_of_a_command=
+        minimum_traverse_height_at_beginning_of_a_command,
       z_position_at_the_command_end=z_position_at_the_command_end,
       return_tool=True
     )
@@ -4157,6 +4157,7 @@ class STAR(HamiltonLiquidHandler):
       z_speed: int = 500,
       minimum_traverse_height_at_beginning_of_a_command: int = 3600,
   ):
+    """ Move a plate with CoRe gripper tool. """
 
     command_output = await self.send_command(
       module="C0",
