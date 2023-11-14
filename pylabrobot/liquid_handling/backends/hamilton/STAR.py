@@ -42,7 +42,7 @@ from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMe
 T = TypeVar("T")
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylabrobot")
 
 
 def need_iswap_parked(method: Callable):

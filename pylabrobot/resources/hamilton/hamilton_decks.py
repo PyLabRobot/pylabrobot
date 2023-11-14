@@ -15,7 +15,7 @@ from pylabrobot.resources.trash import Trash
 import pylabrobot.utils.file_parsing as file_parser
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylabrobot")
 
 
 _RAILS_WIDTH = 22.5 # space between rails (mm)

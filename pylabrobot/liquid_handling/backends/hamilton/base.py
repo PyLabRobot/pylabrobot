@@ -13,7 +13,7 @@ from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 T = TypeVar("T")
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylabrobot")
 
 
 class HamiltonFirmwareError(Exception, metaclass=ABCMeta):
