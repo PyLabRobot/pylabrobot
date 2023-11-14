@@ -12,7 +12,7 @@ from pylabrobot.liquid_handling.standard import Move
 from pylabrobot.resources import Plate, TipRack, Liquid
 
 
-logger = logging.getLogger(__name__) # TODO: get from somewhere else?
+logger = logging.getLogger("pylabrobot")
 
 
 class SimulatorBackend(WebSocketBackend):

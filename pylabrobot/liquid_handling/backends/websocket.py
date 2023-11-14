@@ -23,7 +23,7 @@ if TYPE_CHECKING:
   import websockets.legacy
 
 
-logger = logging.getLogger(__name__) # TODO: get from somewhere else?
+logger = logging.getLogger("pylabrobot")
 
 
 class WebSocketBackend(SerializingBackend):

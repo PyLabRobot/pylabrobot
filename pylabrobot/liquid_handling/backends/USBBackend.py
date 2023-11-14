@@ -19,7 +19,7 @@ if TYPE_CHECKING:
   import usb.core
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylabrobot")
 
 
 class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
