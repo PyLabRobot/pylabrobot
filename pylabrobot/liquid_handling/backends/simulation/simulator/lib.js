@@ -797,7 +797,7 @@ function classForResourceType(type) {
   switch (type) {
     case "Deck":
       return Deck;
-    case "HamiltonDeck":
+    case ("HamiltonDeck", "HamiltonSTARDeck"):
       return HamiltonDeck;
     case "Trash":
       return Trash;
