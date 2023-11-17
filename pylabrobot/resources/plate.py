@@ -194,3 +194,15 @@ class Plate(ItemizedResource[Well]):
     for i, (liquid, volume) in enumerate(liquids):
       well = self.get_well(i)
       well.tracker.set_liquids([(liquid, volume)]) # type: ignore
+
+  def disable_volume_trackers(self) -> None:
+    """ Disable volume tracking for all wells in the plate. """
+
+    for well in self.get_all_items():
+      well.tracker.disable()
+
+  def enable_volume_trackers(self) -> None:
+    """ Enable volume tracking for all wells in the plate. """
+
+    for well in self.get_all_items():
+      well.tracker.enable()
