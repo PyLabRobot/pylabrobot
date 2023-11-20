@@ -52,16 +52,23 @@ def make_from_file(fn, o):
       EqnOfVol = find_string(f"{i}.EqnOfVol", c2)
       section_max_height = find_float(f"{i}.Max", c2)
       if i == num_segments: # first section from bottom
+        EqnOfVol = EqnOfVol.replace("h", f"min(h, {section_max_height})")
         EqnCode += f"volume = {EqnOfVol}\n"
       else:
         EqnOfVol = EqnOfVol.replace("h", f"(h-{height_so_far})")
-        EqnCode += f"if h < {section_max_height}:\n"
+        EqnCode += f"if h <= {section_max_height}:\n"
         EqnCode += f"  volume += {EqnOfVol}\n"
       height_so_far += section_max_height
     EqnCode += f"if h > {height_so_far}:\n"
     EqnCode +=  f"  raise ValueError(f\"Height {{h}} is too large for {cname}\")\n"
     EqnCode += "return volume"
     dz = find_float("BaseMM", c2)
+
+    well_bottom_type_code = find_int(f"{num_segments}.Shape", c2)
+    well_bottom_type = {
+      0: "WellBottomType.FLAT",
+      4: "WellBottomType.U",
+    }.get(well_bottom_type_code, "WellBottomType.UNKNOWN")
 
     well_size_z = find_float("Depth", c2)
 
@@ -88,6 +95,7 @@ def make_from_file(fn, o):
       well_size_x=well_size_x,
       well_size_y=well_size_y,
       well_size_z=well_size_z,
+      well_bottom_type=well_bottom_type,
       EqnCode=EqnCode,
       lid_height=10,
       model=cname
