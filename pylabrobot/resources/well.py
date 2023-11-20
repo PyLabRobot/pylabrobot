@@ -1,7 +1,17 @@
+import enum
 import math
-from typing import Optional
+from typing import Callable, Optional
 
 from pylabrobot.resources.container import Container
+
+
+class WellBottomType(enum.Enum):
+  """ Enum for the type of bottom of a well. """
+
+  FLAT = enum.auto()
+  U = enum.auto()
+  V = enum.auto()
+  UNKNOWN = enum.auto()
 
 
 class Well(Container):
@@ -11,9 +21,10 @@ class Well(Container):
   :class:`pylabrobot.resources.Plate` class.
   """
 
-  def __init__(self, name: str, size_x: float, size_y: float, size_z: float = 9,
-    category: str = "well", max_volume: Optional[float] = None,
-    model: Optional[str] = None):
+  def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
+    bottom_type: WellBottomType=WellBottomType.UNKNOWN, category: str = "well",
+    max_volume: Optional[float] = None, model: Optional[str] = None,
+    compute_volume_from_height: Optional[Callable[[float], float]] = None):
     """ Create a new well.
 
     Args:
@@ -21,14 +32,47 @@ class Well(Container):
       size_x: Size of the well in the x direction.
       size_y: Size of the well in the y direction.
       size_z: Size of the well in the z direction.
+      bottom_type: Type of the bottom of the well.
       category: Category of the well.
       max_volume: Maximum volume of the well. If not specified, the well will be seen as a cylinder
         and the max volume will be computed based on size_x, size_y, and size_z.
+      compute_volume_from_height: function to compute the volume from the height relative to the
+        bottom
     """
 
     if max_volume is None:
-      assert size_x == size_y, "Well max volume computation currently assumes circular wells"
-      max_volume = math.pi * (size_x / 2) ** 2 * size_z
+      if compute_volume_from_height is None:
+        assert size_x == size_y, "Well max volume computation currently assumes circular wells"
+        max_volume = math.pi * (size_x / 2) ** 2 * size_z
+      else:
+        max_volume = compute_volume_from_height(size_z)
 
     super().__init__(name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       max_volume=max_volume, model=model)
+    self.bottom_type = bottom_type
+    self._compute_volume_from_height = compute_volume_from_height
+
+  def serialize(self):
+    return {
+      **super().serialize(),
+      "bottom_type": self.bottom_type.value,
+    }
+
+  def compute_volume_from_height(self, height: float) -> float:
+    """ Compute the volume of liquid in a well from the height of the liquid relative to the bottom
+    of the well.
+
+    Args:
+      height: Height of the liquid in the well relative to the bottom.
+
+    Returns:
+      The volume of liquid in the well.
+
+    Raises:
+      NotImplementedError: If the plate does not have a volume computation function.
+    """
+
+    if self._compute_volume_from_height is None:
+      raise NotImplementedError("compute_volume_from_height not implemented.")
+
+    return self._compute_volume_from_height(height)

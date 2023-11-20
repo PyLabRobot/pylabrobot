@@ -49,7 +49,6 @@ class Plate(ItemizedResource[Well]):
     category: str = "plate",
     lid_height: float = 0,
     with_lid: bool = False,
-    compute_volume_from_height: Optional[Callable[[float], float]] = None,
     model: Optional[str] = None
   ):
     """ Initialize a Plate resource.
@@ -77,31 +76,12 @@ class Plate(ItemizedResource[Well]):
       num_items_y=num_items_y, category=category, model=model)
     self.lid: Optional[Lid] = None
     self.lid_height = lid_height
-    self._compute_volume_from_height = compute_volume_from_height
 
     if with_lid:
       assert lid_height > 0, "Lid height must be greater than 0 if with_lid == True."
 
       lid = Lid(name + "_lid", size_x=size_x, size_y=size_y, size_z=lid_height)
       self.assign_child_resource(lid, location=Coordinate(0, 0, self.get_size_z() - lid_height))
-
-  def compute_volume_from_height(self, height: float) -> float:
-    """ Compute the volume of liquid in a well from the height of the liquid.
-
-    Args:
-      height: Height of the liquid in the well.
-
-    Returns:
-      The volume of liquid in the well.
-
-    Raises:
-      NotImplementedError: If the plate does not have a volume computation function.
-    """
-
-    if self._compute_volume_from_height is None:
-      raise NotImplementedError("compute_volume_from_height not implemented.")
-
-    return self._compute_volume_from_height(height)
 
   def assign_child_resource(
     self,
