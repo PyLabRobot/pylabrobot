@@ -191,10 +191,10 @@ async def aspirate():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquid = cast(Liquid, deserialize(sc["liquid"]))
+      liquids = cast(List[Liquid], deserialize(sc["liquids"]))
       aspirations.append(Aspiration(resource=resource, tip=tip, offset=offset, volume=volume,
         flow_rate=flow_rate, liquid_height=liquid_height, blow_out_air_volume=blow_out_air_volume,
-        liquid=liquid))
+        liquids=liquids))
     use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
@@ -228,10 +228,10 @@ async def dispense():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquid = cast(Liquid, deserialize(sc["liquid"]))
+      liquids = cast(Type[Liquid], deserialize(sc["liquids"]))
       dispenses.append(Dispense(resource=resource, tip=tip, offset=offset, volume=volume,
         flow_rate=flow_rate, liquid_height=liquid_height, blow_out_air_volume=blow_out_air_volume,
-        liquid=liquid))
+        liquids=liquids))
     use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code

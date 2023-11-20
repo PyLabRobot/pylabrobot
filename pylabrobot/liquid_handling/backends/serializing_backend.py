@@ -87,7 +87,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "flow_rate": serialize(op.flow_rate),
       "liquid_height": serialize(op.liquid_height),
       "blow_out_air_volume": serialize(op.blow_out_air_volume),
-      "liquid": serialize(op.liquid),
+      "liquids": serialize(op.liquids),
     } for op in ops]
     await self.send_command(
       command="aspirate",
@@ -102,7 +102,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "flow_rate": serialize(op.flow_rate),
       "liquid_height": serialize(op.liquid_height),
       "blow_out_air_volume": serialize(op.blow_out_air_volume),
-      "liquid": serialize(op.liquid),
+      "liquids": serialize(op.liquids),
     } for op in ops]
     await self.send_command(
       command="dispense",
@@ -124,7 +124,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "flow_rate": serialize(aspiration.flow_rate),
       "liquid_height": serialize(aspiration.liquid_height),
       "blow_out_air_volume": serialize(aspiration.blow_out_air_volume),
-      "liquid": serialize(aspiration.liquid),
+      "liquids": serialize(aspiration.liquids),
       "tips": [serialize(tip) for tip in aspiration.tips],
     }})
 
@@ -136,7 +136,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "flow_rate": serialize(dispense.flow_rate),
       "liquid_height": serialize(dispense.liquid_height),
       "blow_out_air_volume": serialize(dispense.blow_out_air_volume),
-      "liquid": serialize(dispense.liquid),
+      "liquids": serialize(dispense.liquids),
       "tips": [serialize(tip) for tip in dispense.tips],
     }})
 

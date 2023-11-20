@@ -144,6 +144,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
       status=200,
     )
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
+    self.lh.head[0].get_tip().tracker.add_liquid(None, 10)
     with no_volume_tracking():
       await self.lh.dispense(self.plate["A1"], 10)
 
