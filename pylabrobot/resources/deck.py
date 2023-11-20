@@ -145,8 +145,8 @@ class Deck(Resource):
   def save_state_to_file(self, filename: str) -> None:
     """ Save the state of the deck to a file. The state includes volumes and operations in wells.
 
-    Note: this does not include the resources on the deck. To safe the deck layout instead, use
-    :meth:`pylabrobot.resources.Resource.save`.
+    Note: this does not save the layout of resources on the deck. To save the deck layout instead,
+    use :meth:`pylabrobot.resources.Resource.save`.
     """
 
     state: Dict[str, Any] = {}
