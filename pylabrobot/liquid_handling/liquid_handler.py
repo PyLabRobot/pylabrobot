@@ -106,6 +106,19 @@ class LiquidHandler(MachineFrontend):
     with open(filename, "w", encoding="utf-8") as f:
       f.write(json.dumps(state, indent=2))
 
+  def load_state(self, filename: str):
+    """ Load the liquid handler state from a file. """
+
+    with open(filename, "r", encoding="utf-8") as f:
+      state = json.load(f)
+    head_state = state["head_state"]
+    deck_state = state["deck_state"]
+
+    for channel_id, state in head_state.items():
+      # convert head state keys (channel ids) back to integers.
+      self.head[int(channel_id)].load_state(state)
+    self.deck.load_state(deck_state)
+
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.
 
