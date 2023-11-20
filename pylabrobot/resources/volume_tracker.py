@@ -65,6 +65,8 @@ class VolumeTracker:
       raise TooLittleLiquidError(
         f"Container has too little liquid: {volume}uL > {self.get_used_volume()}uL.")
 
+    # TODO: this has to operate on pending_liquids, not liquids directly.
+
     removed_volume = 0.0
     while removed_volume < volume:
       liquid, liquid_volume = self.liquids.pop()
@@ -86,6 +88,8 @@ class VolumeTracker:
       last_pending_liquid_tuple = self.pending_liquids[-1]
       if last_pending_liquid_tuple[0] == liquid:
         self.pending_liquids[-1] = (liquid, last_pending_liquid_tuple[1] + volume)
+      else:
+        self.pending_liquids.append((liquid, volume))
     else:
       self.pending_liquids.append((liquid, volume))
 
@@ -97,6 +101,25 @@ class VolumeTracker:
     """ Get the free volume of the container. Note that this includes pending operations. """
 
     return self.max_volume - self.get_used_volume()
+
+  def get_liquids(self, top_volume: float) -> List[Tuple[Liquid, float]]:
+    """ Get the liquids in the top `top_volume` uL """
+
+    if top_volume > self.get_used_volume():
+      raise TooLittleLiquidError(f"Tracker only has {self.get_used_volume()}uL")
+
+    liquids = []
+    for liquid, volume in reversed(self.liquids):
+      if top_volume == 0:
+        break
+
+      if volume > top_volume:
+        liquids.append((liquid, top_volume))
+        break
+
+      top_volume -= volume
+      liquids.append((liquid, volume))
+    return liquids
 
   def commit(self) -> None:
     """ Commit the pending operations. """

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import enum
-from typing import List, Optional, Union, TYPE_CHECKING
+from typing import List, Optional, Union, Tuple, TYPE_CHECKING
 
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.coordinate import Coordinate
@@ -57,7 +57,7 @@ class Aspiration:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: float
-  liquid: Optional[Liquid] # TODO: probably make this non-optional
+  liquids: List[Tuple[Optional[Liquid], float]]
 
 
 @dataclass
@@ -71,7 +71,7 @@ class Dispense:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: float
-  liquid: Optional[Liquid] # TODO: probably make this non-optional
+  liquids: List[Tuple[Optional[Liquid], float]]
 
 
 @dataclass
@@ -85,7 +85,7 @@ class AspirationPlate:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: float
-  liquid: Optional[Liquid] # TODO: probably make this non-optional
+  liquids: List[List[Tuple[Optional[Liquid], float]]]
 
 
 @dataclass
@@ -99,7 +99,7 @@ class DispensePlate:
   flow_rate: Optional[float]
   liquid_height: Optional[float]
   blow_out_air_volume: float
-  liquid: Optional[Liquid] # TODO: probably make this non-optional
+  liquids: List[List[Tuple[Optional[Liquid], float]]]
 
 
 class GripDirection(enum.Enum):

@@ -36,6 +36,7 @@ from pylabrobot.resources.errors import (
   NoTipError
 )
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.well import Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
 
 
@@ -1475,7 +1476,7 @@ class STAR(HamiltonLiquidHandler):
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
-        liquid=op.liquid or Liquid.WATER,
+        liquid=op.liquids[-1][0] or Liquid.WATER, # get last liquid in well, first to be aspirated
         jet=False, # for aspiration
         empty=False # for aspiration
       ) for op in ops]
@@ -1490,7 +1491,9 @@ class STAR(HamiltonLiquidHandler):
                     (op.offset.z if op.offset is not None else 0) for op in ops]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 1)
                               for wb, op in zip(well_bottoms, ops)]
-    lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
+    lld_search_heights = [wb + op.resource.get_size_z() + \
+                            (2.7 if isinstance(op.resource, Well) else 5) #?
+                          for wb, op in zip(well_bottoms, ops)]
 
     aspiration_volumes = [int(op.volume * 10) for op in ops]
     lld_search_height = [int(sh * 10) for sh in lld_search_heights]
@@ -1726,7 +1729,7 @@ class STAR(HamiltonLiquidHandler):
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
-        liquid=op.liquid or Liquid.WATER,
+        liquid=op.liquids[-1][0] or Liquid.WATER, # get last liquid in pipette, first to be disp.
         jet=should_jet(op),
         # dispensing all, get_used_volume includes pending
         empty=op.tip.tracker.get_used_volume() == 0
@@ -1739,7 +1742,9 @@ class STAR(HamiltonLiquidHandler):
     well_bottoms = [op.resource.get_absolute_location().z + \
                     (op.offset.z if op.offset is not None else 0) for op in ops]
     liquid_surfaces_no_lld = [ls + (op.liquid_height or 1) for ls, op in zip(well_bottoms, ops)]
-    lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
+    lld_search_heights = [wb + op.resource.get_size_z() + \
+                            (2.7 if isinstance(op.resource, Well) else 5) #?
+                          for wb, op in zip(well_bottoms, ops)]
 
     def dispensing_mode_for_op(op: Dispense) -> int:
       return {
