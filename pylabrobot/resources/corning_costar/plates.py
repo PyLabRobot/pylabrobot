@@ -7,7 +7,12 @@ from pylabrobot.resources.itemized_resource import create_equally_spaced
 
 
 def _compute_volume_from_height_Cos_1536_10ul(h: float):
-  return h*3.6100
+  volume = h*h*(2.9845 - 1.0472*h)
+  if h < 5.75:
+    volume += (h-0.25)*3.6100
+  if h > 6.0:
+    raise ValueError(f"Height {h} is too large for Cos_1536_10ul")
+  return volume
 
 #: Cos_1536_10ul
 def Cos_1536_10ul(name: str, with_lid: bool = False) -> Plate:
@@ -46,7 +51,12 @@ def Cos_1536_10ul_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_384_DW(h: float):
-  return h*10.0800
+  volume = h*h*(4.3982 - 1.0472*h)
+  if h < 24.5:
+    volume += (h-1.0)*10.0800
+  if h > 25.5:
+    raise ValueError(f"Height {h} is too large for Cos_384_DW")
+  return volume
 
 #: Cos_384_DW
 def Cos_384_DW(name: str, with_lid: bool = False) -> Plate:
@@ -85,7 +95,10 @@ def Cos_384_DW_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_384_PCR(h: float):
-  return h*2.8510
+  volume = h*2.8510
+  if h > 9.5:
+    raise ValueError(f"Height {h} is too large for Cos_384_PCR")
+  return volume
 
 #: Cos_384_PCR
 def Cos_384_PCR(name: str, with_lid: bool = False) -> Plate:
@@ -124,7 +137,10 @@ def Cos_384_PCR_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_384_Sq(h: float):
-  return h*12.2500
+  volume = h*12.2500
+  if h > 11.56:
+    raise ValueError(f"Height {h} is too large for Cos_384_Sq")
+  return volume
 
 #: Cos_384_Sq
 def Cos_384_Sq(name: str, with_lid: bool = False) -> Plate:
@@ -163,7 +179,12 @@ def Cos_384_Sq_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_384_Sq_Rd(h: float):
-  return h*10.0800
+  volume = h*h*(4.3982 - 1.0472*h)
+  if h < 11.6:
+    volume += (h-1.0)*10.0800
+  if h > 12.6:
+    raise ValueError(f"Height {h} is too large for Cos_384_Sq_Rd")
+  return volume
 
 #: Cos_384_Sq_Rd
 def Cos_384_Sq_Rd(name: str, with_lid: bool = False) -> Plate:
@@ -202,7 +223,12 @@ def Cos_384_Sq_Rd_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_DW_1mL(h: float):
-  return h*33.1831
+  volume = h*h*(10.2102 - 1.0472*h)
+  if h < 40.0:
+    volume += (h-2.5)*33.1831
+  if h > 42.5:
+    raise ValueError(f"Height {h} is too large for Cos_96_DW_1mL")
+  return volume
 
 #: Cos_96_DW_1mL
 def Cos_96_DW_1mL(name: str, with_lid: bool = False) -> Plate:
@@ -241,7 +267,12 @@ def Cos_96_DW_1mL_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_DW_2mL(h: float):
-  return h*64.0000
+  volume = h*h*(12.5664 - 1.0472*h)
+  if h < 42.0:
+    volume += (h-4.0)*64.0000
+  if h > 46.0:
+    raise ValueError(f"Height {h} is too large for Cos_96_DW_2mL")
+  return volume
 
 #: Cos_96_DW_2mL
 def Cos_96_DW_2mL(name: str, with_lid: bool = False) -> Plate:
@@ -280,7 +311,12 @@ def Cos_96_DW_2mL_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_DW_500ul(h: float):
-  return h*34.7486
+  volume = h*10.7233
+  if h < 25.0:
+    volume += (h-1.5)*34.7486
+  if h > 26.5:
+    raise ValueError(f"Height {h} is too large for Cos_96_DW_500ul")
+  return volume
 
 #: Cos_96_DW_500ul
 def Cos_96_DW_500ul(name: str, with_lid: bool = False) -> Plate:
@@ -319,7 +355,10 @@ def Cos_96_DW_500ul_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_EZWash(h: float):
-  return h*37.3928
+  volume = h*37.3928
+  if h > 11.3:
+    raise ValueError(f"Height {h} is too large for Cos_96_EZWash")
+  return volume
 
 #: Cos_96_EZWash
 def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
@@ -358,7 +397,10 @@ def Cos_96_EZWash_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_FL(h: float):
-  return h*34.2808
+  volume = h*34.2808
+  if h > 10.67:
+    raise ValueError(f"Height {h} is too large for Cos_96_FL")
+  return volume
 
 #: Cos_96_FL
 def Cos_96_FL(name: str, with_lid: bool = False) -> Plate:
@@ -387,7 +429,10 @@ def Cos_96_FL(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_Filter(h: float):
-  return h*34.7486
+  volume = h*34.7486
+  if h > 12.2:
+    raise ValueError(f"Height {h} is too large for Cos_96_Filter")
+  return volume
 
 #: Cos_96_Filter
 def Cos_96_Filter(name: str, with_lid: bool = False) -> Plate:
@@ -426,7 +471,10 @@ def Cos_96_Filter_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_HalfArea(h: float):
-  return h*17.7369
+  volume = h*17.7369
+  if h > 10.7:
+    raise ValueError(f"Height {h} is too large for Cos_96_HalfArea")
+  return volume
 
 #: Cos_96_HalfArea
 def Cos_96_HalfArea(name: str, with_lid: bool = False) -> Plate:
@@ -465,7 +513,12 @@ def Cos_96_HalfArea_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_PCR(h: float):
-  return h*23.8237
+  volume = h*6.5450
+  if h < 20.5:
+    volume += (h-11.5)*23.8237
+  if h > 32.0:
+    raise ValueError(f"Height {h} is too large for Cos_96_PCR")
+  return volume
 
 #: Cos_96_PCR
 def Cos_96_PCR(name: str, with_lid: bool = False) -> Plate:
@@ -504,7 +557,10 @@ def Cos_96_PCR_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_ProtCryst(h: float):
-  return h*7.5477
+  volume = h*7.5477
+  if h > 1.6:
+    raise ValueError(f"Height {h} is too large for Cos_96_ProtCryst")
+  return volume
 
 #: Cos_96_ProtCryst
 def Cos_96_ProtCryst(name: str, with_lid: bool = False) -> Plate:
@@ -543,7 +599,12 @@ def Cos_96_ProtCryst_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_Rd(h: float):
-  return h*34.7486
+  volume = h*h*(10.0531 - 1.0472*h)
+  if h < 11.3:
+    volume += (h-0.6)*34.7486
+  if h > 11.9:
+    raise ValueError(f"Height {h} is too large for Cos_96_Rd")
+  return volume
 
 #: Cos_96_Rd
 def Cos_96_Rd(name: str, with_lid: bool = False) -> Plate:
@@ -582,7 +643,10 @@ def Cos_96_Rd_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_SpecOps(h: float):
-  return h*34.7486
+  volume = h*34.7486
+  if h > 11.0:
+    raise ValueError(f"Height {h} is too large for Cos_96_SpecOps")
+  return volume
 
 #: Cos_96_SpecOps
 def Cos_96_SpecOps(name: str, with_lid: bool = False) -> Plate:
@@ -621,7 +685,10 @@ def Cos_96_SpecOps_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_UV(h: float):
-  return h*34.7486
+  volume = h*34.7486
+  if h > 11.0:
+    raise ValueError(f"Height {h} is too large for Cos_96_UV")
+  return volume
 
 #: Cos_96_UV
 def Cos_96_UV(name: str, with_lid: bool = False) -> Plate:
@@ -660,7 +727,12 @@ def Cos_96_UV_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_96_Vb(h: float):
-  return h*36.9605
+  volume = h*10.5564
+  if h < 10.9:
+    volume += (h-1.4)*36.9605
+  if h > 12.3:
+    raise ValueError(f"Height {h} is too large for Cos_96_Vb")
+  return volume
 
 #: Cos_96_Vb
 def Cos_96_Vb(name: str, with_lid: bool = False) -> Plate:

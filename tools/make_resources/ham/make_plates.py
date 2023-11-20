@@ -46,7 +46,22 @@ def make_from_file(fn, o):
 
   with open(rck2ctr(fn), 'r', encoding='ISO-8859-1') as f2:
     c2 = f2.read()
-    EqnOfVol = find_string("1.EqnOfVol", c2)
+    num_segments = find_int("Segments", c2)
+    EqnCode = ""
+    height_so_far = 0
+    for i in range(num_segments, 0, -1):
+      EqnOfVol = find_string(f"{i}.EqnOfVol", c2)
+      section_max_height = find_float(f"{i}.Max", c2)
+      if i == num_segments: # first section from bottom
+        EqnCode += f"volume = {EqnOfVol}\n"
+      else:
+        EqnOfVol = EqnOfVol.replace("h", f"(h-{height_so_far})")
+        EqnCode += f"if h < {section_max_height}:\n"
+        EqnCode += f"  volume += {EqnOfVol}\n"
+      height_so_far += section_max_height
+    EqnCode += f"if h > {height_so_far}:\n"
+    EqnCode +=  f"  raise ValueError(f\"Height {{h}} is too large for {cname}\")\n"
+    EqnCode += "return volume"
     dz = find_float("BaseMM", c2)
 
     one_dot_max = find_float('1.Max', c2)
@@ -74,7 +89,7 @@ def make_from_file(fn, o):
       well_size_x=well_size_x,
       well_size_y=well_size_y,
       one_dot_max=one_dot_max,
-      EqnOfVol=EqnOfVol,
+      EqnCode=EqnCode,
       lid_height=10,
       model=cname
     )
