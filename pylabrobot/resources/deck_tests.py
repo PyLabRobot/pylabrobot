@@ -65,7 +65,7 @@ class DeckTests(unittest.TestCase):
         num_items_x=1, num_items_y=1,
         dx=-1, dy=-1, dz=-1,
         item_dx=1, item_dy=1,
-        size_x=1, size_y=1))
+        size_x=1, size_y=1, size_z=1))
     custom_1.assign_child_resource(tc, location=Coordinate(0, 0, 0))
     custom_1.assign_child_resource(pc, location=Coordinate(100, 0, 0))
 

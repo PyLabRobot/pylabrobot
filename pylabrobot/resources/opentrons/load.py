@@ -105,7 +105,6 @@ def ot_definition_to_resource(
         size_y=size_y,
         size_z=size_z,
         items=cast(List[List[Well]], wells),
-        one_dot_max=None,
         model=data["metadata"]["displayName"]
       )
     elif display_category == "tipRack":
