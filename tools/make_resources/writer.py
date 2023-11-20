@@ -36,12 +36,11 @@ def write_tip_rack_p(o, cname, description, model):
 
 
 def _write_plate_header(o, base_class, name, description, with_params: bool,
-  size_x=None, size_y=None, size_z=None, one_dot_max=None, lid_height=None, EqnCode=None, model=None):
+  size_x=None, size_y=None, size_z=None, lid_height=None, EqnCode=None, model=None):
   o.write(f'\n\n')
 
   if EqnCode is not None:
     o.write(f"def _compute_volume_from_height_{name}(h: float):\n")
-    # o.write(f"  {EqnCode}\n")
     for line in EqnCode.split("\n"):
       o.write(f"  {line}\n")
     o.write(f'\n')
@@ -54,7 +53,6 @@ def _write_plate_header(o, base_class, name, description, with_params: bool,
     o.write(f'    size_x={size_x},\n')
     o.write(f'    size_y={size_y},\n')
     o.write(f'    size_z={size_z},\n')
-    o.write(f'    one_dot_max={one_dot_max},\n')
     o.write(f'    with_lid=with_lid,\n')
     o.write(f'    model="{model}",\n')
 
@@ -64,8 +62,8 @@ def _write_plate_header(o, base_class, name, description, with_params: bool,
       o.write(f'    compute_volume_from_height=_compute_volume_from_height_{name},\n')
 
 
-def write_plate_with_create_equally_spaced(o, base_class, name, description, size_x, size_y, size_z, dx, dy, dz, num_items_x, num_items_y, well_size_x, well_size_y, one_dot_max, lid_height=None, EqnCode=None, model=None):
-  _write_plate_header(o, base_class, name, description, True, size_x, size_y, size_z, one_dot_max, lid_height, EqnCode, model=model)
+def write_plate_with_create_equally_spaced(o, base_class, name, description, size_x, size_y, size_z, dx, dy, dz, num_items_x, num_items_y, well_size_x, well_size_y, well_size_z, lid_height=None, EqnCode=None, model=None):
+  _write_plate_header(o, base_class, name, description, True, size_x, size_y, size_z, lid_height, EqnCode, model=model)
 
   o.write(f'    items=create_equally_spaced(Well,\n')
   o.write(f'      num_items_x={num_items_x},\n')
@@ -77,6 +75,7 @@ def write_plate_with_create_equally_spaced(o, base_class, name, description, siz
   o.write(f'      item_dy={well_size_y},\n')
   o.write(f'      size_x={well_size_x},\n')
   o.write(f'      size_y={well_size_y},\n')
+  o.write(f'      size_z={well_size_z},\n')
   o.write(f'    ),\n')
   o.write(f'  )\n')
 

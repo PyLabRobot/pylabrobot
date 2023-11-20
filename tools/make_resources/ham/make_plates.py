@@ -37,7 +37,6 @@ def make_from_file(fn, o):
   cname = os.path.basename(fn).split('.')[0]
   description = cname
   EqnOfVol = None
-  one_dot_max = None
 
   # .rck to .ctr filename
   def rck2ctr(fn):
@@ -64,7 +63,7 @@ def make_from_file(fn, o):
     EqnCode += "return volume"
     dz = find_float("BaseMM", c2)
 
-    one_dot_max = find_float('1.Max', c2)
+    well_size_z = find_float("Depth", c2)
 
   if fn.endswith("_L.rck"): # landscape mode
     writer.write_landscape_plate(o=o, cname=cname, description=description, model=cname)
@@ -88,7 +87,7 @@ def make_from_file(fn, o):
       num_items_y=num_items_y,
       well_size_x=well_size_x,
       well_size_y=well_size_y,
-      one_dot_max=one_dot_max,
+      well_size_z=well_size_z,
       EqnCode=EqnCode,
       lid_height=10,
       model=cname

@@ -60,20 +60,20 @@ class ResourceStackTests(unittest.TestCase):
   # Tests for using ResourceStack as a stacking area, like the one near the washer on the STARs.
 
   def test_add_item(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1, items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.assign_child_resource(plate)
     self.assertEqual(stacking_area.get_top_item(), plate)
 
   def test_get_absolute_location_plate(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1, items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.location = Coordinate.zero()
     stacking_area.assign_child_resource(plate)
     self.assertEqual(plate.get_absolute_location(), Coordinate(0, 0, 0))
 
   def test_get_absolute_location_lid(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1, items=[],
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[],
       with_lid=True)
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.location = Coordinate.zero()
@@ -81,9 +81,9 @@ class ResourceStackTests(unittest.TestCase):
     self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
 
   def test_get_absolute_location_stack_height(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1, items=[],
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[],
       with_lid=True)
-    plate2 = Plate("plate2", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=1, items=[],
+    plate2 = Plate("plate2", size_x=1, size_y=1, size_z=1, lid_height=1, items=[],
       with_lid=True)
 
     stacking_area = ResourceStack("stacking_area", "z")

@@ -21,7 +21,6 @@ def Cos_1536_10ul(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=10.25,
-    one_dot_max=5.75,
     with_lid=with_lid,
     model="Cos_1536_10ul",
     lid_height=10,
@@ -36,6 +35,7 @@ def Cos_1536_10ul(name: str, with_lid: bool = False) -> Plate:
       item_dy=2.25,
       size_x=2.25,
       size_y=2.25,
+      size_z=5.75,
     ),
   )
 
@@ -65,7 +65,6 @@ def Cos_384_DW(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=28.0,
-    one_dot_max=24.5,
     with_lid=with_lid,
     model="Cos_384_DW",
     lid_height=10,
@@ -80,6 +79,7 @@ def Cos_384_DW(name: str, with_lid: bool = False) -> Plate:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
+      size_z=24.5,
     ),
   )
 
@@ -107,7 +107,6 @@ def Cos_384_PCR(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=16.0,
-    one_dot_max=9.5,
     with_lid=with_lid,
     model="Cos_384_PCR",
     lid_height=10,
@@ -122,6 +121,7 @@ def Cos_384_PCR(name: str, with_lid: bool = False) -> Plate:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
+      size_z=9.5,
     ),
   )
 
@@ -149,7 +149,6 @@ def Cos_384_Sq(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.24,
-    one_dot_max=11.56,
     with_lid=with_lid,
     model="Cos_384_Sq",
     lid_height=10,
@@ -164,6 +163,7 @@ def Cos_384_Sq(name: str, with_lid: bool = False) -> Plate:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
+      size_z=11.56,
     ),
   )
 
@@ -193,7 +193,6 @@ def Cos_384_Sq_Rd(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    one_dot_max=11.6,
     with_lid=with_lid,
     model="Cos_384_Sq_Rd",
     lid_height=10,
@@ -208,6 +207,7 @@ def Cos_384_Sq_Rd(name: str, with_lid: bool = False) -> Plate:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
+      size_z=11.6,
     ),
   )
 
@@ -237,7 +237,6 @@ def Cos_96_DW_1mL(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=42.0,
-    one_dot_max=40.0,
     with_lid=with_lid,
     model="Cos_96_DW_1mL",
     lid_height=10,
@@ -252,6 +251,7 @@ def Cos_96_DW_1mL(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=40.0,
     ),
   )
 
@@ -281,7 +281,6 @@ def Cos_96_DW_2mL(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=43.5,
-    one_dot_max=42.0,
     with_lid=with_lid,
     model="Cos_96_DW_2mL",
     lid_height=10,
@@ -296,6 +295,7 @@ def Cos_96_DW_2mL(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=42.0,
     ),
   )
 
@@ -325,7 +325,6 @@ def Cos_96_DW_500ul(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=27.5,
-    one_dot_max=25.0,
     with_lid=with_lid,
     model="Cos_96_DW_500ul",
     lid_height=10,
@@ -340,6 +339,7 @@ def Cos_96_DW_500ul(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=25.0,
     ),
   )
 
@@ -367,7 +367,6 @@ def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    one_dot_max=11.3,
     with_lid=with_lid,
     model="Cos_96_EZWash",
     lid_height=10,
@@ -382,6 +381,7 @@ def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=11.3,
     ),
   )
 
@@ -409,7 +409,6 @@ def Cos_96_FL(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.24,
-    one_dot_max=10.67,
     with_lid=with_lid,
     model="Cos_96_FL",
     lid_height=10,
@@ -424,6 +423,7 @@ def Cos_96_FL(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=10.67,
     ),
   )
 
@@ -441,7 +441,6 @@ def Cos_96_Filter(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    one_dot_max=12.2,
     with_lid=with_lid,
     model="Cos_96_Filter",
     lid_height=10,
@@ -456,6 +455,7 @@ def Cos_96_Filter(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=12.2,
     ),
   )
 
@@ -483,7 +483,6 @@ def Cos_96_HalfArea(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    one_dot_max=10.7,
     with_lid=with_lid,
     model="Cos_96_HalfArea",
     lid_height=10,
@@ -498,6 +497,7 @@ def Cos_96_HalfArea(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=10.7,
     ),
   )
 
@@ -527,7 +527,6 @@ def Cos_96_PCR(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=22.5,
-    one_dot_max=20.5,
     with_lid=with_lid,
     model="Cos_96_PCR",
     lid_height=10,
@@ -542,6 +541,7 @@ def Cos_96_PCR(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=20.5,
     ),
   )
 
@@ -569,7 +569,6 @@ def Cos_96_ProtCryst(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=20.0,
-    one_dot_max=1.6,
     with_lid=with_lid,
     model="Cos_96_ProtCryst",
     lid_height=10,
@@ -584,6 +583,7 @@ def Cos_96_ProtCryst(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=4.5,
       size_y=9.0,
+      size_z=1.6,
     ),
   )
 
@@ -613,7 +613,6 @@ def Cos_96_Rd(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    one_dot_max=11.3,
     with_lid=with_lid,
     model="Cos_96_Rd",
     lid_height=10,
@@ -628,6 +627,7 @@ def Cos_96_Rd(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=11.3,
     ),
   )
 
@@ -655,7 +655,6 @@ def Cos_96_SpecOps(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.3,
-    one_dot_max=11.0,
     with_lid=with_lid,
     model="Cos_96_SpecOps",
     lid_height=10,
@@ -670,6 +669,7 @@ def Cos_96_SpecOps(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=11.0,
     ),
   )
 
@@ -697,7 +697,6 @@ def Cos_96_UV(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.3,
-    one_dot_max=11.0,
     with_lid=with_lid,
     model="Cos_96_UV",
     lid_height=10,
@@ -712,6 +711,7 @@ def Cos_96_UV(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=11.0,
     ),
   )
 
@@ -741,7 +741,6 @@ def Cos_96_Vb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.24,
-    one_dot_max=10.9,
     with_lid=with_lid,
     model="Cos_96_Vb",
     lid_height=10,
@@ -756,6 +755,7 @@ def Cos_96_Vb(name: str, with_lid: bool = False) -> Plate:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
+      size_z=10.9,
     ),
   )
 
