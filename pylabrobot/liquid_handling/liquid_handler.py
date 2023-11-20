@@ -97,6 +97,15 @@ class LiquidHandler(MachineFrontend):
 
     await super().setup()
 
+  def save_state(self, filename: str):
+    """ Save the state of the liquid handler (including the deck) to a file. """
+
+    head_state = {channel: tracker.serialize() for channel, tracker in self.head.items()}
+    deck_state = self.deck.serialize_state()
+    state = {"head_state": head_state, "deck_state": deck_state}
+    with open(filename, "w", encoding="utf-8") as f:
+      f.write(json.dumps(state, indent=2))
+
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.
 
