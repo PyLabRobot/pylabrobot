@@ -1404,7 +1404,7 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 2450,
     min_z_endpos: int = 2450,
 
-    hamilton_liquid_classes: List[HamiltonLiquidClass] = None
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
   ):
     """ Aspirate liquid from the specified channels.
 
@@ -1666,7 +1666,7 @@ class STAR(HamiltonLiquidHandler):
     min_z_endpos: int = 2450,
     side_touch_off_distance: int = 0,
 
-    hamilton_liquid_classes: List[HamiltonLiquidClass] = None
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
   ):
     """ Dispense liquid from the specified channels.
 
