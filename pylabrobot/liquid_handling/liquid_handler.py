@@ -9,7 +9,7 @@ import logging
 import numbers
 import threading
 import time
-from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set
+from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple
 import warnings
 
 from pylabrobot.machine import MachineFrontend, need_setup_finished
@@ -32,6 +32,7 @@ from pylabrobot.resources import (
   does_tip_tracking,
   does_volume_tracking
 )
+from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.errors import NoTipError
 from pylabrobot.utils.list import expand
 
@@ -652,7 +653,7 @@ class LiquidHandler(MachineFrontend):
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    liquids = []
+    liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     for r, vol in zip(resources, vols):
       if r.tracker.is_disabled or not does_volume_tracking():
         liquids.append([(None, vol)])
@@ -1043,7 +1044,7 @@ class LiquidHandler(MachineFrontend):
       raise ValueError("Aspirating from plate with lid")
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    liquids = []
+    liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     for w in plate.get_all_items():
       if w.tracker.is_disabled or not does_volume_tracking():
         liquids.append([(None, volume)])
@@ -1107,7 +1108,7 @@ class LiquidHandler(MachineFrontend):
       raise ValueError("Dispensing to plate with lid")
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    liquids = []
+    liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     for w in plate.get_all_items():
       if w.tracker.is_disabled or not does_volume_tracking():
         liquids.append([(None, volume)])
