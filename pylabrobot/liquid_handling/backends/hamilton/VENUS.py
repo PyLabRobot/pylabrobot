@@ -44,7 +44,7 @@
 #   Dispense,
 # )
 
-# logger = logging.getLogger(__name__)
+# logger = logging.getLogger("pylabrobot")
 # logging.basicConfig()
 # logger.setLevel(logging.INFO)
 

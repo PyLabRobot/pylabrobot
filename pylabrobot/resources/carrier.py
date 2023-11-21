@@ -7,7 +7,7 @@ from .coordinate import Coordinate
 from .resource import Resource
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylabrobot")
 
 
 class CarrierSite(Resource):

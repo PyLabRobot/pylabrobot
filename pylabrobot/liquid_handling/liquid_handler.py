@@ -97,6 +97,28 @@ class LiquidHandler(MachineFrontend):
 
     await super().setup()
 
+  def save_state(self, filename: str):
+    """ Save the state of the liquid handler (including the deck) to a file. """
+
+    head_state = {channel: tracker.serialize() for channel, tracker in self.head.items()}
+    deck_state = self.deck.serialize_state()
+    state = {"head_state": head_state, "deck_state": deck_state}
+    with open(filename, "w", encoding="utf-8") as f:
+      f.write(json.dumps(state, indent=2))
+
+  def load_state(self, filename: str):
+    """ Load the liquid handler state from a file. """
+
+    with open(filename, "r", encoding="utf-8") as f:
+      state = json.load(f)
+    head_state = state["head_state"]
+    deck_state = state["deck_state"]
+
+    for channel_id, state in head_state.items():
+      # convert head state keys (channel ids) back to integers.
+      self.head[int(channel_id)].load_state(state)
+    self.deck.load_state(deck_state)
+
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.
 
@@ -629,17 +651,25 @@ class LiquidHandler(MachineFrontend):
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
+    # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
+    liquids = []
+    for r, vol in zip(resources, vols):
+      if r.tracker.is_disabled or not does_volume_tracking():
+        liquids.append([(None, vol)])
+      else:
+        liquids.append(r.tracker.get_liquids(top_volume=vol))
+
     aspirations = [Aspiration(resource=r, volume=v, offset=o, flow_rate=fr, liquid_height=lh, tip=t,
-                              blow_out_air_volume=0, liquid=None)
-                   for r, v, o, fr, lh, t in
-                    zip(resources, vols, offsets, flow_rates, liquid_height, tips)]
+                              blow_out_air_volume=0, liquids=lvs)
+                   for r, v, o, fr, lh, t, lvs in
+                    zip(resources, vols, offsets, flow_rates, liquid_height, tips, liquids)]
 
     for op in aspirations:
       if does_volume_tracking():
-        if not op.resource.tracker.is_disabled: # TODO: why do we check this here but not in op.tip?
+        if not op.resource.tracker.is_disabled:
           op.resource.tracker.remove_liquid(op.volume)
-        # TODO: get liquid from container
-        op.tip.tracker.add_liquid(liquid=op.liquid, volume=op.volume)
+        for liquid, volume in reversed(op.liquids):
+          op.tip.tracker.add_liquid(liquid=liquid, volume=volume)
 
     extras = self._check_args(self.backend.aspirate, backend_kwargs,
       default={"ops", "use_channels"})
@@ -659,6 +689,8 @@ class LiquidHandler(MachineFrontend):
         if not op.resource.tracker.is_disabled:
           op.resource.tracker.commit()
           op.tip.tracker.commit()
+      for tracker in self.head.values():
+        tracker.commit()
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -772,16 +804,22 @@ class LiquidHandler(MachineFrontend):
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
+    if does_volume_tracking():
+      liquids = [c.get_tip().tracker.get_liquids(top_volume=vol)
+                for c, vol in zip(self.head.values(), vols)]
+    else:
+      liquids = [[(None, vol)] for vol in vols]
+
     dispenses = [Dispense(resource=r, volume=v, offset=o, flow_rate=fr, liquid_height=lh, tip=t,
-                          liquid=None, blow_out_air_volume=0) # TODO: get blow_out_air_volume
-                 for r, v, o, fr, lh, t in
-                  zip(resources, vols, offsets, flow_rates, liquid_height, tips)]
+                          liquids=lvs, blow_out_air_volume=0) # TODO: get blow_out_air_volume
+                 for r, v, o, fr, lh, t, lvs in
+                  zip(resources, vols, offsets, flow_rates, liquid_height, tips, liquids)]
 
     for op in dispenses:
       if does_volume_tracking():
-        # TODO: get liquid from tracker instead of the op
         if not op.resource.tracker.is_disabled:
-          op.resource.tracker.add_liquid(liquid=op.liquid, volume=op.volume)
+          for liquid, volume in op.liquids:
+            op.resource.tracker.add_liquid(liquid=liquid, volume=volume)
         op.tip.tracker.remove_liquid(op.volume)
 
     extras = self._check_args(self.backend.dispense, backend_kwargs,
@@ -1004,6 +1042,14 @@ class LiquidHandler(MachineFrontend):
     if plate.has_lid():
       raise ValueError("Aspirating from plate with lid")
 
+    # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
+    liquids = []
+    for w in plate.get_all_items():
+      if w.tracker.is_disabled or not does_volume_tracking():
+        liquids.append([(None, volume)])
+      else:
+        liquids.append(w.tracker.get_liquids(top_volume=volume))
+
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       await self.backend.aspirate96(aspiration=AspirationPlate(
         resource=plate,
@@ -1013,11 +1059,11 @@ class LiquidHandler(MachineFrontend):
         tips=tips,
         liquid_height=None,
         blow_out_air_volume=0,
-        liquid=None),
+        liquids=liquids),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
-                               f"by {plate.num_items_y} plate")
+                                f"by {plate.num_items_y} plate")
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -1060,6 +1106,14 @@ class LiquidHandler(MachineFrontend):
     if plate.has_lid():
       raise ValueError("Dispensing to plate with lid")
 
+    # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
+    liquids = []
+    for w in plate.get_all_items():
+      if w.tracker.is_disabled or not does_volume_tracking():
+        liquids.append([(None, volume)])
+      else:
+        liquids.append(w.tracker.get_liquids(top_volume=volume))
+
     if plate.num_items_x == 12 and plate.num_items_y == 8:
       await self.backend.dispense96(dispense=DispensePlate(
         resource=plate,
@@ -1069,7 +1123,7 @@ class LiquidHandler(MachineFrontend):
         tips=tips,
         liquid_height=None,
         blow_out_air_volume=0,
-        liquid=None),
+        liquids=liquids),
         **backend_kwargs)
     else:
       raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "

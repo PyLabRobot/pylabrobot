@@ -142,12 +142,8 @@ class Deck(Resource):
       summary_ += f"{resource.name}: {resource}\n"
     return summary_
 
-  def save_state_to_file(self, filename: str) -> None:
-    """ Save the state of the deck to a file. The state includes volumes and operations in wells.
-
-    Note: this does not include the resources on the deck. To safe the deck layout instead, use
-    :meth:`pylabrobot.resources.Resource.save`.
-    """
+  def serialize_state(self) -> dict:
+    """ Serialize the deck state. """
 
     state: Dict[str, Any] = {}
 
@@ -159,9 +155,18 @@ class Deck(Resource):
           state[resource.name] = resource_state
       for child in resource.children:
         save_resource_state(child)
-
     save_resource_state(self)
 
+    return state
+
+  def save_state_to_file(self, filename: str) -> None:
+    """ Save the state of the deck to a file. The state includes volumes and operations in wells.
+
+    Note: this does not save the layout of resources on the deck. To save the deck layout instead,
+    use :meth:`pylabrobot.resources.Resource.save`.
+    """
+
+    state = self.serialize_state()
     with open(filename, "w", encoding="utf-8") as f:
       f.write(json.dumps(state, indent=2))
 

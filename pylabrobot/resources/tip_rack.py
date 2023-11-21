@@ -152,6 +152,16 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       elif not has_tip[i] and self.get_item(i).has_tip():
         self.get_item(i).tracker.remove_tip()
 
+  def disable_tip_trackers(self) -> None:
+    """ Disable tip tracking for all tips in this tip rack. """
+    for item in self.get_all_items():
+      item.tracker.disable()
+
+  def enable_tip_trackers(self) -> None:
+    """ Enable tip tracking for all tips in this tip rack. """
+    for item in self.get_all_items():
+      item.tracker.enable()
+
   def empty(self):
     """ Empty the tip rack. This is useful when tip tracking is enabled and you are modifying
     the state manually (without the robot). """

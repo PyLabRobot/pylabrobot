@@ -110,6 +110,7 @@ class TipTracker:
     """ Serialize the state of the tip tracker. """
     return {
       "tip": self._tip.serialize() if self._tip is not None else None,
+      "tip_state": self._tip.tracker.serialize() if self._tip is not None else None,
       "pending_tip": self._pending_tip.serialize() if self._pending_tip is not None else None
     }
 

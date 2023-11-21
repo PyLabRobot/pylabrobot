@@ -15,7 +15,8 @@ from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
   HamiltonFirmwareError
 )
-from pylabrobot.liquid_handling.liquid_classes.hamilton import get_star_liquid_class
+from pylabrobot.liquid_handling.liquid_classes.hamilton import (
+  HamiltonLiquidClass, get_star_liquid_class)
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   PickupTipRack,
@@ -36,13 +37,14 @@ from pylabrobot.resources.errors import (
   NoTipError
 )
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.well import Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
 
 
 T = TypeVar("T")
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylabrobot")
 
 
 def need_iswap_parked(method: Callable):
@@ -1400,7 +1402,9 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth_2nd_section: Optional[List[int]] = None,
 
     minimum_traverse_height_at_beginning_of_a_command: int = 2450,
-    min_z_endpos: int = 2450
+    min_z_endpos: int = 2450,
+
+    hamilton_liquid_classes: List[HamiltonLiquidClass] = None
   ):
     """ Aspirate liquid from the specified channels.
 
@@ -1462,6 +1466,9 @@ class STAR(HamiltonLiquidHandler):
       minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
         starting an aspiration.
       min_z_endpos: The minimum height to move to, this is the end of aspiration.
+
+      hamilton_liquid_classes: Override the default liquid classes. See
+        pylabrobot/liquid_handling/liquid_classes/hamilton/star.py
     """
 
     x_positions, y_positions, channels_involved = \
@@ -1469,16 +1476,17 @@ class STAR(HamiltonLiquidHandler):
 
     n = len(ops)
 
-    hamilton_liquid_classes = [
-      get_star_liquid_class(
-        tip_volume=op.tip.maximal_volume,
-        is_core=False,
-        is_tip=True,
-        has_filter=op.tip.has_filter,
-        liquid=op.liquid or Liquid.WATER,
-        jet=False, # for aspiration
-        empty=False # for aspiration
-      ) for op in ops]
+    if hamilton_liquid_classes is None:
+      hamilton_liquid_classes = [
+        get_star_liquid_class(
+          tip_volume=op.tip.maximal_volume,
+          is_core=False,
+          is_tip=True,
+          has_filter=op.tip.has_filter,
+          liquid=op.liquids[-1][0] or Liquid.WATER, # get last liquid in well, first to be aspirated
+          jet=False, # for aspiration
+          empty=False # for aspiration
+        ) for op in ops]
 
     self._assert_valid_resources([op.resource for op in ops])
 
@@ -1490,7 +1498,9 @@ class STAR(HamiltonLiquidHandler):
                     (op.offset.z if op.offset is not None else 0) for op in ops]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 1)
                               for wb, op in zip(well_bottoms, ops)]
-    lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
+    lld_search_heights = [wb + op.resource.get_size_z() + \
+                            (2.7 if isinstance(op.resource, Well) else 5) #?
+                          for wb, op in zip(well_bottoms, ops)]
 
     aspiration_volumes = [int(op.volume * 10) for op in ops]
     lld_search_height = [int(sh * 10) for sh in lld_search_heights]
@@ -1655,6 +1665,8 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 2450,
     min_z_endpos: int = 2450,
     side_touch_off_distance: int = 0,
+
+    hamilton_liquid_classes: List[HamiltonLiquidClass] = None
   ):
     """ Dispense liquid from the specified channels.
 
@@ -1704,6 +1716,9 @@ class STAR(HamiltonLiquidHandler):
         starting a dispense.
       min_z_endpos: The minimum height to move to after a dispense.
       side_touch_off_distance: The distance to move to the side from the well for a dispense.
+
+      hamilton_liquid_classes: Override the default liquid classes. See
+        pylabrobot/liquid_handling/liquid_classes/hamilton/star.py
     """
 
     x_positions, y_positions, channels_involved = \
@@ -1720,17 +1735,18 @@ class STAR(HamiltonLiquidHandler):
         return True
       return False
 
-    hamilton_liquid_classes = [
-      get_star_liquid_class(
-        tip_volume=op.tip.maximal_volume,
-        is_core=False,
-        is_tip=True,
-        has_filter=op.tip.has_filter,
-        liquid=op.liquid or Liquid.WATER,
-        jet=should_jet(op),
-        # dispensing all, get_used_volume includes pending
-        empty=op.tip.tracker.get_used_volume() == 0
-      ) for op in ops]
+    if hamilton_liquid_classes is None:
+      hamilton_liquid_classes = [
+        get_star_liquid_class(
+          tip_volume=op.tip.maximal_volume,
+          is_core=False,
+          is_tip=True,
+          has_filter=op.tip.has_filter,
+          liquid=op.liquids[-1][0] or Liquid.WATER, # get last liquid in pipette, first to be disp.
+          jet=should_jet(op),
+          # dispensing all, get_used_volume includes pending
+          empty=op.tip.tracker.get_used_volume() == 0
+        ) for op in ops]
 
     # correct volumes using the liquid class
     for op, hlc in zip(ops, hamilton_liquid_classes):
@@ -1739,7 +1755,9 @@ class STAR(HamiltonLiquidHandler):
     well_bottoms = [op.resource.get_absolute_location().z + \
                     (op.offset.z if op.offset is not None else 0) for op in ops]
     liquid_surfaces_no_lld = [ls + (op.liquid_height or 1) for ls, op in zip(well_bottoms, ops)]
-    lld_search_heights = [wb + op.resource.get_size_z() + 5 for wb, op in zip(well_bottoms, ops)]
+    lld_search_heights = [wb + op.resource.get_size_z() + \
+                            (2.7 if isinstance(op.resource, Well) else 5) #?
+                          for wb, op in zip(well_bottoms, ops)]
 
     def dispensing_mode_for_op(op: Dispense) -> int:
       return {
