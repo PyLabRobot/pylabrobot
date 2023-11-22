@@ -30,6 +30,9 @@ class PumpCalibration:
         "Pump is not calibrated. Volume based pumping and related functions unavailable.")
     return self.calibration[item]  # type: ignore
 
+  def __bool__(self):
+    return self.calibration is not None
+
   @classmethod
   def load_calibration(cls,
                        calibration: Optional[Union[dict, list, float, int, str]] = None,
@@ -96,7 +99,7 @@ class PumpCalibration:
     """
     with open(file, encoding="utf-8", newline="") as f:
       reader = csv.DictReader(f)
-      calibration = {int(row[0]): float(row[1]) for row in reader}
+      calibration = {int(row["0"]): float(row["1"]) for row in reader}
     return PumpCalibration.load_from_dict(calibration)
 
   @classmethod
@@ -110,6 +113,13 @@ class PumpCalibration:
     Raises:
         ValueError: if the calibration dictionary is not formatted correctly.
     """
+    if not any(key == 0 for key in calibration.keys()):
+      if any(key == 1 for key in calibration.keys()):
+        calibration = {key - 1: value for key, value in calibration.items()}
+      else:
+        raise ValueError("Calibration dictionary keys must start at 0 or 1.")
+    if len(calibration) == 1:
+      calibration = {0: list(calibration.values())[0]}
     if any(key < 0 for key in calibration.keys()) or any(key >= len(calibration) for key in
                                                          calibration.keys()):
       raise ValueError("Calibration dictionary keys must be non-negative and less than the "

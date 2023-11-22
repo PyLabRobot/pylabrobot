@@ -16,6 +16,7 @@ class Pump(MachineFrontend):
 
   def __init__(self, backend: PumpBackend, calibration: Optional[PumpCalibration] = None):
     self.backend: PumpBackend = backend
+    self._setup_finished = False
     if calibration is not None:
       self.calibration = calibration[0]
 

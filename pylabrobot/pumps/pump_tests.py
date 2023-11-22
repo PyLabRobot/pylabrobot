@@ -12,9 +12,11 @@ from typing import Any, Iterable
 
 from itertools import chain, combinations
 
+import asyncio
+
 
 def powerset(iterable: Iterable[Any]):
-  "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+  """powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"""
   s = list(iterable)
   return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1) if r > 0)
 
@@ -30,7 +32,7 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
     self.mock_backend = Mock(spec=PumpBackend)
     self.masterflex_backend = Masterflex(com_port="simulated")
     self.null_calibration = PumpCalibration()
-    self.test_calibration = PumpCalibration.load_calibration(1)
+    self.test_calibration = PumpCalibration.load_calibration(1, num_items=1)
 
   async def test_setup(self):
     """
@@ -63,7 +65,6 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
         self.assertRaises(ValueError, pump.run_continuously, speed=speed)
 
 
-
 class TestPumpArray(unittest.IsolatedAsyncioTestCase):
   """
     Tests for the AgrowPumpArray class.
@@ -80,7 +81,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
                                   [0, 1, 2, 3, 4, 5],
                                   [1, 1, 1, 1, 1, 1],
                                   [1, 2, 3, 4, 5, 6, 7]]
-    self.agrow_backend = AgrowPumpArray(port="simulated", unit=1)
+    self.agrow_backend = AgrowPumpArray(port="simulated", unit=1, keep_alive_thread_enabled=False)
     self.valid_durations = [int(0), int(100), float(0), float(100)]
     self.invalid_durations = [int(-1), float(-1)]
     self.mock_backend = Mock(spec=PumpArrayBackend)
@@ -95,11 +96,15 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
     async with PumpArray(backend=self.agrow_backend,
                          calibration=self.null_calibration) as pump_array:
       self.assertEqual(pump_array.num_channels, 6)
-      self.assertEqual(pump_array.calibration, PumpCalibration.load_calibration())
+      self.assertEqual(pump_array.calibration, self.null_calibration)
       self.assertEqual(pump_array.backend, self.agrow_backend)
       self.assertNotEqual(pump_array.backend, self.mock_backend)
-      self.assertEqual(pump_array.backend.port, "simulated")
-      self.assertEqual(pump_array.backend.unit, 1)
+      self.assertEqual(self.agrow_backend.port, "simulated")
+      self.assertEqual(self.agrow_backend.unit, 1)
+      # pylint: disable=protected-access
+      self.assertEqual(self.agrow_backend._pump_index_to_address,
+                       {pump: pump + 100 for pump in
+                        range(1, 7)})
 
   async def test_run_continuously(self):
     """
@@ -111,23 +116,23 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
         for test_speed in self.agrow_valid_speeds:
           speed = [test_speed] * len(use_channels)
           incorrect_len_speed = [test_speed] * (len(use_channels) + 1)
-          self.assertRaises(ValueError, pump_array.run_continuously,
-                            speed=speed,
-                            use_channels=use_channels)
-          self.assertRaises(ValueError, pump_array.run_continuously,
-                            speed=incorrect_len_speed,
-                            use_channels=use_channels)
+          await pump_array.run_continuously(speed=speed,
+                                            use_channels=use_channels)
+          with self.assertRaises(ValueError):
+            await pump_array.run_continuously(speed=incorrect_len_speed,
+                                              use_channels=use_channels)
         for test_speed in self.agrow_invalid_speeds:
           speed = [test_speed] * len(use_channels)
-          self.assertRaises(ValueError, pump_array.run_continuously,
-                            speed=speed,
-                            use_channels=use_channels)
+          with self.assertRaises(ValueError):
+            await pump_array.run_continuously(speed=speed,
+                                              use_channels=use_channels)
       for use_channels in self.agrow_faulty_channels:
         for test_speed in self.agrow_valid_speeds:
           speed = [test_speed] * len(use_channels)
-          self.assertRaises(ValueError, pump_array.run_continuously,
-                            speed=speed,
-                            use_channels=use_channels)
+          with self.assertRaises(ValueError):
+            await pump_array.run_continuously(speed=speed,
+                                              use_channels=use_channels)
+      await asyncio.sleep(25)
 
   async def test_run_revolutions(self):
     async with PumpArray(backend=self.agrow_backend,
@@ -164,7 +169,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
 
   async def test_volume_pump(self):
     async with PumpArray(backend=self.agrow_backend,
-                        calibration=self.null_calibration) as pump_array:
+                         calibration=self.null_calibration) as pump_array:
       for use_channels in self.agrow_use_all_channels_iterations:
         for test_speed in self.agrow_valid_speeds:
           speed = [test_speed] * len(use_channels)
@@ -180,44 +185,55 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
             pump_array.calibration = self.test_calibration
             await pump_array.pump_volume(speed=test_speed,
                                          use_channels=use_channels,
-                                         volume=test_volume)
+                                         volume=test_volume,
+                                         calibration_units="duration")
             await pump_array.pump_volume(speed=speed,
                                          use_channels=use_channels,
-                                         volume=volume)
+                                         volume=volume,
+                                         calibration_units="duration")
+            self.assertRaises(NotImplementedError, pump_array.pump_volume,
+                              speed=test_speed,
+                              use_channels=use_channels,
+                              volume=test_volume,
+                              calibration_units="revolutions")
             self.assertRaises(ValueError, pump_array.pump_volume,
                               speed=speed,
                               use_channels=use_channels,
-                              volume=incorrect_len_volume)
+                              volume=incorrect_len_volume,
+                              calibration_units="duration")
             self.assertRaises(ValueError, pump_array.pump_volume,
                               speed=test_speed,
                               use_channels=use_channels,
-                              volume=incorrect_len_volume)
+                              volume=incorrect_len_volume,
+                              calibration_units="duration")
             self.assertRaises(ValueError, pump_array.pump_volume,
                               speed=incorrect_len_speed,
                               use_channels=use_channels,
-                              volume=test_volume)
+                              volume=test_volume,
+                              calibration_units="duration")
             self.assertRaises(ValueError, pump_array.pump_volume,
                               speed=incorrect_len_speed,
                               use_channels=use_channels,
-                              volume=volume)
+                              volume=volume,
+                              calibration_units="duration")
           for test_volume in self.agrow_invalid_volumes:
             volume = [test_volume] * len(use_channels)
             pump_array.calibration = self.test_calibration
             self.assertRaises(ValueError, pump_array.pump_volume,
                               speed=speed,
                               use_channels=use_channels,
-                              volume=volume)
+                              volume=volume,
+                              calibration_units="duration")
             self.assertRaises(ValueError, pump_array.pump_volume,
                               speed=speed,
                               use_channels=use_channels,
-                              volume=test_volume)
+                              volume=test_volume,
+                              calibration_units="duration")
 
   async def test_stop(self):
     async with PumpArray(backend=self.agrow_backend,
                          calibration=self.null_calibration) as pump_array:
       await pump_array.stop()
-
-
 
 
 if __name__ == "__main__":

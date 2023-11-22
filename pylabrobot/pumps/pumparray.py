@@ -1,9 +1,9 @@
 import asyncio
-from typing import Union, Optional, List
+from typing import Union, Optional, List, Literal
 
 from pylabrobot.machine import MachineFrontend
-from .backend import PumpArrayBackend
-from .calibration import PumpCalibration
+from pylabrobot.pumps.backend import PumpArrayBackend
+from pylabrobot.pumps.calibration import PumpCalibration
 
 
 class PumpArray(MachineFrontend):
@@ -20,6 +20,7 @@ class PumpArray(MachineFrontend):
   """
 
   def __init__(self, backend: PumpArrayBackend, calibration: Optional[PumpCalibration] = None):
+    self._setup_finished = False
     self.backend: PumpArrayBackend = backend
     self.calibration = calibration
 
@@ -55,14 +56,18 @@ class PumpArray(MachineFrontend):
       speed: speed in rpm/pump-specific units.
       use_channels: pump array channels to run.
     """
+    if isinstance(use_channels, list) and len(set(use_channels)) != len(use_channels):
+      raise ValueError("Channels in use channels must be unique.")
     if isinstance(use_channels, int):
       use_channels = [use_channels]
     if isinstance(speed, (float, int)):
       speed = [speed] * len(use_channels)
     if isinstance(speed[0], int):
       speed = [float(x) for x in speed]
-    if len(speed) == len(use_channels):
+    if len(speed) != len(use_channels):
       raise ValueError("Speed and use_channels must be the same length.")
+    if any(channel > 0 for channel in use_channels):
+      raise ValueError("Channels in use channels must be positive.")
     await self.backend.run_continuously(speed=speed,  # type: ignore[arg-type]
                                         use_channels=use_channels)
 
@@ -85,16 +90,14 @@ class PumpArray(MachineFrontend):
 
   async def pump_volume(self, speed: Union[float, int, List[float], List[int]],
                         use_channels: Union[int, List[int]],
-                        volume: Union[float, int, List[float], List[int]]):
+                        volume: Union[float, int, List[float], List[int]],
+                        calibration_units: Literal["duration", "revolutions"]):
     """
     Run the specified channels at the specified speeds for the specified volume. Note that this
-    function requires the pump to be calibrated at the input speed.
-    Args:
-      speed: speed in rpm/pump-specific units.
-      use_channels: pump array channels to run.
-      volume: volume to pump.
-    Raises:
-      TypeError: if the pump is not calibrated.
+    function requires the pump to be calibrated at the input speed. Args: speed: speed in
+    rpm/pump-specific units. use_channels: pump array channels to run. volume: volume to pump.
+    calibration_units: units of calibration. Volume per seconds ("duration") or volume per
+    revolution ("revolutions"). Raises: TypeError: if the pump is not calibrated.
     """
     if self.calibration is None:
       raise TypeError("Pump is not calibrated. Volume based pumping and related functions "
@@ -109,13 +112,23 @@ class PumpArray(MachineFrontend):
       raise ValueError("Volume must be positive.")
     if not len(speed) == len(use_channels) == len(volume):
       raise ValueError("Speed, use_channels, and volume must be the same length.")
-    durations = [channel_volume / self.calibration[channel] for channel, channel_volume in
-                 zip(use_channels, volume)]
-    tasks = [asyncio.create_task(
-      self.run_for_duration(speed=channel_speed,
-                            use_channels=channel,
-                            duration=duration))
-             for channel_speed, channel, duration in zip(speed, use_channels, durations)]
+    if calibration_units == "duration":
+      durations = [channel_volume / self.calibration[channel] for channel, channel_volume in
+                   zip(use_channels, volume)]
+      tasks = [asyncio.create_task(
+        self.run_for_duration(speed=channel_speed,
+                              use_channels=channel,
+                              duration=duration))
+          for channel_speed, channel, duration in zip(speed, use_channels, durations)]
+    elif calibration_units == "revolutions":
+      num_rotations = [channel_volume / self.calibration[channel] for channel, channel_volume in
+                       zip(use_channels, volume)]
+      tasks = [asyncio.create_task(
+        self.run_revolutions(num_revolutions=num_rotation,
+                             use_channels=channel))
+          for num_rotation, channel in zip(num_rotations, use_channels)]
+    else:
+      raise ValueError("Calibration units must be 'duration' or 'revolutions'.")
     await asyncio.gather(*tasks)
 
   async def halt(self):
