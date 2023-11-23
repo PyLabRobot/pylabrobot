@@ -55,7 +55,7 @@ class Well(Container):
   def serialize(self):
     return {
       **super().serialize(),
-      "bottom_type": self.bottom_type.value,
+      "bottom_type": self.bottom_type.value if hasattr(self.bottom_type, 'value') else self.bottom_type,
     }
 
   def compute_volume_from_height(self, height: float) -> float:
