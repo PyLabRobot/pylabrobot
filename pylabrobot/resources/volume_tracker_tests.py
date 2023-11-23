@@ -47,7 +47,6 @@ class TestVolumeTracker(unittest.TestCase):
     tracker = VolumeTracker(max_volume=200)
     tracker.add_liquid(liquid=None, volume=60)
     tracker.add_liquid(liquid=Liquid.WATER, volume=60)
-    print(tracker.pending_liquids)
     tracker.commit()
 
     liquids = tracker.get_liquids(top_volume=100)
