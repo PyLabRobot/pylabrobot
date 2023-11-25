@@ -134,7 +134,8 @@ function getSnappingGrid(x, y, width, height) {
   let snappingLines = {};
 
   const deck = resources["deck"];
-  if (deck.constructor.name === "HamiltonDeck") {
+  if (deck.constructor.name === "HamiltonSTARDeck") {
+    // TODO: vantage
     if (Math.abs(y - deck.location.y - 63) < SNAP_MARGIN) {
       snappingLines.resourceY = deck.location.y + 63;
     }
@@ -383,7 +384,7 @@ class Deck extends Resource {
   canDelete = false;
 }
 
-class HamiltonDeck extends Deck {
+class HamiltonSTARDeck extends Deck {
   constructor(resourceData) {
     super(resourceData, undefined);
     const { num_rails } = resourceData;
@@ -798,7 +799,7 @@ function classForResourceType(type) {
     case "Deck":
       return Deck;
     case ("HamiltonDeck", "HamiltonSTARDeck"):
-      return HamiltonDeck;
+      return HamiltonSTARDeck;
     case "Trash":
       return Trash;
     case "OTDeck":
@@ -825,7 +826,7 @@ function classForResourceType(type) {
       alert(
         "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"
       );
-      return HamiltonDeck;
+      return HamiltonSTARDeck;
     default:
       return Resource;
   }
