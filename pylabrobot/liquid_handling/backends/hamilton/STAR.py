@@ -65,15 +65,22 @@ def need_iswap_parked(method: Callable):
 
 
 def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
-  """ Util for filling in None lists with the default values. """
+  """ Util for converting an argument to the appropriate format for low level star methods. """
   t = type(default[0])
-  if val is not None:
-    if len(val) != len(default):
-      raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
-    if not all(isinstance(v, t) for v in val):
-      raise ValueError(f"Value must be a list of {t}, but is {val}")
-    return val
-  return default
+  # if the val is None, use the default.
+  if val is None:
+    return default
+  # repeat val if it is not a list.
+  if not isinstance(val, list):
+    return [val] * len(default)
+  # if the val is a list, it must be of the correct length.
+  if len(val) != len(default):
+    raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
+  # if the val is a list of the correct length, the values must be of the right type.
+  if not all(isinstance(v, t) for v in val):
+    raise ValueError(f"Value must be a list of {t}, but is {val}")
+  # the value is ready to be used.
+  return val
 
 
 def parse_star_fw_string(resp: str, fmt: str = "") -> dict:
