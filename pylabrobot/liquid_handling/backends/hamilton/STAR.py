@@ -2264,7 +2264,9 @@ class STAR(HamiltonLiquidHandler):
     acceleration_index_low_acc: int = 1,
     fold_up_sequence_at_the_end_of_process: bool = True
   ):
-    """ Pick up a resource using iSWAP """
+    """ Pick up a resource using iSWAP.
+    Low level component of :meth:`move_resource`
+       """
 
     assert self.iswap_installed, "iswap must be installed"
 
@@ -2315,7 +2317,9 @@ class STAR(HamiltonLiquidHandler):
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1
   ):
-    """ After a resource is picked up, move it to a new location but don't release it yet. """
+    """ After a resource is picked up, move it to a new location but don't release it yet.
+        Low level component of :meth:`move_resource`
+"""
 
     assert self.iswap_installed, "iswap must be installed"
 
@@ -2352,7 +2356,9 @@ class STAR(HamiltonLiquidHandler):
     z_position_at_the_command_end: int = 2840,
     collision_control_level: int = 0,
   ):
-    """ After a resource is picked up, release it at the specified location. """
+    """ After a resource is picked up, release it at the specified location.
+        Low level component of :meth:`move_resource`
+    """
 
     assert self.iswap_installed, "iswap must be installed"
 
@@ -3981,6 +3987,7 @@ class STAR(HamiltonLiquidHandler):
       channel_2: int = 8,
   ):
     """ Pick up resource with CoRe gripper tool
+        Low level component of :meth:`move_resource`
 
     Args:
       resource: Resource to pick up.
@@ -4028,6 +4035,7 @@ class STAR(HamiltonLiquidHandler):
       z_speed: int = 500,
   ):
     """ After a ressource is picked up, move it to a new location but don't release it yet.
+    Low level component of :meth:`move_resource`
 
     Args:
       location: Location to move to.
@@ -4064,8 +4072,9 @@ class STAR(HamiltonLiquidHandler):
       z_position_at_the_command_end: int = 2750,
   ):
     """ Place resource with CoRe gripper tool
+    Low level component of :meth:`move_resource`
 
-    Args:
+        Args:
       resource: Location to place.
       pickup_distance_from_top: Distance from top of resource to place.
       offset: Offset from resource position in mm.
