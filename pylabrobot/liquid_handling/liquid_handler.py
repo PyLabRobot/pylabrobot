@@ -1179,6 +1179,8 @@ class LiquidHandler(MachineFrontend):
   ):
     """ Move a resource to a new location.
 
+    Has convenience methods :meth:`move_plate` and :meth:`move_lid`.
+
     Examples:
       Move a plate to a new location:
 
