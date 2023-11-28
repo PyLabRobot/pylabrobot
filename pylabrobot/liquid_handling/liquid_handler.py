@@ -847,7 +847,7 @@ class LiquidHandler(MachineFrontend):
 
   async def transfer(
     self,
-    sources: Union[Well, List[Well]],
+    source: Well,
     targets: Union[Well, List[Well]],
     source_vol: Optional[float] = None,
     ratios: Optional[List[float]] = None,
@@ -894,9 +894,6 @@ class LiquidHandler(MachineFrontend):
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
     """
 
-    if isinstance(sources, Well):
-      sources = [sources]
-
     if isinstance(targets, Well):
       targets = [targets]
 
@@ -915,12 +912,11 @@ class LiquidHandler(MachineFrontend):
       if ratios is None:
         ratios = [1] * len(targets)
 
-      # ! this has to be recalculated for multiple source vols
-      target_vols = [source_vol[0] * r / sum(ratios) for r in ratios]
+      target_vols = [source_vol * r / sum(ratios) for r in ratios]
 
     await self.aspirate(
-      resources=[sources],
-      vols=[sum(target_vols) / len(sources)] * len(sources),
+      resources=[source],
+      vols=[sum(target_vols)],
       flow_rates=aspiration_flow_rate,
       **backend_kwargs)
     for target, vol in zip(targets, target_vols):
