@@ -482,16 +482,6 @@ def Cos_96_Filter_P(name: str, with_lid: bool = False) -> Plate:
   return Cos_96_Filter(name=name, with_lid=with_lid).rotated(90)
 
 
-#: Cos_96_Fl_L
-def Cos_96_Fl_L(name: str, with_lid: bool = False) -> Plate:
-  return Cos_96_Fl(name=name, with_lid=with_lid)
-
-
-#: Cos_96_Fl_P
-def Cos_96_Fl_P(name: str, with_lid: bool = False) -> Plate:
-  return Cos_96_Fl(name=name, with_lid=with_lid).rotated(90)
-
-
 def _compute_volume_from_height_Cos_96_HalfArea(h: float):
   volume = min(h, 10.7)*17.7369
   if h > 10.7:

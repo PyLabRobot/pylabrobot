@@ -29,13 +29,13 @@ def serialize(obj: Any) -> JSON:
 
   if isinstance(obj, (int, float, str, bool, type(None))):
     return obj
-  elif isinstance(obj, (list, tuple, set)):
+  if isinstance(obj, (list, tuple, set)):
     return [serialize(item) for item in obj]
-  elif isinstance(obj, dict):
+  if isinstance(obj, dict):
     return {k: serialize(v) for k, v in obj.items()}
-  elif isinstance(obj, enum.Enum):
+  if isinstance(obj, enum.Enum):
     return obj.name
-  elif isinstance(obj, object):
+  if isinstance(obj, object):
     if hasattr(obj, "serialize"): # if the object has a custom serialize method
       return cast(JSON, obj.serialize())
     else:
@@ -46,8 +46,7 @@ def serialize(obj: Any) -> JSON:
         data[key] = serialize(value)
       data["type"] = obj.__class__.__name__
       return data
-  else:
-    raise TypeError(f"Cannot serialize {obj} of type {type(obj)}")
+  raise TypeError(f"Cannot serialize {obj} of type {type(obj)}")
 
 
 def deserialize(data: JSON) -> Any:
@@ -55,16 +54,14 @@ def deserialize(data: JSON) -> Any:
 
   if isinstance(data, (int, float, str, bool, type(None))):
     return data
-  elif isinstance(data, list):
+  if isinstance(data, list):
     return [deserialize(item) for item in data]
-  elif isinstance(data, dict):
+  if isinstance(data, dict):
     if "type" in data: # deserialize a class
       data = data.copy()
       klass_type = cast(str, data.pop("type"))
       klass = get_plr_class_from_string(klass_type)
       params = {k: deserialize(v) for k, v in data.items()}
       return klass(**params)
-    else:
-      return {k: deserialize(v) for k, v in data.items()}
-  else:
-    raise TypeError(f"Cannot deserialize {data} of type {type(data)}")
+    return {k: deserialize(v) for k, v in data.items()}
+  raise TypeError(f"Cannot deserialize {data} of type {type(data)}")

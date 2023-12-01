@@ -88,12 +88,15 @@ class Carrier(Resource):
       model=model)
 
     sites = sites if sites is not None else []
-    self.capacity = len(sites)
 
     self.sites: List[CarrierSite] = []
     for site in sites:
       site.name = f"carrier-{self.name}-spot-{site.spot}"
       self.assign_child_resource(site, location=site.location)
+
+  @property
+  def capacity(self):
+    return len(self.sites)
 
   def assign_child_resource(
     self,

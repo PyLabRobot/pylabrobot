@@ -170,7 +170,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       Loading from a lay file:
 
       >>> from pylabrobot.resources.hamilton import HamiltonDeck
-      >>> deck = HamiltonDeck.load_from_lay_file("deck.lay")
+      >>> deck = HamiltonSTARDeck.load_from_lay_file("deck.lay")
     """
 
     # pylint: disable=import-outside-toplevel, cyclic-import

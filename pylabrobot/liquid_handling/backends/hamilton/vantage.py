@@ -521,7 +521,7 @@ class Vantage(HamiltonLiquidHandler):
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
-        liquid=op.liquid or Liquid.WATER,
+        liquid=op.liquids[-1][0] or Liquid.WATER,
         jet=False, # for aspiration
         empty=False # for aspiration
       ) for op in ops]
@@ -665,7 +665,7 @@ class Vantage(HamiltonLiquidHandler):
         is_core=False,
         is_tip=True,
         has_filter=op.tip.has_filter,
-        liquid=op.liquid or Liquid.WATER,
+        liquid=op.liquids[-1][0] or Liquid.WATER,
         jet=jet,
         empty=empty
       ) for jet, empty, op in zip(jet, empty, ops)]
@@ -823,7 +823,8 @@ class Vantage(HamiltonLiquidHandler):
       is_core=True,
       is_tip=True,
       has_filter=tip.has_filter,
-      liquid=aspiration.liquid or Liquid.WATER,
+      # first part of tuple in last liquid of first well
+      liquid=aspiration.liquids[0][-1][0] or Liquid.WATER,
       jet=jet,
       empty=empty
     )
@@ -930,7 +931,8 @@ class Vantage(HamiltonLiquidHandler):
       is_core=True,
       is_tip=True,
       has_filter=tip.has_filter,
-      liquid=dispense.liquid or Liquid.WATER,
+      # first part of tuple in last liquid of first well
+      liquid=dispense.liquids[0][-1][0] or Liquid.WATER,
       jet=jet,
       empty=empty
     )

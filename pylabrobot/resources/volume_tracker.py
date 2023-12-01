@@ -102,7 +102,7 @@ class VolumeTracker:
 
     return self.max_volume - self.get_used_volume()
 
-  def get_liquids(self, top_volume: float) -> List[Tuple[Liquid, float]]:
+  def get_liquids(self, top_volume: float) -> List[Tuple[Optional[Liquid], float]]:
     """ Get the liquids in the top `top_volume` uL """
 
     if top_volume > self.get_used_volume():
