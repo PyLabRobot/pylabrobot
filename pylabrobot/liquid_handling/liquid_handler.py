@@ -598,7 +598,7 @@ class LiquidHandler(MachineFrontend):
         the tips used in the aspiration are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
         aspiration location. If `None`, no offset will be applied.
-      liquid_height: The height of the liquid in the well, in mm.
+      liquid_height: The height of the liquid in the well wrt the bottom, in mm.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -749,7 +749,7 @@ class LiquidHandler(MachineFrontend):
         the tips used in the dispense are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
         dispense location. If `None`, no offset will be applied.
-      liquid_height: The height of the liquid in the well, in mm.
+      liquid_height: The height of the liquid in the well wrt the bottom, in mm.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
