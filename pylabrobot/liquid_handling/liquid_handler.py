@@ -88,13 +88,13 @@ class LiquidHandler(MachineFrontend):
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
+    await super().setup()
+
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 
     self.resource_assigned_callback(self.deck)
     for resource in self.deck.children:
       self.resource_assigned_callback(resource)
-
-    await super().setup()
 
   def save_state(self, filename: str):
     """ Save the state of the liquid handler (including the deck) to a file. """
