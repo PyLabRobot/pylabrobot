@@ -20,7 +20,7 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move
 )
-from pylabrobot.resources import Coordinate, Liquid, Resource, Plate
+from pylabrobot.resources import Coordinate, Liquid, Resource, Plate, Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 
@@ -537,7 +537,9 @@ class Vantage(HamiltonLiquidHandler):
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
                               for wb, op in zip(well_bottoms, ops)]
     # -1 compared to STAR?
-    lld_search_heights = [wb + op.resource.get_size_z()+5-1 for wb, op in zip(well_bottoms, ops)]
+    lld_search_heights = [wb + op.resource.get_size_z() + \
+                          (2.7-1 if isinstance(op.resource, Well) else 5) #?
+                          for wb, op in zip(well_bottoms, ops)]
 
     flow_rates = [
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
@@ -680,7 +682,10 @@ class Vantage(HamiltonLiquidHandler):
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
                               for wb, op in zip(well_bottoms, ops)]
     # -1 compared to STAR?
-    lld_search_heights = [wb + op.resource.get_size_z()+5-1 for wb, op in zip(well_bottoms, ops)]
+    lld_search_heights = [wb + op.resource.get_size_z() + \
+                          (2.7-1 if isinstance(op.resource, Well) else 5) #?
+                          for wb, op in zip(well_bottoms, ops)]
+
 
     flow_rates = [
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100)
@@ -831,7 +836,8 @@ class Vantage(HamiltonLiquidHandler):
     volume = hlc.compute_corrected_volume(aspiration.volume) if hlc is not None \
       else aspiration.volume
 
-    lld_search_height = well_bottoms + well_a1.get_size_z() + 4
+    # -1 compared to STAR?
+    lld_search_height = well_bottoms + well_a1.get_size_z() + 2.7-1
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0)
@@ -915,7 +921,7 @@ class Vantage(HamiltonLiquidHandler):
     position = well_a1.get_absolute_location() + well_a1.center()
 
     liquid_height = well_a1.get_absolute_location().z + (dispense.liquid_height or 0) + \
-      (dispense.offset.z if dispense.offset is not None else 0) + well_a1.get_size_z() + 1 # +1?
+      (dispense.offset.z if dispense.offset is not None else 0) + 10 # +10?
 
     well_bottoms = well_a1.get_absolute_location().z + \
       (dispense.offset.z if dispense.offset is not None else 0)
@@ -939,7 +945,8 @@ class Vantage(HamiltonLiquidHandler):
     volume = hlc.compute_corrected_volume(dispense.volume) if hlc is not None \
       else dispense.volume
 
-    lld_search_height = well_bottoms + well_a1.get_size_z() + 4
+    # -1 compared to STAR?
+    lld_search_height = well_bottoms + well_a1.get_size_z() + 2.7-1
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0)

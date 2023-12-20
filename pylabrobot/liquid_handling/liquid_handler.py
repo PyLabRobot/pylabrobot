@@ -88,15 +88,13 @@ class LiquidHandler(MachineFrontend):
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
-    await self.backend.setup()
+    await super().setup()
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 
     self.resource_assigned_callback(self.deck)
     for resource in self.deck.children:
       self.resource_assigned_callback(resource)
-
-    await super().setup()
 
   def save_state(self, filename: str):
     """ Save the state of the liquid handler (including the deck) to a file. """
@@ -598,7 +596,7 @@ class LiquidHandler(MachineFrontend):
         the tips used in the aspiration are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
         aspiration location. If `None`, no offset will be applied.
-      liquid_height: The height of the liquid in the well, in mm.
+      liquid_height: The height of the liquid in the well wrt the bottom, in mm.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -749,7 +747,7 @@ class LiquidHandler(MachineFrontend):
         the tips used in the dispense are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
         dispense location. If `None`, no offset will be applied.
-      liquid_height: The height of the liquid in the well, in mm.
+      liquid_height: The height of the liquid in the well wrt the bottom, in mm.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:

@@ -17,7 +17,7 @@ def need_setup_finished(func: Callable):
   async def wrapper(self: MachineFrontend, *args, **kwargs):
     if not self.setup_finished:
       raise RuntimeError("The setup has not finished. See `setup`.")
-    await func(self, *args, **kwargs)
+    return await func(self, *args, **kwargs)
   return wrapper
 
 
