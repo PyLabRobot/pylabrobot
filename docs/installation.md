@@ -17,9 +17,23 @@ python -m virtualenv env
 source env/bin/activate
 ```
 
-### Using pip
+### From source
 
-Installing from PyPI is the easiest and recommended way to install PyLabRobot.
+Alternatively, you can install PyLabRobot from source. This is particularly useful if you want to contribute to the project.
+
+```bash
+git clone https://github.com/pylabrobot/pylabrobot.git
+cd pylabrobot
+pip install -e '.[dev]'
+```
+
+See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
+
+(using-the-firmware-interface-with-hamilton-robots)=
+
+### Using pip (outdated and NOT recommended)
+
+> The PyPI package is currently out of date. Please install from source (see above).
 
 The following will install PyLabRobot and the essential dependencies:
 
@@ -60,20 +74,6 @@ Or install all dependencies at once:
 ```bash
 pip install pylabrobot[all]
 ```
-
-### From source
-
-Alternatively, you can install PyLabRobot from source. This is particularly useful if you want to contribute to the project.
-
-```bash
-git clone https://github.com/pylabrobot/pylabrobot.git
-cd pylabrobot
-pip install -e '.[dev]'
-```
-
-See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
-
-(using-the-firmware-interface-with-hamilton-robots)=
 
 ## Using the firmware interface with Hamilton robots
 
