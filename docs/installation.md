@@ -2,7 +2,7 @@
 
 These instructions describe how to install PyLabRobot.
 
-Note that there are additional installation steps for using the firmware (universal) interface to Hamiltons, see {ref}`below <using-the-firmware-interface-with-hamilton-robots>`.
+Note that there are additional installation steps for using the firmware (universal) interface to Hamiltons and Tecans, see {ref}`below <using-the-firmware-interface>`.
 
 ## Installing PyLabRobot
 
@@ -28,8 +28,6 @@ pip install -e '.[dev]'
 ```
 
 See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
-
-(using-the-firmware-interface-with-hamilton-robots)=
 
 ### Using pip (outdated and NOT recommended)
 
@@ -74,6 +72,8 @@ Or install all dependencies at once:
 ```bash
 pip install pylabrobot[all]
 ```
+
+(using-the-firmware-interface)=
 
 ## Using the firmware interface with Hamilton or Tecan robots
 
