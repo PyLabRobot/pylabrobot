@@ -75,9 +75,9 @@ Or install all dependencies at once:
 pip install pylabrobot[all]
 ```
 
-## Using the firmware interface with Hamilton robots
+## Using the firmware interface with Hamilton or Tecan robots
 
-If you want to use the firmware version of the Hamilton driver, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions [here](https://github.com/pyusb/pyusb#requirements-and-platform-support). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
+If you want to use the firmware version of the Hamilton or Tecan interfaces, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions [here](https://github.com/pyusb/pyusb#requirements-and-platform-support). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
 
 Reminder: when you are using the firmware version, make sure to install the firmware dependencies as follows:
 
@@ -109,7 +109,7 @@ brew install libusb
 
 ![](./img/installation/install-1.png)
 
-4. Select "ML Star" from the list.
+4. Select "ML Star" from the list if you're using a Hamilton STAR or STARlet. If you're using a Tecan robot, select "TECU".
 
 ![](./img/installation/install-2.png)
 
@@ -129,13 +129,13 @@ brew install libusb
 
 _These instructions only apply if you are using VENUS on your computer!_
 
-If you ever wish to switch back from firmware command to use `pyhamilton`, the `VENUS` backend or plain VENUS, you have to replace the updated driver with the original Hamilton one.
+If you ever wish to switch back from firmware command to use `pyhamilton` or plain VENUS, you have to replace the updated driver with the original Hamilton or Tecan one.
 
 1. This guide is only relevant if ML Star is listed under libusbK USB Devices in the Device Manager program.
 
 ![](./img/installation/uninstall-1.png)
 
-2. If that"s the case, double click "ML Star" to open this dialog, then click "Driver".
+2. If that"s the case, double click "ML Star" (or similar) to open this dialog, then click "Driver".
 
 ![](./img/installation/uninstall-2.png)
 
