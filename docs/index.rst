@@ -29,6 +29,13 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 
 
 .. toctree::
+   :maxdepth: 1
+   :caption: Pumps
+
+   pumps
+
+
+.. toctree::
    :maxdepth: 4
    :caption: API documentation
 
