@@ -1,6 +1,7 @@
 """ Tests for LiquidHandler """
 # pylint: disable=missing-class-docstring
 
+import pytest
 import tempfile
 from typing import Any, Dict, List, Optional, cast
 import unittest
@@ -496,6 +497,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.lh.aspirate([well], vols=10)
 
+  @pytest.mark.filterwarnings("ignore:Extra arguments to backend.pick_up_tips")
   async def test_strictness(self):
     class TestBackend(backends.SaverBackend):
       """ Override pick_up_tips for testing. """
