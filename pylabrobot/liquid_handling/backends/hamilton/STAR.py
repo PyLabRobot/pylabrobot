@@ -54,8 +54,8 @@ def need_iswap_parked(method: Callable):
   """
 
   @functools.wraps(method)
-  async def wrapper(self, *args, **kwargs):
-    if not self.iswap_parked:
+  async def wrapper(self: "STAR", *args, **kwargs):
+    if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap()
 
     result = await method(self, *args, **kwargs) # pylint: disable=not-callable
