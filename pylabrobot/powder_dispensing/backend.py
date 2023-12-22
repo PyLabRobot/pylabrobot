@@ -4,7 +4,6 @@ from typing import List
 
 from pylabrobot.machine import MachineBackend
 from pylabrobot.resources import Resource, Powder
-from typing import Optional, Dict, Any
 
 
 class PowderDispenserBackend(MachineBackend, metaclass=ABCMeta):
@@ -40,13 +39,11 @@ class PowderDispense:
     resource: Resource,
     powder: Powder,
     amount: float,
-    params: Optional[Dict[str, Any]] = None,
     **kwargs
   ) -> None:
     self.resource = resource
     self.powder = powder
     self.amount = amount
-    self.params = params
     self.kwargs = kwargs
 
 
