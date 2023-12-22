@@ -1,4 +1,4 @@
-from typing import Any, Dict, Union, List, Sequence, cast, Optional
+from typing import Any, Dict, Union, List, Sequence, cast
 from pylabrobot.machine import MachineFrontend, need_setup_finished
 from .backend import PowderDispenserBackend, PowderDispense
 from pylabrobot.resources import (
@@ -31,7 +31,6 @@ class PowderDispenser(MachineFrontend):
     resources: Union[Resource, Sequence[Resource]],
     powders: Union[Powder, Sequence[Powder]],
     amounts: Union[float, Sequence[float]],
-    dispense_parameters: Optional[Union[Dict[str, Any], Sequence[Dict[str, Any]]]] = None,
     **backend_kwargs
   ) -> List[Dict[str, Any]]:
     """
@@ -41,10 +40,7 @@ class PowderDispenser(MachineFrontend):
       resources (Union[Resource, Sequence[Resource]]): The target resources
         into which the dispenses should happen. Usually would be a well or a vial.
       powders (Union[Powder, Sequence[Powder]]): The powders to dispense.
-      amounts (Union[float, Sequence[float]]): The amounts of powders to dispense. In kg, S.I.
-      dispense_parameters (Optional[Union[Dict[str, Any], Sequence[Dict[str, Any]]]], optional):
-        Additional parameters for the dispense. The parameters are optional and depend on the
-        backend. Defaults to None.
+      amounts (Union[float, Sequence[float]]): The amounts of powders to dispense. In mg, S.I.
       **backend_kwargs: Additional keyword arguments to be passed to the backend.
 
     Returns:
@@ -64,20 +60,14 @@ class PowderDispenser(MachineFrontend):
     if isinstance(amounts, float):
       amounts = [amounts]
 
-    assert len(amounts) == len(powders)
+    assert len(amounts) == len(powders) == len(resources)
 
-    if dispense_parameters is not None:
-      assert len(dispense_parameters) == len(powders)
-    else:
-      powder_dispenses = [
-        PowderDispense(resource=r, powder=p, amount=a, params=dp)
-        if dispense_parameters is not None
-        else PowderDispense(resource=r, powder=p, amount=a)
-        for r, p, a, dp in zip(
+    powder_dispenses = [
+        PowderDispense(resource=r, powder=p, amount=a)
+        for r, p, a in zip(
           resources,
           powders,
           amounts,
-          dispense_parameters or [None] * len(resources)
         )
       ]
 
