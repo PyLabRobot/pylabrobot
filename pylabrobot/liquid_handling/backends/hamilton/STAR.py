@@ -2266,7 +2266,7 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ Pick up a resource using iSWAP.
     Low level component of :meth:`move_resource`
-       """
+    """
 
     assert self.iswap_installed, "iswap must be installed"
 
@@ -2318,8 +2318,8 @@ class STAR(HamiltonLiquidHandler):
     acceleration_index_low_acc: int = 1
   ):
     """ After a resource is picked up, move it to a new location but don't release it yet.
-        Low level component of :meth:`move_resource`
-"""
+    Low level component of :meth:`move_resource`
+    """
 
     assert self.iswap_installed, "iswap must be installed"
 
@@ -2357,7 +2357,7 @@ class STAR(HamiltonLiquidHandler):
     collision_control_level: int = 0,
   ):
     """ After a resource is picked up, release it at the specified location.
-        Low level component of :meth:`move_resource`
+    Low level component of :meth:`move_resource`
     """
 
     assert self.iswap_installed, "iswap must be installed"
@@ -4047,7 +4047,7 @@ class STAR(HamiltonLiquidHandler):
         3 = 1.0 mm/s2, 4 = 2.0 mm/s2, 5 = 5.0 mm/s2, 6 = 10.0 mm/s2, 7 = 20.0 mm/s2). Must be
         between 0 and 7. Default 4.
       z_speed: Z speed [0.1mm/s]. Must be between 3 and 1600. Default 500.
-      """
+    """
 
     center = location + resource.center()
 
@@ -4074,7 +4074,7 @@ class STAR(HamiltonLiquidHandler):
     """ Place resource with CoRe gripper tool
     Low level component of :meth:`move_resource`
 
-        Args:
+    Args:
       resource: Location to place.
       pickup_distance_from_top: Distance from top of resource to place.
       offset: Offset from resource position in mm.
@@ -4085,6 +4085,7 @@ class STAR(HamiltonLiquidHandler):
         channels independent of tip pattern parameter 'tm'). Must be between 0 and 3600.  Default
         3600.
     """
+
     # Get center of destination location. Also gripping height and plate width.
     center = location + resource.center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
