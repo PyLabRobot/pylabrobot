@@ -1251,9 +1251,10 @@ class STAR(HamiltonLiquidHandler):
         discarding_method=0
       )
 
-    iswap_initialized = await self.request_iswap_initialization_status()
-    if self.iswap_installed and not iswap_initialized:
-      await self.initialize_iswap()
+    if self.iswap_installed:
+      iswap_initialized = await self.request_iswap_initialization_status()
+      if not iswap_initialized:
+        await self.initialize_iswap()
 
       await self.park_iswap()
       self._iswap_parked = True
