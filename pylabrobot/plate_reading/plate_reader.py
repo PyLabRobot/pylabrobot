@@ -20,24 +20,14 @@ class PlateReader(Resource, MachineFrontend):
   absorbance, or fluorescence from a plate.
 
   Plate readers are asynchronous, meaning that their methods will return immediately and
-  will not block. If you want to use a plate reader in a synchronous context, use SyncPlateReader
-  instead.
+  will not block.
 
-  Here's an example of how to use this class in a Juptyer Notebook:
+  Here's an example of how to use this class in a Jupyter Notebook:
 
   >>> from pylabrobot.plate_reading.clario_star import CLARIOStar
   >>> pr = PlateReader(backend=CLARIOStar())
   >>> pr.setup()
   >>> await pr.read_luminescence()
-  [[value1, value2, value3, ...], [value1, value2, value3, ...], ...
-
-  In a synchronous context, use asyncio.run() to run the asynchronous methods:
-
-  >>> import asyncio
-  >>> from pylabrobot.plate_reading.clario_star import CLARIOStar
-  >>> pr = SyncPlateReader(backend=CLARIOStar())
-  >>> pr.setup()
-  >>> asyncio.run(pr.read_luminescence())
   [[value1, value2, value3, ...], [value1, value2, value3, ...], ...
   """
 
@@ -80,10 +70,11 @@ class PlateReader(Resource, MachineFrontend):
     wavelength: int,
     report: Literal["OD", "transmittance"]
   ) -> List[List[float]]:
-    """ Read the absorbance from the plate.
+    """ Read the absorbance from the plate in either OD or transmittance.
 
     Args:
       wavelength: The wavelength to read the absorbance at, in nanometers.
+      report: Whether to report the absorbance in OD or transmittance.
     """
 
     if report not in {"OD", "transmittance"}:
