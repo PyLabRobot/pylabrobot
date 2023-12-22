@@ -1216,7 +1216,7 @@ class LiquidHandler(MachineFrontend):
     to: Union[Plate, ResourceStack, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
-    to_offset: Coordinate = Coordinate.zero(),
+    destination_offset: Coordinate = Coordinate.zero(),
     get_direction: GripDirection = GripDirection.FRONT,
     put_direction: GripDirection = GripDirection.FRONT,
     pickup_distance_from_top: float = 5.7,
@@ -1240,7 +1240,7 @@ class LiquidHandler(MachineFrontend):
       lid: The lid to move. Can be either a Plate object or a Lid object.
       to: The location to move the lid to, either a plate, ResourceStack or a Coordinate.
       resource_offset: The offset from the resource's origin, optional (rarely necessary).
-      to_offset: The offset from the location's origin, optional (rarely necessary).
+      destination_offset: The offset from the location's origin, optional (rarely necessary).
 
     Raises:
       ValueError: If the lid is not assigned to a resource.
@@ -1270,7 +1270,7 @@ class LiquidHandler(MachineFrontend):
       intermediate_locations=intermediate_locations,
       pickup_distance_from_top=pickup_distance_from_top,
       resource_offset=resource_offset,
-      to_offset=to_offset,
+      destination_offset=destination_offset,
       get_direction=get_direction,
       put_direction=put_direction,
       **backend_kwargs)
@@ -1289,7 +1289,7 @@ class LiquidHandler(MachineFrontend):
     to: Union[ResourceStack, CarrierSite, Resource, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
-    to_offset: Coordinate = Coordinate.zero(),
+    destination_offset: Coordinate = Coordinate.zero(),
     put_direction: GripDirection = GripDirection.FRONT,
     get_direction: GripDirection = GripDirection.FRONT,
     pickup_distance_from_top: float = 13.2,
@@ -1324,7 +1324,7 @@ class LiquidHandler(MachineFrontend):
       plate: The plate to move. Can be either a Plate object or a CarrierSite object.
       to: The location to move the plate to, either a plate, CarrierSite or a Coordinate.
       resource_offset: The offset from the resource's origin, optional (rarely necessary).
-      to_offset: The offset from the location's origin, optional (rarely necessary).
+      destination_offset: The offset from the location's origin, optional (rarely necessary).
     """
 
     if isinstance(to, ResourceStack):
@@ -1345,7 +1345,7 @@ class LiquidHandler(MachineFrontend):
       intermediate_locations=intermediate_locations,
       pickup_distance_from_top=pickup_distance_from_top,
       resource_offset=resource_offset,
-      to_offset=to_offset,
+      destination_offset=destination_offset,
       get_direction=get_direction,
       put_direction=put_direction,
       **backend_kwargs)
