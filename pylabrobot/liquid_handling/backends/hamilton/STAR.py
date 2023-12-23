@@ -2400,6 +2400,7 @@ class STAR(HamiltonLiquidHandler):
     use_arm: str = "iswap",
     channel_1: int = 7,
     channel_2: int = 8,
+    core_grip_strength: int = 15
   ):
     """ Move a resource.
 
@@ -2408,6 +2409,8 @@ class STAR(HamiltonLiquidHandler):
       use_arm: Which arm to use. Either "iswap" or "core".
       channel_1: The first channel to use with the core arm. Only used if `use_arm` is "core".
       channel_2: The second channel to use with the core arm. Only used if `use_arm` is "core".
+      core_grip_strength: The grip strength to use with the core arm. Only used if `use_arm` is
+        "core".
     """
 
     if not use_arm in {"iswap", "core"}:
@@ -2430,6 +2433,7 @@ class STAR(HamiltonLiquidHandler):
         minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10),
         channel_1=channel_1,
         channel_2=channel_2,
+        grip_strength=core_grip_strength,
       )
 
     previous_location = move.resource.get_absolute_location() + move.resource_offset
@@ -3980,7 +3984,7 @@ class STAR(HamiltonLiquidHandler):
       tz="2050",
       th="2450",
       te="2450"
-      )
+    )
     self._core_parked = True
     return command_output
 
