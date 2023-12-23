@@ -2400,7 +2400,8 @@ class STAR(HamiltonLiquidHandler):
     use_arm: str = "iswap",
     channel_1: int = 7,
     channel_2: int = 8,
-    core_grip_strength: int = 15
+    core_grip_strength: int = 15,
+    return_core_gripper: bool = True,
   ):
     """ Move a resource.
 
@@ -2411,6 +2412,8 @@ class STAR(HamiltonLiquidHandler):
       channel_2: The second channel to use with the core arm. Only used if `use_arm` is "core".
       core_grip_strength: The grip strength to use with the core arm. Only used if `use_arm` is
         "core".
+      return_core_gripper: Whether to return the core gripper to the home position after the move.
+        Only used if `use_arm` is "core".
     """
 
     if not use_arm in {"iswap", "core"}:
@@ -2478,6 +2481,7 @@ class STAR(HamiltonLiquidHandler):
         pickup_distance_from_top=move.pickup_distance_from_top,
         minimum_traverse_height_at_beginning_of_a_command=
           int(previous_location.z + move.resource.get_size_z() / 2) * 10,
+        return_tool=return_core_gripper
       )
 
   async def prepare_for_manual_channel_operation(self):
@@ -4085,6 +4089,7 @@ class STAR(HamiltonLiquidHandler):
       offset: Coordinate = Coordinate.zero(),
       minimum_traverse_height_at_beginning_of_a_command: int = 2750,
       z_position_at_the_command_end: int = 2750,
+      return_tool: bool = True
   ):
     """ Place resource with CoRe gripper tool
     Low level component of :meth:`move_resource`
@@ -4099,6 +4104,7 @@ class STAR(HamiltonLiquidHandler):
       z_position_at_the_command_end: Minimum z-Position at end of a command [0.1 mm] (refers to all
         channels independent of tip pattern parameter 'tm'). Must be between 0 and 3600.  Default
         3600.
+      return_tool: Return tool to wasteblock mount after placing. Default True.
     """
 
     # Get center of destination location. Also gripping height and plate width.
@@ -4117,7 +4123,7 @@ class STAR(HamiltonLiquidHandler):
       minimum_traverse_height_at_beginning_of_a_command=
         minimum_traverse_height_at_beginning_of_a_command,
       z_position_at_the_command_end=z_position_at_the_command_end,
-      return_tool=True
+      return_tool=return_tool
     )
 
   async def core_open_gripper(self):
