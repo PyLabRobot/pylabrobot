@@ -2394,12 +2394,20 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=collision_control_level,
     )
 
-  async def move_resource(self, move: Move, use_arm: str = "iswap"):
+  async def move_resource(
+    self,
+    move: Move,
+    use_arm: str = "iswap",
+    channel_1: int = 7,
+    channel_2: int = 8,
+  ):
     """ Move a resource.
 
     Args:
       move: The move to perform.
       use_arm: Which arm to use. Either "iswap" or "core".
+      channel_1: The first channel to use with the core arm. Only used if `use_arm` is "core".
+      channel_2: The second channel to use with the core arm. Only used if `use_arm` is "core".
     """
 
     if not use_arm in {"iswap", "core"}:
@@ -2420,6 +2428,8 @@ class STAR(HamiltonLiquidHandler):
         pickup_distance_from_top=move.pickup_distance_from_top,
         offset=move.resource_offset,
         minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10),
+        channel_1=channel_1,
+        channel_2=channel_2,
       )
 
     previous_location = move.resource.get_absolute_location() + move.resource_offset
