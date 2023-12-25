@@ -146,13 +146,16 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         og_y = cast(Coordinate, og_resource.location).y
 
         # A resource is not allowed to overlap with another resource. Resources overlap when a
-        # corner of one resource is inside the boundaries other resource.
-        if (og_x <= resource_location.x < og_x + og_resource.get_size_x() or \
-          og_x <= resource_location.x + resource.get_size_x() <
-            og_x + og_resource.get_size_x()) and \
-            (og_y <= resource_location.y < og_y + og_resource.get_size_y() or \
-              og_y <= resource_location.y + resource.get_size_y() <
-                og_y + og_resource.get_size_y()):
+        # corner of one resource is inside the boundaries of another resource.
+        if any([
+          og_x <= resource_location.x < og_x + og_resource.get_size_x(),
+          og_x < resource_location.x + resource.get_size_x() < og_x + og_resource.get_size_x()
+          ]) and any(
+            [
+              og_y <= resource_location.y < og_y + og_resource.get_size_y(),
+              og_y < resource_location.y + resource.get_size_y() < og_y + og_resource.get_size_y()
+            ]
+          ):
           raise ValueError(f"Location {resource_location} is already occupied by resource "
                             f"'{og_resource.name}'.")
 
