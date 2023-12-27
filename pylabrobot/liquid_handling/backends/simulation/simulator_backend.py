@@ -204,7 +204,11 @@ class SimulatorBackend(WebSocketBackend):
 
     await self.send_command(command="adjust_well_liquids", data={"pattern": serialized_pattern})
 
-  async def adjust_container_liquids(self, container: Container, liquids: List[Tuple[Liquid, float]]):
+  async def adjust_container_liquids(
+    self,
+    container: Container,
+    liquids: List[Tuple[Liquid, float]]
+  ):
     """ Fill a container with the specified liquids (**simulator only**).
 
     Simulator method to fill a resource with liquid, for testing of liquid handling.
