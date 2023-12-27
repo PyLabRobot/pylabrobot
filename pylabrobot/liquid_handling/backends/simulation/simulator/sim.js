@@ -122,6 +122,12 @@ function adjustLiquids(pattern) {
   return null;
 }
 
+function adjustResourceLiquids(liquids, resource_name) {
+  const resource = resources[resource_name];
+  resource.setLiquids(liquids);
+  return null;
+}
+
 function checkPipHeadReach(x) {
   // Check if the x coordinate is within the pip head range. Undefined indicates no limit.
   // Returns the error.
@@ -444,7 +450,9 @@ async function handleEvent(event, data) {
           system = SYSTEM_OPENTRONS;
           // Just one channel for Opentrons right now. Should create a UI to select the config.
           mainHead.push(new PipettingChannel("Channel: 1"));
-        } else if (["HamiltonSTARDeck","HamiltonDeck"].includes(data.resource.type)) {
+        } else if (
+          ["HamiltonSTARDeck", "HamiltonDeck"].includes(data.resource.type)
+        ) {
           system = SYSTEM_HAMILTON;
           for (let i = 0; i < 8; i++) {
             mainHead.push(new PipettingChannel(`Channel: ${i + 1}`));
@@ -473,6 +481,10 @@ async function handleEvent(event, data) {
 
     case "adjust_well_liquids":
       ret.error = adjustLiquids(data.pattern);
+      break;
+
+    case "adjust_container_liquids":
+      ret.error = adjustResourceLiquids(data.liquids, data.resource_name);
       break;
 
     case "aspirate":

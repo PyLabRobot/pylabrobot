@@ -9,7 +9,7 @@ import webbrowser
 
 from pylabrobot.liquid_handling.backends.websocket import WebSocketBackend
 from pylabrobot.liquid_handling.standard import Move
-from pylabrobot.resources import Plate, TipRack, Liquid
+from pylabrobot.resources import Container, Plate, TipRack, Liquid
 
 
 logger = logging.getLogger("pylabrobot")
@@ -203,6 +203,26 @@ class SimulatorBackend(WebSocketBackend):
       })
 
     await self.send_command(command="adjust_well_liquids", data={"pattern": serialized_pattern})
+
+  async def adjust_container_liquids(self, container: Container, liquids: List[Tuple[Liquid, float]]):
+    """ Fill a container with the specified liquids (**simulator only**).
+
+    Simulator method to fill a resource with liquid, for testing of liquid handling.
+
+    Args:
+      container: The container to fill.
+      liquids: The liquids to fill the container with. Liquids are specified as a list of tuples of
+        (liquid, volume).
+    """
+
+    serialized_liquids = [
+      {"liquid": liquid.name if liquid is not None else None, "volume": volume}
+      for liquid, volume in liquids]
+
+    await self.send_command(command="adjust_container_liquids", data={
+      "liquids": serialized_liquids,
+      "resource_name": container.name
+    })
 
   async def edit_tips(self, tip_rack: TipRack, pattern: List[List[bool]]):
     """ Place and/or remove tips on the robot (**simulator only**).
