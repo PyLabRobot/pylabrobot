@@ -639,6 +639,32 @@ class Container extends Resource {
   }
 }
 
+class Trough extends Container {
+  drawMainShape() {
+    let mainShape = new Konva.Group();
+
+    let background = new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: "white",
+      stroke: "black",
+      strokeWidth: 1,
+    });
+
+    let liquidLayer = new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: Trough.colorForVolume(this.getVolume(), this.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+    });
+
+    mainShape.add(background);
+    mainShape.add(liquidLayer);
+    return mainShape;
+  }
+}
+
 class Well extends Container {
   draggable = false;
   canDelete = false;
@@ -822,6 +848,8 @@ function classForResourceType(type) {
       return TipCarrier;
     case "Container":
       return Container;
+    case "Trough":
+      return Trough;
     case "VantageDeck":
       alert(
         "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"
