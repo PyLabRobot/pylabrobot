@@ -678,12 +678,19 @@ class LiquidHandler(MachineFrontend):
 
     try:
       await self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
-    except:
+    except Exception as error:  # pylint: disable=broad-exception-caught
       for op in aspirations:
         if not op.resource.tracker.is_disabled:
           op.resource.tracker.rollback()
           op.tip.tracker.rollback()
-      raise
+      self._trigger_callback(
+        "aspirate",
+        liquid_handler=self,
+        operations=aspirations,
+        use_channels=use_channels,
+        error=error,
+        **backend_kwargs,
+      )
     else:
       for op in aspirations:
         if not op.resource.tracker.is_disabled:
@@ -691,6 +698,14 @@ class LiquidHandler(MachineFrontend):
           op.tip.tracker.commit()
       for tracker in self.head.values():
         tracker.commit()
+      self._trigger_callback(
+        "aspirate",
+        liquid_handler=self,
+        operations=aspirations,
+        use_channels=use_channels,
+        error=None,
+        **backend_kwargs,
+      )
 
     if end_delay > 0:
       time.sleep(end_delay)
