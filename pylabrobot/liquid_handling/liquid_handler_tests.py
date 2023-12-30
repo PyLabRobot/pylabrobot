@@ -13,7 +13,7 @@ from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.resources.volume_tracker import set_volume_tracking
 
 from . import backends
-from .liquid_handler import LiquidHandler
+from .liquid_handler import LiquidHandler, OperationCallback
 from pylabrobot.resources import (
   Coordinate,
   Deck,
@@ -569,3 +569,42 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(well_a2.tracker.liquids, [(None, 10)])
 
     set_volume_tracking(enabled=False)
+
+
+class LiquidHandlerForTesting(LiquidHandler):
+  @property
+  def callbacks(self):
+    return self._callbacks
+
+  def trigger_callback(self, method_name: str, *args, **kwargs):
+    self._trigger_callback(method_name, *args, **kwargs)
+
+
+class TestLiquidHandlerCallbacks(unittest.IsolatedAsyncioTestCase):
+  def setUp(self):
+    self.backend = backends.SaverBackend(num_channels=8)
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandlerForTesting(self.backend, deck=self.deck)
+    self.callback = unittest.mock.Mock(spec=OperationCallback)
+
+  def test_register_callback(self):
+    self.lh.register_callback("test_operation", self.callback)
+    assert "test_operation" in self.lh.callbacks
+
+  def test_duplicate_register_callback(self):
+    self.lh.register_callback("test_duplicate", self.callback)
+    with pytest.raises(RuntimeError):
+      self.lh.register_callback("test_duplicate", self.callback)
+
+  def test_trigger_callback_without_error(self):
+    self.lh.register_callback("test_operation_without_error", self.callback)
+    self.lh.trigger_callback("test_operation_without_error", self.lh)
+    self.callback.assert_called_once()
+
+  def test_trigger_callback_not_found_with_error(self):
+    with pytest.raises(RuntimeError):
+      self.lh.trigger_callback(
+        "test_callback_not_registered_with_error",
+        liquid_handler=self.lh,
+        error=RuntimeError("test"),
+      )

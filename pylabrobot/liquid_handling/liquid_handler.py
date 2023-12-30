@@ -9,7 +9,7 @@ import logging
 import numbers
 import threading
 import time
-from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol
 import warnings
 
 from pylabrobot.machine import MachineFrontend, need_setup_finished
@@ -74,6 +74,7 @@ class LiquidHandler(MachineFrontend):
 
     self.backend: LiquidHandlerBackend = backend
     self._picked_up_tips96: Optional[TipRack] = None # TODO: replace with tracker.
+    self._callbacks: Dict[str, OperationCallback] = {}
 
     self.deck = deck
     self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
@@ -1383,6 +1384,21 @@ class LiquidHandler(MachineFrontend):
     with open(path, "w", encoding="utf-8") as f:
       json.dump(self.serialize(), f, indent=2)
 
+  def register_callback(self, method_name: str, callback: OperationCallback):
+    """Registers a callback for a specific method."""
+    if self._callbacks.get(method_name):
+      error_message = f"Callback already registered for: {method_name}"
+      raise RuntimeError(error_message)
+    self._callbacks[method_name] = callback
+
+  def _trigger_callback(self, method_name: str, *args, **kwargs):
+    """Triggers the callback associated with a method, if any."""
+    error = kwargs.pop("error", None)
+    if callback := self._callbacks.get(method_name):
+      callback(*args, error=error, **kwargs)
+    elif error:
+      raise error
+
   @classmethod
   def deserialize(cls, data: dict) -> LiquidHandler:
     """ Deserialize a liquid handler from a dictionary.
@@ -1405,3 +1421,8 @@ class LiquidHandler(MachineFrontend):
 
     with open(path, "r", encoding="utf-8") as f:
       return cls.deserialize(json.load(f))
+
+
+class OperationCallback(Protocol):
+  def __call__(self, handler: "LiquidHandler", *args: Any, **kwargs: Any) -> None:
+    ...  # pragma: no cover
