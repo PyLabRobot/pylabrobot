@@ -1,10 +1,12 @@
+# pylint: skip-file
+
 import re
 
 from pylabrobot.resources import Coordinate
 
 
-path = "Carrier_Coley.cfg"
-# path = "Carrier.cfg"
+# path = "Carrier_Coley.cfg"
+path = "Carrier.cfg"
 
 RES = re.compile("(\d{2});(.*?);(\S*)")
 SITE = re.compile("998;0;(\S{2,});")
@@ -12,8 +14,8 @@ DESC = re.compile("998;(Tecan part no\. .*);")
 DESC2 = re.compile("998;(.* pn \d{8}.*);")
 
 
-def main(pc, tc, p, tr):
-  with open(path) as f:
+def main(pc, tc, p, tr, tcr):
+  with open(path, "r", newline='\r\n', encoding="latin-1") as f:
     c = f.read().split("\n")
 
   for i in range(len(c)):
@@ -21,10 +23,10 @@ def main(pc, tc, p, tr):
     if m is None:
       continue
 
-    name = m.group(2).replace("+", " ").replace("-", " ").replace(" ", "_")
+    name = m.group(2).replace("+", "_").replace("-", "_").replace(" ", "_")
     dim = [d.split("/") for d in m.group(3).split(";")]
 
-    if m.group(1) == "13":
+    if m.group(1) == "13": # Carrier
       off_x = float(dim[1][0]) / 10
       off_y = float(dim[1][1]) / 10
       size_x = float(dim[2][0]) / 10
@@ -38,7 +40,7 @@ def main(pc, tc, p, tr):
       while i + 1 < len(c) and not RES.match(c[i + 1]):
         i += 1
 
-        if s:=SITE.match(c[i]):
+        if s := SITE.match(c[i]):
           site_dim = [d.split("/") for d in s.group(1).split(";")]
           w = float(site_dim[0][0]) / 10
           h = float(site_dim[0][1]) / 10
@@ -49,7 +51,7 @@ def main(pc, tc, p, tr):
           site_size_x = [w] + site_size_x
           site_size_y = [h] + site_size_y
 
-        if d:=DESC.match(c[i]):
+        if d := DESC.match(c[i]):
           desc = d.group(1)
 
       if len(locations) != int(dim[3][0]):
@@ -108,7 +110,7 @@ def main(pc, tc, p, tr):
       # [link];
       # [sort];
 
-    elif m.group(1) == "15":
+    elif m.group(1) == "15": # Plate or TipRack
       num_x = int(dim[1][0])
       num_y = int(dim[1][1])
 
@@ -134,7 +136,7 @@ def main(pc, tc, p, tr):
       z_max = float(dim[3][0])
       area = float(dim[4][0])
 
-      desc = ""
+      desc = None
       while i + 1 < len(c) and not RES.match(c[i + 1]):
         i += 1
         if d:=DESC.match(c[i]):
@@ -160,7 +162,7 @@ def main(pc, tc, p, tr):
         if bc == 'TecanPlate':
           o.write(f', with_lid: bool = False')
         o.write(f') -> {bc}:\n')
-        if desc:
+        if desc is not None:
           o.write(f'  """ {desc} """\n')
         o.write(f'  return {bc}(\n')
         o.write(f'    name=name,\n')
@@ -182,8 +184,34 @@ def main(pc, tc, p, tr):
         o.write(f'      dx={dx},\n')
         o.write(f'      dy={dy},\n')
         o.write(f'      dz={dz},\n')
-        o.write(f'      item_size_x={res_size_x},\n')
-        o.write(f'      item_size_y={res_size_y},\n')
+        o.write(f'      item_dx={res_size_x},\n')
+        o.write(f'      item_dy={res_size_y},\n')
+        o.write(f'      size_x={res_size_x},\n')
+        o.write(f'      size_y={res_size_y},\n')
+        if bc == 'TecanTipRack':
+          tip_name = name + "_tip"
+          total_tip_length = float(dim[12][0]) / 10
+          has_filter = dim[13] == "1"
+          maximal_volume = float(dim[11][0])
+          # all tip types in tip racks are Disposable Tips?
+          tip_type = "TipType.DITI"
+
+          tcr.write(f'\n\n')
+          tcr.write(f'def {tip_name}() -> TecanTip:\n')
+          tcr.write(f'  """ Tip for {name} """\n')
+          if total_tip_length <= 0:
+            # print a warning, because this parameter is confusing in the file and I don't have
+            # have a device to test this on. tbc.
+            tcr.write("  print(\"WARNING: total_tip_length <= 0.\")\n")
+            tcr.write("  print(\"Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23\")\n")
+          tcr.write(f'  return TecanTip(\n')
+          tcr.write(f'    has_filter={has_filter},\n')
+          tcr.write(f'    total_tip_length={total_tip_length},\n')
+          tcr.write(f'    maximal_volume={maximal_volume},\n')
+          tcr.write(f'    tip_type={tip_type}\n')
+          tcr.write(f'  )\n')
+
+          o.write(f'      make_tip={tip_name}\n')
         o.write(f'    ),\n')
         o.write(f'  )\n')
 
@@ -207,5 +235,6 @@ if __name__ == "__main__":
   with open("plate_carriers.py", "w") as plate_carriers, \
        open("tip_carriers.py", "w") as tip_carriers, \
        open("plates.py", "w") as plates, \
-       open("tip_racks.py", "w") as tip_racks:
-    main(plate_carriers, tip_carriers, plates, tip_racks)
+       open("tip_racks.py", "w") as tip_racks, \
+       open("tip_creators.py", "w") as tip_creators:
+    main(plate_carriers, tip_carriers, plates, tip_racks, tip_creators)

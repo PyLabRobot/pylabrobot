@@ -2,9 +2,6 @@
 # pylint: skip-file
 
 import os
-import sys
-
-sys.path.insert(0, '..')
 
 from pylabrobot.utils.file_parsing import find_int, find_float, find_string
 import tools.make_resources.writer as writer
