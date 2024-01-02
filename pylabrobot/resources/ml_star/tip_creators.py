@@ -205,10 +205,10 @@ def five_ml_tip() -> HamiltonTip:
   )
 
 def fifty_ul_tip_with_filter() -> HamiltonTip:
-  """ 50 ul tip with a filter (`tt05` in venus) """
+  """ 50 ul tip with a filter (Hamilton cat. no.: 235948) """
   return HamiltonTip(
     has_filter=True,
-    total_tip_length=50, # 95 in the ctr file, but 95.1 in the log file (871-80)/10
+    total_tip_length=50,
     maximal_volume=50,
     tip_size=TipSize.FIFTY_UL,
     pickup_method=TipPickupMethod.OUT_OF_RACK
