@@ -201,7 +201,8 @@ class PlateCarrier(Carrier):
 
 
 class MFXCarrier(Carrier):
-  """ Base class for multiflex carriers. """
+  """ Base class for multiflex carriers 
+  (i.e. carriers with mixed-use and/or specialized sites). """
   def __init__(
     self,
     name: str,
