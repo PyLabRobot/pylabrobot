@@ -572,9 +572,12 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
 
 class LiquidHandlerForTesting(LiquidHandler):
-  @property
-  def callbacks(self):
-    return self._callbacks
+  ALLOWED_CALLBACKS = {
+    "test_operation",
+    "test_duplicate",
+    "test_operation_without_error",
+    "test_callback_not_registered_with_error",
+  }
 
   def trigger_callback(self, method_name: str, *args, **kwargs):
     self._trigger_callback(method_name, *args, **kwargs)
@@ -601,6 +604,13 @@ class TestLiquidHandlerCallbacks(unittest.IsolatedAsyncioTestCase):
     self.lh.trigger_callback("test_operation_without_error", self.lh)
     self.callback.assert_called_once()
 
+  def test_trigger_callback_with_error_raised(self):
+    with pytest.raises(RuntimeError):
+      self.lh.trigger_callback(
+        "test_operation",
+        error=RuntimeError("test")
+      )
+
   def test_trigger_callback_not_found_with_error(self):
     with pytest.raises(RuntimeError):
       self.lh.trigger_callback(
@@ -608,3 +618,7 @@ class TestLiquidHandlerCallbacks(unittest.IsolatedAsyncioTestCase):
         liquid_handler=self.lh,
         error=RuntimeError("test"),
       )
+
+  def test_trigger_disallowed_callback(self):
+    with pytest.raises(RuntimeError):
+      self.lh.register_callback("not_allowed", self.callback)
