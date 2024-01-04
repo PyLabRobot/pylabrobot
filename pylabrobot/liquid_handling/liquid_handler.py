@@ -62,6 +62,25 @@ class LiquidHandler(MachineFrontend):
   defined in `pyhamilton.liquid_handling.backends`) to communicate with the liquid handler.
   """
 
+  ALLOWED_CALLBACKS = {
+    "aspirate",
+    "aspirate_plate",
+    "discard_tips",
+    "dispense",
+    "dispense_plate",
+    "drop_tips",
+    "drop_tips96",
+    "move_lid",
+    "move_plate",
+    "move_resource",
+    "pick_up_tips",
+    "pick_up_tips96",
+    "return_tips",
+    "return_tips96",
+    "stamp",
+    "transfer",
+  }
+
   def __init__(self, backend: LiquidHandlerBackend, deck: Deck):
     """ Initialize a LiquidHandler.
 
@@ -1401,18 +1420,27 @@ class LiquidHandler(MachineFrontend):
 
   def register_callback(self, method_name: str, callback: OperationCallback):
     """Registers a callback for a specific method."""
-    if self._callbacks.get(method_name):
+    if method_name in self._callbacks:
       error_message = f"Callback already registered for: {method_name}"
+      raise RuntimeError(error_message)
+    if method_name not in self.ALLOWED_CALLBACKS:
+      error_message = f"Callback not allowed: {method_name}"
       raise RuntimeError(error_message)
     self._callbacks[method_name] = callback
 
-  def _trigger_callback(self, method_name: str, *args, **kwargs):
-    """Triggers the callback associated with a method, if any."""
-    error = kwargs.pop("error", None)
+  def _trigger_callback(self, method_name: str, *args, error: Optional[Exception] = None, **kwargs):
+    """Triggers the callback associated with a method, if any.
+
+    NB: If an error exists it will be passed to the callback instead of being raised.
+    """
     if callback := self._callbacks.get(method_name):
       callback(*args, error=error, **kwargs)
     elif error:
       raise error
+
+  @property
+  def callbacks(self):
+    return self._callbacks
 
   @classmethod
   def deserialize(cls, data: dict) -> LiquidHandler:
