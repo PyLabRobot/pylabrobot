@@ -20,11 +20,14 @@ from .trash import Trash
 from .tip_tracker import TipTracker, does_tip_tracking, no_tip_tracking, set_tip_tracking
 from .volume_tracker import VolumeTracker, does_volume_tracking, no_volume_tracking, set_volume_tracking
 
+from .resource_stack import ResourceStack
+
+# labware manufacturers and suppliers
 from .corning_costar import *
 from .revvity import *
+
+# liquid handling companies
 from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
 from .ml_star import *
 from .opentrons import *
-from .resource_stack import ResourceStack
-
 from .tecan import *
