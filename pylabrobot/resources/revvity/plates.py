@@ -1,4 +1,4 @@
-""" Corning Costar plates """
+""" Revvity plates """
 
 # pylint: disable=invalid-name
 
@@ -7,13 +7,15 @@ from pylabrobot.resources.well import Well, WellBottomType
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 
 
+# TODO: update heights for volume calculations
 def _compute_volume_from_height_Revvity_ProxiPlate_384Plus(h: float):
   volume = min(h, 11.56)*12.2500
   if h > 11.56:
     raise ValueError(f"Height {h} is too large for Revvity_384Plus_ProxiPlate")
   return volume
 
-#: Revvity_384Plus_ProxiPlate
+
+#: Revvity_ProxiPlate_384Plus
 def Revvity_ProxiPlate_384Plus(name: str, with_lid: bool = False) -> Plate:
   return Plate(
     name=name,
