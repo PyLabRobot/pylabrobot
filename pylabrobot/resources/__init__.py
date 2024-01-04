@@ -3,6 +3,7 @@ from .carrier import (
   CarrierSite,
   PlateCarrier,
   TipCarrier,
+  MFXCarrier,
   create_homogeneous_carrier_sites,
   create_carrier_sites
 )
@@ -20,6 +21,7 @@ from .tip_tracker import TipTracker, does_tip_tracking, no_tip_tracking, set_tip
 from .volume_tracker import VolumeTracker, does_volume_tracking, no_volume_tracking, set_volume_tracking
 
 from .corning_costar import *
+from .revvity import *
 from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
 from .ml_star import *
 from .opentrons import *
