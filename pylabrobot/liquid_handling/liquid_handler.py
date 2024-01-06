@@ -65,20 +65,13 @@ class LiquidHandler(MachineFrontend):
   ALLOWED_CALLBACKS = {
     "aspirate",
     "aspirate_plate",
-    "discard_tips",
     "dispense",
     "dispense_plate",
     "drop_tips",
     "drop_tips96",
-    "move_lid",
-    "move_plate",
     "move_resource",
     "pick_up_tips",
     "pick_up_tips96",
-    "return_tips",
-    "return_tips96",
-    "stamp",
-    "transfer",
   }
 
   def __init__(self, backend: LiquidHandlerBackend, deck: Deck):
@@ -1435,7 +1428,7 @@ class LiquidHandler(MachineFrontend):
     """
     if callback := self._callbacks.get(method_name):
       callback(*args, error=error, **kwargs)
-    elif error:
+    elif callback is None and error:
       raise error
 
   @property
