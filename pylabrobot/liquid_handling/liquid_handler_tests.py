@@ -605,7 +605,7 @@ class TestLiquidHandlerCallbacks(unittest.IsolatedAsyncioTestCase):
 
   def test_trigger_callback_without_error(self):
     self.lh.register_callback("test_operation_without_error", self.callback)
-    self.lh.trigger_callback("test_operation_without_error", self.lh)
+    self.lh.trigger_callback("test_operation_without_error")
     self.callback.assert_called_once()
 
   def test_trigger_callback_with_error_raised(self):
@@ -632,6 +632,5 @@ class TestLiquidHandlerCallbacks(unittest.IsolatedAsyncioTestCase):
     with pytest.raises(RuntimeError):
       self.lh.trigger_callback(
         "test_callback_not_registered_with_error",
-        liquid_handler=self.lh,
         error=RuntimeError("test"),
       )
