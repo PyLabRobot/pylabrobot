@@ -1427,7 +1427,7 @@ class LiquidHandler(MachineFrontend):
     NB: If an error exists it will be passed to the callback instead of being raised.
     """
     if callback := self._callbacks.get(method_name):
-      callback(*args, error=error, **kwargs)
+      callback(self, *args, error=error, **kwargs)
     elif callback is None and error:
       raise error
 
