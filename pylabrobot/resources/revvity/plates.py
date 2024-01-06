@@ -9,11 +9,11 @@ from pylabrobot.resources.itemized_resource import create_equally_spaced
 
 # TODO: update heights for volume calculations
 def _compute_volume_from_height_Revvity_ProxiPlate_384Plus(h: float):
-  raise NotImplementedError("This function is not yet implemented")
-  # volume = min(h, 11.56)*12.2500
-  # if h > 11.56:
-  #   raise ValueError(f"Height {h} is too large for Revvity_384Plus_ProxiPlate")
-  # return volume
+  # raise NotImplementedError("This function is not yet implemented")
+  volume = min(h, 11.56)*12.2500
+  if h > 11.56:
+    raise ValueError(f"Height {h} is too large for Revvity_384Plus_ProxiPlate")
+  return volume
 
 
 #: Revvity_ProxiPlate_384Plus
