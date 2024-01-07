@@ -1519,7 +1519,7 @@ class LiquidHandler(MachineFrontend):
     """
     if callback := self._callbacks.get(method_name):
       callback(self, *args, error=error, **kwargs)
-    elif callback is None and error:
+    elif error is not None:
       raise error
 
   @property
