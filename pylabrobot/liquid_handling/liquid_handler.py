@@ -9,7 +9,7 @@ import logging
 import numbers
 import threading
 import time
-from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol
 import warnings
 
 from pylabrobot.machine import MachineFrontend, need_setup_finished
@@ -62,6 +62,18 @@ class LiquidHandler(MachineFrontend):
   defined in `pyhamilton.liquid_handling.backends`) to communicate with the liquid handler.
   """
 
+  ALLOWED_CALLBACKS = {
+    "aspirate",
+    "aspirate_plate",
+    "dispense",
+    "dispense_plate",
+    "drop_tips",
+    "drop_tips96",
+    "move_resource",
+    "pick_up_tips",
+    "pick_up_tips96",
+  }
+
   def __init__(self, backend: LiquidHandlerBackend, deck: Deck):
     """ Initialize a LiquidHandler.
 
@@ -74,6 +86,7 @@ class LiquidHandler(MachineFrontend):
 
     self.backend: LiquidHandlerBackend = backend
     self._picked_up_tips96: Optional[TipRack] = None # TODO: replace with tracker.
+    self._callbacks: Dict[str, OperationCallback] = {}
 
     self.deck = deck
     self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
@@ -362,17 +375,32 @@ class LiquidHandler(MachineFrontend):
 
     try:
       await self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
-    except:
+    except Exception as error:  # pylint: disable=broad-except
       for channel, op in zip(use_channels, pickups):
         if does_tip_tracking() and not op.resource.tracker.is_disabled:
           op.resource.tracker.rollback()
         self.head[channel].rollback()
-      raise
+      self._trigger_callback(
+        "pick_up_tips",
+        liquid_handler=self,
+        operations=pickups,
+        use_channels=use_channels,
+        error=error,
+        **backend_kwargs,
+      )
     else:
       for channel, op in zip(use_channels, pickups):
         if does_tip_tracking() and not op.resource.tracker.is_disabled:
           op.resource.tracker.commit()
         self.head[channel].commit()
+      self._trigger_callback(
+        "pick_up_tips",
+        liquid_handler=self,
+        operations=pickups,
+        use_channels=use_channels,
+        error=None,
+        **backend_kwargs,
+      )
 
   @need_setup_finished
   async def drop_tips(
@@ -460,19 +488,34 @@ class LiquidHandler(MachineFrontend):
 
     try:
       await self.backend.drop_tips(ops=drops, use_channels=use_channels, **backend_kwargs)
-    except:
+    except Exception as error:  # pylint: disable=broad-except
       for channel, op in zip(use_channels, drops):
         if does_tip_tracking() and \
           (isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled):
           op.resource.tracker.rollback()
         self.head[channel].rollback()
-      raise
+      self._trigger_callback(
+        "drop_tips",
+        liquid_handler=self,
+        operations=drops,
+        use_channels=use_channels,
+        error=error,
+        **backend_kwargs,
+      )
     else:
       for channel, op in zip(use_channels, drops):
         if does_tip_tracking() and \
           (isinstance(op.resource, TipSpot) and not op.resource.tracker.is_disabled):
           op.resource.tracker.commit()
         self.head[channel].commit()
+      self._trigger_callback(
+        "drop_tips",
+        liquid_handler=self,
+        operations=drops,
+        use_channels=use_channels,
+        error=None,
+        **backend_kwargs,
+      )
 
   async def return_tips(self):
     """ Return all tips that are currently picked up to their original place.
@@ -677,12 +720,19 @@ class LiquidHandler(MachineFrontend):
 
     try:
       await self.backend.aspirate(ops=aspirations, use_channels=use_channels, **backend_kwargs)
-    except:
+    except Exception as error:  # pylint: disable=broad-exception-caught
       for op in aspirations:
         if not op.resource.tracker.is_disabled:
           op.resource.tracker.rollback()
           op.tip.tracker.rollback()
-      raise
+      self._trigger_callback(
+        "aspirate",
+        liquid_handler=self,
+        operations=aspirations,
+        use_channels=use_channels,
+        error=error,
+        **backend_kwargs,
+      )
     else:
       for op in aspirations:
         if not op.resource.tracker.is_disabled:
@@ -690,6 +740,14 @@ class LiquidHandler(MachineFrontend):
           op.tip.tracker.commit()
       for tracker in self.head.values():
         tracker.commit()
+      self._trigger_callback(
+        "aspirate",
+        liquid_handler=self,
+        operations=aspirations,
+        use_channels=use_channels,
+        error=None,
+        **backend_kwargs,
+      )
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -828,17 +886,32 @@ class LiquidHandler(MachineFrontend):
 
     try:
       await self.backend.dispense(ops=dispenses, use_channels=use_channels, **backend_kwargs)
-    except:
+    except Exception as error:  # pylint: disable=broad-except
       for op in dispenses:
         if not op.resource.tracker.is_disabled:
           op.resource.tracker.rollback()
           op.tip.tracker.rollback()
-      raise
+      self._trigger_callback(
+        "dispense",
+        liquid_handler=self,
+        operations=dispenses,
+        use_channels=use_channels,
+        error=error,
+        **backend_kwargs,
+      )
     else:
       for op in dispenses:
         if not op.resource.tracker.is_disabled:
           op.resource.tracker.commit()
           op.tip.tracker.commit()
+      self._trigger_callback(
+        "dispense",
+        liquid_handler=self,
+        operations=dispenses,
+        use_channels=use_channels,
+        error=None,
+        **backend_kwargs,
+      )
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -947,13 +1020,22 @@ class LiquidHandler(MachineFrontend):
     for extra in extras:
       del backend_kwargs[extra]
 
+    pickup_operation = PickupTipRack(resource=tip_rack, offset=offset)
     await self.backend.pick_up_tips96(
-      pickup=PickupTipRack(resource=tip_rack, offset=offset),
+      pickup=pickup_operation,
       **backend_kwargs
     )
 
     # Save the tips as picked up.
     self._picked_up_tips96 = tip_rack
+
+    self._trigger_callback(
+      "pick_up_tips96",
+      liquid_handler=self,
+      pickup=pickup_operation,
+      error=None,
+      **backend_kwargs,
+    )
 
   async def drop_tips96(
     self,
@@ -978,12 +1060,21 @@ class LiquidHandler(MachineFrontend):
     for extra in extras:
       del backend_kwargs[extra]
 
+    drop_operation = DropTipRack(resource=tip_rack, offset=offset)
     await self.backend.drop_tips96(
-      drop=DropTipRack(resource=tip_rack, offset=offset),
+      drop=drop_operation,
       **backend_kwargs
     )
 
     self._picked_up_tips96 = None
+
+    self._trigger_callback(
+      "drop_tips96",
+      liquid_handler=self,
+      drop=drop_operation,
+      error=None,
+      **backend_kwargs,
+    )
 
   async def return_tips96(self):
     """ Return the tips on the 96 head to the tip rack where they were picked up.
@@ -1050,7 +1141,7 @@ class LiquidHandler(MachineFrontend):
         liquids.append(w.tracker.get_liquids(top_volume=volume))
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
-      await self.backend.aspirate96(aspiration=AspirationPlate(
+      aspiration_plate = AspirationPlate(
         resource=plate,
         volume=volume,
         offset=Coordinate.zero(),
@@ -1058,8 +1149,16 @@ class LiquidHandler(MachineFrontend):
         tips=tips,
         liquid_height=None,
         blow_out_air_volume=0,
-        liquids=liquids),
-        **backend_kwargs)
+        liquids=liquids,
+      )
+      await self.backend.aspirate96(aspiration=aspiration_plate, **backend_kwargs)
+      self._trigger_callback(
+        "aspirate_plate",
+        liquid_handler=self,
+        aspiration=aspiration_plate,
+        error=None,
+        **backend_kwargs,
+      )
     else:
       raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
                                 f"by {plate.num_items_y} plate")
@@ -1114,7 +1213,7 @@ class LiquidHandler(MachineFrontend):
         liquids.append(w.tracker.get_liquids(top_volume=volume))
 
     if plate.num_items_x == 12 and plate.num_items_y == 8:
-      await self.backend.dispense96(dispense=DispensePlate(
+      dispense_plate = DispensePlate(
         resource=plate,
         volume=volume,
         offset=Coordinate.zero(),
@@ -1122,8 +1221,16 @@ class LiquidHandler(MachineFrontend):
         tips=tips,
         liquid_height=None,
         blow_out_air_volume=0,
-        liquids=liquids),
-        **backend_kwargs)
+        liquids=liquids,
+      )
+      await self.backend.dispense96(dispense=dispense_plate, **backend_kwargs)
+      self._trigger_callback(
+        "dispense_plate",
+        liquid_handler=self,
+        dispense=dispense_plate,
+        error=None,
+        **backend_kwargs,
+      )
     else:
       raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "
                                f"by {plate.num_items_y} plate")
@@ -1199,7 +1306,7 @@ class LiquidHandler(MachineFrontend):
     for extra in extras:
       del backend_kwargs[extra]
 
-    return await self.backend.move_resource(move=Move(
+    move_operation = Move(
       resource=resource,
       destination=to,
       intermediate_locations=intermediate_locations or [],
@@ -1207,8 +1314,20 @@ class LiquidHandler(MachineFrontend):
       destination_offset=destination_offset,
       pickup_distance_from_top=pickup_distance_from_top,
       get_direction=get_direction,
-      put_direction=put_direction),
-      **backend_kwargs)
+      put_direction=put_direction,
+    )
+
+    result = await self.backend.move_resource(move=move_operation, **backend_kwargs)
+
+    self._trigger_callback(
+      "move_resource",
+      liquid_handler=self,
+      move=move_operation,
+      error=None,
+      **backend_kwargs,
+    )
+
+    return result
 
   async def move_lid(
     self,
@@ -1383,6 +1502,30 @@ class LiquidHandler(MachineFrontend):
     with open(path, "w", encoding="utf-8") as f:
       json.dump(self.serialize(), f, indent=2)
 
+  def register_callback(self, method_name: str, callback: OperationCallback):
+    """Registers a callback for a specific method."""
+    if method_name in self._callbacks:
+      error_message = f"Callback already registered for: {method_name}"
+      raise RuntimeError(error_message)
+    if method_name not in self.ALLOWED_CALLBACKS:
+      error_message = f"Callback not allowed: {method_name}"
+      raise RuntimeError(error_message)
+    self._callbacks[method_name] = callback
+
+  def _trigger_callback(self, method_name: str, *args, error: Optional[Exception] = None, **kwargs):
+    """Triggers the callback associated with a method, if any.
+
+    NB: If an error exists it will be passed to the callback instead of being raised.
+    """
+    if callback := self._callbacks.get(method_name):
+      callback(self, *args, error=error, **kwargs)
+    elif error is not None:
+      raise error
+
+  @property
+  def callbacks(self):
+    return self._callbacks
+
   @classmethod
   def deserialize(cls, data: dict) -> LiquidHandler:
     """ Deserialize a liquid handler from a dictionary.
@@ -1405,3 +1548,8 @@ class LiquidHandler(MachineFrontend):
 
     with open(path, "r", encoding="utf-8") as f:
       return cls.deserialize(json.load(f))
+
+
+class OperationCallback(Protocol):
+  def __call__(self, handler: "LiquidHandler", *args: Any, **kwargs: Any) -> None:
+    ...  # pragma: no cover
