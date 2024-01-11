@@ -138,4 +138,4 @@ Optionally, you can add a description of your changes. Then click "Create pull r
 
 ## Support
 
-If you have any questions, feel free to reach out using the [PyLabRobot forum](https://forums.pylabrobot.org) or in the [Slack channel](https://forms.gle/F7d7cs6nU551kZS27).
+If you have any questions, feel free to reach out using the [PyLabRobot forum](https://forums.pylabrobot.org).

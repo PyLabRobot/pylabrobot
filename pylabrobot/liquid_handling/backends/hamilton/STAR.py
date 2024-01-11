@@ -54,8 +54,8 @@ def need_iswap_parked(method: Callable):
   """
 
   @functools.wraps(method)
-  async def wrapper(self, *args, **kwargs):
-    if not self.iswap_parked:
+  async def wrapper(self: "STAR", *args, **kwargs):
+    if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap()
 
     result = await method(self, *args, **kwargs) # pylint: disable=not-callable
@@ -1251,9 +1251,10 @@ class STAR(HamiltonLiquidHandler):
         discarding_method=0
       )
 
-    iswap_initialized = await self.request_iswap_initialization_status()
-    if self.iswap_installed and not iswap_initialized:
-      await self.initialize_iswap()
+    if self.iswap_installed:
+      iswap_initialized = await self.request_iswap_initialization_status()
+      if not iswap_initialized:
+        await self.initialize_iswap()
 
       await self.park_iswap()
       self._iswap_parked = True
@@ -2264,7 +2265,9 @@ class STAR(HamiltonLiquidHandler):
     acceleration_index_low_acc: int = 1,
     fold_up_sequence_at_the_end_of_process: bool = True
   ):
-    """ Pick up a resource using iSWAP """
+    """ Pick up a resource using iSWAP.
+    Low level component of :meth:`move_resource`
+    """
 
     assert self.iswap_installed, "iswap must be installed"
 
@@ -2315,7 +2318,9 @@ class STAR(HamiltonLiquidHandler):
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1
   ):
-    """ After a resource is picked up, move it to a new location but don't release it yet. """
+    """ After a resource is picked up, move it to a new location but don't release it yet.
+    Low level component of :meth:`move_resource`
+    """
 
     assert self.iswap_installed, "iswap must be installed"
 
@@ -2352,7 +2357,9 @@ class STAR(HamiltonLiquidHandler):
     z_position_at_the_command_end: int = 2840,
     collision_control_level: int = 0,
   ):
-    """ After a resource is picked up, release it at the specified location. """
+    """ After a resource is picked up, release it at the specified location.
+    Low level component of :meth:`move_resource`
+    """
 
     assert self.iswap_installed, "iswap must be installed"
 
@@ -2387,12 +2394,26 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=collision_control_level,
     )
 
-  async def move_resource(self, move: Move, use_arm: str = "iswap"):
+  async def move_resource(
+    self,
+    move: Move,
+    use_arm: str = "iswap",
+    channel_1: int = 7,
+    channel_2: int = 8,
+    core_grip_strength: int = 15,
+    return_core_gripper: bool = True,
+  ):
     """ Move a resource.
 
     Args:
       move: The move to perform.
       use_arm: Which arm to use. Either "iswap" or "core".
+      channel_1: The first channel to use with the core arm. Only used if `use_arm` is "core".
+      channel_2: The second channel to use with the core arm. Only used if `use_arm` is "core".
+      core_grip_strength: The grip strength to use with the core arm. Only used if `use_arm` is
+        "core".
+      return_core_gripper: Whether to return the core gripper to the home position after the move.
+        Only used if `use_arm` is "core".
     """
 
     if not use_arm in {"iswap", "core"}:
@@ -2413,6 +2434,9 @@ class STAR(HamiltonLiquidHandler):
         pickup_distance_from_top=move.pickup_distance_from_top,
         offset=move.resource_offset,
         minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10),
+        channel_1=channel_1,
+        channel_2=channel_2,
+        grip_strength=core_grip_strength,
       )
 
     previous_location = move.resource.get_absolute_location() + move.resource_offset
@@ -2457,6 +2481,7 @@ class STAR(HamiltonLiquidHandler):
         pickup_distance_from_top=move.pickup_distance_from_top,
         minimum_traverse_height_at_beginning_of_a_command=
           int(previous_location.z + move.resource.get_size_z() / 2) * 10,
+        return_tool=return_core_gripper
       )
 
   async def prepare_for_manual_channel_operation(self):
@@ -3963,7 +3988,7 @@ class STAR(HamiltonLiquidHandler):
       tz="2050",
       th="2450",
       te="2450"
-      )
+    )
     self._core_parked = True
     return command_output
 
@@ -3981,6 +4006,7 @@ class STAR(HamiltonLiquidHandler):
       channel_2: int = 8,
   ):
     """ Pick up resource with CoRe gripper tool
+        Low level component of :meth:`move_resource`
 
     Args:
       resource: Resource to pick up.
@@ -4028,6 +4054,7 @@ class STAR(HamiltonLiquidHandler):
       z_speed: int = 500,
   ):
     """ After a ressource is picked up, move it to a new location but don't release it yet.
+    Low level component of :meth:`move_resource`
 
     Args:
       location: Location to move to.
@@ -4039,7 +4066,7 @@ class STAR(HamiltonLiquidHandler):
         3 = 1.0 mm/s2, 4 = 2.0 mm/s2, 5 = 5.0 mm/s2, 6 = 10.0 mm/s2, 7 = 20.0 mm/s2). Must be
         between 0 and 7. Default 4.
       z_speed: Z speed [0.1mm/s]. Must be between 3 and 1600. Default 500.
-      """
+    """
 
     center = location + resource.center()
 
@@ -4062,8 +4089,10 @@ class STAR(HamiltonLiquidHandler):
       offset: Coordinate = Coordinate.zero(),
       minimum_traverse_height_at_beginning_of_a_command: int = 2750,
       z_position_at_the_command_end: int = 2750,
+      return_tool: bool = True
   ):
     """ Place resource with CoRe gripper tool
+    Low level component of :meth:`move_resource`
 
     Args:
       resource: Location to place.
@@ -4075,7 +4104,9 @@ class STAR(HamiltonLiquidHandler):
       z_position_at_the_command_end: Minimum z-Position at end of a command [0.1 mm] (refers to all
         channels independent of tip pattern parameter 'tm'). Must be between 0 and 3600.  Default
         3600.
+      return_tool: Return tool to wasteblock mount after placing. Default True.
     """
+
     # Get center of destination location. Also gripping height and plate width.
     center = location + resource.center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
@@ -4092,7 +4123,7 @@ class STAR(HamiltonLiquidHandler):
       minimum_traverse_height_at_beginning_of_a_command=
         minimum_traverse_height_at_beginning_of_a_command,
       z_position_at_the_command_end=z_position_at_the_command_end,
-      return_tool=True
+      return_tool=return_tool
     )
 
   async def core_open_gripper(self):
