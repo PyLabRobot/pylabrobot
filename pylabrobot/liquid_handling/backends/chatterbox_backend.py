@@ -69,3 +69,6 @@ class ChatterBoxBackend(LiquidHandlerBackend):
 
   async def move_resource(self, move: Move, **backend_kwargs):
     print(f"Moving {move}.")
+
+  async def position_single_pipetting_channel_in_y_direction(self, idx, position):
+    print(f"Moving pipette {idx} to {position} in the y direction.")

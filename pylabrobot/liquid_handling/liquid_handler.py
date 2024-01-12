@@ -1504,9 +1504,9 @@ class LiquidHandler(MachineFrontend):
 
   def register_callback(self, method_name: str, callback: OperationCallback):
     """Registers a callback for a specific method."""
-    if method_name in self._callbacks:
-      error_message = f"Callback already registered for: {method_name}"
-      raise RuntimeError(error_message)
+    #if method_name in self._callbacks:
+    #  error_message = f"Callback already registered for: {method_name}"
+    #  raise RuntimeError(error_message)
     if method_name not in self.ALLOWED_CALLBACKS:
       error_message = f"Callback not allowed: {method_name}"
       raise RuntimeError(error_message)

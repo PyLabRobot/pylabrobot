@@ -2274,13 +2274,13 @@ class STAR(HamiltonLiquidHandler):
     # Get center of source plate. Also gripping height and plate width.
     center = resource.get_absolute_location() + resource.center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    plate_width = resource.get_size_x()
-    # plate_width = { # TODO: LH should rotate resources on move_plate
-    #   GripDirection.FRONT: resource.get_size_x(),
-    #   GripDirection.RIGHT: resource.get_size_y(),
-    #   GripDirection.BACK: resource.get_size_x(),
-    #   GripDirection.LEFT: resource.get_size_y(),
-    # }[grip_direction]
+    #plate_width = resource.get_size_x()
+    plate_width = { # TODO: LH should rotate resources on move_plate
+      GripDirection.FRONT: resource.get_size_x(),
+      GripDirection.RIGHT: resource.get_size_y(),
+      GripDirection.BACK: resource.get_size_x(),
+      GripDirection.LEFT: resource.get_size_y(),
+    }[grip_direction]
 
     await self.iswap_get_plate(
       x_position=int(center.x * 10),
@@ -2350,9 +2350,9 @@ class STAR(HamiltonLiquidHandler):
     self,
     location: Coordinate,
     resource: Resource,
-    offset: Coordinate,
     grip_direction: GripDirection,
     pickup_distance_from_top: float,
+    offset: Coordinate = Coordinate.zero(),
     minimum_traverse_height_at_beginning_of_a_command: int = 2840,
     z_position_at_the_command_end: int = 2840,
     collision_control_level: int = 0,
@@ -2366,13 +2366,13 @@ class STAR(HamiltonLiquidHandler):
     # Get center of source plate. Also gripping height and plate width.
     center = location + resource.center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    plate_width = resource.get_size_x()
-    # plate_width = { # TODO: LH should rotate resources on move_plate
-    #   GripDirection.FRONT: resource.get_size_x(),
-    #   GripDirection.RIGHT: resource.get_size_y(),
-    #   GripDirection.BACK: resource.get_size_x(),
-    #   GripDirection.LEFT: resource.get_size_y(),
-    # }[grip_direction]
+    #plate_width = resource.get_size_x()
+    plate_width = { # TODO: LH should rotate resources on move_plate
+      GripDirection.FRONT: resource.get_size_x(),
+      GripDirection.RIGHT: resource.get_size_y(),
+      GripDirection.BACK: resource.get_size_x(),
+      GripDirection.LEFT: resource.get_size_y(),
+    }[grip_direction]
 
     await self.iswap_put_plate(
       x_position=int(center.x * 10),
@@ -3951,6 +3951,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
+  @need_iswap_parked
   async def get_core(self, p1: int, p2: int):
     """ Get CoRe gripper tool from wasteblock mount. """
     if not 0 <= p1 < self.num_channels:
@@ -3975,6 +3976,7 @@ class STAR(HamiltonLiquidHandler):
     self._core_parked = False
     return command_output
 
+  @need_iswap_parked
   async def put_core(self):
     """ Put CoRe gripper tool at wasteblock mount. """
     command_output = await self.send_command(
@@ -3991,7 +3993,8 @@ class STAR(HamiltonLiquidHandler):
     )
     self._core_parked = True
     return command_output
-
+  
+  @need_iswap_parked
   async def core_pick_up_resource(
       self,
       resource: Resource,
@@ -4044,7 +4047,8 @@ class STAR(HamiltonLiquidHandler):
         minimum_traverse_height_at_beginning_of_a_command,
       minimum_z_position_at_the_command_end=minimum_z_position_at_the_command_end,
     )
-
+  
+  @need_iswap_parked
   async def core_move_picked_up_resource(
       self,
       location: Coordinate,
@@ -4080,7 +4084,8 @@ class STAR(HamiltonLiquidHandler):
       minimum_traverse_height_at_beginning_of_a_command=
         minimum_traverse_height_at_beginning_of_a_command,
     )
-
+  
+  @need_iswap_parked
   async def core_release_picked_up_resource(
       self,
       location: Coordinate,
@@ -4132,7 +4137,8 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="ZO")
     return command_output
-
+  
+  @need_iswap_parked
   async def core_get_plate(
       self,
       x_position: int = 0,
@@ -4180,7 +4186,8 @@ class STAR(HamiltonLiquidHandler):
     )
 
     return command_output
-
+  
+  @need_iswap_parked
   async def core_put_plate(
       self,
       x_position: int = 0,
@@ -4226,7 +4233,8 @@ class STAR(HamiltonLiquidHandler):
       await self.put_core()
 
     return command_output
-
+  
+  @need_iswap_parked
   async def core_move_plate_to_position(
       self,
       x_position: int = 0,
@@ -4343,9 +4351,9 @@ class STAR(HamiltonLiquidHandler):
     self,
     tip_pattern: bool = True,
     x_positions: int = 0,
-    y_positions: int = 0,
-    minimum_traverse_height_at_beginning_of_command: int = 3600,
-    z_endpos: int = 0
+    y_positions: [int] = [0],
+    minimum_traverse_height_at_beginning_of_command: int = 2800,
+    z_endpos: [int] = [2800]
   ):
     """ Move all pipetting channels to defined position
 
@@ -4360,20 +4368,31 @@ class STAR(HamiltonLiquidHandler):
         pattern parameter 'tm'). Must be between 0 and 3600. Default 0.
     """
 
-    assert 0 <= x_positions <= 25000, "x_positions must be between 0 and 25000"
-    assert 0 <= y_positions <= 6500, "y_positions must be between 0 and 6500"
+    #assert 0 <= x_positions <= 25000, "x_positions must be between 0 and 25000"
+    # assert 0 <= y_positions <= 6500, "y_positions must be between 0 and 6500"
+    #assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
+    #assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
     assert 0 <= minimum_traverse_height_at_beginning_of_command <= 3600, \
       "minimum_traverse_height_at_beginning_of_command must be between 0 and 3600"
-    assert 0 <= z_endpos <= 3600, "z_endpos must be between 0 and 3600"
+    #assert 0 <= z_endpos <= 3600, "z_endpos must be between 0 and 3600"
+    assert all(0 <= zp <= 3600 for zp in z_endpos)
+    print([f"{tm:01}" for tm in tip_pattern])
+    print([f"{xp:05}" for xp in x_positions])
+    print([f"{yp:04}" for yp in y_positions])
+    print([f"{zp:04}" for zp in z_endpos])
 
     return await self.send_command(
       module="C0",
       command="JM",
-      tm=tip_pattern,
-      xp=x_positions,
-      yp=y_positions,
+      tm=[f"{tm:01}" for tm in tip_pattern],
+      #tm=tip_pattern,
+      xp=[f"{xp:05}" for xp in x_positions],
+      #xp=x_positions,
+      yp=[f"{yp:04}" for yp in y_positions],
+      #yp=y_positions,
       th=minimum_traverse_height_at_beginning_of_command,
-      zp=z_endpos,
+      zp=[f"{zp:04}" for zp in z_endpos],
+      #zp=z_endpos,
     )
 
   # TODO:(command:JR): teach rack using pipetting channel n
