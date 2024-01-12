@@ -72,3 +72,9 @@ class ChatterBoxBackend(LiquidHandlerBackend):
 
   async def position_single_pipetting_channel_in_y_direction(self, idx, position):
     print(f"Moving pipette {idx} to {position} in the y direction.")
+
+  async def core_pick_up_resource(self, resource: Resource, **backend_kwargs):
+    print(f"CORE: Picking up {resource}.")
+  
+  async def core_release_picked_up_resource(self, coordinate, resource: Resource, **backend_kwargs):
+    print(f"CORE: Releasing picked up {resource} to {coordinate}.")

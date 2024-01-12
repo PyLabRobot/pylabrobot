@@ -4208,7 +4208,7 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
     assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
     assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
-    assert 0 <= z_press_on_distance <= 50, "z_press_on_distance must be between 0 and 999"
+    assert 0 <= z_press_on_distance <= 999, "z_press_on_distance must be between 0 and 999"
     assert 0 <= z_speed <= 1600, "z_speed must be between 0 and 1600"
     assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
     assert 0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600, \
