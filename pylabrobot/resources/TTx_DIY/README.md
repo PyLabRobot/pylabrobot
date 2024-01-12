@@ -7,4 +7,4 @@
 
 | Description               | Image              |
 |--------------------|--------------------|
-| 'TTx_EppiPlate'<br>Part no.: TTx_OpenSource_000<br>[manufacturer website](https://tbd) | <img src="ims/TTx_24_EppiPlate.png" alt="TTx_EppiPlate" width="250"/> |
+| 'TTx_24_EppiPlate_safelock'<br>Part no.: TTx_OpenSource_000<br>[manufacturer website](https://tbd) | <img src="ims/TTx_24_EppiPlate.png" alt="TTx_EppiPlate" width="250"/> |
