@@ -4092,6 +4092,7 @@ class STAR(HamiltonLiquidHandler):
       resource: Resource,
       pickup_distance_from_top: float,
       offset: Coordinate = Coordinate.zero(),
+      z_press_on_distance: int = 0,
       minimum_traverse_height_at_beginning_of_a_command: int = 2750,
       z_position_at_the_command_end: int = 2750,
       return_tool: bool = True
@@ -4122,7 +4123,7 @@ class STAR(HamiltonLiquidHandler):
       x_direction=0,
       y_position=int(center.y * 10),
       z_position=int(grip_height * 10),
-      z_press_on_distance=0,
+      z_press_on_distance=z_press_on_distance,
       z_speed=500,
       open_gripper_position=int(grip_width*10) + 30,
       minimum_traverse_height_at_beginning_of_a_command=
