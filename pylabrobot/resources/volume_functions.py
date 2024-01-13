@@ -6,8 +6,8 @@ import math
 def calculate_liquid_volume_container_2segments_square_vbottom(
     x: float,
     y: float,
-    z_pyramid: float,
-    z_cube: float,
+    h_pyramid: float,
+    h_cube: float,
     liquid_height: float
   ) -> float:
   """
@@ -21,14 +21,14 @@ def calculate_liquid_volume_container_2segments_square_vbottom(
   Parameters:
     x (float): The base length of the square pyramid and cube in mm.
     y (float): The base width of the square pyramid and cube in mm.
-    z_pyramid (float): The height of the square pyramid in mm.
-    z_cube (float): The height of the cube in mm.
+    h_pyramid (float): The height of the square pyramid in mm.
+    h_cube (float): The height of the cube in mm.
     liquid_height (float): The height of the liquid in the container in mm.
 
   Returns:
     float: The volume of the liquid in cubic millimeters.
   """
-  if liquid_height > z_pyramid+z_cube:
+  if liquid_height > h_pyramid + h_cube:
     print("""WARNING: Liquid overflow detected;
     check your labware definiton and/or that you are using the right labware.""")
     return 0.0
@@ -37,18 +37,18 @@ def calculate_liquid_volume_container_2segments_square_vbottom(
   base_area = x * y
 
   # Calculating the full volume of the pyramid
-  full_pyramid_volume = (1/3) * base_area * z_pyramid
+  full_pyramid_volume = (1/3) * base_area * h_pyramid
 
-  if liquid_height <= z_pyramid:
+  if liquid_height <= h_pyramid:
     # Liquid height is within the pyramid
     # Calculating the scale factor for the reduced height
-    scale_factor = liquid_height / z_pyramid
+    scale_factor = liquid_height / h_pyramid
     # Calculating the sub-volume of the pyramid
     liquid_volume = full_pyramid_volume * (scale_factor ** 3)
   else:
     # Liquid height extends into the cube
     # Calculating the volume of the cube portion filled with liquid
-    cube_liquid_height = liquid_height - z_pyramid
+    cube_liquid_height = liquid_height - h_pyramid
     cube_liquid_volume = base_area * cube_liquid_height
     # Total liquid volume is the sum of the pyramid and cube volumes
     liquid_volume = full_pyramid_volume + cube_liquid_volume

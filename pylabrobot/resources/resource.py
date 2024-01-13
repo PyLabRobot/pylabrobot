@@ -285,10 +285,6 @@ class Resource:
 
     dx = self.get_size_x() / 2
     dy = self.get_size_y() / (n+1)
-    # if n > 1:
-    #   dy = self.get_size_y() / (n+1)
-    # else:
-    #   dy = self.get_size_y()
 
     if dy < 9: # TODO: too specific?
       raise ValueError(f"Resource is too small to space {n} channels evenly.")
