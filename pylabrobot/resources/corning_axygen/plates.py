@@ -32,7 +32,7 @@ def Axy_24_DW_10ML(name: str, with_lid: bool = False):
     with_lid=with_lid,
     model="Axy_24_DW_10ML",
     lid_height=5,
-    items=create_equally_spaced(Container, # Well
+    items=create_equally_spaced(Well,
       num_items_x=6,
       num_items_y=4,
       dx=10.3,
@@ -50,11 +50,11 @@ def Axy_24_DW_10ML(name: str, with_lid: bool = False):
 
 
 #: Axy_24_DW_10ML_L
-def Axy_24_DW_10ML_L(name: str, with_lid: bool = False) -> Plate:
+def Axy_24_DW_10ML_L(name: str, with_lid: bool = False):
   return Axy_24_DW_10ML(name=name, with_lid=with_lid)
 
 
 #: Axy_24_DW_10ML_P
-def Axy_24_DW_10ML_P(name: str, with_lid: bool = False) -> Plate:
+def Axy_24_DW_10ML_P(name: str, with_lid: bool = False):
   return Axy_24_DW_10ML(name=name, with_lid=with_lid).rotated(90)
 
