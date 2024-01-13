@@ -28,8 +28,9 @@ def calculate_liquid_volume_container_2segments_square_Vb(
   the pyramid or extends into the cuboid.
   """
   if liquid_height > z_pyramid+z_cube:
-    return "WARNING: Liquid overflow detected; check your labware definiton and/or that you are using the right labware."
-   
+    return """WARNING: Liquid overflow detected; 
+    check your labware definiton and/or that you are using the right labware."""
+
   # Calculating the base area
   base_area = x * y
 
@@ -59,45 +60,46 @@ def calculate_liquid_volume_container_2segments_round_Vb(
         h_cylinder: float,
         liquid_height: float
         ) -> float:
-    """
-    Calculate the volume of liquid in a container with a conical bottom and 
-    a cylindrical top. The container has the same radius for both the cone and 
-    the cylinder.
+  """
+  Calculate the volume of liquid in a container with a conical bottom and 
+  a cylindrical top. The container has the same radius for both the cone and 
+  the cylinder.
 
-    Parameters:
-    r (float): The radius of the base of the cone and cylinder in mm.
-    h_cone (float): The height of the cone in mm.
-    h_cylinder (float): The height of the cylinder in mm.
-    liquid_height (float): The height of the liquid in the container in mm.
+  Parameters:
+  r (float): The radius of the base of the cone and cylinder in mm.
+  h_cone (float): The height of the cone in mm.
+  h_cylinder (float): The height of the cylinder in mm.
+  liquid_height (float): The height of the liquid in the container in mm.
 
-    Returns:
-    float: The volume of the liquid in cubic millimeters.
+  Returns:
+  float: The volume of the liquid in cubic millimeters.
 
-    The function calculates the volume based on whether the liquid height is 
-    within the cone or extends into the cylinder.
-    """
-    if liquid_height > h_cone+h_cylinder:
-        return "WARNING: Liquid overflow detected; check your labware definiton and/or that you are using the right labware."
+  The function calculates the volume based on whether the liquid height is 
+  within the cone or extends into the cylinder.
+  """
+  if liquid_height > h_cone+h_cylinder:
+    return """WARNING: Liquid overflow detected; 
+    check your labware definiton and/or that you are using the right labware."""
     
-    r = d/2
-    # Calculating the full volume of the cone
-    full_cone_volume = (1/3) * math.pi * r**2 * h_cone
+  r = d/2
+  # Calculating the full volume of the cone
+  full_cone_volume = (1/3) * math.pi * r**2 * h_cone
 
-    if liquid_height <= h_cone:
-        # Liquid height is within the cone
-        # Calculating the scale factor for the reduced height
-        scale_factor = liquid_height / h_cone
-        # Calculating the sub-volume of the cone
-        liquid_volume = full_cone_volume * (scale_factor ** 3)
-    else:
-        # Liquid height extends into the cylinder
-        # Calculating the volume of the cylinder portion filled with liquid
-        cylinder_liquid_height = liquid_height - h_cone
-        cylinder_liquid_volume = math.pi * r**2 * cylinder_liquid_height
-        # Total liquid volume is the sum of the cone and cylinder volumes
-        liquid_volume = full_cone_volume + cylinder_liquid_volume
+  if liquid_height <= h_cone:
+    # Liquid height is within the cone
+    # Calculating the scale factor for the reduced height
+    scale_factor = liquid_height / h_cone
+    # Calculating the sub-volume of the cone
+    liquid_volume = full_cone_volume * (scale_factor ** 3)
+  else:
+    # Liquid height extends into the cylinder
+    # Calculating the volume of the cylinder portion filled with liquid
+    cylinder_liquid_height = liquid_height - h_cone
+    cylinder_liquid_volume = math.pi * r**2 * cylinder_liquid_height
+    # Total liquid volume is the sum of the cone and cylinder volumes
+    liquid_volume = full_cone_volume + cylinder_liquid_volume
 
-    return liquid_volume
+  return liquid_volume
 
 
 def calculate_liquid_volume_container_2segments_round_Ub(
@@ -105,41 +107,42 @@ def calculate_liquid_volume_container_2segments_round_Ub(
         h_cylinder: float,
         liquid_height: float
         ) -> float:
-    """
-    Calculate the volume of liquid in a container with a hemispherical bottom 
-    and a cylindrical top. The container has the same radius for both the 
-    hemisphere and the cylinder.
+  """
+  Calculate the volume of liquid in a container with a hemispherical bottom 
+  and a cylindrical top. The container has the same radius for both the 
+  hemisphere and the cylinder.
 
-    Parameters:
-    r (float): The radius of the base of the hemisphere and cylinder in mm.
-    h_cylinder (float): The height of the cylinder in mm.
-    liquid_height (float): The height of the liquid in the container in mm.
+  Parameters:
+  r (float): The radius of the base of the hemisphere and cylinder in mm.
+  h_cylinder (float): The height of the cylinder in mm.
+  liquid_height (float): The height of the liquid in the container in mm.
 
-    Returns:
-    float: The volume of the liquid in cubic millimeters.
+  Returns:
+  float: The volume of the liquid in cubic millimeters.
 
-    The function calculates the volume based on whether the liquid height is 
-    within the hemisphere or extends into the cylinder.
-    """
-    r = d/2
-    if liquid_height > h_cylinder+r:
-        return "WARNING: Liquid overflow detected; check your labware definiton and/or that you are using the right labware."
+  The function calculates the volume based on whether the liquid height is 
+  within the hemisphere or extends into the cylinder.
+  """
+  r = d/2
+  if liquid_height > h_cylinder+r:
+    return """WARNING: Liquid overflow detected; 
+    check your labware definiton and/or that you are using the right labware."""
     
-    # Calculating the full volume of the hemisphere
-    full_hemisphere_volume = (2/3) * math.pi * r**3
+  # Calculating the full volume of the hemisphere
+  full_hemisphere_volume = (2/3) * math.pi * r**3
 
-    if liquid_height <= r:
-        # Liquid height is within the hemisphere
-        # Calculating the sub-volume of the hemisphere using spherical cap volume formula
-        h = r - (r - liquid_height)  # Height of the spherical cap
-        liquid_volume = (1/3) * math.pi * h**2 * (3*r - h)
-    else:
-        # Liquid height extends into the cylinder
-        # Calculating the volume of the cylinder portion filled with liquid
-        cylinder_liquid_height = liquid_height - r
-        cylinder_liquid_volume = math.pi * r**2 * cylinder_liquid_height
-        # Total liquid volume is the sum of the hemisphere and cylinder volumes
-        liquid_volume = full_hemisphere_volume + cylinder_liquid_volume
+  if liquid_height <= r:
+    # Liquid height is within the hemisphere
+    # Calculating the sub-volume of the hemisphere using spherical cap volume formula
+    h = r - (r - liquid_height)  # Height of the spherical cap
+    liquid_volume = (1/3) * math.pi * h**2 * (3*r - h)
+  else:
+    # Liquid height extends into the cylinder
+    # Calculating the volume of the cylinder portion filled with liquid
+    cylinder_liquid_height = liquid_height - r
+    cylinder_liquid_volume = math.pi * r**2 * cylinder_liquid_height
+    # Total liquid volume is the sum of the hemisphere and cylinder volumes
+    liquid_volume = full_hemisphere_volume + cylinder_liquid_volume
 
-    return liquid_volume
+  return liquid_volume
 
