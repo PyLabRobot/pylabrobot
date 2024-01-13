@@ -23,7 +23,7 @@ def _compute_volume_from_height_Axy_24_DW_10ML(h: float):
 
 
 #: Axy_24_DW_10ML
-def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
+def Axy_24_DW_10ML(name: str, with_lid: bool = False):
   return Plate(
     name=name,
     size_x=127.0,
