@@ -20,7 +20,7 @@ def _compute_volume_from_height_Revvity_ProxiPlate_384Plus(h: float):
     h_cone = 3,
     h_cylinder = 2.3,
     liquid_height=h
-    )
+  )
 
 
 #: Revvity_ProxiPlate_384Plus
@@ -49,4 +49,3 @@ def Revvity_ProxiPlate_384Plus(name: str, with_lid: bool = False) -> Plate:
       compute_volume_from_height=_compute_volume_from_height_Revvity_ProxiPlate_384Plus,
     ),
   )
-
