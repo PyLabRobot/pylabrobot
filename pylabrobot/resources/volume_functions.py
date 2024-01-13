@@ -138,7 +138,7 @@ def calculate_liquid_volume_container_2segments_round_ubottom(
   if liquid_height <= r:
     # Liquid height is within the hemisphere
     # Calculating the sub-volume of the hemisphere using spherical cap volume formula
-    h = r - (r - liquid_height)  # Height of the spherical cap
+    h = liquid_height  # Height of the spherical cap
     liquid_volume = (1/3) * math.pi * h**2 * (3*r - h)
   else:
     # Liquid height extends into the cylinder
