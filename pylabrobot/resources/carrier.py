@@ -226,7 +226,7 @@ class ShakerCarrier(Carrier):
     size_y: float,
     size_z: float,
     sites: Optional[List[CarrierSite]] = None,
-    category="mfx_carrier",
+    category="shaker_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
       sites,category=category, model=model)
