@@ -2,7 +2,7 @@
 
 import math
 
-def calculate_liquid_volume_container_2segments_square_Vb(
+def calculate_liquid_volume_container_2segments_square_vbottom(
         x: float,
         y: float,
         z_pyramid: float,
@@ -28,7 +28,7 @@ def calculate_liquid_volume_container_2segments_square_Vb(
   the pyramid or extends into the cuboid.
   """
   if liquid_height > z_pyramid+z_cube:
-    return """WARNING: Liquid overflow detected; 
+    return """WARNING: Liquid overflow detected;
     check your labware definiton and/or that you are using the right labware."""
 
   # Calculating the base area
@@ -51,10 +51,10 @@ def calculate_liquid_volume_container_2segments_square_Vb(
     # Total liquid volume is the sum of the pyramid and cube volumes
     liquid_volume = full_pyramid_volume + cube_liquid_volume
 
-  return liquid_volume
+  return float(liquid_volume)
 
 
-def calculate_liquid_volume_container_2segments_round_Vb(
+def calculate_liquid_volume_container_2segments_round_vbottom(
         d: float,
         h_cone: float,
         h_cylinder: float,
@@ -78,9 +78,9 @@ def calculate_liquid_volume_container_2segments_round_Vb(
   within the cone or extends into the cylinder.
   """
   if liquid_height > h_cone+h_cylinder:
-    return """WARNING: Liquid overflow detected; 
+    return """WARNING: Liquid overflow detected;
     check your labware definiton and/or that you are using the right labware."""
-    
+
   r = d/2
   # Calculating the full volume of the cone
   full_cone_volume = (1/3) * math.pi * r**2 * h_cone
@@ -99,10 +99,10 @@ def calculate_liquid_volume_container_2segments_round_Vb(
     # Total liquid volume is the sum of the cone and cylinder volumes
     liquid_volume = full_cone_volume + cylinder_liquid_volume
 
-  return liquid_volume
+  return float(liquid_volume)
 
 
-def calculate_liquid_volume_container_2segments_round_Ub(
+def calculate_liquid_volume_container_2segments_round_ubottom(
         d: float,
         h_cylinder: float,
         liquid_height: float
@@ -125,9 +125,9 @@ def calculate_liquid_volume_container_2segments_round_Ub(
   """
   r = d/2
   if liquid_height > h_cylinder+r:
-    return """WARNING: Liquid overflow detected; 
+    return """WARNING: Liquid overflow detected;
     check your labware definiton and/or that you are using the right labware."""
-    
+
   # Calculating the full volume of the hemisphere
   full_hemisphere_volume = (2/3) * math.pi * r**3
 
@@ -144,5 +144,5 @@ def calculate_liquid_volume_container_2segments_round_Ub(
     # Total liquid volume is the sum of the hemisphere and cylinder volumes
     liquid_volume = full_hemisphere_volume + cylinder_liquid_volume
 
-  return liquid_volume
+  return float(liquid_volume)
 

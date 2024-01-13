@@ -7,14 +7,14 @@ from pylabrobot.resources.container import Container
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.plate import Plate
 
-from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_Vb
+from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_vbottom
 
 
 
 def _compute_volume_from_height_Axy_24_DW_10ML(h: float):
   if h > 42.1:
     raise ValueError(f"Height {h} is too large for Cos_96_Vb")
-  return calculate_liquid_volume_container_2segments_square_Vb(
+  return calculate_liquid_volume_container_2segments_square_vbottom(
     x=17,
     y=17,
     z_pyramid=5,
