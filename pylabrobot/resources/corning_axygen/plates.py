@@ -2,13 +2,11 @@
 
 # pylint: disable=invalid-name
 
-# from pylabrobot.resources.container import Container
-from pylabrobot.resources.well import Well#, WellBottomType
+from pylabrobot.resources.well import Well
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.plate import Plate
 
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_vbottom
-
 
 
 def _compute_volume_from_height_Axy_24_DW_10ML(h: float):
@@ -57,4 +55,3 @@ def Axy_24_DW_10ML_L(name: str, with_lid: bool = False):
 #: Axy_24_DW_10ML_P
 def Axy_24_DW_10ML_P(name: str, with_lid: bool = False):
   return Axy_24_DW_10ML(name=name, with_lid=with_lid).rotated(90)
-
