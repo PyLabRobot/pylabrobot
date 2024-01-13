@@ -9,40 +9,41 @@ def calculate_liquid_volume_container_2segments_square_Vb(
         z_cube: float,
         liquid_height: float
         ) -> float:
-    """
-    Calculate the volume of liquid in a container consisting of an upside-down 
-    square pyramid at the bottom     and a cuboid on top. The container has the 
-    same x and y dimensions for both the pyramid and the cuboid.
+     
+     """
+     Calculate the volume of liquid in a container consisting of an upside-down
+     square pyramid at the bottom     and a cuboid on top. The container has the 
+     same x and y dimensions for both the pyramid and the cuboid.
+     
+     Parameters:
+     x (float): The base length of the square pyramid and cube in mm.
+     y (float): The base width of the square pyramid and cube in mm.
+     z_pyramid (float): The height of the square pyramid in mm.
+     z_cube (float): The height of the cube in mm.
+     liquid_height (float): The height of the liquid in the container in mm.
 
-    Parameters:
-    x (float): The base length of the square pyramid and cube in mm.
-    y (float): The base width of the square pyramid and cube in mm.
-    z_pyramid (float): The height of the square pyramid in mm.
-    z_cube (float): The height of the cube in mm.
-    liquid_height (float): The height of the liquid in the container in mm.
+     Returns:
+     float: The volume of the liquid in cubic millimeters.
 
-    Returns:
-    float: The volume of the liquid in cubic millimeters.
+     The function calculates the volume based on whether the liquid height is within
+     the pyramid or extends into the cuboid.
+     """
+     if liquid_height > z_pyramid+z_cube:
+         return "WARNING: Liquid overflow detected; check your labware definiton and/or that you are using the right labware."
+     
+     # Calculating the base area
+     base_area = x * y
 
-    The function calculates the volume based on whether the liquid height is within
-    the pyramid or extends into the cuboid.
-    """
-    if liquid_height > z_pyramid+z_cube:
-        return "WARNING: Liquid overflow detected; check your labware definiton and/or that you are using the right labware."
-
-    # Calculating the base area
-    base_area = x * y
-
-    # Calculating the full volume of the pyramid
-    full_pyramid_volume = (1/3) * base_area * z_pyramid
-
-    if liquid_height <= z_pyramid:
+     # Calculating the full volume of the pyramid
+     full_pyramid_volume = (1/3) * base_area * z_pyramid
+     
+     if liquid_height <= z_pyramid:
         # Liquid height is within the pyramid
         # Calculating the scale factor for the reduced height
         scale_factor = liquid_height / z_pyramid
         # Calculating the sub-volume of the pyramid
         liquid_volume = full_pyramid_volume * (scale_factor ** 3)
-    else:
+     else:
         # Liquid height extends into the cube
         # Calculating the volume of the cube portion filled with liquid
         cube_liquid_height = liquid_height - z_pyramid
@@ -50,13 +51,13 @@ def calculate_liquid_volume_container_2segments_square_Vb(
         # Total liquid volume is the sum of the pyramid and cube volumes
         liquid_volume = full_pyramid_volume + cube_liquid_volume
 
-    return liquid_volume
+     return liquid_volume
 
 
 def calculate_liquid_volume_container_2segments_round_Vb(
-        d: float, 
-        h_cone: float, 
-        h_cylinder: float, 
+        d: float,
+        h_cone: float,
+        h_cylinder: float,
         liquid_height: float
         ) -> float:
     """
@@ -101,8 +102,8 @@ def calculate_liquid_volume_container_2segments_round_Vb(
 
 
 def calculate_liquid_volume_container_2segments_round_Ub(
-        d: float, 
-        h_cylinder: float, 
+        d: float,
+        h_cylinder: float,
         liquid_height: float
         ) -> float:
     """
