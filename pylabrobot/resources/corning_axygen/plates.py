@@ -21,7 +21,7 @@ def _compute_volume_from_height_Axy_24_DW_10ML(h: float):
 
 
 #: Axy_24_DW_10ML
-def Axy_24_DW_10ML(name: str, with_lid: bool = False):
+def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
   return Plate(
     name=name,
     size_x=127.0,
@@ -41,17 +41,17 @@ def Axy_24_DW_10ML(name: str, with_lid: bool = False):
       size_x=17.0,
       size_y=17.0,
       size_z=42,
-      # bottom_type=WellBottomType.V,
-      # compute_volume_from_height=_compute_volume_from_height_Axy_24_DW_10ML,
+      bottom_type=WellBottomType.V,
+      compute_volume_from_height=_compute_volume_from_height_Axy_24_DW_10ML,
     ),
   )
 
 
 #: Axy_24_DW_10ML_L
-def Axy_24_DW_10ML_L(name: str, with_lid: bool = False):
+def Axy_24_DW_10ML_L(name: str, with_lid: bool = False) -> Plate:
   return Axy_24_DW_10ML(name=name, with_lid=with_lid)
 
 
 #: Axy_24_DW_10ML_P
-def Axy_24_DW_10ML_P(name: str, with_lid: bool = False):
+def Axy_24_DW_10ML_P(name: str, with_lid: bool = False) -> Plate:
   return Axy_24_DW_10ML(name=name, with_lid=with_lid).rotated(90)
