@@ -15,6 +15,7 @@ class TestWell(unittest.TestCase):
       "size_y": 2,
       "size_z": 3,
       "bottom_type": "flat",
+      "cross_section_type": "circle",
       "max_volume": 10,
       "model": "model",
 
