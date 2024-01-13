@@ -787,3 +787,4 @@ def Cos_96_Vb_L(name: str, with_lid: bool = False) -> Plate:
 #: Cos_96_Vb_P
 def Cos_96_Vb_P(name: str, with_lid: bool = False) -> Plate:
   return Cos_96_Vb(name=name, with_lid=with_lid).rotated(90)
+
