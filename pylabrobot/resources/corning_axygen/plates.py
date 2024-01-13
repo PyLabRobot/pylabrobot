@@ -2,8 +2,8 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.container import Container
-# from pylabrobot.resources.well import Well, WellBottomType
+# from pylabrobot.resources.container import Container
+from pylabrobot.resources.well import Well#, WellBottomType
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.plate import Plate
 
