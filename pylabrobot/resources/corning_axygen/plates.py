@@ -2,7 +2,7 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.well import Well
+from pylabrobot.resources.well import Well, WellBottomType
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.plate import Plate
 
@@ -15,8 +15,8 @@ def _compute_volume_from_height_Axy_24_DW_10ML(h: float):
   return calculate_liquid_volume_container_2segments_square_vbottom(
     x=17,
     y=17,
-    z_pyramid=5,
-    z_cube=37,
+    h_pyramid=5,
+    h_cube=37,
     liquid_height=h)
 
 
