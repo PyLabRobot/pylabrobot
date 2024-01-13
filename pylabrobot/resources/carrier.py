@@ -230,7 +230,7 @@ class ShakerCarrier(Carrier):
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
       sites,category=category, model=model)
-    
+
 
 def create_carrier_sites(
   locations: List[Coordinate],

@@ -3,11 +3,11 @@
 # pylint: disable=invalid-name
 
 from pylabrobot.resources.container import Container
-from pylabrobot.resources.well import Well, WellBottomType
+# from pylabrobot.resources.well import Well, WellBottomType
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.plate import Plate
 
-from pylabrobot.resources.volume_functions import *
+from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_Vb
 
 
 
@@ -39,7 +39,7 @@ def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
       dy=5.8,
       dz=2.24,
       item_dx= 18,
-      item_dy=18, 
+      item_dy=18,
       size_x=17.0,
       size_y=17.0,
       size_z=42,
