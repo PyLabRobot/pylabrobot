@@ -63,8 +63,13 @@ class Well(Container):
 
     if max_volume is None:
       if compute_volume_from_height is None:
-        assert size_x == size_y, "Well max volume computation currently assumes circular wells"
-        max_volume = math.pi * (size_x / 2) ** 2 * size_z
+        # we assume flat bottom as a best guess, bottom types require additional information
+        if cross_section_type == CrossSectionType.CIRCLE:
+          assert size_x == size_y, "size_x and size_y must be equal for circular wells."
+          max_volume = math.pi * (size_x / 2) ** 2 * size_z
+        elif cross_section_type == CrossSectionType.SQUARE:
+          assert size_x == size_y, "size_x and size_y must be equal for square wells."
+          max_volume = size_x * size_y * size_z
       else:
         max_volume = compute_volume_from_height(size_z)
 
