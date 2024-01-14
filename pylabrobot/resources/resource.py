@@ -291,6 +291,10 @@ class Resource:
     offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
     return list(reversed(offsets))
 
+  def get_2d_center_offset(self) -> Coordinate:
+    """ Get the offset (from bottom left) of the center of this resource. """
+    return self.get_2d_center_offsets()[0]
+
   def rotate(self, degrees: int):
     """ Rotate counter clockwise by the given number of degrees.
 
