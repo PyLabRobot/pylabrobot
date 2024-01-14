@@ -285,6 +285,7 @@ class Resource:
 
     dx = self.get_size_x() / 2
     dy = self.get_size_y() / (n+1)
+
     if dy < 9: # TODO: too specific?
       raise ValueError(f"Resource is too small to space {n} channels evenly.")
     offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
