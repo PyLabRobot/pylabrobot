@@ -29,9 +29,8 @@ def calculate_liquid_volume_container_2segments_square_vbottom(
     float: The volume of the liquid in cubic millimeters.
   """
   if liquid_height > h_pyramid + h_cube:
-    print("""WARNING: Liquid overflow detected;
+    raise ValueError("""WARNING: Liquid overflow detected;
     check your labware definiton and/or that you are using the right labware.""")
-    return 0.0
 
   # Calculating the base area
   base_area = x * y
@@ -80,9 +79,8 @@ def calculate_liquid_volume_container_2segments_round_vbottom(
     float: The volume of the liquid in cubic millimeters.
   """
   if liquid_height > h_cone+h_cylinder:
-    print("""WARNING: Liquid overflow detected;
+    raise ValueError("""WARNING: Liquid overflow detected;
     check your labware definiton and/or that you are using the right labware.""")
-    return 0.0
 
   r = d/2
   # Calculating the full volume of the cone
@@ -128,9 +126,8 @@ def calculate_liquid_volume_container_2segments_round_ubottom(
   """
   r = d/2
   if liquid_height > h_cylinder+r:
-    print("""WARNING: Liquid overflow detected;
+    raise ValueError("""WARNING: Liquid overflow detected;
     check your labware definiton and/or that you are using the right labware.""")
-    return 0.0
 
   # Calculating the full volume of the hemisphere
   full_hemisphere_volume = (2/3) * math.pi * r**3
