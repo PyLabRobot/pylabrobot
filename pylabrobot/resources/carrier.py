@@ -216,6 +216,22 @@ class MFXCarrier(Carrier):
       sites,category=category, model=model)
 
 
+class ShakerCarrier(Carrier):
+  """ Base class for shaker carriers
+  (i.e. 7-track carriers with mixed-use and/or specialized sites). """
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sites: Optional[List[CarrierSite]] = None,
+    category="shaker_carrier",
+    model: Optional[str] = None):
+    super().__init__(name, size_x, size_y, size_z,
+      sites,category=category, model=model)
+
+
 def create_carrier_sites(
   locations: List[Coordinate],
   site_size_x: List[float],
