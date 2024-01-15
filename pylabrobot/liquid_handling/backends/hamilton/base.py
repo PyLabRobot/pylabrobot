@@ -326,6 +326,16 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
         y_pos += offset.y
       y_positions.append(int(y_pos*10))
 
+    # check that the minimum d between any two y positions is >9mm
+    y_sorted = sorted(y_positions)
+    for channel_idx, (y1, y2) in enumerate(zip(y_sorted, y_sorted[1:])):
+      # skip channels that are not involved
+      if not channels_involved[channel_idx] or not channels_involved[channel_idx+1]:
+        continue
+      if (y2 - y1) < 90:
+        raise ValueError(f"Minimum distance between two y positions is <9mm: {y1}, {y2}"
+                         f", channel {channel_idx})")
+
     if len(ops) > self.num_channels:
       raise ValueError(f"Too many channels specified: {len(ops)} > {self.num_channels}")
 
