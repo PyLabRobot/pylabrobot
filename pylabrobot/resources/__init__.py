@@ -35,3 +35,4 @@ from .opentrons import *
 from .tecan import *
 
 # labware made from 3rd parties that share their designs with PLR
+from .TTx_DIY import *
