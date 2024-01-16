@@ -5322,8 +5322,12 @@ class STAR(HamiltonLiquidHandler):
     assert len(bit_pattern) == 54, "bit pattern must be length 54"
     assert len(blink_pattern) == 54, "bit pattern must be length 54"
 
-    bit_pattern_hex   = hex(int("".join(["1" if x else "0" for x in bit_pattern]), base=2))
-    blink_pattern_hex = hex(int("".join(["1" if x else "0" for x in blink_pattern]), base=2))
+    def pattern2hex(pattern: List[bool]) -> str:
+      bit_string = "".join(["1" if x else "0" for x in pattern])
+      return hex(int(bit_string, base=2))[2:].upper().zfill(14)
+
+    bit_pattern_hex   = pattern2hex(bit_pattern)
+    blink_pattern_hex = pattern2hex(blink_pattern)
 
     return await self.send_command(
       module="C0",
