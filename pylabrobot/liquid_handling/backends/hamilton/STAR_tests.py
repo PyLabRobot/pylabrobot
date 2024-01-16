@@ -276,6 +276,12 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     elif not should_be and found:
       self.fail(f"Command {cmd} was found in sent commands: {self.mockSTAR.commands}")
 
+  async def test_indictor_light(self):
+    """ Test the indicator light. """
+    await self.mockSTAR.set_loading_indicators(bit_pattern=[True]*54, blink_pattern=[False]*54)
+    self._assert_command_sent_once("C0CPid0000cl3FFFFFFFFFFFFFcb00000000000000",
+                                             "cl**************cb**************")
+
   def test_ops_to_fw_positions(self):
     """ Convert channel positions to firmware positions. """
     # pylint: disable=protected-access
