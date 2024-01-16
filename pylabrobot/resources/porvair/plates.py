@@ -11,7 +11,7 @@ from pylabrobot.resources.volume_functions import calculate_liquid_volume_contai
 
 def _compute_volume_from_height_Porvair_6x47_Reservoir(h: float):
   if h > 42.5:
-    raise ValueError(f"Height {h} is too large for Cos_96_Vb")
+    raise ValueError(f"Height {h} is too large for Porvair_6x47_Reservoir")
   return calculate_liquid_volume_container_2segments_square_vbottom(
     x=17,
     y=70.8,
