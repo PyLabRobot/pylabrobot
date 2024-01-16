@@ -20,7 +20,7 @@ def _compute_volume_from_height_Porvair_6x47_Reservoir(h: float):
     liquid_height=h)
 
 
-#: Axy_24_DW_10ML
+#: Porvair_6x47_Reservoir
 def Porvair_6x47_Reservoir(name: str, with_lid: bool = False) -> Plate:
   return Plate(
     name=name,
@@ -48,11 +48,11 @@ def Porvair_6x47_Reservoir(name: str, with_lid: bool = False) -> Plate:
   )
 
 
-#: Axy_24_DW_10ML_L
+#: Porvair_6x47_Reservoir_L
 def Porvair_6x47_Reservoir_L(name: str, with_lid: bool = False) -> Plate:
   return Porvair_6x47_Reservoir(name=name, with_lid=with_lid)
 
 
-#: Axy_24_DW_10ML_P
+#: Porvair_6x47_Reservoir_P
 def Porvair_6x47_Reservoir_P(name: str, with_lid: bool = False) -> Plate:
   return Porvair_6x47_Reservoir(name=name, with_lid=with_lid).rotated(90)
