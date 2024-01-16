@@ -1,5 +1,5 @@
 
-## Resource defintions: Revvity
+## Resource defintions: Porvair
 
 Company history: [Porvair Filtration Group](https://www.porvairfiltration.com/about/our-history/)
 
