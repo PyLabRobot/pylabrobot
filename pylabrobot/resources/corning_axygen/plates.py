@@ -2,7 +2,7 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.well import Well, WellBottomType
+from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.plate import Plate
 
@@ -43,6 +43,7 @@ def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
       size_z=42,
       bottom_type=WellBottomType.V,
       compute_volume_from_height=_compute_volume_from_height_Axy_24_DW_10ML,
+      cross_section_type=CrossSectionType.SQUARE
     ),
   )
 
