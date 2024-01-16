@@ -78,3 +78,15 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   
   async def core_release_picked_up_resource(self, coordinate, resource: Resource, **backend_kwargs):
     print(f"CORE: Releasing picked up {resource} to {coordinate}.")
+
+  async def _ops_to_fw_positions(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
+    print(f"Converting {ops} to fw positions.")
+
+  async def iswap_pick_up_resource(self, resource: Resource, **backend_kwargs):
+    print(f"ISWAP: Picking up {resource}.")
+
+  async def send_raw_command(self, command: str):
+    print(f"Sending raw command {command}.")
+
+  async def iswap_release_picked_up_resource(self, coordinate, resource: Resource, **backend_kwargs):
+    print(f"ISWAP: Releasing picked up {resource} to {coordinate}.")
