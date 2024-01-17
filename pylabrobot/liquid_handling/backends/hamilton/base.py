@@ -31,8 +31,8 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     id_product: int,
     device_address: Optional[int] = None,
     packet_read_timeout: int = 3,
-    read_timeout: int = 30,
-    write_timeout: int = 30,
+    read_timeout: int = 300,
+    write_timeout: int = 300,
   ):
     """
 
