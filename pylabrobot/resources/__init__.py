@@ -28,6 +28,7 @@ from .corning_costar import *
 from .corning_axygen import *
 from .revvity import *
 from .porvair import *
+from .azenta import *
 
 # liquid handling companies
 from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
