@@ -9,7 +9,7 @@ from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_round_vbottom
 
 
-def _compute_volume_from_height_Azenta4titudeFrameStar_96_wellplate_skirted(h: float):
+def _compute_volume_from_height_FrameStar_96_wellplate_skirted(h: float):
   if h > 42.5:
     raise ValueError(f"Height {h} is too large for Azenta4titudeFrameStar_96_wellplate_skirted")
   return calculate_liquid_volume_container_2segments_round_vbottom(
@@ -42,7 +42,7 @@ def Azenta4titudeFrameStar_96_wellplate_skirted(name: str, with_lid: bool = Fals
       size_y=5.5,
       size_z=15,
       bottom_type=WellBottomType.V,
-      compute_volume_from_height=_compute_volume_from_height_Azenta4titudeFrameStar_96_wellplate_skirted,
+      compute_volume_from_height=_compute_volume_from_height_FrameStar_96_wellplate_skirted,
       cross_section_type=CrossSectionType.CIRCLE
     ),
   )
