@@ -66,7 +66,7 @@ class PumpArray(MachineFrontend):
       speed = [float(x) for x in speed]
     if len(speed) != len(use_channels):
       raise ValueError("Speed and use_channels must be the same length.")
-    if any(channel > 0 for channel in use_channels):
+    if any(channel < 0 for channel in use_channels):
       raise ValueError("Channels in use channels must be positive.")
     await self.backend.run_continuously(speed=speed,  # type: ignore[arg-type]
                                         use_channels=use_channels)
@@ -95,7 +95,7 @@ class PumpArray(MachineFrontend):
     """
     Run the specified channels at the specified speeds for the specified volume. Note that this
     function requires the pump to be calibrated at the input speed. Args: speed: speed in
-    rpm/pump-specific units. use_channels: pump array channels to run. volume: volume to pump.
+    rpm/pump-specific units. use_channels: pump array channels to run using 0-index. volume: volume to pump.
     calibration_units: units of calibration. Volume per seconds ("duration") or volume per
     revolution ("revolutions"). Raises: TypeError: if the pump is not calibrated.
     """

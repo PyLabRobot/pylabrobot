@@ -1,12 +1,12 @@
-import threading
 import time
+import threading
 from typing import Optional, List, Dict, Union, Callable
 
 import functools
 
 from pylabrobot.pumps.backend import PumpArrayBackend
 
-from pymodbus.client import AsyncModbusSerialClient as ModbusClient  # type: ignore
+from pymodbus.client import ModbusSerialClient as ModbusClient  # type: ignore
 
 
 def check_pump_mappings(func: Callable):
@@ -109,7 +109,7 @@ class AgrowPumpArray(PumpArrayBackend):
       time.sleep(25)
       self.modbus.read_holding_registers(0, 1, unit=self.unit)
 
-    self.keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    self.keep_alive_thread = threading.Thread(target=keep_alive(), daemon=True)
     self.keep_alive_thread.start()
 
   async def setup(self):
@@ -124,10 +124,12 @@ class AgrowPumpArray(PumpArrayBackend):
     if self.port == "simulated":
       self._modbus = SimulatedModbusClient()
     else:
-      self._modbus = ModbusClient(method="rtu", port=self.port,
+      self._modbus = ModbusClient(port=self.port,
                                   baudrate=115200, timeout=1, stopbits=1, bytesize=8, parity="E",
                                   retry_on_empty=True)
-    await self.modbus.connect()
+    response = self.modbus.connect()
+    if not response:
+      raise ConnectionError("Modbus connection failed during pump setup")
     if self.keep_alive_thread_enabled:
       await self.start_keep_alive_thread()
     await self.set_num_channels()
@@ -144,7 +146,7 @@ class AgrowPumpArray(PumpArrayBackend):
       return int(len(self.pump_index_to_address))
 
   async def set_pump_mappings(self):
-    self._pump_index_to_address = {pump: pump + 100 for pump in range(1, self.num_channels + 1)}
+    self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
 
   async def run_revolutions(self, num_revolutions: List[float],
                             use_channels: List[int]):
@@ -170,9 +172,9 @@ class AgrowPumpArray(PumpArrayBackend):
             ValueError: Pump address out of range
             ValueError: Pump speed out of range
     """
-    if any(channel not in range(1, self.num_channels + 1) for channel in use_channels):
+    if any(channel not in range(0, self.num_channels) for channel in use_channels):
       raise ValueError(f"Pump address out of range for this pump array. \
-        Value should be between 1 and {self.num_channels + 1}")
+        Value should be between 0 and {self.num_channels}")
     for pump_index, pump_speed in zip(use_channels, speed):
       pump_speed = int(pump_speed)
       if pump_speed not in range(101):
@@ -183,7 +185,7 @@ class AgrowPumpArray(PumpArrayBackend):
     """ Halt the entire pump array. """
     assert self.modbus is not None, "Modbus connection not established"
     assert self.pump_index_to_address is not None, "Pump address mapping not established"
-    print("Engaging shutdown routine")
+    print("Engaging pump halt routine")
     for pump in self.pump_index_to_address:
       address = self.pump_index_to_address[pump]
       self.modbus.write_register(address, 0, unit=self.unit)
@@ -192,9 +194,11 @@ class AgrowPumpArray(PumpArrayBackend):
     """ Close the connection to the pump array. """
     await self.halt()
     assert self.modbus is not None, "Modbus connection not established"
+    if self.keep_alive_thread is not None:
+      self.keep_alive_thread.join()
     self.modbus.close()
-    assert self.keep_alive_thread is not None, "Keep alive thread not established"
-    self.keep_alive_thread.join()
+    assert not self.modbus.is_socket_open(), "Modbus failing to disconnect"
+
 
 
 class SimulatedModbusClient:
@@ -209,8 +213,9 @@ class SimulatedModbusClient:
   def __init__(self, connected: bool = False):
     self.connected = connected
 
-  async def connect(self):
+  def connect(self):
     self.connected = True
+
 
   @staticmethod
   def read_holding_registers(*args, **kwargs):

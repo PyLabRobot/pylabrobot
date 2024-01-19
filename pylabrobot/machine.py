@@ -53,12 +53,13 @@ class MachineFrontend(ABC):
 
   @need_setup_finished
   async def stop(self):
+    print("testing")
     await self.backend.stop()
     self._setup_finished = False
 
   def __del__(self):
     if self.setup_finished:
-      self.backend.stop()
+      self.stop()
 
   def __enter__(self):
     self.setup()
