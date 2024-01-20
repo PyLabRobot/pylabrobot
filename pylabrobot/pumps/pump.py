@@ -18,6 +18,8 @@ class Pump(MachineFrontend):
     self.backend: PumpBackend = backend
     self._setup_finished = False
     if calibration is not None:
+      if not len(calibration) == 1:
+        raise ValueError("Calibration must be a single value if used with a single pump.")
       self.calibration = calibration[0]
 
   async def run_revolutions(self, num_revolutions: float):

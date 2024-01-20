@@ -179,3 +179,8 @@ class PumpCalibration:
     """
 
     return PumpCalibration()
+
+  def __len__(self) -> int:
+    """ Return the length of the calibration. """
+
+    return len(self.calibration)
