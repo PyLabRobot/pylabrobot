@@ -1,3 +1,6 @@
+import asyncio
+from itertools import chain, combinations
+from typing import Any, Iterable
 import unittest
 from unittest.mock import Mock
 
@@ -7,12 +10,6 @@ from pylabrobot.pumps.pump import Pump
 from pylabrobot.pumps.backend import PumpBackend, PumpArrayBackend
 from pylabrobot.pumps.cole_parmer import Masterflex
 from pylabrobot.pumps.agrowpumps import AgrowPumpArray
-
-from typing import Any, Iterable
-
-from itertools import chain, combinations
-
-import asyncio
 
 
 def powerset(iterable: Iterable[Any]):
@@ -34,9 +31,7 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
     self.test_calibration = PumpCalibration.load_calibration(1, num_items=1)
 
   async def test_setup(self):
-    """
-    Test that the Pump class can be initialized.
-    """
+    """ Test that the Pump class can be initialized. """
     async with Pump(backend=self.mock_backend, calibration=self.null_calibration) as pump:
       self.assertEqual(pump.calibration, self.null_calibration)
       self.assertEqual(pump.backend, self.mock_backend)
@@ -47,16 +42,12 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(pump.backend.com_port, "simulated")
 
   async def test_run_revolutions(self):
-    """
-    Test that the Pump class can run for a specified number of revolutions.
-    """
+    """ Test that the Pump class can run for a specified number of revolutions. """
     async with Pump(backend=self.masterflex_backend, calibration=self.test_calibration) as pump:
       await pump.run_revolutions(num_revolutions=1)
 
   async def test_run_continuously(self):
-    """
-    Test that the Pump class can run continuously and inputs are properly handled.
-    """
+    """ Test that the Pump class can run continuously and inputs are properly handled. """
     async with Pump(backend=self.masterflex_backend, calibration=self.test_calibration) as pump:
       for speed in [0, 1, 100]:
         await pump.run_continuously(speed=speed)
@@ -65,7 +56,7 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
 
 
 class TestPumpArray(unittest.IsolatedAsyncioTestCase):
-  """ Tests for the AgrowPumpArray class.  """
+  """ Tests for the AgrowPumpArray class. """
 
   def setUp(self):
     self.agrow_valid_speeds = [int(0), int(100), float(0), float(100)]
@@ -86,7 +77,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
     self.test_calibration = PumpCalibration.load_calibration(1, num_items=6)
 
   async def test_setup(self):
-    """ Test that the AgrowPumpArray class can be initialized.  """
+    """ Test that the AgrowPumpArray class can be initialized. """
     pump_array: PumpArray
     async with PumpArray(backend=self.agrow_backend,
                          calibration=self.null_calibration) as pump_array:
