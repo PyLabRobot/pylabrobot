@@ -1,17 +1,15 @@
+import os
 import unittest
 
+import pylabrobot
 from pylabrobot.pumps.calibration import PumpCalibration
 
-import pylabrobot
-import os
 
 plr_directory = os.path.join(pylabrobot.__path__[0], "testing", "test_data")
 
 
 class TestCalibration(unittest.TestCase):
-  """
-    Tests for the PumpCalibration class.
-  """
+  """ Tests for the PumpCalibration class.  """
 
   def setUp(self) -> None:
     self.json_list_path = os.path.join(plr_directory, "test_calibration_list.json")
@@ -73,7 +71,3 @@ class TestCalibration(unittest.TestCase):
   def test_uncalibrated(self):
     calibration = PumpCalibration.uncalibrated()
     self.assertIsNone(calibration.calibration)
-
-
-
-

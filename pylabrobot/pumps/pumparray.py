@@ -7,8 +7,7 @@ from pylabrobot.pumps.calibration import PumpCalibration
 
 
 class PumpArray(MachineFrontend):
-  """
-  Front-end for a pump array.
+  """ Front-end for a pump array.
 
   Attributes:
     backend: The backend that the pump array is controlled through.
@@ -16,7 +15,6 @@ class PumpArray(MachineFrontend):
 
   Properties:
     num_channels: The number of channels that the pump array has.
-
   """
 
   def __init__(self, backend: PumpArrayBackend, calibration: Optional[PumpCalibration] = None):
@@ -26,22 +24,23 @@ class PumpArray(MachineFrontend):
 
   @property
   def num_channels(self) -> int:
-    """
-    num_channels(self): This method returns the number of channels that the pump array has.
+    """ Returns the number of channels that the pump array has.
+
     Returns:
       int: The number of channels that the pump array has.
     """
+
     return self.backend.num_channels
 
   async def run_revolutions(self, num_revolutions: Union[float, List[float]],
                             use_channels: Union[int, List[int]]):
-    """
-    Run the specified channels for the specified number of revolutions.
+    """ Run the specified channels for the specified number of revolutions.
+
     Args:
       num_revolutions: number of revolutions to run pumps.
       use_channels: pump array channels to run.
-
     """
+
     if isinstance(use_channels, int):
       use_channels = [use_channels]
     if isinstance(num_revolutions, float):
@@ -50,12 +49,13 @@ class PumpArray(MachineFrontend):
 
   async def run_continuously(self, speed: Union[float, int, List[float], List[int]],
                              use_channels: Union[int, List[int]]):
-    """
-    Run the specified channels at the specified speeds.
+    """ Run the specified channels at the specified speeds.
+
     Args:
       speed: speed in rpm/pump-specific units.
       use_channels: pump array channels to run.
     """
+
     if isinstance(use_channels, list) and len(set(use_channels)) != len(use_channels):
       raise ValueError("Channels in use channels must be unique.")
     if isinstance(use_channels, int):
@@ -74,14 +74,14 @@ class PumpArray(MachineFrontend):
   async def run_for_duration(self, speed: Union[float, int, List[float], List[int]],
                              use_channels: Union[int, List[int]],
                              duration: Union[float, int]):
-    """
-    Run the specified channels at the specified speeds for the specified duration.
+    """ Run the specified channels at the specified speeds for the specified duration.
 
     Args:
       speed: speed in rpm/pump-specific units.
       use_channels: pump array channels to run.
       duration: duration to run pumps (seconds).
     """
+
     if duration < 0:
       raise ValueError("Duration must be positive.")
     await self.run_continuously(speed=speed, use_channels=use_channels)
@@ -92,13 +92,19 @@ class PumpArray(MachineFrontend):
                         use_channels: Union[int, List[int]],
                         volume: Union[float, int, List[float], List[int]],
                         calibration_units: Literal["duration", "revolutions"]):
-    """
-    Run the specified channels at the specified speeds for the specified volume. Note that this
-    function requires the pump to be calibrated at the input speed. Args: speed: speed in
-    rpm/pump-specific units. use_channels: pump array channels to run using 0-index. volume: volume to pump.
+    """ Run the specified channels at the specified speeds for the specified volume. Note that this
+    function requires the pump to be calibrated at the input speed.
+
+    Args:
+      speed: speed in rpm/pump-specific units. use_channels: pump array channels to run using
+        0-index. volume: volume to pump.
     calibration_units: units of calibration. Volume per seconds ("duration") or volume per
-    revolution ("revolutions"). Raises: TypeError: if the pump is not calibrated.
+      revolution ("revolutions").
+
+    Raises:
+      TypeError: if the pump is not calibrated.
     """
+
     if self.calibration is None:
       raise TypeError("Pump is not calibrated. Volume based pumping and related functions "
                       "unavailable.")
@@ -132,7 +138,5 @@ class PumpArray(MachineFrontend):
     await asyncio.gather(*tasks)
 
   async def halt(self):
-    """
-    Halt the entire pump array.
-    """
+    """ Halt the entire pump array.  """
     await self.backend.halt()

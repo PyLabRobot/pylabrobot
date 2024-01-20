@@ -22,10 +22,9 @@ def powerset(iterable: Iterable[Any]):
 
 
 class TestPump(unittest.IsolatedAsyncioTestCase):
-  """
-    Tests for the Pump class.
+  """ Tests for the Pump class.
 
-    Currently, only the Cole Palmer Masterflex pump is implemented.
+  Currently, only the Cole Palmer Masterflex pump is implemented.
   """
 
   def setUp(self):
@@ -66,9 +65,7 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
 
 
 class TestPumpArray(unittest.IsolatedAsyncioTestCase):
-  """
-    Tests for the AgrowPumpArray class.
-  """
+  """ Tests for the AgrowPumpArray class.  """
 
   def setUp(self):
     self.agrow_valid_speeds = [int(0), int(100), float(0), float(100)]
@@ -89,9 +86,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
     self.test_calibration = PumpCalibration.load_calibration(1, num_items=6)
 
   async def test_setup(self):
-    """
-    Test that the AgrowPumpArray class can be initialized.
-    """
+    """ Test that the AgrowPumpArray class can be initialized.  """
     pump_array: PumpArray
     async with PumpArray(backend=self.agrow_backend,
                          calibration=self.null_calibration) as pump_array:
