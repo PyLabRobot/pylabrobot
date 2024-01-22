@@ -547,7 +547,11 @@ function openSocket() {
 
   socketLoading = true;
   updateStatusLabel("loading");
-  webSocket = new WebSocket(`ws://localhost:2121/`);
+  let wsHostInput = document.querySelector(`input[id="ws_host"]`);
+  let wsPortInput = document.querySelector(`input[id="ws_port"]`);
+  let wsHost = wsHostInput.value;
+  let wsPort = wsPortInput.value;
+  webSocket = new WebSocket(`ws://${wsHost}:${wsPort}/`);
 
   webSocket.onopen = function (event) {
     console.log("Connected to " + event.target.URL);
