@@ -18,3 +18,8 @@ test:
 
 typecheck:
 	$(BIN)python -m mypy pylabrobot --check-untyped-defs
+
+clear-pyc:
+	find . -name "*.pyc" | xargs rm
+	find . -name "*__pycache__" | xargs rm -r
+
