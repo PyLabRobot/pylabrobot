@@ -6,9 +6,11 @@ endif
 .PHONY: docs lint test
 
 docs:
+	sphinx-build -b html docs docs/build/ -j 1 -W
+
+clean-docs:
 	rm -rf docs/build
 	rm -rf docs/_autosummary
-	sphinx-build -b html docs docs/build/ -j auto -W
 
 lint:
 	$(BIN)python -m pylint pylabrobot
