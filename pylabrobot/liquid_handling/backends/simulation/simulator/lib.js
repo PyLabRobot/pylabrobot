@@ -803,6 +803,8 @@ class TipSpot extends Resource {
 
 // Nothing special.
 class Trash extends Resource {
+  dropTip(layer) {} // just ignore
+
   drawMainShape() {
     if (resources["deck"].constructor.name) {
       return undefined;
