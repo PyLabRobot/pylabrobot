@@ -19,16 +19,13 @@ nav.navbar {
 }
 
 main {
-  padding: 20px !important;
-}
-
-#canvas {
-  display: block;
+  height: 100%;
 }
 
 #kanvas {
   width: 100%;
   height: 100%;
+  overflow: scroll;
 }
 
 #status-indicator {

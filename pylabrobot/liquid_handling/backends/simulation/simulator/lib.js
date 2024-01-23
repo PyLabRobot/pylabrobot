@@ -405,6 +405,17 @@ class HamiltonSTARDeck extends Deck {
         strokeWidth: 1,
       })
     );
+
+    // draw border around the deck
+    mainShape.add(
+      new Konva.Rect({
+        width: this.size_x,
+        height: this.size_y,
+        stroke: "black",
+        strokeWidth: 1,
+      })
+    );
+
     // Draw vertical rails as lines
     for (let i = 0; i < numRails; i++) {
       const rail = new Konva.Line({
@@ -501,6 +512,17 @@ class OTDeck extends Deck {
       });
       group.add(siteLabel);
     }
+
+    // draw border around the deck
+    group.add(
+      new Konva.Rect({
+        width: this.size_x,
+        height: this.size_y,
+        stroke: "black",
+        strokeWidth: 1,
+      })
+    );
+
     return group;
   }
 
@@ -897,21 +919,6 @@ function loadResource(resourceData) {
 // init
 // ===========================================================================
 
-function scaleStage(stage) {
-  const canvas = document.getElementById("kanvas");
-  canvasWidth = canvas.offsetWidth;
-  canvasHeight = canvas.offsetHeight;
-
-  scaleX = canvasWidth / robotWidthMM;
-  scaleY = canvasHeight / robotHeightMM;
-
-  const effectiveScale = Math.min(scaleX, scaleY);
-
-  stage.scaleX(effectiveScale);
-  stage.scaleY(-1 * effectiveScale);
-  stage.offsetY(canvasHeight / effectiveScale);
-}
-
 window.addEventListener("load", function () {
   const canvas = document.getElementById("kanvas");
   canvasWidth = canvas.offsetWidth;
@@ -921,9 +928,27 @@ window.addEventListener("load", function () {
     container: "kanvas",
     width: canvasWidth,
     height: canvasHeight,
+    draggable: true,
   });
+  stage.scaleY(-1);
+  stage.offsetY(canvasHeight);
 
-  scaleStage(stage);
+  // limit draggable area to size of canvas
+  stage.dragBoundFunc(function (pos) {
+    // Set the bounds of the draggable area to 1/2 off the canvas.
+    let minX = -(1 / 2) * canvasWidth;
+    let minY = -(1 / 2) * canvasHeight;
+    let maxX = (1 / 2) * canvasWidth;
+    let maxY = (1 / 2) * canvasHeight;
+
+    let newX = Math.max(minX, Math.min(maxX, pos.x));
+    let newY = Math.max(minY, Math.min(maxY, pos.y));
+
+    return {
+      x: newX,
+      y: newY,
+    };
+  });
 
   // add the layer to the stage
   stage.add(layer);
@@ -933,8 +958,4 @@ window.addEventListener("load", function () {
   if (typeof afterStageSetup === "function") {
     afterStageSetup();
   }
-});
-
-window.addEventListener("resize", function () {
-  scaleStage(stage);
 });

@@ -461,7 +461,7 @@ async function handleEvent(event, data) {
       resource = loadResource(data.resource);
       resource.draw(resourceLayer);
 
-      if (data.resource.name === "deck") {
+      if (resource.name === "deck") {
         // infer the system from the deck.
         if (data.resource.type === "OTDeck") {
           system = SYSTEM_OPENTRONS;
@@ -475,7 +475,14 @@ async function handleEvent(event, data) {
             mainHead.push(new PipettingChannel(`Channel: ${i + 1}`));
           }
         }
+
+        // center the deck in the stage.
+        let centerXOffset = (stage.width() - resource.size_x) / 2;
+        let centerYOffset = (stage.height() - resource.size_y) / 2;
+        stage.x(centerXOffset);
+        stage.y(-centerYOffset);
       }
+
       break;
 
     case "resource_unassigned":
@@ -611,7 +618,7 @@ function openSocket() {
   webSocket = new WebSocket(`ws://${wsHost}:${wsPort}/`);
 
   webSocket.onopen = function (event) {
-    console.log("Connected to " + event.target.URL);
+    console.log("Connected to " + event.target.url);
     webSocket.send(`{"event": "ready"}`);
     updateStatusLabel("loaded");
     socketLoading = false;
