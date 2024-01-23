@@ -146,6 +146,7 @@ class SimulatorBackend(WebSocketBackend):
           break
         except OSError:
           self.fs_port += 1
+          fs_port = self.fs_port
 
       self.httpd.serve_forever()
 
