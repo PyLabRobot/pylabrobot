@@ -306,6 +306,20 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ([0, 1179, 1179, 0], [0, 2418, 1968, 0], [False, True, True, False])
     )
 
+    # check two operations on the same row
+    # I'm not entirely sure if we should support picking up two tips in separate columns because
+    # it's effectively two operations, but we will do it for now bc it's a single firmware command.
+    tip_a2 = self.tip_rack.get_item("A2")
+    op3 = Pickup(resource=tip_a2, tip=tip, offset=Coordinate.zero())
+    self.assertEqual(
+      self.mockSTAR._ops_to_fw_positions((op1, op3), use_channels=[0, 1]),
+      ([1179, 1269, 0], [2418, 2418, 0], [True, True, False])
+    )
+
+    # make sure two operations on the same spot are not allowed
+    with self.assertRaises(ValueError):
+      self.mockSTAR._ops_to_fw_positions((op1, op1), use_channels=[0, 1])
+
   def _assert_command_sent_once(self, cmd: str, fmt: str):
     """ Assert that the given command was sent to the backend exactly once. """
     self._assert_command_in_command_buffer(cmd, True, fmt)
