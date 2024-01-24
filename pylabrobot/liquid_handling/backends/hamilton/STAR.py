@@ -29,7 +29,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
-from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot
+from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot, Carrier
 from pylabrobot.resources.errors import (
   TooLittleVolumeError,
   TooLittleLiquidError,
@@ -5258,7 +5258,7 @@ class STAR(HamiltonLiquidHandler):
   # TODO:(command:QU)
 
   # -------------- 3.13 Auto load commands --------------
-
+  
   # -------------- 3.13.1 Initialization --------------
 
   async def initialize_auto_load(self):
@@ -5304,6 +5304,69 @@ class STAR(HamiltonLiquidHandler):
   # TODO:(command:CR) Unload carrier
 
   # TODO:(command:CL) Load carrier
+  async def autoload_carrier(
+      self, 
+      carrier: Carrier,
+      barcode_reading: bool = False,
+      barcode_reading_direction: str = 'horizontal',
+      barcode_symbology: str = 'Code 128 (Subset B and C)',
+      no_container_per_carrier: int = 5
+      ):
+    """ 
+    Use autoload to load carrier.
+
+    Barcode reading is disabled by default.
+    
+    """
+    barcode_reading_direction_dict = {
+      'vertical': 0,
+      'horizontal': 1
+    }
+    barcode_symbology_dict = {
+      'ISBT Standard': '70',
+      'Code 128 (Subset B and C)': '71',
+      'Code 39': '72',
+      'Codebar': '73',
+      'Code 2of5 Interleaved': '74',
+      'UPC A/E': '75',
+      'JAN/EAN 8': '76',
+      'Code 93': '77',
+    }
+    # Identify carrier end rail
+    track_width = 22.5
+    carrier_end_rail = int((carrier.get_absolute_location().x - 100  + carrier.get_size_x() )/ track_width)
+    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
+
+    # Determine presence of carrier at defined position
+    presence_check = self.request_single_carrier_presence(carrier_end_rail)
+
+    if presence_check == 1:
+      # Set carrier type for identification purposes
+      await lh.backend.send_command(module="C0", command="CI", cp=carrier_end_rail)
+      # Load carrier
+      # with barcoding
+      if barcode_reading:
+        resp = await lh.backend.send_command(
+          module="C0",
+          command="CL",
+          fmt="bb",
+          sp=barcode_reading_direction_dict[barcode_reading_direction],
+          bt=barcode_symbology_dict[barcode_symbology],
+          cn=str(no_container_per_carrier).zfill(2),
+          )
+        return resp
+      # without barcoding
+      else:
+        resp = await lh.backend.send_command(
+          module="C0",
+          command="CL",
+          cn='00')
+      return resp
+    
+    else:
+      raise ValueError(f"""No carrier found at position {carrier_end_rail}, 
+                       have you placed the carrier onto the correct autoload tray position?""")
+  
 
   async def set_loading_indicators(
     self,
