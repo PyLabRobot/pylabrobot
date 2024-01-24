@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Dict, List, cast
 
 from pylabrobot.resources.errors import ResourceNotFoundError
 
@@ -11,7 +11,13 @@ from .trash import Trash
 
 
 class Deck(Resource):
-  """ Base class for liquid handler decks. """
+  """ Base class for liquid handler decks.
+
+  This class maintains a dictionary of all resources on the deck. The dictionary is keyed by the
+  resource name and is updated when resources are assigned and unassigned from the deck. The point
+  of this dictionary is to allow O(1) naming collision checks as well as the quick lookup of
+  resources by name.
+  """
 
   def __init__(
     self,
@@ -19,28 +25,18 @@ class Deck(Resource):
     size_x: float = 1360,
     size_y: float = 653.5,
     size_z: float = 900,
-    resource_assigned_callback: Optional[Callable] = None,
-    resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 0, 0),
     category: str = "deck",
   ):
-    """ Initialize a new deck.
-
-    Args:
-      resource_assigned_callback: A callback function that is called when a resource is assigned to
-        the deck. This includes resources assigned to child resources. The callback function is
-        called with the resource as an argument. This method may raise an exception to prevent the
-        resource from being assigned.
-      resource_unassigned_callback: A callback function that is called when a resource is unassigned
-        from the deck. This includes resources unassigned from child resources. The callback
-        function is called with the resource as an argument.
-    """
+    """ Initialize a new deck. """
 
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
     self.location = origin
     self.resources: Dict[str, Resource] = {}
-    self.resource_assigned_callback_callback = resource_assigned_callback
-    self.resource_unassigned_callback_callback = resource_unassigned_callback
+
+    self.register_will_assign_resource_callback(self._check_name_exists)
+    self.register_did_assign_resource_callback(self._register_resource)
+    self.register_did_unassign_resource_callback(self._deregister_resource)
 
   def serialize(self) -> dict:
     """ Serialize this deck. """
@@ -49,53 +45,38 @@ class Deck(Resource):
     return super_serialized
 
   def _check_name_exists(self, resource: Resource):
-    """ Raises a ValueError if the resource name already exists. This method is recursive, and
-    will also check child resources. """
+    """ Callback called before a resource is assigned to the deck. (will_assign_resource_callback)
+    Raises a ValueError if the resource name already exists. This method is recursive, and
+    will also check children of the resource that is to be assigned.
+    """
 
     if self.has_resource(resource.name):
       raise ValueError(f"Resource '{resource.name}' already assigned to deck")
     for child in resource.children:
       self._check_name_exists(child)
 
-  def _assign_resource(self, resource: Resource):
+  def _register_resource(self, resource: Resource):
     """ Recursively assign the given resource and all child resources to the `self.resources`
-    dictionary.
+    dictionary. This method is called after a resource is assigned to the deck
+    (did_assign_resource_callback).
 
     Precondition: All child resources must be assignable, see `self._check_name_exists`.
     """
 
     for child in resource.children:
-      self._assign_resource(child)
+      self._register_resource(child)
     self.resources[resource.name] = resource
 
-  def resource_assigned_callback(self, resource: Resource):
+  def _deregister_resource(self, resource: Resource):
+    """ Recursively deregisters the given resource and all child resources from the `self.resources`
+    dictionary. This method is called after a resource is unassigned from the deck
+    (did_unassign_resource_callback).
     """
-    - Keeps track of the resources in the deck.
-    - Raises a `ValueError` if a resource with the same name is already assigned.
-    """
-
-    self._check_name_exists(resource)
-    super().resource_assigned_callback(resource)
-
-    self._assign_resource(resource)
-
-    if self.resource_assigned_callback_callback is not None:
-      self.resource_assigned_callback_callback(resource)
-
-  def _unassign_resource(self, resource: Resource):
-    """ Recursively unassigns the given resource and all child resources from the `self.resources`
-    dictionary."""
 
     if self.has_resource(resource.name):
       del self.resources[resource.name]
     for child in resource.children:
-      self._unassign_resource(child)
-
-  def resource_unassigned_callback(self, resource: Resource):
-    self._unassign_resource(resource)
-    super().resource_unassigned_callback(resource)
-    if self.resource_unassigned_callback_callback is not None:
-      self.resource_unassigned_callback_callback(resource)
+      self._deregister_resource(child)
 
   def get_resource(self, name: str) -> Resource:
     """ Returns the resource with the given name.

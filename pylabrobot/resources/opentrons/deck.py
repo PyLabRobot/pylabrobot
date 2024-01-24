@@ -1,5 +1,5 @@
 import textwrap
-from typing import Optional, Callable, List
+from typing import Optional, List
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
@@ -11,16 +11,11 @@ class OTDeck(Deck):
   """ The OpenTron deck. """
 
   def __init__(self, size_x: float = 624.3, size_y: float = 565.2, size_z: float = 900,
-    resource_assigned_callback: Optional[Callable] = None,
-    resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 0, 0),
     no_trash: bool = False, name: str = "deck"):
     # size_z is probably wrong
 
-    super().__init__(size_x=size_x, size_y=size_y, size_z=size_z,
-     resource_assigned_callback=resource_assigned_callback,
-     resource_unassigned_callback=resource_unassigned_callback,
-     origin=origin)
+    super().__init__(size_x=size_x, size_y=size_y, size_z=size_z, origin=origin)
 
     self.slots: List[Optional[Resource]] = [None] * 12
 
