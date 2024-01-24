@@ -5289,12 +5289,12 @@ class STAR(HamiltonLiquidHandler):
     """
 
     assert 1 <= carrier_position <= 54, "carrier_position must be between 1 and 54"
-    carrier_position = str(carrier_position).zfill(2)
+    carrier_position_str = str(carrier_position).zfill(2)
     resp = await self.send_command(
       module="C0",
       command="CT",
       fmt="ct#",
-      cp=carrier_position,
+      cp=carrier_position_str,
     )
     assert resp is not None
     return resp["ct"] == 1
