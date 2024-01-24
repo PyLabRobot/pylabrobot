@@ -550,7 +550,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "xs#####xd#yj####yd#zj####zd#th####te####go####ga#")
 
   async def test_iswap_plate_reader(self):
-    plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
+    plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend(),
+      size_x=0, size_y=0, size_z=0)
     self.lh.deck.assign_child_resource(plate_reader,
       location=Coordinate(979.5, 285.2, 200)) # 666: 00002
 

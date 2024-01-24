@@ -1,13 +1,9 @@
-from typing import Any, Dict, Union, List, Sequence, cast
-from pylabrobot.machine import MachineFrontend, need_setup_finished
+from typing import Any, Dict, List, Optional, Sequence, Union, cast
+from pylabrobot.machine import Machine, need_setup_finished
 from .backend import PowderDispenserBackend, PowderDispense
-from pylabrobot.resources import (
-  Deck,
-  Resource,
-  Powder
-)
+from pylabrobot.resources import Resource, Powder
 
-class PowderDispenser(MachineFrontend):
+class PowderDispenser(Machine):
   """
   The front end for powder dispensers. Powder dispensers are devices that can dispense powder
   into containers such as mtp's placed on a deck.
@@ -20,10 +16,20 @@ class PowderDispenser(MachineFrontend):
   {'actual_amount': 0.005012, ...}
   """
 
-  def __init__(self, backend: PowderDispenserBackend, deck: Deck) -> None:
-    MachineFrontend.__init__(self, backend=backend)
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    backend: PowderDispenserBackend,
+    category: Optional[str] = None,
+    model: Optional[str] = None
+    # deck: Deck
+  ) -> None:
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
+                     category=category, model=model)
     self.backend: PowderDispenserBackend = backend
-    self.deck = deck
 
   @need_setup_finished
   async def dispense(
