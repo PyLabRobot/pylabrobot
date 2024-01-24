@@ -29,7 +29,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
-from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot, Carrier
+from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot
 from pylabrobot.resources.errors import (
   TooLittleVolumeError,
   TooLittleLiquidError,
@@ -5258,7 +5258,7 @@ class STAR(HamiltonLiquidHandler):
   # TODO:(command:QU)
 
   # -------------- 3.13 Auto load commands --------------
-  
+
   # -------------- 3.13.1 Initialization --------------
 
   async def initialize_auto_load(self):
@@ -5304,7 +5304,7 @@ class STAR(HamiltonLiquidHandler):
   # TODO:(command:CR) Unload carrier
 
   # TODO:(command:CL) Load carrier
-  
+
 
   async def set_loading_indicators(
     self,
