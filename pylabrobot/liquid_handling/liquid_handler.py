@@ -89,8 +89,9 @@ class LiquidHandler(MachineFrontend):
     self._callbacks: Dict[str, OperationCallback] = {}
 
     self.deck = deck
-    self.deck.resource_assigned_callback_callback = self.resource_assigned_callback
-    self.deck.resource_unassigned_callback_callback = self.resource_unassigned_callback
+    # register callbacks for sending resource assignment/unassignment to backend
+    self.deck.register_did_assign_resource_callback(self._send_assigned_resource_to_backend)
+    self.deck.register_did_unassign_resource_callback(self._send_unassigned_resource_to_backend)
 
     self.head: Dict[int, TipTracker] = {}
 
@@ -105,9 +106,9 @@ class LiquidHandler(MachineFrontend):
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
 
-    self.resource_assigned_callback(self.deck)
+    self._send_assigned_resource_to_backend(self.deck)
     for resource in self.deck.children:
-      self.resource_assigned_callback(resource)
+      self._send_assigned_resource_to_backend(resource)
 
   def save_state(self, filename: str):
     """ Save the state of the liquid handler (including the deck) to a file. """
@@ -166,10 +167,14 @@ class LiquidHandler(MachineFrontend):
     t.start()
     t.join()
 
-  def resource_assigned_callback(self, resource: Resource):
+  def _send_assigned_resource_to_backend(self, resource: Resource):
+    """ This method is called when a resource is assigned to the deck, and passes this information
+    to the backend. """
     self._run_async_in_thread(self.backend.assigned_resource_callback, resource)
 
-  def resource_unassigned_callback(self, resource: Resource):
+  def _send_unassigned_resource_to_backend(self, resource: Resource):
+    """ This method is called when a resource is unassigned from the deck, and passes this
+    information to the backend. """
     self._run_async_in_thread(self.backend.unassigned_resource_callback, resource.name)
 
   def unassign_resource(self, resource: Union[str, Resource]): # TODO: remove this.

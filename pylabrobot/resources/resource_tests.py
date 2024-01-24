@@ -2,6 +2,7 @@
 # pylint: disable=missing-class-docstring
 
 import unittest
+import unittest.mock
 
 from .coordinate import Coordinate
 from .deck import Deck
@@ -242,3 +243,67 @@ class TestResource(unittest.TestCase):
     self.assertEqual(r.get_size_x(), 200)
     self.assertEqual(r.get_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(20, 10, 10))
+
+class TestResourceCallback(unittest.TestCase):
+  def setUp(self) -> None:
+    super().setUp()
+    self.r = Resource("test", size_x=10, size_y=10, size_z=10)
+    self.child = Resource("child", size_x=5, size_y=5, size_z=5)
+
+  def test_will_assign_resource(self):
+    mock_function = unittest.mock.Mock()
+    self.r.register_will_assign_resource_callback(mock_function)
+    self.r.assign_child_resource(self.child, location=Coordinate.zero())
+    mock_function.assert_called_once_with(self.child)
+
+  def test_will_assign_resource_error(self):
+    # raising an error in will assign should prevent the resource from being assigned
+    mock_function = unittest.mock.Mock(side_effect=ValueError("test"))
+    self.r.register_will_assign_resource_callback(mock_function)
+    with self.assertRaises(ValueError):
+      self.r.assign_child_resource(self.child, location=Coordinate.zero())
+    self.assertEqual(self.r.children, [])
+    mock_function.assert_called_once_with(self.child)
+
+  def test_did_assign_resource(self):
+    mock_function = unittest.mock.Mock()
+    self.r.register_did_assign_resource_callback(mock_function)
+    self.r.assign_child_resource(self.child, location=Coordinate.zero())
+    mock_function.assert_called_once_with(self.child)
+
+  def test_will_unassign_resource(self):
+    mock_function = unittest.mock.Mock()
+    self.r.register_will_unassign_resource_callback(mock_function)
+    self.r.assign_child_resource(self.child, location=Coordinate.zero())
+    mock_function.assert_not_called()
+    self.r.unassign_child_resource(self.child)
+    mock_function.assert_called_once_with(self.child)
+
+  def test_did_unassign_resource(self):
+    mock_function = unittest.mock.Mock()
+    self.r.register_did_unassign_resource_callback(mock_function)
+    self.r.assign_child_resource(self.child, location=Coordinate.zero())
+    mock_function.assert_not_called()
+    self.child.unassign()
+    mock_function.assert_called_once_with(self.child)
+
+  def test_callbacks_removed_on_unassign(self):
+    mock_function = unittest.mock.Mock()
+    self.r.register_did_unassign_resource_callback(mock_function)
+    self.r.assign_child_resource(self.child, location=Coordinate.zero())
+    self.child.unassign()
+
+    # pylint: disable=protected-access
+    self.assertEqual(self.child._did_assign_resource_callbacks, [])
+    self.assertEqual(self.child._did_unassign_resource_callbacks, [])
+    self.assertEqual(self.child._will_assign_resource_callbacks, [])
+    self.assertEqual(self.child._will_unassign_resource_callbacks, [])
+
+  def test_did_assign_is_passed_up_the_chain(self):
+    mock_function = unittest.mock.Mock()
+    self.r.register_did_assign_resource_callback(mock_function)
+    self.r.assign_child_resource(self.child, location=Coordinate.zero())
+    mock_function.reset_mock()
+    new_child = Resource("new_child", size_x=5, size_y=5, size_z=5)
+    self.child.assign_child_resource(new_child, location=Coordinate.zero())
+    mock_function.assert_called_once_with(new_child)
