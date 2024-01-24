@@ -32,28 +32,29 @@ class MockPlateReaderBackend(PlateReaderBackend):
 class TestPlateReaderResource(unittest.TestCase):
   """ Test plate reade as a resource. """
 
+  def setUp(self) -> None:
+    super().setUp()
+    self.pr = PlateReader(name="pr", backend=MockPlateReaderBackend(), size_x=1, size_y=1, size_z=1)
+
   def test_add_plate(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1,
       items=[])
-    plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
-    plate_reader.assign_child_resource(plate)
+    self.pr.assign_child_resource(plate)
 
   def test_add_plate_full(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1,
       items=[])
-    plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
-    plate_reader.assign_child_resource(plate)
+    self.pr.assign_child_resource(plate)
 
     another_plate = Plate("another_plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
     with self.assertRaises(ValueError):
-      plate_reader.assign_child_resource(another_plate)
+      self.pr.assign_child_resource(another_plate)
 
   def test_get_plate(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
-    plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
-    plate_reader.assign_child_resource(plate)
+    self.pr.assign_child_resource(plate)
 
-    self.assertEqual(plate_reader.get_plate(), plate)
+    self.assertEqual(self.pr.get_plate(), plate)
 
   def test_serialization(self):
     backend = MockPlateReaderBackend()

@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import AsyncMock
 from pylabrobot.powder_dispensing.powder_dispenser import PowderDispenser
 from pylabrobot.powder_dispensing.backend import PowderDispenserBackend, PowderDispense, DispenseResults
-from pylabrobot.resources import Deck, Powder, Cos_96_DW_1mL
+from pylabrobot.resources import Powder, Cos_96_DW_1mL
 from typing import List
 
 class MockPowderDispenserBackend(PowderDispenserBackend):
@@ -33,8 +33,7 @@ class TestPowderDispenser(unittest.TestCase):
 
   def setUp(self):
     self.backend = AsyncMock(spec=MockPowderDispenserBackend)
-    self.deck = Deck()
-    self.dispenser = PowderDispenser(backend=self.backend, deck=self.deck)
+    self.dispenser = PowderDispenser(name="pd", backend=self.backend, size_x=1, size_y=1, size_z=1)
     self.dispenser.setup()
 
   async def test_dispense_single_resource(self):

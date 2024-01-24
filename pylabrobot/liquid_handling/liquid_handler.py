@@ -12,7 +12,7 @@ import time
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol
 import warnings
 
-from pylabrobot.machine import MachineFrontend, need_setup_finished
+from pylabrobot.machine import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
@@ -53,7 +53,7 @@ from .standard import (
 logger = logging.getLogger("pylabrobot")
 
 
-class LiquidHandler(MachineFrontend):
+class LiquidHandler(Machine):
   """
   Front end for liquid handlers.
 
@@ -82,9 +82,16 @@ class LiquidHandler(MachineFrontend):
       deck: Deck to use.
     """
 
-    super().__init__(backend=backend)
+    super().__init__(
+      name=f"lh_{deck.name}",
+      size_x=deck._size_x,
+      size_y=deck._size_y,
+      size_z=deck._size_z,
+      backend=backend,
+      category="liquid_handler",
+    )
 
-    self.backend: LiquidHandlerBackend = backend
+    self.backend: LiquidHandlerBackend = backend # fix type
     self._picked_up_tips96: Optional[TipRack] = None # TODO: replace with tracker.
     self._callbacks: Dict[str, OperationCallback] = {}
 
@@ -95,6 +102,9 @@ class LiquidHandler(MachineFrontend):
 
     self.head: Dict[int, TipTracker] = {}
 
+    # assign deck as only child resource, and set location of self to origin.
+    self.location = Coordinate.zero()
+    super().assign_child_resource(deck, location=deck.location)
 
   async def setup(self):
     """ Prepare the robot for use. """
@@ -234,11 +244,12 @@ class LiquidHandler(MachineFrontend):
     """
 
     for resource in resources:
-      # see of top parent of resource is the deck (i.e. resource is assigned to deck)
-      while resource.parent is not None:
-        resource = resource.parent
-      if resource != self.deck:
-        raise ValueError(f"Resource named '{resource.name}' not found on deck.")
+      # names on the deck are unique, so we can simply check if the resource matches the one on
+      # the deck (if any).
+      resource_from_deck = self.deck.get_resource(resource.name)
+      # it might be better to use `is`, but that would probably cause problems with autoreload.
+      if not resource_from_deck == resource:
+        raise ValueError(f"Resource {resource} is not assigned to the deck.")
 
   def _check_args(
     self,
@@ -1493,19 +1504,10 @@ class LiquidHandler(MachineFrontend):
     """
 
     return {
-      "deck": self.deck.serialize(),
+      # "children": self.deck.serialize(),
+      **super().serialize(),
       "backend": self.backend.serialize()
     }
-
-  def save(self, path: str):
-    """ Save the liquid handler to a file.
-
-    Args:
-      path: The path to the file to save to.
-    """
-
-    with open(path, "w", encoding="utf-8") as f:
-      json.dump(self.serialize(), f, indent=2)
 
   def register_callback(self, method_name: str, callback: OperationCallback):
     """Registers a callback for a specific method."""
@@ -1539,8 +1541,10 @@ class LiquidHandler(MachineFrontend):
       data: A dictionary representation of the liquid handler.
     """
 
-    deck = Deck.deserialize(data["deck"])
-    backend = LiquidHandlerBackend.deserialize(data["backend"])
+    backend_data = data.pop("backend")
+    backend = LiquidHandlerBackend.deserialize(backend_data)
+    deck_data = data["children"][0]
+    deck = Deck.deserialize(data=deck_data)
     return LiquidHandler(deck=deck, backend=backend)
 
   @classmethod
@@ -1553,6 +1557,17 @@ class LiquidHandler(MachineFrontend):
 
     with open(path, "r", encoding="utf-8") as f:
       return cls.deserialize(json.load(f))
+
+  # -- Resource methods --
+
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate], reassign: bool = True
+  ):
+    """ Not implement on LiquidHandler, since the deck is managed by the :attr:`deck` attribute. """
+    raise NotImplementedError("Cannot assign child resource to liquid handler. Use "
+                              "lh.deck.assign_child_resource() instead.")
 
 
 class OperationCallback(Protocol):
