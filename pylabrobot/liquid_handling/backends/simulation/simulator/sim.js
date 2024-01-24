@@ -15,6 +15,8 @@ var config = {
   max_pip_head_location: -1,
   min_core_head_location: -1,
   max_core_head_location: -1,
+
+  pip_allow_drop_liquid_left: false,
 };
 
 class PipettingChannel {
@@ -28,44 +30,68 @@ class PipettingChannel {
     return this.tip !== null;
   }
 
-  pickUpTip(tip) {
+  checkCanPickup() {
     if (this.tip !== null) {
-      throw `Tip already on pipetting channel ${this.identifier}`;
+      throw new Error(`Tip already on pipetting channel ${this.identifier}`);
     }
+  }
 
+  pickUpTip(tip) {
+    this.checkCanPickup();
     this.tip = tip;
     this.volume = 0;
   }
 
-  dropTip() {
+  checkCanDrop() {
     if (this.tip === null) {
-      throw `No tip on pipetting channel ${this.identifier}`;
+      throw new Error(`No tip on pipetting channel ${this.identifier}`);
     }
 
+    if (!config.pip_allow_drop_liquid_left && this.volume !== 0) {
+      throw new Error(
+        `Cannot drop tip from channel ${this.identifier} with volume ${this.volume}`
+      );
+    }
+  }
+
+  dropTip() {
+    this.checkCanDrop();
+
+    // if there is still liquid in the tip, remove the liquid.
     if (this.volume !== 0) {
-      throw `Cannot drop tip from channel ${this.identifier} with volume ${this.volume}`;
+      this.tip.liquids = [];
     }
 
     this.tip = null;
   }
 
-  aspirate(volume) {
+  checkCanAspirate(volume) {
     if (this.tip === null) {
-      throw `No tip on pipetting channel ${this.identifier}`;
+      throw new Error(`No tip on pipetting channel ${this.identifier}`);
     }
 
     if (this.volume + volume > this.tip.maximal_volume) {
-      throw `Not enough volume in tip on pipetting channel ${this.identifier}`;
+      throw new Error(
+        `Not enough volume in tip on pipetting channel ${this.identifier}`
+      );
     }
+  }
 
+  aspirate(volume) {
+    this.checkCanAspirate(volume);
     this.volume += volume;
   }
 
-  dispense(volume) {
+  checkCanDispense(volume) {
     if (this.volume - volume < 0) {
-      throw `Not enough volume in pipetting channel ${this.identifier}`;
+      throw new Error(
+        `Not enough volume in pipetting channel ${this.identifier}`
+      );
     }
+  }
 
+  dispense(volume) {
+    this.checkCanDispense(volume);
     this.volume -= volume;
   }
 }
@@ -170,7 +196,6 @@ function pickUpTips(channels) {
 
   for (var i = 0; i < channels.length; i++) {
     var tipSpot = resources[channels[i].resource_name];
-    tipSpot.pickUpTip(resourceLayer);
 
     if (system === SYSTEM_HAMILTON) {
       const pipError = checkPipHeadReach(tipSpot.getAbsoluteLocation().x);
@@ -179,6 +204,8 @@ function pickUpTips(channels) {
       }
     }
 
+    mainHead[i].checkCanPickup(); // check before picking up the tip.
+    tipSpot.pickUpTip(resourceLayer);
     mainHead[i].pickUpTip(tipSpot.tip);
   }
 }
@@ -190,7 +217,6 @@ function dropTips(channels) {
 
   for (let i = 0; i < channels.length; i++) {
     var tipSpot = resources[channels[i].resource_name];
-    tipSpot.dropTip(resourceLayer);
 
     if (system === SYSTEM_HAMILTON) {
       const pipError = checkPipHeadReach(tipSpot.getAbsoluteLocation().x);
@@ -199,6 +225,8 @@ function dropTips(channels) {
       }
     }
 
+    mainHead[i].checkCanDrop(); // check before dropping the tip.
+    tipSpot.dropTip(resourceLayer);
     mainHead[i].dropTip();
   }
 }
@@ -210,9 +238,7 @@ function aspirate(channels) {
 
   for (let i = 0; i < channels.length; i++) {
     let { resource_name, volume } = channels[i];
-
     const well = resources[resource_name];
-    well.aspirate(volume);
 
     if (system === SYSTEM_HAMILTON) {
       const pipError = checkPipHeadReach(well.getAbsoluteLocation().x);
@@ -221,6 +247,8 @@ function aspirate(channels) {
       }
     }
 
+    mainHead[i].checkCanAspirate(volume); // check before aspirating.
+    well.aspirate(volume);
     mainHead[i].aspirate(volume);
   }
 }
@@ -232,9 +260,7 @@ function dispense(channels) {
 
   for (let i = 0; i < channels.length; i++) {
     let { resource_name, volume } = channels[i];
-
     const well = resources[resource_name];
-    well.dispense(volume);
 
     if (system === SYSTEM_HAMILTON) {
       const pipError = checkPipHeadReach(well.getAbsoluteLocation().x);
@@ -243,6 +269,8 @@ function dispense(channels) {
       }
     }
 
+    mainHead[i].checkCanDispense(volume); // check before dispensing.
+    well.dispense(volume);
     mainHead[i].dispense(volume);
   }
 }
@@ -677,8 +705,19 @@ function saveSettings(e) {
   // Get settings from UI.
   for (var c in config) {
     var input = document.querySelector(`input[name="${c}"]`);
-    if (input) {
-      config[c] = parseInt(input.value); // FIXME: this is not good style, what if value is not int?
+    if (input === null) {
+      continue;
+    }
+
+    switch (input.type) {
+      case "checkbox":
+        config[c] = input.checked;
+        break;
+      case "number":
+        config[c] = parseInt(input.value);
+        break;
+      default:
+        config[c] = input.value;
     }
   }
 

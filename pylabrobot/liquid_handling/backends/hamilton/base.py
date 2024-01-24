@@ -332,6 +332,9 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       # skip channels that are not involved
       if not channels_involved[channel_idx] or not channels_involved[channel_idx+1]:
         continue
+      # skip channels that are not close enough to each other
+      if abs(x_positions[channel_idx] - x_positions[channel_idx+1]) >= 90:
+        continue
       if (y2 - y1) < 90:
         raise ValueError(f"Minimum distance between two y positions is <9mm: {y1}, {y2}"
                          f", channel {channel_idx})")
