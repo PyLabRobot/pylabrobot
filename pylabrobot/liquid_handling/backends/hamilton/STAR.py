@@ -1360,7 +1360,7 @@ class STAR(HamiltonLiquidHandler):
       max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
       begin_tip_deposit_process=int((max_z + max_total_tip_length)*10)
       end_tip_deposit_process=int((max_z + max_tip_length)*10)
-    
+
     try:
       return await self.discard_tip(
         x_positions=x_positions,
