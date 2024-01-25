@@ -5339,7 +5339,7 @@ class STAR(HamiltonLiquidHandler):
 
   # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
 
-  async def auto_unload_carrier(
+  async def unload_carrier(
       self,
       carrier: Carrier,
       ):
@@ -5363,7 +5363,7 @@ class STAR(HamiltonLiquidHandler):
     await self.park_autoload()
     return resp
 
-  async def auto_load_carrier(
+  async def load_carrier(
       self,
       carrier: Carrier,
       barcode_reading: bool = False,
