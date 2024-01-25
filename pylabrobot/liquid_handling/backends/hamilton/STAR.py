@@ -2642,7 +2642,7 @@ class STAR(HamiltonLiquidHandler):
     Convenient substitute for checking whether machine has an autoload.
     """
 
-    resp = await self.backend.send_command(module="I0", command="RO", fmt="ao####")
+    resp = await self.send_command(module="I0", command="RO", fmt="ao####")
     return resp is not None and resp["ao"] > 2015
 
   async def request_autoload_initialization_status(self) -> bool:
@@ -5448,7 +5448,7 @@ class STAR(HamiltonLiquidHandler):
     else:
       raise ValueError(f"""No carrier found at position {carrier_end_rail},
                        have you placed the carrier onto the correct autoload tray position?""")
-  
+
 
 
   async def set_loading_indicators(
