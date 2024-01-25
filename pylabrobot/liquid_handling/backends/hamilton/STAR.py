@@ -1351,16 +1351,23 @@ class STAR(HamiltonLiquidHandler):
     # get highest z position
     max_z = max(op.resource.get_absolute_location().z + \
                 (op.offset.z if op.offset is not None else 0) for op in ops)
-    max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-    max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
+    if drop_method == TipDropMethod.PLACE_SHIFT:
+      # magic values empirically found in https://github.com/PyLabRobot/pylabrobot/pull/63
+      begin_tip_deposit_process  = int((max_z+59.9)*10)
+      end_tip_deposit_process  = int((max_z+49.9)*10)
+    else:
+      max_total_tip_length = max(op.tip.total_tip_length for op in ops)
+      max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
+      begin_tip_deposit_process=int((max_z + max_total_tip_length)*10)
+      end_tip_deposit_process=int((max_z + max_tip_length)*10)
 
     try:
       return await self.discard_tip(
         x_positions=x_positions,
         y_positions=y_positions,
         tip_pattern=channels_involved,
-        begin_tip_deposit_process=int((max_z + max_total_tip_length)*10),
-        end_tip_deposit_process=int((max_z + max_tip_length)*10),
+        begin_tip_deposit_process= begin_tip_deposit_process,
+        end_tip_deposit_process= end_tip_deposit_process,
         minimum_traverse_height_at_beginning_of_a_command=2450,
         z_position_at_end_of_a_command=2450,
         discarding_method=drop_method
@@ -5289,12 +5296,12 @@ class STAR(HamiltonLiquidHandler):
     """
 
     assert 1 <= carrier_position <= 54, "carrier_position must be between 1 and 54"
-
+    carrier_position_str = str(carrier_position).zfill(2)
     resp = await self.send_command(
       module="C0",
       command="CT",
       fmt="ct#",
-      cp=carrier_position,
+      cp=carrier_position_str,
     )
     assert resp is not None
     return resp["ct"] == 1
@@ -5304,6 +5311,7 @@ class STAR(HamiltonLiquidHandler):
   # TODO:(command:CR) Unload carrier
 
   # TODO:(command:CL) Load carrier
+
 
   async def set_loading_indicators(
     self,
