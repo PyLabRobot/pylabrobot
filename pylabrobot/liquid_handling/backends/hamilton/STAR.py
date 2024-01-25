@@ -2634,7 +2634,7 @@ class STAR(HamiltonLiquidHandler):
 
     resp = await self.send_command(module="C0", command="QW", fmt="qw#")
     return resp is not None and resp["qw"] == 1
-  
+
   async def request_autoload_installed_after_2015(self) -> bool:
     """
     Check whether autoload has been installed after 2015.
@@ -2642,7 +2642,7 @@ class STAR(HamiltonLiquidHandler):
     Convenient substitute for checking whether machine has an autoload.
     """
 
-    resp = await lh.backend.send_command(module="I0", command="RO", fmt="ao####")
+    resp = await self.backend.send_command(module="I0", command="RO", fmt="ao####")
     return resp is not None and resp["ao"] > 2015
 
   async def request_autoload_initialization_status(self) -> bool:
@@ -5348,16 +5348,17 @@ class STAR(HamiltonLiquidHandler):
     """
     # Identify carrier end rail
     track_width = 22.5
-    carrier_end_rail = int((carrier.get_absolute_location().x - 100  + carrier.get_size_x() )/ track_width)
+    carrier_width = carrier.get_absolute_location().x - 100  + carrier.get_size_x()
+    carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
-    carrier_end_rail = str(carrier_end_rail).zfill(2)
+    carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
     # Unload and read out barcodes
     resp = await self.send_command(
-      module="C0", 
+      module="C0",
       command="CR",
-      cp=carrier_end_rail,
+      cp=carrier_end_rail_str,
       )
     # Park autoload
     await self.park_autoload()
@@ -5367,8 +5368,8 @@ class STAR(HamiltonLiquidHandler):
       self,
       carrier: Carrier,
       barcode_reading: bool = False,
-      barcode_reading_direction: str = 'horizontal',
-      barcode_symbology: str = 'Code 128 (Subset B and C)',
+      barcode_reading_direction: str = "horizontal",
+      barcode_symbology: str = "Code 128 (Subset B and C)",
       no_container_per_carrier: int = 5,
       park_autoload_after: bool = True
       ):
@@ -5379,31 +5380,32 @@ class STAR(HamiltonLiquidHandler):
 
     """
     barcode_reading_direction_dict = {
-      'vertical': '0',
-      'horizontal': '1'
+      "vertical": "0",
+      "horizontal": "1"
     }
     barcode_symbology_dict = {
-      'ISBT Standard': '70',
-      'Code 128 (Subset B and C)': '71',
-      'Code 39': '72',
-      'Codebar': '73',
-      'Code 2of5 Interleaved': '74',
-      'UPC A/E': '75',
-      'YESN/EAN 8': '76',
-      'Code 93': '',
+      "ISBT Standard": "70",
+      "Code 128 (Subset B and C)": "71",
+      "Code 39": "72",
+      "Codebar": "73",
+      "Code 2of5 Interleaved": "74",
+      "UPC A/E": "75",
+      "YESN/EAN 8": "76",
+      "Code 93": "",
     }
     # Identify carrier end rail
     track_width = 22.5
-    carrier_end_rail = int((carrier.get_absolute_location().x - 100  + carrier.get_size_x() )/ track_width)
+    carrier_width = carrier.get_absolute_location().x - 100  + carrier.get_size_x()
+    carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
     # Determine presence of carrier at defined position
     presence_check = await self.request_single_carrier_presence(carrier_end_rail)
-    carrier_end_rail = str(carrier_end_rail).zfill(2)
+    carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
     if presence_check == 1:
       # Set carrier type for identification purposes
-      await self.send_command(module="C0", command="CI", cp=carrier_end_rail)
+      await self.send_command(module="C0", command="CI", cp=carrier_end_rail_str)
 
       # Load carrier
       # with barcoding
@@ -5420,13 +5422,13 @@ class STAR(HamiltonLiquidHandler):
           module="C0",
           command="CL",
           bd=barcode_reading_direction_dict[barcode_reading_direction],
-          bp='0616', # Barcode reading direction (0 = vertical 1 = horizontal)
-          co='0960', # Distance between containers (pattern) [0.1 mm]
-          cf='380', # Width of reading window [0.1 mm]
-          cv='1281', # Carrier reading speed [0.1 mm]/s
-          cn=str(no_container_per_carrier).zfill(2), # Number of containers (cups, plates) in a carrier
+          bp="0616", # Barcode reading direction (0 = vertical 1 = horizontal)
+          co="0960", # Distance between containers (pattern) [0.1 mm]
+          cf="380", # Width of reading window [0.1 mm]
+          cv="1281", # Carrier reading speed [0.1 mm]/s
+          cn=str(no_container_per_carrier).zfill(2), # No of containers (cups, plates) in a carrier
           )
-        # Check for presence of other carriers & park autoload 
+        # Check for presence of other carriers & park autoload
         if park_autoload_after:
           await self.send_command(module="C0", command="CS")
         return resp
@@ -5436,7 +5438,7 @@ class STAR(HamiltonLiquidHandler):
         resp = await self.send_command(
           module="C0",
           command="CL",
-          cn='00'
+          cn="00"
           )
         # Check for presence of other carriers & park autoload
         if park_autoload_after:
