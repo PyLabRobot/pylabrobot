@@ -29,7 +29,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
-from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot
+from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot, Carrier
 from pylabrobot.resources.errors import (
   TooLittleVolumeError,
   TooLittleLiquidError,
@@ -1225,6 +1225,7 @@ class STAR(HamiltonLiquidHandler):
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1[2:]
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
     self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
+    self.autoload_installed = self.request_autoload_installed_after_2015()
 
     initialized = await self.request_instrument_initialization_status()
 
@@ -1250,6 +1251,12 @@ class STAR(HamiltonLiquidHandler):
         tip_type=4, # TODO: get from tip types
         discarding_method=0
       )
+    if self.autoload_installed:
+      autoload_initialized = await self.request_autoload_initialization_status()
+      if not autoload_initialized:
+        await self.initialize_autoload()
+
+        await self.park_autoload()
 
     if self.iswap_installed:
       iswap_initialized = await self.request_iswap_initialization_status()
@@ -2626,6 +2633,22 @@ class STAR(HamiltonLiquidHandler):
     """ Request instrument initialization status """
 
     resp = await self.send_command(module="C0", command="QW", fmt="qw#")
+    return resp is not None and resp["qw"] == 1
+  
+  async def request_autoload_installed_after_2015(self) -> bool:
+    """
+    Check whether autoload has been installed after 2015.
+    
+    Convenient substitute for checking whether machine has an autoload.
+    """
+
+    resp = await lh.backend.send_command(module="I0", command="RO", fmt="ao####")
+    return resp is not None and resp["ao"] > 2015
+
+  async def request_autoload_initialization_status(self) -> bool:
+    """ Request autoload initialization status """
+
+    resp = await self.send_command(module="I0", command="QW", fmt="qw#")
     return resp is not None and resp["qw"] == 1
 
   async def request_name_of_last_faulty_parameter(self):
@@ -5306,13 +5329,42 @@ class STAR(HamiltonLiquidHandler):
     assert resp is not None
     return resp["ct"] == 1
 
+    # Park autoload
+  async def park_autoload(
+      self,
+      ):
+    """ Park autoload """
+
+    return await self.send_command(module="C0", command="CS")
+
   # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
 
-  # TODO:(command:CR) Unload carrier
+  async def auto_unload_carrier(
+      self,
+      carrier: Carrier,
+      ):
+    """
+    Use autoload to unload carrier.
+    """
+    # Identify carrier end rail
+    track_width = 22.5
+    carrier_end_rail = int((carrier.get_absolute_location().x - 100  + carrier.get_size_x() )/ track_width)
+    assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
-  # TODO:(command:CL) Load carrier
-  async def autoload_carrier(
-      self, 
+    carrier_end_rail = str(carrier_end_rail).zfill(2)
+
+    # Unload and read out barcodes
+    resp = await self.send_command(
+      module="C0", 
+      command="CR",
+      cp=carrier_end_rail,
+      )
+    # Park autoload
+    await self.park_autoload()
+    return resp
+
+  async def auto_load_carrier(
+      self,
       carrier: Carrier,
       barcode_reading: bool = False,
       barcode_reading_direction: str = 'horizontal',
@@ -5320,11 +5372,11 @@ class STAR(HamiltonLiquidHandler):
       no_container_per_carrier: int = 5,
       park_autoload_after: bool = True
       ):
-    """ 
+    """
     Use autoload to load carrier.
 
     Barcode reading is disabled by default.
-    
+
     """
     barcode_reading_direction_dict = {
       'vertical': '0',
@@ -5344,7 +5396,7 @@ class STAR(HamiltonLiquidHandler):
     track_width = 22.5
     carrier_end_rail = int((carrier.get_absolute_location().x - 100  + carrier.get_size_x() )/ track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
-    
+
     # Determine presence of carrier at defined position
     presence_check = await self.request_single_carrier_presence(carrier_end_rail)
     carrier_end_rail = str(carrier_end_rail).zfill(2)
@@ -5352,7 +5404,7 @@ class STAR(HamiltonLiquidHandler):
     if presence_check == 1:
       # Set carrier type for identification purposes
       await self.send_command(module="C0", command="CI", cp=carrier_end_rail)
-      
+
       # Load carrier
       # with barcoding
       if barcode_reading:
@@ -5378,7 +5430,7 @@ class STAR(HamiltonLiquidHandler):
         if park_autoload_after:
           await self.send_command(module="C0", command="CS")
         return resp
-      
+
       # without barcoding
       else:
         resp = await self.send_command(
@@ -5390,9 +5442,9 @@ class STAR(HamiltonLiquidHandler):
         if park_autoload_after:
           await self.send_command(module="C0", command="CS")
       return resp
-    
+
     else:
-      raise ValueError(f"""No carrier found at position {carrier_end_rail}, 
+      raise ValueError(f"""No carrier found at position {carrier_end_rail},
                        have you placed the carrier onto the correct autoload tray position?""")
   
 
@@ -5664,6 +5716,11 @@ class STAR(HamiltonLiquidHandler):
     """ Initialize iSWAP (for standalone configuration only) """
 
     return await self.send_command(module="C0", command="FI")
+
+  async def initialize_autoload(self):
+    """ Initialize autoload (for standalone configuration only) """
+
+    return await self.send_command(module="C0", command="II")
 
   async def position_components_for_free_iswap_y_range(self):
     """ Position all components so that there is maximum free Y range for iSWAP """
