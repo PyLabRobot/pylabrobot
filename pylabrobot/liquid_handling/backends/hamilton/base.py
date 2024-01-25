@@ -165,6 +165,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
     wait = True,
+    verbose: bool = False,
     **kwargs
   ):
     """ Send a firmware command to the Hamilton machine.
@@ -188,6 +189,8 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
 
     cmd, id_ = self._assemble_command(module=module, command=command, tip_pattern=tip_pattern,
       **kwargs)
+    if verbose:
+      print(cmd)
     return await self._write_and_read_command(id_=id_, cmd=cmd, write_timeout=write_timeout,
                     read_timeout=read_timeout, wait=wait)
 
