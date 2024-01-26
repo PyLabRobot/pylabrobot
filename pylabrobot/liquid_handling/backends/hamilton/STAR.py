@@ -5325,13 +5325,22 @@ class STAR(HamiltonLiquidHandler):
     assert resp is not None
     return resp["ct"] == 1
 
-    # Park autoload
+  # Park autoload
   async def park_autoload(
       self,
       ):
     """ Park autoload """
 
-    return await self.send_command(module="C0", command="CS")
+    # Identify max number of x positions for your liquid handler
+    extended_conf = await self.request_extended_configuration()
+    max_x_pos = str(extended_conf["xt"]).zfill(2)
+
+    # Park autoload to max x position available
+    return await self.send_command(
+      module="I0",
+      command="XP",
+      xp=max_x_pos
+      )
 
   # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
 
