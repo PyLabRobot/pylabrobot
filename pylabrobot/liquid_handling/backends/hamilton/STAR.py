@@ -1218,14 +1218,19 @@ class STAR(HamiltonLiquidHandler):
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
 
+    # Request machine information
+    conf = await self.request_machine_configuration()
     extended_conf = await self.request_extended_configuration()
+
     left_x_drive_configuration_byte_1 = bin(extended_conf["xl"])
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1 + \
       "0" * (16 - len(left_x_drive_configuration_byte_1))
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1[2:]
+    autoload_configuration_byte = bin(conf['kb']).split('b')[-1][-3]
+    # Identify installations
+    self.autoload_installed = autoload_configuration_byte == "1"
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
     self.iswap_installed = left_x_drive_configuration_byte_1[1] == "1"
-    self.autoload_installed = self.request_autoload_installed_after_2015()
 
     initialized = await self.request_instrument_initialization_status()
 
@@ -2635,16 +2640,6 @@ class STAR(HamiltonLiquidHandler):
     resp = await self.send_command(module="C0", command="QW", fmt="qw#")
     return resp is not None and resp["qw"] == 1
 
-  async def request_autoload_installed_after_2015(self) -> bool:
-    """
-    Check whether autoload has been installed after 2015.
-    
-    Convenient substitute for checking whether machine has an autoload.
-    """
-
-    resp = await self.send_command(module="I0", command="RO", fmt="ao####")
-    return resp is not None and resp["ao"] > 2015
-
   async def request_autoload_initialization_status(self) -> bool:
     """ Request autoload initialization status """
 
@@ -3114,7 +3109,8 @@ class STAR(HamiltonLiquidHandler):
     """ Request machine configuration """
 
     # TODO: parse res
-    return await self.send_command(module="C0", command="RM")
+    return await self.send_command(module="C0", command="RM",
+                                   fmt="kb**kp**")
 
   async def request_extended_configuration(self):
     """ Request extended configuration """
