@@ -1226,7 +1226,7 @@ class STAR(HamiltonLiquidHandler):
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1 + \
       "0" * (16 - len(left_x_drive_configuration_byte_1))
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1[2:]
-    autoload_configuration_byte = bin(conf['kb']).split('b')[-1][-3]
+    autoload_configuration_byte = bin(conf["kb"]).split("b")[-1][-3]
     # Identify installations
     self.autoload_installed = autoload_configuration_byte == "1"
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
