@@ -9,7 +9,7 @@ import enum
 import functools
 import logging
 import re
-from typing import Callable, Dict, ItemsView, List, Optional, Sequence, Type, TypeVar, cast
+from typing import Callable, Dict, ItemsView, List, Literal, Optional, Sequence, Type, TypeVar, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
@@ -1069,6 +1069,7 @@ class STAR(HamiltonLiquidHandler):
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
     self._core_parked: Optional[bool] = None
+    self._extended_conf: Optional[dict] = None
 
   @property
   def num_channels(self) -> int:
@@ -1080,6 +1081,13 @@ class STAR(HamiltonLiquidHandler):
   @property
   def module_id_length(self):
     return 2
+
+  @property
+  def extended_conf(self) -> dict:
+    """ Extended configuration. """
+    if self._extended_conf is None:
+      raise RuntimeError("has not loaded extended_conf, forgot to call `setup`?")
+    return self._extended_conf
 
   def serialize(self) -> dict:
     return {
@@ -1220,9 +1228,9 @@ class STAR(HamiltonLiquidHandler):
 
     # Request machine information
     conf = await self.request_machine_configuration()
-    extended_conf = await self.request_extended_configuration()
+    self._extended_conf = await self.request_extended_configuration()
 
-    left_x_drive_configuration_byte_1 = bin(extended_conf["xl"])
+    left_x_drive_configuration_byte_1 = bin(self.extended_conf["xl"])
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1 + \
       "0" * (16 - len(left_x_drive_configuration_byte_1))
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1[2:]
@@ -1247,7 +1255,7 @@ class STAR(HamiltonLiquidHandler):
       y_positions = [4050 - i * dy for i in range(self.num_channels)]
 
       await self.initialize_pipetting_channels(
-        x_positions=[extended_conf["xw"]],  # Tip eject waste X position.
+        x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
         y_positions=y_positions,
         begin_of_tip_deposit_process=2450,
         end_of_tip_deposit_process=1220,
@@ -1261,7 +1269,7 @@ class STAR(HamiltonLiquidHandler):
       if not autoload_initialized:
         await self.initialize_autoload()
 
-        await self.park_autoload()
+      await self.park_autoload()
 
     if self.iswap_installed:
       iswap_initialized = await self.request_iswap_initialization_status()
@@ -3109,8 +3117,7 @@ class STAR(HamiltonLiquidHandler):
     """ Request machine configuration """
 
     # TODO: parse res
-    return await self.send_command(module="C0", command="RM",
-                                   fmt="kb**kp**")
+    return await self.send_command(module="C0", command="RM", fmt="kb**kp**")
 
   async def request_extended_configuration(self):
     """ Request extended configuration """
@@ -5326,31 +5333,23 @@ class STAR(HamiltonLiquidHandler):
     return resp["ct"] == 1
 
   # Park autoload
-  async def park_autoload(
-      self,
-      ):
+  async def park_autoload(self):
     """ Park autoload """
 
     # Identify max number of x positions for your liquid handler
-    extended_conf = await self.request_extended_configuration()
-    max_x_pos = str(extended_conf["xt"]).zfill(2)
+    max_x_pos = str(self.extended_conf["xt"]).zfill(2)
 
     # Park autoload to max x position available
     return await self.send_command(
       module="I0",
       command="XP",
       xp=max_x_pos
-      )
+    )
 
   # TODO:(command:CA) Push out carrier to loading tray (after identification CI)
 
-  async def unload_carrier(
-      self,
-      carrier: Carrier,
-      ):
-    """
-    Use autoload to unload carrier.
-    """
+  async def unload_carrier(self, carrier: Carrier):
+    """ Use autoload to unload carrier. """
     # Identify carrier end rail
     track_width = 22.5
     carrier_width = carrier.get_absolute_location().x - 100  + carrier.get_size_x()
@@ -5364,26 +5363,43 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="CR",
       cp=carrier_end_rail_str,
-      )
+    )
     # Park autoload
     await self.park_autoload()
     return resp
 
   async def load_carrier(
-      self,
-      carrier: Carrier,
-      barcode_reading: bool = False,
-      barcode_reading_direction: str = "horizontal",
-      barcode_symbology: str = "Code 128 (Subset B and C)",
-      no_container_per_carrier: int = 5,
-      park_autoload_after: bool = True
-      ):
+    self,
+    carrier: Carrier,
+    barcode_reading: bool = False,
+    barcode_reading_direction: Literal["horizontal", "vertical"] = "horizontal",
+    barcode_symbology:
+      Literal[
+        "ISBT Standard",
+        "Code 128 (Subset B and C)",
+        "Code 39",
+        "Codebar",
+        "Code 2of5 Interleaved",
+        "UPC A/E",
+        "YESN/EAN 8",
+        "Code 93"
+      ] = "Code 128 (Subset B and C)",
+    no_container_per_carrier: int = 5,
+    park_autoload_after: bool = True
+  ):
     """
     Use autoload to load carrier.
 
-    Barcode reading is disabled by default.
-
+    Args:
+      carrier: Carrier to load
+      barcode_reading: Whether to read barcodes. Default False.
+      barcode_reading_direction: Barcode reading direction. Either "vertical" or "horizontal",
+        default "horizontal".
+      barcode_symbology: Barcode symbology. Default "Code 128 (Subset B and C)".
+      no_container_per_carrier: Number of containers per carrier. Default 5.
+      park_autoload_after: Whether to park autoload after loading. Default True.
     """
+
     barcode_reading_direction_dict = {
       "vertical": "0",
       "horizontal": "1"
@@ -5408,53 +5424,44 @@ class STAR(HamiltonLiquidHandler):
     presence_check = await self.request_single_carrier_presence(carrier_end_rail)
     carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
-    if presence_check == 1:
-      # Set carrier type for identification purposes
-      await self.send_command(module="C0", command="CI", cp=carrier_end_rail_str)
-
-      # Load carrier
-      # with barcoding
-      if barcode_reading:
-
-        # Choose barcode symbology
-        await self.send_command(
-          module="C0",
-          command="CB",
-          bt=barcode_symbology_dict[barcode_symbology]
-        )
-        # Load and read out barcodes
-        resp = await self.send_command(
-          module="C0",
-          command="CL",
-          bd=barcode_reading_direction_dict[barcode_reading_direction],
-          bp="0616", # Barcode reading direction (0 = vertical 1 = horizontal)
-          co="0960", # Distance between containers (pattern) [0.1 mm]
-          cf="380", # Width of reading window [0.1 mm]
-          cv="1281", # Carrier reading speed [0.1 mm]/s
-          cn=str(no_container_per_carrier).zfill(2), # No of containers (cups, plates) in a carrier
-          )
-        # Check for presence of other carriers & park autoload
-        if park_autoload_after:
-          await self.send_command(module="C0", command="CS")
-        return resp
-
-      # without barcoding
-      else:
-        resp = await self.send_command(
-          module="C0",
-          command="CL",
-          cn="00"
-          )
-        # Check for presence of other carriers & park autoload
-        if park_autoload_after:
-          await self.send_command(module="C0", command="CS")
-      return resp
-
-    else:
+    if presence_check != 1:
       raise ValueError(f"""No carrier found at position {carrier_end_rail},
                        have you placed the carrier onto the correct autoload tray position?""")
 
+    # Set carrier type for identification purposes
+    await self.send_command(module="C0", command="CI", cp=carrier_end_rail_str)
 
+    # Load carrier
+    # with barcoding
+    if barcode_reading:
+      # Choose barcode symbology
+      await self.send_command(
+        module="C0",
+        command="CB",
+        bt=barcode_symbology_dict[barcode_symbology]
+      )
+      # Load and read out barcodes
+      resp = await self.send_command(
+        module="C0",
+        command="CL",
+        bd=barcode_reading_direction_dict[barcode_reading_direction],
+        bp="0616", # Barcode reading direction (0 = vertical 1 = horizontal)
+        co="0960", # Distance between containers (pattern) [0.1 mm]
+        cf="380", # Width of reading window [0.1 mm]
+        cv="1281", # Carrier reading speed [0.1 mm]/s
+        cn=str(no_container_per_carrier).zfill(2), # No of containers (cups, plates) in a carrier
+      )
+    else: # without barcoding
+      resp = await self.send_command(
+        module="C0",
+        command="CL",
+        cn="00"
+      )
+
+    # Check for presence of other carriers & park autoload
+    if park_autoload_after:
+      await self.send_command(module="C0", command="CS")
+    return resp
 
   async def set_loading_indicators(
     self,
