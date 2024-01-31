@@ -5341,7 +5341,6 @@ class STAR(HamiltonLiquidHandler):
 
     slot_no_as_safe_str = str(slot_number).zfill(2)
 
-    # Park autoload to max x position available
     return await self.send_command(
       module="I0",
       command="XP",
