@@ -306,14 +306,22 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       ([0, 1179, 1179, 0], [0, 2418, 1968, 0], [False, True, True, False])
     )
 
-    # check two operations on the same row
-    # I'm not entirely sure if we should support picking up two tips in separate columns because
-    # it's effectively two operations, but we will do it for now bc it's a single firmware command.
+    # check two operations on the same row, different column.
     tip_a2 = self.tip_rack.get_item("A2")
     op3 = Pickup(resource=tip_a2, tip=tip, offset=Coordinate.zero())
     self.assertEqual(
       self.mockSTAR._ops_to_fw_positions((op1, op3), use_channels=[0, 1]),
       ([1179, 1269, 0], [2418, 2418, 0], [True, True, False])
+    )
+
+    # A1, A2, B1, B2
+    tip_b1 = self.tip_rack.get_item("B1")
+    op4 = Pickup(resource=tip_b1, tip=tip, offset=Coordinate.zero())
+    tip_b2 = self.tip_rack.get_item("B2")
+    op5 = Pickup(resource=tip_b2, tip=tip, offset=Coordinate.zero())
+    self.assertEqual(
+      self.mockSTAR._ops_to_fw_positions((op1, op4, op3, op5), use_channels=[0, 1, 2, 3]),
+      ([1179, 1179, 1269, 1269, 0], [2418, 2328, 2418, 2328, 0], [True, True, True, True, False])
     )
 
     # make sure two operations on the same spot are not allowed
