@@ -5333,10 +5333,7 @@ class STAR(HamiltonLiquidHandler):
     return resp["ct"] == 1
 
   # Move autoload/scanner X-drive into slot number
-  async def move_autoload_to_slot(
-      self,
-      slot_number: int
-      ):
+  async def move_autoload_to_slot(self, slot_number: int):
     """ Move autoload to specific slot/track position """
 
     assert 1 <= slot_number <= 54, "slot_number must be between 1 and 54"
@@ -5346,7 +5343,7 @@ class STAR(HamiltonLiquidHandler):
       module="I0",
       command="XP",
       xp=slot_no_as_safe_str
-      )
+    )
 
   # Park autoload
   async def park_autoload(self):
