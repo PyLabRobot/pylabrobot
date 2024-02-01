@@ -5339,6 +5339,7 @@ class STAR(HamiltonLiquidHandler):
       ):
     """ Move autoload to specific slot/track position """
 
+    assert 1 <= slot_number <= 54, "slot_number must be between 1 and 54"
     slot_no_as_safe_str = str(slot_number).zfill(2)
 
     return await self.send_command(
