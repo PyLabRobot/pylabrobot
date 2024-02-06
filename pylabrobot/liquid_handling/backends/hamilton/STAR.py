@@ -6381,3 +6381,159 @@ class STAR(HamiltonLiquidHandler):
 
     resp = await self.send_command(module="C0", command="QC", fmt="qc#")
     return bool(resp["qc"])
+
+
+  # -------------- 4.0 Direct Module Integration --------------
+  # Communication occurs directly through STAR,
+  # not a separate connection
+
+  # -------------- 4.1 Hamilton Heater Shaker (HHS) --------------
+
+  # 
+  async def check_type_is_HHS(self, device_number: int):
+    """
+    Convenience method to check that connected module is a HHS.
+    Executed through firmware query
+    """
+
+    firmware_version = await self.send_command(module=f"T{device_number}", command="RF")
+    if "Heater Shaker" not in firmware_version:
+      raise ValueError(f"Device number {device_number} does not connect to a HHS" \
+                        f", found {firmware_version}." \
+                        f"Have you called the wrong device number?")
+    
+  async def initialize_HHS(self, device_number: int) -> str:
+    """ Initialize Hamilton Heater Shaker (HHS) at specified TCC
+
+    Args:
+      device_number: TCC connect number to the HHS
+    """
+
+    _module = f"T{device_number}"
+
+    # Request module configuration
+    try:
+      module_config = await self.send_command(module=_module, command="QU")
+    except:
+      raise ValueError(f"No Hamilton Heater Shaker found at device_number {device_number}" \
+                       f", check you connections")
+
+    await self.check_type_is_HHS(device_number)
+
+    # Request module configuration
+    HHW_init_status = await self.send_command(module=_module, command="QW", fmt="qw#")
+    HHW_init_status = HHW_init_status["qw"]
+
+    info = "HHS already initialised"
+    # Initializing HHS if necessary
+    if HHW_init_status != 1:
+      # Initialise module
+      await self.send_command(module=_module, command="LI")
+      info = f"HHS at device number {device_number} initialised."
+
+    return info
+
+  # -------------- 4.1.1 HHS Plate Lock --------------
+
+  async def open_plate_lock(self, device_number: int):
+    """ Open HHS plate lock """
+
+    await self.check_type_is_HHS(device_number)
+
+    return await self.send_command(
+      module=f"T{device_number}",
+      command="LP",
+      lp="0" # => open plate lock
+      )
+
+  async def close_plate_lock(self, device_number: int):
+    """ Close HHS plate lock """
+
+    await self.check_type_is_HHS(device_number)
+
+    return await self.send_command(
+      module = f"T{device_number}",
+      command="LP",
+      lp="1" # => close plate lock
+      )
+
+  # -------------- 4.1.2 HHS Shaking --------------
+  async def start_shaking_HHS(
+      self,
+      device_number: int,
+      rpm: int,
+      rotation: int = 0,
+      plate_locked_during_shaking: bool = True
+      ):
+    """ Start shaking of specified HHS 
+    
+    Args:
+      rpm: round per minute
+      rotation: 0: clockwise rotation, 1: counter-clockwise rotation
+    """
+    
+    await self.check_type_is_HHS(device_number)
+
+    # Ensure plate is locked before shaking starts
+    # allow over-writing of default (perhaps special holder system)
+    if plate_locked_during_shaking:
+      await self.close_plate_lock(device_number)
+
+    return await self.send_command(
+      module=f"T{device_number}",
+      command="SB",
+      st=str(rotation),
+      sv=str(rpm).zfill(4),
+      sr="00500" # ??? maybe shakingAccRamp rate?
+      )
+  
+  async def stop_all_shaking(self, device_number: int): # all shakers or just this shaker????
+    """ Close HHS plate lock """
+    
+    await self.check_type_is_HHS(device_number)
+
+    return await self.send_command(module="T1", command="SC")
+
+  # -------------- 4.1.3 HHS Heating/Temperature Control --------------
+
+  async def start_temperature_control_at_HHS(
+      self,
+      device_number: int,
+      temp: float | int,
+
+      ):
+    """ Start temperature regulation of specified HHS """
+    
+    await self.check_type_is_HHS(device_number)
+    assert 0 < temp <= 100
+
+    # Ensure proper temperature input handling
+    if isinstance(temp, int):
+        safe_temp_str = "{:04d}".format(temp * 10)
+    elif isinstance(temp, float):
+        safe_temp_str = "{:04d}".format(int(temp * 10))
+    
+    return await self.send_command(
+      module=f"T{device_number}",
+      command="TA", # temperature adjustment
+      ta=safe_temp_str,
+      )
+  
+  async def stop_temperature_control_at_HHS(self, device_number: int): # all shakers or just this shaker????
+    """ Stop temperature regulation of specified HHS """
+    
+    await self.check_type_is_HHS(device_number)
+
+    return await self.send_command(module=f"T{device_number}", command="TO")
+  
+  async def get_temperature_at_HHS(self, device_number: int) -> dict:
+    """ Query current temperatures of both sensors of specified HHS """
+    
+    await self.check_type_is_HHS(device_number)
+    
+    request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
+    processed_t_info = [int(x)/10 for x in request_temperature.split("+")[-2:]]
+
+    return {"front_T": processed_t_info[0],"back_T": processed_t_info[-1]}
+
+  # -------------- 4.2 Hamilton Heater Cooler (HHS) --------------
