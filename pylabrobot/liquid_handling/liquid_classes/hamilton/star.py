@@ -19,7 +19,7 @@ def get_star_liquid_class(
 ) -> Optional[HamiltonLiquidClass]:
   """ Get the Hamilton STAR liquid class for the given parameters. """
 
-  # Tip volumes from resources (mostly where they have filters) are slightly different form the ones
+  # Tip volumes from resources (mostly where they have filters) are slightly different from the ones
   # in the liquid class mapping, so we need to map them here. If no mapping is found, we use the
   # given maximal volume of the tip.
   tip_volume = int({

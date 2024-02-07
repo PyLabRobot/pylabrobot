@@ -25,10 +25,15 @@ from .resource_stack import ResourceStack
 
 # labware manufacturers and suppliers
 from .corning_costar import *
+from .corning_axygen import *
 from .revvity import *
+from .porvair import *
+from .azenta import *
 
 # liquid handling companies
 from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
 from .ml_star import *
 from .opentrons import *
 from .tecan import *
+
+# labware made from 3rd parties that share their designs with PLR

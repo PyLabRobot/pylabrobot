@@ -1,3 +1,4 @@
+import sys
 from typing import Dict, Optional, List, cast
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
@@ -24,15 +25,21 @@ from pylabrobot.liquid_handling.standard import (
 )
 from pylabrobot import utils
 
-try:
-  import ot_api
-  USE_OT = True
-except ImportError:
+PYTHON_VERSION = sys.version_info[:2]
+
+if PYTHON_VERSION <= (3, 10):
+  try:
+    import ot_api
+    USE_OT = True
+  except ImportError:
+    USE_OT = False
+else:
   USE_OT = False
 
 
 class OpentronsBackend(LiquidHandlerBackend):
-  """ Backends for the Opentrons liquid handling robots """
+  """ Backends for the Opentrons liquid handling robots. Only supported on Python 3.10 and below.
+  """
 
   pipette_name2volume = {
     "p10_single": 10,
@@ -55,7 +62,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     super().__init__()
 
     if not USE_OT:
-      raise RuntimeError("Opentrons is not installed. Please run pip install pylabrobot[opentrons]")
+      raise RuntimeError("Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
+                         " Only supported on Python 3.10 and below.")
 
     self.host = host
     self.port = port
