@@ -98,6 +98,17 @@
                       />
                     </div>
                   </div>
+
+                  <div>
+                    <input
+                      type="checkbox"
+                      name="pip_allow_drop_liquid_left"
+                      id="pip-drop-liquid-left"
+                    />
+                    <label for="pip-drop-liquid-left">
+                      Allow tip drop with liquid left (will discard liquid)
+                    </label>
+                  </div>
                 </div>
 
                 <h3 class="form-row-header">
@@ -222,5 +233,10 @@
 
     <script src="./lib.js"></script>
     <script src="./sim.js"></script>
+
+    <input type="text" id="fs_host" value="{{ fs_host }}" hidden />
+    <input type="text" id="fs_port" value="{{ fs_port }}" hidden />
+    <input type="text" id="ws_host" value="{{ ws_host }}" hidden />
+    <input type="text" id="ws_port" value="{{ ws_port }}" hidden />
   </body>
 </html>

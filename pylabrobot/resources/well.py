@@ -14,6 +14,18 @@ class WellBottomType(enum.Enum):
   UNKNOWN = "unknown"
 
 
+class CrossSectionType(enum.Enum):
+  """ Enum for the type of cross section of a well.
+
+  A well with a circular cross section will be a cylinder, and a well with a square cross section
+  will be a rectangular cuboid. Note that the bottom section of a well may be any of the
+  :class:`WellBottomType` values.
+  """
+
+  CIRCLE = "circle"
+  SQUARE = "square"
+
+
 class Well(Container):
   """ Base class for Well resources.
 
@@ -24,7 +36,8 @@ class Well(Container):
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
     bottom_type: Union[WellBottomType, str] = WellBottomType.UNKNOWN, category: str = "well",
     max_volume: Optional[float] = None, model: Optional[str] = None,
-    compute_volume_from_height: Optional[Callable[[float], float]] = None):
+    compute_volume_from_height: Optional[Callable[[float], float]] = None,
+    cross_section_type: Union[CrossSectionType, str] = CrossSectionType.CIRCLE):
     """ Create a new well.
 
     Args:
@@ -39,15 +52,24 @@ class Well(Container):
         and the max volume will be computed based on size_x, size_y, and size_z.
       compute_volume_from_height: function to compute the volume from the height relative to the
         bottom
+      cross_section_type: Type of the cross section of the well. If not specified, the well will be
+        seen as a cylinder.
     """
 
     if isinstance(bottom_type, str):
       bottom_type = WellBottomType(bottom_type)
+    if isinstance(cross_section_type, str):
+      cross_section_type = CrossSectionType(cross_section_type)
 
     if max_volume is None:
       if compute_volume_from_height is None:
-        assert size_x == size_y, "Well max volume computation currently assumes circular wells"
-        max_volume = math.pi * (size_x / 2) ** 2 * size_z
+        # we assume flat bottom as a best guess, bottom types require additional information
+        if cross_section_type == CrossSectionType.CIRCLE:
+          assert size_x == size_y, "size_x and size_y must be equal for circular wells."
+          max_volume = math.pi * (size_x / 2) ** 2 * size_z
+        elif cross_section_type == CrossSectionType.SQUARE:
+          assert size_x == size_y, "size_x and size_y must be equal for square wells."
+          max_volume = size_x * size_y * size_z
       else:
         max_volume = compute_volume_from_height(size_z)
 
@@ -55,11 +77,13 @@ class Well(Container):
       max_volume=max_volume, model=model)
     self.bottom_type = bottom_type
     self._compute_volume_from_height = compute_volume_from_height
+    self.cross_section_type = cross_section_type
 
   def serialize(self):
     return {
       **super().serialize(),
       "bottom_type": self.bottom_type.value,
+      "cross_section_type": self.cross_section_type.value,
     }
 
   def compute_volume_from_height(self, height: float) -> float:

@@ -276,6 +276,12 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     elif not should_be and found:
       self.fail(f"Command {cmd} was found in sent commands: {self.mockSTAR.commands}")
 
+  async def test_indictor_light(self):
+    """ Test the indicator light. """
+    await self.mockSTAR.set_loading_indicators(bit_pattern=[True]*54, blink_pattern=[False]*54)
+    self._assert_command_sent_once("C0CPid0000cl3FFFFFFFFFFFFFcb00000000000000",
+                                             "cl**************cb**************")
+
   def test_ops_to_fw_positions(self):
     """ Convert channel positions to firmware positions. """
     # pylint: disable=protected-access
@@ -299,6 +305,28 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       self.mockSTAR._ops_to_fw_positions((op1, op2), use_channels=[1, 2]),
       ([0, 1179, 1179, 0], [0, 2418, 1968, 0], [False, True, True, False])
     )
+
+    # check two operations on the same row, different column.
+    tip_a2 = self.tip_rack.get_item("A2")
+    op3 = Pickup(resource=tip_a2, tip=tip, offset=Coordinate.zero())
+    self.assertEqual(
+      self.mockSTAR._ops_to_fw_positions((op1, op3), use_channels=[0, 1]),
+      ([1179, 1269, 0], [2418, 2418, 0], [True, True, False])
+    )
+
+    # A1, A2, B1, B2
+    tip_b1 = self.tip_rack.get_item("B1")
+    op4 = Pickup(resource=tip_b1, tip=tip, offset=Coordinate.zero())
+    tip_b2 = self.tip_rack.get_item("B2")
+    op5 = Pickup(resource=tip_b2, tip=tip, offset=Coordinate.zero())
+    self.assertEqual(
+      self.mockSTAR._ops_to_fw_positions((op1, op4, op3, op5), use_channels=[0, 1, 2, 3]),
+      ([1179, 1179, 1269, 1269, 0], [2418, 2328, 2418, 2328, 0], [True, True, True, True, False])
+    )
+
+    # make sure two operations on the same spot are not allowed
+    with self.assertRaises(ValueError):
+      self.mockSTAR._ops_to_fw_positions((op1, op1), use_channels=[0, 1])
 
   def _assert_command_sent_once(self, cmd: str, fmt: str):
     """ Assert that the given command was sent to the backend exactly once. """
@@ -664,7 +692,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.discard_tips()
     self._assert_command_sent_once(
      "C0TRid0206xp08000 08000 08000 08000 08000 08000 08000 08000yp4050 3782 3514 3246 2978 2710 "
-     "2442 2174tp1970tz1890th2450te2450tm1 1 1 1 1 1 1 1ti0",
+     "2442 2174tp1970tz1870th2450te2450tm1 1 1 1 1 1 1 1ti0",
      DROP_TIP_FORMAT)
 
   async def test_portrait_tip_rack_handling(self):

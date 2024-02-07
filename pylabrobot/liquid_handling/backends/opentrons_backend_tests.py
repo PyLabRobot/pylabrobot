@@ -1,3 +1,4 @@
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +13,7 @@ from pylabrobot.resources.opentrons import (
 )
 
 
+@unittest.skipIf(sys.version_info >= (3, 11), "requires Python 3.10 or lower")
 class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
   """ Tests for setup and stop """
   @patch("ot_api.runs.create")
@@ -47,6 +49,7 @@ def _mock_add(load_name, namespace, slot, version, labware_id, display_name):
   return labware_id
 
 
+@unittest.skipIf(sys.version_info >= (3, 11), "requires Python 3.10 or lower")
 class OpentronsBackendDefinitionTests(unittest.IsolatedAsyncioTestCase):
   """ Test for the callback when assigning labware to the deck. """
 
@@ -78,6 +81,7 @@ class OpentronsBackendDefinitionTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_at_slot(self.plate, slot=11)
 
 
+@unittest.skipIf(sys.version_info >= (3, 11), "requires Python 3.10 or lower")
 class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   """ Tests Opentrons commands """
 
