@@ -12,7 +12,7 @@ from pylabrobot.resources.tip import Tip
 
 
 class TipSize(enum.Enum):
-  """ Tip type """
+  """ Tip type. These correspond to the tip types in the FW documentation (see command TT) """
   UNDEFINED=0
   LOW_VOLUME=1
   STANDARD_VOLUME=2
