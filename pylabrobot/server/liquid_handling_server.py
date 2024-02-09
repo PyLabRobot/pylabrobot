@@ -8,6 +8,7 @@ import threading
 from typing import Any, Coroutine, List, Tuple, Type, TypeVar, Optional, cast
 
 from flask import Blueprint, Flask, request, jsonify, current_app
+from flask_cors import CORS, cross_origin
 import werkzeug
 
 from pylabrobot.liquid_handling import LiquidHandler
@@ -15,7 +16,7 @@ from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp, Pickup, Aspiration, Dispense, Drop
 from pylabrobot.resources import Coordinate, Deck, Tip, Liquid, TecanTip400
 from pylabrobot.serializer import serialize, deserialize
-
+import usb.backend.libusb0 as libusb0
 
 lh_api = Blueprint("liquid handling", __name__)
 
@@ -90,6 +91,11 @@ def get_status():
   status = "running" if current_app.lh.setup_finished else "stopped"
   return jsonify({"status": status})
 
+@lh_api.route("/rinse", methods=["POST"])
+async def rinse_tips():
+  return add_and_run_task(Task(current_app.lh.rinse_tips()))
+
+
 @lh_api.route("/layout", methods=["GET"])
 def get_layout():
   """ API Endpoint to inspect the current design of the deck
@@ -106,8 +112,15 @@ def update_head_state():
 
   current_app.lh.clear_head_state()
   current_app.lh.update_head_state({0:TecanTip400()})
+  current_app.lh.update_head_state({1:TecanTip400()})
+  current_app.lh.update_head_state({2:TecanTip400()})
+  current_app.lh.update_head_state({3:TecanTip400()})
+  current_app.lh.update_head_state({4:TecanTip400()})
+  current_app.lh.update_head_state({5:TecanTip400()})
+  current_app.lh.update_head_state({6:TecanTip400()})
+  current_app.lh.update_head_state({7:TecanTip400()})
 
-  result = True  
+  result = True
 
   return jsonify({"result": result})
 
@@ -268,6 +281,7 @@ async def dispense():
 def create_app(lh: LiquidHandler):
   """ Create a Flask app with the given LiquidHandler """
   app = Flask(__name__)
+  cors = CORS(app)
   app.lh = lh
   app.register_blueprint(lh_api)
   return app

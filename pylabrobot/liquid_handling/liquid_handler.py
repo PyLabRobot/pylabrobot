@@ -23,6 +23,7 @@ from pylabrobot.resources import (
   Coordinate,
   CarrierSite,
   Lid,
+  Liquid,
   Plate,
   Tip,
   TipRack,
@@ -86,8 +87,10 @@ class LiquidHandler(MachineFrontend):
 
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
+    print("hello", self.backend)
 
     await self.backend.setup()
+    print("hello2", self.backend)
 
     self.head = {c: TipTracker() for c in range(self.backend.num_channels)}
 
@@ -96,6 +99,10 @@ class LiquidHandler(MachineFrontend):
       self.resource_assigned_callback(resource)
 
     await super().setup()
+
+
+  async def rinse_tips(self):
+    await self.backend.rinse_tips()
 
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.
@@ -670,6 +677,7 @@ class LiquidHandler(MachineFrontend):
     end_delay: float = 0,
     offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
     liquid_height: Union[Optional[float], List[Optional[float]]] = None,
+    liquid_classes: Union[Optional[Liquid], List[Optional[Liquid]]] = None,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
@@ -765,14 +773,15 @@ class LiquidHandler(MachineFrontend):
     vols = expand(vols, n)
     flow_rates = expand(flow_rates, n)
     liquid_height = expand(liquid_height, n)
+    liquid_classes = expand(liquid_classes, n)
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
     dispenses = [Dispense(resource=r, volume=v, offset=o, flow_rate=fr, liquid_height=lh, tip=t,
-                          liquid=None, blow_out_air_volume=0) # TODO: get blow_out_air_volume
-                 for r, v, o, fr, lh, t in
-                  zip(resources, vols, offsets, flow_rates, liquid_height, tips)]
+                          liquid=lc, blow_out_air_volume=0) # TODO: get blow_out_air_volume
+                 for r, v, o, fr, lh, t, lc in
+                  zip(resources, vols, offsets, flow_rates, liquid_height, tips, liquid_classes)]
 
     for op in dispenses:
       if does_volume_tracking():
