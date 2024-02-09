@@ -235,9 +235,7 @@ class EVO(TecanLiquidHandler):
 
     Creates a USB connection and finds read/write interfaces.
     """
-    print("what the fuck")
     await super().setup()
-    print("what the fuck2")
 
     self._liha_connected = await self.setup_arm(EVO.LIHA)
     self._roma_connected = await self.setup_arm(EVO.ROMA)
