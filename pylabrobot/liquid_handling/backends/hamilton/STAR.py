@@ -6409,26 +6409,26 @@ class STAR(HamiltonLiquidHandler):
       device_number: TCC connect number to the HHS
     """
 
-    _module = f"T{device_number}"
+    module_pointer = f"T{device_number}"
 
     # Request module configuration
     try:
-      module_config = await self.send_command(module=_module, command="QU")
-    except:
+      await self.send_command(module=module_pointer, command="QU")
+    except TimeoutError:
       raise ValueError(f"No Hamilton Heater Shaker found at device_number {device_number}" \
                        f", have you checked your connections?")
 
     await self.check_type_is_hhs(device_number)
 
     # Request module configuration
-    HHS_init_status = await self.send_command(module=_module, command="QW", fmt="qw#")
-    HHS_init_status = HHS_init_status["qw"]
+    hhs_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
+    hhs_init_status = hhs_init_status["qw"]
 
     info = "HHS already initialised"
     # Initializing HHS if necessary
-    if HHS_init_status != 1:
+    if hhs_init_status != 1:
       # Initialise module
-      await self.send_command(module=_module, command="LI")
+      await self.send_command(module=module_pointer, command="LI")
       info = f"HHS at device number {device_number} initialised."
 
     return info
@@ -6508,7 +6508,7 @@ class STAR(HamiltonLiquidHandler):
 
     # Ensure proper temperature input handling
     if isinstance(temp, (float, int)):
-      safe_temp_str = "{:04d}".format(int(temp * 10))
+      safe_temp_str = f"{int(temp * 10):04d}"
 
     return await self.send_command(
       module=f"T{device_number}",
@@ -6554,26 +6554,26 @@ class STAR(HamiltonLiquidHandler):
       device_number: TCC connect number to the HHC
     """
 
-    _module = f"T{device_number}"
+    module_pointer = f"T{device_number}"
 
     # Request module configuration
     try:
-      module_config = await self.send_command(module=_module, command="QU")
-    except:
+      await self.send_command(module=module_pointer, command="QU")
+    except TimeoutError:
       raise ValueError(f"No Hamilton Heater Cooler found at device_number {device_number}" \
                       f", have you checked your connections?")
 
     await self.check_type_is_hhc(device_number)
 
     # Request module configuration
-    HHC_init_status = await self.send_command(module=_module, command="QW", fmt="qw#")
-    HHC_init_status = HHC_init_status["qw"]
+    hhc_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
+    hhc_init_status = hhc_init_status["qw"]
 
     info = "HHC already initialised"
     # Initializing HHS if necessary
-    if HHC_init_status != 1:
+    if hhc_init_status != 1:
       # Initialise device
-      await self.send_command(module=_module, command="LI")
+      await self.send_command(module=module_pointer, command="LI")
       info = f"HHS at device number {device_number} initialised."
 
     return info
@@ -6590,7 +6590,7 @@ class STAR(HamiltonLiquidHandler):
 
     # Ensure proper temperature input handling
     if isinstance(temp, (float, int)):
-      safe_temp_str = "{:04d}".format(int(temp * 10))
+      safe_temp_str = f"{int(temp * 10):04d}"
 
     return await self.send_command(
       module=f"T{device_number}",
