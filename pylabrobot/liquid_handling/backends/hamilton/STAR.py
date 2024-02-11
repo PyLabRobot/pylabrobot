@@ -9,7 +9,7 @@ import enum
 import functools
 import logging
 import re
-from typing import Callable, Dict, ItemsView, List, Literal, Optional, Sequence, Type, TypeVar, cast
+from typing import Callable, Dict, ItemsView, List, Literal, Optional, Sequence, Type, TypeVar, cast, Union
 
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
@@ -6499,7 +6499,7 @@ class STAR(HamiltonLiquidHandler):
   async def start_temperature_control_at_HHS(
       self,
       device_number: int,
-      temp: float | int,
+      temp: Union[float, int],
       ):
     """ Start temperature regulation of specified HHS """
 
@@ -6507,7 +6507,7 @@ class STAR(HamiltonLiquidHandler):
     assert 0 < temp <= 105
 
     # Ensure proper temperature input handling
-    if isinstance(temp, float | int):
+    if isinstance(temp, (float, int)):
         safe_temp_str = "{:04d}".format(int(temp * 10))
 
     return await self.send_command(
@@ -6581,7 +6581,7 @@ class STAR(HamiltonLiquidHandler):
   async def start_temperature_control_at_HHC(
         self,
         device_number: int,
-        temp: float | int,
+        temp:  Union[float, int],
         ):
       """ Start temperature regulation of specified HHC """
 
@@ -6589,10 +6589,8 @@ class STAR(HamiltonLiquidHandler):
       assert 0 < temp <= 105
 
       # Ensure proper temperature input handling
-      if isinstance(temp, int):
-          safe_temp_str = "{:04d}".format(temp * 10)
-      elif isinstance(temp, float):
-          safe_temp_str = "{:04d}".format(int(temp * 10))
+      if isinstance(temp, (float, int)):
+        safe_temp_str = "{:04d}".format(int(temp * 10))
 
       return await self.send_command(
         module=f"T{device_number}",
