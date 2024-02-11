@@ -1,7 +1,9 @@
 # pylint: disable=invalid-name
 
+import random
 import re
 import sys
+import time
 from typing import Dict, List, Optional, Sequence, Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.base import (
@@ -4713,3 +4715,10 @@ class Vantage(HamiltonLiquidHandler):
       module="A1RM",
       command="RS",
     )
+
+  async def disco_mode(self):
+    """ Easter egg. """
+    for _ in range(69):
+      r, g, b = random.randint(30, 100), random.randint(30, 100), random.randint(30, 100)
+      await self.set_led_color("on", intensity=100, white=0, red=r, green=g, blue=b, uv=0)
+      time.sleep(0.1)
