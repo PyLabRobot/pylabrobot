@@ -6383,9 +6383,10 @@ class STAR(HamiltonLiquidHandler):
     return bool(resp["qc"])
 
 
-  # -------------- 4.0 Direct Module Integration --------------
-  # Communication occurs directly through STAR,
-  # not a separate connection
+  # -------------- 4.0 Direct Device Integration --------------
+  # Communication occurs directly through STAR "TCC" connections,
+  # i.e. firmware commands. This means devices can be seen as part
+  # of the STAR machine directly (if number of devices =< 2).
 
   # -------------- 4.1 Hamilton Heater Shaker (HHS) --------------
 
@@ -6397,10 +6398,10 @@ class STAR(HamiltonLiquidHandler):
 
     firmware_version = await self.send_command(module=f"T{device_number}", command="RF")
     if "Heater Shaker" not in firmware_version:
-      raise ValueError(f"Device number {device_number} does not connect to an HHS" \
-                        f", found {firmware_version}." \
+      raise ValueError(f"Device number {device_number} does not connect to a Hamilton" \
+                        f" Heater Shaker, found {firmware_version} instead." \
                         f"Have you called the wrong device number?")
-    
+
   async def initialize_HHS(self, device_number: int) -> str:
     """ Initialize Hamilton Heater Shaker (HHS) at specified TCC port
 
@@ -6465,12 +6466,12 @@ class STAR(HamiltonLiquidHandler):
       plate_locked_during_shaking: bool = True
       ):
     """ Start shaking of specified HHS 
-    
+
     Args:
       rpm: round per minute
       rotation: 0: clockwise rotation, 1: counter-clockwise rotation
     """
-    
+
     await self.check_type_is_HHS(device_number)
 
     # Ensure plate is locked before shaking starts
@@ -6485,10 +6486,10 @@ class STAR(HamiltonLiquidHandler):
       sv=str(rpm).zfill(4),
       sr="00500" # ??? maybe shakingAccRamp rate?
       )
-  
+
   async def stop_shaking_at_HHS(self, device_number: int):
     """ Close HHS plate lock """
-    
+
     await self.check_type_is_HHS(device_number)
 
     return await self.send_command(module="T1", command="SC")
@@ -6501,16 +6502,14 @@ class STAR(HamiltonLiquidHandler):
       temp: float | int,
       ):
     """ Start temperature regulation of specified HHS """
-    
+
     await self.check_type_is_HHS(device_number)
     assert 0 < temp <= 105
 
     # Ensure proper temperature input handling
-    if isinstance(temp, int):
-        safe_temp_str = "{:04d}".format(temp * 10)
-    elif isinstance(temp, float):
+    if isinstance(temp, float | int):
         safe_temp_str = "{:04d}".format(int(temp * 10))
-    
+
     return await self.send_command(
       module=f"T{device_number}",
       command="TA", # temperature adjustment
@@ -6519,9 +6518,9 @@ class STAR(HamiltonLiquidHandler):
 
   async def get_temperature_at_HHS(self, device_number: int) -> dict:
     """ Query current temperatures of both sensors of specified HHS """
-    
+
     await self.check_type_is_HHS(device_number)
-    
+
     request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
     processed_t_info = [int(x)/10 for x in request_temperature.split("+")[-2:]]
 
@@ -6529,7 +6528,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def stop_temperature_control_at_HHS(self, device_number: int):
     """ Stop temperature regulation of specified HHS """
-    
+
     await self.check_type_is_HHS(device_number)
 
     return await self.send_command(module=f"T{device_number}", command="TO")
@@ -6544,8 +6543,8 @@ class STAR(HamiltonLiquidHandler):
 
       firmware_version = await self.send_command(module=f"T{device_number}", command="RF")
       if "Hamilton Heater Cooler" not in firmware_version:
-        raise ValueError(f"Device number {device_number} does not connect to an HHC" \
-                          f", found {firmware_version}." \
+        raise ValueError(f"Device number {device_number} does not connect to a Hamilton" \
+                          f" Heater-Cooler, found {firmware_version} instead." \
                           f"Have you called the wrong device number?")
 
   async def initialize_HHC(self, device_number: int) -> str:
@@ -6585,7 +6584,7 @@ class STAR(HamiltonLiquidHandler):
         temp: float | int,
         ):
       """ Start temperature regulation of specified HHC """
-      
+
       await self.check_type_is_HHC(device_number)
       assert 0 < temp <= 105
 
@@ -6594,7 +6593,7 @@ class STAR(HamiltonLiquidHandler):
           safe_temp_str = "{:04d}".format(temp * 10)
       elif isinstance(temp, float):
           safe_temp_str = "{:04d}".format(int(temp * 10))
-      
+
       return await self.send_command(
         module=f"T{device_number}",
         command="TA", # temperature adjustment
@@ -6602,12 +6601,12 @@ class STAR(HamiltonLiquidHandler):
         tb="1800", # TODO: identify precise purpose?
         tc="0020", # TODO: identify precise purpose?
         )
-  
+
   async def get_temperature_at_HHC(self, device_number: int) -> dict:
       """ Query current temperatures of both sensors of specified HHC """
-      
+
       await self.check_type_is_HHC(device_number)
-      
+
       request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
       processed_t_info = [int(x)/10 for x in request_temperature.split("+")[-2:]]
 
@@ -6615,7 +6614,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def query_whether_temperature_reached_at_HHC(self, device_number: int):
     """ Stop temperature regulation of specified HHC """
-    
+
     await self.check_type_is_HHC(device_number)
     query_current_control_status = await self.send_command(module=f"T{device_number}", command="QD", fmt="qd#")
 
@@ -6623,7 +6622,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def stop_temperature_control_at_HHC(self, device_number: int): # all shakers or just this shaker????
     """ Stop temperature regulation of specified HHC """
-    
+
     await self.check_type_is_HHC(device_number)
 
     return await self.send_command(module=f"T{device_number}", command="TO")
