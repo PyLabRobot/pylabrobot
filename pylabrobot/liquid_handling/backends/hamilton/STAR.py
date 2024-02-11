@@ -6392,7 +6392,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def check_type_is_HHS(self, device_number: int):
     """
-    Convenience method to check that connected module is an HHS.
+    Convenience method to check that connected device is an HHS.
     Executed through firmware query
     """
 
@@ -6537,7 +6537,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def check_type_is_HHC(self, device_number: int):
       """
-      Convenience method to check that connected module is an HHC.
+      Convenience method to check that connected device is an HHC.
       Executed through firmware query
       """
 
@@ -6572,7 +6572,7 @@ class STAR(HamiltonLiquidHandler):
       info = "HHC already initialised"
       # Initializing HHS if necessary
       if HHC_init_status != 1:
-        # Initialise module
+        # Initialise device
         await self.send_command(module=_module, command="LI")
         info = f"HHS at device number {device_number} initialised."
 
