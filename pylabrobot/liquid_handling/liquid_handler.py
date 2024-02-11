@@ -190,18 +190,6 @@ class LiquidHandler(MachineFrontend):
       raise KeyError(f"Resource '{resource}' is not assigned to this liquid handler.")
     r.unassign()
 
-  def get_resource(self, name: str) -> Resource:
-    """ Find a resource on the deck of this liquid handler. Also see :meth:`~Deck.get_resource`.
-
-    Args:
-      name: name of the resource.
-
-    Returns:
-      The resource with the given name, or None if not found.
-    """
-
-    return self.deck.get_resource(name)
-
   def summary(self):
     """ Prints a string summary of the deck layout.  """
 
