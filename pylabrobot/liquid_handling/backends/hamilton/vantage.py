@@ -349,6 +349,10 @@ class Vantage(HamiltonLiquidHandler):
       error = vantage_response_string_to_error(resp)
       raise error
 
+  def _parse_response(self, resp: str, fmt: Dict[str, str]) -> dict:
+    """ Parse a firmware response. """
+    return parse_vantage_fw_string(resp, fmt)
+
   async def setup(self):
     """ setup
 
