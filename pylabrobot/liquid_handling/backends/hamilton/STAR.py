@@ -6414,7 +6414,7 @@ class STAR(HamiltonLiquidHandler):
     # Request module configuration
     try:
       await self.send_command(module=module_pointer, command="QU")
-    except TimeoutError:
+    except TimeoutError as exc:
       raise ValueError(f"No Hamilton Heater Shaker found at device_number {device_number}" \
                        f", have you checked your connections?")
 
@@ -6559,7 +6559,7 @@ class STAR(HamiltonLiquidHandler):
     # Request module configuration
     try:
       await self.send_command(module=module_pointer, command="QU")
-    except TimeoutError:
+    except TimeoutError as exc:
       raise ValueError(f"No Hamilton Heater Cooler found at device_number {device_number}" \
                       f", have you checked your connections?")
 
@@ -6617,8 +6617,8 @@ class STAR(HamiltonLiquidHandler):
     query_current_control_status = await self.send_command(
       module=f"T{device_number}", command="QD", fmt="qd#"
       )
-    result = True if query_current_control_status["qd"] == 0 else False
-    return result
+
+    return query_current_control_status["qd"] == 0
 
   async def stop_temperature_control_at_hhc(self, device_number: int):
     """ Stop temperature regulation of specified HHC """
