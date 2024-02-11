@@ -6415,8 +6415,9 @@ class STAR(HamiltonLiquidHandler):
     try:
       await self.send_command(module=module_pointer, command="QU")
     except TimeoutError as exc:
-      raise ValueError(f"No Hamilton Heater Shaker found at device_number {device_number}" \
-                       f", have you checked your connections?")
+      error_message = f"No Hamilton Heater Shaker found at device_number {device_number}" \
+        f", have you checked your connections? Original error: {exc}"
+      raise ValueError(error_message) from exc
 
     await self.check_type_is_hhs(device_number)
 
@@ -6560,8 +6561,9 @@ class STAR(HamiltonLiquidHandler):
     try:
       await self.send_command(module=module_pointer, command="QU")
     except TimeoutError as exc:
-      raise ValueError(f"No Hamilton Heater Cooler found at device_number {device_number}" \
-                      f", have you checked your connections?")
+      error_message = f"No Hamilton Heater Cooler found at device_number {device_number}" \
+        f", have you checked your connections? Original error: {exc}"
+      raise ValueError(error_message) from exc
 
     await self.check_type_is_hhc(device_number)
 
