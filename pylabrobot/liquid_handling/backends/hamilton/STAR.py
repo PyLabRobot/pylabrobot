@@ -6421,12 +6421,12 @@ class STAR(HamiltonLiquidHandler):
     await self.check_type_is_HHS(device_number)
 
     # Request module configuration
-    HHW_init_status = await self.send_command(module=_module, command="QW", fmt="qw#")
-    HHW_init_status = HHW_init_status["qw"]
+    HHS_init_status = await self.send_command(module=_module, command="QW", fmt="qw#")
+    HHS_init_status = HHS_init_status["qw"]
 
     info = "HHS already initialised"
     # Initializing HHS if necessary
-    if HHW_init_status != 1:
+    if HHS_init_status != 1:
       # Initialise module
       await self.send_command(module=_module, command="LI")
       info = f"HHS at device number {device_number} initialised."
@@ -6566,12 +6566,12 @@ class STAR(HamiltonLiquidHandler):
       await self.check_type_is_HHC(device_number)
 
       # Request module configuration
-      HHW_init_status = await self.send_command(module=_module, command="QW", fmt="qw#")
-      HHW_init_status = HHW_init_status["qw"]
+      HHC_init_status = await self.send_command(module=_module, command="QW", fmt="qw#")
+      HHC_init_status = HHC_init_status["qw"]
 
       info = "HHC already initialised"
       # Initializing HHS if necessary
-      if HHW_init_status != 1:
+      if HHC_init_status != 1:
         # Initialise module
         await self.send_command(module=_module, command="LI")
         info = f"HHS at device number {device_number} initialised."
@@ -6620,7 +6620,7 @@ class STAR(HamiltonLiquidHandler):
 
     return True if query_current_control_status["qd"] == 0 else False
 
-  async def stop_temperature_control_at_HHC(self, device_number: int): # all shakers or just this shaker????
+  async def stop_temperature_control_at_HHC(self, device_number: int):
     """ Stop temperature regulation of specified HHC """
 
     await self.check_type_is_HHC(device_number)
