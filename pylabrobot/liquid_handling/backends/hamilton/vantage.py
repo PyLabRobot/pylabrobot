@@ -293,6 +293,7 @@ def vantage_response_string_to_error(string: str) -> HamiltonFirmwareError:
       "A1PM": "Pip",
       "A1HM": "Core 96",
       "A1RM": "IPG",
+      "A1AM": "Arm"
     }.get(module_id, "Unknown module")
     error_string = parse_vantage_fw_string(string, {"et": "str"})["et"]
     errors = {modules: error_string}
@@ -361,31 +362,46 @@ class Vantage(HamiltonLiquidHandler):
 
     await super().setup()
 
-    self._num_channels = 8 # TODO: query
+    tip_presences = await self.query_tip_presence()
+    self._num_channels = len(tip_presences)
 
-    await self.pre_initialize_instrument()
+    arm_initialized = await self.arm_request_instrument_initialization_status()
+    if not arm_initialized:
+      await self.arm_pre_initialize()
 
-    # TODO: check if already initialized
-    await self.pip_initialize(
-      x_position=[7095]*self.num_channels,
-      y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
-      begin_z_deposit_position=[2450] * self.num_channels,
-      end_z_deposit_position=[1235] * self.num_channels,
-      minimal_height_at_command_end=[2450] * self.num_channels,
-      tip_pattern=[True]*self.num_channels,
-      tip_type=[1]*self.num_channels,
-      TODO_DI_2=70
-    )
+    # TODO: check which modules are actually installed.
 
-    await self.loading_cover_initialize()
+    pip_channels_initialized = await self.pip_request_initialization_status()
+    if not pip_channels_initialized:
+      await self.pip_initialize(
+        x_position=[7095]*self.num_channels,
+        y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
+        begin_z_deposit_position=[2450] * self.num_channels,
+        end_z_deposit_position=[1235] * self.num_channels,
+        minimal_height_at_command_end=[2450] * self.num_channels,
+        tip_pattern=[True]*self.num_channels,
+        tip_type=[1]*self.num_channels,
+        TODO_DI_2=70
+      )
 
-    await self.core96_initialize(
-      x_position=7347, # TODO: get trash location from deck.
-      y_position=2684, # TODO: get trash location from deck.
-      minimal_traverse_height_at_begin_of_command=2450,
-      minimal_height_at_command_end=2450,
-      end_z_deposit_position=2020,
-    )
+    loading_cover_initialized = await self.loading_cover_request_initialization_status()
+    if not loading_cover_initialized:
+      await self.loading_cover_initialize()
+
+    core96_initialized = await self.core96_request_initialization_status()
+    if not core96_initialized:
+      await self.core96_initialize(
+        x_position=7347, # TODO: get trash location from deck.
+        y_position=2684, # TODO: get trash location from deck.
+        minimal_traverse_height_at_begin_of_command=2450,
+        minimal_height_at_command_end=2450,
+        end_z_deposit_position=2020,
+      )
+
+    ipg_initialized = await self.ipg_request_initialization_status()
+    if not ipg_initialized:
+      await self.ipg_initialize()
+      await self.ipg_park()
 
   @property
   def num_channels(self) -> int:
@@ -1142,18 +1158,60 @@ class Vantage(HamiltonLiquidHandler):
       lc=not cover_open
     )
 
-  def loading_cover_initialize(self):
+  async def loading_cover_request_initialization_status(self) -> bool:
+    """ Request the loading cover initialization status.
+
+    This command was based on the STAR command (QW) and the VStarTranslator log.
+
+    Returns:
+      True if the cover module is initialized, False otherwise.
+    """
+
+    resp = await self.send_command(
+      module="I1AM",
+      command="QW",
+      fmt={"qw": "int"}
+    )
+    return resp is not None and resp["qw"] == 1
+
+  async def loading_cover_initialize(self):
     """ Initialize the loading cover. """
 
-    return self.send_command(
+    return await self.send_command(
       module="I1AM",
       command="MI",
     )
 
-  async def pre_initialize_instrument(self):
-    """ Initialize the main instrument. """
+  async def arm_request_instrument_initialization_status(self) -> bool:
+    """ Request the instrument initialization status.
+
+    This command was based on the STAR command (QW) and the VStarTranslator log. A1AM corresponds
+    to "arm".
+
+    Returns:
+      True if the arm module is initialized, False otherwise.
+    """
+
+    resp = await self.send_command(module="A1AM", command="QW", fmt={"qw": "int"})
+    return resp is not None and resp["qw"] == 1
+
+  async def arm_pre_initialize(self):
+    """ Initialize the arm module. """
 
     return await self.send_command(module="A1AM", command="MI")
+
+  async def pip_request_initialization_status(self) -> bool:
+    """ Request the pip initialization status.
+
+    This command was based on the STAR command (QW) and the VStarTranslator log. A1PM corresponds
+    to all pip channels together.
+
+    Returns:
+      True if the pip channels module is initialized, False otherwise.
+    """
+
+    resp = await self.send_command(module="A1PM", command="QW", fmt={"qw": "int"})
+    return resp is not None and resp["qw"] == 1
 
   async def pip_initialize(
     self,
@@ -3482,10 +3540,8 @@ class Vantage(HamiltonLiquidHandler):
   async def query_tip_presence(self):
     """ Query Tip presence """
 
-    return await self.send_command(
-      module="A1PM",
-      command="QA",
-    )
+    resp = await self.send_command(module="A1PM", command="QA", fmt={"rt": "[int]"})
+    return cast(List[int], resp["rt"])
 
   async def request_height_of_last_lld(self):
     """ Request height of last LLD """
@@ -3502,6 +3558,18 @@ class Vantage(HamiltonLiquidHandler):
       module="A1PM",
       command="QF",
     )
+
+  async def core96_request_initialization_status(self) -> bool:
+    """ Request CoRe96 initialization status
+
+    This method is inferred from I1AM and A1AM commands ("QW").
+
+    Returns:
+      bool: True if initialized, False otherwise.
+    """
+
+    resp = await self.send_command(module="A1HM", command="QW", fmt={"qw": "int"})
+    return resp is not None and resp["qw"] == 1
 
   async def core96_initialize(
     self,
@@ -4295,6 +4363,23 @@ class Vantage(HamiltonLiquidHandler):
       command="VB",
       cw=hex(tadm_channel_pattern_num)[2:].upper(),
     )
+
+  async def ipg_request_initialization_status(self) -> bool:
+    """ Request initialization status of IPG.
+
+    This command was based on the STAR command (QW) and the VStarTranslator log. A1AM corresponds
+    to "arm".
+
+    Returns:
+      True if the ipg module is initialized, False otherwise.
+    """
+
+    resp = await self.send_command(
+      module="A1RM",
+      command="QW",
+      fmt={"qw": "int"}
+    )
+    return resp is not None and resp["qw"] == 1
 
   async def ipg_initialize(self):
     """ Initialize IPG """
