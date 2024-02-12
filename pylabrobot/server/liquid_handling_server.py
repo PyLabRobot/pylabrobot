@@ -13,7 +13,7 @@ import werkzeug
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.standard import PipettingOp, Pickup, Aspiration, Dispense, Drop
+from pylabrobot.liquid_handling.standard import PipettingOp, Pickup, Aspiration, Dispense, Drop, Move
 from pylabrobot.resources import Coordinate, Deck, Tip, Liquid, TecanTip400
 from pylabrobot.serializer import serialize, deserialize
 import usb.backend.libusb0 as libusb0
@@ -94,6 +94,22 @@ def get_status():
 @lh_api.route("/rinse", methods=["POST"])
 async def rinse_tips():
   return add_and_run_task(Task(current_app.lh.rinse_tips()))
+
+
+@lh_api.route("/move_plate", methods=["POST"])
+async def move_plate():
+
+  data = request.get_json()
+
+  resource_name = data["resource_name"]
+  to = data["to"]
+  resource = current_app.lh.deck.get_resource(resource_name)
+
+  move = Move(resource=resource, to=to)
+
+  print(resource_name, to, move)
+
+  return add_and_run_task(Task(current_app.lh.move_resource(resource, to)))
 
 
 @lh_api.route("/layout", methods=["GET"])

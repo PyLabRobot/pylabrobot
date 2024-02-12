@@ -553,8 +553,10 @@ class EVO(TecanLiquidHandler):
 
     z_range = await self.roma.report_z_param(5)
     x, y, z = self._roma_positions(move.resource, move.resource.get_absolute_location(), z_range)
+    print("debug roma 1")
     h = int(move.resource.get_size_y() * 10)
     xt, yt, zt = self._roma_positions(move.resource, move.to, z_range)
+    print("debug roma 2")
 
     # move to resource
     await self.roma.set_smooth_move_x(1)
@@ -806,13 +808,16 @@ class EVO(TecanLiquidHandler):
     par = resource.parent
     if par is None:
       raise ValueError(f"Operation is not supported by resource {resource}.")
+    print("debug roma 3")
     par = par.parent
     if not isinstance(par, TecanPlateCarrier):
       raise ValueError(f"Operation is not supported by resource {par}.")
+    print("debug roma 4")
 
     if par.roma_x is None or par.roma_y is None or par.roma_z_safe is None \
       or par.roma_z_travel is None or par.roma_z_end is None:
       raise ValueError(f"Operation is not supported by resource {par}.")
+    print('debug roma 5')
     x_position = int((offset.x - 100)* 10 + par.roma_x)
     y_position = int((347.1 - (offset.y + resource.get_size_y())) * 10 + par.roma_y)
     z_positions = {
