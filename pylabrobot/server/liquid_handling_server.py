@@ -104,12 +104,14 @@ async def move_plate():
   resource_name = data["resource_name"]
   to = data["to"]
   resource = current_app.lh.deck.get_resource(resource_name)
+  resource_to = current_app.lh.deck.get_resource(to)
 
-  move = Move(resource=resource, to=to)
 
-  print(resource_name, to, move)
+  # move = Move(resource=resource, to=to)
 
-  return add_and_run_task(Task(current_app.lh.move_resource(resource, to)))
+  print(resource_name, resource_to.location)
+
+  return add_and_run_task(Task(current_app.lh.move_resource(resource, resource_to.location)))
 
 
 @lh_api.route("/layout", methods=["GET"])
@@ -150,6 +152,7 @@ def define_labware():
     return jsonify({"error": "json data must be a dict"}), 400
 
   try:
+    print(data["deck"])
     deck = Deck.deserialize(data=data["deck"])
     current_app.lh.deck = deck
   except KeyError as e:
