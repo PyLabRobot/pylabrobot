@@ -271,7 +271,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
 
-    # labware_id = self.defined_labware[op.resource.parent.parent.name] # get name of tip rack
     labware_id = self.defined_labware[op.resource.parent.name] # get name of tip rack
     tip_max_volume = 20 # op.resource.maximal_volume
     pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=False)
