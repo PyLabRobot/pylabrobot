@@ -242,7 +242,6 @@ class EVO(TecanLiquidHandler):
 
     if self.roma_connected: # position_initialization_x in reverse order from setup_arm
       self.roma = RoMa(self, EVO.ROMA)
-      await self._park_liha()
       await self.roma.position_initialization_x()
       # move to home position (TBD) after initialization
       await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
