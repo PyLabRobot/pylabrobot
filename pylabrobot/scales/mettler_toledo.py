@@ -170,13 +170,13 @@ class MettlerToledoWXS205SDU(ScaleBackend):
 
   async def tare(
     self,
-    timeout: Union[Literal["stable"], float] = "stable"
+    timeout: Union[Literal["stable"], float, int] = "stable"
   ) -> MettlerToledoResponse:
     """ High level function to tare the scale.
 
     Args:
       timeout: The timeout in seconds. If "stable", the scale will tare when the weight is stable.
-        If 0, the scale will tare immediately. If a float, the scale will tare after the given
+        If 0, the scale will tare immediately. If a float/int, the scale will tare after the given
         timeout (in seconds).
     """
 
@@ -187,7 +187,7 @@ class MettlerToledoWXS205SDU(ScaleBackend):
       # "Use T to tare the balance. The next stable weight value will be saved in the tare memory."
       return await self.tare_stable()
 
-    if not isinstance(timeout, float):
+    if not isinstance(timeout, (float, int)):
       raise TypeError("timeout must be a float or 'stable'")
 
     if timeout < 0:
@@ -257,19 +257,19 @@ class MettlerToledoWXS205SDU(ScaleBackend):
     assert response[3] == "g" # this is the format we expect
     return weight
 
-  async def get_weight(self, timeout: Union[Literal["stable"], float] = "stable") -> float:
+  async def get_weight(self, timeout: Union[Literal["stable"], float, int] = "stable") -> float:
     """ High level function to get a weight value from the scale.
 
     Args:
       timeout: The timeout in seconds. If "stable", the scale will return a weight value when the
-        weight is stable. If 0, the scale will return a weight value immediately. If a float, the
-        scale will return a weight value after the given timeout (in seconds).
+        weight is stable. If 0, the scale will return a weight value immediately. If a float/int,
+        the scale will return a weight value after the given timeout (in seconds).
     """
 
     if timeout == "stable":
       return await self.get_stable_weight()
 
-    if not isinstance(timeout, float):
+    if not isinstance(timeout, (float, int)):
       raise TypeError("timeout must be a float or 'stable'")
 
     if timeout < 0:
@@ -304,20 +304,20 @@ class MettlerToledoWXS205SDU(ScaleBackend):
 
   async def zero(
     self,
-    timeout: Union[Literal["stable"], float] = "stable"
+    timeout: Union[Literal["stable"], float, int] = "stable"
   ) -> MettlerToledoResponse:
     """ High level function to zero the scale.
 
     Args:
       timeout: The timeout in seconds. If "stable", the scale will zero when the weight is stable.
-        If 0, the scale will zero immediately. If a float, the scale will zero after the given
+        If 0, the scale will zero immediately. If a float/int, the scale will zero after the given
         timeout (in seconds).
     """
 
     if timeout == "stable":
       return await self.zero_stable()
 
-    if not isinstance(timeout, float):
+    if not isinstance(timeout, (float, int)):
       raise TypeError("timeout must be a float or 'stable'")
 
     if timeout < 0:

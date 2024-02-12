@@ -9,14 +9,14 @@ class Scale(MachineFrontend):
     super().__init__(backend=backend)
     self.backend: ScaleBackend = backend # fix type
 
-  async def tare(self):
+  async def tare(self, **backend_kwargs):
     """ Tare the scale """
-    await self.backend.tare()
+    await self.backend.tare(**backend_kwargs)
 
-  async def zero(self):
+  async def zero(self, **backend_kwargs):
     """ Zero the scale """
-    await self.backend.zero()
+    await self.backend.zero(**backend_kwargs)
 
-  async def get_weight(self) -> float:
+  async def get_weight(self, **backend_kwargs) -> float:
     """ Get the weight in grams """
-    return await self.backend.get_weight()
+    return await self.backend.get_weight(**backend_kwargs)
