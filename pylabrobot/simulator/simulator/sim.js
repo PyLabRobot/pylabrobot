@@ -439,50 +439,69 @@ function dispense96(dispense) {
   }
 }
 
-async function handleEvent(event, data) {
+function hideSetupInstruction() {
+  let noRootResourceInfo = document.getElementById("setup-instruction");
+  noRootResourceInfo.style.display = "none";
+}
+
+async function handleEvent(id, event, data) {
   if (event === "ready") {
     return; // don't parse response.
   }
 
-  var resource = undefined;
-  if (data.resource) {
-    resource = data.resource;
+  if (event === "pong") {
+    return; // don't respond to pongs.
   }
 
   const ret = {
     event: event,
-    id: data.id,
+    id: id,
   };
 
   console.log("[event] " + event, data);
 
   switch (event) {
-    case "resource_assigned":
+    case "set_root_resource":
       resource = loadResource(data.resource);
-      resource.draw(resourceLayer);
 
-      if (resource.name === "deck") {
+      // the code for setting up a deck thingy should be move into a new LiquidHandler resource.
+      if (data.resource.type === "LiquidHandler") {
         // infer the system from the deck.
-        if (data.resource.type === "OTDeck") {
+        let deck = data.resource.children[0];
+        mainHead = []; // reset the mainHead
+
+        if (deck.type === "OTDeck") {
           system = SYSTEM_OPENTRONS;
           // Just one channel for Opentrons right now. Should create a UI to select the config.
           mainHead.push(new PipettingChannel("Channel: 1"));
-        } else if (
-          ["HamiltonSTARDeck", "HamiltonDeck"].includes(data.resource.type)
-        ) {
+        } else if (["HamiltonSTARDeck", "HamiltonDeck"].includes(deck.type)) {
           system = SYSTEM_HAMILTON;
           for (let i = 0; i < 8; i++) {
             mainHead.push(new PipettingChannel(`Channel: ${i + 1}`));
           }
+        } else {
+          let errorString = `Unknown deck type: ${deck.type}. Supported deck types: OTDeck, HamiltonSTARDeck, HamiltonDeck.`;
+          alert(errorString);
+          throw new Error(errorString);
         }
-
-        // center the deck in the stage.
-        let centerXOffset = (stage.width() - resource.size_x) / 2;
-        let centerYOffset = (stage.height() - resource.size_y) / 2;
-        stage.x(centerXOffset);
-        stage.y(-centerYOffset);
       }
 
+      hideSetupInstruction();
+
+      resource.location = { x: 0, y: 0, z: 0 };
+      resource.draw(resourceLayer);
+
+      // center the root resource on the stage.
+      let centerXOffset = (stage.width() - resource.size_x) / 2;
+      let centerYOffset = (stage.height() - resource.size_y) / 2;
+      stage.x(centerXOffset);
+      stage.y(-centerYOffset);
+
+      break;
+
+    case "resource_assigned":
+      resource = loadResource(data.resource);
+      resource.draw(resourceLayer);
       break;
 
     case "resource_unassigned":
@@ -581,9 +600,6 @@ async function handleEvent(event, data) {
       }
       break;
 
-    case "pong":
-      break;
-
     default:
       ret.error = "Unknown event";
       break;
@@ -641,7 +657,7 @@ function openSocket() {
     var data = event.data;
     data = JSON.parse(data);
     console.log(`[message] Data received from server:`, data);
-    handleEvent(data.event, data);
+    handleEvent(data.id, data.event, data.data);
   });
 }
 

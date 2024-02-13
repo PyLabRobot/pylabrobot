@@ -151,3 +151,7 @@ h3.form-row-header {
 #settings-content input {
   text-align: right;
 }
+
+#setup-instruction {
+  padding-top: 50px;
+}

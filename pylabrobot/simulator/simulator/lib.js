@@ -860,6 +860,13 @@ class CarrierSite extends Resource {
   }
 }
 
+class LiquidHandler extends Resource {
+  drawMainShape() {
+    // don't draw anything, just draw the children
+    return undefined;
+  }
+}
+
 function classForResourceType(type) {
   switch (type) {
     case "Deck":
@@ -895,6 +902,8 @@ function classForResourceType(type) {
         "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"
       );
       return HamiltonSTARDeck;
+    case "LiquidHandler":
+      return LiquidHandler;
     default:
       return Resource;
   }
