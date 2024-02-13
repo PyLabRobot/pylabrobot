@@ -143,7 +143,6 @@ def calculate_liquid_volume_container_2segments_round_ubottom(
     cylinder_liquid_height = liquid_height - r
     cylinder_liquid_volume = math.pi * r**2 * cylinder_liquid_height
     # Total liquid volume is the sum of the hemisphere and cylinder volumes
-    print(cylinder_liquid_volume)
     liquid_volume = full_hemisphere_volume + cylinder_liquid_volume
 
   return float(liquid_volume)
