@@ -30,7 +30,6 @@ logger = logging.getLogger("pylabrobot")
 class SimulatorBackend(abc.ABC):
   """ Abstract base class for backends that communicate with the simulator. """
 
-  @abc.abstractmethod
   def __init__(self, simulator: "Simulator"):
     """ Create a new backend. This will connect to the
     {class}`~pylabrobot.simulator.Simulator` and send commands to it.
@@ -82,7 +81,7 @@ class Simulator:
 
     self.setup_finished = False
     self.devices: Dict[SimulatorBackend, str] = {}
-    self.root_resource: Optional[Resource] = None
+    self._root_resource: Optional[Resource] = None
 
     # file server attributes
     self.fs_host = fs_host
@@ -252,8 +251,7 @@ class Simulator:
       raise RuntimeError("Cannot wait for response when no websocket connection is established.")
 
     if self.has_connection():
-      # TODO: why not just await self.websocket.send(serialized_data)?
-      asyncio.run_coroutine_threadsafe(self.websocket.send(serialized_data), self.loop)
+      await self.websocket.send(serialized_data)
 
       if wait_for_response:
         while True:
@@ -261,7 +259,7 @@ class Simulator:
             message = self.received.pop()
             if "id" in message and message["id"] == id_:
               break
-          time.sleep(0.1)
+          await asyncio.sleep(0.1)
 
         if not message["success"]:
           error = message.get("error", "unknown error")
@@ -411,7 +409,7 @@ class Simulator:
     """
 
     self.devices = {}
-    self.root_resource = None
+    self._root_resource = None
 
     # -- file server --
     # Stop the file server.
@@ -442,30 +440,79 @@ class Simulator:
 
     self.setup_finished = False
 
-  def _send_resource_assigned_event(self, resource: Resource):
-    """ Send a resource assigned event to the browser. """
-    data = {
-      "resource": resource.serialize(),
-      "parent_name": (resource.parent.name if resource.parent else None)
-    }
-    fut = self.send_command(
-      event="resource_assigned",
-      data=data,
-      device=None,
-      wait_for_response=False)
+  async def add_devices(self, resource: Resource) -> None:
+    """ Traverse the resource tree (starting from the resource given in the argument) and add all
+    devices to the simulator.
+    """
+
+    if isinstance(resource, Machine):
+      await self.send_command(event="add_device", data={"device_name": resource.name}, device=None)
+      self.devices[resource.backend] = resource.name
+
+    for child in resource.children:
+      await self.add_devices(child)
+
+  async def remove_device(self, resource: Resource) -> None:
+    """ Remove a device and all devices in its subtree from the simulator. """
+
+    if isinstance(resource, Machine):
+      del self.devices[resource.backend]
+      await self.send_command(event="remove_device", data={"device_name": resource.name},
+                              device=None)
+
+    for child in resource.children:
+      await self.remove_device(child)
+
+  def _handle_resource_assigned_callback(self, resource: Resource) -> None:
+    """ Called when a resource is assigned to a resource already in the tree starting from the
+    root resource. This method will 1) send an event about the new resource, and 2) find any devices
+    in the resource tree and add them to the simulator. """
+
+    async def send_events_to_browser():
+      # This is wrapped in a function so that we can make a single run_coroutine_threadsafe call.
+      # This will ensure that the events are sent in the correct order.
+
+      # Send a `resource_assigned` event to the browser.
+      data = {
+        "resource": resource.serialize(),
+        "parent_name": (resource.parent.name if resource.parent else None)
+      }
+      await self.send_command(
+        event="resource_assigned",
+        data=data,
+        device=None,
+        wait_for_response=False)
+
+      # Traverse the resource tree and add all devices to the simulator.
+      await self.add_devices(resource)
+
+    fut = send_events_to_browser()
     asyncio.run_coroutine_threadsafe(fut, self.loop)
 
-  def _send_resource_unassigned_event(self, resource: Resource):
-    """ Send a resource unassigned event to the browser. """
-    data = {
-      "resource": resource.serialize(),
-      "parent_name": (resource.parent.name if resource.parent else None)
-    }
-    fut = self.send_command(
-      event="resource_unassigned",
-      data=data,
-      device=None,
-      wait_for_response=False)
+  def _handle_resource_unassigned_callback(self, resource: Resource) -> None:
+    """ Called when a resource is unassigned from a resource already in the tree starting from the
+    root resource. This method will 1) send an event about the removed resource, and 2) find any
+    devices in the resource tree and remove them from the simulator. """
+
+    async def send_events_to_browser():
+      # This is wrapped in a function so that we can make a single run_coroutine_threadsafe call.
+      # This will ensure that the events are sent in the correct order.
+
+      # Send a `resource_unassigned` event to the browser.
+      data = {
+        "resource": resource.serialize(),
+        "parent_name": (resource.parent.name if resource.parent else None)
+      }
+      await self.send_command(
+        event="resource_unassigned",
+        data=data,
+        device=None,
+        wait_for_response=False)
+
+      # Traverse the resource tree and remove all devices from the simulator.
+      await self.remove_device(resource)
+
+    fut = send_events_to_browser()
     asyncio.run_coroutine_threadsafe(fut, self.loop)
 
   async def set_root_resource(self, resource: Resource) -> None:
@@ -478,24 +525,19 @@ class Simulator:
       resource: The root resource.
     """
 
-    if self.root_resource is not None:
+    if self._root_resource is not None:
       raise RuntimeError("The root resource has already been set.")
 
-    self.root_resource = resource
     await self.send_command("set_root_resource", {"resource": resource.serialize()})
+    self._root_resource = resource
 
-    # TODO: this should be done by traversing the tree, not just for the root node.
-    if isinstance(resource, Machine):
-      self.devices[resource.backend] = resource.name
-
-    # TODO: traverse tree and save a link to each Machine in the tree.
+    # Traverse the resource tree and add all devices to the simulator.
+    await self.add_devices(resource)
 
     # Hook into the resource (un)assigned callbacks so we can send the appropriate events to the
     # browser.
-    resource.register_did_assign_resource_callback(self._send_resource_assigned_event)
-    resource.register_did_unassign_resource_callback(self._send_resource_unassigned_event)
-
-    # TODO: add a callback for catching machines and adding them to the simulator
+    resource.register_did_assign_resource_callback(self._handle_resource_assigned_callback)
+    resource.register_did_unassign_resource_callback(self._handle_resource_unassigned_callback)
 
   # --- Some methods for editing the deck state ---
 
