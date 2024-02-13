@@ -19,7 +19,6 @@ class TipSize(enum.Enum):
   HIGH_VOLUME=3
   CORE_384_HEAD_TIP=4
   XL=5
-  FIFTY_UL=6
 
 
 class TipPickupMethod(enum.Enum):
@@ -208,8 +207,18 @@ def fifty_ul_tip_with_filter() -> HamiltonTip:
   """ 50 ul tip with a filter (Hamilton cat. no.: 235948) """
   return HamiltonTip(
     has_filter=True,
-    total_tip_length=50,
-    maximal_volume=50,
-    tip_size=TipSize.FIFTY_UL,
+    total_tip_length=50.4,
+    maximal_volume=60,
+    tip_size=TipSize.STANDARD_VOLUME,
+    pickup_method=TipPickupMethod.OUT_OF_RACK
+  )
+
+def fifty_ul_tip() -> HamiltonTip:
+  """ 50 ul tip with a filter (Hamilton cat. no.: 235966) """
+  return HamiltonTip(
+    has_filter=False,
+    total_tip_length=50.4,
+    maximal_volume=65,
+    tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK
   )
