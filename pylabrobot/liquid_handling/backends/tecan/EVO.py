@@ -237,16 +237,49 @@ class EVO(TecanLiquidHandler):
     """
     await super().setup()
 
+    print("setting up arms")
     self._liha_connected = await self.setup_arm(EVO.LIHA)
+    self._pnp_connected = await self.setup_arm(EVO.PNP)
     self._roma_connected = await self.setup_arm(EVO.ROMA)
 
     if self.roma_connected: # position_initialization_x in reverse order from setup_arm
       self.roma = RoMa(self, EVO.ROMA)
       await self.roma.position_initialization_x()
+      print("roma connected")
       # move to home position (TBD) after initialization
       await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
       await self.roma.action_move_vector_coordinate_position()
+    if self.pnp_connected:
+      print("pnp connected")
+      self.pnp = PnP(self, EVO.PNP)
+      await self.pnp.position_initialization_x()
+
+      xloc = await self.pnp.report_x_param(0)
+      yloc = await self.pnp.report_y_param(0)
+      zloc = await self.pnp.report_z_param(0)
+
+      print(xloc, yloc, zloc)
+
+      xloc2 = await self.pnp.report_x_param(5)
+      yloc2 = await self.pnp.report_y_param(5)
+      zloc2 = await self.pnp.report_z_param(5)
+
+      print(xloc2, yloc2, zloc2)
+
+      # await self.pnp.position_absolute_all_axis(2000, -765, 90, [2591])
+
+      await self.pnp.position_absolute_x_axis(7000)
+
+      xloc = await self.pnp.report_x_param(0)
+      yloc = await self.pnp.report_y_param(0)
+      zloc = await self.pnp.report_z_param(0)
+
+      print(xloc, yloc, zloc)
+
+
+
     if self.liha_connected:
+      print("liha connected")
       self.liha = LiHa(self, EVO.LIHA)
       await self.liha.position_initialization_x()
 
@@ -256,7 +289,7 @@ class EVO(TecanLiquidHandler):
     self._z_range = (await self.liha.report_z_param(5))[0]
     # print(self._z_range)
 
-    # Initialize plungers. Assumes wash station assigned at rail 1.
+    # # Initialize plungers. Assumes wash station assigned at rail 1.
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
     await self.liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
@@ -340,6 +373,11 @@ class EVO(TecanLiquidHandler):
       ops: The aspiration operations to perform.
       use_channels: The channels to use for the operations.
     """
+
+    await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
+    await self.roma.action_move_vector_coordinate_position()
+    await self.pnp.position_absolute_x_axis(7000)
+
 
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
 
@@ -429,6 +467,13 @@ class EVO(TecanLiquidHandler):
       ops: The dispense operations to perform.
       use_channels: The channels to use for the dispense operations.
     """
+
+
+
+    await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
+    await self.roma.action_move_vector_coordinate_position()
+    await self.pnp.position_absolute_x_axis(7000)
+
 
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
     ys = int(ops[0].resource.get_size_y() * 10)
@@ -551,7 +596,12 @@ class EVO(TecanLiquidHandler):
 
     # TODO: implement PnP for moving tubes
     assert self.roma_connected
+    await self._park_liha()
 
+    await self.liha.position_initialization_x()
+    await self.pnp.position_absolute_x_axis(1500)
+
+    print(move)
     z_range = await self.roma.report_z_param(5)
     x, y, z = self._roma_positions(move.resource, move.resource.get_absolute_location(), z_range)
     print("debug roma 1")
@@ -569,6 +619,8 @@ class EVO(TecanLiquidHandler):
     await self.roma.action_move_vector_coordinate_position()
     await self.roma.set_smooth_move_x(0)
 
+    print("debug roma movement 1")
+
     # pick up resource
     await self.roma.position_absolute_g(900) # TODO: verify
     await self.roma.set_target_window_class(1, 0, 0, 0, 135, 0)
@@ -581,18 +633,29 @@ class EVO(TecanLiquidHandler):
     await self.roma.set_gripper_params(100, 75)
     await self.roma.grip_plate(h - 100)
 
+    print("debug roma movement 2")
+
+
     # move to target
     await self.roma.set_target_window_class(1, 0, 0, 0, 135, 0)
     await self.roma.set_target_window_class(2, 0, 0, 0, 53, 0)
     await self.roma.set_target_window_class(3, 0, 0, 0, 55, 0)
     await self.roma.set_target_window_class(4, 45, 0, 0, 0, 0)
+    print("debug roma movement 3.1")
     await self.roma.set_vector_coordinate_position(1, x, y, z["end"], 900, None, 1, 1)
+    print("debug roma movement 3.1.1")
     await self.roma.set_vector_coordinate_position(2, x, y, z["travel"], 900, None, 1, 2)
+    print("debug roma movement 3.1.2")
     await self.roma.set_vector_coordinate_position(3, x, y, z["safe"], 900, None, 1, 3)
+    print("debug roma movement 3.1.3")
     await self.roma.set_vector_coordinate_position(4, xt, yt, zt["safe"], 900, None, 1, 4)
+    print("debug roma movement 3.1.4")
     await self.roma.set_vector_coordinate_position(5, xt, yt, zt["travel"], 900, None, 1, 3)
+    print("debug roma movement 3.1.5")
     await self.roma.set_vector_coordinate_position(6, xt, yt, zt["end"], 900, None, 1, 0)
+    print("debug roma movement 3.2")
     await self.roma.action_move_vector_coordinate_position()
+    print("debug roma movement 3")
 
     # release resource
     await self.roma.position_absolute_g(900)
@@ -604,6 +667,7 @@ class EVO(TecanLiquidHandler):
     await self.roma.action_move_vector_coordinate_position()
     await self.roma.set_fast_speed_y(3500, 1000)
     await self.roma.set_fast_speed_r(2000, 600)
+    print("debug roma movement 4")
 
   def _first_valid(
     self,
@@ -1227,6 +1291,7 @@ class RoMa(EVOArm):
     for module, pos in EVOArm._pos_cache.items():
       if module == self.module:
         continue
+      print(module, pos, cur_x, x)
       if cur_x < pos < x or x < pos < cur_x or abs(pos - x) < 1500:
         raise TecanError("Invalid command (collision)", self.module, 2)
 
@@ -1292,3 +1357,170 @@ class RoMa(EVOArm):
     await self.backend.send_command(module=self.module, command="STW",
                                     params=[wc, x, y, z, r, g])
 
+class PnP(EVOArm):
+  """
+  Provides firmware commands for the PnP head
+  """
+
+  async def report_z_param(self, param: int) -> int:
+    """ Report current parameter for z-axis.
+
+    Args:
+      param: 0 - current position, 5 - actual machine range
+    """
+
+    resp: List[int] = (await self.backend.send_command(module=self.module,
+                             command="RPZ", params=[param]))["data"]
+    return resp[0]
+
+  async def report_r_param(self, param: int) -> int:
+    """ Report current parameter for r-axis.
+
+    Args:
+      param: 0 - current position, 5 - actual machine range
+    """
+
+    resp: List[int] = (await self.backend.send_command(module=self.module,
+                             command="RPR", params=[param]))["data"]
+    return resp[0]
+
+  async def report_g_param(self, param: int) -> int:
+    """ Report current parameter for g-axis.
+
+    Args:
+      param: 0 - current position, 5 - actual machine range
+    """
+
+    resp: List[int] = (await self.backend.send_command(module=self.module,
+                             command="RPG", params=[param]))["data"]
+    return resp[0]
+
+  async def set_smooth_move_x(self, mode: int):
+    """ Sets X-axis smooth move.
+
+    Args:
+      mode: 0 - active, 1 - normal acceleration and speed used
+    """
+
+    await self.backend.send_command(module=self.module, command="SSM", params=[mode])
+
+  async def set_fast_speed_x(self, speed: Optional[int], accel: Optional[int] = None):
+    """ Set fast speed and acceleration for X-axis.
+
+    Args:
+      speed: fast speed in 1/10 mm/s
+      accel: acceleration in 1/10 mm/s^2
+    """
+
+    await self.backend.send_command(module=self.module, command="SFX", params=[speed, accel])
+
+  async def set_fast_speed_y(self, speed: Optional[int], accel: Optional[int] = None):
+    """ Set fast speed and acceleration for Y-axis.
+
+    Args:
+      speed: fast speed in 1/10 mm/s
+      accel: acceleration in 1/10 mm/s^2
+    """
+
+    await self.backend.send_command(module=self.module, command="SFY", params=[speed, accel])
+
+  async def set_fast_speed_z(self, speed: Optional[int], accel: Optional[int] = None):
+    """ Set fast speed and acceleration for Z-axis.
+
+    Args:
+      speed: fast speed in 1/10 mm/s
+      accel: acceleration in 1/10 mm/s^2
+    """
+
+    await self.backend.send_command(module=self.module, command="SFZ", params=[speed, accel])
+
+  async def set_fast_speed_r(self, speed: Optional[int], accel: Optional[int] = None):
+    """ Set fast speed and acceleration for R-axis.
+
+    Args:
+      speed: fast speed in 1/10 dg/s
+      accel: acceleration in 1/10 dg/s^2
+    """
+
+    await self.backend.send_command(module=self.module, command="SFR", params=[speed, accel])
+
+  async def set_vector_coordinate_position(
+    self,
+    v: int,
+    x: int,
+    y: int,
+    z: int,
+    r: int,
+    g: Optional[int],
+    speed: int,
+    tw: int = 0
+  ):
+    """ Sets vector coordinate positions into table.
+
+    Args:
+      v: vector to be defined, must be between 1 and 100
+      x: aboslute x position in 1/10 mm
+      y: aboslute y position in 1/10 mm
+      z: aboslute z position in 1/10 mm
+      r: aboslute r position in 1/10 mm
+      g: aboslute g position in 1/10 mm
+      speed: speed select, 0 - slow, 1 - fast
+      tw: target window class, set with STW
+
+    Raises:
+      TecanError: if moving to the target position causes a collision
+    """
+
+    cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
+    for module, pos in EVOArm._pos_cache.items():
+      if module == self.module:
+        continue
+      print(module, pos, cur_x, x)
+      if cur_x < pos < x or x < pos < cur_x or abs(pos - x) < 1500:
+        raise TecanError("Invalid command (collision)", self.module, 2)
+
+    await self.backend.send_command(module=self.module, command="SAA",
+                                    params=[v, x, y, z, r, g, speed, 0, tw])
+
+  async def action_move_vector_coordinate_position(self):
+    """ Starts coordinate movement, built by vector coordinate table. """
+
+    await self.backend.send_command(module=self.module, command="AAC")
+
+    EVOArm._pos_cache[self.module] = await self.report_x_param(0)
+
+
+  async def position_absolute_x_axis(self, x: int):
+    """ Position absolute for X-axis.
+
+    Args:
+      x: aboslute x position in 1/10 mm, must be in allowed machine range
+    """
+
+    await self.backend.send_command(module=self.module, command="PAX", params=[x])
+
+
+  async def position_absolute_all_axis(self, x: int, y: int, ys: int, z: List[int]):
+    """ Position absolute for all LiHa axes.
+
+    Args:
+      x: aboslute x position in 1/10 mm, must be in allowed machine range
+      y: absolute y position in 1/10 mm, must be in allowed machine range
+      ys: absolute y spacing in 1/10 mm, must be between 90 and 380
+      z: absolute z position in 1/10 mm for each channel, must be in
+         allowed machine range
+
+    Raises:
+      TecanError: if moving to the target position causes a collision
+    """
+
+    cur_x = EVOArm._pos_cache.setdefault(self.module, await self.report_x_param(0))
+    for module, pos in EVOArm._pos_cache.items():
+      if module == self.module:
+        continue
+      if cur_x < pos < x or x < pos < cur_x or abs(pos - x) < 1500:
+        raise TecanError("Invalid command (collision)", self.module, 2)
+
+    await self.backend.send_command(module=self.module, command="PAA", params=list([x, y, ys] + z))
+
+    EVOArm._pos_cache[self.module] = x

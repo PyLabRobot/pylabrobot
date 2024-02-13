@@ -109,9 +109,9 @@ async def move_plate():
 
   # move = Move(resource=resource, to=to)
 
-  print(resource_name, resource_to.location)
+  print(resource_name, resource_to.get_absolute_location())
 
-  return add_and_run_task(Task(current_app.lh.move_resource(resource, resource_to.location)))
+  return add_and_run_task(Task(current_app.lh.move_resource(resource, resource_to.get_absolute_location())))
 
 
 @lh_api.route("/layout", methods=["GET"])
