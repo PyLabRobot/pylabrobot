@@ -27,8 +27,8 @@ backend = STAR()
 lh = LiquidHandler(backend=backend, deck=deck)
 
 # Get references to the resources you need. Use type hinting for autocompletion.
-tip_rack: TipRack = lh.get_resource('tip_rack')
-plate: Plate = lh.get_resource('plate')
+tip_rack: TipRack = lh.deck.get_resource('tip_rack')
+plate: Plate = lh.deck.get_resource('plate')
 
 # the protocol...
 lh.pick_up_tip(tip_rack["A1"])

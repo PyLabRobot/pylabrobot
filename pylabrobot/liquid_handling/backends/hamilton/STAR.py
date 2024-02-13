@@ -1197,45 +1197,25 @@ class STAR(HamiltonLiquidHandler):
 
             raise he
 
-    async def send_command(
-        self,
-        module: str,
-        command: str,
-        tip_pattern: Optional[List[bool]] = None,
-        write_timeout: Optional[int] = None,
-        read_timeout: Optional[int] = None,
-        wait=True,
-        fmt: str = "",
-        **kwargs,
-    ):
-        """Send a command to the machine. Parse the response if `fmt != ""`, else return the raw
-        response."""
+  def _parse_response(self, resp: str, fmt: str) -> dict:
+    """ Parse a response from the machine. """
+    return parse_star_fw_string(resp, fmt)
 
-        resp = await super().send_command(
-            module=module,
-            command=command,
-            tip_pattern=tip_pattern,
-            write_timeout=write_timeout,
-            read_timeout=read_timeout,
-            wait=wait,
-            **kwargs,
-        )
-        if fmt != "":
-            parsed = parse_star_fw_string(resp, fmt)
-            return parsed
-        return resp
-
-    async def send_raw_command(
-        self, command: str, write_timeout: Optional[int] = None, read_timeout: Optional[int] = None, wait: bool = True
-    ) -> Optional[dict]:
-        """Send a raw command to the machine."""
-        id_index = command.find("id")
-        if id_index == -1:
-            raise ValueError("Command must contain an id.")
-        id_str = command[id_index + 2 : id_index + 6]
-        if not id_str.isdigit():
-            raise ValueError("Id must be a 4 digit int.")
-        id_ = int(id_str)
+  async def send_raw_command(
+    self,
+    command: str,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait: bool = True
+  ) -> Optional[str]:
+    """ Send a raw command to the machine. """
+    id_index = command.find("id")
+    if id_index == -1:
+      raise ValueError("Command must contain an id.")
+    id_str = command[id_index + 2 : id_index + 6]
+    if not id_str.isdigit():
+      raise ValueError("Id must be a 4 digit int.")
+    id_ = int(id_str)
 
         return await super()._write_and_read_command(
             id_=id_,
@@ -2663,11 +2643,11 @@ class STAR(HamiltonLiquidHandler):
 
         # pylint: disable=undefined-variable
 
-        resp = await self.send_command(module="C0", command="QB", fmt="")
-        try:
-            return STAR.BoardType(resp["qb"])
-        except ValueError:
-            return STAR.BoardType.UNKNOWN
+    resp = await self.send_command(module="C0", command="QB")
+    try:
+      return STAR.BoardType(resp["qb"])
+    except ValueError:
+      return STAR.BoardType.UNKNOWN
 
     # TODO: parse response.
     async def request_supply_voltage(self):
@@ -4327,7 +4307,7 @@ class STAR(HamiltonLiquidHandler):
     async def spread_pip_channels(self):
         """Spread PIP channels"""
 
-        return await self.send_command(module="C0", command="JE", fmt="")
+    return await self.send_command(module="C0", command="JE")
 
     async def move_all_pipetting_channels_to_defined_position(
         self,
@@ -6186,22 +6166,22 @@ class STAR(HamiltonLiquidHandler):
     async def lock_cover(self):
         """Lock cover"""
 
-        return await self.send_command(module="C0", command="CO", fmt="")
+    return await self.send_command(module="C0", command="CO")
 
     async def unlock_cover(self):
         """Unlock cover"""
 
-        return await self.send_command(module="C0", command="HO", fmt="")
+    return await self.send_command(module="C0", command="HO")
 
     async def disable_cover_control(self):
         """Disable cover control"""
 
-        return await self.send_command(module="C0", command="CD", fmt="")
+    return await self.send_command(module="C0", command="CD")
 
     async def enable_cover_control(self):
         """Enable cover control"""
 
-        return await self.send_command(module="C0", command="CE", fmt="")
+    return await self.send_command(module="C0", command="CE")
 
     async def set_cover_output(self, output: int = 0):
         """Set cover output
@@ -6210,8 +6190,8 @@ class STAR(HamiltonLiquidHandler):
           output: 1 = cover lock; 2 = reserve out; 3 = reserve out.
         """
 
-        assert 1 <= output <= 3, "output must be between 1 and 3"
-        return await self.send_command(module="C0", command="OS", on=output, fmt="")
+    assert 1 <= output <= 3, "output must be between 1 and 3"
+    return await self.send_command(module="C0", command="OS", on=output)
 
     async def reset_output(self, output: int = 0):
         """Reset output
