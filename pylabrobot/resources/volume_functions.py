@@ -4,20 +4,20 @@ import math
 
 
 def calculate_liquid_volume_container_2segments_square_vbottom(
-    x: float,
-    y: float,
-    h_pyramid: float,
-    h_cube: float,
-    liquid_height: float
-  ) -> float:
+  x: float,
+  y: float,
+  h_pyramid: float,
+  h_cube: float,
+  liquid_height: float
+) -> float:
   """
   Calculate the volume of liquid in a container consisting of an upside-down
-  square pyramid at the bottom and a cuboid on top. The container has the 
+  square pyramid at the bottom and a cuboid on top. The container has the
   same x and y dimensions for both the pyramid and the cuboid.
 
   The function calculates the volume based on whether the liquid height is within
   the pyramid or extends into the cuboid.
-     
+
   Parameters:
     x (float): The base length of the square pyramid and cube in mm.
     y (float): The base width of the square pyramid and cube in mm.
@@ -56,21 +56,21 @@ def calculate_liquid_volume_container_2segments_square_vbottom(
 
 
 def calculate_liquid_volume_container_2segments_round_vbottom(
-    d: float,
-    h_cone: float,
-    h_cylinder: float,
-    liquid_height: float
-  ) -> float:
+  d: float,
+  h_cone: float,
+  h_cylinder: float,
+  liquid_height: float
+) -> float:
   """
-  Calculate the volume of liquid in a container with a conical bottom and 
-  a cylindrical top. The container has the same radius for both the cone and 
+  Calculate the volume of liquid in a container with a conical bottom and
+  a cylindrical top. The container has the same radius for both the cone and
   the cylinder.
 
-  The function calculates the volume based on whether the liquid height is 
+  The function calculates the volume based on whether the liquid height is
   within the cone or extends into the cylinder.
 
   Parameters:
-    r (float): The radius of the base of the cone and cylinder in mm.
+    d (float): The diameter of the base of the cone and cylinder in mm.
     h_cone (float): The height of the cone in mm.
     h_cylinder (float): The height of the cylinder in mm.
     liquid_height (float): The height of the liquid in the container in mm.
@@ -104,20 +104,20 @@ def calculate_liquid_volume_container_2segments_round_vbottom(
 
 
 def calculate_liquid_volume_container_2segments_round_ubottom(
-    d: float,
-    h_cylinder: float,
-    liquid_height: float
-  ) -> float:
+  d: float,
+  h_cylinder: float,
+  liquid_height: float
+) -> float:
   """
-  Calculate the volume of liquid in a container with a hemispherical bottom 
-  and a cylindrical top. The container has the same radius for both the 
+  Calculate the volume of liquid in a container with a hemispherical bottom
+  and a cylindrical top. The container has the same radius for both the
   hemisphere and the cylinder.
 
-  The function calculates the volume based on whether the liquid height is 
+  The function calculates the volume based on whether the liquid height is
   within the hemisphere or extends into the cylinder.
 
   Parameters:
-    r (float): The radius of the base of the hemisphere and cylinder in mm.
+    d (float): The diameter of the base of the hemisphere and cylinder in mm.
     h_cylinder (float): The height of the cylinder in mm.
     liquid_height (float): The height of the liquid in the container in mm.
 

@@ -4,7 +4,7 @@ import datetime
 import logging
 import threading
 import time
-from typing import Dict, List, Optional, Sequence, Tuple, TypeVar, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 
 from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
@@ -165,6 +165,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
     wait = True,
+    fmt: Optional[Any] = None,
     **kwargs
   ):
     """ Send a firmware command to the Hamilton machine.
@@ -176,6 +177,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       read_timeout: read timeout in seconds. If None, `self.read_timeout` is used.
       wait: If True, wait for a response. If False, return `None` immediately after sending the
         command.
+      fmt: A format to use for the response. If `None`, the response is not parsed.
       kwargs: any named parameters. The parameter name should also be 2 characters long. The value
         can be of any size.
 
@@ -188,8 +190,11 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
 
     cmd, id_ = self._assemble_command(module=module, command=command, tip_pattern=tip_pattern,
       **kwargs)
-    return await self._write_and_read_command(id_=id_, cmd=cmd, write_timeout=write_timeout,
+    resp = await self._write_and_read_command(id_=id_, cmd=cmd, write_timeout=write_timeout,
                     read_timeout=read_timeout, wait=wait)
+    if resp is not None and fmt is not None:
+      return self._parse_response(resp, fmt)
+    return resp
 
   async def _write_and_read_command(
     self,
@@ -198,7 +203,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
     wait: bool = True
-  ) -> Optional[dict]:
+  ) -> Optional[str]:
     """ Write a command to the Hamilton machine and read the response. """
     self.write(cmd, timeout=write_timeout)
 
@@ -213,7 +218,7 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     fut = loop.create_future()
     self._start_reading(id_, loop, fut, cmd, read_timeout)
     result = await fut
-    return cast(dict, result) # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
+    return cast(str, result) # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
 
   def _start_reading(
     self,
@@ -239,6 +244,10 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
   @abstractmethod
   def check_fw_string_error(self, resp: str):
     """ Raise an error if the firmware response is an error response. """
+
+  @abstractmethod
+  def _parse_response(self, resp: str, fmt: Any) -> dict:
+    """ Parse a firmware response. """
 
   def _continuously_read(self) -> None:
     """ Continuously read from the USB port until all tasks are completed.
