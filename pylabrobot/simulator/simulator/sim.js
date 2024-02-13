@@ -17,18 +17,7 @@ var config = {
   max_core_head_location: -1,
 };
 
-// Initialize pipetting heads.
-const SYSTEM_HAMILTON = "Hamilton";
-const SYSTEM_OPENTRONS = "Opentrons";
-var system = undefined; // "Hamilton" or "Opentrons"
-
-var CoRe96Head = [];
-for (var i = 0; i < 8; i++) {
-  CoRe96Head[i] = [];
-  for (var j = 0; j < 12; j++) {
-    CoRe96Head[i].push(new PipettingChannel(`96 head: ${i * 12 + j}`));
-  }
-}
+let devices = {};
 
 const statusLabel = document.getElementById("status-label");
 const statusIndicator = document.getElementById("status-indicator");
@@ -72,36 +61,6 @@ function adjustResourceLiquids(liquids, resource_name) {
   resource.setLiquids(liquids);
 }
 
-function checkPipHeadReach(x) {
-  // Check if the x coordinate is within the pip head range. Undefined indicates no limit.
-  // Returns the error.
-  if (config.min_pip_head_location !== -1 && x < config.min_pip_head_location) {
-    return `x position ${x} not reachable, because it is lower than the left limit (${config.min_pip_head_location})`;
-  }
-  if (config.max_pip_head_location !== -1 && x > config.max_pip_head_location) {
-    return `x position ${x} not reachable, because it is higher than the right limit (${config.max_pip_head_location})`;
-  }
-  return undefined;
-}
-
-function checkCoreHeadReachable(x) {
-  // Check if the x coordinate is within the core head range. Undefined indicates no limit.
-  // Returns the error.
-  if (
-    config.min_core_head_location !== -1 &&
-    x < config.min_core_head_location
-  ) {
-    return `x position ${x} not reachable, because it is lower than the left limit (${config.min_core_head_location})`;
-  }
-  if (
-    config.max_core_head_location !== -1 &&
-    x > config.max_core_head_location
-  ) {
-    return `x position ${x} not reachable, because it is higher than the right limit (${config.max_core_head_location})`;
-  }
-  return undefined;
-}
-
 function editTips(pattern) {
   for (let i = 0; i < pattern.length; i++) {
     const { tip, has_one } = pattern[i];
@@ -114,72 +73,31 @@ function hideSetupInstruction() {
   noRootResourceInfo.style.display = "none";
 }
 
-async function handleEvent(id, event, data) {
-  if (event === "ready") {
-    return; // don't parse response.
+function setRootResource(data) {
+  resource = loadResource(data.resource);
+
+  // If the resource is a liquid handler, then add it to the devices list.
+  console.log("resource.constructor.name", resource.constructor.name);
+  if (resource.constructor.name === "LiquidHandler") {
+    devices[data.resource.name] = resource;
   }
 
-  if (event === "pong") {
-    return; // don't respond to pongs.
-  }
+  hideSetupInstruction();
 
-  const ret = {
-    event: event,
-    id: id,
-  };
+  resource.location = { x: 0, y: 0, z: 0 };
+  resource.draw(resourceLayer);
 
-  console.log("[event] " + event, data);
+  // center the root resource on the stage.
+  let centerXOffset = (stage.width() - resource.size_x) / 2;
+  let centerYOffset = (stage.height() - resource.size_y) / 2;
+  stage.x(centerXOffset);
+  stage.y(-centerYOffset);
+}
 
-  // send event to appropriate device
-  let deviceName = data.device_name;
-  if (deviceName === null) {
-    // ...
-  } else {
-    // ...
-    let device = devices[deviceName];
-    // ...
-  }
-
+async function processCentralEvent(event, data) {
   switch (event) {
     case "set_root_resource":
-      resource = loadResource(data.resource);
-
-      // the code for setting up a deck thingy should be move into a new LiquidHandler resource.
-      if (data.resource.type === "LiquidHandler") {
-        // infer the system from the deck.
-        let deck = data.resource.children[0];
-        mainHead = []; // reset the mainHead
-
-        if (deck.type === "OTDeck") {
-          system = SYSTEM_OPENTRONS;
-          // Just one channel for Opentrons right now. Should create a UI to select the config.
-          mainHead.push(new PipettingChannel("Channel: 1"));
-        } else if (["HamiltonSTARDeck", "HamiltonDeck"].includes(deck.type)) {
-          system = SYSTEM_HAMILTON;
-          for (let i = 0; i < 8; i++) {
-            mainHead.push(new PipettingChannel(`Channel: ${i + 1}`));
-          }
-        } else {
-          let errorString = `Unknown deck type: ${deck.type}. Supported deck types: OTDeck, HamiltonSTARDeck, HamiltonDeck.`;
-          alert(errorString);
-          throw new Error(errorString);
-        }
-      }
-
-      // TODO: instantiate a new LiquidHandler
-      let lh = LiquidHandler(data.resource);
-
-      hideSetupInstruction();
-
-      resource.location = { x: 0, y: 0, z: 0 };
-      resource.draw(resourceLayer);
-
-      // center the root resource on the stage.
-      let centerXOffset = (stage.width() - resource.size_x) / 2;
-      let centerYOffset = (stage.height() - resource.size_y) / 2;
-      stage.x(centerXOffset);
-      stage.y(-centerYOffset);
-
+      setRootResource(data);
       break;
 
     case "resource_assigned":
@@ -191,106 +109,60 @@ async function handleEvent(id, event, data) {
       removeResource(data.resource_name);
       break;
 
-    case "pick_up_tips":
-      await sleep(config.pip_tip_pickup_duration);
-      try {
-        pickUpTips(data.channels);
-      } catch (e) {
-        ret.error = e.message;
-      }
-      break;
-
-    case "drop_tips":
-      await sleep(config.pip_tip_drop_duration);
-      try {
-        dropTips(data.channels);
-      } catch (e) {
-        ret.error = e.message;
-      }
-      break;
-
     case "edit_tips":
-      try {
-        editTips(data.pattern);
-      } catch (e) {
-        ret.error = e.message;
-      }
+      editTips(data.pattern);
       break;
 
     case "adjust_well_liquids":
-      try {
-        adjustLiquids(data.pattern);
-      } catch (e) {
-        ret.error = e.message;
-      }
+      adjustLiquids(data.pattern);
       break;
 
     case "adjust_container_liquids":
-      try {
-        adjustResourceLiquids(data.liquids, data.resource_name);
-      } catch (e) {
-        ret.error = e.message;
-      }
-      break;
-
-    case "aspirate":
-      await sleep(config.pip_aspiration_duration);
-      try {
-        aspirate(data.channels);
-      } catch (e) {
-        ret.error = e.message;
-      }
-      break;
-
-    case "dispense":
-      await sleep(config.pip_dispense_duration);
-      try {
-        dispense(data.channels);
-      } catch (e) {
-        ret.error = e.message;
-      }
-      break;
-
-    case "pick_up_tips96":
-      await sleep(config.core_tip_pickup_duration);
-      try {
-        pickupTips96(data.resource_name);
-      } catch (e) {
-        ret.error = e.message;
-      }
-      break;
-
-    case "drop_tips96":
-      await sleep(config.core_tip_drop_duration);
-      ret.error = dropTips96(data.resource_name);
-      break;
-
-    case "aspirate96":
-      await sleep(config.core_aspiration_duration);
-      try {
-        aspirate96(data.aspiration);
-      } catch (e) {
-        ret.error = e.message;
-      }
-      break;
-
-    case "dispense96":
-      await sleep(config.core_dispense_duration);
-      try {
-        dispense96(data.dispense);
-      } catch (e) {
-        ret.error = e.message;
-      }
+      adjustResourceLiquids(data.liquids, data.resource_name);
       break;
 
     default:
-      ret.error = "Unknown event";
-      break;
+      throw new Error(`Unknown event: ${event}`);
+  }
+}
+
+async function handleEvent(id, event, data, deviceName) {
+  // If data.device_name corresponds to a device, then send the event to that device.
+  // If it doesn't correspond to a device, then raise an error.
+  // If data.device_name is null, then the event is processed centrally (in this function).
+  // In all cases, this function is responsibly for sending a response back to the server.
+
+  if (event === "ready") {
+    return; // don't parse response.
   }
 
+  if (event === "pong") {
+    return; // don't parse pongs.
+  }
+
+  console.log("[event] " + event, data);
+
+  const ret = {
+    event: event,
+    id: id,
+  };
+
+  // Actually process the event.
+  try {
+    if (deviceName === null) {
+      await processCentralEvent(event, data);
+    } else {
+      let device = devices[deviceName];
+      await device.processEvent(event, data);
+    }
+  } catch (e) {
+    console.error(e);
+    ret.error = e.message;
+  }
+
+  // Set the `success` field based on whether there was an error.
   if (ret.error === undefined || ret.error === null) {
     ret.success = true;
-    delete ret.error;
   } else {
     ret.success = false;
   }
@@ -340,7 +212,7 @@ function openSocket() {
     var data = event.data;
     data = JSON.parse(data);
     console.log(`[message] Data received from server:`, data);
-    handleEvent(data.id, data.event, data.data);
+    handleEvent(data.id, data.event, data.data, data.device_name);
   });
 }
 
