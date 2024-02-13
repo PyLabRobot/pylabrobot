@@ -111,16 +111,16 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(plt_car, rails=10)
 
     # Get resource.
-    self.assertEqual(self.lh.deck.get_resource("tip_carrier").name, "tip_carrier")
-    self.assertEqual(self.lh.deck.get_resource("plate carrier").name, "plate carrier")
+    self.assertEqual(self.lh.get_resource("tip_carrier").name, "tip_carrier")
+    self.assertEqual(self.lh.get_resource("plate carrier").name, "plate carrier")
 
     # Get subresource.
-    self.assertEqual(self.lh.deck.get_resource("tip_rack_01").name, "tip_rack_01")
-    self.assertEqual(self.lh.deck.get_resource("aspiration plate").name, "aspiration plate")
+    self.assertEqual(self.lh.get_resource("tip_rack_01").name, "tip_rack_01")
+    self.assertEqual(self.lh.get_resource("aspiration plate").name, "aspiration plate")
 
     # Get unknown resource.
     with self.assertRaises(ValueError):
-      self.lh.deck.get_resource("unknown resource")
+      self.lh.get_resource("unknown resource")
 
   def test_subcoordinates(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
@@ -133,32 +133,30 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(plt_car, rails=10)
 
     # Rails 10 should be left of rails 1.
-    self.assertGreater(self.lh.deck.get_resource("plate carrier").get_absolute_location().x,
-                       self.lh.deck.get_resource("tip_carrier").get_absolute_location().x)
+    self.assertGreater(self.lh.get_resource("plate carrier").get_absolute_location().x,
+                       self.lh.get_resource("tip_carrier").get_absolute_location().x)
 
     # Verified with Hamilton Method Editor.
     # Carriers.
-    self.assertEqual(self.lh.deck.get_resource("tip_carrier").get_absolute_location(),
+    self.assertEqual(self.lh.get_resource("tip_carrier").get_absolute_location(),
                      Coordinate(100.0, 63.0, 100.0))
-    self.assertEqual(self.lh.deck.get_resource("plate carrier").get_absolute_location(),
+    self.assertEqual(self.lh.get_resource("plate carrier").get_absolute_location(),
                      Coordinate(302.5, 63.0, 100.0))
 
     # Subresources.
     self.assertEqual(
-      cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_item("A1") \
-        .get_absolute_location() +
-      cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_item("A1").center(),
+      cast(TipRack, self.lh.get_resource("tip_rack_01")).get_item("A1").get_absolute_location() +
+      cast(TipRack, self.lh.get_resource("tip_rack_01")).get_item("A1").center(),
       Coordinate(117.900, 145.800, 164.450))
     self.assertEqual(
-      cast(TipRack, self.lh.deck.get_resource("tip_rack_04")).get_item("A1") \
-        .get_absolute_location() +
-      cast(TipRack, self.lh.deck.get_resource("tip_rack_04")).get_item("A1").center(),
+      cast(TipRack, self.lh.get_resource("tip_rack_04")).get_item("A1").get_absolute_location() +
+      cast(TipRack, self.lh.get_resource("tip_rack_04")).get_item("A1").center(),
       Coordinate(117.900, 433.800, 131.450))
 
     self.assertEqual(
-      cast(TipRack, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
+      cast(TipRack, self.lh.get_resource("aspiration plate")).get_item("A1")
         .get_absolute_location() +
-      cast(TipRack, self.lh.deck.get_resource("aspiration plate")).get_item("A1").center(),
+      cast(TipRack, self.lh.get_resource("aspiration plate")).get_item("A1").center(),
         Coordinate(320.500, 146.000, 187.150))
 
   def test_illegal_subresource_assignment_before(self):
@@ -192,7 +190,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     await self.lh.move_plate(plate, plt_car[2])
     self.assertIsNotNone(plt_car[2].resource)
     self.assertIsNone(plt_car[0].resource)
-    self.assertEqual(plt_car[2].resource, self.lh.deck.get_resource("plate"))
+    self.assertEqual(plt_car[2].resource, self.lh.get_resource("plate"))
     self.assertEqual(plate.get_item("A1").get_absolute_location() + plate.get_item("A1").center(),
                      Coordinate(568.000, 338.000, 187.150))
 
@@ -202,7 +200,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(plt_car, rails=1)
 
     await self.lh.move_plate(plate, Coordinate(1000, 1000, 1000))
-    self.assertIsNotNone(self.lh.deck.get_resource("plate"))
+    self.assertIsNotNone(self.lh.get_resource("plate"))
     self.assertIsNone(plt_car[0].resource)
     self.assertEqual(plate.get_absolute_location(),
       Coordinate(1000, 1000, 1000))

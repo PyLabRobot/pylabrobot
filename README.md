@@ -24,9 +24,9 @@ deck = Deck.load_from_json_file("hamilton-layout.json")
 lh = LiquidHandler(backend=STAR(), deck=deck)
 await lh.setup()
 
-await lh.pick_up_tips(lh.deck.get_resource("tip_rack")["A1"])
-await lh.aspirate(lh.deck.get_resource("plate")["A1"], vols=100)
-await lh.dispense(lh.deck.get_resource("plate")["A2"], vols=100)
+await lh.pick_up_tips(lh.get_resource("tip_rack")["A1"])
+await lh.aspirate(lh.get_resource("plate")["A1"], vols=100)
+await lh.dispense(lh.get_resource("plate")["A2"], vols=100)
 await lh.return_tips()
 ```
 
@@ -68,7 +68,7 @@ await pr.setup()
 
 # Use in combination with a liquid handler
 lh.assign_child_resource(pr, location=Coordinate(x, y, z))
-lh.move_plate(lh.deck.get_resource("plate"), pr)
+lh.move_plate(lh.get_resource("plate"), pr)
 
 data = await pr.read_luminescence()
 ```

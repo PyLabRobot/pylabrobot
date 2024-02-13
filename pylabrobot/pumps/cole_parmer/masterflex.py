@@ -29,22 +29,17 @@ class Masterflex(PumpBackend):
     )
 
     self.ser.write(b"\x05") # Enquiry; ready to send.
-    self.ser.write(b"\x05P02\r")
-
-  async def stop(self):
-    assert self.ser is not None, "Pump not initialized"
-    self.ser.close()
-    self.ser = None
+    self.send_command("P21")
 
   def send_command(self, command: str):
     assert self.ser is not None
-    command = "\x02P02" + command + "\x0d"
+    command = "\x02" + command + "\x0d"
     self.ser.write(command.encode())
     return self.ser.read()
 
   def run_revolutions(self, num_revolutions: float):
     num_revolutions = round(num_revolutions, 2)
-    cmd = f"V{num_revolutions}G"
+    cmd = f"P21V{num_revolutions}G"
     self.send_command(cmd)
 
   def run_continuously(self, speed: float):
@@ -54,8 +49,8 @@ class Masterflex(PumpBackend):
 
     direction = "+" if speed > 0 else "-"
     speed = int(abs(speed))
-    cmd = f"S{direction}{speed}G0"
+    cmd = f"P21S{direction}{speed}G0"
     self.send_command(cmd)
 
   def halt(self):
-    self.send_command("H")
+    self.send_command("P21H")
