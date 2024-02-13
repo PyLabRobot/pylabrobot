@@ -1257,20 +1257,20 @@ class STAR(HamiltonLiquidHandler):
             # if self.core96_head_installed:
             #   self.initialize_core_96_head()
 
-        if not initialized or any(tip_presences):
-            dy = (4050 - 2175) // (self.num_channels - 1)
-            y_positions = [4050 - i * dy for i in range(self.num_channels)]
+            if not initialized or any(tip_presences):
+                dy = (4050 - 2175) // (self.num_channels - 1)
+                y_positions = [4050 - i * dy for i in range(self.num_channels)]
 
-        await self.initialize_pipetting_channels(
-            x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
-            y_positions=y_positions,
-            begin_of_tip_deposit_process=2450,
-            end_of_tip_deposit_process=1220,
-            z_position_at_end_of_a_command=3600,
-            tip_pattern=[True],  # [True] * 8
-            tip_type=4,  # TODO: get from tip types
-            discarding_method=0,
-        )
+            await self.initialize_pipetting_channels(
+                x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
+                y_positions=y_positions,
+                begin_of_tip_deposit_process=2450,
+                end_of_tip_deposit_process=1220,
+                z_position_at_end_of_a_command=3600,
+                tip_pattern=[True],  # [True] * 8
+                tip_type=4,  # TODO: get from tip types
+                discarding_method=0,
+            )
         if self.autoload_installed:
             autoload_initialized = await self.request_autoload_initialization_status()
             if not autoload_initialized:
@@ -1286,9 +1286,9 @@ class STAR(HamiltonLiquidHandler):
             await self.park_iswap()
             self._iswap_parked = True
 
-        # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
-        # the core grippers.
-        self._core_parked = True
+            # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
+            # the core grippers.
+            self._core_parked = True
 
     # ============== LiquidHandlerBackend methods ==============
 
