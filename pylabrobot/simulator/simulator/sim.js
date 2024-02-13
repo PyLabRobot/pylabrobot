@@ -76,12 +76,6 @@ function hideSetupInstruction() {
 function setRootResource(data) {
   resource = loadResource(data.resource);
 
-  // If the resource is a liquid handler, then add it to the devices list.
-  console.log("resource.constructor.name", resource.constructor.name);
-  if (resource.constructor.name === "LiquidHandler") {
-    devices[data.resource.name] = resource;
-  }
-
   hideSetupInstruction();
 
   resource.location = { x: 0, y: 0, z: 0 };
@@ -92,6 +86,20 @@ function setRootResource(data) {
   let centerYOffset = (stage.height() - resource.size_y) / 2;
   stage.x(centerXOffset);
   stage.y(-centerYOffset);
+}
+
+function removeResource(resourceName) {
+  let resource = resources[resourceName];
+  resource.destroy();
+}
+
+function addDevice(deviceName) {
+  let device = resources[deviceName];
+  devices[deviceName] = device;
+}
+
+function removeDevice(deviceName) {
+  delete devices[deviceName];
 }
 
 async function processCentralEvent(event, data) {
@@ -106,7 +114,7 @@ async function processCentralEvent(event, data) {
       break;
 
     case "resource_unassigned":
-      removeResource(data.resource_name);
+      removeResource(data.resource.name);
       break;
 
     case "edit_tips":
@@ -119,6 +127,14 @@ async function processCentralEvent(event, data) {
 
     case "adjust_container_liquids":
       adjustResourceLiquids(data.liquids, data.resource_name);
+      break;
+
+    case "add_device":
+      addDevice(data.device_name);
+      break;
+
+    case "remove_device":
+      removeDevice(data.device_name);
       break;
 
     default:
