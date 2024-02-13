@@ -52,13 +52,6 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Scales
-
-   scales
-
-
-.. toctree::
    :maxdepth: 4
    :caption: API documentation
 
@@ -71,3 +64,5 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+
