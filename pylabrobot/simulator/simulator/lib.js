@@ -860,13 +860,6 @@ class CarrierSite extends Resource {
   }
 }
 
-class LiquidHandler extends Resource {
-  drawMainShape() {
-    // don't draw anything, just draw the children
-    return undefined;
-  }
-}
-
 function classForResourceType(type) {
   switch (type) {
     case "Deck":
@@ -903,7 +896,7 @@ function classForResourceType(type) {
       );
       return HamiltonSTARDeck;
     case "LiquidHandler":
-      return LiquidHandler;
+      return LiquidHandler; // liquid_handler.js
     default:
       return Resource;
   }

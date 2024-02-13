@@ -2,9 +2,9 @@ import logging
 from typing import Any, Dict, Optional
 
 from pylabrobot.liquid_handling.standard import Move
-from pylabrobot.simulator import Simulator
 from pylabrobot.liquid_handling.backends import SerializingBackend
-from pylabrobot.simulator.simulator import SimulatorBackend
+from pylabrobot.resources import Resource
+from pylabrobot.simulator import Simulator, SimulatorBackend
 
 
 logger = logging.getLogger("pylabrobot")
@@ -40,3 +40,11 @@ class LiquidHandlerSimulator(SerializingBackend, SimulatorBackend):
 
   async def move_resource(self, move: Move, **backend_kwargs):
     raise NotImplementedError("This method is not yet implemented in the simulator.")
+
+  async def assigned_resource_callback(self, resource: Resource):
+    # In simulation, resource assignment is handled by the Simulator, not the backend, -> do nothing
+    return
+
+  async def unassigned_resource_callback(self, name: str):
+    # In simulation, resource assignment is handled by the Simulator, not the backend, -> do nothing
+    return
