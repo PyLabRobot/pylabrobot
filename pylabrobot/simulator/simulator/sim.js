@@ -17,61 +17,7 @@ var config = {
   max_core_head_location: -1,
 };
 
-class PipettingChannel {
-  constructor(identifier) {
-    this.identifier = identifier;
-    this.volume = null;
-    this.tip = null;
-  }
-
-  has_tip() {
-    return this.tip !== null;
-  }
-
-  pickUpTip(tip) {
-    if (this.tip !== null) {
-      throw `Tip already on pipetting channel ${this.identifier}`;
-    }
-
-    this.tip = tip;
-    this.volume = 0;
-  }
-
-  dropTip() {
-    if (this.tip === null) {
-      throw `No tip on pipetting channel ${this.identifier}`;
-    }
-
-    if (this.volume !== 0) {
-      throw `Cannot drop tip from channel ${this.identifier} with volume ${this.volume}`;
-    }
-
-    this.tip = null;
-  }
-
-  aspirate(volume) {
-    if (this.tip === null) {
-      throw `No tip on pipetting channel ${this.identifier}`;
-    }
-
-    if (this.volume + volume > this.tip.maximal_volume) {
-      throw `Not enough volume in tip on pipetting channel ${this.identifier}`;
-    }
-
-    this.volume += volume;
-  }
-
-  dispense(volume) {
-    if (this.volume - volume < 0) {
-      throw `Not enough volume in pipetting channel ${this.identifier}`;
-    }
-
-    this.volume -= volume;
-  }
-}
-
 // Initialize pipetting heads.
-var mainHead = [];
 const SYSTEM_HAMILTON = "Hamilton";
 const SYSTEM_OPENTRONS = "Opentrons";
 var system = undefined; // "Hamilton" or "Opentrons"
@@ -163,282 +109,6 @@ function editTips(pattern) {
   }
 }
 
-function pickUpTips(channels) {
-  if (channels.length > mainHead.length) {
-    throw new Error(`Too many channels (${channels.length})`);
-  }
-
-  for (var i = 0; i < channels.length; i++) {
-    var tipSpot = resources[channels[i].resource_name];
-    tipSpot.pickUpTip(resourceLayer);
-
-    if (system === SYSTEM_HAMILTON) {
-      const pipError = checkPipHeadReach(tipSpot.getAbsoluteLocation().x);
-      if (pipError !== undefined) {
-        throw new Error(pipError);
-      }
-    }
-
-    mainHead[i].pickUpTip(tipSpot.tip);
-  }
-}
-
-function dropTips(channels) {
-  if (channels.length > mainHead.length) {
-    throw new Error(`Too many channels (${channels.length})`);
-  }
-
-  for (let i = 0; i < channels.length; i++) {
-    var tipSpot = resources[channels[i].resource_name];
-    tipSpot.dropTip(resourceLayer);
-
-    if (system === SYSTEM_HAMILTON) {
-      const pipError = checkPipHeadReach(tipSpot.getAbsoluteLocation().x);
-      if (pipError !== undefined) {
-        throw new Error(pipError);
-      }
-    }
-
-    mainHead[i].dropTip();
-  }
-}
-
-function aspirate(channels) {
-  if (channels.length > mainHead.length) {
-    throw new Error(`Too many channels (${channels.length})`);
-  }
-
-  for (let i = 0; i < channels.length; i++) {
-    let { resource_name, volume } = channels[i];
-
-    const well = resources[resource_name];
-    well.aspirate(volume);
-
-    if (system === SYSTEM_HAMILTON) {
-      const pipError = checkPipHeadReach(well.getAbsoluteLocation().x);
-      if (pipError !== undefined) {
-        throw new Error(pipError);
-      }
-    }
-
-    mainHead[i].aspirate(volume);
-  }
-}
-
-function dispense(channels) {
-  if (channels.length > mainHead.length) {
-    throw new Error(`Too many channels (${channels.length})`);
-  }
-
-  for (let i = 0; i < channels.length; i++) {
-    let { resource_name, volume } = channels[i];
-
-    const well = resources[resource_name];
-    well.dispense(volume);
-
-    if (system === SYSTEM_HAMILTON) {
-      const pipError = checkPipHeadReach(well.getAbsoluteLocation().x);
-      if (pipError !== undefined) {
-        throw new Error(pipError);
-      }
-    }
-
-    mainHead[i].dispense(volume);
-  }
-}
-
-function pickupTips96(resource_name) {
-  if (system !== SYSTEM_HAMILTON) {
-    throw new Error(
-      "The 96 head actions are currently only available on the Hamilton Simulator."
-    );
-  }
-
-  const tipRack = resources[resource_name];
-
-  // Validate there are enough tips first, and that there are no tips in the head.
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 12; j++) {
-      const tip_name = tipRack.children[i + tipRack.num_items_y * j].name;
-      const tip_spot = resources[tip_name];
-      if (!tip_spot.has_tip) {
-        throw new Error(`There is no tip at (${i},${j}) in ${resource_name}.`);
-      }
-      if (CoRe96Head[i][j].has_tip()) {
-        throw new Error(
-          `There already is a tip in the CoRe 96 head at (${i},${j}) in ${resource_name}.`
-        );
-      }
-    }
-  }
-
-  // Check reachable for A1.
-  let a1_name = tipRack.children[0].name;
-  let a1_resource = resources[a1_name];
-  const coreError = checkCoreHeadReachable(a1_resource.x);
-  if (coreError !== undefined) {
-    throw new Error(coreError);
-  }
-
-  // Then pick up the tips.
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 12; j++) {
-      const tip_name = tipRack.children[i + tipRack.num_items_y * j].name;
-      const tip_spot = resources[tip_name];
-      tip_spot.pickUpTip(resourceLayer);
-      CoRe96Head[i][j].pickUpTip(tip_spot.tip);
-    }
-  }
-}
-
-function dropTips96(resource_name) {
-  if (system !== SYSTEM_HAMILTON) {
-    throw new Error(
-      "The 96 head actions are currently only available on the Hamilton Simulator."
-    );
-  }
-
-  const tipRack = resources[resource_name];
-
-  // Validate there are enough tips first, and that there are no tips in the head.
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 12; j++) {
-      const tip_name = tipRack.children[i * tipRack.num_items_x + j].name;
-      const tip_spot = resources[tip_name];
-      if (tip_spot.has_tip) {
-        throw new Error(
-          `There already is a tip at (${i},${j}) in ${resource_name}.`
-        );
-      }
-      if (!CoRe96Head[i][j].has_tip()) {
-        throw new Error(
-          `There is no tip in the CoRe 96 head at (${i},${j}) in ${resource_name}.`
-        );
-      }
-    }
-  }
-
-  // Check reachable for A1.
-  let a1_name = tipRack.children[0].name;
-  let a1_resource = resources[a1_name];
-  const coreError = checkCoreHeadReachable(a1_resource.x);
-  if (coreError !== undefined) {
-    throw new Error(coreError);
-  }
-
-  // Then pick up the tips.
-  for (let i = 0; i < 8; i++) {
-    for (let j = 0; j < 12; j++) {
-      const tip_spot = tipRack.children[i * tipRack.num_items_x + j];
-      tip_spot.dropTip(resourceLayer);
-      CoRe96Head[i][j].dropTip();
-    }
-  }
-}
-
-function aspirate96(aspiration) {
-  if (system !== SYSTEM_HAMILTON) {
-    throw new Error(
-      "The 96 head actions are currently only available on the Hamilton Simulator."
-    );
-  }
-
-  const resource_name = aspiration.resource_name;
-  const plate = resources[resource_name];
-
-  // Check reachable for A1.
-  let a1_name = plate.children[0].name;
-  let a1_resource = resources[a1_name];
-  const coreError = checkCoreHeadReachable(a1_resource.x);
-  if (coreError !== undefined) {
-    throw new Error(coreError);
-  }
-
-  // Validate there is enough liquid available, that it fits in the tips, and that each channel
-  // has a tip before aspiration.
-  for (let i = 0; i < plate.num_items_y; i++) {
-    for (let j = 0; j < plate.num_items_x; j++) {
-      const well = plate.children[i * plate.num_items_x + j];
-      if (well.volume < aspiration.volume) {
-        throw new Error(
-          `Not enough volume in well ${well.name}: ${well.volume}uL.`
-        );
-      }
-      if (
-        CoRe96Head[i][j].volume + aspiration.volume >
-        CoRe96Head[i][j].tip.maximal_volume
-      ) {
-        throw new Error(
-          `Aspirated volume (${aspiration.volume}uL) + volume of tip (${CoRe96Head[i][j].volume}uL) > maximal volume of tip (${CoRe96Head[i][j].tip.maximal_volume}uL).`
-        );
-      }
-      if (!CoRe96Head[i][j].has_tip()) {
-        throw new Error(
-          `CoRe 96 head channel (${i},${j}) does not have a tip.`
-        );
-      }
-    }
-  }
-
-  for (let i = 0; i < plate.num_items_y; i++) {
-    for (let j = 0; j < plate.num_items_x; j++) {
-      const well = plate.children[i * plate.num_items_x + j];
-      CoRe96Head[i][j].aspirate(aspiration.volume);
-      well.aspirate(aspiration.volume);
-    }
-  }
-}
-
-function dispense96(dispense) {
-  if (system !== SYSTEM_HAMILTON) {
-    throw new Error(
-      "The 96 head actions are currently only available on the Hamilton Simulator."
-    );
-  }
-
-  const resource_name = dispense.resource_name;
-  const plate = resources[resource_name];
-
-  // Check reachable for A1.
-  let a1_name = plate.children[0].name;
-  let a1_resource = resources[a1_name];
-  const coreError = checkCoreHeadReachable(a1_resource.x);
-  if (coreError !== undefined) {
-    throw new Error(coreError);
-  }
-
-  // Validate there is enough liquid available, that it fits in the well, and that each channel
-  // has a tip before dispense.
-  for (let i = 0; i < plate.num_items_y; i++) {
-    for (let j = 0; j < plate.num_items_x; j++) {
-      const well = plate.children[i * plate.num_items_x + j];
-      if (CoRe96Head[i][j].volume < dispense.volume) {
-        throw new Error(
-          `Not enough volume in head: ${CoRe96Head[i][j].volume}uL.`
-        );
-      }
-      if (well.volume + dispense.volume > well.maxVolume) {
-        throw new Error(
-          `Dispensed volume (${dispense.volume}uL) + volume of well (${well.volume}uL) > maximal volume of well (${well.maxVolume}uL).`
-        );
-      }
-      if (!CoRe96Head[i][j].has_tip()) {
-        throw new Error(
-          `CoRe 96 head channel (${i},${j}) does not have a tip.`
-        );
-      }
-    }
-  }
-
-  for (let i = 0; i < plate.num_items_y; i++) {
-    for (let j = 0; j < plate.num_items_x; j++) {
-      const well = plate.children[i * plate.num_items_x + j];
-      CoRe96Head[i][j].dispense(dispense.volume);
-      well.dispense(dispense.volume);
-    }
-  }
-}
-
 function hideSetupInstruction() {
   let noRootResourceInfo = document.getElementById("setup-instruction");
   noRootResourceInfo.style.display = "none";
@@ -459,6 +129,16 @@ async function handleEvent(id, event, data) {
   };
 
   console.log("[event] " + event, data);
+
+  // send event to appropriate device
+  let deviceName = data.device_name;
+  if (deviceName === null) {
+    // ...
+  } else {
+    // ...
+    let device = devices[deviceName];
+    // ...
+  }
 
   switch (event) {
     case "set_root_resource":
@@ -485,6 +165,9 @@ async function handleEvent(id, event, data) {
           throw new Error(errorString);
         }
       }
+
+      // TODO: instantiate a new LiquidHandler
+      let lh = LiquidHandler(data.resource);
 
       hideSetupInstruction();
 
