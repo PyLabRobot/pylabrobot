@@ -9,7 +9,7 @@ import enum
 import functools
 import logging
 import re
-from typing import Callable, Dict, ItemsView, List, Literal, Optional, Sequence, Type, TypeVar, cast
+from typing import Callable, Dict, ItemsView, List, Literal, Optional, Sequence, Type, TypeVar, cast, Union
 
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
@@ -6357,3 +6357,257 @@ class STAR(HamiltonLiquidHandler):
 
     resp = await self.send_command(module="C0", command="QC", fmt="qc#")
     return bool(resp["qc"])
+
+
+  # -------------- 4.0 Direct Device Integration --------------
+  # Communication occurs directly through STAR "TCC" connections,
+  # i.e. firmware commands. This means devices can be seen as part
+  # of the STAR machine directly (if number of devices =< 2).
+
+  # -------------- 4.1 Hamilton Heater Shaker (HHS) --------------
+
+  async def check_type_is_hhs(self, device_number: int):
+    """
+    Convenience method to check that connected device is an HHS.
+    Executed through firmware query
+    """
+
+    firmware_version = await self.send_command(module=f"T{device_number}", command="RF")
+    if "Heater Shaker" not in firmware_version:
+      raise ValueError(f"Device number {device_number} does not connect to a Hamilton" \
+                        f" Heater Shaker, found {firmware_version} instead." \
+                        f"Have you called the wrong device number?")
+
+  async def initialize_hhs(self, device_number: int) -> str:
+    """ Initialize Hamilton Heater Shaker (HHS) at specified TCC port
+
+    Args:
+      device_number: TCC connect number to the HHS
+
+    Returns:
+      Information string about the initialization status
+    """
+
+    module_pointer = f"T{device_number}"
+
+    # Request module configuration
+    try:
+      await self.send_command(module=module_pointer, command="QU")
+    except TimeoutError as exc:
+      error_message = f"No Hamilton Heater Shaker found at device_number {device_number}" \
+        f", have you checked your connections? Original error: {exc}"
+      raise ValueError(error_message) from exc
+
+    await self.check_type_is_hhs(device_number)
+
+    # Request module configuration
+    hhs_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
+    hhs_init_status = hhs_init_status["qw"]
+
+    # Initializing HHS if necessary
+    info = "HHS already initialized"
+    if hhs_init_status != 1:
+      await self.send_command(module=module_pointer, command="LI")
+      info = f"HHS at device number {device_number} initialized."
+
+    return info
+
+  # -------------- 4.1.1 HHS Plate Lock --------------
+
+  async def open_plate_lock(self, device_number: int):
+    """ Open HHS plate lock """
+
+    await self.check_type_is_hhs(device_number)
+
+    return await self.send_command(
+      module=f"T{device_number}",
+      command="LP",
+      lp="0" # => open plate lock
+    )
+
+  async def close_plate_lock(self, device_number: int):
+    """ Close HHS plate lock """
+
+    await self.check_type_is_hhs(device_number)
+
+    return await self.send_command(
+      module = f"T{device_number}",
+      command="LP",
+      lp="1" # => close plate lock
+    )
+
+  # -------------- 4.1.2 HHS Shaking --------------
+  async def start_shaking_at_hhs(
+    self,
+    device_number: int,
+    rpm: int,
+    rotation: int = 0,
+    plate_locked_during_shaking: bool = True
+  ):
+    """ Start shaking of specified HHS
+
+    Args:
+      rpm: round per minute
+      rotation: 0: clockwise rotation, 1: counter-clockwise rotation
+      plate_locked_during_shaking: True if plate is locked during shaking
+    """
+
+    await self.check_type_is_hhs(device_number)
+
+    # Ensure plate is locked before shaking starts
+    # allow over-writing of default (perhaps special holder system)
+    if plate_locked_during_shaking:
+      await self.close_plate_lock(device_number)
+
+    return await self.send_command(
+      module=f"T{device_number}",
+      command="SB",
+      st=str(rotation),
+      sv=str(rpm).zfill(4),
+      sr="00500" # ??? maybe shakingAccRamp rate?
+    )
+
+  async def stop_shaking_at_hhs(self, device_number: int):
+    """ Close HHS plate lock """
+
+    await self.check_type_is_hhs(device_number)
+
+    return await self.send_command(module="T1", command="SC")
+
+  # -------------- 4.1.3 HHS Heating/Temperature Control --------------
+
+  async def start_temperature_control_at_hhs(
+    self,
+    device_number: int,
+    temp: Union[float, int],
+  ):
+    """ Start temperature regulation of specified HHS """
+
+    await self.check_type_is_hhs(device_number)
+    assert 0 < temp <= 105
+
+    # Ensure proper temperature input handling
+    if isinstance(temp, (float, int)):
+      safe_temp_str = f"{int(temp * 10):04d}"
+
+    return await self.send_command(
+      module=f"T{device_number}",
+      command="TA", # temperature adjustment
+      ta=safe_temp_str,
+    )
+
+  async def get_temperature_at_hhs(self, device_number: int) -> dict:
+    """ Query current temperatures of both sensors of specified HHS
+
+    Returns:
+      Dictionary with keys "middle_T" and "edge_T" for the middle and edge temperature
+    """
+
+    await self.check_type_is_hhs(device_number)
+
+    request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
+    processed_t_info = [int(x)/10 for x in request_temperature.split("+")[-2:]]
+
+    return {"middle_T": processed_t_info[0],"edge_T": processed_t_info[-1]}
+
+  async def stop_temperature_control_at_hhs(self, device_number: int):
+    """ Stop temperature regulation of specified HHS """
+
+    await self.check_type_is_hhs(device_number)
+
+    return await self.send_command(module=f"T{device_number}", command="TO")
+
+  # -------------- 4.2 Hamilton Heater Cooler (HHS) --------------
+
+  async def check_type_is_hhc(self, device_number: int):
+    """
+    Convenience method to check that connected device is an HHC.
+    Executed through firmware query
+    """
+
+    firmware_version = await self.send_command(module=f"T{device_number}", command="RF")
+    if "Hamilton Heater Cooler" not in firmware_version:
+      raise ValueError(f"Device number {device_number} does not connect to a Hamilton" \
+                        f" Heater-Cooler, found {firmware_version} instead." \
+                        f"Have you called the wrong device number?")
+
+  async def initialize_hhc(self, device_number: int) -> str:
+    """ Initialize Hamilton Heater Cooler (HHC) at specified TCC port
+
+    Args:
+      device_number: TCC connect number to the HHC
+    """
+
+    module_pointer = f"T{device_number}"
+
+    # Request module configuration
+    try:
+      await self.send_command(module=module_pointer, command="QU")
+    except TimeoutError as exc:
+      error_message = f"No Hamilton Heater Cooler found at device_number {device_number}" \
+        f", have you checked your connections? Original error: {exc}"
+      raise ValueError(error_message) from exc
+
+    await self.check_type_is_hhc(device_number)
+
+    # Request module configuration
+    hhc_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
+    hhc_init_status = hhc_init_status["qw"]
+
+    info = "HHC already initialized"
+    # Initializing HHS if necessary
+    if hhc_init_status != 1:
+      # Initialize device
+      await self.send_command(module=module_pointer, command="LI")
+      info = f"HHS at device number {device_number} initialized."
+
+    return info
+
+  async def start_temperature_control_at_hhc(
+    self,
+    device_number: int,
+    temp:  Union[float, int],
+  ):
+    """ Start temperature regulation of specified HHC """
+
+    await self.check_type_is_hhc(device_number)
+    assert 0 < temp <= 105
+
+    # Ensure proper temperature input handling
+    if isinstance(temp, (float, int)):
+      safe_temp_str = f"{int(temp * 10):04d}"
+
+    return await self.send_command(
+      module=f"T{device_number}",
+      command="TA", # temperature adjustment
+      ta=safe_temp_str,
+      tb="1800", # TODO: identify precise purpose?
+      tc="0020", # TODO: identify precise purpose?
+    )
+
+  async def get_temperature_at_hhc(self, device_number: int) -> dict:
+    """ Query current temperatures of both sensors of specified HHC """
+
+    await self.check_type_is_hhc(device_number)
+
+    request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
+    processed_t_info = [int(x)/10 for x in request_temperature.split("+")[-2:]]
+
+    return {"middle_T": processed_t_info[0],"edge_T": processed_t_info[-1]}
+
+  async def query_whether_temperature_reached_at_hhc(self, device_number: int):
+    """ Stop temperature regulation of specified HHC """
+
+    await self.check_type_is_hhc(device_number)
+    query_current_control_status = await self.send_command(
+      module=f"T{device_number}", command="QD", fmt="qd#"
+    )
+
+    return query_current_control_status["qd"] == 0
+
+  async def stop_temperature_control_at_hhc(self, device_number: int):
+    """ Stop temperature regulation of specified HHC """
+
+    await self.check_type_is_hhc(device_number)
+
+    return await self.send_command(module=f"T{device_number}", command="TO")
