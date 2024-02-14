@@ -120,27 +120,20 @@ class LiquidHandler(Machine):
     for resource in self.deck.children:
       self._send_assigned_resource_to_backend(resource)
 
-  def save_state(self, filename: str):
-    """ Save the state of the liquid handler (including the deck) to a file. """
+  def serialize_state(self) -> Dict[str, Any]:
+    """ Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to
+    serialize the state of the liquid handler and all children (the deck). """
 
     head_state = {channel: tracker.serialize() for channel, tracker in self.head.items()}
-    deck_state = self.deck.serialize_state()
-    state = {"head_state": head_state, "deck_state": deck_state}
-    with open(filename, "w", encoding="utf-8") as f:
-      f.write(json.dumps(state, indent=2))
+    return {"head_state": head_state}
 
-  def load_state(self, filename: str):
-    """ Load the liquid handler state from a file. """
+  def load_state(self, state: Dict[str, Any]):
+    """ Load the liquid handler state from a file. Use :meth:`~Resource.load_all_state` to load the
+    state of the liquid handler and all children (the deck). """
 
-    with open(filename, "r", encoding="utf-8") as f:
-      state = json.load(f)
     head_state = state["head_state"]
-    deck_state = state["deck_state"]
-
-    for channel_id, state in head_state.items():
-      # convert head state keys (channel ids) back to integers.
-      self.head[int(channel_id)].load_state(state)
-    self.deck.load_state(deck_state)
+    for channel, tracker_state in head_state.items():
+      self.head[channel].load_state(tracker_state)
 
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.

@@ -1,6 +1,6 @@
 import contextlib
 import sys
-from typing import Optional, TYPE_CHECKING, cast
+from typing import Callable, Optional, TYPE_CHECKING, cast
 
 from pylabrobot.resources.errors import HasTipError, NoTipError
 from pylabrobot.serializer import deserialize
@@ -27,6 +27,9 @@ def no_tip_tracking():
   this.tip_tracking_enabled = old_value # type: ignore
 
 
+TrackerCallback = Callable[[], None]
+
+
 class TipTracker:
   """ A tip tracker tracks tip operations and raises errors if the tip operations are invalid. """
 
@@ -36,6 +39,8 @@ class TipTracker:
     self._tip: Optional["Tip"] = None
     self._pending_tip: Optional["Tip"] = None
     self._tip_origin: Optional["TipSpot"] = None # not currently in a transaction, do we need that?
+
+    self._callback: Optional[TrackerCallback] = None
 
   @property
   def is_disabled(self) -> bool:
@@ -84,7 +89,7 @@ class TipTracker:
     if commit:
       self.commit()
 
-  def remove_tip(self) -> None:
+  def remove_tip(self, commit: bool = False) -> None:
     """ Update the pending state with the operation, if the operation is valid """
     if self.is_disabled:
       raise RuntimeError("Tip tracker is disabled. Call `enable()`.")
@@ -92,9 +97,14 @@ class TipTracker:
       raise NoTipError(f"{self.thing} does not have a tip.")
     self._pending_tip = None
 
+    if commit:
+      self.commit()
+
   def commit(self) -> None:
     """ Commit the pending operations. """
     self._tip = self._pending_tip
+    if self._callback is not None:
+      self._callback()
 
   def rollback(self) -> None:
     """ Rollback the pending operations. """
@@ -127,3 +137,6 @@ class TipTracker:
   def __repr__(self) -> str:
     return f"TipTracker({self.thing}, is_disabled={self.is_disabled}, has_tip={self.has_tip}" + \
       f" tip={self._tip}, pending_tip={self._pending_tip})"
+
+  def register_callback(self, callback: TrackerCallback) -> None:
+    self._callback = callback

@@ -1,5 +1,5 @@
 var mode;
-const MODE_SIMULATOR = "simulator";
+const MODE_VISUALIZER = "visualizer";
 const MODE_GUI = "gui";
 
 var layer = new Konva.Layer();
@@ -377,6 +377,8 @@ class Resource {
   update() {
     this.draw(resourceLayer);
   }
+
+  setState() {}
 }
 
 class Deck extends Resource {
@@ -631,6 +633,18 @@ class Container extends Resource {
     this.update();
   }
 
+  setState(state) {
+    let liquids = [];
+    for (let i = 0; i < state.liquids.length; i++) {
+      const liquid = state.liquids[i];
+      liquids.push({
+        name: liquid[0],
+        volume: liquid[1],
+      });
+    }
+    this.setLiquids(liquids);
+  }
+
   dispense(volume) {
     if (volume + this.volume > this.maxVolume) {
       throw new Error(
@@ -781,6 +795,11 @@ class TipSpot extends Resource {
     });
   }
 
+  setState(state) {
+    this.has_tip = state.tip !== null;
+    this.update();
+  }
+
   setTip(has_tip, layer) {
     this.has_tip = has_tip;
     this.draw(layer);
@@ -860,6 +879,12 @@ class CarrierSite extends Resource {
   }
 }
 
+class LiquidHandler extends Resource {
+  drawMainShape() {
+    return undefined; // just draw the children (deck and so on)
+  }
+}
+
 function classForResourceType(type) {
   switch (type) {
     case "Deck":
@@ -896,7 +921,7 @@ function classForResourceType(type) {
       );
       return HamiltonSTARDeck;
     case "LiquidHandler":
-      return LiquidHandler; // liquid_handler.js
+      return LiquidHandler;
     default:
       return Resource;
   }

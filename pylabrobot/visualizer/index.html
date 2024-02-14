@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PyLabRobot Visualizer</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.3/font/bootstrap-icons.css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3"
+      crossorigin="anonymous"
+    />
+
+    <script src="https://unpkg.com/konva@8/konva.min.js"></script>
+
+    <link href="./main.css" rel="stylesheet" />
+  </head>
+  <body>
+    <nav class="navbar bg-light">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="#">
+          PyLabRobot Visualizer <span class="fs-6 text-muted">(v0.1)</span></a
+        >
+        <div class="ml-auto">
+          <span onclick="openSocket();" id="status-indicator"></span>
+          <span id="status-label">Loading...</span>
+          <button onclick="openSettings();">Open Settings</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="content">
+      <main>
+        <div id="kanvas"></div>
+      </main>
+    </div>
+
+    <script src="./lib.js"></script>
+    <script src="./vis.js"></script>
+
+    <input type="text" id="fs_host" value="{{ fs_host }}" hidden />
+    <input type="text" id="fs_port" value="{{ fs_port }}" hidden />
+    <input type="text" id="ws_host" value="{{ ws_host }}" hidden />
+    <input type="text" id="ws_port" value="{{ ws_port }}" hidden />
+  </body>
+</html>

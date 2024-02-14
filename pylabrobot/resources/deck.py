@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import json
-from typing import Any, Dict, List, cast
+from typing import Dict, List, cast
 
 from pylabrobot.resources.errors import ResourceNotFoundError
 
@@ -122,46 +121,3 @@ class Deck(Resource):
     for resource in self.children:
       summary_ += f"{resource.name}: {resource}\n"
     return summary_
-
-  def serialize_state(self) -> dict:
-    """ Serialize the deck state. """
-
-    state: Dict[str, Any] = {}
-
-    def save_resource_state(resource: Resource):
-      """ Recursively save the state of the resource and all child resources. """
-      if hasattr(resource, "tracker"):
-        resource_state = resource.tracker.serialize()
-        if resource_state is not None:
-          state[resource.name] = resource_state
-      for child in resource.children:
-        save_resource_state(child)
-    save_resource_state(self)
-
-    return state
-
-  def save_state_to_file(self, filename: str) -> None:
-    """ Save the state of the deck to a file. The state includes volumes and operations in wells.
-
-    Note: this does not save the layout of resources on the deck. To save the deck layout instead,
-    use :meth:`pylabrobot.resources.Resource.save`.
-    """
-
-    state = self.serialize_state()
-    with open(filename, "w", encoding="utf-8") as f:
-      f.write(json.dumps(state, indent=2))
-
-  def load_state(self, data: dict) -> None:
-    """ Load state from a data dictionary. """
-
-    for resource_name, resource_state in data.items():
-      resource = self.get_resource(resource_name)
-      assert hasattr(resource, "tracker")
-      resource.tracker.load_state(resource_state)
-
-  def load_state_from_file(self, filename: str) -> None:
-    """ Load the state of the deck from a file. """
-
-    with open(filename, "r", encoding="utf-8") as f:
-      data = json.load(f)
-    self.load_state(data)
