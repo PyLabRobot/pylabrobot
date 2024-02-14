@@ -161,6 +161,16 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
 
   @responses.activate
   async def test_drop_tips96(self):
+    # FIXME: pick up tips first, but make nicer.
+    responses.add(
+      responses.POST,
+      "http://localhost:8080/events/pick-up-tips96",
+      match=[header_match],
+      json={"status": "ok"},
+      status=200,
+    )
+    await self.lh.pick_up_tips96(self.tip_rack)
+
     responses.add(
       responses.POST,
       "http://localhost:8080/events/drop-tips96",

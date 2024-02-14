@@ -92,7 +92,6 @@ class LiquidHandler(Machine):
     )
 
     self.backend: LiquidHandlerBackend = backend # fix type
-    self._picked_up_tips96: Optional[TipRack] = None # TODO: replace with tracker.
     self._callbacks: Dict[str, OperationCallback] = {}
 
     self.deck = deck
@@ -101,6 +100,7 @@ class LiquidHandler(Machine):
     self.deck.register_did_unassign_resource_callback(self._send_unassigned_resource_to_backend)
 
     self.head: Dict[int, TipTracker] = {}
+    self.head96: Dict[int, TipTracker] = {}
 
     # assign deck as only child resource, and set location of self to origin.
     self.location = Coordinate.zero()
@@ -115,6 +115,7 @@ class LiquidHandler(Machine):
     await super().setup()
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
+    self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
 
     self._send_assigned_resource_to_backend(self.deck)
     for resource in self.deck.children:
@@ -1029,27 +1030,48 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
+    # queue operation on all tip trackers
+    for i, tip_spot in enumerate(tip_rack.get_all_items()):
+      if not does_tip_tracking() and self.head96[i].has_tip:
+        self.head96[i].remove_tip()
+      self.head96[i].add_tip(tip_spot.get_tip(), origin=tip_spot, commit=False)
+
     pickup_operation = PickupTipRack(resource=tip_rack, offset=offset)
-    await self.backend.pick_up_tips96(
-      pickup=pickup_operation,
-      **backend_kwargs
-    )
-
-    # Save the tips as picked up.
-    self._picked_up_tips96 = tip_rack
-
-    self._trigger_callback(
-      "pick_up_tips96",
-      liquid_handler=self,
-      pickup=pickup_operation,
-      error=None,
-      **backend_kwargs,
-    )
+    try:
+      await self.backend.pick_up_tips96(
+        pickup=pickup_operation,
+        **backend_kwargs
+      )
+    except Exception as error:  # pylint: disable=broad-except
+      for i, tip_spot in enumerate(tip_rack.get_all_items()):
+        if not does_tip_tracking() and tip_spot.has_tip():
+          self.head96[i].rollback()
+        self.head96[i].rollback()
+      self._trigger_callback(
+        "pick_up_tips96",
+        liquid_handler=self,
+        pickup=pickup_operation,
+        error=error,
+        **backend_kwargs,
+      )
+    else:
+      for i, tip_spot in enumerate(tip_rack.get_all_items()):
+        if not does_tip_tracking() and tip_spot.has_tip():
+          self.head96[i].commit()
+        self.head96[i].commit()
+      self._trigger_callback(
+        "pick_up_tips96",
+        liquid_handler=self,
+        pickup=pickup_operation,
+        error=None,
+        **backend_kwargs,
+      )
 
   async def drop_tips96(
     self,
     tip_rack: TipRack,
     offset: Coordinate = Coordinate.zero(),
+    allow_nonzero_volume: bool = False,
     **backend_kwargs
   ):
     """ Drop tips using the 96 head. This will drop 96 tips.
@@ -1062,6 +1084,9 @@ class LiquidHandler(Machine):
     Args:
       tip_rack: The tip rack to drop tips to.
       offset: The offset to use when dropping tips.
+      allow_nonzero_volume: If `True`, the tip will be dropped even if its volume is not zero (there
+        is liquid in the tip). If `False`, a RuntimeError will be raised if the tip has nonzero
+        volume.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
@@ -1069,21 +1094,59 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
+    # queue operation on all tip trackers
+    for i, tip_spot in enumerate(tip_rack.get_all_items()):
+      tip = self.head96[i].get_tip()
+      if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
+        error = f"Cannot drop tip with volume {tip.tracker.get_used_volume()} on channel {i}"
+        raise RuntimeError(error)
+      if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+        tip_spot.tracker.add_tip(tip, commit=False)
+      self.head96[i].remove_tip()
+
     drop_operation = DropTipRack(resource=tip_rack, offset=offset)
-    await self.backend.drop_tips96(
-      drop=drop_operation,
-      **backend_kwargs
-    )
+    try:
+      await self.backend.drop_tips96(
+        drop=drop_operation,
+        **backend_kwargs
+      )
+    except Exception as e:  # pylint: disable=broad-except
+      self._trigger_callback(
+        "drop_tips96",
+        liquid_handler=self,
+        drop=drop_operation,
+        error=e,
+        **backend_kwargs,
+      )
+    else:
+      self._trigger_callback(
+        "drop_tips96",
+        liquid_handler=self,
+        drop=drop_operation,
+        error=None,
+        **backend_kwargs,
+      )
 
-    self._picked_up_tips96 = None
+  def _get_96_head_origin_tip_rack(self) -> Optional[TipRack]:
+    """ Get the tip rack where the tips on the 96 head were picked up. If no tips were picked up,
+    return `None`. If different tip racks were found for different tips on the head, raise a
+    RuntimeError. """
 
-    self._trigger_callback(
-      "drop_tips96",
-      liquid_handler=self,
-      drop=drop_operation,
-      error=None,
-      **backend_kwargs,
-    )
+    tip_spot = self.head96[0].get_tip_origin()
+    if tip_spot is None:
+      return None
+    tip_rack = tip_spot.parent
+    if tip_rack is None:
+      # very unlikely, but just in case
+      raise RuntimeError("No tip rack found for tip")
+    for i in range(tip_rack.num_items):
+      other_tip_spot = self.head96[i].get_tip_origin()
+      if other_tip_spot is None:
+        raise RuntimeError("Not all channels have a tip origin")
+      other_tip_rack = other_tip_spot.parent
+      if tip_rack != other_tip_rack:
+        raise RuntimeError("All tips must be from the same tip rack")
+    return tip_rack
 
   async def return_tips96(self):
     """ Return the tips on the 96 head to the tip rack where they were picked up.
@@ -1098,10 +1161,10 @@ class LiquidHandler(Machine):
       RuntimeError: If no tips have been picked up.
     """
 
-    if self._picked_up_tips96 is None:
+    tip_rack = self._get_96_head_origin_tip_rack()
+    if tip_rack is None:
       raise RuntimeError("No tips have been picked up with the 96 head")
-
-    await self.drop_tips96(self._picked_up_tips96)
+    return await self.drop_tips96(tip_rack)
 
   async def aspirate_plate(
     self,
@@ -1134,9 +1197,10 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    if self._picked_up_tips96 is None:
+    origin_tip_rack = self._get_96_head_origin_tip_rack()
+    if origin_tip_rack is None:
       raise NoTipError("No tips have been picked up with the 96 head")
-    tips = self._picked_up_tips96.get_all_tips()
+    tips = origin_tip_rack.get_all_tips()
 
     if plate.has_lid():
       raise ValueError("Aspirating from plate with lid")
@@ -1206,9 +1270,10 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    if self._picked_up_tips96 is None:
+    origin_tip_rack = self._get_96_head_origin_tip_rack()
+    if origin_tip_rack is None:
       raise NoTipError("No tips have been picked up with the 96 head")
-    tips = self._picked_up_tips96.get_all_tips()
+    tips = origin_tip_rack.get_all_tips()
 
     if plate.has_lid():
       raise ValueError("Dispensing to plate with lid")

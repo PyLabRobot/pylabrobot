@@ -36,6 +36,7 @@ class ChatterBoxBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
 
   async def test_drop_tips96(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.drop_tips96(self.tip_rack)
 
   async def test_aspirate(self):
