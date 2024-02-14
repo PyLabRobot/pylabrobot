@@ -501,6 +501,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
                 "xs#####xd#yh####tt##wu#za####zh####ze####")
 
   async def test_core_96_tip_drop(self):
+    await self.lh.pick_up_tips96(self.tip_rack) # pick up tips first
     await self.lh.drop_tips96(self.tip_rack)
 
     self._assert_command_sent_once(
