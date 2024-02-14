@@ -1,7 +1,7 @@
 # from abc import ABC, abstractmethod
 import contextlib
 import sys
-from typing import List, Tuple, Optional, cast
+from typing import Callable, List, Tuple, Optional, cast
 
 from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError
 from pylabrobot.resources.liquid import Liquid
@@ -25,6 +25,9 @@ def no_volume_tracking():
   this.volume_tracking_enabled = old_value # type: ignore
 
 
+VolumeTrackerCallback = Callable[[], None]
+
+
 class VolumeTracker:
   """ A volume tracker tracks operations that change the volume in a container and raises errors
   if the volume operations are invalid. """
@@ -40,6 +43,8 @@ class VolumeTracker:
 
     self.liquids: List[Tuple[Optional[Liquid], float]] = liquids or []
     self.pending_liquids: List[Tuple[Optional[Liquid], float]] = pending_liquids or []
+
+    self._callback: Optional[VolumeTrackerCallback] = None
 
   @property
   def is_disabled(self) -> bool:
@@ -57,6 +62,8 @@ class VolumeTracker:
     """ Set the liquids in the container. """
     self.liquids = liquids
     self.pending_liquids = liquids
+    if self._callback is not None:
+      self._callback()
 
   def remove_liquid(self, volume: float) -> None:
     """ Remove liquid from the container. Top to bottom. """
@@ -127,6 +134,9 @@ class VolumeTracker:
 
     self.liquids = self.pending_liquids
 
+    if self._callback is not None:
+      self._callback()
+
   def rollback(self) -> None:
     """ Rollback the pending operations. """
     assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
@@ -148,3 +158,6 @@ class VolumeTracker:
 
     self.liquids = [load_liquid(l) for l in state["liquids"]]
     self.pending_liquids = [load_liquid(l) for l in state["pending_liquids"]]
+
+  def register_callback(self, callback: VolumeTrackerCallback) -> None:
+    self._callback = callback

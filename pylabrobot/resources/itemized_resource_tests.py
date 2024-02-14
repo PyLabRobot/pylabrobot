@@ -42,6 +42,10 @@ class TestItemizedResource(unittest.TestCase):
     self.assertEqual(self.plate.get_item("B1").name, "plate_well_0_1")
     self.assertEqual(self.plate.get_item("A2").name, "plate_well_1_0")
 
+  def test_get_item_tuple(self):
+    self.assertEqual(self.plate.get_item((0, 0)).name, "plate_well_0_0")
+    self.assertEqual(self.plate.get_item((7, 11)).name, "plate_well_11_7")
+
   def test_well_get_absolute_location(self):
     self.assertEqual(self.plate.get_item(0).get_absolute_location(),
       Coordinate(0, 63, 0))

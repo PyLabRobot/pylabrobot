@@ -551,7 +551,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # save the state
     state_filename = tempfile.mktemp()
-    self.lh.deck.save_state_to_file(filename=state_filename)
+    self.lh.deck.save_state_to_file(fn=state_filename)
 
     # save the deck
     deck_filename = tempfile.mktemp()
@@ -560,7 +560,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # create a new liquid handler, load the state and the deck
     lh2 = LiquidHandler(self.backend, deck=STARLetDeck())
     lh2.deck = Deck.load_from_json_file(json_file=deck_filename)
-    lh2.deck.load_state_from_file(filename=state_filename)
+    lh2.deck.load_state_from_file(fn=state_filename)
 
     # assert that the state is the same
     well_a1 = lh2.deck.get_resource("plate").get_item("A1") # type: ignore

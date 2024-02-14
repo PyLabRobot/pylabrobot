@@ -4,7 +4,7 @@ import copy
 import json
 import logging
 import sys
-from typing import Callable, List, Optional, Type, cast
+from typing import Any, Callable, Dict, List, Optional, Type, cast
 
 from .coordinate import Coordinate
 from pylabrobot.serializer import serialize, deserialize
@@ -21,6 +21,7 @@ WillAssignResourceCallback = Callable[["Resource"], None]
 DidAssignResourceCallback = Callable[["Resource"], None]
 WillUnassignResourceCallback = Callable[["Resource"], None]
 DidUnassignResourceCallback = Callable[["Resource"], None]
+ResourceDidUpdateState = Callable[[Dict[str, Any]], None]
 
 
 class Resource:
@@ -62,6 +63,7 @@ class Resource:
     self._did_assign_resource_callbacks: List[DidAssignResourceCallback] = []
     self._will_unassign_resource_callbacks: List[WillUnassignResourceCallback] = []
     self._did_unassign_resource_callbacks: List[DidUnassignResourceCallback] = []
+    self._resource_state_updated_callbacks: List[ResourceDidUpdateState] = []
 
   def serialize(self) -> dict:
     """ Serialize this resource. """
@@ -479,28 +481,104 @@ class Resource:
     self._will_assign_resource_callbacks.remove(callback)
 
   def deregister_did_assign_resource_callback(self, callback: DidAssignResourceCallback):
-    """ Remove a callback that will be called after a resource is assigned to this resource.
-
-    Args:
-      callback: The callback to remove.
-    """
+    """ Remove a callback that will be called after a resource is assigned to this resource. """
     self._did_assign_resource_callbacks.remove(callback)
 
   def deregister_will_unassign_resource_callback(self, callback: WillUnassignResourceCallback):
-    """ Remove a callback that will be called before a resource is unassigned from this resource.
-
-    Args:
-      callback: The callback to remove.
-    """
+    """ Remove a callback that will be called before a resource is unassigned from this resource."""
     self._will_unassign_resource_callbacks.remove(callback)
 
   def deregister_did_unassign_resource_callback(self, callback: DidUnassignResourceCallback):
-    """ Remove a callback that will be called after a resource is unassigned from this resource.
+    """ Remove a callback that will be called after a resource is unassigned from this resource. """
+    self._did_unassign_resource_callbacks.remove(callback)
+
+  # -- state --
+
+  # Developer note: this method serializes the state of this resource only. If you want to serialize
+  # a custom state for a resource, override this method in the subclass.
+  def serialize_state(self) -> Dict[str, Any]:
+    """ Serialize the state of this resource only.
+
+    Use :meth:`pylabrobot.resources.resource.Resource.serialize_all_state` to serialize the state of
+    this resource and all children.
+    """
+    return {}
+
+  # Developer note: you probably don't need to override this method. Instead, override
+  # `serialize_state`.
+  def serialize_all_state(self) -> Dict[str, Dict[str, Any]]:
+    """ Serialize the state of this resource and all children.
+
+    Use :meth:`pylabrobot.resources.resource.Resource.serialize_state` to serialize the state of
+    this resource only.
+
+    Returns:
+      A dictionary where the keys are the names of the resources and the values are the serialized
+      states of the resources.
+    """
+
+    state = {self.name: self.serialize_state()}
+    for child in self.children:
+      state.update(child.serialize_all_state())
+    return state
+
+  # Developer note: this method deserializes the state of this resource only. If you want to
+  # deserialize a custom state for a resource, override this method in the subclass.
+  def load_state(self, state: Dict[str, Any]) -> None:
+    """ Load state for this resource only. """
+    # no state to load by default
+
+  # Developer note: you probably don't need to override this method. Instead, override `load_state`.
+  def load_all_state(self, state: Dict[str, Dict[str, Any]]) -> None:
+    """ Load state for this resource and all children. """
+    for child in self.children:
+      child.load_state(state[child.name])
+      child.load_all_state(state)
+
+  def save_state_to_file(self, fn: str, indent: Optional[int] = None):
+    """ Save the state of this resource and all children to a JSON file.
 
     Args:
-      callback: The callback to remove.
+      fn: File name. Caution: file will be overwritten.
+      indent: Same as `json.dump`'s `indent` argument (for json pretty printing).
+
+    Examples:
+      Saving to a json file:
+
+      >>> deck.save_state_to_file("my_state.json")
     """
-    self._did_unassign_resource_callbacks.remove(callback)
+
+    serialized = self.serialize_all_state()
+    with open(fn, "w", encoding="utf-8") as f:
+      json.dump(serialized, f, indent=indent)
+
+  def load_state_from_file(self, fn: str) -> None:
+    """ Load the state of this resource and all children from a JSON file.
+
+    Args:
+      fn: The file name to load the state from.
+
+    Examples:
+      Loading from a json file:
+
+      >>> deck.load_state_from_file("my_state.json")
+    """
+
+    with open(fn, "r", encoding="utf-8") as f:
+      content = json.load(f)
+    self.load_all_state(content)
+
+  def register_state_update_callback(self, callback: ResourceDidUpdateState):
+    """ Register a callback that will be called when the state of the resource changes. """
+    self._resource_state_updated_callbacks.append(callback)
+
+  def deregister_state_update_callback(self, callback: ResourceDidUpdateState):
+    """ Remove a callback that will be called when the state of the resource changes. """
+    self._resource_state_updated_callbacks.remove(callback)
+
+  def _state_updated(self):
+    for callback in self._resource_state_updated_callbacks:
+      callback(self.serialize_state())
 
 
 def get_resource_class_from_string(
