@@ -6383,6 +6383,9 @@ class STAR(HamiltonLiquidHandler):
 
     Args:
       device_number: TCC connect number to the HHS
+
+    Returns:
+      Information string about the initialization status
     """
 
     module_pointer = f"T{device_number}"
@@ -6401,12 +6404,11 @@ class STAR(HamiltonLiquidHandler):
     hhs_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
     hhs_init_status = hhs_init_status["qw"]
 
-    info = "HHS already initialised"
     # Initializing HHS if necessary
+    info = "HHS already initialized"
     if hhs_init_status != 1:
-      # Initialise module
       await self.send_command(module=module_pointer, command="LI")
-      info = f"HHS at device number {device_number} initialised."
+      info = f"HHS at device number {device_number} initialized."
 
     return info
 
@@ -6421,7 +6423,7 @@ class STAR(HamiltonLiquidHandler):
       module=f"T{device_number}",
       command="LP",
       lp="0" # => open plate lock
-      )
+    )
 
   async def close_plate_lock(self, device_number: int):
     """ Close HHS plate lock """
@@ -6432,21 +6434,22 @@ class STAR(HamiltonLiquidHandler):
       module = f"T{device_number}",
       command="LP",
       lp="1" # => close plate lock
-      )
+    )
 
   # -------------- 4.1.2 HHS Shaking --------------
   async def start_shaking_at_hhs(
-      self,
-      device_number: int,
-      rpm: int,
-      rotation: int = 0,
-      plate_locked_during_shaking: bool = True
-      ):
-    """ Start shaking of specified HHS 
+    self,
+    device_number: int,
+    rpm: int,
+    rotation: int = 0,
+    plate_locked_during_shaking: bool = True
+  ):
+    """ Start shaking of specified HHS
 
     Args:
       rpm: round per minute
       rotation: 0: clockwise rotation, 1: counter-clockwise rotation
+      plate_locked_during_shaking: True if plate is locked during shaking
     """
 
     await self.check_type_is_hhs(device_number)
@@ -6462,7 +6465,7 @@ class STAR(HamiltonLiquidHandler):
       st=str(rotation),
       sv=str(rpm).zfill(4),
       sr="00500" # ??? maybe shakingAccRamp rate?
-      )
+    )
 
   async def stop_shaking_at_hhs(self, device_number: int):
     """ Close HHS plate lock """
@@ -6474,10 +6477,10 @@ class STAR(HamiltonLiquidHandler):
   # -------------- 4.1.3 HHS Heating/Temperature Control --------------
 
   async def start_temperature_control_at_hhs(
-      self,
-      device_number: int,
-      temp: Union[float, int],
-      ):
+    self,
+    device_number: int,
+    temp: Union[float, int],
+  ):
     """ Start temperature regulation of specified HHS """
 
     await self.check_type_is_hhs(device_number)
@@ -6491,10 +6494,14 @@ class STAR(HamiltonLiquidHandler):
       module=f"T{device_number}",
       command="TA", # temperature adjustment
       ta=safe_temp_str,
-      )
+    )
 
   async def get_temperature_at_hhs(self, device_number: int) -> dict:
-    """ Query current temperatures of both sensors of specified HHS """
+    """ Query current temperatures of both sensors of specified HHS
+
+    Returns:
+      Dictionary with keys "middle_T" and "edge_T" for the middle and edge temperature
+    """
 
     await self.check_type_is_hhs(device_number)
 
@@ -6526,7 +6533,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def initialize_hhc(self, device_number: int) -> str:
     """ Initialize Hamilton Heater Cooler (HHC) at specified TCC port
-  
+
     Args:
       device_number: TCC connect number to the HHC
     """
@@ -6547,20 +6554,20 @@ class STAR(HamiltonLiquidHandler):
     hhc_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
     hhc_init_status = hhc_init_status["qw"]
 
-    info = "HHC already initialised"
+    info = "HHC already initialized"
     # Initializing HHS if necessary
     if hhc_init_status != 1:
-      # Initialise device
+      # Initialize device
       await self.send_command(module=module_pointer, command="LI")
-      info = f"HHS at device number {device_number} initialised."
+      info = f"HHS at device number {device_number} initialized."
 
     return info
 
   async def start_temperature_control_at_hhc(
-      self,
-      device_number: int,
-      temp:  Union[float, int],
-      ):
+    self,
+    device_number: int,
+    temp:  Union[float, int],
+  ):
     """ Start temperature regulation of specified HHC """
 
     await self.check_type_is_hhc(device_number)
@@ -6576,7 +6583,7 @@ class STAR(HamiltonLiquidHandler):
       ta=safe_temp_str,
       tb="1800", # TODO: identify precise purpose?
       tc="0020", # TODO: identify precise purpose?
-      )
+    )
 
   async def get_temperature_at_hhc(self, device_number: int) -> dict:
     """ Query current temperatures of both sensors of specified HHC """
@@ -6594,7 +6601,7 @@ class STAR(HamiltonLiquidHandler):
     await self.check_type_is_hhc(device_number)
     query_current_control_status = await self.send_command(
       module=f"T{device_number}", command="QD", fmt="qd#"
-      )
+    )
 
     return query_current_control_status["qd"] == 0
 
