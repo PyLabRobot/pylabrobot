@@ -1,5 +1,6 @@
 :orphan:
 
-# The simulator was removed in favor of the Visualizer
+The simulator was removed in favor of the Visualizer
+-----------------------------------------------------
 
-Read the tutorial on how to use the Visualizer [here](using-the-visualizer).
+Read the tutorial on how to use the Visualizer {doc}`here <using-the-visualizer>`.
