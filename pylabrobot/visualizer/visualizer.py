@@ -146,7 +146,7 @@ class Visualizer:
     """ Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`. """
 
-    while True:
+    while self._websocket is not None:
       try:
         message = await websocket.recv()
       except websockets.exceptions.ConnectionClosed:
