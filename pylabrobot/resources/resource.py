@@ -4,7 +4,7 @@ import copy
 import json
 import logging
 import sys
-from typing import List, Optional, Type, cast
+from typing import Any, Callable, Dict, List, Optional, Type, cast
 
 from .coordinate import Coordinate
 from pylabrobot.serializer import serialize, deserialize
@@ -15,6 +15,13 @@ else:
   from typing_extensions import Self
 
 logger = logging.getLogger("pylabrobot")
+
+
+WillAssignResourceCallback = Callable[["Resource"], None]
+DidAssignResourceCallback = Callable[["Resource"], None]
+WillUnassignResourceCallback = Callable[["Resource"], None]
+DidUnassignResourceCallback = Callable[["Resource"], None]
+ResourceDidUpdateState = Callable[[Dict[str, Any]], None]
 
 
 class Resource:
@@ -51,6 +58,12 @@ class Resource:
     self.children: List[Resource] = []
 
     self.rotation = 0
+
+    self._will_assign_resource_callbacks: List[WillAssignResourceCallback] = []
+    self._did_assign_resource_callbacks: List[DidAssignResourceCallback] = []
+    self._will_unassign_resource_callbacks: List[WillUnassignResourceCallback] = []
+    self._did_unassign_resource_callbacks: List[DidUnassignResourceCallback] = []
+    self._resource_state_updated_callbacks: List[ResourceDidUpdateState] = []
 
   def serialize(self) -> dict:
     """ Serialize this resource. """
@@ -139,9 +152,12 @@ class Resource:
     reassign: bool = True):
     """ Assign a child resource to this resource.
 
-    Will use :meth:`~Resource.resource_assigned_callback` to notify the parent of the assignment,
-    if parent is not `None`. Note that the resource to be assigned may have child resources, in
-    which case you will be responsible for handling any checking, if necessary.
+    Before the resource is assigned, all callbacks registered with
+    :meth:`~Resource.register_will_assign_resource_callback` will be called. If any of these
+    callbacks raises an exception, the resource will not be assigned.
+
+    After the resource is assigned, all callbacks registered with
+    :meth:`~Resource.register_did_assign_resource_callback` will be called.
 
     Args:
       resource: The resource to assign.
@@ -153,17 +169,38 @@ class Resource:
     # Check for unsupported resource assignment operations
     self._check_assignment(resource=resource, reassign=reassign)
 
+    # Call "will assign" callbacks
+    for callback in self._will_assign_resource_callbacks:
+      callback(resource)
+
+    # Modify the tree structure
     resource.parent = self
     resource.location = location
-
-    try:
-      self.resource_assigned_callback(resource) # call callbacks first.
-    except Exception as e:
-      resource.parent = None
-      resource.location = None
-      raise e
-
     self.children.append(resource)
+
+    # Register callbacks on the new child resource so that they can be propagated up the tree.
+    resource.register_will_assign_resource_callback(self._call_will_assign_resource_callbacks)
+    resource.register_did_assign_resource_callback(self._call_did_assign_resource_callbacks)
+    resource.register_will_unassign_resource_callback(self._call_will_unassign_resource_callbacks)
+    resource.register_did_unassign_resource_callback(self._call_did_unassign_resource_callbacks)
+
+    # Call "did assign" callbacks
+    for callback in self._did_assign_resource_callbacks:
+      callback(resource)
+
+  # Helper methods to call all callbacks. These are used to propagate callbacks up the tree.
+  def _call_will_assign_resource_callbacks(self, resource: Resource):
+    for callback in self._will_assign_resource_callbacks:
+      callback(resource)
+  def _call_did_assign_resource_callbacks(self, resource: Resource):
+    for callback in self._did_assign_resource_callbacks:
+      callback(resource)
+  def _call_will_unassign_resource_callbacks(self, resource: Resource):
+    for callback in self._will_unassign_resource_callbacks:
+      callback(resource)
+  def _call_did_unassign_resource_callbacks(self, resource: Resource):
+    for callback in self._did_unassign_resource_callbacks:
+      callback(resource)
 
   def _check_assignment(self, resource: Resource, reassign: bool = True):
     """ Check if the resource assignment produces unsupported or dangerous conflicts. """
@@ -171,7 +208,7 @@ class Resource:
 
     # Check for self assignment
     if resource is self:
-      msgs.append(f"Will not assign resource '{self.name}' to itself.")
+      msgs.append(f"Cannot assign resource '{self.name}' to itself.")
 
     # Check for reassignment to the same (non-null) parent
     if (resource.parent is not None) and (resource.parent is self):
@@ -189,8 +226,6 @@ class Resource:
       msgs.append(f"Will not assign resource '{resource.name}' " +
                   f"that already has a parent: '{resource.parent.name}'.")
 
-    # TODO: write other checks, perhaps recursive or location checks.
-
     if len(msgs) > 0:
       msg = " ".join(msgs)
       raise ValueError(msg)
@@ -198,50 +233,39 @@ class Resource:
   def unassign_child_resource(self, resource: Resource):
     """ Unassign a child resource from this resource.
 
-    Will use :meth:`~Resource.resource_unassigned_callback` to notify the parent of the
-    unassignment, if parent is not `None`.
+    Before the resource is unassigned, all callbacks registered with
+    :meth:`~Resource.register_will_unassign_resource_callback` will be called.
+
+    After the resource is unassigned, all callbacks registered with
+    :meth:`~Resource.register_did_unassign_resource_callback` will be called.
     """
 
     if resource not in self.children:
       raise ValueError(f"Resource with name '{resource.name}' is not a child of this resource "
                        f"('{self.name}').")
 
-    self.resource_unassigned_callback(resource) # call callbacks first.
+    # Call "will unassign" callbacks
+    for callback in self._will_unassign_resource_callbacks:
+      callback(resource)
+
+    # Update the tree structure
     resource.parent = None
     self.children.remove(resource)
+
+    # Delete callbacks on the child resource so that they are not propagated up the tree.
+    resource.deregister_will_assign_resource_callback(self._call_will_assign_resource_callbacks)
+    resource.deregister_did_assign_resource_callback(self._call_did_assign_resource_callbacks)
+    resource.deregister_will_unassign_resource_callback(self._call_will_unassign_resource_callbacks)
+    resource.deregister_did_unassign_resource_callback(self._call_did_unassign_resource_callbacks)
+
+    # Call "did unassign" callbacks
+    for callback in self._did_unassign_resource_callbacks:
+      callback(resource)
 
   def unassign(self):
     """ Unassign this resource from its parent. """
     if self.parent is not None:
       self.parent.unassign_child_resource(self)
-
-  def resource_assigned_callback(self, resource):
-    """ Called when a resource is assigned to this resource.
-
-    May be overridden by subclasses.
-
-    May raise an exception if the resource cannot be assigned to this resource.
-
-    Args:
-      resource: The resource that was assigned.
-    """
-
-    if self.parent is not None:
-      self.parent.resource_assigned_callback(resource)
-
-  def resource_unassigned_callback(self, resource):
-    """ Called when a resource is unassigned from this resource.
-
-    May be overridden by subclasses.
-
-    May raise an exception if the resource cannot be unassigned from this resource.
-
-    Args:
-      resource: The resource that was unassigned.
-    """
-
-    if self.parent is not None:
-      self.parent.resource_unassigned_callback(resource)
 
   def get_all_children(self) -> List[Resource]:
     """ Recursively get all children of this resource. """
@@ -414,6 +438,147 @@ class Resource:
       content = json.load(f)
 
     return cls.deserialize(content)
+
+  def register_will_assign_resource_callback(self, callback: WillAssignResourceCallback):
+    """ Add a callback that will be called before a resource is assigned to this resource. These
+    callbacks can raise errors in case the proposed assignment is invalid.
+
+    Args:
+      callback: The callback to add.
+    """
+    self._will_assign_resource_callbacks.append(callback)
+
+  def register_did_assign_resource_callback(self, callback: DidAssignResourceCallback):
+    """ Add a callback that will be called after a resource is assigned to this resource.
+
+    Args:
+      callback: The callback to add.
+    """
+    self._did_assign_resource_callbacks.append(callback)
+
+  def register_will_unassign_resource_callback(self, callback: WillUnassignResourceCallback):
+    """ Add a callback that will be called before a resource is unassigned from this resource.
+
+    Args:
+      callback: The callback to add.
+    """
+    self._will_unassign_resource_callbacks.append(callback)
+
+  def register_did_unassign_resource_callback(self, callback: DidUnassignResourceCallback):
+    """ Add a callback that will be called after a resource is unassigned from this resource.
+
+    Args:
+      callback: The callback to add.
+    """
+    self._did_unassign_resource_callbacks.append(callback)
+
+  def deregister_will_assign_resource_callback(self, callback: WillAssignResourceCallback):
+    """ Remove a callback that will be called before a resource is assigned to this resource.
+
+    Args:
+      callback: The callback to remove.
+    """
+    self._will_assign_resource_callbacks.remove(callback)
+
+  def deregister_did_assign_resource_callback(self, callback: DidAssignResourceCallback):
+    """ Remove a callback that will be called after a resource is assigned to this resource. """
+    self._did_assign_resource_callbacks.remove(callback)
+
+  def deregister_will_unassign_resource_callback(self, callback: WillUnassignResourceCallback):
+    """ Remove a callback that will be called before a resource is unassigned from this resource."""
+    self._will_unassign_resource_callbacks.remove(callback)
+
+  def deregister_did_unassign_resource_callback(self, callback: DidUnassignResourceCallback):
+    """ Remove a callback that will be called after a resource is unassigned from this resource. """
+    self._did_unassign_resource_callbacks.remove(callback)
+
+  # -- state --
+
+  # Developer note: this method serializes the state of this resource only. If you want to serialize
+  # a custom state for a resource, override this method in the subclass.
+  def serialize_state(self) -> Dict[str, Any]:
+    """ Serialize the state of this resource only.
+
+    Use :meth:`pylabrobot.resources.resource.Resource.serialize_all_state` to serialize the state of
+    this resource and all children.
+    """
+    return {}
+
+  # Developer note: you probably don't need to override this method. Instead, override
+  # `serialize_state`.
+  def serialize_all_state(self) -> Dict[str, Dict[str, Any]]:
+    """ Serialize the state of this resource and all children.
+
+    Use :meth:`pylabrobot.resources.resource.Resource.serialize_state` to serialize the state of
+    this resource only.
+
+    Returns:
+      A dictionary where the keys are the names of the resources and the values are the serialized
+      states of the resources.
+    """
+
+    state = {self.name: self.serialize_state()}
+    for child in self.children:
+      state.update(child.serialize_all_state())
+    return state
+
+  # Developer note: this method deserializes the state of this resource only. If you want to
+  # deserialize a custom state for a resource, override this method in the subclass.
+  def load_state(self, state: Dict[str, Any]) -> None:
+    """ Load state for this resource only. """
+    # no state to load by default
+
+  # Developer note: you probably don't need to override this method. Instead, override `load_state`.
+  def load_all_state(self, state: Dict[str, Dict[str, Any]]) -> None:
+    """ Load state for this resource and all children. """
+    for child in self.children:
+      child.load_state(state[child.name])
+      child.load_all_state(state)
+
+  def save_state_to_file(self, fn: str, indent: Optional[int] = None):
+    """ Save the state of this resource and all children to a JSON file.
+
+    Args:
+      fn: File name. Caution: file will be overwritten.
+      indent: Same as `json.dump`'s `indent` argument (for json pretty printing).
+
+    Examples:
+      Saving to a json file:
+
+      >>> deck.save_state_to_file("my_state.json")
+    """
+
+    serialized = self.serialize_all_state()
+    with open(fn, "w", encoding="utf-8") as f:
+      json.dump(serialized, f, indent=indent)
+
+  def load_state_from_file(self, fn: str) -> None:
+    """ Load the state of this resource and all children from a JSON file.
+
+    Args:
+      fn: The file name to load the state from.
+
+    Examples:
+      Loading from a json file:
+
+      >>> deck.load_state_from_file("my_state.json")
+    """
+
+    with open(fn, "r", encoding="utf-8") as f:
+      content = json.load(f)
+    self.load_all_state(content)
+
+  def register_state_update_callback(self, callback: ResourceDidUpdateState):
+    """ Register a callback that will be called when the state of the resource changes. """
+    self._resource_state_updated_callbacks.append(callback)
+
+  def deregister_state_update_callback(self, callback: ResourceDidUpdateState):
+    """ Remove a callback that will be called when the state of the resource changes. """
+    self._resource_state_updated_callbacks.remove(callback)
+
+  def _state_updated(self):
+    for callback in self._resource_state_updated_callbacks:
+      callback(self.serialize_state())
 
 
 def get_resource_class_from_string(
