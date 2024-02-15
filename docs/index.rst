@@ -31,7 +31,7 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
    :caption: Liquid handling
 
    basic
-   using-the-simulator
+   using-the-visualizer
    using-trackers
    custom-resources
    writing-robot-agnostic-methods
