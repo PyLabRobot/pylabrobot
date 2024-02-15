@@ -23,7 +23,7 @@ extras_websockets = [
   "websockets"
 ]
 
-extras_simulation = extras_websockets
+extras_visualizer = extras_websockets
 
 extras_venus = [
   "pyhamilton"
@@ -39,7 +39,7 @@ extras_server = [
 ]
 
 extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets + \
-    extras_simulation + extras_opentrons + extras_server + [
+    extras_visualizer + extras_opentrons + extras_server + [
     "sphinx_book_theme",
     "myst_nb",
     "sphinx_copybutton",
@@ -62,13 +62,13 @@ setup(
   long_description_content_type="text/markdown",
   install_requires=["typing_extensions"],
   url="https://github.com/pylabrobot/pylabrobot.git",
-  package_data={"pylabrobot": ["liquid_handling/backends/simulation/simulator/*"]},
+  package_data={"pylabrobot": ["liquid_handling/visualizer/*"]},
   extras_require={
     "fw": extras_fw,
     "http": extras_http,
     "plate_reading": extras_plate_reading,
     "websockets": extras_websockets,
-    "simulation": extras_simulation,
+    "visualizer": extras_visualizer,
     "venus": extras_venus,
     "opentrons": extras_opentrons,
     "server": extras_server,
@@ -78,7 +78,7 @@ setup(
   entry_points={
     "console_scripts": [
       "lh-server=pylabrobot.server.liquid_handling_server:main",
-      "plr-gui=pylabrobot.liquid_handling.backends.simulation.simulator.gui:main",
+      "plr-gui=pylabrobot.gui.gui:main",
     ],
   }
 )

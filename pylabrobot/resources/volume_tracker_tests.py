@@ -38,6 +38,7 @@ class TestVolumeTracker(unittest.TestCase):
 
     self.assertEqual(tracker.get_used_volume(), 60)
     tracker.remove_liquid(volume=20)
+    tracker.commit()
     self.assertEqual(tracker.get_used_volume(), 40)
 
     with self.assertRaises(TooLittleLiquidError):

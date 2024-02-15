@@ -1,13 +1,32 @@
-from pylabrobot.machine import MachineFrontend
+from typing import Optional
 
+from pylabrobot.machine import Machine
 from .backend import PumpBackend
 
 
-class Pump(MachineFrontend):
+class Pump(Machine):
   """ Frontend for a (peristaltic) pump. """
 
-  def __init__(self, backend: PumpBackend):
-    self.backend: PumpBackend = backend
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    backend: PumpBackend,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
+  ):
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      backend=backend,
+      category=category,
+      model=model,
+    )
+    self.backend: PumpBackend = backend # fix type
 
   def run_revolutions(self, num_revolutions: float):
     """ Run a given number of revolutions. This method will return after the command has been sent,

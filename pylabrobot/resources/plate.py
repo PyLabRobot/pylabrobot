@@ -125,18 +125,18 @@ class Plate(ItemizedResource[Well]):
     return self.lid is not None
 
   def set_well_liquids(
-      self,
-      liquids: Union[
-        List[List[Tuple["Liquid", float]]],
-        List[Tuple["Liquid", float]],
-        Tuple["Liquid", float]]
-    ) -> None:
+    self,
+    liquids: Union[
+      List[List[Tuple[Optional["Liquid"], Union[int, float]]]],
+      List[Tuple[Optional["Liquid"], Union[int, float]]],
+      Tuple[Optional["Liquid"], Union[int, float]]]
+  ) -> None:
 
     """ Update the liquid in the volume tracker for each well in the plate.
 
     Args:
       liquids: A list of liquids, one for each well in the plate. The list can be a list of lists,
-        where each inner list contains the liquids for each well in a column.  If a single float is
+        where each inner list contains the liquids for each well in a column. If a single tuple is
         given, the volume is assumed to be the same for all wells. Liquids are in uL.
 
     Raises:
@@ -153,7 +153,7 @@ class Plate(ItemizedResource[Well]):
       liquids = [liquids] * self.num_items
     elif isinstance(liquids, list) and all(isinstance(column, list) for column in liquids):
       # mypy doesn't know that all() checks the type
-      liquids = cast(List[List[Tuple["Liquid", float]]], liquids)
+      liquids = cast(List[List[Tuple[Optional["Liquid"], float]]], liquids)
       liquids = [list(column) for column in zip(*liquids)] # transpose the list of lists
       liquids = [volume for column in liquids for volume in column] # flatten the list of lists
 

@@ -28,7 +28,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   processing. The implementation of `send_command` is left to the subclasses. """
 
   def __init__(self, num_channels: int):
-    super().__init__()
+    LiquidHandlerBackend.__init__(self)
     self._num_channels = num_channels
 
   @property

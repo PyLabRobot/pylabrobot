@@ -36,6 +36,7 @@ class ChatterBoxBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
 
   async def test_drop_tips96(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.drop_tips96(self.tip_rack)
 
   async def test_aspirate(self):
@@ -52,6 +53,7 @@ class ChatterBoxBackendTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense_plate(self):
     await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate_plate(self.plate, volume=10)
     await self.lh.dispense_plate(self.plate, volume=10)
 
   async def test_move(self):

@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from abc import ABCMeta
-from typing import List, Union, Optional, Sequence, cast
+from typing import Any, Dict, List, Union, Optional, Sequence, cast
 
-from pylabrobot import utils
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
 from pylabrobot.serializer import deserialize
@@ -36,6 +35,8 @@ class TipSpot(Resource):
     self.parent: Optional["TipRack"] = None
 
     self.make_tip = make_tip
+
+    self.tracker.register_callback(self._state_updated)
 
   def get_tip(self) -> Tip:
     """ Get a tip from the tip spot. """
@@ -77,6 +78,12 @@ class TipSpot(Resource):
       make_tip=make_tip,
       category=data.get("category", "tip_spot")
     )
+
+  def serialize_state(self) -> Dict[str, Any]:
+    return self.tracker.serialize()
+
+  def load_state(self, state: Dict[str, Any]):
+    self.tracker.load_state(state)
 
 
 class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
@@ -124,33 +131,23 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
     return [ts.get_tip() for ts in super().get_items(identifier)]
 
-  def set_tip_state(self, tips: Union[List[List[bool]], str]) -> None:
+  def set_tip_state(self, tips: List[List[bool]]) -> None:
     """ Set the initial tip tracking state of all tips in this tip rack.
 
     Examples:
-      Filling the left half of a 96-well tip rack:
-
-      >>> tip_rack.set_tip_state("A7:H12")
-
       Filling the right half of a 96-well tip rack:
 
       >>> tip_rack.set_tip_state([[True] * 6 + [False] * 6] * 8)
     """
 
-    if isinstance(tips, str):
-      tips = utils.string_to_pattern(tips, num_rows=self.num_items_y, num_columns=self.num_items_x)
-
-    # flatten the list
-    has_tip = [item for sublist in tips for item in sublist]
-    assert len(has_tip) == self.num_items, "Invalid tip state."
-
-    for i in range(self.num_items):
-      # If the tip state is different from the current state, update it by either creating or
-      # removing the tip.
-      if has_tip[i] and not self.get_item(i).has_tip():
-        self.get_item(i).tracker.add_tip(self.get_item(i).make_tip())
-      elif not has_tip[i] and self.get_item(i).has_tip():
-        self.get_item(i).tracker.remove_tip()
+    for i in range(self.num_items_y):
+      for j in range(self.num_items_x):
+        # If the tip state is different from the current state, update it by either creating or
+        # removing the tip.
+        if tips[i][j] and not self.get_item((i, j)).has_tip():
+          self.get_item((i, j)).tracker.add_tip(self.get_item((i, j)).make_tip(), commit=True)
+        elif not tips[i][j] and self.get_item((i, j)).has_tip():
+          self.get_item((i, j)).tracker.remove_tip(commit=True)
 
   def disable_tip_trackers(self) -> None:
     """ Disable tip tracking for all tips in this tip rack. """

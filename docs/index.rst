@@ -3,7 +3,7 @@ Welcome to PyLabRobot's documentation!
 
 PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots and accessories.
 
-PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only support Hamilton STAR and STARLet, Tecan EVO, and Opentrons robots, but we will soon support many more. All of these robots can be controlled using any computer running any operating system. We also provide a simulator which simulates protocols in a browser-based deck visualization.
+PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only support Hamilton STAR and STARLet, Tecan EVO, and Opentrons robots, but we will soon support many more. All of these robots can be controlled using any computer running any operating system. We also provide a browser-based Visualizer which can visualize the state of the deck during a run, and testing backends which do not require access to a robot.
 
 - GitHub repository: https://github.com/PyLabRobot/pylabrobot
 - Forum: https://forums.pylabrobot.org

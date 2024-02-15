@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 import inspect
 import logging
-from typing import Callable, Optional, cast
+from typing import Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.carrier import Carrier
@@ -46,14 +46,11 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     size_z: float,
     name: str = "deck",
     category: str = "deck",
-    resource_assigned_callback: Optional[Callable] = None,
-    resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate.zero(),
     no_trash: bool = False,
   ):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
-      resource_assigned_callback=resource_assigned_callback,
-      resource_unassigned_callback=resource_unassigned_callback, origin=origin)
+      origin=origin)
     self.num_rails = num_rails
 
     # assign trash area
@@ -192,8 +189,6 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     deck = cls(num_rails=num_rails,
       size_x=size_x, size_y=size_y, size_z=size_z,
-      resource_assigned_callback=None,
-      resource_unassigned_callback=None,
       origin=Coordinate.zero())
 
     # Get class names of all defined resources.
@@ -323,8 +318,6 @@ class HamiltonSTARDeck(HamiltonDeck): # pylint: disable=invalid-name
 
 
 def STARLetDeck( # pylint: disable=invalid-name
-  resource_assigned_callback: Optional[Callable] = None,
-  resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate.zero(),
 ) -> HamiltonSTARDeck:
   """ Create a new STARLet deck.
@@ -337,14 +330,10 @@ def STARLetDeck( # pylint: disable=invalid-name
     size_x=STARLET_SIZE_X,
     size_y=STARLET_SIZE_Y,
     size_z=STARLET_SIZE_Z,
-    resource_assigned_callback=resource_assigned_callback,
-    resource_unassigned_callback=resource_unassigned_callback,
     origin=origin)
 
 
 def STARDeck( # pylint: disable=invalid-name
-  resource_assigned_callback: Optional[Callable] = None,
-  resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate.zero(),
 ) -> HamiltonSTARDeck:
   """ Create a new STAR deck.
@@ -357,6 +346,4 @@ def STARDeck( # pylint: disable=invalid-name
     size_x=STAR_SIZE_X,
     size_y=STAR_SIZE_Y,
     size_z=STAR_SIZE_Z,
-    resource_assigned_callback=resource_assigned_callback,
-    resource_unassigned_callback=resource_unassigned_callback,
     origin=origin)

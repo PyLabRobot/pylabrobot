@@ -523,6 +523,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
                 "xs#####xd#yh####tt##wu#za####zh####ze####")
 
   async def test_core_96_tip_drop(self):
+    await self.lh.pick_up_tips96(self.tip_rack) # pick up tips first
     await self.lh.drop_tips96(self.tip_rack)
 
     self._assert_command_sent_once(
@@ -547,10 +548,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_core_96_dispense(self):
     await self.test_core_96_tip_pickup() # pick up tips first
+    if self.plate.lid is not None:
+      self.plate.lid.unassign()
+    await self.lh.aspirate_plate(self.plate, 100*1.072) # aspirate first
 
-    # TODO: Hamilton liquid classes
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
     with no_volume_tracking():
       await self.lh.dispense_plate(self.plate, 100*1.072)
 
@@ -572,7 +573,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "xs#####xd#yj####yd#zj####zd#th####te####go####ga#")
 
   async def test_iswap_plate_reader(self):
-    plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend())
+    plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend(),
+      size_x=0, size_y=0, size_z=0)
     self.lh.deck.assign_child_resource(plate_reader,
       location=Coordinate(979.5, 285.2, 200)) # 666: 00002
 
