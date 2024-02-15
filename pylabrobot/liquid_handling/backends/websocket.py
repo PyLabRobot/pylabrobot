@@ -58,8 +58,6 @@ class WebSocketBackend(SerializingBackend):
     self._sent_messages: List[str] = []
     self.received: List[dict] = []
 
-    self.stop_event = None
-
     self._id = 0
 
   @property
