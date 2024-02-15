@@ -77,11 +77,11 @@ class VolumeTracker:
     while removed_volume < volume:
       liquid, liquid_volume = self.pending_liquids.pop()
       removed_volume += liquid_volume
-      removed_liquids.append((liquid, volume))
+      removed_liquids.append((liquid, liquid_volume))
 
       # If we have more liquid than we need, put the excess back.
       if removed_volume > volume:
-        self.liquids.append((liquid, removed_volume - volume))
+        self.pending_liquids.append((liquid, removed_volume - volume))
 
     return removed_liquids
 
