@@ -146,7 +146,7 @@ class Visualizer:
     """ Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`. """
 
-    while self._websocket is not None:
+    while True:
       try:
         message = await websocket.recv()
       except websockets.exceptions.ConnectionClosed:
@@ -227,9 +227,7 @@ class Visualizer:
         while True:
           if len(self.received) > 0:
             message = self.received.pop()
-            print("message: ", message)
             if "id" in message and message["id"] == id_:
-              print("correct: ", message)
               break
           await asyncio.sleep(0.1)
 
@@ -310,7 +308,6 @@ class Visualizer:
 
     dirname = os.path.dirname(__file__)
     path = os.path.join(dirname, ".")
-    print(path)
     if not os.path.exists(path):
       raise RuntimeError("Could not find Visualizer files. Please run from the root of the "
                          "repository.")
@@ -382,7 +379,7 @@ class Visualizer:
     self._fst = None
 
     # -- websocket --
-    if self._loop is None:
+    if self.has_connection():
       # send stop event to the browser
       await self.send_command("stop", wait_for_response=False)
 

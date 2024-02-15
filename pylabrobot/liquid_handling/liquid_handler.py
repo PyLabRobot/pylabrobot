@@ -1208,8 +1208,8 @@ class LiquidHandler(Machine):
         liquids = [(None, volume)]
         all_liquids.append(liquids)
       else:
-        liquids1 = well.tracker.remove_liquid(volume=volume)
-        all_liquids.append(liquids1)
+        liquids = well.tracker.remove_liquid(volume=volume) # type: ignore
+        all_liquids.append(liquids)
 
       for liquid, vol in reversed(liquids):
         channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)

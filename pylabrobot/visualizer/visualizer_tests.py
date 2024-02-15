@@ -98,12 +98,6 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
 
     await self.vis.setup()
 
-    # self.tip_rack = STF_L(name="tip_rack_01")
-    # self.root_resource.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
-
-    # self.plate = Cos_96_EZWash(name="plate_01", with_lid=True)
-    # self.root_resource.assign_child_resource(self.plate, location=Coordinate(0, 0, 0))
-
   async def test_assign_child_resource(self):
     """ Test that the assign_child_resource method sends the correct event. """
     child = Resource(size_x=100, size_y=100, size_z=100, name="child")
