@@ -160,7 +160,6 @@ class Visualizer:
       # If the event is "ready", then we can save the connection and send the saved messages.
       if data.get("event") == "ready":
         self._websocket = websocket
-        print("ready")
         await self._send_resources_and_state()
 
       if "event" in data:
