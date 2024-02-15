@@ -11,7 +11,7 @@ PyLabRobot is a hardware agnostic, pure Python library for liquid handling robot
 
 ### Liquid handling robots
 
-PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton, Tecan and Opentrons liquid handling robots, but we will soon have drivers for many more. The Hamiton and Tecan backends provide an interactive firmware interface that works on Windows, macOS and Linux. The Opentrons driver is based on the [Opentrons HTTP API](https://github.com/rickwierenga/opentrons-python-api). We also provide a simulator which simulates protocols in a browser-based deck visualization.
+PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton, Tecan and Opentrons liquid handling robots, but we will soon have drivers for many more. The Hamiton and Tecan backends provide an interactive firmware interface that works on Windows, macOS and Linux. The Opentrons driver is based on the [Opentrons HTTP API](https://github.com/rickwierenga/opentrons-python-api). We also provide a browser-based Visualizer which can visualize the state of the deck during a run, and testing backends which do not require access to a robot.
 
 Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on **Hamilton STAR** (this will work on any operating system!):
 
