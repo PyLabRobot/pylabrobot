@@ -1035,6 +1035,8 @@ class LiquidHandler(Machine):
       if not does_tip_tracking() and self.head96[i].has_tip:
         self.head96[i].remove_tip()
       self.head96[i].add_tip(tip_spot.get_tip(), origin=tip_spot, commit=False)
+      if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+        tip_spot.tracker.remove_tip()
 
     pickup_operation = PickupTipRack(resource=tip_rack, offset=offset)
     try:
@@ -1044,8 +1046,8 @@ class LiquidHandler(Machine):
       )
     except Exception as error:  # pylint: disable=broad-except
       for i, tip_spot in enumerate(tip_rack.get_all_items()):
-        if not does_tip_tracking() and tip_spot.has_tip():
-          self.head96[i].rollback()
+        if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+          tip_spot.tracker.rollback()
         self.head96[i].rollback()
       self._trigger_callback(
         "pick_up_tips96",
@@ -1056,8 +1058,8 @@ class LiquidHandler(Machine):
       )
     else:
       for i, tip_spot in enumerate(tip_rack.get_all_items()):
-        if not does_tip_tracking() and tip_spot.has_tip():
-          self.head96[i].commit()
+        if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+          tip_spot.tracker.commit()
         self.head96[i].commit()
       self._trigger_callback(
         "pick_up_tips96",
@@ -1111,6 +1113,10 @@ class LiquidHandler(Machine):
         **backend_kwargs
       )
     except Exception as e:  # pylint: disable=broad-except
+      for i, tip_spot in enumerate(tip_rack.get_all_items()):
+        if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+          tip_spot.tracker.rollback()
+        self.head96[i].rollback()
       self._trigger_callback(
         "drop_tips96",
         liquid_handler=self,
@@ -1119,6 +1125,10 @@ class LiquidHandler(Machine):
         **backend_kwargs,
       )
     else:
+      for i, tip_spot in enumerate(tip_rack.get_all_items()):
+        if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+          tip_spot.tracker.commit()
+        self.head96[i].commit()
       self._trigger_callback(
         "drop_tips96",
         liquid_handler=self,
@@ -1197,34 +1207,58 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    origin_tip_rack = self._get_96_head_origin_tip_rack()
-    if origin_tip_rack is None:
-      raise NoTipError("No tips have been picked up with the 96 head")
-    tips = origin_tip_rack.get_all_tips()
+    tips = [channel.get_tip() for channel in self.head96.values()]
 
     if plate.has_lid():
       raise ValueError("Aspirating from plate with lid")
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    for w in plate.get_all_items():
-      if w.tracker.is_disabled or not does_volume_tracking():
-        liquids.append([(None, volume)])
+    all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
+    for well, channel in zip(plate.get_all_items(), self.head96.values()):
+      liquids = None # liquids in this well
+      if well.tracker.is_disabled or not does_volume_tracking():
+        liquids = [(None, volume)]
       else:
-        liquids.append(w.tracker.get_liquids(top_volume=volume))
+        liquids = well.tracker.remove_liquid(volume=volume)
+      all_liquids.append(liquids)
 
-    if plate.num_items_x == 12 and plate.num_items_y == 8:
-      aspiration_plate = AspirationPlate(
-        resource=plate,
-        volume=volume,
-        offset=Coordinate.zero(),
-        flow_rate=flow_rate,
-        tips=tips,
-        liquid_height=None,
-        blow_out_air_volume=0,
-        liquids=liquids,
-      )
+      for liquid, vol in reversed(liquids):
+        channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
+
+    if not (plate.num_items_x == 12 and plate.num_items_y == 8):
+      raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
+                                f"by {plate.num_items_y} plate")
+
+    aspiration_plate = AspirationPlate(
+      resource=plate,
+      volume=volume,
+      offset=Coordinate.zero(),
+      flow_rate=flow_rate,
+      tips=tips,
+      liquid_height=None,
+      blow_out_air_volume=0,
+      liquids=all_liquids,
+    )
+
+    try:
       await self.backend.aspirate96(aspiration=aspiration_plate, **backend_kwargs)
+    except Exception as error:  # pylint: disable=broad-except
+      for channel, well in zip(self.head96.values(), plate.get_all_items()):
+        if does_volume_tracking() and not well.tracker.is_disabled:
+          well.tracker.rollback()
+        channel.get_tip().tracker.rollback()
+      self._trigger_callback(
+        "aspirate_plate",
+        liquid_handler=self,
+        aspiration=aspiration_plate,
+        error=error,
+        **backend_kwargs,
+      )
+    else:
+      for channel, well in zip(self.head96.values(), plate.get_all_items()):
+        if does_volume_tracking() and not well.tracker.is_disabled:
+          well.tracker.commit()
+        channel.get_tip().tracker.commit()
       self._trigger_callback(
         "aspirate_plate",
         liquid_handler=self,
@@ -1232,9 +1266,6 @@ class LiquidHandler(Machine):
         error=None,
         **backend_kwargs,
       )
-    else:
-      raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
-                                f"by {plate.num_items_y} plate")
 
     if end_delay > 0:
       time.sleep(end_delay)
@@ -1252,7 +1283,7 @@ class LiquidHandler(Machine):
     Examples:
       Dispense an entire 96 well plate:
 
-      >>> dispense96(plate, volume=50)
+      >>> lh.dispense_plate(plate, volume=50)
 
     Args:
       resource: Resource name or resource object.
@@ -1270,34 +1301,60 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    origin_tip_rack = self._get_96_head_origin_tip_rack()
-    if origin_tip_rack is None:
-      raise NoTipError("No tips have been picked up with the 96 head")
-    tips = origin_tip_rack.get_all_tips()
+    tips = [channel.get_tip() for channel in self.head96.values()]
 
     if plate.has_lid():
       raise ValueError("Dispensing to plate with lid")
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    for w in plate.get_all_items():
-      if w.tracker.is_disabled or not does_volume_tracking():
-        liquids.append([(None, volume)])
-      else:
-        liquids.append(w.tracker.get_liquids(top_volume=volume))
+    all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
+    for channel, well in zip(self.head96.values(), plate.get_all_items()):
+      liquids = None # liquids in this well
+      # even if the volume tracker is disabled, a liquid (None, volume) is added to the list during
+      # the aspiration command
+      l = channel.get_tip().tracker.remove_liquid(volume=volume)
+      liquids = list(reversed(l))
+      all_liquids.append(liquids)
 
-    if plate.num_items_x == 12 and plate.num_items_y == 8:
-      dispense_plate = DispensePlate(
-        resource=plate,
-        volume=volume,
-        offset=Coordinate.zero(),
-        flow_rate=flow_rate,
-        tips=tips,
-        liquid_height=None,
-        blow_out_air_volume=0,
-        liquids=liquids,
-      )
+      for liquid, vol in liquids:
+        well.tracker.add_liquid(liquid=liquid, volume=vol)
+
+    if not (plate.num_items_x == 12 and plate.num_items_y == 8):
+      raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "
+                                f"by {plate.num_items_y} plate")
+
+    dispense_plate = DispensePlate(
+      resource=plate,
+      volume=volume,
+      offset=Coordinate.zero(),
+      flow_rate=flow_rate,
+      tips=tips,
+      liquid_height=None,
+      blow_out_air_volume=0,
+      liquids=all_liquids,
+    )
+
+    try:
       await self.backend.dispense96(dispense=dispense_plate, **backend_kwargs)
+    except Exception as error:  # pylint: disable=broad-except
+      for channel, well in zip(self.head96.values(), plate.get_all_items()):
+        if does_volume_tracking() and not well.tracker.is_disabled:
+          well.tracker.rollback()
+        channel.get_tip().tracker.rollback()
+
+      self._trigger_callback(
+        "dispense_plate",
+        liquid_handler=self,
+        dispense=dispense_plate,
+        error=error,
+        **backend_kwargs,
+      )
+    else:
+      for channel, well in zip(self.head96.values(), plate.get_all_items()):
+        if does_volume_tracking() and not well.tracker.is_disabled:
+          well.tracker.commit()
+        channel.get_tip().tracker.commit()
+
       self._trigger_callback(
         "dispense_plate",
         liquid_handler=self,
@@ -1305,9 +1362,6 @@ class LiquidHandler(Machine):
         error=None,
         **backend_kwargs,
       )
-    else:
-      raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "
-                               f"by {plate.num_items_y} plate")
 
     if end_delay > 0:
       time.sleep(end_delay)

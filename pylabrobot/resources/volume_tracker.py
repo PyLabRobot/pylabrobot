@@ -1,5 +1,5 @@
-# from abc import ABC, abstractmethod
 import contextlib
+import copy
 import sys
 from typing import Callable, List, Tuple, Optional, cast
 
@@ -65,23 +65,25 @@ class VolumeTracker:
     if self._callback is not None:
       self._callback()
 
-  def remove_liquid(self, volume: float) -> None:
+  def remove_liquid(self, volume: float) -> List[Tuple[Optional["Liquid"], float]]:
     """ Remove liquid from the container. Top to bottom. """
 
     if volume > self.get_used_volume():
       raise TooLittleLiquidError(
         f"Container has too little liquid: {volume}uL > {self.get_used_volume()}uL.")
 
-    # TODO: this has to operate on pending_liquids, not liquids directly.
-
+    removed_liquids = []
     removed_volume = 0.0
     while removed_volume < volume:
-      liquid, liquid_volume = self.liquids.pop()
+      liquid, liquid_volume = self.pending_liquids.pop()
       removed_volume += liquid_volume
+      removed_liquids.append((liquid, volume))
 
       # If we have more liquid than we need, put the excess back.
       if removed_volume > volume:
         self.liquids.append((liquid, removed_volume - volume))
+
+    return removed_liquids
 
   def add_liquid(self, liquid: Optional["Liquid"], volume: float) -> None:
     """ Add liquid to the container. """
@@ -132,7 +134,7 @@ class VolumeTracker:
     """ Commit the pending operations. """
     assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
 
-    self.liquids = self.pending_liquids
+    self.liquids = copy.deepcopy(self.pending_liquids)
 
     if self._callback is not None:
       self._callback()

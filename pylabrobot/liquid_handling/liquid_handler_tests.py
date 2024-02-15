@@ -15,10 +15,11 @@ from pylabrobot.resources.volume_tracker import set_volume_tracking
 from . import backends
 from .liquid_handler import LiquidHandler, OperationCallback
 from pylabrobot.resources import (
+  Container,
   Coordinate,
   Deck,
   Lid,
-  Container,
+  Plate,
   TipRack,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
@@ -154,9 +155,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       Coordinate(117.900, 433.800, 131.450))
 
     self.assertEqual(
-      cast(TipRack, self.lh.get_resource("aspiration plate")).get_item("A1")
+      cast(Plate, self.lh.get_resource("aspiration plate")).get_item("A1")
         .get_absolute_location() +
-      cast(TipRack, self.lh.get_resource("aspiration plate")).get_item("A1").center(),
+      cast(Plate, self.lh.get_resource("aspiration plate")).get_item("A1").center(),
         Coordinate(320.500, 146.000, 187.150))
 
   def test_illegal_subresource_assignment_before(self):
@@ -292,8 +293,14 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.return_tips()
 
   async def test_return_tips96(self):
+    for i in range(96):
+      assert not self.lh.head96[i].has_tip, f"Channel head {i} is not empty."
     await self.lh.pick_up_tips96(self.tip_rack)
+    for i in range(96):
+      assert self.lh.head96[i].has_tip, f"Channel head {i} is empty."
     await self.lh.return_tips96()
+    for i in range(96):
+      assert not self.lh.head96[i].has_tip, f"Channel head {i} is not empty."
 
     self.assertEqual(self.get_first_command("drop_tips96"), {
       "command": "drop_tips96",
@@ -304,6 +311,17 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     with self.assertRaises(RuntimeError):
       await self.lh.return_tips()
+
+  async def test_aspirate_dispense96(self):
+    self.plate.get_item("A1").tracker.set_liquids([(None, 10)])
+    await self.lh.pick_up_tips96(self.tip_rack)
+    await self.lh.aspirate_plate(self.plate, volume=10)
+    for i in range(96):
+      self.assertTrue(self.lh.head96[i].has_tip)
+      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 10)
+    await self.lh.dispense_plate(self.plate, volume=10)
+    for i in range(96):
+      self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
 
   async def test_transfer(self):
     t = self.tip_rack.get_item("A1").get_tip()
