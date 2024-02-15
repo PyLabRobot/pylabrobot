@@ -136,7 +136,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.test_pick_up_tips96() # pick up tips first
     self.backend.clear()
 
-    tips = self.tip_rack.get_all_tips()
+    tips = [channel.get_tip() for channel in self.lh.head96.values()]
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     self.backend.clear()
@@ -155,12 +155,10 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     }})
 
   async def test_dispense96(self):
-    await self.test_pick_up_tips96() # pick up tips first
+    await self.test_aspirate96() # aspirate first
     self.backend.clear()
 
-    tips = self.tip_rack.get_all_tips()
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
+    tips = [channel.get_tip() for channel in self.lh.head96.values()]
     self.backend.clear()
     await self.lh.dispense_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)

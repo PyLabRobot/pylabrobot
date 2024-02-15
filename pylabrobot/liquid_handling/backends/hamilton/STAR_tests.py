@@ -526,10 +526,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_core_96_dispense(self):
     await self.test_core_96_tip_pickup() # pick up tips first
+    if self.plate.lid is not None:
+      self.plate.lid.unassign()
+    await self.lh.aspirate_plate(self.plate, 100*1.072) # aspirate first
 
-    # TODO: Hamilton liquid classes
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
     with no_volume_tracking():
       await self.lh.dispense_plate(self.plate, 100*1.072)
 

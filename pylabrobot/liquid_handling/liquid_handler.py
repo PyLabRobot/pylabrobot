@@ -9,7 +9,7 @@ import logging
 import numbers
 import threading
 import time
-from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol
+from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
 
 from pylabrobot.machine import Machine, need_setup_finished
@@ -33,7 +33,6 @@ from pylabrobot.resources import (
   does_volume_tracking
 )
 from pylabrobot.resources.liquid import Liquid
-from pylabrobot.resources.errors import NoTipError
 from pylabrobot.utils.list import expand
 
 from .backends import LiquidHandlerBackend
@@ -1213,14 +1212,16 @@ class LiquidHandler(Machine):
       raise ValueError("Aspirating from plate with lid")
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
+    all_liquids: List[Sequence[Tuple[Optional[Liquid], float]]] = []
     for well, channel in zip(plate.get_all_items(), self.head96.values()):
-      liquids = None # liquids in this well
+      # superfluous to have append in two places but the type checker is very angry and does not
+      # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
       if well.tracker.is_disabled or not does_volume_tracking():
         liquids = [(None, volume)]
+        all_liquids.append(liquids)
       else:
-        liquids = well.tracker.remove_liquid(volume=volume)
-      all_liquids.append(liquids)
+        liquids1 = well.tracker.remove_liquid(volume=volume)
+        all_liquids.append(liquids1)
 
       for liquid, vol in reversed(liquids):
         channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
@@ -1237,7 +1238,7 @@ class LiquidHandler(Machine):
       tips=tips,
       liquid_height=None,
       blow_out_air_volume=0,
-      liquids=all_liquids,
+      liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
     )
 
     try:
