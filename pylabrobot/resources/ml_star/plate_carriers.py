@@ -73,15 +73,15 @@ def PLT_CAR_L5FLEX_AC(name: str) -> PlateCarrier:
   """ Plate carrier with 5 adjustable (height) portrait positions for archive plates """
   return PlateCarrier(
     name=name,
-    size_x=157.5,
+    size_x=135.0,
     size_y=497.0,
     size_z=130.0,
     sites=create_homogeneous_carrier_sites([
-        Coordinate(15.25, 8.5, 89.1),
-        Coordinate(15.25, 104.5, 89.1),
-        Coordinate(15.25, 200.5, 89.1),
-        Coordinate(15.25, 296.5, 89.1),
-        Coordinate(15.25, 392.5, 89.1)
+        Coordinate(4.0, 10.5, 85.1),
+        Coordinate(4.0, 104.5, 85.1),
+        Coordinate(4.0, 200.5, 85.1),
+        Coordinate(4.0, 296.5, 85.1),
+        Coordinate(4.0, 392.5, 85.1)
       ],
       site_size_x=127.0,
       site_size_y=86.0,
@@ -94,15 +94,15 @@ def PLT_CAR_L5FLEX_AC_A00(name: str) -> PlateCarrier:
   """ Plate carrier with 5 adjustable (height) portrait positions for archive plates """
   return PlateCarrier(
     name=name,
-    size_x=157.5,
+    size_x=135.0,
     size_y=497.0,
     size_z=130.0,
     sites=create_homogeneous_carrier_sites([
-        Coordinate(15.25, 8.5, 89.1),
-        Coordinate(15.25, 104.5, 89.1),
-        Coordinate(15.25, 200.5, 89.1),
-        Coordinate(15.25, 296.5, 89.1),
-        Coordinate(15.25, 392.5, 89.1)
+        Coordinate(4.0, 8.5, 85.1),
+        Coordinate(4.0, 104.5, 85.1),
+        Coordinate(4.0, 200.5, 85.1),
+        Coordinate(4.0, 296.5, 85.1),
+        Coordinate(4.0, 392.5, 85.1)
       ],
       site_size_x=127.0,
       site_size_y=86.0,
@@ -115,15 +115,15 @@ def PLT_CAR_L5FLEX_MD(name: str) -> PlateCarrier:
   """ Plate carrier with 5 adjustable (height) positions for MTP """
   return PlateCarrier(
     name=name,
-    size_x=157.5,
+    size_x=135.0,
     size_y=497.0,
     size_z=130.0,
     sites=create_homogeneous_carrier_sites([
-        Coordinate(15.25, 8.5, 115.8),
-        Coordinate(15.25, 104.5, 115.8),
-        Coordinate(15.25, 200.5, 115.8),
-        Coordinate(15.25, 296.5, 115.8),
-        Coordinate(15.25, 392.5, 115.8)
+        Coordinate(4.0, 8.5, 110.8),
+        Coordinate(4.0, 104.5, 110.8),
+        Coordinate(4.0, 200.5, 110.8),
+        Coordinate(4.0, 296.5, 110.8),
+        Coordinate(4.0, 392.5, 110.8)
       ],
       site_size_x=127.0,
       site_size_y=86.0,
@@ -136,15 +136,15 @@ def PLT_CAR_L5FLEX_MD_A00(name: str) -> PlateCarrier:
   """ Plate carrier with 5 adjustable (height) positions for MTP """
   return PlateCarrier(
     name=name,
-    size_x=157.5,
+    size_x=135.0,
     size_y=497.0,
     size_z=130.0,
     sites=create_homogeneous_carrier_sites([
-        Coordinate(15.25, 8.5, 115.8),
-        Coordinate(15.25, 104.5, 115.8),
-        Coordinate(15.25, 200.5, 115.8),
-        Coordinate(15.25, 296.5, 115.8),
-        Coordinate(15.25, 392.5, 115.8)
+        Coordinate(4.0, 8.5, 110.8),
+        Coordinate(4.0, 104.5, 110.8),
+        Coordinate(4.0, 200.5, 110.8),
+        Coordinate(4.0, 296.5, 110.8),
+        Coordinate(4.0, 392.5, 110.8)
       ],
       site_size_x=127.0,
       site_size_y=86.0,
