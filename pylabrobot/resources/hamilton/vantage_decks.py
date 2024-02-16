@@ -6,7 +6,14 @@ from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck, _RAILS_WI
 class VantageDeck(HamiltonDeck):
   """ A Hamilton Vantage deck. """
 
-  def __init__(self, size: float, name="deck") -> None:
+  def __init__(
+    self,
+    size: float,
+    name="deck",
+    category: str = "deck",
+    origin: Coordinate = Coordinate.zero(),
+    no_trash: bool = False,
+  ) -> None:
     """ Create a new Vantage deck of the given size.
 
     TODO: parameters for setting up the Entry Exit module, waste, etc.
@@ -24,7 +31,10 @@ class VantageDeck(HamiltonDeck):
         size_x=1237.5,
         size_y=653.5,
         size_z=900.0,
-        name=name
+        name=name,
+        category=category,
+        origin=origin,
+        no_trash=no_trash
       )
       self.size = 1.3
     elif size == 2.0:
