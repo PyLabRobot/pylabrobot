@@ -589,7 +589,7 @@ class Vantage(HamiltonLiquidHandler):
       tube_2nd_section_height_measured_from_zm=tube_2nd_section_height_measured_from_zm or
         [0]*len(ops),
       tube_2nd_section_ratio=tube_2nd_section_ratio or [0]*len(ops),
-      minimum_height=minimum_height or [1871]*len(ops),
+      minimum_height=minimum_height or [int(ls * 10) for ls in liquid_surfaces_no_lld],
       immersion_depth=immersion_depth or [0]*len(ops),
       surface_following_distance=surface_following_distance or [0]*len(ops),
       aspiration_volume=[int(op.volume*100) for op in ops],
