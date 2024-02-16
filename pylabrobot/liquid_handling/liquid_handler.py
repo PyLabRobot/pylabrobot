@@ -658,12 +658,14 @@ class LiquidHandler(Machine):
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
+      center_offsets = resources.get_2d_center_offsets(n=n)
       if offsets is not None:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when aspirating "
                            "from a resource.")
+        offsets = [o + co for o, co in zip(offsets, center_offsets)]
       else:
-        offsets = resources.get_2d_center_offsets(n=n)
+        offsets = center_offsets
 
       resources = [resources] * n
     else:
@@ -826,12 +828,14 @@ class LiquidHandler(Machine):
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
+      center_offsets = resources.get_2d_center_offsets(n=n)
       if offsets is not None:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when dispensing "
                           "to a resource.")
+        offsets = [o + co for o, co in zip(offsets, center_offsets)]
       else:
-        offsets = resources.get_2d_center_offsets(n=n)
+        offsets = center_offsets
 
       resources = [resources] * n
     else:
