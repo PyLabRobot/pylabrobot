@@ -1794,14 +1794,15 @@ class STAR(HamiltonLiquidHandler):
                             (2.7 if isinstance(op.resource, Well) else 5) #?
                           for wb, op in zip(well_bottoms, ops)]
 
-    def dispensing_mode_for_op(op: Dispense) -> int:
+    def dispensing_mode_for_op(empty: bool, jet: bool) -> int:
       return {
         (False, True): 0,
         (True, True): 1,
         (True, False): 2,
         (False, False): 3,
-      }[(op.tip.tracker.get_used_volume() == 0, should_jet(op))]
-    dispensing_modes = dispensing_mode or [dispensing_mode_for_op(op) for op in ops]
+      }[(empty, jet)]
+    dispensing_modes = dispensing_mode or [dispensing_mode_for_op(empty[i], jet[i])
+                                           for i in range(len(ops))]
 
     dispense_volumes = [int(op.volume*10) for op in ops]
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [100]*n)

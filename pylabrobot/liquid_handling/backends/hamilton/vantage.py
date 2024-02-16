@@ -491,7 +491,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     ops: List[Aspiration],
     use_channels: List[int],
-    hlcs: Optional[List[HamiltonLiquidClass]] = None,
+    hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     type_of_aspiration: Optional[List[int]] = None,
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
@@ -626,7 +626,7 @@ class Vantage(HamiltonLiquidHandler):
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
     empty: Optional[List[bool]] = None,
-    hlcs: Optional[List[HamiltonLiquidClass]] = None,
+    hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     type_of_dispensing_mode: Optional[List[int]] = None,
     minimum_height: Optional[List[int]] = None,
     pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[int]] = None,
@@ -805,7 +805,9 @@ class Vantage(HamiltonLiquidHandler):
   async def aspirate96(
     self,
     aspiration: AspirationPlate,
-    hlc: Optional[List[HamiltonLiquidClass]] = None,
+    jet: bool = False,
+    empty: bool = False,
+    hlc: Optional[HamiltonLiquidClass] = None,
     type_of_aspiration: int = 0,
     minimal_traverse_height_at_begin_of_command: int = 2450,
     minimal_height_at_command_end: int = 2450,
@@ -834,6 +836,10 @@ class Vantage(HamiltonLiquidHandler):
     """ Aspirate from a plate.
 
     Args:
+      jet: Whether to aspirate in jet mode. If `True`, jet aspirate will be used. If `False`,
+        surface aspirate will be used.
+      empty: Whether to empty in jet mode. If `True`, empty aspirate will be used. If `False`,
+        normal aspirate will be used.
       hlc: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
         determined automatically based on the tip and liquid used in the first well.
     """
@@ -857,8 +863,8 @@ class Vantage(HamiltonLiquidHandler):
         has_filter=tip.has_filter,
         # first part of tuple in last liquid of first well
         liquid=aspiration.liquids[0][-1][0] or Liquid.WATER,
-        jet=False, # for aspiration
-        empty=False # for aspiration
+        jet=jet,
+        empty=empty
       )
     volume = hlc.compute_corrected_volume(aspiration.volume) if hlc is not None \
       else aspiration.volume

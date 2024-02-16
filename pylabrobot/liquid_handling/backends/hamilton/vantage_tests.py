@@ -283,7 +283,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_dispense(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
     await self.lh.aspirate(self.plate["A1"], vols=100)
-    await self.lh.dispense(self.plate["A2"], vols=100, liquid_height=[5], jet=[False])
+    await self.lh.dispense(self.plate["A2"], vols=100, liquid_height=[5], jet=[False], empty=[True])
 
     self._assert_command_sent_once(
       "A1PMDDid0253dm1&tm1 0&xp05770 0&yp1460 0&zx1871&lp2001&zl1921&"
@@ -306,7 +306,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate_plate(self.plate, volume=100)
+    await self.lh.aspirate_plate(self.plate, volume=100, jet=True, empty=True)
     self._assert_command_sent_once(
       "A1HMDAid0236at0xp05680yp1460th2450te2450lp2001zl1871zx1871ip000fp000av010720as2500ta050"
       "ba004000oa00000lm0ll4de0020wt10mv00000mc00mp000ms2500zu0000zr00000mh000gj0gk0gi000"
@@ -319,8 +319,8 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate_plate(self.plate, volume=100)
-    await self.lh.dispense_plate(self.plate, volume=100)
+    await self.lh.aspirate_plate(self.plate, volume=100, jet=True, empty=True)
+    await self.lh.dispense_plate(self.plate, volume=100, jet=True, empty=True)
     self._assert_command_sent_once(
       "A1HMDDid0238dm1xp05680yp1460th2450te2450lp2001zl1971zx1871ip000fp029dv010720ds4000ta050"
       "ba004000lm0ll4de0010wt00mv00000mc00mp000ms0010ss2500rv000zu0000dj00zr00000mh000gj0gk0gi000"
