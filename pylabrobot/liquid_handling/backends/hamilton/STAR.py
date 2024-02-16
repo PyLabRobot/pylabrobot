@@ -1701,7 +1701,9 @@ class STAR(HamiltonLiquidHandler):
     min_z_endpos: int = 2450,
     side_touch_off_distance: int = 0,
 
-    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    jet: Optional[List[bool]] = None,
+    empty: Optional[List[bool]] = None
   ):
     """ Dispense liquid from the specified channels.
 
@@ -1754,6 +1756,9 @@ class STAR(HamiltonLiquidHandler):
 
       hamilton_liquid_classes: Override the default liquid classes. See
         pylabrobot/liquid_handling/liquid_classes/hamilton/star.py
+
+      jet: Whether to use jetting for each dispense. Defaults to `False` for all.
+      empty: Whether to use 'empty' mode dispensing. Defaults to `False` for all.
     """
 
     x_positions, y_positions, channels_involved = \
@@ -1761,14 +1766,10 @@ class STAR(HamiltonLiquidHandler):
 
     n = len(ops)
 
-    def should_jet(op):
-      if op.liquid_height is None:
-        return True
-      if op.liquid_height is not None and op.liquid_height > 0:
-        return True
-      if hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0:
-        return True
-      return False
+    if jet is None:
+      jet = [False] * n
+    if empty is None:
+      empty = [False] * n
 
     if hamilton_liquid_classes is None:
       hamilton_liquid_classes = [
@@ -1778,10 +1779,9 @@ class STAR(HamiltonLiquidHandler):
           is_tip=True,
           has_filter=op.tip.has_filter,
           liquid=op.liquids[-1][0] or Liquid.WATER, # get last liquid in pipette, first to be disp.
-          jet=should_jet(op),
-          # dispensing all, get_used_volume includes pending
-          empty=op.tip.tracker.get_used_volume() == 0
-        ) for op in ops]
+          jet=jet[i],
+          empty=empty[i],
+        ) for i, op in enumerate(ops)]
 
     # correct volumes using the liquid class
     for op, hlc in zip(ops, hamilton_liquid_classes):
