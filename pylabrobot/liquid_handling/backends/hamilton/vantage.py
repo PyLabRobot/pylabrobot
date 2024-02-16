@@ -375,7 +375,7 @@ class Vantage(HamiltonLiquidHandler):
     # TODO: check which modules are actually installed.
 
     pip_channels_initialized = await self.pip_request_initialization_status()
-    if not pip_channels_initialized:
+    if not pip_channels_initialized or any(tip_presences):
       await self.pip_initialize(
         x_position=[7095]*self.num_channels,
         y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
@@ -3549,11 +3549,12 @@ class Vantage(HamiltonLiquidHandler):
       command="RD",
     )
 
-  async def query_tip_presence(self):
+  async def query_tip_presence(self) -> List[bool]:
     """ Query Tip presence """
 
     resp = await self.send_command(module="A1PM", command="QA", fmt={"rt": "[int]"})
-    return cast(List[int], resp["rt"])
+    presences_int = cast(List[int], resp["rt"])
+    return [bool(p) for p in presences_int]
 
   async def request_height_of_last_lld(self):
     """ Request height of last LLD """
