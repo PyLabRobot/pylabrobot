@@ -24,11 +24,12 @@ from .volume_tracker import VolumeTracker, does_volume_tracking, no_volume_track
 from .resource_stack import ResourceStack
 
 # labware manufacturers and suppliers
+from .azenta import *
 from .corning_costar import *
 from .corning_axygen import *
-from .revvity import *
 from .porvair import *
-from .azenta import *
+from .revvity import *
+from .thermo_fisher import *
 
 # liquid handling companies
 from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
