@@ -660,28 +660,19 @@ class Vantage(HamiltonLiquidHandler):
     Args:
       ops: The aspiration operations.
       use_channels: The channels to use.
-      jet: Whether to jet. If `True`, jet dispense will be used. If `False`, surface dispense will
-        be used. If `None`, dispense will be jet if the liquid_height for an operation is greater
-        than 0, or if the tip is empty. Otherwise, surface dispense will be used.
+      jet: Whether to dispense in jet mode per channel. If `True`, jet dispense will be used. If
+        `False`, surface dispense will be used. Defaults to `False` for all channels.
+      empty: Whether to empty in jet mode per channel. If `True`, empty dispense will be used. If
+        `False`, normal dispense will be used. Defaults to `False` for all channels.
     """
 
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
 
-    def should_jet(op):
-      if op.liquid_height is not None and op.liquid_height > 0:
-        return True
-      if hasattr(op.resource, "tracker") and op.resource.tracker.get_used_volume() == 0:
-        return True
-      return False
-
-    def should_empty(op):
-      return op.tip.tracker.get_used_volume() == 0
-
     if jet is None:
-      jet = [should_jet(op) for op in ops]
+      jet = [False]*len(ops)
     if empty is None:
-      empty = [should_empty(op) for op in ops]
+      empty = [False]*len(ops)
 
     hamilton_liquid_classes = [
       get_vantage_liquid_class(
@@ -909,8 +900,8 @@ class Vantage(HamiltonLiquidHandler):
   async def dispense96(
     self,
     dispense: DispensePlate,
-    jet: Optional[bool] = None,
-    empty: Optional[bool] = None,
+    jet: bool = False,
+    empty: bool = False,
     type_of_dispensing_mode: int = 0,
     tube_2nd_section_height_measured_from_zm: int = 0,
     tube_2nd_section_ratio: int = 0,
@@ -938,6 +929,12 @@ class Vantage(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
   ):
+    """ Dispense to a plate using the 96 head.
+
+    Args:
+      jet: whether to dispense in jet mode.
+      empty: whether to empty in empty mode.
+    """
     assert isinstance(dispense.resource, Plate), "Only Plate is supported."
     well_a1 = dispense.resource.get_item("A1")
     position = well_a1.get_absolute_location() + well_a1.center()
@@ -947,11 +944,6 @@ class Vantage(HamiltonLiquidHandler):
 
     well_bottoms = well_a1.get_absolute_location().z + \
       (dispense.offset.z if dispense.offset is not None else 0)
-
-    if jet is None:
-      jet = dispense.liquid_height is None or dispense.liquid_height > 0
-    if empty is None:
-      empty = all(tip.tracker.get_used_volume() == 0 for tip in dispense.tips)
 
     tip = dispense.tips[0]
     hlc = get_vantage_liquid_class(
