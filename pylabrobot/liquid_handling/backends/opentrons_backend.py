@@ -282,6 +282,9 @@ class OpentronsBackend(LiquidHandlerBackend):
     else:
       offset_x = offset_y = offset_z = 0
 
+    # ad-hoc offset adjustment that makes it smoother.
+    offset_z += 50
+
     ot_api.lh.pick_up_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
@@ -312,6 +315,9 @@ class OpentronsBackend(LiquidHandlerBackend):
       offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
     else:
       offset_x = offset_y = offset_z = 0
+
+    # ad-hoc offset adjustment that makes it smoother.
+    offset_z += 10
 
     ot_api.lh.drop_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
