@@ -13,7 +13,8 @@ from .tip_creators import (
   high_volume_tip_with_filter,
   four_ml_tip_with_filter,
   five_ml_tip,
-  fifty_ul_tip_with_filter
+  fifty_ul_tip_with_filter,
+  fifty_ul_tip_no_filter
 )
 
 
@@ -296,7 +297,7 @@ def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=fifty_ul_tip_with_filter,
+      make_tip=fifty_ul_tip_no_filter,
     ),
     with_tips=with_tips
   )
