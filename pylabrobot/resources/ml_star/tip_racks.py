@@ -250,13 +250,13 @@ def ST_P(name: str, with_tips: bool = True) -> TipRack:
 
 
 #: Rack with 96 50ul Tip with filter
-def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
+def TIP_50ul_w_filter_L(name: str, with_tips: bool = True) -> TipRack:
   return TipRack(
     name=name,
     size_x=122.4,
     size_y=82.6,
     size_z=18.0,
-    model="TIP_50ul_L",
+    model="TIP_50ul_w_filter",
     items=create_equally_spaced(TipSpot,
       num_items_x=12,
       num_items_y=8,
@@ -272,6 +272,36 @@ def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
     with_tips=with_tips
   )
 
+
 #: Tip Rack 96 50ul Tip with filter portrait oriented
+def TIP_50ul_w_filter_P(name: str, with_tips: bool = True) -> TipRack:
+  return TIP_50ul_w_filter_L(name=name, with_tips=with_tips).rotated(90)
+
+
+#: Rack with 96 50ul Tip
+def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
+  return TipRack(
+    name=name,
+    size_x=122.4,
+    size_y=82.6,
+    size_z=18.0,
+    model="TIP_50ul",
+    items=create_equally_spaced(TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      dx=7.2,
+      dy=5.3,
+      dz=-40.5,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
+      make_tip=fifty_ul_tip_with_filter,
+    ),
+    with_tips=with_tips
+  )
+
+
+#: Tip Rack 96 50ul Tip portrait oriented
 def TIP_50ul_P(name: str, with_tips: bool = True) -> TipRack:
   return TIP_50ul_L(name=name, with_tips=with_tips).rotated(90)

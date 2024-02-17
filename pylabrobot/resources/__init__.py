@@ -30,7 +30,6 @@ from .corning_axygen import *
 from .porvair import *
 from .revvity import *
 from .thermo_fisher import *
-from .sarstedt import *
 
 # liquid handling companies
 from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
@@ -39,4 +38,3 @@ from .opentrons import *
 from .tecan import *
 
 # labware made from 3rd parties that share their designs with PLR
-from .TTx_DIY import *
