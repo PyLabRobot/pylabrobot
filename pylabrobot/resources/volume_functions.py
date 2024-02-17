@@ -59,42 +59,42 @@ def calculate_liquid_volume_container_2segments_square_ubottom(
     h_cuboid: float,
     liquid_height: float
 ) -> float:
-    """
-    Calculate the volume of liquid in a container with a hemispherical bottom 
-    and a cuboidal top. The diameter of the hemisphere is equal to the side 
-    length of the square base of the cuboid.
+  """
+  Calculate the volume of liquid in a container with a hemispherical bottom 
+  and a cuboidal top. The diameter of the hemisphere is equal to the side 
+  length of the square base of the cuboid.
 
-    The function calculates the volume based on whether the liquid height is 
-    within the hemisphere or extends into the cuboid.
+  The function calculates the volume based on whether the liquid height is 
+  within the hemisphere or extends into the cuboid.
 
-    Parameters:
-      x (float): The side length of the square base of the cuboid and diameter 
-                 of the hemisphere in mm.
-      h_cuboid (float): The height of the cuboid in mm.
-      liquid_height (float): The height of the liquid in the container in mm.
+  Parameters:
+    x (float): The side length of the square base of the cuboid and diameter 
+                of the hemisphere in mm.
+    h_cuboid (float): The height of the cuboid in mm.
+    liquid_height (float): The height of the liquid in the container in mm.
 
-    Returns:
-      float: The volume of the liquid in cubic millimeters.
-    """
-    if liquid_height > h_cuboid + x/2:
-        raise ValueError("WARNING: Liquid overflow detected; check your labware definition and/or that you are using the right labware.")
+  Returns:
+    float: The volume of the liquid in cubic millimeters.
+  """
+  if liquid_height > h_cuboid + x/2:
+    raise ValueError("WARNING: Liquid overflow detected; check your labware definition and/or that you are using the right labware.")
 
-    r = x / 2  # Radius of the hemisphere
-    full_hemisphere_volume = (2/3) * math.pi * r**3
+  r = x / 2  # Radius of the hemisphere
+  full_hemisphere_volume = (2/3) * math.pi * r**3
 
-    if liquid_height <= r:
-        # Liquid height is within the hemisphere
-        # Calculating the sub-volume of the hemisphere using spherical cap volume formula
-        h = liquid_height  # Height of the spherical cap
-        liquid_volume = (1/3) * math.pi * h**2 * (3*r - h)
-    else:
-        # Liquid height extends into the cuboid
-        # Calculating the volume of the cuboid portion filled with liquid
-        cuboid_liquid_height = liquid_height - r
-        cuboid_liquid_volume = x**2 * cuboid_liquid_height
-        liquid_volume = full_hemisphere_volume + cuboid_liquid_volume
+  if liquid_height <= r:
+    # Liquid height is within the hemisphere
+    # Calculating the sub-volume of the hemisphere using spherical cap volume formula
+    h = liquid_height  # Height of the spherical cap
+    liquid_volume = (1/3) * math.pi * h**2 * (3*r - h)
+  else:
+    # Liquid height extends into the cuboid
+    # Calculating the volume of the cuboid portion filled with liquid
+    cuboid_liquid_height = liquid_height - r
+    cuboid_liquid_volume = x**2 * cuboid_liquid_height
+    liquid_volume = full_hemisphere_volume + cuboid_liquid_volume
 
-    return float(liquid_volume)
+  return float(liquid_volume)
 
 def calculate_liquid_volume_container_2segments_round_vbottom(
   d: float,
