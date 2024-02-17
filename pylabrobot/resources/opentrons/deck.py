@@ -58,7 +58,12 @@ class OTDeck(Deck):
       size_z=82,
     )
 
-    trash_container.assign_child_resource(actual_trash, location=Coordinate(x=82.84, y=53.56, z=5))
+    # Trash location used to be Coordinate(x=86.43, y=82.93, z=0),
+    # this is approximately the center of the trash area.
+    # LiquidHandler will now automatically find the center of the trash before discarding tips,
+    # so this location is no longer needed and we just use Coordinate.zero().
+    # The actual location of the trash is determined by the slot number (12).
+    trash_container.assign_child_resource(actual_trash, location=Coordinate.zero())
     self.assign_child_at_slot(trash_container, 12)
 
   def assign_child_resource(
