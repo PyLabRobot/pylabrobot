@@ -36,7 +36,7 @@ def _rails_for_x_coordinate(x: int):
 
 
 class HamiltonDeck(Deck, metaclass=ABCMeta):
-  """ Hamilton decks. Currently only STARLet and STAR are supported. """
+  """ Hamilton decks. Currently only STARLet, STAR and Vantage are supported. """
 
   def __init__(
     self,
@@ -47,19 +47,10 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     name: str = "deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
-    no_trash: bool = False,
   ):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       origin=origin)
     self.num_rails = num_rails
-
-    # assign trash area
-    if not no_trash:
-      trash_x = size_x - 560 # only tested on STARLet, assume STAR is same distance from right max..
-
-      self.assign_child_resource(
-        resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
-        location=Coordinate(x=trash_x, y=190.6, z=137.1)) # z I am not sure about
 
   @abstractmethod
   def rails_to_location(self, rails: int) -> Coordinate:
@@ -311,6 +302,36 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
 class HamiltonSTARDeck(HamiltonDeck): # pylint: disable=invalid-name
   """ Base class for a Hamilton STAR(let) deck. """
+
+  def __init__(
+    self,
+    num_rails: int,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    name="deck",
+    category: str = "deck",
+    origin: Coordinate = Coordinate.zero(),
+    no_trash: bool = False,
+  ) -> None:
+    """ Create a new STAR(let) deck of the given size. """
+
+    super().__init__(
+      num_rails=num_rails,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      name=name,
+      category=category,
+      origin=origin)
+
+    # assign trash area
+    if not no_trash:
+      trash_x = size_x - 560 # only tested on STARLet, assume STAR is same distance from right max..
+
+      self.assign_child_resource(
+        resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
+        location=Coordinate(x=trash_x, y=190.6, z=137.1)) # z I am not sure about
 
   def rails_to_location(self, rails: int) -> Coordinate:
     x = 100.0 + (rails - 1) * _RAILS_WIDTH
