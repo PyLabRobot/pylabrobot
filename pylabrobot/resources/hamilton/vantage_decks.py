@@ -1,4 +1,5 @@
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck, _RAILS_WIDTH
 
 
@@ -26,17 +27,25 @@ class VantageDeck(HamiltonDeck):
     if size == 1.3:
       # Curiously stored in ML_STAR2.deck in HAMILTON\\Config after editing the deck to 1.3m using
       # the HxConfigEditor.
+      size_x = 1237.5
       super().__init__(
         num_rails=54,
-        size_x=1237.5,
+        size_x=size_x,
         size_y=653.5,
         size_z=900.0,
         name=name,
         category=category,
         origin=origin,
-        no_trash=no_trash
       )
       self.size = 1.3
+
+      if not no_trash:
+        trash_x = size_x - 660 # only tested on small Vantage
+
+        # an experimentally informed guess.
+        self.assign_child_resource(
+          resource=Trash("trash", size_x=0, size_y=260, size_z=0),
+          location=Coordinate(x=trash_x, y=185.6, z=137.1)) # z I am not sure about
     elif size == 2.0:
       raise NotImplementedError("2.0m Vantage decks are not yet supported.")
     else:
