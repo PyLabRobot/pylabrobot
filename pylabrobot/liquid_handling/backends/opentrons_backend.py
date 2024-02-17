@@ -272,7 +272,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     assert op.resource.parent is not None, "must not be a floating resource"
 
     labware_id = self.defined_labware[op.resource.parent.name] # get name of tip rack
-    tip_max_volume = 20 # op.resource.maximal_volume
+    tip_max_volume = op.tip.maximal_volume
     pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=False)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
@@ -303,7 +303,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     assert op.resource.parent is not None, "must not be a floating resource"
 
     labware_id = self.defined_labware[op.resource.parent.name] # get name of tip rack
-    tip_max_volume = 20 # op.resource.maximal_volume
+    tip_max_volume = op.tip.maximal_volume
     pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=True)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
@@ -464,6 +464,10 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     ot_api.lh.dispense(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=flow_rate, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
+
+  async def home(self):
+    """ Home the robot """
+    ot_api.health.home()
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
