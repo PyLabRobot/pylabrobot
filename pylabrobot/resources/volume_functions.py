@@ -77,7 +77,8 @@ def calculate_liquid_volume_container_2segments_square_ubottom(
     float: The volume of the liquid in cubic millimeters.
   """
   if liquid_height > h_cuboid + x/2:
-    raise ValueError("WARNING: Liquid overflow detected; check your labware definition and/or that you are using the right labware.")
+    raise ValueError("""WARNING: Liquid overflow detected;
+    check your labware definiton and/or that you are using the right labware.""")
 
   r = x / 2  # Radius of the hemisphere
   full_hemisphere_volume = (2/3) * math.pi * r**3
