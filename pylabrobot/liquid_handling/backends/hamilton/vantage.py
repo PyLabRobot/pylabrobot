@@ -491,6 +491,8 @@ class Vantage(HamiltonLiquidHandler):
     self,
     ops: List[Aspiration],
     use_channels: List[int],
+    jet: Optional[List[bool]] = None,
+    empty: Optional[List[bool]] = None,
     hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     type_of_aspiration: Optional[List[int]] = None,
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
@@ -541,6 +543,11 @@ class Vantage(HamiltonLiquidHandler):
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
 
+    if jet is None:
+      jet = [False]*len(ops)
+    if empty is None:
+      empty = [False]*len(ops)
+
     if hlcs is None:
       hlcs = [
         get_vantage_liquid_class(
@@ -549,9 +556,9 @@ class Vantage(HamiltonLiquidHandler):
           is_tip=True,
           has_filter=op.tip.has_filter,
           liquid=op.liquids[-1][0] or Liquid.WATER,
-          jet=False, # for aspiration
-          empty=False # for aspiration
-        ) for op in ops]
+          jet=jet[i],
+          empty=empty[i]
+        ) for i, op in enumerate(ops)]
 
     self._assert_valid_resources([op.resource for op in ops])
 
@@ -1173,7 +1180,7 @@ class Vantage(HamiltonLiquidHandler):
     return await self.send_command(
       module="I1AM",
       command="LP",
-      lc=not cover_open
+      lp=not cover_open
     )
 
   async def loading_cover_request_initialization_status(self) -> bool:
@@ -2348,12 +2355,12 @@ class Vantage(HamiltonLiquidHandler):
     self,
     y_position: List[int],
     tip_pattern: Optional[List[bool]] = None,
-    TODO_DF_1: int = 0,
-    TODO_DF_2: int = 0,
-    TODO_DF_3: int = 100,
-    TODO_DF_4: int = 900,
+    first_shoot_x_pos: int = 0, #1
+    dispense_on_fly_pos_command_end: int = 0, # 2
+    x_acceleration_distance_before_first_shoot: int = 100, # 3
+    space_between_shoots: int = 900, # 4
     x_speed: int = 270,
-    TODO_DF_5: int = 1,
+    number_of_shoots: int = 1, # 5
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
     liquid_surface_at_function_without_lld: Optional[List[int]] = None,
@@ -2370,12 +2377,13 @@ class Vantage(HamiltonLiquidHandler):
 
     Args:
       tip_pattern: Tip pattern (channels involved). [0 = not involved, 1 = involved].
-      TODO_DF_1: (0).
-      TODO_DF_2: (0).
-      TODO_DF_3: (0).
-      TODO_DF_4: (0).
+      first_shoot_x_pos: First shoot X-position [0.1mm]
+      dispense_on_fly_pos_command_end: Dispense on fly position on command end [0.1mm]
+      x_acceleration_distance_before_first_shoot: X- acceleration distance before first shoot
+        [0.1mm] Space between shoots (raster pitch) [0.01mm]
+      space_between_shoots: Space between shoots (raster pitch) [0.01mm]
       x_speed: X speed [0.1mm/s].
-      TODO_DF_5: (0).
+      number_of_shoots: Number of shoots
       minimal_traverse_height_at_begin_of_command: Minimal traverse height at begin of command
         [0.1mm].
       minimal_height_at_command_end: Minimal height at command end [0.1mm].
@@ -2396,23 +2404,23 @@ class Vantage(HamiltonLiquidHandler):
     elif not all(0 <= x <= 1 for x in tip_pattern):
       raise ValueError("tip_pattern must be in range 0 to 1")
 
-    if not -50000 <= TODO_DF_1 <= 50000:
-      raise ValueError("TODO_DF_1 must be in range -50000 to 50000")
+    if not -50000 <= first_shoot_x_pos <= 50000:
+      raise ValueError("first_shoot_x_pos must be in range -50000 to 50000")
 
-    if not -50000 <= TODO_DF_2 <= 50000:
-      raise ValueError("TODO_DF_2 must be in range -50000 to 50000")
+    if not -50000 <= dispense_on_fly_pos_command_end <= 50000:
+      raise ValueError("dispense_on_fly_pos_command_end must be in range -50000 to 50000")
 
-    if not 0 <= TODO_DF_3 <= 900:
-      raise ValueError("TODO_DF_3 must be in range 0 to 900")
+    if not 0 <= x_acceleration_distance_before_first_shoot <= 900:
+      raise ValueError("x_acceleration_distance_before_first_shoot must be in range 0 to 900")
 
-    if not 1 <= TODO_DF_4 <= 2500:
-      raise ValueError("TODO_DF_4 must be in range 1 to 2500")
+    if not 1 <= space_between_shoots <= 2500:
+      raise ValueError("space_between_shoots must be in range 1 to 2500")
 
     if not 20 <= x_speed <= 25000:
       raise ValueError("x_speed must be in range 20 to 25000")
 
-    if not 1 <= TODO_DF_5 <= 48:
-      raise ValueError("TODO_DF_5 must be in range 1 to 48")
+    if not 1 <= number_of_shoots <= 48:
+      raise ValueError("number_of_shoots must be in range 1 to 48")
 
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
@@ -2474,12 +2482,12 @@ class Vantage(HamiltonLiquidHandler):
       module="A1PM",
       command="DF",
       tm=tip_pattern,
-      xa=TODO_DF_1,
-      xf=TODO_DF_2,
-      xh=TODO_DF_3,
-      xy=TODO_DF_4,
+      xa=first_shoot_x_pos,
+      xf=dispense_on_fly_pos_command_end,
+      xh=x_acceleration_distance_before_first_shoot,
+      xy=space_between_shoots,
       xv=x_speed,
-      xi=TODO_DF_5,
+      xi=number_of_shoots,
       th=minimal_traverse_height_at_begin_of_command,
       te=minimal_height_at_command_end,
       yp=y_position,
