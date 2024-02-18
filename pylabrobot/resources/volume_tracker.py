@@ -92,7 +92,7 @@ class VolumeTracker:
 
     if volume > self.get_free_volume():
       raise TooLittleVolumeError(
-        "Container has too little volume: {volume}uL > {self.get_free_volume()}uL.")
+        f"Container has too little volume: {volume}uL > {self.get_free_volume()}uL.")
 
     # If the last liquid is the same as the one we want to add, just add the volume to it.
     if len(self.pending_liquids) > 0:
