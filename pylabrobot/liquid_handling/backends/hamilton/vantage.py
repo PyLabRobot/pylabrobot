@@ -303,6 +303,22 @@ def vantage_response_string_to_error(string: str) -> HamiltonFirmwareError:
 
   return VantageFirmwareError(errors, string)
 
+def _get_dispense_mode(jet: bool, empty: bool, blow_out: bool) -> Literal[0, 1, 2, 3, 4]:
+  """ from docs:
+  0 = part in jet
+  1 = blow in jet (called "empty" in VENUS liquid editor)
+  2 = Part at surface
+  3 = Blow at surface (called "empty" in VENUS liquid editor)
+  4 = Empty (truly empty)
+  """
+
+  if empty:
+    return 4
+  if jet:
+    return 1 if blow_out else 0
+  else:
+    return 3 if blow_out else 2
+
 
 class Vantage(HamiltonLiquidHandler):
   """ A Hamilton Vantage liquid handler. """
@@ -492,8 +508,9 @@ class Vantage(HamiltonLiquidHandler):
     ops: List[Aspiration],
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
-    empty: Optional[List[bool]] = None,
+    blow_out: Optional[List[bool]] = None,
     hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+
     type_of_aspiration: Optional[List[int]] = None,
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
@@ -536,6 +553,9 @@ class Vantage(HamiltonLiquidHandler):
     Args:
       ops: The aspiration operations.
       use_channels: The channels to use.
+      blow_out: Whether to search for a "blow out" liquid class. This is only used on dispense.
+        Note that in the VENUS liquid editor, the term "empty" is used for this, but in the firmware
+        documentation, "empty" is used for a different mode (dm4).
       hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
         determined automatically based on the tip and liquid used.
     """
@@ -545,8 +565,8 @@ class Vantage(HamiltonLiquidHandler):
 
     if jet is None:
       jet = [False]*len(ops)
-    if empty is None:
-      empty = [False]*len(ops)
+    if blow_out is None:
+      blow_out = [False]*len(ops)
 
     if hlcs is None:
       hlcs = [
@@ -557,7 +577,7 @@ class Vantage(HamiltonLiquidHandler):
           has_filter=op.tip.has_filter,
           liquid=op.liquids[-1][0] or Liquid.WATER,
           jet=jet[i],
-          empty=empty[i]
+          blow_out=blow_out[i]
         ) for i, op in enumerate(ops)]
 
     self._assert_valid_resources([op.resource for op in ops])
@@ -631,9 +651,12 @@ class Vantage(HamiltonLiquidHandler):
     self,
     ops: List[Dispense],
     use_channels: List[int],
+
     jet: Optional[List[bool]] = None,
-    empty: Optional[List[bool]] = None,
+    blow_out: Optional[List[bool]] = None, # "empty" in the VENUS liquid editor
+    empty: Optional[List[bool]] = None, # truly "empty", does not exist in liquid editor, dm4
     hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+
     type_of_dispensing_mode: Optional[List[int]] = None,
     minimum_height: Optional[List[int]] = None,
     pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[int]] = None,
@@ -673,12 +696,17 @@ class Vantage(HamiltonLiquidHandler):
     Args:
       ops: The aspiration operations.
       use_channels: The channels to use.
-      jet: Whether to dispense in jet mode per channel. If `True`, jet dispense will be used. If
-        `False`, surface dispense will be used. Defaults to `False` for all channels.
-      empty: Whether to empty in jet mode per channel. If `True`, empty dispense will be used. If
-        `False`, normal dispense will be used. Defaults to `False` for all channels.
       hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
         determined automatically based on the tip and liquid used.
+
+      jet: Whether to use jetting for each dispense. Defaults to `False` for all. Used for
+        determining the dispense mode. True for dispense mode 0 or 1.
+      blow_out: Whether to use "blow out" dispense mode for each dispense. Defaults to `False` for
+        all. This is labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
+        documentation. True for dispense mode 1 or 3.
+      empty: Whether to use "empty" dispense mode for each dispense. Defaults to `False` for all.
+        Truly empty the tip, not available in the VENUS liquid editor, but is in the firmware
+        documentation. Dispense mode 4.
     """
 
     x_positions, y_positions, channels_involved = \
@@ -688,6 +716,8 @@ class Vantage(HamiltonLiquidHandler):
       jet = [False]*len(ops)
     if empty is None:
       empty = [False]*len(ops)
+    if blow_out is None:
+      blow_out = [False]*len(ops)
 
     if hlcs is None:
       hlcs = [
@@ -698,8 +728,8 @@ class Vantage(HamiltonLiquidHandler):
           has_filter=op.tip.has_filter,
           liquid=op.liquids[-1][0] or Liquid.WATER,
           jet=jet,
-          empty=empty
-        ) for jet, empty, op in zip(jet, empty, ops)]
+          blow_out=bo # see method docstring
+        ) for jet, bo, op in zip(jet, blow_out, ops)]
     self._assert_valid_resources([op.resource for op in ops])
 
     # correct volumes using the liquid class
@@ -719,11 +749,15 @@ class Vantage(HamiltonLiquidHandler):
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100)
         for op, hlc in zip(ops, hlcs)]
 
+    type_of_dispensing_mode = type_of_dispensing_mode or \
+      [_get_dispense_mode(jet=jet[i], empty=empty[i], blow_out=blow_out[i])
+       for i in range(len(ops))]
+
     return await self.pip_dispense(
       x_position=x_positions,
       y_position=y_positions,
       tip_pattern=channels_involved,
-      type_of_dispensing_mode=type_of_dispensing_mode or [1]*len(ops),
+      type_of_dispensing_mode=type_of_dispensing_mode,
       minimum_height=minimum_height or [int(wb*10) for wb in well_bottoms],
       lld_search_height=[int(sh*10) for sh in lld_search_heights],
       liquid_surface_at_function_without_lld=[int(ls*10) for ls in liquid_surfaces_no_lld],
@@ -813,8 +847,9 @@ class Vantage(HamiltonLiquidHandler):
     self,
     aspiration: AspirationPlate,
     jet: bool = False,
-    empty: bool = False,
+    blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
+
     type_of_aspiration: int = 0,
     minimal_traverse_height_at_begin_of_command: int = 2450,
     minimal_height_at_command_end: int = 2450,
@@ -843,10 +878,10 @@ class Vantage(HamiltonLiquidHandler):
     """ Aspirate from a plate.
 
     Args:
-      jet: Whether to aspirate in jet mode. If `True`, jet aspirate will be used. If `False`,
-        surface aspirate will be used.
-      empty: Whether to empty in jet mode. If `True`, empty aspirate will be used. If `False`,
-        normal aspirate will be used.
+      jet: Whether to find a liquid class with "jet" mode. Only used on dispense.
+      blow_out: Whether to find a liquid class with "blow out" mode. Only used on dispense. Note
+        that this is called "empty" in the VENUS liquid editor, but "blow out" in the firmware
+        documentation.
       hlc: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
         determined automatically based on the tip and liquid used in the first well.
     """
@@ -871,8 +906,9 @@ class Vantage(HamiltonLiquidHandler):
         # first part of tuple in last liquid of first well
         liquid=aspiration.liquids[0][-1][0] or Liquid.WATER,
         jet=jet,
-        empty=empty
+        blow_out=blow_out
       )
+
     volume = hlc.compute_corrected_volume(aspiration.volume) if hlc is not None \
       else aspiration.volume
 
@@ -928,9 +964,11 @@ class Vantage(HamiltonLiquidHandler):
     self,
     dispense: DispensePlate,
     jet: bool = False,
-    empty: bool = False,
+    blow_out: bool = False, # "empty" in the VENUS liquid editor
+    empty: bool = False, # truly "empty", does not exist in liquid editor, dm4
+
     hlc: Optional[HamiltonLiquidClass] = None,
-    type_of_dispensing_mode: int = 0,
+    type_of_dispensing_mode: Optional[int] = None,
     tube_2nd_section_height_measured_from_zm: int = 0,
     tube_2nd_section_ratio: int = 0,
     pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
@@ -961,9 +999,15 @@ class Vantage(HamiltonLiquidHandler):
 
     Args:
       jet: whether to dispense in jet mode.
-      empty: whether to empty in empty mode.
+      blow_out: whether to dispense in jet mode. In the VENUS liquid editor, this is called "empty".
+        Dispensing mode 1 or 3.
+      empty: whether to truly empty the tip. This does not exist in the liquid editor, but is in the
+        firmware documentation. Dispense mode 4.
       liquid_class: the liquid class to use. If not provided, it will be determined based on the
         liquid in the first well.
+
+      type_of_dispensing_mode: the type of dispense mode to use. If not provided, it will be
+        determined based on the jet, blow_out, and empty parameters.
     """
     assert isinstance(dispense.resource, Plate), "Only Plate is supported."
     well_a1 = dispense.resource.get_item("A1")
@@ -985,7 +1029,7 @@ class Vantage(HamiltonLiquidHandler):
         # first part of tuple in last liquid of first well
         liquid=dispense.liquids[0][-1][0] or Liquid.WATER,
         jet=jet,
-        empty=empty
+        blow_out=blow_out # see method docstring
       )
     volume = hlc.compute_corrected_volume(dispense.volume) if hlc is not None \
       else dispense.volume
@@ -1002,6 +1046,8 @@ class Vantage(HamiltonLiquidHandler):
     settling_time = settling_time or \
       (int(hlc.dispense_settling_time*10) if hlc is not None else 5)
     mix_speed = mix_speed or (int(hlc.dispense_mix_flow_rate*10) if hlc is not None else 100)
+    type_of_dispensing_mode = type_of_dispensing_mode or \
+      _get_dispense_mode(jet=jet, empty=empty, blow_out=blow_out)
 
     return await self.core96_dispensing_of_liquid(
       x_position=int(position.x * 10),

@@ -15,9 +15,22 @@ def get_star_liquid_class(
   has_filter: bool,
   liquid: Liquid,
   jet: bool,
-  empty: bool
+  blow_out: bool
 ) -> Optional[HamiltonLiquidClass]:
-  """ Get the Hamilton STAR liquid class for the given parameters. """
+  """ Get the Hamilton STAR liquid class for the given parameters.
+
+  Args:
+    tip_volume: The volume of the tip in microliters.
+    is_core: Whether the tip is a core tip.
+    is_tip: Whether the tip is a tip tip or a needle.
+    has_filter: Whether the tip has a filter.
+    liquid: The liquid to be dispensed.
+    jet: Whether the liquid is dispensed using a jet.
+    blow_out: This is called "empty" in the Hamilton Liquid editor and liquid class names, but
+      "blow out" in the firmware documentation. "Empty" in the firmware documentation means fully
+      emptying the tip, which is the terminology PyLabRobot adopts. Blow_out is the opposite of
+      partial dispense.
+  """
 
   # Tip volumes from resources (mostly where they have filters) are slightly different from the ones
   # in the liquid class mapping, so we need to map them here. If no mapping is found, we use the
@@ -30,7 +43,7 @@ def get_star_liquid_class(
     5420.0: 5000.0,
   }.get(tip_volume, tip_volume))
 
-  return star_mapping.get((tip_volume, is_core, is_tip, has_filter, liquid, jet, empty), None)
+  return star_mapping.get((tip_volume, is_core, is_tip, has_filter, liquid, jet, blow_out), None)
 
 
 star_mapping[(1000, False, False, False, Liquid.WATER, True, True)] = \

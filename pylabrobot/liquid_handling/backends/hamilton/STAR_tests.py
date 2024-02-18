@@ -14,6 +14,7 @@ from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   Cos_96_EZWash,
   HT_P,
+  HTF_L,
   Coordinate,
   ResourceStack,
   Lid,
@@ -206,6 +207,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
     self.tip_car[1] = self.tip_rack = STF_L(name="tip_rack_01")
+    self.tip_car[2] = self.tip_rack2 = HTF_L(name="tip_rack_02")
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
@@ -471,7 +473,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
     with no_volume_tracking():
       await self.lh.dispense(self.bb, vols=10, use_channels=[0, 1, 2, 3, 4], liquid_height=1,
-                             empty=[True]*5, jet=[True]*5)
+                             blow_out=[True]*5, jet=[True]*5)
     self._assert_command_sent_once(
       "C0DSid0002dm1 1 1 1 1 1&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 "
       "1825 1688 1551 0000&zx1260 1260 1260 1260 1260 1260&lp2000 2000 2000 2000 2000 2000&zl1210 "
@@ -490,7 +492,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     with no_volume_tracking():
-      await self.lh.dispense(self.plate["A1"], vols=[100], jet=[True], empty=[True])
+      await self.lh.dispense(self.plate["A1"], vols=[100], jet=[True], blow_out=[True])
     self._assert_command_sent_once(
       "C0DSid0002dm1 1&tm1 0&xp02980 00000&yp1460 0000&zx1931 1931&lp2011 2011&zl1881 1881&"
       "po0100 0100&ip0000 0000&it0 0&fp0000 0000&zu0032 0032&zr06180 06180&th2450te2450"
@@ -505,7 +507,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     with no_volume_tracking():
-      await self.lh.dispense(self.plate["A1:B1"], vols=100, jet=[True]*2, empty=[True]*2)
+      await self.lh.dispense(self.plate["A1:B1"], vols=100, jet=[True]*2, blow_out=[True]*2)
 
     self._assert_command_sent_once(
       "C0DSid0002dm1 1 1&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&zx1931 1931 1931&lp2011 2011 "
@@ -532,15 +534,16 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
                 "xs#####xd#yh####za####zh####ze####")
 
   async def test_core_96_aspirate(self):
-    await self.test_core_96_tip_pickup() # pick up tips first
+    await self.lh.pick_up_tips96(self.tip_rack2) # pick up high volume tips
 
     # TODO: Hamilton liquid classes
     assert self.plate.lid is not None
     self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, 100*1.072)
+    await self.lh.aspirate_plate(self.plate, volume=100, blow_out=True)
 
+    # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
-      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01072ag2500vt050"
+      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01083ag2500vt050"
       "bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000hs1200zv0032zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "xs#####xd#yh####zh####ze####lz####zt####zm####iw###ix#fh###af#####ag####vt###"
@@ -548,16 +551,17 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "cw************************pp####")
 
   async def test_core_96_dispense(self):
-    await self.test_core_96_tip_pickup() # pick up tips first
+    await self.lh.pick_up_tips96(self.tip_rack2) # pick up high volume tips
     if self.plate.lid is not None:
       self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, 100*1.072) # aspirate first
+    await self.lh.aspirate_plate(self.plate, 100, blow_out=True) # aspirate first
 
     with no_volume_tracking():
-      await self.lh.dispense_plate(self.plate, 100*1.072)
+      await self.lh.dispense_plate(self.plate, 100, blow_out=True)
 
+    # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
-      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01072dg1200vt050"
+      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01083dg1200vt050"
       "bv00000cm0cs1bs0020wh00hv00000hc00hp000hs1200es0050ev000zv0032ej00zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "da#xs#####xd#yh##6#zh####ze####lz####zt####zm##6#iw###ix#fh###df#####dg####vt###"
