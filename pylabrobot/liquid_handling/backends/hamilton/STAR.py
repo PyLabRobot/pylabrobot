@@ -1036,6 +1036,23 @@ def star_firmware_string_to_error(
   return STARFirmwareError(errors=errors, raw_response=raw_response)
 
 
+def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
+  """ from docs:
+  0 = Partial volume in jet mode
+  1 = Blow out in jet mode, called "empty" in the VENUS liquid editor
+  2 = Partial volume at surface
+  3 = Blow out at surface, called "empty" in the VENUS liquid editor
+  4 = Empty tip at fix position
+  """
+
+  if empty:
+    return 4
+  if jet:
+    return 1 if blow_out else 0
+  else:
+    return 3 if blow_out else 2
+
+
 class STAR(HamiltonLiquidHandler):
   """
   Interface for the Hamilton STAR.
@@ -1401,6 +1418,8 @@ class STAR(HamiltonLiquidHandler):
     self,
     ops: List[Aspiration],
     use_channels: List[int],
+    jet: Optional[List[bool]] = None,
+    blow_out: Optional[List[bool]] = None,
 
     lld_search_height: Optional[List[int]] = None,
     clot_detection_height: Optional[List[int]] = None,
@@ -1455,6 +1474,10 @@ class STAR(HamiltonLiquidHandler):
     Args:
       ops: The aspiration operations to perform.
       use_channels: The channels to use for the operations.
+      jet: whether to search for a jet liquid class. Only used on dispense. Default is False.
+      blow_out: whether to blow out air. Only used on dispense. Note that in the VENUS Liquid
+        Editor, this is called "empty". Default is False.
+
       blow_out_air_volumes: The amount of air to be blown out over all matching dispense operations.
       lld_search_height: The height to start searching for the liquid level when using LLD.
       clot_detection_height: Unknown, but probably the height to search for clots when doing LLD.
@@ -1511,6 +1534,11 @@ class STAR(HamiltonLiquidHandler):
 
     n = len(ops)
 
+    if jet is None:
+      jet = [False] * n
+    if blow_out is None:
+      blow_out = [False] * n
+
     if hamilton_liquid_classes is None:
       hamilton_liquid_classes = [
         get_star_liquid_class(
@@ -1519,9 +1547,9 @@ class STAR(HamiltonLiquidHandler):
           is_tip=True,
           has_filter=op.tip.has_filter,
           liquid=op.liquids[-1][0] or Liquid.WATER, # get last liquid in well, first to be aspirated
-          jet=False, # for aspiration
-          empty=False # for aspiration
-        ) for op in ops]
+          jet=jet[i],
+          blow_out=blow_out[i]
+        ) for i, op in enumerate(ops)]
 
     self._assert_valid_resources([op.resource for op in ops])
 
@@ -1703,7 +1731,8 @@ class STAR(HamiltonLiquidHandler):
 
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     jet: Optional[List[bool]] = None,
-    empty: Optional[List[bool]] = None
+    blow_out: Optional[List[bool]] = None, # "empty" in the VENUS liquid editor
+    empty: Optional[List[bool]] = None, # truly "empty", does not exist in liquid editor, dm4
   ):
     """ Dispense liquid from the specified channels.
 
@@ -1757,8 +1786,14 @@ class STAR(HamiltonLiquidHandler):
       hamilton_liquid_classes: Override the default liquid classes. See
         pylabrobot/liquid_handling/liquid_classes/hamilton/star.py
 
-      jet: Whether to use jetting for each dispense. Defaults to `False` for all.
-      empty: Whether to use 'empty' mode dispensing. Defaults to `False` for all.
+      jet: Whether to use jetting for each dispense. Defaults to `False` for all. Used for
+        determining the dispense mode. True for dispense mode 0 or 1.
+      blow_out: Whether to use "blow out" dispense mode for each dispense. Defaults to `False` for
+        all. This is labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
+        documentation. True for dispense mode 1 or 3.
+      empty: Whether to use "empty" dispense mode for each dispense. Defaults to `False` for all.
+        Truly empty the tip, not available in the VENUS liquid editor, but is in the firmware
+        documentation. Dispense mode 4.
     """
 
     x_positions, y_positions, channels_involved = \
@@ -1770,6 +1805,8 @@ class STAR(HamiltonLiquidHandler):
       jet = [False] * n
     if empty is None:
       empty = [False] * n
+    if blow_out is None:
+      blow_out = [False] * n
 
     if hamilton_liquid_classes is None:
       hamilton_liquid_classes = [
@@ -1780,7 +1817,7 @@ class STAR(HamiltonLiquidHandler):
           has_filter=op.tip.has_filter,
           liquid=op.liquids[-1][0] or Liquid.WATER, # get last liquid in pipette, first to be disp.
           jet=jet[i],
-          empty=empty[i],
+          blow_out=blow_out[i], # see comment in method docstring
         ) for i, op in enumerate(ops)]
 
     # correct volumes using the liquid class
@@ -1794,15 +1831,9 @@ class STAR(HamiltonLiquidHandler):
                             (2.7 if isinstance(op.resource, Well) else 5) #?
                           for wb, op in zip(well_bottoms, ops)]
 
-    def dispensing_mode_for_op(empty: bool, jet: bool) -> int:
-      return {
-        (False, True): 0,
-        (True, True): 1,
-        (True, False): 2,
-        (False, False): 3,
-      }[(empty, jet)]
-    dispensing_modes = dispensing_mode or [dispensing_mode_for_op(empty[i], jet[i])
-                                           for i in range(len(ops))]
+    dispensing_modes = dispensing_mode or \
+      [_dispensing_mode_for_op(empty=empty[i], jet=jet[i], blow_out=blow_out[i])
+       for i in range(len(ops))]
 
     dispense_volumes = [int(op.volume*10) for op in ops]
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [100]*n)
@@ -1961,10 +1992,14 @@ class STAR(HamiltonLiquidHandler):
   async def aspirate96(
     self,
     aspiration: AspirationPlate,
+    jet: bool = False,
+    blow_out: bool = False,
+
     blow_out_air_volume: float = 0,
     use_lld: bool = False,
     liquid_height: float = 2,
     air_transport_retract_dist: float = 10,
+    hlc: Optional[HamiltonLiquidClass] = None,
 
     aspiration_type: int = 0,
     minimum_traverse_height_at_beginning_of_a_command: int = 2450,
@@ -1997,6 +2032,14 @@ class STAR(HamiltonLiquidHandler):
 
     Args:
       aspiration: The aspiration to perform.
+
+      jet: Whether to search for a jet liquid class. Only used on dispense.
+      blow_out: Whether to use "blow out" dispense mode. Only used on dispense. Note that this is
+        labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
+        documentation.
+      hlc: The Hamiltonian liquid class to use. If `None`, the liquid class will be determined
+        automatically.
+
       blow_out_air_volume: The volume of air to blow out after aspiration, in microliters.
       use_lld: If True, use gamma liquid level detection. If False, use liquid height.
       liquid_height: The height of the liquid above the bottom of the well, in millimeters.
@@ -2031,16 +2074,43 @@ class STAR(HamiltonLiquidHandler):
     """
 
     assert self.core96_head_installed, "96 head must be installed"
-
     assert isinstance(aspiration.resource, Plate), "Only ItemizedResource is supported."
+
+    # get the first well and tip as representatives
     well_a1 = aspiration.resource.get_item("A1")
     position = well_a1.get_absolute_location() + well_a1.center()
+    tip = aspiration.tips[0]
 
     liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
 
-    flow_rate = int((aspiration.flow_rate or 250)*10)
+    hlc = hlc or get_star_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=True,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      # get last liquid in pipette, first to be dispensed
+      liquid=aspiration.liquids[-1][0][0] or Liquid.WATER,
+      jet=jet,
+      blow_out=blow_out, # see comment in method docstring
+    )
 
-    aspiration_volumes = int(aspiration.volume * 10)
+    if hlc is not None:
+      volume = hlc.compute_corrected_volume(aspiration.volume)
+    else:
+      volume = aspiration.volume
+    aspiration_volumes = int(volume * 10)
+
+    transport_air_volume = transport_air_volume or \
+      (int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0)
+    blow_out_air_volume = blow_out_air_volume or \
+      (int(hlc.aspiration_blow_out_volume * 100) if hlc is not None else 0)
+    flow_rate = int(aspiration.flow_rate or \
+      (hlc.aspiration_flow_rate if hlc is not None else 250)) * 10
+    swap_speed = swap_speed or (int(hlc.aspiration_swap_speed*10) if hlc is not None else 100)
+    settling_time = settling_time or \
+      (int(hlc.aspiration_settling_time*10) if hlc is not None else 5)
+    speed_of_homogenization = speed_of_homogenization or \
+      (int(hlc.aspiration_mix_flow_rate*10) if hlc is not None else 100)
 
     channel_pattern = [True]*12*8
 
@@ -2106,9 +2176,12 @@ class STAR(HamiltonLiquidHandler):
     self,
     dispense: DispensePlate,
     jet: bool = False,
-    blow_out: bool = True, # TODO: do we need this if we can just check if blow_out_air_volume > 0?
+    empty: bool = False,
+    blow_out: bool = False,
+    hlc: Optional[HamiltonLiquidClass] = None,
+
     liquid_height: float = 2,
-    dispense_mode=3,
+    dispense_mode: Optional[int] = None,
     air_transport_retract_dist=10,
     blow_out_air_volume: Optional[float] = None,
     use_lld: bool = False,
@@ -2148,7 +2221,8 @@ class STAR(HamiltonLiquidHandler):
       blow_out: Whether to blow out after dispensing.
       liquid_height: The height of the liquid in the well, in mm. Used if LLD is not used.
       dispense_mode: The dispense mode to use. 0 = Partial volume in jet mode 1 = Blow out in jet
-        mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix position
+        mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix position.
+        If `None`, the mode will be determined based on the `jet`, `empty`, and `blow_out`
       air_transport_retract_dist: The distance to retract after dispensing, in mm.
       blow_out_air_volume: The volume of air to blow out after dispensing, in ul.
       use_lld: Whether to use gamma LLD.
@@ -2178,21 +2252,45 @@ class STAR(HamiltonLiquidHandler):
     """
 
     assert self.core96_head_installed, "96 head must be installed"
-
     assert isinstance(dispense.resource, Plate), "Only ItemizedResource is supported."
+
+    # get the first well and tip as representatives
     well_a1 = dispense.resource.get_item("A1")
     position = well_a1.get_absolute_location() + well_a1.center()
+    tip = dispense.tips[0]
 
     liquid_height = dispense.resource.get_absolute_location().z + liquid_height
 
-    dispense_mode = {
-      (True, False): 0,
-      (True, True): 1,
-      (False, False): 2,
-      (False, True): 3,
-    }[(jet, blow_out)]
+    dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 
-    flow_rate = dispense.flow_rate or 120
+    hlc = hlc or get_star_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=True,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      # get last liquid in pipette, first to be dispensed
+      liquid=dispense.liquids[-1][0][0] or Liquid.WATER,
+      jet=jet,
+      blow_out=blow_out, # see comment in method docstring
+    )
+
+    if hlc is not None:
+      volume = hlc.compute_corrected_volume(dispense.volume)
+    else:
+      volume = dispense.volume
+    dispense_volumes = int(volume * 10)
+
+    transport_air_volume = transport_air_volume or \
+      (int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0)
+    blow_out_air_volume = blow_out_air_volume or \
+      (int(hlc.dispense_blow_out_volume * 100) if hlc is not None else 0)
+    flow_rate = int(dispense.flow_rate or \
+      (hlc.dispense_flow_rate if hlc is not None else 120)) * 10
+    swap_speed = swap_speed or (int(hlc.dispense_swap_speed*10) if hlc is not None else 100)
+    settling_time = settling_time or \
+      (int(hlc.dispense_settling_time*10) if hlc is not None else 5)
+    speed_of_mixing = speed_of_mixing or \
+      (int(hlc.dispense_mix_flow_rate*10) if hlc is not None else 100)
 
     liquid_surface_at_function_without_lld: int = int(liquid_height*10)
     pull_out_distance_to_take_transport_air_in_function_without_lld = air_transport_retract_dist*10
@@ -2220,8 +2318,8 @@ class STAR(HamiltonLiquidHandler):
       immersion_depth_direction=immersion_depth_direction,
       liquid_surface_sink_distance_at_the_end_of_dispense=
         liquid_surface_sink_distance_at_the_end_of_dispense,
-      dispense_volume=int(dispense.volume * 10),
-      dispense_speed=int(flow_rate * 10),
+      dispense_volume=dispense_volumes,
+      dispense_speed=flow_rate,
       transport_air_volume=transport_air_volume,
       blow_out_air_volume=0,
       lld_mode=int(use_lld),
