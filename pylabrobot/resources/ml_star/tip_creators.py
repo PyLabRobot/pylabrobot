@@ -213,7 +213,7 @@ def fifty_ul_tip_with_filter() -> HamiltonTip:
     pickup_method=TipPickupMethod.OUT_OF_RACK
   )
 
-def fifty_ul_tip() -> HamiltonTip:
+def fifty_ul_tip_no_filter() -> HamiltonTip:
   """ 50 ul tip with a filter (Hamilton cat. no.: 235966) """
   return HamiltonTip(
     has_filter=False,
