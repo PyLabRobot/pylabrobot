@@ -54,27 +54,26 @@ def calculate_liquid_volume_container_2segments_square_vbottom(
 
   return float(liquid_volume)
 
+
 def calculate_liquid_volume_container_2segments_square_ubottom(
-    x: float,
-    h_cuboid: float,
-    liquid_height: float
+  x: float,
+  h_cuboid: float,
+  liquid_height: float
 ) -> float:
   """
-  Calculate the volume of liquid in a container with a hemispherical bottom 
-  and a cuboidal top. The diameter of the hemisphere is equal to the side 
-  length of the square base of the cuboid.
+  Calculate the volume of liquid in a container with a hemispherical bottom and a cuboidal top.
+  The diameter of the hemisphere is equal to the side length of the square base of the cuboid.
 
-  The function calculates the volume based on whether the liquid height is 
-  within the hemisphere or extends into the cuboid.
+  The function calculates the volume based on whether the liquid height is within the hemisphere or
+  extends into the cuboid.
 
   Parameters:
-    x (float): The side length of the square base of the cuboid and diameter 
-                of the hemisphere in mm.
-    h_cuboid (float): The height of the cuboid in mm.
-    liquid_height (float): The height of the liquid in the container in mm.
+    x: The side length of the square base of the cuboid and diameter of the hemisphere in mm.
+    h_cuboid: The height of the cuboid in mm.
+    liquid_height: The height of the liquid in the container in mm.
 
   Returns:
-    float: The volume of the liquid in cubic millimeters.
+    The volume of the liquid in cubic millimeters.
   """
   if liquid_height > h_cuboid + x/2:
     raise ValueError("""WARNING: Liquid overflow detected;
@@ -95,7 +94,8 @@ def calculate_liquid_volume_container_2segments_square_ubottom(
     cuboid_liquid_volume = x**2 * cuboid_liquid_height
     liquid_volume = full_hemisphere_volume + cuboid_liquid_volume
 
-  return float(liquid_volume)
+  return liquid_volume
+
 
 def calculate_liquid_volume_container_2segments_round_vbottom(
   d: float,
