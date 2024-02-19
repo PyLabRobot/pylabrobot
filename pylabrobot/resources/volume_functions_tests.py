@@ -5,6 +5,7 @@ from pylabrobot.resources.volume_functions import (
   calculate_liquid_volume_container_2segments_square_vbottom,
   calculate_liquid_volume_container_2segments_round_vbottom,
   calculate_liquid_volume_container_2segments_round_ubottom,
+  calculate_liquid_volume_container_2segments_square_ubottom,
 )
 
 
@@ -69,3 +70,22 @@ class TestVolumeFunctions(unittest.TestCase):
       calculate_liquid_volume_container_2segments_round_ubottom(
         d=10, h_cylinder=10, liquid_height=15),
         (2/3) * math.pi * 5**3 + math.pi * (10/2)**2 * 10)
+
+  def test_calculate_liquid_volume_container_2segments_square_ubottom(self):
+    # Exactly the full hemisphere
+    self.assertAlmostEqual(
+      calculate_liquid_volume_container_2segments_square_ubottom(
+        x=10, h_cuboid=10, liquid_height=5),
+        (2/3) * math.pi * (10/2)**3)
+
+    # Test for liquid height within the hemisphere
+    self.assertAlmostEqual(
+      calculate_liquid_volume_container_2segments_square_ubottom(
+        x=10, h_cuboid=10, liquid_height=5),
+        (1/3) * math.pi * 5**2 * (3*5 - 5))
+
+    # Test for liquid height extending into the cuboid
+    self.assertAlmostEqual(
+      calculate_liquid_volume_container_2segments_square_ubottom(
+        x=10, h_cuboid=10, liquid_height=15),
+        (2/3) * math.pi * (10/2)**3 + 10**2 * 10)
