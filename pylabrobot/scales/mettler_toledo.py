@@ -1,5 +1,6 @@
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
+import time
 from typing import List, Literal, Optional, Union
 
 import logging
@@ -97,8 +98,12 @@ class MettlerToledoWXS205SDU(ScaleBackend):
       self.ser.close()
       self.ser = None
 
-  async def send_command(self, command: str) -> MettlerToledoResponse:
-    """ Send a command to the scale and receive the response. """
+  async def send_command(self, command: str, timeout: int = 60) -> MettlerToledoResponse:
+    """ Send a command to the scale and receive the response.
+
+    Args:
+      timeout: The timeout in seconds.
+    """
 
     if self.ser is None:
       raise RuntimeError("Call scale.setup() before sending commands.")
@@ -107,7 +112,15 @@ class MettlerToledoWXS205SDU(ScaleBackend):
     logger.debug("[scale] Sent command: %s", command)
 
     # TODO: make this async
-    response = self.ser.readline()
+    response = b""
+    timeout_time = time.time() + timeout
+    while True:
+      response = self.ser.readline()
+      time.sleep(0.001)
+      if time.time() > timeout_time:
+        raise TimeoutError("Timeout while waiting for response from scale.")
+      if response != b"":
+        break
     logger.debug("[scale] Received response: %s", response)
     response = response.decode("utf-8")
     response = response.strip()
