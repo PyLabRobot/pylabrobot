@@ -29,9 +29,9 @@ pip install -e '.[dev]'
 
 See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
 
-### Using pip (outdated and NOT recommended)
+### Using pip (often outdated NOT recommended)
 
-> The PyPI package is currently out of date. Please install from source (see above).
+> The PyPI package is often out of date. Please install from source (see above).
 
 The following will install PyLabRobot and the essential dependencies:
 
@@ -43,8 +43,8 @@ If you want to build documentation or run tests, you need install the additional
 dependencies. Also using pip:
 
 ```bash
-pip install pylabrobot[docs]
-pip install pylabrobot[testing]
+pip install 'pylabrobot[docs]'
+pip install 'pylabrobot[testing]'
 ```
 
 There's a multitude of other optional dependencies that you can install. Replace `[docs]` with one of the following items to install the desired dependencies.
@@ -64,13 +64,13 @@ There's a multitude of other optional dependencies that you can install. Replace
 To install multiple dependencies, separate them with a comma:
 
 ```bash
-pip install pylabrobot[fw,server]
+pip install 'pylabrobot[fw,server]'
 ```
 
 Or install all dependencies at once:
 
 ```bash
-pip install pylabrobot[all]
+pip install 'pylabrobot[all]'
 ```
 
 (using-the-firmware-interface)=
