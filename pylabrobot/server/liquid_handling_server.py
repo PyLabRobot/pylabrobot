@@ -91,10 +91,6 @@ def get_status():
   status = "running" if current_app.lh.setup_finished else "stopped"
   return jsonify({"status": status})
 
-@lh_api.route("/rinse", methods=["POST"])
-async def rinse_tips():
-  return add_and_run_task(Task(current_app.lh.rinse_tips()))
-
 
 @lh_api.route("/move_plate", methods=["POST"])
 async def move_plate():
@@ -105,14 +101,6 @@ async def move_plate():
   to = data["to"]
   resource = current_app.lh.deck.get_resource(resource_name)
   resource_to = current_app.lh.deck.get_resource(to)
-
-
-  # current_app.lh.deck.unassign_child_resource(resource)
-  # current_app.lh.deck.assign_child_resource(resource, resource_to)
-
-  # move = Move(resource=resource, to=to)
-
-  # print(resource_name, resource_to.get_absolute_location())
 
   return add_and_run_task(Task(current_app.lh.move_plate(resource, resource_to)))
 

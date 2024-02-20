@@ -87,10 +87,8 @@ class LiquidHandler(MachineFrontend):
 
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
-    print("hello", self.backend)
 
     await self.backend.setup()
-    print("hello2", self.backend)
 
     self.head = {c: TipTracker() for c in range(self.backend.num_channels)}
 
@@ -100,9 +98,6 @@ class LiquidHandler(MachineFrontend):
 
     await super().setup()
 
-
-  async def rinse_tips(self):
-    await self.backend.rinse_tips()
 
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.
@@ -1150,7 +1145,7 @@ class LiquidHandler(MachineFrontend):
     for extra in extras:
       del backend_kwargs[extra]
 
-    return await self.backend.move_resource(move=Move(
+    await self.backend.move_resource(move=Move(
       resource=resource,
       to=to,
       intermediate_locations=intermediate_locations or [],
@@ -1300,6 +1295,7 @@ class LiquidHandler(MachineFrontend):
       get_direction=get_direction,
       put_direction=put_direction,
       **backend_kwargs)
+
 
     plate.unassign()
     if isinstance(to, Coordinate):
