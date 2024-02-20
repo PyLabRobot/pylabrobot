@@ -1,5 +1,6 @@
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
+import asyncio
 import time
 from typing import List, Literal, Optional, Union
 
@@ -62,6 +63,51 @@ class MettlerToledoError(Exception):
     return MettlerToledoError(title="Logical error",
       message="The weigh module/balance can not execute the received command")
 
+  @staticmethod
+  def boot_error(from_terminal: bool) -> "MettlerToledoError":
+    return MettlerToledoError(title="Boot error",
+                              message="from terminal" if from_terminal else "from electronics")
+
+  @staticmethod
+  def brand_error(from_terminal: bool) -> "MettlerToledoError":
+    return MettlerToledoError(title="Brand error",
+                              message="from terminal" if from_terminal else "from electronics")
+
+  @staticmethod
+  def checksum_error(from_terminal: bool) -> "MettlerToledoError":
+    return MettlerToledoError(title="Checksum error",
+                              message="from terminal" if from_terminal else "from electronics")
+
+  @staticmethod
+  def option_fail(from_terminal: bool) -> "MettlerToledoError":
+    return MettlerToledoError(title="Option fail",
+                              message="from terminal" if from_terminal else "from electronics")
+
+  @staticmethod
+  def eeprom_error(from_terminal: bool) -> "MettlerToledoError":
+    return MettlerToledoError(title="EEPROM error",
+                              message="from terminal" if from_terminal else "from electronics")
+
+  @staticmethod
+  def device_mismatch(from_terminal: bool) -> "MettlerToledoError":
+    return MettlerToledoError(title="Device mismatch",
+                              message="from terminal" if from_terminal else "from electronics")
+
+  @staticmethod
+  def hot_plug_out(from_terminal: bool) -> "MettlerToledoError":
+    return MettlerToledoError(title="Hot plug out",
+                              message="from terminal" if from_terminal else "from electronics")
+
+  @staticmethod
+  def weight_module_electronic_mismatch(from_terminal: bool) -> "MettlerToledoError":
+    return MettlerToledoError(title="Weight module / electronic mismatch",
+                              message="from terminal" if from_terminal else "from electronics")
+
+  @staticmethod
+  def adjustment_needed(from_terminal: bool) -> "MettlerToledoError":
+    return MettlerToledoError(title="Adjustment needed",
+                              message="from terminal" if from_terminal else "from electronics")
+
 
 MettlerToledoResponse = List[str]
 
@@ -111,20 +157,17 @@ class MettlerToledoWXS205SDU(ScaleBackend):
     self.ser.write(command.encode() + b"\r\n")
     logger.debug("[scale] Sent command: %s", command)
 
-    # TODO: make this async
-    response = b""
+    raw_response = b""
     timeout_time = time.time() + timeout
     while True:
-      response = self.ser.readline()
-      time.sleep(0.001)
+      raw_response = self.ser.readline()
+      await asyncio.sleep(0.001)
       if time.time() > timeout_time:
         raise TimeoutError("Timeout while waiting for response from scale.")
-      if response != b"":
+      if raw_response != b"":
         break
-    logger.debug("[scale] Received response: %s", response)
-    response = response.decode("utf-8")
-    response = response.strip()
-    response = response.split()
+    logger.debug("[scale] Received response: %s", raw_response)
+    response = raw_response.decode("utf-8").strip().split()
 
     # parse basic errors
     self._parse_basic_errors(response)
@@ -165,6 +208,29 @@ class MettlerToledoWXS205SDU(ScaleBackend):
       raise MettlerToledoError.overload()
     if response[1] == "-":
       raise MettlerToledoError.underload()
+
+    if response[0] == "S" and response[1] == "S" and response[2] == "Error":
+      error_code = response[3]
+      code, source = error_code[:-1], error_code[-1]
+      from_terminal = (source == "t")
+      if code == "1":
+        raise MettlerToledoError.boot_error(from_terminal=from_terminal)
+      if code == "2":
+        raise MettlerToledoError.brand_error(from_terminal=from_terminal)
+      if code == "3":
+        raise MettlerToledoError.checksum_error(from_terminal=from_terminal)
+      if code == "9":
+        raise MettlerToledoError.option_fail(from_terminal=from_terminal)
+      if code == "10":
+        raise MettlerToledoError.eeprom_error(from_terminal=from_terminal)
+      if code == "11":
+        raise MettlerToledoError.device_mismatch(from_terminal=from_terminal)
+      if code == "12":
+        raise MettlerToledoError.hot_plug_out(from_terminal=from_terminal)
+      if code == "14":
+        raise MettlerToledoError.weight_module_electronic_mismatch(from_terminal=from_terminal)
+      if code == "15":
+        raise MettlerToledoError.adjustment_needed(from_terminal=from_terminal)
 
   async def tare_stable(self) -> MettlerToledoResponse:
     """ Tare the scale when the weight is stable. """
