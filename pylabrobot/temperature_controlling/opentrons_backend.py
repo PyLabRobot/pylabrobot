@@ -1,8 +1,18 @@
+import sys
 from typing import cast
 
-import ot_api
-
 from pylabrobot.temperature_controlling.backend import TemperatureControllerBackend
+
+PYTHON_VERSION = sys.version_info[:2]
+
+if PYTHON_VERSION <= (3, 10):
+  try:
+    import ot_api
+    USE_OT = True
+  except ImportError:
+    USE_OT = False
+else:
+  USE_OT = False
 
 
 class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
@@ -16,6 +26,10 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
         `OpentronsTemperatureModuleBackend.list_connected_modules()`.
     """
     self.opentrons_id = opentrons_id
+
+    if not USE_OT:
+      raise RuntimeError("Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
+                         " Only supported on Python 3.10 and below.")
 
   async def setup(self):
     await super().setup()

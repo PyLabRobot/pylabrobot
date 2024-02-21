@@ -14,4 +14,5 @@ Subpackages
     pylabrobot.pumps
     pylabrobot.scales
     pylabrobot.resources
+    pylabrobot.temperature_controlling
     pylabrobot.utils
