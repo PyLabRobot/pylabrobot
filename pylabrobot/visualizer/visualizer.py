@@ -433,6 +433,7 @@ class Visualizer:
     # Send a `resource_assigned` event to the browser.
     data = {
       "resource": resource.serialize(),
+      "state": resource.serialize_all_state(),
       "parent_name": (resource.parent.name if resource.parent else None)
     }
     fut = self.send_command(

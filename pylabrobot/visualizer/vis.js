@@ -42,6 +42,14 @@ function removeResource(resourceName) {
   resource.destroy();
 }
 
+function setState(allStates) {
+  for (let resourceName in allStates) {
+    let state = allStates[resourceName];
+    let resource = resources[resourceName];
+    resource.setState(state);
+  }
+}
+
 async function processCentralEvent(event, data) {
   switch (event) {
     case "set_root_resource":
@@ -51,6 +59,7 @@ async function processCentralEvent(event, data) {
     case "resource_assigned":
       resource = loadResource(data.resource);
       resource.draw(resourceLayer);
+      setState(data.state);
       break;
 
     case "resource_unassigned":
@@ -59,12 +68,8 @@ async function processCentralEvent(event, data) {
 
     case "set_state":
       let allStates = data;
+      setState(allStates);
 
-      for (let resourceName in allStates) {
-        let state = allStates[resourceName];
-        let resource = resources[resourceName];
-        resource.setState(state);
-      }
       break;
 
     default:

@@ -107,6 +107,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
       event="resource_assigned",
       data={
         "resource": child.serialize(),
+        "state": child.serialize_all_state(),
         "parent_name": "root",
      },
      wait_for_response=False
