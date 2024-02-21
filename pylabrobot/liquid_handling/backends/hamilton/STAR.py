@@ -6775,10 +6775,10 @@ class STAR(HamiltonLiquidHandler):
     lowest_immers_pos_str = f"{lowest_immers_pos:05}"
     start_pos_lld_search_str = f"{start_pos_lld_search:05}"
     channel_speed_str = f"{channel_speed:05}"
-    channel_acc_str = f"{channel_acceleration:03}" 
+    channel_acc_str = f"{channel_acceleration:03}"
     detection_edge_str = f"{detection_edge:04}"
-    detection_drop_str = f"{detection_drop:04}" 
-    post_detection_dist_str = f"{post_detection_dist:04}" 
+    detection_drop_str = f"{detection_drop:04}"
+    post_detection_dist_str = f"{post_detection_dist:04}"
 
     await self.send_command(
       module=f"P{channel_idx}",
@@ -6793,9 +6793,9 @@ class STAR(HamiltonLiquidHandler):
         zi=post_detection_dist_str  # Distance to move up after detection
     )
     if move_channels_to_save_pos_after:
-        await self.move_all_channels_in_z_safety()
+      await self.move_all_channels_in_z_safety()
 
     get_llds = await self.request_pip_height_last_lld()
-    result_in_mm = get_llds["lh"][channel_idx-1] / 10
+    result_in_mm = float(get_llds["lh"][channel_idx-1] / 10)
 
     return result_in_mm
