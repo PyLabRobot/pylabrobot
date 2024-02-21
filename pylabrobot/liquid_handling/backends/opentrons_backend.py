@@ -3,15 +3,6 @@ from typing import Dict, Optional, List, cast
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
-from pylabrobot.resources import (
-  Coordinate,
-  ItemizedResource,
-  Plate,
-  Resource,
-  TipRack,
-  TipSpot
-)
-from pylabrobot.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   PickupTipRack,
@@ -23,6 +14,16 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move
 )
+from pylabrobot.resources import (
+  Coordinate,
+  ItemizedResource,
+  Plate,
+  Resource,
+  TipRack,
+  TipSpot
+)
+from pylabrobot.resources.opentrons import OTDeck
+from pylabrobot.temperature_controlling import OpentronsTemperatureModuleV2
 from pylabrobot import utils
 
 PYTHON_VERSION = sys.version_info[:2]
@@ -100,6 +101,21 @@ class OpentronsBackend(LiquidHandlerBackend):
     self.defined_labware = {}
     await super().stop()
 
+  def _get_resource_slot(self, resource: Resource) -> int:
+    """ Get the ultimate slot of a given resource. Some resources are assigned to another resource,
+    such as a temperature controller, and we need to find the slot of the parent resource. Nesting
+    may be deeper than one level, so we need to traverse the tree from the bottom up. """
+
+    slot = None
+    while resource.parent is not None:
+      if isinstance(resource.parent, OTDeck):
+        slot = cast(OTDeck, resource.parent).get_slot(resource)
+        break
+      resource = resource.parent
+    if slot is None:
+      raise ValueError("Resource not on the deck.")
+    return slot
+
   async def assigned_resource_callback(self, resource: Resource):
     """ Called when a resource is assigned to a backend.
 
@@ -111,6 +127,19 @@ class OpentronsBackend(LiquidHandlerBackend):
     await super().assigned_resource_callback(resource)
 
     if resource.name == "deck":
+      return
+
+    slot = self._get_resource_slot(resource)
+
+    # check if resource is actually a Module
+    if isinstance(resource, OpentronsTemperatureModuleV2):
+      ot_api.modules.load_module(
+        slot=slot,
+        model="temperatureModuleV2",
+        module_id=resource.backend.opentrons_id
+      )
+      # call self to assign the tube rack
+      await self.assigned_resource_callback(resource.tube_rack)
       return
 
     well_names = [well.name for well in resource.children]
@@ -210,8 +239,6 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     data = ot_api.labware.define(lw)
     namespace, definition, version = data["data"]["definitionUri"].split("/")
-
-    slot = cast(OTDeck, resource.parent).get_slot(resource)
 
     # assign labware to robot
     labware_uuid = resource.name
@@ -490,3 +517,7 @@ class OpentronsBackend(LiquidHandlerBackend):
   async def move_resource(self, move: Move):
     """ Move the specified lid within the robot. """
     raise NotImplementedError("Moving resources in Opentrons is not implemented yet.")
+
+  async def list_connected_modules(self) -> List[str]:
+    """ List all connected temperature modules. """
+    return ot_api.modules.list_connected_modules()
