@@ -212,7 +212,7 @@ class MettlerToledoWXS205SDU(ScaleBackend):
     if response[0] == "S" and response[1] == "S" and response[2] == "Error":
       error_code = response[3]
       code, source = error_code[:-1], error_code[-1]
-      from_terminal = (source == "t")
+      from_terminal = source == "t"
       if code == "1":
         raise MettlerToledoError.boot_error(from_terminal=from_terminal)
       if code == "2":
