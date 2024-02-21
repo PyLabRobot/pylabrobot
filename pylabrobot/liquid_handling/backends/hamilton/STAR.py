@@ -6728,8 +6728,9 @@ class STAR(HamiltonLiquidHandler):
   ) -> float:
     """
     Probes the Z-height using a specified channel on a liquid handling device.
-    This asynchronous function commands the liquid handler to perform a Liquid Level Detection (LLD) 
-    operation using the specified channel (this means only conductive materials can be probed!).
+    This asynchronous function commands the liquid handler to perform a Liquid Level
+    Detection (LLD) operation using the specified channel (this means only
+    conductive materials can be probed!).
     Args:
         self: The liquid handler.
         channel_idx (int): The index of the channel to use for probing.
@@ -6739,9 +6740,12 @@ class STAR(HamiltonLiquidHandler):
         channel_acceleration (int): The acceleration of the channel.
         detection_edge (int): The edge steepness at capacitive LLD detection.
         detection_drop (int): The offset after capacitive LLD edge detection.
-        post_detection_trajectory (int): Movement of the channel up (1) or down (0) after contacting the surface.
-        post_detection_dist (Literal[0, 1]): Distance to move up after detection to avoid pressure build-up.
-        move_channels_to_save_pos_after (bool): Flag to move channels to a safe position after operation.
+        post_detection_trajectory (int): Movement of the channel up (1) or
+                                         down (0) after contacting the surface.
+        post_detection_dist (Literal[0, 1]): Distance to move up after detection
+                                             to avoid pressure build-up.
+        move_channels_to_save_pos_after (bool): Flag to move channels to a safe
+                                                position after operation.
     Returns:
         float: The detected Z-height in mm.
     """
