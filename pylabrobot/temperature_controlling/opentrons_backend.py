@@ -1,4 +1,4 @@
-from typing import List, cast
+from typing import cast
 
 import ot_api
 

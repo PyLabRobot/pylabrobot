@@ -518,6 +518,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     """ Move the specified lid within the robot. """
     raise NotImplementedError("Moving resources in Opentrons is not implemented yet.")
 
-  async def list_connected_modules(self) -> List[str]:
+  async def list_connected_modules(self) -> List[dict]:
     """ List all connected temperature modules. """
-    return ot_api.modules.list_connected_modules()
+    return cast(List[dict], ot_api.modules.list_connected_modules())
