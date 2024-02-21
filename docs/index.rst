@@ -66,6 +66,13 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 
 
 .. toctree::
+   :maxdepth: 1
+   :caption: Temperature controlling
+
+   temperature
+
+
+.. toctree::
    :maxdepth: 4
    :caption: API documentation
 
