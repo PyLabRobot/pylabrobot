@@ -6722,8 +6722,8 @@ class STAR(HamiltonLiquidHandler):
     channel_acceleration: int = 75,
     detection_edge: int = 10,
     detection_drop: int = 2,
-    post_detection_trajectory: int = 1,
-    post_detection_dist: Literal[0, 1] = 1,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_dist: int = 100,
     move_channels_to_save_pos_after: bool = False
   ) -> float:
     """
@@ -6740,9 +6740,9 @@ class STAR(HamiltonLiquidHandler):
         channel_acceleration (int): The acceleration of the channel.
         detection_edge (int): The edge steepness at capacitive LLD detection.
         detection_drop (int): The offset after capacitive LLD edge detection.
-        post_detection_trajectory (int): Movement of the channel up (1) or
+        post_detection_trajectory (Literal[0, 1]): Movement of the channel up (1) or
                                          down (0) after contacting the surface.
-        post_detection_dist (Literal[0, 1]): Distance to move up after detection
+        post_detection_dist (int): Distance to move up after detection
                                              to avoid pressure build-up.
         move_channels_to_save_pos_after (bool): Flag to move channels to a safe
                                                 position after operation.
