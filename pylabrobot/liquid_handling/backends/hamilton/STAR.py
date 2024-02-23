@@ -6710,3 +6710,91 @@ class STAR(HamiltonLiquidHandler):
     await self.check_type_is_hhc(device_number)
 
     return await self.send_command(module=f"T{device_number}", command="TO")
+
+# -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
+
+  async def probe_z_height_using_channel(
+    self,
+    channel_idx: int,
+    lowest_immers_pos: int = 10000,
+    start_pos_lld_search: int = 31200,
+    channel_speed: int = 1000,
+    channel_acceleration: int = 75,
+    detection_edge: int = 10,
+    detection_drop: int = 2,
+    post_detection_trajectory: Literal[0, 1] = 1,
+    post_detection_dist: int = 100,
+    move_channels_to_save_pos_after: bool = False
+  ) -> float:
+    """ Probes the Z-height using a specified channel on a liquid handling device.
+    Commands the liquid handler to perform a Liquid Level Detection (LLD) operation using the
+    specified channel (this means only conductive materials can be probed!).
+
+    Args:
+      self: The liquid handler.
+      channel_idx: The index of the channel to use for probing.
+      lowest_immers_pos: The lowest immersion position in increments.
+      start_pos_lld_search: The start position for LLD search in increments.
+      channel_speed: The speed of channel movement.
+      channel_acceleration: The acceleration of the channel.
+      detection_edge: The edge steepness at capacitive LLD detection.
+      detection_drop: The offset after capacitive LLD edge detection.
+      post_detection_trajectory: Movement of the channel up (1) or down (0) after contacting the
+        surface.
+      post_detection_dist (int): Distance to move up after detection to avoid pressure build-up.
+      move_channels_to_save_pos_after (bool): Flag to move channels to a safe position after
+       operation.
+
+    Returns:
+      float: The detected Z-height in mm.
+    """
+
+    assert 9320 <= lowest_immers_pos <= 31200, (
+        "Lowest immersion position [increment] must be between 9320 and 31200"
+    )
+    assert 9320 <= start_pos_lld_search <= 31200, (
+        "Start position of LLD search [increment] must be between 9320 and 31200"
+    )
+    assert 20 <= channel_speed <= 15000, (
+        "LLD search speed [increment/second] must be between 20 and 15000"
+    )
+    assert 5 <= channel_acceleration <= 150, (
+        "Channel acceleration [increment] must be between 5 and 150"
+    )
+    assert 0 <= detection_edge <= 1023, (
+        "Edge steepness at capacitive LLD detection must be between 0 and 1023"
+    )
+    assert 0 <= detection_drop <= 1023, (
+        "Offset after capacitive LLD edge detection must be between 0 and 1023"
+    )
+    assert 0 <= post_detection_dist <= 9999, (
+        "Immersion depth after Liquid Level Detection [increment] must be between 0 and 9999"
+    )
+
+    lowest_immers_pos_str = f"{lowest_immers_pos:05}"
+    start_pos_lld_search_str = f"{start_pos_lld_search:05}"
+    channel_speed_str = f"{channel_speed:05}"
+    channel_acc_str = f"{channel_acceleration:03}"
+    detection_edge_str = f"{detection_edge:04}"
+    detection_drop_str = f"{detection_drop:04}"
+    post_detection_dist_str = f"{post_detection_dist:04}"
+
+    await self.send_command(
+      module=f"P{channel_idx}",
+      command="ZL",
+        zh=lowest_immers_pos_str,  # Lowest immersion position [increment]
+        zc=start_pos_lld_search_str,  # Start position of LLD search [increment]
+        zl=channel_speed_str,  # Speed of channel movement
+        zr=channel_acc_str,  # Acceleration [1000 increment/second^2]
+        gt=detection_edge_str,  # Edge steepness at capacitive LLD detection
+        gl=detection_drop_str,  # Offset after capacitive LLD edge detection
+        zj=post_detection_trajectory,  # Movement of the channel after contacting surface
+        zi=post_detection_dist_str  # Distance to move up after detection
+    )
+    if move_channels_to_save_pos_after:
+      await self.move_all_channels_in_z_safety()
+
+    get_llds = await self.request_pip_height_last_lld()
+    result_in_mm = float(get_llds["lh"][channel_idx-1] / 10)
+
+    return result_in_mm
