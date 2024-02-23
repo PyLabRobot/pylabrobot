@@ -529,7 +529,9 @@ class OpentronsBackend(LiquidHandlerBackend):
     minimum_z_height: Optional[float] = None,
     pipette_id: Optional[str] = None
   ):
-    """ Move the pipette head to the specified location.
+    """ Move the pipette head to the specified location. Whe a tip is mounted, the location refers
+    to the bottom of the tip. If no tip is mounted, the location refers to the bottom of the
+    pipette head.
 
     Args:
       location: The location to move to.
