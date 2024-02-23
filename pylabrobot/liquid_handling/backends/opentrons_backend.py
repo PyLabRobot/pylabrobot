@@ -521,3 +521,34 @@ class OpentronsBackend(LiquidHandlerBackend):
   async def list_connected_modules(self) -> List[dict]:
     """ List all connected temperature modules. """
     return cast(List[dict], ot_api.modules.list_connected_modules())
+
+  async def move_pipette_head(
+    self,
+    location: Coordinate,
+    speed: Optional[float] = None,
+    minimum_z_height: Optional[float] = None,
+    pipette_id: Optional[str] = None
+  ):
+    """ Move the pipette head to the specified location.
+
+    Args:
+      location: The location to move to.
+      speed: The speed to move at, in mm/s.
+      minimum_z_height: The minimum z height to move to.
+      pipette_id: The id of the pipette to move. If `"left"` or `"right"`, the left or right
+        pipette is used.
+    """
+
+    if pipette_id == "left":
+      pipette_id = self.left_pipette["pipetteId"]
+    elif pipette_id == "right":
+      pipette_id = self.right_pipette["pipetteId"]
+
+    ot_api.lh.move_arm(
+      pipette_id=pipette_id,
+      location_x=location.x,
+      location_y=location.y,
+      location_z=location.z,
+      minimum_z_height=minimum_z_height,
+      speed=speed
+    )
