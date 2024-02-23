@@ -9,7 +9,7 @@ Subpackages
 .. toctree::
     :maxdepth: 1
 
-    pylabrobot.heating_shaking.rst
+    pylabrobot.heating_shaking
     pylabrobot.liquid_handling
     pylabrobot.plate_reading
     pylabrobot.pumps

@@ -1,9 +1,13 @@
 import time
 import typing
 
-import hid  # type: ignore
-
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
+
+try:
+  import hid  # type: ignore
+  USE_IDE = True
+except ImportError:
+  USE_IDE = False
 
 
 class InhecoThermoShake(HeaterShakerBackend):
@@ -18,6 +22,8 @@ class InhecoThermoShake(HeaterShakerBackend):
     self.serial_number = serial_number
 
   async def setup(self):
+    if not USE_IDE:
+      raise RuntimeError("This backend requires the `hid` package to be installed")
     self.device = hid.Device(vid=self.vid, pid=self.pid, serial=self.serial_number)
 
   async def stop(self):
