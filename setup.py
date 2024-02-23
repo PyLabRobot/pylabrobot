@@ -25,10 +25,6 @@ extras_websockets = [
 
 extras_visualizer = extras_websockets
 
-extras_venus = [
-  "pyhamilton"
-]
-
 extras_opentrons = [
   "opentrons-http-api-client",
   "opentrons-shared-data"
@@ -38,8 +34,12 @@ extras_server = [
   "flask[async]",
 ]
 
+extras_inheco = [
+  "hid"
+]
+
 extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets + \
-    extras_visualizer + extras_opentrons + extras_server + [
+    extras_visualizer + extras_opentrons + extras_server + extras_inheco + [
     "sphinx_book_theme",
     "myst_nb",
     "sphinx_copybutton",
@@ -51,7 +51,7 @@ extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets 
   ]
 
 # Some extras are not available on all platforms. `dev` should be available everywhere
-extras_all = extras_dev + extras_venus
+extras_all = extras_dev
 
 setup(
   name="PyLabRobot",
@@ -69,7 +69,7 @@ setup(
     "plate_reading": extras_plate_reading,
     "websockets": extras_websockets,
     "visualizer": extras_visualizer,
-    "venus": extras_venus,
+    "inheco": extras_inheco,
     "opentrons": extras_opentrons,
     "server": extras_server,
     "dev": extras_dev,
