@@ -6711,7 +6711,7 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module=f"T{device_number}", command="TO")
 
-# -------------- 5.0 Probing labware with STAR - making STAR into a CMM --------------
+# -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
   async def probe_z_height_using_channel(
     self,
@@ -6726,28 +6726,27 @@ class STAR(HamiltonLiquidHandler):
     post_detection_dist: int = 100,
     move_channels_to_save_pos_after: bool = False
   ) -> float:
-    """
-    Probes the Z-height using a specified channel on a liquid handling device.
-    This asynchronous function commands the liquid handler to perform a Liquid Level
-    Detection (LLD) operation using the specified channel (this means only
-    conductive materials can be probed!).
+    """ Probes the Z-height using a specified channel on a liquid handling device.
+    Commands the liquid handler to perform a Liquid Level Detection (LLD) operation using the
+    specified channel (this means only conductive materials can be probed!).
+
     Args:
-        self: The liquid handler.
-        channel_idx (int): The index of the channel to use for probing.
-        lowest_immers_pos (int): The lowest immersion position in increments.
-        start_pos_lld_search (int): The start position for LLD search in increments.
-        channel_speed (int): The speed of channel movement.
-        channel_acceleration (int): The acceleration of the channel.
-        detection_edge (int): The edge steepness at capacitive LLD detection.
-        detection_drop (int): The offset after capacitive LLD edge detection.
-        post_detection_trajectory (Literal[0, 1]): Movement of the channel up (1) or
-                                         down (0) after contacting the surface.
-        post_detection_dist (int): Distance to move up after detection
-                                             to avoid pressure build-up.
-        move_channels_to_save_pos_after (bool): Flag to move channels to a safe
-                                                position after operation.
+      self: The liquid handler.
+      channel_idx: The index of the channel to use for probing.
+      lowest_immers_pos: The lowest immersion position in increments.
+      start_pos_lld_search: The start position for LLD search in increments.
+      channel_speed: The speed of channel movement.
+      channel_acceleration: The acceleration of the channel.
+      detection_edge: The edge steepness at capacitive LLD detection.
+      detection_drop: The offset after capacitive LLD edge detection.
+      post_detection_trajectory: Movement of the channel up (1) or down (0) after contacting the
+        surface.
+      post_detection_dist (int): Distance to move up after detection to avoid pressure build-up.
+      move_channels_to_save_pos_after (bool): Flag to move channels to a safe position after
+       operation.
+
     Returns:
-        float: The detected Z-height in mm.
+      float: The detected Z-height in mm.
     """
 
     assert 9320 <= lowest_immers_pos <= 31200, (
