@@ -22,6 +22,7 @@ class InhecoThermoShake(HeaterShakerBackend):
 
   async def stop(self):
     await self.stop_shaking()
+    await self.stop_temperature_control()
     self.device.close()
 
   @typing.no_type_check
