@@ -527,7 +527,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     location: Coordinate,
     speed: Optional[float] = None,
     minimum_z_height: Optional[float] = None,
-    pipette_id: Optional[str] = None
+    pipette_id: Optional[str] = None,
+    force_direct: bool = False
   ):
     """ Move the pipette head to the specified location. Whe a tip is mounted, the location refers
     to the bottom of the tip. If no tip is mounted, the location refers to the bottom of the
@@ -536,9 +537,10 @@ class OpentronsBackend(LiquidHandlerBackend):
     Args:
       location: The location to move to.
       speed: The speed to move at, in mm/s.
-      minimum_z_height: The minimum z height to move to.
+      minimum_z_height: The minimum z height to move to. Appears to be broken in the Opentrons API.
       pipette_id: The id of the pipette to move. If `"left"` or `"right"`, the left or right
         pipette is used.
+      force_direct: If True, move the pipette head directly in all dimensions.
     """
 
     if pipette_id == "left":
@@ -552,5 +554,6 @@ class OpentronsBackend(LiquidHandlerBackend):
       location_y=location.y,
       location_z=location.z,
       minimum_z_height=minimum_z_height,
-      speed=speed
+      speed=speed,
+      force_direct=force_direct
     )
