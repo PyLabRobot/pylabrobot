@@ -1487,7 +1487,7 @@ class STAR(HamiltonLiquidHandler):
       second_section_ratio: Unknown.
       minimum_height: The minimum height to move to, this is the end of aspiration. The channel
        will move linearly from the liquid surface to this height over the course of the aspiration.
-      immersion_depth: The z distance to move after detecting the liquid, can be into or away from the
+      immersion_depth: The z distance to move after detecting the liquid, can be into or away from
         the liquid surface (dependent on immersion_depth_direction).
       immersion_depth_direction: set to 0, tip will move below the detected liquid surface; set to
         1, tip will move away from the detected surface.
