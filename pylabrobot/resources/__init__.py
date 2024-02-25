@@ -29,6 +29,7 @@ from .resource_stack import ResourceStack
 from .azenta import *
 from .corning_costar import *
 from .corning_axygen import *
+from .falcon import *
 from .porvair import *
 from .revvity import *
 from .thermo_fisher import *
