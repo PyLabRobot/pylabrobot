@@ -296,7 +296,8 @@ def vantage_response_string_to_error(string: str) -> HamiltonFirmwareError:
       "A1PM": "Pip",
       "A1HM": "Core 96",
       "A1RM": "IPG",
-      "A1AM": "Arm"
+      "A1AM": "Arm",
+      "A1XM": "X-arm"
     }.get(module_id, "Unknown module")
     error_string = parse_vantage_fw_string(string, {"et": "str"})["et"]
     errors = {modules: error_string}
@@ -1172,6 +1173,26 @@ class Vantage(HamiltonLiquidHandler):
       hotel_depth=hotel_depth,
       minimal_height_at_command_end=minimal_height_at_command_end
     )
+
+  async def prepare_for_manual_channel_operation(self, channel: int):
+    """ Prepare the robot for manual operation. """
+
+    return await self.expose_channel_n(channel_index=channel + 1) # ?
+
+  async def move_channel_x(self, channel: int, x: float): # pylint: disable=unused-argument
+    """ Move the specified channel to the specified x coordinate. """
+
+    return await self.x_arm_move_to_x_position(int(x * 10))
+
+  async def move_channel_y(self, channel: int, y: float):
+    """ Move the specified channel to the specified y coordinate. """
+
+    return await self.position_single_channel_in_y_direction(channel + 1, int(y * 10))
+
+  async def move_channel_z(self, channel: int, z: float):
+    """ Move the specified channel to the specified z coordinate. """
+
+    return await self.position_single_channel_in_z_direction(channel + 1, int(z * 10))
 
   # ============== Firmware Commands ==============
 
@@ -3585,12 +3606,13 @@ class Vantage(HamiltonLiquidHandler):
       command="RY",
     )
 
-  async def request_y_position_of_channel_n(self):
+  async def request_y_position_of_channel_n(self, channel_index: int = 1):
     """ Request Y Position of channel n """
 
     return await self.send_command(
       module="A1PM",
       command="RB",
+      pn=channel_index,
     )
 
   async def request_z_positions_of_all_channels(self):
@@ -3601,12 +3623,13 @@ class Vantage(HamiltonLiquidHandler):
       command="RZ",
     )
 
-  async def request_z_position_of_channel_n(self):
+  async def request_z_position_of_channel_n(self, channel_index: int = 1):
     """ Request Z Position of channel n """
 
     return await self.send_command(
       module="A1PM",
       command="RD",
+      pn=channel_index,
     )
 
   async def query_tip_presence(self) -> List[bool]:
@@ -4784,6 +4807,213 @@ class Vantage(HamiltonLiquidHandler):
     return await self.send_command(
       module="A1RM",
       command="RS",
+    )
+
+  async def x_arm_initialize(self):
+    """ Initialize the x arm """
+    return await self.send_command(module="A1XM", command="XI")
+
+  async def x_arm_move_to_x_position(
+    self,
+    x_position: int = 5000,
+    x_speed: int = 25000,
+    TODO_XI_1: int = 1,
+  ):
+    """ Move arm to X position
+
+    Args:
+      x_position: X Position [0.1mm].
+      x_speed: X speed [0.1mm/s].
+      TODO_XI_1: (0).
+    """
+
+    if not -50000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -50000 to 50000")
+
+    if not 1 <= x_speed <= 25000:
+      raise ValueError("x_speed must be in range 1 to 25000")
+
+    if not 1 <= TODO_XI_1 <= 25000:
+      raise ValueError("TODO_XI_1 must be in range 1 to 25000")
+
+    return await self.send_command(module="A1XM", command="XP", xp=x_position, xv=x_speed)
+
+  async def x_arm_move_to_x_position_with_all_attached_components_in_z_safety_position(
+    self,
+    x_position: int = 5000,
+    x_speed: int = 25000,
+    TODO_XA_1: int = 1,
+  ):
+    """ Move arm to X position with all attached components in Z safety position
+
+    Args:
+      x_position: X Position [0.1mm].
+      x_speed: X speed [0.1mm/s].
+      TODO_XA_1: (0).
+    """
+
+    if not -50000 <= x_position <= 50000:
+      raise ValueError("x_position must be in range -50000 to 50000")
+
+    if not 1 <= x_speed <= 25000:
+      raise ValueError("x_speed must be in range 1 to 25000")
+
+    if not 1 <= TODO_XA_1 <= 25000:
+      raise ValueError("TODO_XA_1 must be in range 1 to 25000")
+
+    return await self.send_command(
+      module="A1XM",
+      command="XA",
+      xp=x_position,
+      xv=x_speed,
+      xx=TODO_XA_1,
+    )
+
+  async def x_arm_move_arm_relatively_in_x(
+    self,
+    x_search_distance: int = 0,
+    x_speed: int = 25000,
+    TODO_XS_1: int = 1,
+  ):
+    """ Move arm relatively in X
+
+    Args:
+      x_search_distance: X search distance [0.1mm].
+      x_speed: X speed [0.1mm/s].
+      TODO_XS_1: (0).
+    """
+
+    if not -50000 <= x_search_distance <= 50000:
+      raise ValueError("x_search_distance must be in range -50000 to 50000")
+
+    if not 1 <= x_speed <= 25000:
+      raise ValueError("x_speed must be in range 1 to 25000")
+
+    if not 1 <= TODO_XS_1 <= 25000:
+      raise ValueError("TODO_XS_1 must be in range 1 to 25000")
+
+    return await self.send_command(
+      module="A1XM",
+      command="XS",
+      xs=x_search_distance,
+      xv=x_speed,
+      xx=TODO_XS_1,
+    )
+
+  async def x_arm_search_x_for_teach_signal(
+    self,
+    x_search_distance: int = 0,
+    x_speed: int = 25000,
+    TODO_XT_1: int = 1,
+  ):
+    """ Search X for teach signal
+
+    Args:
+      x_search_distance: X search distance [0.1mm].
+      x_speed: X speed [0.1mm/s].
+      TODO_XT_1: (0).
+    """
+
+    if not -50000 <= x_search_distance <= 50000:
+      raise ValueError("x_search_distance must be in range -50000 to 50000")
+
+    if not 1 <= x_speed <= 25000:
+      raise ValueError("x_speed must be in range 1 to 25000")
+
+    if not 1 <= TODO_XT_1 <= 25000:
+      raise ValueError("TODO_XT_1 must be in range 1 to 25000")
+
+    return await self.send_command(
+      module="A1XM",
+      command="XT",
+      xs=x_search_distance,
+      xv=x_speed,
+      xx=TODO_XT_1,
+    )
+
+  async def x_arm_set_x_drive_angle_of_alignment(
+    self,
+    TODO_XL_1: int = 1,
+  ):
+    """ Set X drive angle of alignment
+
+    Args:
+      TODO_XL_1: (0).
+    """
+
+    if not 1 <= TODO_XL_1 <= 1:
+      raise ValueError("TODO_XL_1 must be in range 1 to 1")
+
+    return await self.send_command(
+      module="A1XM",
+      command="XL",
+      xl=TODO_XL_1,
+    )
+
+  async def x_arm_turn_x_drive_off(self):
+    return await self.send_command(module="A1XM", command="XO")
+
+  async def x_arm_send_message_to_motion_controller(
+    self,
+    TODO_BD_1: str = "",
+  ):
+    """ Send message to motion controller
+
+    Args:
+      TODO_BD_1: (0).
+    """
+
+    return await self.send_command(
+      module="A1XM",
+      command="BD",
+      bd=TODO_BD_1,
+    )
+
+  async def x_arm_set_any_parameter_within_this_module(
+    self,
+    TODO_AA_1: int = 0,
+    TODO_AA_2: int = 1,
+  ):
+    """ Set any parameter within this module
+
+    Args:
+      TODO_AA_1: (0).
+      TODO_AA_2: (0).
+    """
+
+    return await self.send_command(
+      module="A1XM",
+      command="AA",
+      xm=TODO_AA_1,
+      xt=TODO_AA_2,
+    )
+
+  async def x_arm_request_arm_x_position(self):
+    """ Request arm X position. This returns a list, of which the first value is one that can be
+    used with x_arm_move_to_x_position. """
+    return await self.send_command(module="A1XM", command="RX")
+
+  async def x_arm_request_error_code(self):
+    """ X arm request error code """
+    return await self.send_command(module="A1XM", command="RE")
+
+  async def x_arm_request_x_drive_recorded_data(
+    self,
+    TODO_QL_1: int = 0,
+    TODO_QL_2: int = 0,
+  ):
+    """ Request X drive recorded data
+
+    Args:
+      TODO_QL_1: (0).
+      TODO_QL_2: (0).
+    """
+
+    return await self.send_command(
+      module="A1RM",
+      command="QL",
+      lj=TODO_QL_1,
+      ln=TODO_QL_2,
     )
 
   async def disco_mode(self):

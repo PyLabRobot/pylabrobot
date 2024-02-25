@@ -2587,10 +2587,10 @@ class STAR(HamiltonLiquidHandler):
         return_tool=return_core_gripper
       )
 
-  async def prepare_for_manual_channel_operation(self):
+  async def prepare_for_manual_channel_operation(self, channel: int):
     """ Prepare for manual operation. """
 
-    await self.position_max_free_y_for_n(pipetting_channel_index=self.num_channels)
+    await self.position_max_free_y_for_n(pipetting_channel_index=channel + 1)
 
   async def move_channel_x(self, channel: int, x: float): # pylint: disable=unused-argument
     """ Move a channel in the x direction. """
