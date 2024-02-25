@@ -4792,3 +4792,21 @@ class Vantage(HamiltonLiquidHandler):
       r, g, b = random.randint(30, 100), random.randint(30, 100), random.randint(30, 100)
       await self.set_led_color("on", intensity=100, white=0, red=r, green=g, blue=b, uv=0)
       await asyncio.sleep(0.1)
+
+  async def russian_roulette(self):
+    """ Dangerous easter egg. """
+    sure = input("Are you sure you want to play Russian Roulette? This will turn on the uv-light "
+                 "with a probability of 1/6. (yes/no) ")
+    if sure.lower() != "yes":
+      print("boring")
+      return
+
+    if random.randint(1, 6) == 6:
+      await self.set_led_color("on", intensity=100, white=100, red=100, green=0, blue=0, uv=100)
+      print("You lost.")
+    else:
+      await self.set_led_color("on", intensity=100, white=100, red=0, green=100, blue=0, uv=0)
+      print("You won.")
+
+    await asyncio.sleep(5)
+    await self.set_led_color("on", intensity=100, white=100, red=100, green=100, blue=100, uv=0)
