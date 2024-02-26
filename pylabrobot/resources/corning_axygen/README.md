@@ -9,4 +9,4 @@ Company page: [Corning - Axygen® Brand Products](https://www.corning.com/emea/e
 
 | Description               | Image              |
 |--------------------|--------------------|
-| 'Axy_24_DW_10ML'<br>Part no.: P-DW-10ML-24-C-S<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-DW-10ML-24-C-S) | <img src="ims/axygen_Axy_24_DW_10ML.jpg" alt="Axy_24_DW_10ML" width="250"/> |
+| 'Axy_24_DW_10ML'<br>Part no.: P-DW-10ML-24-C-S<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-DW-10ML-24-C-S) | <img src="ims/axygen_Axy_24_DW_10ML.jpg" alt="Axy_24_DW_10ML" width="250"/> | `Axy_24_DW_10ML` |

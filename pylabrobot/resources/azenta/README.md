@@ -9,6 +9,6 @@ Company wikipedia: [Azenta](https://en.wikipedia.org/wiki/Azenta)
 
 ### Currently defined labware:
 
-| Description               | Image              |
-|--------------------|--------------------|
-| 'Azenta4titudeFrameStar_96_wellplate_skirted'<br><br> - Man. part no.: 4ti-0960<br> - Supplier part no.: PCR1232<br> - [manufacturer website](https://www.azenta.com/products/framestar-96-well-skirted-pcr-plate)<br> - [supplier website](https://www.scientificlabs.co.uk/product/pcr-plates/PCR1232)<br> - working volume: <100µl<br> - total well capacity: 200µl| <img src="ims/azenta_4titude_96PCR_4ti-0960.jpg" alt="Azenta4titudeFrameStar_96_wellplate_skirted" width="250"/> |
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Azenta4titudeFrameStar_96_wellplate_skirted'<br><br> - Man. part no.: 4ti-0960<br> - Supplier part no.: PCR1232<br> - [manufacturer website](https://www.azenta.com/products/framestar-96-well-skirted-pcr-plate)<br> - [supplier website](https://www.scientificlabs.co.uk/product/pcr-plates/PCR1232)<br> - working volume: <100µl<br> - total well capacity: 200µl| <img src="ims/azenta_4titude_96PCR_4ti-0960.jpg" alt="Azenta4titudeFrameStar_96_wellplate_skirted" width="250"/> | `Azenta4titudeFrameStar_96_wellplate_skirted` |

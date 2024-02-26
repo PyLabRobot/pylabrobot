@@ -7,6 +7,6 @@ Company wikipedia: [Revvity, Inc. (formerly PerkinElmer, Inc.)](https://en.wikip
 
 ### Currently defined labware:
 
-| Description               | Image              |
-|--------------------|--------------------|
-| 'Revvity_ProxiPlate_384Plus'<br>Part no.: 6008280<br>[manufacturer website](https://www.perkinelmer.com/uk/Product/proxiplate-384-plus-50w-6008280) | <img src="ims/revvity_ProxiPlate-384-Plus-White-384-shallow-well-Microplate.jpg" alt="Revvity_ProxiPlate_384Plus" width="250"/> |
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Revvity_ProxiPlate_384Plus'<br>Part no.: 6008280<br>[manufacturer website](https://www.perkinelmer.com/uk/Product/proxiplate-384-plus-50w-6008280) | <img src="ims/revvity_ProxiPlate-384-Plus-White-384-shallow-well-Microplate.jpg" alt="Revvity_ProxiPlate_384Plus" width="250"/> | `Revvity_ProxiPlate_384Plus`
