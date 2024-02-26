@@ -7,6 +7,6 @@ Company history: [Porvair Filtration Group](https://www.porvairfiltration.com/ab
 
 ### Currently defined labware:
 
-| Description               | Image              |
-|--------------------|--------------------|
-| 'Porvair_6x47_Reservoir'<br>Part no.: 6008280<br>[manufacturer website](https://www.microplates.com/product/282-ml-reservoir-plate-6-columns-v-bottom/) | <img src="ims/porvair_6x47_reservoir_390015.jpg" alt="Porvair_6x47_Reservoir" width="250"/> |
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Porvair_6x47_Reservoir'<br>Part no.: 6008280<br>[manufacturer website](https://www.microplates.com/product/282-ml-reservoir-plate-6-columns-v-bottom/) | <img src="ims/porvair_6x47_reservoir_390015.jpg" alt="Porvair_6x47_Reservoir" width="250"/> | `Porvair_6x47_Reservoir` |
