@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from .coordinate import Coordinate
 from .resource import Resource
@@ -231,10 +231,25 @@ class ShakerCarrier(Carrier):
       sites,category=category, model=model)
 
 
+class TubeCarrier(Carrier):
+  """ Base class for tube/sample carriers. """
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sites: Optional[List[CarrierSite]] = None,
+    category="tube_carrier",
+    model: Optional[str] = None):
+    super().__init__(name, size_x, size_y, size_z,
+      sites,category=category, model=model)
+
+
 def create_carrier_sites(
   locations: List[Coordinate],
-  site_size_x: List[float],
-  site_size_y: List[float]) -> List[CarrierSite]:
+  site_size_x: List[Union[float, int]],
+  site_size_y: List[Union[float, int]]) -> List[CarrierSite]:
   """ Create a list of carrier sites with the given sizes. """
 
   sites = []

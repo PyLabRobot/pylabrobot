@@ -27,6 +27,7 @@ from .resource_stack import ResourceStack
 
 # labware manufacturers and suppliers
 from .azenta import *
+from .boekel import *
 from .corning_costar import *
 from .corning_axygen import *
 from .falcon import *
