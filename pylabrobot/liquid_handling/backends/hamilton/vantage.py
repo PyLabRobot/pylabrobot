@@ -432,7 +432,13 @@ class Vantage(HamiltonLiquidHandler):
 
   # ============== LiquidHandlerBackend methods ==============
 
-  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
+  async def pick_up_tips(
+    self,
+    ops: List[Pickup],
+    use_channels: List[int],
+    minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
+    minimal_height_at_command_end: Optional[List[int]] = None,
+  ):
     x_positions, y_positions, tip_pattern = \
       self._ops_to_fw_positions(ops, use_channels)
 
@@ -458,8 +464,9 @@ class Vantage(HamiltonLiquidHandler):
         tip_type=ttti,
         begin_z_deposit_position=[int((max_z + max_total_tip_length)*10)]*len(ops),
         end_z_deposit_position=[int((max_z + max_tip_length)*10)]*len(ops),
-        minimal_traverse_height_at_begin_of_command=[2450]*len(ops),
-        minimal_height_at_command_end=[2450]*len(ops),
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or \
+          [2450]*len(ops),
+        minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
         tip_handling_method=[1 for _ in tips], # always appears to be 1 # tip.pickup_method.value
         blow_out_air_volume=[0]*len(ops), # Why is this here? Who knows.
       )
@@ -471,6 +478,8 @@ class Vantage(HamiltonLiquidHandler):
     self,
     ops: List[Drop],
     use_channels: List[int],
+    minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
+    minimal_height_at_command_end: Optional[List[int]] = None,
   ):
     """ Drop tips to a resource. """
 
@@ -487,8 +496,9 @@ class Vantage(HamiltonLiquidHandler):
         tip_pattern=channels_involved,
         begin_z_deposit_position=[int((max_z+10)*10)]*len(ops), # +10
         end_z_deposit_position=[int(max_z*10)]*len(ops),
-        minimal_traverse_height_at_begin_of_command=[2450]*len(ops),
-        minimal_height_at_command_end=[2450]*len(ops),
+        minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or \
+          [2450]*len(ops),
+        minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
         tip_handling_method=[0 for _ in ops], # Always appears to be 0, even in trash.
         # tip_handling_method=[TipDropMethod.DROP.value if isinstance(op.resource, TipSpot) \
         #                      else TipDropMethod.PLACE_SHIFT.value for op in ops],
