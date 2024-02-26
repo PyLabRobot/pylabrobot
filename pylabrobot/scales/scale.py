@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.machine import Machine
 from pylabrobot.scales.scale_backend import ScaleBackend
 
@@ -5,17 +7,27 @@ from pylabrobot.scales.scale_backend import ScaleBackend
 class Scale(Machine):
   """ Base class for a scale """
 
-  def __init__(self, backend: ScaleBackend, name: str = "scale"):
+  def __init__(
+      self,
+      backend: ScaleBackend,
+      name: str,
+      size_x: float,
+      size_y: float,
+      size_z: float,
+
+      cateogry: str = "scale",
+      model: Optional[str] = None,
+    ):
     super().__init__(
       name=name,
       backend=backend,
-      model=backend.__class__.__name__,
 
-      # TODO:
-      size_x=0,
-      size_y=0,
-      size_z=0,
-      category="scale",
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+
+      category=cateogry,
+      model=model,
     )
     self.backend: ScaleBackend = backend # fix type
 
