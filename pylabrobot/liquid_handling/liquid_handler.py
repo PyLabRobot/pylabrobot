@@ -514,7 +514,7 @@ class LiquidHandler(Machine):
         **backend_kwargs,
       )
 
-  async def return_tips(self):
+  async def return_tips(self, **backend_kwargs):
     """ Return all tips that are currently picked up to their original place.
 
     Examples:
@@ -522,6 +522,9 @@ class LiquidHandler(Machine):
 
       >>> lh.pick_up_tips(tip_rack["A1"])
       >>> lh.return_tips()
+
+    Args:
+      backend_kwargs: backend kwargs passed to `drop_tips`.
 
     Raises:
       RuntimeError: If no tips have been picked up.
@@ -541,7 +544,7 @@ class LiquidHandler(Machine):
     if len(tip_spots) == 0:
       raise RuntimeError("No tips have been picked up.")
 
-    return await self.drop_tips(tip_spots=tip_spots, use_channels=channels)
+    return await self.drop_tips(tip_spots=tip_spots, use_channels=channels, **backend_kwargs)
 
   async def discard_tips(
     self,
