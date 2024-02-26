@@ -667,6 +667,7 @@ class Vantage(HamiltonLiquidHandler):
     tube_2nd_section_ratio: Optional[List[int]] = None,
     minimal_traverse_height_at_begin_of_command: Optional[List[int]] = None,
     minimal_height_at_command_end: Optional[List[int]] = None,
+    lld_search_height: Optional[List[int]] = None,
     cut_off_speed: Optional[List[int]] = None,
     stop_back_volume: Optional[List[int]] = None,
     transport_air_volume: Optional[List[int]] = None,
@@ -760,7 +761,7 @@ class Vantage(HamiltonLiquidHandler):
       tip_pattern=channels_involved,
       type_of_dispensing_mode=type_of_dispensing_mode,
       minimum_height=minimum_height or [int(wb*10) for wb in well_bottoms],
-      lld_search_height=[int(sh*10) for sh in lld_search_heights],
+      lld_search_height=lld_search_height or [int(sh*10) for sh in lld_search_heights],
       liquid_surface_at_function_without_lld=[int(ls*10) for ls in liquid_surfaces_no_lld],
       pull_out_distance_to_take_transport_air_in_function_without_lld=
         pull_out_distance_to_take_transport_air_in_function_without_lld or [50]*len(ops),
