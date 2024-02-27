@@ -396,9 +396,9 @@ class Vantage(HamiltonLiquidHandler):
       await self.pip_initialize(
         x_position=[7095]*self.num_channels,
         y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
-        begin_z_deposit_position=[2450] * self.num_channels,
+        begin_z_deposit_position=[2850] * self.num_channels,
         end_z_deposit_position=[1235] * self.num_channels,
-        minimal_height_at_command_end=[2450] * self.num_channels,
+        minimal_height_at_command_end=[2850] * self.num_channels,
         tip_pattern=[True]*self.num_channels,
         tip_type=[1]*self.num_channels,
         TODO_DI_2=70
@@ -413,8 +413,8 @@ class Vantage(HamiltonLiquidHandler):
       await self.core96_initialize(
         x_position=7347, # TODO: get trash location from deck.
         y_position=2684, # TODO: get trash location from deck.
-        minimal_traverse_height_at_begin_of_command=2450,
-        minimal_height_at_command_end=2450,
+        minimal_traverse_height_at_begin_of_command=2850,
+        minimal_height_at_command_end=2850,
         end_z_deposit_position=2020,
       )
 
@@ -465,8 +465,8 @@ class Vantage(HamiltonLiquidHandler):
         begin_z_deposit_position=[int((max_z + max_total_tip_length)*10)]*len(ops),
         end_z_deposit_position=[int((max_z + max_tip_length)*10)]*len(ops),
         minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or \
-          [2450]*len(ops),
-        minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+          [2850]*len(ops),
+        minimal_height_at_command_end=minimal_height_at_command_end or [2850]*len(ops),
         tip_handling_method=[1 for _ in tips], # always appears to be 1 # tip.pickup_method.value
         blow_out_air_volume=[0]*len(ops), # Why is this here? Who knows.
       )
@@ -497,8 +497,8 @@ class Vantage(HamiltonLiquidHandler):
         begin_z_deposit_position=[int((max_z+10)*10)]*len(ops), # +10
         end_z_deposit_position=[int(max_z*10)]*len(ops),
         minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or \
-          [2450]*len(ops),
-        minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+          [2850]*len(ops),
+        minimal_height_at_command_end=minimal_height_at_command_end or [2850]*len(ops),
         tip_handling_method=[0 for _ in ops], # Always appears to be 0, even in trash.
         # tip_handling_method=[TipDropMethod.DROP.value if isinstance(op.resource, TipSpot) \
         #                      else TipDropMethod.PLACE_SHIFT.value for op in ops],
@@ -616,8 +616,8 @@ class Vantage(HamiltonLiquidHandler):
       type_of_aspiration=type_of_aspiration or [0]*len(ops),
       tip_pattern=channels_involved,
       minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
-        [2450]*len(ops),
-      minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+        [2850]*len(ops),
+      minimal_height_at_command_end=minimal_height_at_command_end or [2850]*len(ops),
       lld_search_height=lld_search_height or [int(ls*10) for ls in lld_search_heights],
       clot_detection_height=clot_detection_height or [0]*len(ops),
       liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld or
@@ -781,8 +781,8 @@ class Vantage(HamiltonLiquidHandler):
         [0]*len(ops),
       tube_2nd_section_ratio=tube_2nd_section_ratio or [0]*len(ops),
       minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
-        [2450]*len(ops),
-      minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+        [2850]*len(ops),
+      minimal_height_at_command_end=minimal_height_at_command_end or [2850]*len(ops),
       dispense_volume=[int(op.volume * 100) for op in ops],
       dispense_speed=[int(fr*10) for fr in flow_rates],
       cut_off_speed=cut_off_speed or [2500]*len(ops),
@@ -816,8 +816,8 @@ class Vantage(HamiltonLiquidHandler):
     pickup: PickupTipRack,
     tip_handling_method: int = 0,
     z_deposit_position: int = 2164,
-    minimal_traverse_height_at_begin_of_command: int = 2450,
-    minimal_height_at_command_end: int = 2450,
+    minimal_traverse_height_at_begin_of_command: int = 2850,
+    minimal_height_at_command_end: int = 2850,
   ):
     # assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
@@ -840,8 +840,8 @@ class Vantage(HamiltonLiquidHandler):
     self,
     drop: DropTipRack,
     z_deposit_position: int = 2164,
-    minimal_traverse_height_at_begin_of_command: int = 2450,
-    minimal_height_at_command_end: int = 2450
+    minimal_traverse_height_at_begin_of_command: int = 2850,
+    minimal_height_at_command_end: int = 2850
   ):
     # assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = drop.resource.get_item("A1")
@@ -863,8 +863,8 @@ class Vantage(HamiltonLiquidHandler):
     hlc: Optional[HamiltonLiquidClass] = None,
 
     type_of_aspiration: int = 0,
-    minimal_traverse_height_at_begin_of_command: int = 2450,
-    minimal_height_at_command_end: int = 2450,
+    minimal_traverse_height_at_begin_of_command: int = 2850,
+    minimal_height_at_command_end: int = 2850,
     pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
     tube_2nd_section_height_measured_from_zm: int = 0,
     tube_2nd_section_ratio: int = 0,
@@ -986,8 +986,8 @@ class Vantage(HamiltonLiquidHandler):
     pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
     immersion_depth: int = 0,
     surface_following_distance: int = 29,
-    minimal_traverse_height_at_begin_of_command: int = 2450,
-    minimal_height_at_command_end: int = 2450,
+    minimal_traverse_height_at_begin_of_command: int = 2850,
+    minimal_height_at_command_end: int = 2850,
     cut_off_speed: int = 2500,
     stop_back_volume: int = 0,
     transport_air_volume: Optional[int] = None,
