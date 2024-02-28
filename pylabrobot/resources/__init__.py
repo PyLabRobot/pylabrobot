@@ -19,6 +19,7 @@ from .resource import Resource, get_resource_class_from_string
 from .tip_rack import TipRack, TipSpot
 from .trash import Trash
 from .tube import Tube
+from .tube_rack import TubeRack
 
 from .tip_tracker import TipTracker, does_tip_tracking, no_tip_tracking, set_tip_tracking
 from .volume_tracker import VolumeTracker, does_volume_tracking, no_volume_tracking, set_volume_tracking

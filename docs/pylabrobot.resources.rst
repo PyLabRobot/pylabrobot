@@ -29,6 +29,8 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     pylabrobot.resources.TipRack
     pylabrobot.resources.Trough
     pylabrobot.resources.Tube
+    pylabrobot.resources.TubeCarrier
+    pylabrobot.resources.TubeRack
     pylabrobot.resources.Well
 
 
