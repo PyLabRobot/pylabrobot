@@ -6,9 +6,9 @@ PyLabRobot supports a number of different types of machines. Currently, these ar
 - [Plate readers](plate_reading)
 - [Pumps](pumps)
 - [Temperature controllers](temperature)
-- [Heater shakers](heating_shaking)
+- [Heater shakers](/heating-shaking)
 
-If you want to add support for a new type of machine, this guide will explain the process. If you want to add a new machine for a type that already exists, you should read {ref}`this guide <concrete-backends>` instead.
+If you want to add support for a new type of machine, this guide will explain the process. If you want to add a new machine for a type that already exists, you should read {doc}`this guide <new-concrete-backend>` instead.
 
 This guide is not a definitive step-by-step guide (otherwise we would have automated it), but rather a collection of high-level ideas and suggestions. Often, it only becomes clear what the best abstractions are after two or more machines for a type have been implemented, so it is totally valid (and encouraged) to make some assumptions and then refactor later.
 
@@ -29,7 +29,7 @@ Each machine type has its own module in PLR. For example, the liquid handling mo
 
 - the machine front end: the user-facing API for the machine type. Example: `LiquidHandler`.
 - the abstract base class for the machine type: the minimal set of atomic commands that the machine type is expected to support. Example: `LiquidHandlerBackend`.
-- the concrete backends: the actual implementations of the abstract base class for specific machines. See {ref}`the concrete backends guide <concrete-backends>` for more information. Example: `STAR`.
+- the concrete backends: the actual implementations of the abstract base class for specific machines. See {doc}`the concrete backends guide <new-concrete-backend>` for more information. Example: `STAR`.
 
 ## 2. Creating a new abstract backend class
 
@@ -53,7 +53,7 @@ If your devices updates the resource tree or its state, the front end should han
 
 ## 4. Creating a new concrete backend for a specific machine
 
-Refer to the {ref}`the concrete backends guide <concrete-backends>`.
+Refer to the {doc}`the concrete backends guide <new-concrete-backend>`.
 
 ## 5. Adding documentation (strongly recommended)
 
