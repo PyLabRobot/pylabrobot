@@ -596,6 +596,7 @@ class LiquidHandler(Machine):
     end_delay: float = 0,
     offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
     liquid_height: Union[Optional[float], List[Optional[float]]] = None,
+    blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified wells.
@@ -640,6 +641,8 @@ class LiquidHandler(Machine):
       offsets: List of offsets for each channel, a translation that will be applied to the
         aspiration location. If `None`, no offset will be applied.
       liquid_height: The height of the liquid in the well wrt the bottom, in mm.
+      blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
+        backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -691,6 +694,7 @@ class LiquidHandler(Machine):
     vols = expand(vols, n)
     flow_rates = expand(flow_rates, n)
     liquid_height = expand(liquid_height, n)
+    blow_out_air_volume = expand(blow_out_air_volume, n)
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
@@ -704,9 +708,10 @@ class LiquidHandler(Machine):
         liquids.append(r.tracker.get_liquids(top_volume=vol))
 
     aspirations = [Aspiration(resource=r, volume=v, offset=o, flow_rate=fr, liquid_height=lh, tip=t,
-                              blow_out_air_volume=0, liquids=lvs)
-                   for r, v, o, fr, lh, t, lvs in
-                    zip(resources, vols, offsets, flow_rates, liquid_height, tips, liquids)]
+                              blow_out_air_volume=bav, liquids=lvs)
+                   for r, v, o, fr, lh, t, bav, lvs in
+                    zip(resources, vols, offsets, flow_rates, liquid_height, tips,
+                        blow_out_air_volume, liquids)]
 
     for op in aspirations:
       if does_volume_tracking():
@@ -764,6 +769,7 @@ class LiquidHandler(Machine):
     end_delay: float = 0,
     offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
     liquid_height: Union[Optional[float], List[Optional[float]]] = None,
+    blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
@@ -808,6 +814,8 @@ class LiquidHandler(Machine):
       offsets: List of offsets for each channel, a translation that will be applied to the
         dispense location. If `None`, no offset will be applied.
       liquid_height: The height of the liquid in the well wrt the bottom, in mm.
+      blow_out_air_volume: The volume of air to dispense after the liquid, in ul. If `None`, the
+        backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -861,6 +869,7 @@ class LiquidHandler(Machine):
     vols = expand(vols, n)
     flow_rates = expand(flow_rates, n)
     liquid_height = expand(liquid_height, n)
+    blow_out_air_volume = expand(blow_out_air_volume, n)
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
@@ -872,9 +881,10 @@ class LiquidHandler(Machine):
       liquids = [[(None, vol)] for vol in vols]
 
     dispenses = [Dispense(resource=r, volume=v, offset=o, flow_rate=fr, liquid_height=lh, tip=t,
-                          liquids=lvs, blow_out_air_volume=0) # TODO: get blow_out_air_volume
-                 for r, v, o, fr, lh, t, lvs in
-                  zip(resources, vols, offsets, flow_rates, liquid_height, tips, liquids)]
+                          liquids=lvs, blow_out_air_volume=bav)
+                 for r, v, o, fr, lh, t, bav, lvs in
+                  zip(resources, vols, offsets, flow_rates, liquid_height, tips,
+                      blow_out_air_volume, liquids)]
 
     for op in dispenses:
       if does_volume_tracking():
@@ -1176,6 +1186,7 @@ class LiquidHandler(Machine):
     volume: float,
     flow_rate: Optional[float] = None,
     end_delay: float = 0,
+    blow_out_air_volume: Optional[float] = None,
     **backend_kwargs
   ):
     """ Aspirate from all wells in a plate.
@@ -1194,6 +1205,8 @@ class LiquidHandler(Machine):
         will be used.
       end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
         the tips used in the aspiration are dripping.
+      blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
+        backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
@@ -1232,7 +1245,7 @@ class LiquidHandler(Machine):
       flow_rate=flow_rate,
       tips=tips,
       liquid_height=None,
-      blow_out_air_volume=0,
+      blow_out_air_volume=blow_out_air_volume,
       liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
     )
 
@@ -1272,6 +1285,7 @@ class LiquidHandler(Machine):
     volume: float,
     flow_rate: Optional[float] = None,
     end_delay: float = 0,
+    blow_out_air_volume: Optional[float] = None,
     **backend_kwargs
   ):
     """ Dispense to all wells in a plate.
@@ -1290,6 +1304,8 @@ class LiquidHandler(Machine):
         will be used.
       end_delay: The delay after the last dispense in seconds, optional. This is useful for when
         the tips used in the dispense are dripping.
+      blow_out_air_volume: The volume of air to dispense after the liquid, in ul. If `None`, the
+        backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
@@ -1326,7 +1342,7 @@ class LiquidHandler(Machine):
       flow_rate=flow_rate,
       tips=tips,
       liquid_height=None,
-      blow_out_air_volume=0,
+      blow_out_air_volume=blow_out_air_volume,
       liquids=all_liquids,
     )
 

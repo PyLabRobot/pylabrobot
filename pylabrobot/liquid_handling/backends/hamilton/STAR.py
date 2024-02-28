@@ -1478,7 +1478,6 @@ class STAR(HamiltonLiquidHandler):
       blow_out: whether to blow out air. Only used on dispense. Note that in the VENUS Liquid
         Editor, this is called "empty". Default is False.
 
-      blow_out_air_volumes: The amount of air to be blown out over all matching dispense operations.
       lld_search_height: The height to start searching for the liquid level when using LLD.
       clot_detection_height: Unknown, but probably the height to search for clots when doing LLD.
       pull_out_distance_transport_air: The distance to pull out when aspirating air, if LLD is
@@ -1587,6 +1586,10 @@ class STAR(HamiltonLiquidHandler):
     transport_air_volume = _fill_in_defaults(transport_air_volume,
       default=[int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0
                for hlc in hamilton_liquid_classes])
+    blow_out_air_volumes = [int((op.blow_out_air_volume or
+                                (hlc.aspiration_blow_out_volume
+                                  if hlc is not None else 0)*10))
+                            for op, hlc in zip(ops, hamilton_liquid_classes)]
     pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0]*n)
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF]*n)
     gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1]*n)
@@ -1645,7 +1648,7 @@ class STAR(HamiltonLiquidHandler):
         surface_following_distance=surface_following_distance,
         aspiration_speed=aspiration_speed,
         transport_air_volume=transport_air_volume,
-        blow_out_air_volume=[int(op.blow_out_air_volume*10) for op in ops],
+        blow_out_air_volume=blow_out_air_volumes,
         pre_wetting_volume=pre_wetting_volume,
         lld_mode=[mode.value for mode in lld_mode],
         gamma_lld_sensitivity=gamma_lld_sensitivity,
@@ -1712,7 +1715,6 @@ class STAR(HamiltonLiquidHandler):
     cut_off_speed: Optional[List[int]] = None,
     stop_back_volume: Optional[List[int]] = None,
     transport_air_volume: Optional[List[int]] = None,
-    blow_out_air_volume: Optional[List[int]] = None,
     lld_mode: Optional[List[int]] = None,
     dispense_position_above_z_touch_off: Optional[List[int]] = None,
     gamma_lld_sensitivity: Optional[List[int]] = None,
@@ -1749,8 +1751,6 @@ class STAR(HamiltonLiquidHandler):
     Args:
       ops: The dispense operations to perform.
       use_channels: The channels to use for the dispense operations.
-      blow_out_air_volumes: The amount of air to blow out after dispensing. If a single value is
-        given, it will be used for all operations.
       dispensing_mode: The dispensing mode to use for each operation.
       pull_out_distance_transport_air: The distance to pull out the tip for aspirating transport air
         if LLD is disabled.
@@ -1764,7 +1764,6 @@ class STAR(HamiltonLiquidHandler):
       cut_off_speed: Unknown.
       stop_back_volume: Unknown.
       transport_air_volume: The volume of air to dispense before dispensing the liquid.
-      blow_out_air_volume: The volume of air to blow out after dispensing.
       lld_mode: The liquid level detection mode to use.
       dispense_position_above_z_touch_off: The height to move after LLD mode found the Z touch off
         position.
@@ -1856,9 +1855,10 @@ class STAR(HamiltonLiquidHandler):
     transport_air_volume = _fill_in_defaults(transport_air_volume,
       default=[int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0
       for hlc in hamilton_liquid_classes])
-    blow_out_air_volume = _fill_in_defaults(blow_out_air_volume,
-      default=[int(hlc.dispense_blow_out_volume*10) if hlc is not None else 0
-       for hlc in hamilton_liquid_classes])
+    blow_out_air_volumes = [int((op.blow_out_air_volume or
+                                (hlc.aspiration_blow_out_volume
+                                  if hlc is not None else 0)*10))
+                            for op, hlc in zip(ops, hamilton_liquid_classes)]
     lld_mode = _fill_in_defaults(lld_mode, [0]*n)
     dispense_position_above_z_touch_off = _fill_in_defaults(dispense_position_above_z_touch_off,
       default=[0]*n)
@@ -1900,7 +1900,7 @@ class STAR(HamiltonLiquidHandler):
         cut_off_speed=cut_off_speed,
         stop_back_volume=stop_back_volume,
         transport_air_volume=transport_air_volume,
-        blow_out_air_volume=[int(op.blow_out_air_volume*10) for op in ops],
+        blow_out_air_volume=blow_out_air_volumes,
         lld_mode=lld_mode,
         dispense_position_above_z_touch_off=dispense_position_above_z_touch_off,
         gamma_lld_sensitivity=gamma_lld_sensitivity,
@@ -1996,7 +1996,6 @@ class STAR(HamiltonLiquidHandler):
     jet: bool = False,
     blow_out: bool = False,
 
-    blow_out_air_volume: float = 0,
     use_lld: bool = False,
     liquid_height: float = 2,
     air_transport_retract_dist: float = 10,
@@ -2041,7 +2040,6 @@ class STAR(HamiltonLiquidHandler):
       hlc: The Hamiltonian liquid class to use. If `None`, the liquid class will be determined
         automatically.
 
-      blow_out_air_volume: The volume of air to blow out after aspiration, in microliters.
       use_lld: If True, use gamma liquid level detection. If False, use liquid height.
       liquid_height: The height of the liquid above the bottom of the well, in millimeters.
       air_transport_retract_dist: The distance to retract after aspirating, in millimeters.
@@ -2103,8 +2101,8 @@ class STAR(HamiltonLiquidHandler):
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0)
-    blow_out_air_volume = blow_out_air_volume or \
-      (int(hlc.aspiration_blow_out_volume * 100) if hlc is not None else 0)
+    blow_out_air_volume = int((aspiration.blow_out_air_volume or \
+      (hlc.aspiration_blow_out_volume if hlc is not None else 0))*10)
     flow_rate = int(aspiration.flow_rate or \
       (hlc.aspiration_flow_rate if hlc is not None else 250)) * 10
     swap_speed = swap_speed or (int(hlc.aspiration_swap_speed*10) if hlc is not None else 100)
@@ -2119,16 +2117,18 @@ class STAR(HamiltonLiquidHandler):
     pull_out_distance_to_take_transport_air_in_function_without_lld = \
       int(air_transport_retract_dist * 10)
 
-    # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
-    # manually.
-    if blow_out_air_volume is not None and blow_out_air_volume > 0:
-      await self.aspirate_core_96(
-        x_position=int(position.x * 10),
-        y_positions=int(position.y * 10),
-        lld_mode=0,
-        liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
-        aspiration_volumes=int(blow_out_air_volume * 10)
-      )
+    # Was this ever true? Just copied it over from pyhamilton. Could have something to do with
+    # the liquid classes and whether blow_out mode is enabled.
+    # # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
+    # # manually.
+    # if blow_out_air_volume is not None and blow_out_air_volume > 0:
+    #   await self.aspirate_core_96(
+    #     x_position=int(position.x * 10),
+    #     y_positions=int(position.y * 10),
+    #     lld_mode=0,
+    #     liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
+    #     aspiration_volumes=int(blow_out_air_volume * 10)
+    #   )
 
     return await self.aspirate_core_96(
       x_position=int(position.x * 10),
@@ -2153,7 +2153,7 @@ class STAR(HamiltonLiquidHandler):
       aspiration_volumes=aspiration_volumes,
       aspiration_speed=flow_rate,
       transport_air_volume=transport_air_volume,
-      blow_out_air_volume=0,
+      blow_out_air_volume=blow_out_air_volume,
       pre_wetting_volume=pre_wetting_volume,
       lld_mode=int(use_lld),
       gamma_lld_sensitivity=gamma_lld_sensitivity,
@@ -2184,7 +2184,6 @@ class STAR(HamiltonLiquidHandler):
     liquid_height: float = 2,
     dispense_mode: Optional[int] = None,
     air_transport_retract_dist=10,
-    blow_out_air_volume: Optional[float] = None,
     use_lld: bool = False,
 
     minimum_traverse_height_at_beginning_of_a_command: int = 2450,
@@ -2225,7 +2224,6 @@ class STAR(HamiltonLiquidHandler):
         mode 2 = Partial volume at surface 3 = Blow out at surface 4 = Empty tip at fix position.
         If `None`, the mode will be determined based on the `jet`, `empty`, and `blow_out`
       air_transport_retract_dist: The distance to retract after dispensing, in mm.
-      blow_out_air_volume: The volume of air to blow out after dispensing, in ul.
       use_lld: Whether to use gamma LLD.
 
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
@@ -2283,8 +2281,8 @@ class STAR(HamiltonLiquidHandler):
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0)
-    blow_out_air_volume = blow_out_air_volume or \
-      (int(hlc.dispense_blow_out_volume * 100) if hlc is not None else 0)
+    blow_out_air_volume = int((dispense.blow_out_air_volume or \
+      (hlc.dispense_blow_out_volume if hlc is not None else 0))*10)
     flow_rate = int(dispense.flow_rate or \
       (hlc.dispense_flow_rate if hlc is not None else 120)) * 10
     swap_speed = swap_speed or (int(hlc.dispense_swap_speed*10) if hlc is not None else 100)
@@ -2322,7 +2320,7 @@ class STAR(HamiltonLiquidHandler):
       dispense_volume=dispense_volumes,
       dispense_speed=flow_rate,
       transport_air_volume=transport_air_volume,
-      blow_out_air_volume=0,
+      blow_out_air_volume=blow_out_air_volume,
       lld_mode=int(use_lld),
       gamma_lld_sensitivity=gamma_lld_sensitivity,
       swap_speed=swap_speed,
@@ -2340,16 +2338,18 @@ class STAR(HamiltonLiquidHandler):
       stop_back_volume=stop_back_volume,
     )
 
-    # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we dispense air
-    # manually.
-    if blow_out_air_volume is not None and blow_out_air_volume > 0:
-      await self.dispense_core_96(
-        x_position=int(position.x * 10),
-        y_position=int(position.y * 10),
-        lld_mode=0,
-        liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
-        dispense_volume=int(blow_out_air_volume * 10),
-      )
+    # Was this ever true? Just copied it over from pyhamilton. Could have something to do with
+    # the liquid classes and whether blow_out mode is enabled.
+    # # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we dispense air
+    # # manually.
+    # if blow_out_air_volume is not None and blow_out_air_volume > 0:
+    #   await self.dispense_core_96(
+    #     x_position=int(position.x * 10),
+    #     y_position=int(position.y * 10),
+    #     lld_mode=0,
+    #     liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
+    #     dispense_volume=int(blow_out_air_volume * 10),
+    #   )
 
     return ret
 
