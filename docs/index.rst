@@ -23,6 +23,13 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 
    installation.md
    contributing.md
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Contributing
+
+   new-machine-type.md
+   new-concrete-backend.md
    how-to-open-source.md
 
 
