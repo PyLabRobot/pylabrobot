@@ -12,7 +12,10 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
+from pylabrobot.resources.tube import Tube
+from pylabrobot.resources.tube_rack import TubeRack
 from pylabrobot.resources.well import Well
+
 
 if TYPE_CHECKING:
   from opentrons_shared_data.labware.dev_types import LabwareDefinition
@@ -24,7 +27,7 @@ class UnknownResourceType(Exception):
 
 def ot_definition_to_resource(
   data: "LabwareDefinition",
-  name: str) -> Union[Plate, TipRack]:
+  name: str) -> Union[Plate, TipRack, TubeRack]:
   """ Convert an Opentrons definition file to a PyLabRobot resource file. """
 
   if not USE_OT:
@@ -37,9 +40,9 @@ def ot_definition_to_resource(
   size_y = data["dimensions"]["yDimension"]
   size_z = data["dimensions"]["zDimension"]
 
-  if display_category in ["wellPlate", "tipRack"]:
+  if display_category in ["wellPlate", "tipRack", "tubeRack"]:
     items = data["ordering"]
-    wells: List[List[Union[TipSpot, Well]]] = [] # TODO: can we use TypeGuard?
+    wells: List[List[Union[TipSpot, Well, Tube]]] = [] # TODO: can we use TypeGuard?
 
     def volume_from_name(name: str) -> float:
       # like "Opentrons 96 Filter Tip Rack 200 µL"
@@ -73,10 +76,11 @@ def ot_definition_to_resource(
             size_x=well_size_x,
             size_y=well_size_y,
             size_z=well_size_z,
+            max_volume=well_data["totalLiquidVolume"]
           )
           well.location = location
           wells[i].append(well)
-        else:
+        elif display_category == "tipRack":
           # closure
           def make_make_tip(well_data) -> TipCreator:
             def make_tip() -> Tip:
@@ -97,6 +101,16 @@ def ot_definition_to_resource(
           )
           tip_spot.location = location
           wells[i].append(tip_spot)
+        elif display_category == "tubeRack":
+          tube = Tube(
+            name=item,
+            size_x=well_size_x,
+            size_y=well_size_y,
+            size_z=well_size_z,
+            max_volume=well_data["totalLiquidVolume"]
+          )
+          tube.location = location
+          wells[i].append(tube)
 
     if display_category == "wellPlate":
       return Plate(
@@ -107,7 +121,7 @@ def ot_definition_to_resource(
         items=cast(List[List[Well]], wells),
         model=data["metadata"]["displayName"]
       )
-    elif display_category == "tipRack":
+    if display_category == "tipRack":
       return TipRack(
         name=name,
         size_x=size_x,
@@ -116,10 +130,20 @@ def ot_definition_to_resource(
         items=cast(List[List[TipSpot]], wells),
         model=data["metadata"]["displayName"]
       )
+    if display_category == "tubeRack":
+      return TubeRack(
+        name=name,
+        size_x=size_x,
+        size_y=size_y,
+        size_z=size_z,
+        items=cast(List[List[Tube]], wells),
+        model=data["metadata"]["displayName"]
+      )
+
   raise UnknownResourceType(f"Unknown resource type '{display_category}'.")
 
 
-def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack]:
+def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack, TubeRack]:
   """ Load an Opentrons resource from a file.
 
   Args:
@@ -152,7 +176,7 @@ def load_shared_opentrons_resource(
   definition: str,
   name: str,
   version: int = 1
-) -> Union[Plate, TipRack]:
+) -> Union[Plate, TipRack, TubeRack]:
   """ Load an Opentrons resource from the shared Opentrons resource library.
 
   See https://github.com/Opentrons/opentrons/tree/edge/shared-data.
