@@ -33,7 +33,6 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
    basic
    using-the-visualizer
    using-trackers
-   custom-resources
    writing-robot-agnostic-methods
 
 
@@ -41,6 +40,8 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
    :maxdepth: 1
    :caption: Resources
 
+   resources/introduction
+   resources/custom-resources
    resources/hamilton_parse
 
 
