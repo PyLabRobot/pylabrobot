@@ -1,6 +1,6 @@
 # Adding support for a new machine of an existing type
 
-This guide explains how to add support for a new machine of an existing type. For example, if you want to add support for a new liquid handler, you should read this guide. If you want to add support for a new type of machine, you should read {ref}`this guide <new-machine-type>` first.
+This guide explains how to add support for a new machine of an existing type. For example, if you want to add support for a new liquid handler, you should read this guide. If you want to add support for a new type of machine, you should read {doc}`this guide <new-machine-type>` first.
 
 The machine types that are currently supported are:
 
@@ -8,7 +8,7 @@ The machine types that are currently supported are:
 - [Plate readers](plate_reading)
 - [Pumps](pumps)
 - [Temperature controllers](temperature)
-- [Heater shakers](heating_shaking)
+- [Heater shakers](/heating-shaking)
 
 Two documents that you can read before you start are:
 

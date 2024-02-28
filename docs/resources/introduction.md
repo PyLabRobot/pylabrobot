@@ -1,6 +1,6 @@
 # Resources Introduction
 
-This document introduces PyLabRobot Resources (labware and deck definitions) and general subclasses. You can find more information on creating custom resources in the {ref}`resources/custom-resources` section.
+This document introduces PyLabRobot Resources (labware and deck definitions) and general subclasses. You can find more information on creating custom resources in the {doc}`custom-resources` section.
 
 In PyLabRobot, a {class}`pylabrobot.resources.Resource` is a piece of labware or equipment used in a protocol or program, a part of a labware item (such as a Well) or a container of labware items (such as a Deck). All resources inherit from a single base class {class}`pylabrobot.resources.Resource` that provides most of the functionality, such as the name, sizing, type, model, as well as methods for dealing with state. The name and sizing are required for all resources, with the name being a unique identifier for the resource and the sizing being the x, y and z-dimensions of the resource in millimeters when conceptualized as a cuboid.
 
@@ -32,7 +32,7 @@ resource.assign_child_resource(child, Coordinate(x=0, y=0, z=0))
 
 ### `Container`: Resources that contain liquid
 
-Resources that contain liquid are subclasses of {class}`pylabrobot.resources.container.Container`. This class provides a {class}`pylabrobot.resources.volume_tracker.VolumeTracker` that helps {class}`pylabrobot.liquid_handling.LiquidHandler` keep track of the liquid in the resource. (For more information on trackers, check out {ref}`using-trackers`). Examples of subclasses of `Container` are {class}`pylabrobot.resources.well.Well` and {class}`pylabrobot.resources.trough.Trough`.
+Resources that contain liquid are subclasses of {class}`pylabrobot.resources.container.Container`. This class provides a {class}`pylabrobot.resources.volume_tracker.VolumeTracker` that helps {class}`pylabrobot.liquid_handling.LiquidHandler` keep track of the liquid in the resource. (For more information on trackers, check out {doc}`/using-trackers`). Examples of subclasses of `Container` are {class}`pylabrobot.resources.well.Well` and {class}`pylabrobot.resources.trough.Trough`.
 
 It is possible to instantiate a `Container` directly:
 
