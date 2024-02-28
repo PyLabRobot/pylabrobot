@@ -1,5 +1,5 @@
 from abc import ABCMeta
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from .resource import Resource
 from .volume_tracker import VolumeTracker
@@ -34,3 +34,9 @@ class Container(Resource, metaclass=ABCMeta):
       **super().serialize(),
       "max_volume": self.max_volume
     }
+
+  def serialize_state(self) -> Dict[str, Any]:
+    return self.tracker.serialize()
+
+  def load_state(self, state: Dict[str, Any]):
+    self.tracker.load_state(state)
