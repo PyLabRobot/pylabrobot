@@ -1,6 +1,6 @@
 import enum
 import math
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Callable, Optional, Union
 
 from pylabrobot.resources.container import Container
 
@@ -106,9 +106,3 @@ class Well(Container):
       raise NotImplementedError("compute_volume_from_height not implemented.")
 
     return self._compute_volume_from_height(height)
-
-  def serialize_state(self) -> Dict[str, Any]:
-    return self.tracker.serialize()
-
-  def load_state(self, state: Dict[str, Any]):
-    self.tracker.load_state(state)
