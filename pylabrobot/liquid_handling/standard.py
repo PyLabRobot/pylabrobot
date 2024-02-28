@@ -56,7 +56,7 @@ class Aspiration:
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
-  blow_out_air_volume: float
+  blow_out_air_volume: Optional[float]
   liquids: List[Tuple[Optional[Liquid], float]]
 
 
@@ -70,7 +70,7 @@ class Dispense:
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
-  blow_out_air_volume: float
+  blow_out_air_volume: Optional[float]
   liquids: List[Tuple[Optional[Liquid], float]]
 
 
@@ -84,7 +84,7 @@ class AspirationPlate:
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
-  blow_out_air_volume: float
+  blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
 
 
@@ -98,7 +98,7 @@ class DispensePlate:
   volume: float
   flow_rate: Optional[float]
   liquid_height: Optional[float]
-  blow_out_air_volume: float
+  blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
 
 

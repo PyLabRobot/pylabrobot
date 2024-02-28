@@ -40,10 +40,12 @@ from .standard import (
 
 def _make_asp(r: Container, vol: float, tip: Any, offset: Optional[Coordinate]=None) -> Aspiration:
   return Aspiration(resource=r, volume=vol, tip=tip, offset=offset,
-                   flow_rate=None, liquid_height=None, blow_out_air_volume=0, liquids=[(None, vol)])
+                   flow_rate=None, liquid_height=None, blow_out_air_volume=None,
+                   liquids=[(None, vol)])
 def _make_disp(r: Container, vol: float, tip: Any, offset: Optional[Coordinate]=None) -> Dispense:
   return Dispense(resource=r, volume=vol, tip=tip, offset=offset,
-                  flow_rate=None, liquid_height=None, blow_out_air_volume=0, liquids=[(None, vol)])
+                  flow_rate=None, liquid_height=None, blow_out_air_volume=None,
+                  liquids=[(None, vol)])
 
 
 class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
@@ -428,14 +430,14 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "args": (),
       "kwargs": {"aspiration":
         AspirationPlate(resource=self.plate, volume=10.0, tips=ts, offset=Coordinate.zero(),
-                        flow_rate=None, liquid_height=None, blow_out_air_volume=0,
+                      flow_rate=None, liquid_height=None, blow_out_air_volume=None,
                         liquids=[[(None, 10)]]*96)}})
     self.assertEqual(self.get_first_command("dispense96"), {
       "command": "dispense96",
       "args": (),
       "kwargs": {"dispense":
         DispensePlate(resource=self.plate, volume=10.0, tips=ts, offset=Coordinate.zero(),
-                flow_rate=None, liquid_height=None, blow_out_air_volume=0,
+                flow_rate=None, liquid_height=None, blow_out_air_volume=None,
                 liquids=[[(None, 10)]]*96)}})
     self.backend.clear()
 

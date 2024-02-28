@@ -609,6 +609,9 @@ class Vantage(HamiltonLiquidHandler):
     flow_rates = [
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
         for op, hlc in zip(ops, hlcs)]
+    blow_out_air_volumes = [int((op.blow_out_air_volume or
+                            (hlc.dispense_blow_out_volume if hlc is not None else 0))*100)
+                        for op, hlc in zip(ops, hlcs)]
 
     return await self.pip_aspirate(
       x_position=x_positions,
@@ -635,7 +638,7 @@ class Vantage(HamiltonLiquidHandler):
       transport_air_volume=transport_air_volume or
         [int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0
           for hlc in hlcs],
-      blow_out_air_volume=[int(op.blow_out_air_volume*100) for op in ops],
+      blow_out_air_volume=blow_out_air_volumes,
       pre_wetting_volume=pre_wetting_volume or [0]*len(ops),
       lld_mode=lld_mode or [0]*len(ops),
       lld_sensitivity=lld_sensitivity or [4]*len(ops),
@@ -761,6 +764,10 @@ class Vantage(HamiltonLiquidHandler):
       op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100)
         for op, hlc in zip(ops, hlcs)]
 
+    blow_out_air_volumes = [int((op.blow_out_air_volume or
+                                (hlc.dispense_blow_out_volume if hlc is not None else 0))*100)
+                            for op, hlc in zip(ops, hlcs)]
+
     type_of_dispensing_mode = type_of_dispensing_mode or \
       [_get_dispense_mode(jet=jet[i], empty=empty[i], blow_out=blow_out[i])
        for i in range(len(ops))]
@@ -790,7 +797,7 @@ class Vantage(HamiltonLiquidHandler):
       transport_air_volume=transport_air_volume or
         [int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0
         for hlc in hlcs],
-      blow_out_air_volume=[int(op.blow_out_air_volume*100) for op in ops],
+      blow_out_air_volume=blow_out_air_volumes,
       lld_mode=lld_mode or [0]*len(ops),
       side_touch_off_distance=side_touch_off_distance or 0,
       dispense_position_above_z_touch_off=dispense_position_above_z_touch_off or [5]*len(ops),
