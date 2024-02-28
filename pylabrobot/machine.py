@@ -37,7 +37,7 @@ class MachineBackend(ABC):
 
 
 class Machine(Resource, metaclass=ABCMeta):
-  """ Abstract class for machine frontends. All `Machine`s are `Resource`s. """
+  """ Abstract class for machine frontends. All Machines are Resources. """
 
   @abstractmethod
   def __init__(
