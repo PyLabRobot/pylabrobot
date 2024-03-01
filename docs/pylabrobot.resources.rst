@@ -89,6 +89,17 @@ Falcon
     pylabrobot.resources.falcon.tubes
 
 
+Greiner
+-------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.greiner.plates
+
+
 Hamilton
 --------
 
