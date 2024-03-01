@@ -97,6 +97,7 @@ Greiner
   :nosignatures:
   :recursive:
 
+    pylabrobot.resources.greiner
     pylabrobot.resources.greiner.plates
 
 
@@ -112,6 +113,18 @@ Hamilton
     pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck
     pylabrobot.resources.hamilton.STARDeck
     pylabrobot.resources.hamilton.STARLetDeck
+
+
+Limbro
+------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.limbro
+    pylabrobot.resources.limbro.plates
 
 
 ML Star resources
