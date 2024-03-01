@@ -44,27 +44,27 @@ def main(po, to, tro):
 
         if isinstance(resource, Plate):
           po.write(f"def {definition.replace('.', 'point')}(name: str) -> Plate:\n")
-          po.write(f"  return load_shared_opentrons_resource(\n")
+          po.write(f"  return cast(Plate, load_shared_opentrons_resource(\n")
           po.write(f'    definition="{definition}",\n')
           po.write(f"    name=name,\n")
           po.write(f"    version={version}\n")
-          po.write(f"  )\n")
+          po.write(f"  ))\n")
           po.write(f"\n\n")
         elif isinstance(resource, TipRack):
           to.write(f"def {definition.replace('.', 'point')}(name: str) -> TipRack:\n")
-          to.write(f"  return load_shared_opentrons_resource(\n")
+          to.write(f"  return cast(TipRack, load_shared_opentrons_resource(\n")
           to.write(f'    definition="{definition}",\n')
           to.write(f"    name=name,\n")
           to.write(f"    version={version}\n")
-          to.write(f"  )\n")
+          to.write(f"  ))\n")
           to.write(f"\n\n")
         elif isinstance(resource, TubeRack):
           tro.write(f"def {definition.replace('.', 'point')}(name: str) -> TubeRack:\n")
-          tro.write(f"  return load_shared_opentrons_resource(\n")
+          tro.write(f"  return cast(TubeRack, load_shared_opentrons_resource(\n")
           tro.write(f'    definition="{definition}",\n')
           tro.write(f"    name=name,\n")
           tro.write(f"    version={version}\n")
-          tro.write(f"  )\n")
+          tro.write(f"  ))\n")
           tro.write(f"\n\n")
         else:
           raise RuntimeError(f"Unknown resource type: {resource}")
