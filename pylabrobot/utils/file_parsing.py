@@ -12,6 +12,7 @@ def find_int(key, c):
       return int(c.split(chr(i) + key + chr(j))[1].split(chr(k))[0])
     except (IndexError, ValueError):
       continue
+  raise ValueError(f"Could not find '{key}'")
 
 
 def find_float(key, c):
@@ -20,6 +21,7 @@ def find_float(key, c):
       return float(c.split(chr(i) + key + chr(j))[1].split(chr(k))[0])
     except (IndexError, ValueError):
       continue
+  raise ValueError(f"Could not find '{key}'")
 
 
 def find_string(key, c):
