@@ -43,7 +43,7 @@ def Porvair_6x47_Reservoir(name: str, with_lid: bool = False) -> Plate:
       size_z=42.5,
       bottom_type=WellBottomType.V,
       compute_volume_from_height=_compute_volume_from_height_Porvair_6x47_Reservoir,
-      cross_section_type=CrossSectionType.SQUARE
+      cross_section_type=CrossSectionType.RECTANGLE
     ),
   )
 

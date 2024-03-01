@@ -3,6 +3,7 @@ from typing import Tuple, Optional
 
 from pylabrobot.resources import (
   Coordinate,
+  CrossSectionType,
   MFXCarrier,
   Plate,
   PlateCarrier,
@@ -70,6 +71,12 @@ def get_resource_type(filepath) -> str:
     except ValueError:
       pass
 
+    try:
+      _ = find_string("Cntr.1.file", c) # only plates have a .ctr file
+      return "Plate"
+    except ValueError:
+      pass
+
   raise ValueError(f"Unknown resource type for file {filename}")
 
 
@@ -94,21 +101,21 @@ def create_plate_for_writing(
 
   num_items_x = find_int("Columns", c)
   num_items_y = find_int("Rows", c)
-  well_size_x = find_float("Dx", c)
-  well_size_y = find_float("Dy", c)
+  well_dx = find_float("Dx", c)
+  well_dy = find_float("Dy", c)
 
   # rck files use the center of the well, but we want the bottom left corner.
-  dx = round(find_float("BndryX", c) - well_size_x/2, 4)
-  dy = round(find_float("BndryY", c) - well_size_y/2, 4)
-  dz = round(find_float("Cntr.1.base", c), 4)
+  dx = round(find_float("BndryX", c) - well_dx/2, 4)
+  dy = round(find_float("BndryY", c) - well_dy/2, 4)
+  # dz = round(find_float("Cntr.1.base", c), 4)
 
   filename = os.path.basename(filepath)
   cname = filename.split(".")[0]
   description = cname
 
-  if cname == "Cos_96_ProtCryst" and well_size_x == 4.5:
+  if cname == "Cos_96_ProtCryst" and well_dy == 4.5:
     # ad-hoc fix for Cos_96_ProtCryst, where the definition is almost certainly wrong
-    well_size_x = 9.0
+    well_dy = 9.0
 
   # .rck to .ctr filepath
   def rck2ctr(fn):
@@ -139,13 +146,41 @@ def create_plate_for_writing(
     vol_eqn_func +=  f"  raise ValueError(f\"Height {{h}} is too large for {cname}\")\n"
     vol_eqn_func += "return volume"
 
+    well_size_x = find_float("Dim.Dx", c2)
+    well_size_y = find_float("Dim.Dy", c2)
+
+    # we can get shapes of other segments with X.Shape, X being the segment number.
+    # Numbered from the top, so last segment is the bottom
     well_bottom_type_code = find_int(f"{num_segments}.Shape", c2)
     well_bottom_type = {
-      0: WellBottomType.FLAT,
-      4: WellBottomType.U,
+      0: WellBottomType.FLAT, # cylinder
+      1: WellBottomType.FLAT, # rectangle
+      # 2: ? # "inverted cone"
+      3: WellBottomType.V,    # "V-cone"
+      # 4 & 5 only for last segment
+      4: WellBottomType.U,    # "rounded base segment"
+      5: WellBottomType.V,    # "V-cone base segment"
     }.get(well_bottom_type_code, WellBottomType.UNKNOWN)
 
+    # The shape of the first segment is most indicative of the well shape
+    cross_section_type_code = find_int("1.Shape", c2)
+    cross_section_type = {
+      0: CrossSectionType.CIRCLE,
+      1: CrossSectionType.RECTANGLE,
+      # 2: ?? ,
+      # 3: ?? ,
+      # 4: ?? ,
+      # 5: ?? ,
+    }.get(cross_section_type_code, CrossSectionType.CIRCLE)
+
     well_size_z = find_float("Depth", c2)
+
+    # probably wrong, will fix later when I do carrier site bases
+    # written on 2024-03-01
+    try:
+      dz = find_float("BaseMM", c2)
+    except ValueError:
+      dz = 0
 
   plate = Plate(
     name=cname,
@@ -158,15 +193,16 @@ def create_plate_for_writing(
       Well,
       num_items_x=num_items_x,
       num_items_y=num_items_y,
-      dx=dx,
-      dy=dy,
+      dx=dx + (well_dx - well_size_x)/2, # add mini offset for border of wells
+      dy=dy + (well_dy - well_size_y)/2, # add mini offset for border of wells
       dz=dz,
-      item_dx=size_x,
-      item_dy=size_y,
+      item_dx=well_dx,
+      item_dy=well_dy,
       size_x=well_size_x,
       size_y=well_size_y,
       size_z=well_size_z,
       bottom_type=well_bottom_type,
+      cross_section_type=cross_section_type
     ),
     lid_height=10,
     model=cname

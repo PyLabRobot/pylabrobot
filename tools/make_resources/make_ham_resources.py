@@ -1,6 +1,7 @@
 import argparse
 import sys
 import os
+import traceback
 
 from pylabrobot.resources import MFXCarrier, Plate, PlateCarrier, TipCarrier, TipRack
 from pylabrobot.resources.hamilton_parse import (
@@ -32,15 +33,19 @@ def write_plate_definition(out_file, plate: Plate, description: str = None, eqn:
   # pylint: disable=protected-access
 
   well_a1 = plate.get_item("A1")
-  dy = round(plate._size_y - well_a1.location.y - well_a1._size_y, 4)
+  dy = plate.get_item(plate.num_items_y - 1).location.y
 
   method_name = None
   if eqn is not None:
+    out_file.write("\n")
     method_name = f"_compute_volume_from_height_{plate.model}"
     out_file.write(f"def {method_name}(h: float) -> float:\n")
     for line in eqn.split("\n"):
       out_file.write(f"  {line}\n")
     out_file.write("\n\n")
+
+  item_dx = round(plate.get_item("A2").location.x - well_a1.location.x, 4)
+  item_dy = round(well_a1.location.y - plate.get_item("B1").location.y, 4)
 
   out_file.write(f"def {plate.model}(name: str, with_lid: bool = False) -> Plate:\n")
   if description is not None:
@@ -52,18 +57,20 @@ def write_plate_definition(out_file, plate: Plate, description: str = None, eqn:
   out_file.write(f"    size_z={plate._size_z},\n")
   out_file.write( "    with_lid=with_lid,\n")
   out_file.write(f"    model=\"{plate.model}\",\n")
+  out_file.write(f"    lid_height={plate.lid_height},\n")
   out_file.write( "    items=create_equally_spaced(Well,\n")
   out_file.write(f"      num_items_x={plate.num_items_x},\n")
   out_file.write(f"      num_items_y={plate.num_items_y},\n")
   out_file.write(f"      dx={well_a1.location.x},\n")
   out_file.write(f"      dy={dy},\n")
   out_file.write(f"      dz={well_a1.location.z},\n")
-  out_file.write(f"      item_dx={well_a1._size_x},\n")
-  out_file.write(f"      item_dy={well_a1._size_y},\n")
+  out_file.write(f"      item_dx={item_dx},\n")
+  out_file.write(f"      item_dy={item_dy},\n")
   out_file.write(f"      size_x={well_a1._size_x},\n")
   out_file.write(f"      size_y={well_a1._size_y},\n")
   out_file.write(f"      size_z={well_a1._size_z},\n")
   out_file.write(f"      bottom_type={well_a1.bottom_type},\n")
+  out_file.write(f"      cross_section_type={well_a1.cross_section_type},\n")
   if method_name is not None:
     out_file.write(f"      compute_volume_from_height={method_name},\n")
   out_file.write( "    ),\n")
@@ -234,6 +241,8 @@ def main():
                       "TipRack, TipCarrier, MFXCarrier). Resources found for other types will be "
                       "ignored. If not provided, resources of all types will be created",
                       choices=["Plate", "PlateCarrier", "TipRack", "TipCarrier", "MFXCarrier"])
+  parser.add_argument("--silence-errors", help="Don't print errors", action="store_true")
+  parser.add_argument("--traceback", help="Print traceback on error", action="store_true")
 
   args = parser.parse_args()
 
@@ -260,13 +269,14 @@ def main():
   else:
     out = open(args.out_file, "w", encoding="utf-8") # pylint: disable=consider-using-with
 
-  for filepath in filepaths:
+  for filepath in sorted(filepaths):
     try:
       resource_type = get_resource_type(filepath)
       if args.type is not None and resource_type != args.type:
         continue
 
       if resource_type == "Plate":
+        # print(filepath)
         if filepath.endswith("_L.rck"):
           landscape = True
           filepath = filepath.replace("_L.rck", ".rck")
@@ -277,13 +287,14 @@ def main():
           landscape = None
 
         plate, description, eqn = create_plate_for_writing(filepath)
-        write_plate_definition(out, plate=plate, description=description, eqn=eqn)
+        if landscape is None:
+          write_plate_definition(out, plate=plate, description=description, eqn=eqn)
 
         if landscape:
-          out.write("\n\n")
+          out.write("\n")
           write_plate_landscape_variant(out, plate=plate, description=description)
         elif landscape is False:
-          out.write("\n\n")
+          out.write("\n")
           write_plate_portrait_variant(out, plate=plate, description=description)
       elif resource_type == "PlateCarrier":
         plate_carrier, description = create_plate_carrier_for_writing(filepath)
@@ -300,7 +311,10 @@ def main():
       else:
         raise ValueError(f"Unknown resource type {resource_type}")
     except Exception as e:  # pylint: disable=broad-except
-      print(f"{filepath}: error: {e}")
+      if not args.silence_errors:
+        print(f"{filepath}: error: {e}")
+      if args.traceback:
+        traceback.print_exc()
     else:
       if args.out_file is not None:
         print(f"{filepath}: success")
