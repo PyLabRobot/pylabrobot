@@ -256,8 +256,12 @@ class OpentronsBackend(LiquidHandlerBackend):
   async def unassigned_resource_callback(self, name: str):
     await super().unassigned_resource_callback(name)
 
-    # The OT API does not support deleting labware, so we just forget about it locally.
     del self.defined_labware[name]
+
+    # The OT-api does not support removing labware definitions
+    # https://forums.pylabrobot.org/t/feature-request-support-unloading-labware-in-the-http-api/3098
+    # instead, we move the labware off deck as a workaround
+    ot_api.labware.move_labware(labware_id=name, off_deck=True)
 
   def select_tip_pipette(self, tip_max_volume: float, with_tip: bool) -> Optional[str]:
     """ Select a pipette based on maximum tip volume for tip pick up or drop.
