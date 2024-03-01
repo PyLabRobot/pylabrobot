@@ -60,19 +60,31 @@ def get_resource_type(filepath) -> str:
 
   with open(filepath, "r", encoding="ISO-8859-1") as f:
     c = f.read()
-    category0id = find_int("Category.0.Id", c)
-    # based on some inspection of the files, but just a guess
-    if category0id in range(170, 180):
-      return "TipRack"
-    if category0id in range(1000, 1100):
-      return "Plate"
+    try:
+      category0id = find_int("Category.0.Id", c)
+      # based on some inspection of the files, but just a guess
+      if category0id in range(170, 180):
+        return "TipRack"
+      if category0id in range(1000, 1100):
+        return "Plate"
+    except ValueError:
+      pass
 
   raise ValueError(f"Unknown resource type for file {filename}")
 
 
-def create_plate_for_writing(filepath) -> Tuple[Plate, Optional[str], Optional[str]]:
+def create_plate_for_writing(
+  filepath: str,
+  ctr_filepath: Optional[str] = None
+) -> Tuple[Plate, Optional[str], Optional[str]]:
   """ Create a plate from the given file. Returns the plate and optionally a description. Also
-  returns a description and the volume equation. """
+  returns a description and the volume equation.
+
+  Args:
+    filepath: The path to the .rck file for the plate.
+    ctr_filepath: The path to the .ctr file for the plate. If not given, it will be inferred from
+      the .rck file. I think the ctr file is used for well definitions.
+  """
   with open(filepath, "r", encoding="ISO-8859-1") as f:
     c = f.read()
 
@@ -88,7 +100,7 @@ def create_plate_for_writing(filepath) -> Tuple[Plate, Optional[str], Optional[s
   # rck files use the center of the well, but we want the bottom left corner.
   dx = round(find_float("BndryX", c) - well_size_x/2, 4)
   dy = round(find_float("BndryY", c) - well_size_y/2, 4)
-  dz = 0
+  dz = round(find_float("Cntr.1.base", c), 4)
 
   filename = os.path.basename(filepath)
   cname = filename.split(".")[0]
@@ -106,7 +118,8 @@ def create_plate_for_writing(filepath) -> Tuple[Plate, Optional[str], Optional[s
       .replace(".rck", ".ctr") \
       .replace("ProtCryst", "Post")
 
-  with open(rck2ctr(filepath), "r", encoding="ISO-8859-1") as f2:
+  ctr_filepath = ctr_filepath or rck2ctr(filepath)
+  with open(ctr_filepath, "r", encoding="ISO-8859-1") as f2:
     c2 = f2.read()
     num_segments = find_int("Segments", c2)
     vol_eqn_func = ""
@@ -125,7 +138,6 @@ def create_plate_for_writing(filepath) -> Tuple[Plate, Optional[str], Optional[s
     vol_eqn_func += f"if h > {height_so_far}:\n"
     vol_eqn_func +=  f"  raise ValueError(f\"Height {{h}} is too large for {cname}\")\n"
     vol_eqn_func += "return volume"
-    dz = find_float("BaseMM", c2)
 
     well_bottom_type_code = find_int(f"{num_segments}.Shape", c2)
     well_bottom_type = {
@@ -340,14 +352,14 @@ def create_flex_carrier_for_writing(filepath: str) -> Tuple[MFXCarrier, Optional
   return flex_carrier, description
 
 
-def create_plate(filepath: str, name: str) -> Plate:
+def create_plate(filepath: str, name: str, ctr_filepath: Optional[str] = None) -> Plate:
   """ Create a plate from the given file.
 
   Args:
     filepath: The path to the .rck file for the plate.
     name: The name of the plate resource.
   """
-  plate, _, _ = create_plate_for_writing(filepath)
+  plate, _, _ = create_plate_for_writing(filepath, ctr_filepath=ctr_filepath)
   plate.name = name
   return plate
 
