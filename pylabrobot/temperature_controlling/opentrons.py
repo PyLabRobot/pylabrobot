@@ -24,6 +24,10 @@ class OpentronsTemperatureModuleV2(TemperatureController):
       name=name,
       size_x=112.0,
       size_y=73.6,
+
+      # size_x=127.0,
+      # size_y=86.0,
+
       size_z=140.0,
       backend=OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id),
       category="temperature_controller",
@@ -46,7 +50,10 @@ class OpentronsTemperatureModuleV2(TemperatureController):
         num_items_y=4,
         dx=22,
         dy=18,
+        # dx=22 - (86 - 73.6),
+        # dy=18 - (86 - 73.6),
         dz=45.0,
+
         item_dx=17.2,
         item_dy=17.2,
 
@@ -58,6 +65,12 @@ class OpentronsTemperatureModuleV2(TemperatureController):
       category="temperature_module",
       model="opentrons_temperature_module_v2",
     )
-    self.assign_child_resource(self.tube_rack, location=Coordinate.zero())
+    self.assign_child_resource(self.tube_rack, location=Coordinate(
+      x=0,
+      y=0,
+      # x=(127 - 112.0)/2,
+      # y=(86 - 73.6)/2,
+      z=0
+    ))
 
     self.backend: OpentronsTemperatureModuleBackend = b # fix type
