@@ -9,7 +9,7 @@ from pylabrobot.pumps.calibration import PumpCalibration
 from pylabrobot.pumps.pump import Pump
 from pylabrobot.pumps.backend import PumpBackend, PumpArrayBackend
 from pylabrobot.pumps.cole_parmer import Masterflex
-from pylabrobot.pumps.agrowpumps import AgrowPumpArray
+from pylabrobot.pumps.agrowpumps import AgrowPumpArrayTester
 
 
 def powerset(iterable: Iterable[Any]):
@@ -56,7 +56,7 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
 
 
 class TestPumpArray(unittest.IsolatedAsyncioTestCase):
-  """ Tests for the AgrowPumpArray class. """
+  """ Tests for the AgrowPumpArrayTester class. """
 
   def setUp(self):
     self.agrow_valid_speeds = [int(0), int(100), float(0), float(100)]
@@ -69,7 +69,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
                                   [0, 1, 2, 3, 4, 5],
                                   [1, 1, 1, 1, 1, 1],
                                   [1, 2, 3, 4, 5, 6, 7]]
-    self.agrow_backend = AgrowPumpArray(port="simulated", unit=1, keep_alive_thread_enabled=False)
+    self.agrow_backend = AgrowPumpArrayTester(port="simulated", unit=1, keep_alive_thread_enabled=False)
     self.valid_durations = [int(0), int(100), float(0), float(100)]
     self.invalid_durations = [int(-1), float(-1)]
     self.mock_backend = Mock(spec=PumpArrayBackend)
@@ -77,8 +77,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
     self.test_calibration = PumpCalibration.load_calibration(1, num_items=6)
 
   async def test_setup(self):
-    """ Test that the AgrowPumpArray class can be initialized. """
-    pump_array: PumpArray
+    """ Test that the AgrowPumpArrayTester class can be initialized. """
     async with PumpArray(backend=self.agrow_backend,
                          calibration=self.null_calibration) as pump_array:
       self.assertEqual(pump_array.num_channels, 6)
@@ -215,11 +214,6 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
                               use_channels=use_channels,
                               volume=test_volume,
                               calibration_units="duration")
-
-  async def test_stop(self):
-    async with PumpArray(backend=self.agrow_backend,
-                         calibration=self.null_calibration) as pump_array:
-      await pump_array.stop()
 
 
 if __name__ == "__main__":

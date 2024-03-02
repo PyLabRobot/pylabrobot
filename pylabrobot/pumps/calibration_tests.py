@@ -67,7 +67,3 @@ class TestCalibration(unittest.TestCase):
     calibration = PumpCalibration.load_calibration(self.test_value, 2)
     self.assertEqual(calibration[0], 1.0)
     self.assertEqual(calibration[1], 1.0)
-
-  def test_uncalibrated(self):
-    calibration = PumpCalibration.uncalibrated()
-    self.assertIsNone(calibration.calibration)

@@ -1,10 +1,10 @@
 from abc import ABCMeta, abstractmethod
 from typing import List
 
-from pylabrobot.machine import MachineBackend
+from pylabrobot.machine import Machine
 
 
-class PumpBackend(MachineBackend, metaclass=ABCMeta):
+class PumpBackend(Machine, metaclass=ABCMeta):
   """ Abstract base class for pump backends. """
 
   def run_revolutions(self, num_revolutions: float):
@@ -30,7 +30,7 @@ class PumpBackend(MachineBackend, metaclass=ABCMeta):
     """ Close the connection to the pump. """
 
 
-class PumpArrayBackend(MachineBackend, metaclass=ABCMeta):
+class PumpArrayBackend(Machine, metaclass=ABCMeta):
   """
     Abstract base class for pump array backends.
 

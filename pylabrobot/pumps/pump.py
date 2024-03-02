@@ -1,10 +1,9 @@
-from typing import Optional
+import asyncio
+from typing import Optional, Union
 
 from pylabrobot.machine import Machine
 from .backend import PumpBackend
 from .calibration import PumpCalibration
-
-
 
 class Pump(Machine):
   """ Frontend for a (peristaltic) pump. """
@@ -18,6 +17,7 @@ class Pump(Machine):
     backend: PumpBackend,
     category: Optional[str] = None,
     model: Optional[str] = None,
+    calibration: Optional[PumpCalibration] = None,
   ):
     super().__init__(
       name=name,
@@ -29,6 +29,7 @@ class Pump(Machine):
       model=model,
     )
     self.backend: PumpBackend = backend # fix type
+    self.calibration = calibration
 
   def run_revolutions(self, num_revolutions: float):
     """ Run a given number of revolutions. This method will return after the command has been sent,
@@ -79,8 +80,14 @@ class Pump(Machine):
     if self.calibration is None:
       raise TypeError(
         "Pump is not calibrated. Volume based pumping and related functions unavailable.")
-    duration = volume / self.calibration
-    await self.run_for_duration(speed=speed, duration=duration)
+    if self.calibration.calibration_mode == "duration":
+      duration = volume / self.calibration
+      await self.run_for_duration(speed=speed, duration=duration)
+    elif self.calibration.calibration_mode == "revolutions":
+      num_revolutions = volume / self.calibration
+      self.run_revolutions(num_revolutions=num_revolutions)
+    else:
+      raise ValueError("Calibration mode not recognized.")
 
   async def halt(self):
     """ Halt the pump."""
