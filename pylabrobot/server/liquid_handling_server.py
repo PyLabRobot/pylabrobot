@@ -5,16 +5,16 @@ import asyncio
 import json
 import os
 import threading
-from typing import Any, Coroutine, List, Tuple, Type, TypeVar, Optional, cast
+from typing import Any, Coroutine, List, Tuple, Type, Optional, cast
 
 from flask import Blueprint, Flask, request, jsonify, current_app
 import werkzeug
 
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.standard import PipettingOp, Pickup, Aspiration, Dispense, Drop
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.standard import Pickup, Aspiration, Dispense, Drop
 from pylabrobot.resources import Coordinate, Deck, Tip, Liquid
-from pylabrobot.serializer import serialize, deserialize
+from pylabrobot.serializer import deserialize
 
 
 lh_api = Blueprint("liquid handling", __name__)
@@ -191,10 +191,10 @@ async def aspirate():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquid = cast(Liquid, deserialize(sc["liquid"]))
+      liquids = cast(List[Tuple[Optional[Liquid], float]], deserialize(sc["liquids"]))
       aspirations.append(Aspiration(resource=resource, tip=tip, offset=offset, volume=volume,
         flow_rate=flow_rate, liquid_height=liquid_height, blow_out_air_volume=blow_out_air_volume,
-        liquid=liquid))
+        liquids=liquids))
     use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
@@ -228,10 +228,10 @@ async def dispense():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquid = cast(Liquid, deserialize(sc["liquid"]))
+      liquids = cast(List[Tuple[Optional[Liquid], float]], deserialize(sc["liquids"]))
       dispenses.append(Dispense(resource=resource, tip=tip, offset=offset, volume=volume,
         flow_rate=flow_rate, liquid_height=liquid_height, blow_out_air_volume=blow_out_air_volume,
-        liquid=liquid))
+        liquids=liquids))
     use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code

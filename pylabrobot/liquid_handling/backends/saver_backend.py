@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 
 
 class SaverBackend(LiquidHandlerBackend):

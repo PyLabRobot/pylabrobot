@@ -5,12 +5,9 @@
 # pylint: disable=line-too-long
 
 from typing import List, Optional
-from pylabrobot.resources import (
-  Plate,
-  Well,
-  create_equally_spaced
-)
-from pylabrobot.resources.tecan import TecanResource
+from pylabrobot.resources.plate import Plate, Well
+from pylabrobot.resources.itemized_resource import create_equally_spaced
+from pylabrobot.resources.tecan.tecan_resource import TecanResource
 
 
 class TecanPlate(Plate, TecanResource):

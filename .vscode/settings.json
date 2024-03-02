@@ -5,6 +5,7 @@
     "coro",
     "Defaultable",
     "frontmost",
+    "Inheco",
     "iswap",
     "jsonify",
     "klass",
@@ -14,6 +15,7 @@
     "pytest",
     "subclassing",
     "subresource",
+    "tadm",
     "tiprack",
     "usascientific",
     "websockets"

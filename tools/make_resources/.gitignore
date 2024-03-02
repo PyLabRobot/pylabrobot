@@ -1,7 +1,6 @@
 *
 
-!ham
-!ham/make_*.py
+!make_ham_resources.py
 !ot
 !ot/make.py
 !tc

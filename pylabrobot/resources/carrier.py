@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from .coordinate import Coordinate
 from .resource import Resource
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylabrobot")
 
 
 class CarrierSite(Resource):
@@ -88,12 +88,15 @@ class Carrier(Resource):
       model=model)
 
     sites = sites if sites is not None else []
-    self.capacity = len(sites)
 
     self.sites: List[CarrierSite] = []
     for site in sites:
       site.name = f"carrier-{self.name}-spot-{site.spot}"
       self.assign_child_resource(site, location=site.location)
+
+  @property
+  def capacity(self):
+    return len(self.sites)
 
   def assign_child_resource(
     self,
@@ -197,10 +200,56 @@ class PlateCarrier(Carrier):
       sites,category=category, model=model)
 
 
+class MFXCarrier(Carrier):
+  """ Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites). """
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sites: Optional[List[CarrierSite]] = None,
+    category="mfx_carrier",
+    model: Optional[str] = None):
+    super().__init__(name, size_x, size_y, size_z,
+      sites,category=category, model=model)
+
+
+class ShakerCarrier(Carrier):
+  """ Base class for shaker carriers (i.e. 7-track carriers with mixed-use and/or specialized
+  sites). """
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sites: Optional[List[CarrierSite]] = None,
+    category="shaker_carrier",
+    model: Optional[str] = None):
+    super().__init__(name, size_x, size_y, size_z,
+      sites,category=category, model=model)
+
+
+class TubeCarrier(Carrier):
+  """ Base class for tube/sample carriers. """
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sites: Optional[List[CarrierSite]] = None,
+    category="tube_carrier",
+    model: Optional[str] = None):
+    super().__init__(name, size_x, size_y, size_z,
+      sites,category=category, model=model)
+
+
 def create_carrier_sites(
   locations: List[Coordinate],
-  site_size_x: List[float],
-  site_size_y: List[float]) -> List[CarrierSite]:
+  site_size_x: List[Union[float, int]],
+  site_size_y: List[Union[float, int]]) -> List[CarrierSite]:
   """ Create a list of carrier sites with the given sizes. """
 
   sites = []

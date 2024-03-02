@@ -7,11 +7,11 @@
 
 ## What is PyLabRobot?
 
-PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots and other lab automation equipment.
+PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots and other lab automation equipment. Read [the paper](<https://www.cell.com/device/fulltext/S2666-9986(23)00170-9>) in Device.
 
 ### Liquid handling robots
 
-PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton, Tecan and Opentrons liquid handling robots, but we will soon have drivers for many more. The two Hamilton drivers are Venus, which is derived from the [PyHamilton library](https://github.com/dgretton/pyhamilton), and STAR, which is a low-level firmware interface. The Tecan driver is EVO, also a low level, cross platform firmware interface. The Opentrons driver is based on the [Opentrons HTTP API](https://github.com/rickwierenga/opentrons-python-api). We also provide a simulator which plays the role of a device driver but renders commands in a browser-based deck visualization.
+PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton, Tecan and Opentrons liquid handling robots, but we will soon have drivers for many more. The Hamiton and Tecan backends provide an interactive firmware interface that works on Windows, macOS and Linux. The Opentrons driver is based on the [Opentrons HTTP API](https://github.com/rickwierenga/opentrons-python-api). We also provide a browser-based Visualizer which can visualize the state of the deck during a run, and testing backends which do not require access to a robot.
 
 Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on **Hamilton STAR** (this will work on any operating system!):
 
@@ -24,9 +24,9 @@ deck = Deck.load_from_json_file("hamilton-layout.json")
 lh = LiquidHandler(backend=STAR(), deck=deck)
 await lh.setup()
 
-await lh.pick_up_tips(lh.get_resource("tip_rack")["A1"])
-await lh.aspirate(lh.get_resource("plate")["A1"], vols=100)
-await lh.dispense(lh.get_resource("plate")["A2"], vols=100)
+await lh.pick_up_tips(lh.deck.get_resource("tip_rack")["A1"])
+await lh.aspirate(lh.deck.get_resource("plate")["A1"], vols=100)
+await lh.dispense(lh.deck.get_resource("plate")["A2"], vols=100)
 await lh.return_tips()
 ```
 
@@ -68,7 +68,7 @@ await pr.setup()
 
 # Use in combination with a liquid handler
 lh.assign_child_resource(pr, location=Coordinate(x, y, z))
-lh.move_plate(lh.get_resource("plate"), pr)
+lh.move_plate(lh.deck.get_resource("plate"), pr)
 
 data = await pr.read_luminescence()
 ```
@@ -91,19 +91,21 @@ data = await pr.read_luminescence()
 
 ## Citing
 
-If you use PyLabRobot in your research, please cite the following preprint:
+If you use PyLabRobot in your research, please cite the following:
 
 ```bibtex
-@article {Wierenga2023.07.10.547733,
-	author = {Rick Wierenga and Stefan Golas and Wilson Ho and Connor Coley and Kevin Esvelt},
-	title = {PyLabRobot: An Open-Source, Hardware Agnostic Interface for Liquid-Handling Robots and Accessories},
-	elocation-id = {2023.07.10.547733},
-	year = {2023},
-	doi = {10.1101/2023.07.10.547733},
-	publisher = {Cold Spring Harbor Laboratory},
-	URL = {https://www.biorxiv.org/content/early/2023/07/15/2023.07.10.547733},
-	eprint = {https://www.biorxiv.org/content/early/2023/07/15/2023.07.10.547733.full.pdf},
-	journal = {bioRxiv}
+@article{WIERENGA2023100111,
+  title = {PyLabRobot: An open-source, hardware-agnostic interface for liquid-handling robots and accessories},
+  journal = {Device},
+  volume = {1},
+  number = {4},
+  pages = {100111},
+  year = {2023},
+  issn = {2666-9986},
+  doi = {https://doi.org/10.1016/j.device.2023.100111},
+  url = {https://www.sciencedirect.com/science/article/pii/S2666998623001709},
+  author = {Rick P. Wierenga and Stefan M. Golas and Wilson Ho and Connor W. Coley and Kevin M. Esvelt},
+  keywords = {laboratory automation, open source, standardization, liquid-handling robots},
 }
 ```
 

@@ -301,7 +301,7 @@ class EVO(TecanLiquidHandler):
     tecan_liquid_classes = [
       get_liquid_class(
         target_volume=op.volume,
-        liquid_class=op.liquid or Liquid.WATER,
+        liquid_class=op.liquids[-1][0] or Liquid.WATER,
         tip_type=op.tip.tip_type
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
@@ -390,7 +390,7 @@ class EVO(TecanLiquidHandler):
     tecan_liquid_classes = [
       get_liquid_class(
         target_volume=op.volume,
-        liquid_class=op.liquid or Liquid.WATER,
+        liquid_class=op.liquids[-1][0] or Liquid.WATER,
         tip_type=op.tip.tip_type
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
@@ -506,7 +506,7 @@ class EVO(TecanLiquidHandler):
     z_range = await self.roma.report_z_param(5)
     x, y, z = self._roma_positions(move.resource, move.resource.get_absolute_location(), z_range)
     h = int(move.resource.get_size_y() * 10)
-    xt, yt, zt = self._roma_positions(move.resource, move.to, z_range)
+    xt, yt, zt = self._roma_positions(move.resource, move.destination, z_range)
 
     # move to resource
     await self.roma.set_smooth_move_x(1)

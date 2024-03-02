@@ -1,38 +1,48 @@
-import asyncio
-from typing import Optional, Union
+from typing import Optional
 
-from pylabrobot.machine import MachineFrontend
+from pylabrobot.machine import Machine
 from .backend import PumpBackend
 from .calibration import PumpCalibration
 
 
-class Pump(MachineFrontend):
-  """ Frontend for a (peristaltic) pump.
 
-  Attributes:
-    backend: The backend that the pump is controlled through.
-    calibration: The calibration of the pump.
-  """
+class Pump(Machine):
+  """ Frontend for a (peristaltic) pump. """
 
-  def __init__(self, backend: PumpBackend, calibration: Optional[PumpCalibration] = None):
-    self.backend: PumpBackend = backend
-    self._setup_finished = False
-    if calibration is not None:
-      if not len(calibration) == 1:
-        raise ValueError("Calibration must be a single value if used with a single pump.")
-      self.calibration = calibration[0]
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    backend: PumpBackend,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
+  ):
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      backend=backend,
+      category=category,
+      model=model,
+    )
+    self.backend: PumpBackend = backend # fix type
 
-  async def run_revolutions(self, num_revolutions: float):
-    """ Run for a given number of revolutions.
+  def run_revolutions(self, num_revolutions: float):
+    """ Run a given number of revolutions. This method will return after the command has been sent,
+    and the pump will run until `halt` is called.
 
     Args:
-      num_revolutions: number of revolutions to run.
+      num_revolutions: number of revolutions to run
     """
 
     self.backend.run_revolutions(num_revolutions=num_revolutions)
 
-  async def run_continuously(self, speed: float):
-    """ Run continuously at a given speed.
+  def run_continuously(self, speed: float):
+    """ Run continuously at a given speed. This method will return after the command has been sent,
+    and the pump will run until `halt` is called.
 
     If speed is 0, the pump will be halted.
 

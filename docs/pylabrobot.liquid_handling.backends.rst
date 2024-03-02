@@ -25,8 +25,9 @@ Hardware
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.backends.hamilton.STAR.HamiltonLiquidHandler
+    pylabrobot.liquid_handling.backends.hamilton.base.HamiltonLiquidHandler
     pylabrobot.liquid_handling.backends.hamilton.STAR.STAR
+    pylabrobot.liquid_handling.backends.hamilton.vantage.Vantage
     pylabrobot.liquid_handling.backends.opentrons_backend.OpentronsBackend
     pylabrobot.liquid_handling.backends.tecan.EVO.EVO
 
@@ -43,12 +44,13 @@ Net backends can be used to communicate with servers that manage liquid handling
     pylabrobot.liquid_handling.backends.http.HTTPBackend
     pylabrobot.liquid_handling.backends.websocket.WebSocketBackend
 
-Simulator
----------
+
+Testing
+-------
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.backends.simulation.SimulatorBackend
+    pylabrobot.liquid_handling.backends.chatterbox_backend.ChatterBoxBackend

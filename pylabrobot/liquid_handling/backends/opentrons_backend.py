@@ -1,16 +1,8 @@
+import sys
 from typing import Dict, Optional, List, cast
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
-from pylabrobot.resources import (
-  Coordinate,
-  ItemizedResource,
-  Plate,
-  Resource,
-  TipRack,
-  TipSpot
-)
-from pylabrobot.resources.opentrons import OTDeck
 from pylabrobot.liquid_handling.standard import (
   Pickup,
   PickupTipRack,
@@ -22,17 +14,33 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move
 )
+from pylabrobot.resources import (
+  Coordinate,
+  ItemizedResource,
+  Plate,
+  Resource,
+  TipRack,
+  TipSpot
+)
+from pylabrobot.resources.opentrons import OTDeck
+from pylabrobot.temperature_controlling import OpentronsTemperatureModuleV2
 from pylabrobot import utils
 
-try:
-  import ot_api
-  USE_OT = True
-except ImportError:
+PYTHON_VERSION = sys.version_info[:2]
+
+if PYTHON_VERSION <= (3, 10):
+  try:
+    import ot_api
+    USE_OT = True
+  except ImportError:
+    USE_OT = False
+else:
   USE_OT = False
 
 
 class OpentronsBackend(LiquidHandlerBackend):
-  """ Backends for the Opentrons liquid handling robots """
+  """ Backends for the Opentrons liquid handling robots. Only supported on Python 3.10 and below.
+  """
 
   pipette_name2volume = {
     "p10_single": 10,
@@ -55,7 +63,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     super().__init__()
 
     if not USE_OT:
-      raise RuntimeError("Opentrons is not installed. Please run pip install pylabrobot[opentrons]")
+      raise RuntimeError("Opentrons is not installed. Please run pip install pylabrobot[opentrons]."
+                         " Only supported on Python 3.10 and below.")
 
     self.host = host
     self.port = port
@@ -92,6 +101,21 @@ class OpentronsBackend(LiquidHandlerBackend):
     self.defined_labware = {}
     await super().stop()
 
+  def _get_resource_slot(self, resource: Resource) -> int:
+    """ Get the ultimate slot of a given resource. Some resources are assigned to another resource,
+    such as a temperature controller, and we need to find the slot of the parent resource. Nesting
+    may be deeper than one level, so we need to traverse the tree from the bottom up. """
+
+    slot = None
+    while resource.parent is not None:
+      if isinstance(resource.parent, OTDeck):
+        slot = cast(OTDeck, resource.parent).get_slot(resource)
+        break
+      resource = resource.parent
+    if slot is None:
+      raise ValueError("Resource not on the deck.")
+    return slot
+
   async def assigned_resource_callback(self, resource: Resource):
     """ Called when a resource is assigned to a backend.
 
@@ -103,6 +127,19 @@ class OpentronsBackend(LiquidHandlerBackend):
     await super().assigned_resource_callback(resource)
 
     if resource.name == "deck":
+      return
+
+    slot = self._get_resource_slot(resource)
+
+    # check if resource is actually a Module
+    if isinstance(resource, OpentronsTemperatureModuleV2):
+      ot_api.modules.load_module(
+        slot=slot,
+        model="temperatureModuleV2",
+        module_id=resource.backend.opentrons_id
+      )
+      # call self to assign the tube rack
+      await self.assigned_resource_callback(resource.tube_rack)
       return
 
     well_names = [well.name for well in resource.children]
@@ -203,8 +240,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     data = ot_api.labware.define(lw)
     namespace, definition, version = data["data"]["definitionUri"].split("/")
 
-    slot = cast(OTDeck, resource.parent).get_slot(resource)
-
     # assign labware to robot
     labware_uuid = resource.name
 
@@ -221,8 +256,12 @@ class OpentronsBackend(LiquidHandlerBackend):
   async def unassigned_resource_callback(self, name: str):
     await super().unassigned_resource_callback(name)
 
-    # The OT API does not support deleting labware, so we just forget about it locally.
     del self.defined_labware[name]
+
+    # The OT-api does not support removing labware definitions
+    # https://forums.pylabrobot.org/t/feature-request-support-unloading-labware-in-the-http-api/3098
+    # instead, we move the labware off deck as a workaround
+    ot_api.labware.move_labware(labware_id=name, off_deck=True)
 
   def select_tip_pipette(self, tip_max_volume: float, with_tip: bool) -> Optional[str]:
     """ Select a pipette based on maximum tip volume for tip pick up or drop.
@@ -263,9 +302,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
 
-    # labware_id = self.defined_labware[op.resource.parent.parent.name] # get name of tip rack
     labware_id = self.defined_labware[op.resource.parent.name] # get name of tip rack
-    tip_max_volume = 20 # op.resource.maximal_volume
+    tip_max_volume = op.tip.maximal_volume
     pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=False)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
@@ -274,6 +312,9 @@ class OpentronsBackend(LiquidHandlerBackend):
       offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
     else:
       offset_x = offset_y = offset_z = 0
+
+    # ad-hoc offset adjustment that makes it smoother.
+    offset_z += 50
 
     ot_api.lh.pick_up_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
@@ -296,7 +337,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     assert op.resource.parent is not None, "must not be a floating resource"
 
     labware_id = self.defined_labware[op.resource.parent.name] # get name of tip rack
-    tip_max_volume = 20 # op.resource.maximal_volume
+    tip_max_volume = op.tip.maximal_volume
     pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=True)
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
@@ -305,6 +346,9 @@ class OpentronsBackend(LiquidHandlerBackend):
       offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
     else:
       offset_x = offset_y = offset_z = 0
+
+    # ad-hoc offset adjustment that makes it smoother.
+    offset_z += 10
 
     ot_api.lh.drop_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
@@ -458,6 +502,10 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.lh.dispense(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=flow_rate, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
+  async def home(self):
+    """ Home the robot """
+    ot_api.health.home()
+
   async def pick_up_tips96(self, pickup: PickupTipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
@@ -473,3 +521,43 @@ class OpentronsBackend(LiquidHandlerBackend):
   async def move_resource(self, move: Move):
     """ Move the specified lid within the robot. """
     raise NotImplementedError("Moving resources in Opentrons is not implemented yet.")
+
+  async def list_connected_modules(self) -> List[dict]:
+    """ List all connected temperature modules. """
+    return cast(List[dict], ot_api.modules.list_connected_modules())
+
+  async def move_pipette_head(
+    self,
+    location: Coordinate,
+    speed: Optional[float] = None,
+    minimum_z_height: Optional[float] = None,
+    pipette_id: Optional[str] = None,
+    force_direct: bool = False
+  ):
+    """ Move the pipette head to the specified location. Whe a tip is mounted, the location refers
+    to the bottom of the tip. If no tip is mounted, the location refers to the bottom of the
+    pipette head.
+
+    Args:
+      location: The location to move to.
+      speed: The speed to move at, in mm/s.
+      minimum_z_height: The minimum z height to move to. Appears to be broken in the Opentrons API.
+      pipette_id: The id of the pipette to move. If `"left"` or `"right"`, the left or right
+        pipette is used.
+      force_direct: If True, move the pipette head directly in all dimensions.
+    """
+
+    if pipette_id == "left":
+      pipette_id = self.left_pipette["pipetteId"]
+    elif pipette_id == "right":
+      pipette_id = self.right_pipette["pipetteId"]
+
+    ot_api.lh.move_arm(
+      pipette_id=pipette_id,
+      location_x=location.x,
+      location_y=location.y,
+      location_z=location.z,
+      minimum_z_height=minimum_z_height,
+      speed=speed,
+      force_direct=force_direct
+    )

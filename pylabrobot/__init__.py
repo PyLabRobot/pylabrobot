@@ -4,7 +4,8 @@ import logging
 from pylabrobot.__version__ import __version__
 
 # Create a logger
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylabrobot")
+logger.setLevel(logging.DEBUG)
 
 # Add a file handler
 now = datetime.datetime.now().strftime("%Y%m%d")

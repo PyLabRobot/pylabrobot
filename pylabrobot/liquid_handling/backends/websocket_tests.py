@@ -1,5 +1,3 @@
-""" Tests for the simulation backend. """
-
 import json
 import unittest
 

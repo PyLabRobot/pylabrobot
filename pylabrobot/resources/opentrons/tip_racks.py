@@ -1,7 +1,7 @@
 from typing import cast
 
-from pylabrobot.resources import TipRack
 from pylabrobot.resources.opentrons.load import load_shared_opentrons_resource
+from pylabrobot.resources.tip_rack import TipRack
 
 
 def eppendorf_96_tiprack_1000ul_eptips(name: str) -> TipRack:

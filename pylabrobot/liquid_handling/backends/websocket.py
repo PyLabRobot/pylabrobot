@@ -15,7 +15,7 @@ try:
 except ImportError:
   HAS_WEBSOCKETS = False
 
-from pylabrobot.liquid_handling.backends import SerializingBackend
+from pylabrobot.liquid_handling.backends.serializing_backend import SerializingBackend
 from pylabrobot.resources import Resource
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
   import websockets.legacy
 
 
-logger = logging.getLogger(__name__) # TODO: get from somewhere else?
+logger = logging.getLogger("pylabrobot")
 
 
 class WebSocketBackend(SerializingBackend):
@@ -44,10 +44,10 @@ class WebSocketBackend(SerializingBackend):
     """
 
     if not HAS_WEBSOCKETS:
-      raise RuntimeError("The simulator requires websockets to be installed.")
+      raise RuntimeError("The WebSocketBackend requires websockets to be installed.")
 
     super().__init__(num_channels=num_channels)
-    self._websocket: Optional[websockets.legacy.server.WebSocketServerProtocol] = None
+    self._websocket: Optional["websockets.legacy.server.WebSocketServerProtocol"] = None
     self._loop: Optional[asyncio.AbstractEventLoop] = None
     self._t: Optional[threading.Thread] = None
     self._stop_: Optional[asyncio.Future] = None
@@ -57,8 +57,6 @@ class WebSocketBackend(SerializingBackend):
 
     self._sent_messages: List[str] = []
     self.received: List[dict] = []
-
-    self.stop_event = None
 
     self._id = 0
 
@@ -85,7 +83,7 @@ class WebSocketBackend(SerializingBackend):
 
   @property
   def stop_(self) -> asyncio.Future:
-    """ The future that is set when the simulation is stopped. """
+    """ The future that is set when the web socket is stopped. """
     if self._stop_ is None:
       raise RuntimeError("Event loop has not been started.")
     return self._stop_
@@ -111,7 +109,7 @@ class WebSocketBackend(SerializingBackend):
     if event == "ping":
       await self.websocket.send(json.dumps({"event": "pong"}))
 
-  async def _socket_handler(self, websocket: websockets.legacy.server.WebSocketServerProtocol):
+  async def _socket_handler(self, websocket: "websockets.legacy.server.WebSocketServerProtocol"):
     """ Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`. """
 
@@ -164,8 +162,8 @@ class WebSocketBackend(SerializingBackend):
   async def assigned_resource_callback(self, resource: Resource):
     # override SerializingBackend so we don't wait for a response
     await self.send_command(command="resource_assigned", data={
-      "resource": resource.serialize(),
-      "parent_name": (resource.parent.name if resource.parent else None)
+        "resource": resource.serialize(),
+        "parent_name": (resource.parent.name if resource.parent else None)
       },
       wait_for_response=False)
 
@@ -187,10 +185,10 @@ class WebSocketBackend(SerializingBackend):
 
     Args:
       event: The event identifier.
-      wait_for_response: If `True`, the simulation will wait for a response from the browser. If
-        `False`, it is not guaranteed that the response will be available for reading at a later
-        time. This is useful for sending events that do not require a response. When `True`, a
-        `ValueError` will be raised if the response `"success"` field is not `True`.
+      wait_for_response: If `True`, the web socker backend will wait for a response from the
+        browser . If `False`, it is not guaranteed that the response will be available for reading
+        at a later time. This is useful for sending events that do not require a response. When
+        `True`, a `ValueError` will be raised if the response `"success"` field is not `True`.
       data: The event arguments, which must be serializable by `json.dumps`.
 
     Returns:
@@ -236,13 +234,10 @@ class WebSocketBackend(SerializingBackend):
       asyncio.run_coroutine_threadsafe(self.websocket.send(message), self.loop)
 
   async def setup(self):
-    """ Setup the simulation.
-
-    Sets up the websocket server. This will run in a separate thread.
-    """
+    """ Start the websocket server. This will run in a separate thread. """
 
     if not HAS_WEBSOCKETS:
-      raise RuntimeError("The simulator requires websockets to be installed.")
+      raise RuntimeError("The WebSocketBackend requires websockets to be installed.")
 
     async def run_server():
       self._stop_ = self.loop.create_future()
@@ -275,16 +270,14 @@ class WebSocketBackend(SerializingBackend):
     self.setup_finished = True
 
   async def stop(self):
-    """ Stop the simulation. """
+    """ Stop the web socket server. """
 
-    if self.loop is None:
-      raise ValueError("Cannot stop simulation when it has not been started.")
+    if self.has_connection():
+      # send stop event to the browser
+      await self.send_command("stop", wait_for_response=False)
 
-    # send stop event to the browser
-    await self.send_command("stop", wait_for_response=False)
-
-    # must be thread safe, because event loop is running in a separate thread
-    self.loop.call_soon_threadsafe(self.stop_.set_result, "done")
+      # must be thread safe, because event loop is running in a separate thread
+      self.loop.call_soon_threadsafe(self.stop_.set_result, "done")
 
     # Clear all relevant attributes.
     self._sent_messages.clear()
