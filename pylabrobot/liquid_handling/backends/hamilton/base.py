@@ -322,14 +322,14 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       offset = ops[i].offset
 
       x_pos = ops[i].resource.get_absolute_location().x
-      if offset is None or isinstance(ops[i].resource, (TipSpot, Well)):
+      if isinstance(ops[i].resource, (TipSpot, Well)):
         x_pos += ops[i].resource.center().x
       if offset is not None:
         x_pos += offset.x
       x_positions.append(int(x_pos*10))
 
       y_pos = ops[i].resource.get_absolute_location().y
-      if offset is None or isinstance(ops[i].resource, (TipSpot, Well)):
+      if isinstance(ops[i].resource, (TipSpot, Well)):
         y_pos += ops[i].resource.center().y
       if offset is not None:
         y_pos += offset.y
