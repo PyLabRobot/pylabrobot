@@ -40,7 +40,7 @@ class VantageDeck(HamiltonDeck):
       self.size = 1.3
 
       if not no_trash:
-        trash_x = size_x - 660 # only tested on small Vantage
+        trash_x = size_x - 460 # only tested on small Vantage
 
         # an experimentally informed guess.
         self.assign_child_resource(
