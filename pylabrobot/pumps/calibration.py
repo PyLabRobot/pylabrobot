@@ -56,6 +56,7 @@ class PumpCalibration:
       NotImplementedError: if the calibration filetype or format is not supported.
       ValueError: if num_items is not specified when calibration is a value.
     """
+
     if isinstance(calibration, dict):
       return PumpCalibration.load_from_dict(calibration)
     if isinstance(calibration, list):
@@ -70,7 +71,7 @@ class PumpCalibration:
       if calibration.endswith(".csv"):
         return PumpCalibration.load_from_csv(calibration)
       raise NotImplementedError("Calibration filetype not supported.")
-    return PumpCalibration()
+    raise NotImplementedError("Calibration format not supported.")
 
   @classmethod
   def load_from_json(cls, file: str) -> PumpCalibration:
@@ -85,6 +86,7 @@ class PumpCalibration:
     Raises:
       TypeError: if the calibration pulled from the json is not a dictionary or list.
     """
+
     with open(file, "rb") as f:
       calibration = json.load(f)
     if isinstance(calibration, dict):
@@ -106,8 +108,8 @@ class PumpCalibration:
     """
 
     with open(file, encoding="utf-8", newline="") as f:
-      reader = csv.DictReader(f)
-      calibration = {int(row["0"]): float(row["1"]) for row in reader}
+      reader = csv.reader(f)
+      calibration = {int(row[0]): float(row[1]) for row in reader}
     return PumpCalibration.load_from_dict(calibration)
 
   @classmethod

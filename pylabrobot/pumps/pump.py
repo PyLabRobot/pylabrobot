@@ -29,9 +29,11 @@ class Pump(Machine):
       model=model,
     )
     self.backend: PumpBackend = backend # fix type
+    if calibration is not None and len(calibration) != 1:
+      raise ValueError("Calibration may only have a single item for this pump")
     self.calibration = calibration
 
-  def run_revolutions(self, num_revolutions: float):
+  async def run_revolutions(self, num_revolutions: float):
     """ Run a given number of revolutions. This method will return after the command has been sent,
     and the pump will run until `halt` is called.
 
@@ -41,7 +43,7 @@ class Pump(Machine):
 
     self.backend.run_revolutions(num_revolutions=num_revolutions)
 
-  def run_continuously(self, speed: float):
+  async def run_continuously(self, speed: float):
     """ Run continuously at a given speed. This method will return after the command has been sent,
     and the pump will run until `halt` is called.
 
@@ -67,8 +69,7 @@ class Pump(Machine):
     await asyncio.sleep(duration)
     await self.run_continuously(speed=0)
 
-  async def pump_volume(self, speed: Union[float, int],
-                        volume: Union[float, int]):
+  async def pump_volume(self, speed: Union[float, int], volume: Union[float, int]):
     """ Run the pump at specified speed for the specified volume. Note that this function requires
     the pump to be calibrated at the input speed.
 
@@ -81,11 +82,11 @@ class Pump(Machine):
       raise TypeError(
         "Pump is not calibrated. Volume based pumping and related functions unavailable.")
     if self.calibration.calibration_mode == "duration":
-      duration = volume / self.calibration
+      duration = volume / self.calibration[0]
       await self.run_for_duration(speed=speed, duration=duration)
     elif self.calibration.calibration_mode == "revolutions":
-      num_revolutions = volume / self.calibration
-      self.run_revolutions(num_revolutions=num_revolutions)
+      num_revolutions = volume / self.calibration[0]
+      await self.run_revolutions(num_revolutions=num_revolutions)
     else:
       raise ValueError("Calibration mode not recognized.")
 

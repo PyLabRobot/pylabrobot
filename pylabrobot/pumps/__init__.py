@@ -1,3 +1,4 @@
+from .errors import NotCalibratedError
 from .pump import Pump
 from .pumparray import PumpArray
 from .calibration import PumpCalibration

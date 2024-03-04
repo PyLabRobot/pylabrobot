@@ -1,54 +1,13 @@
-from typing import Optional, Dict
+import unittest
+from unittest.mock import AsyncMock, Mock, call
 
+from pymodbus.client import AsyncModbusSerialClient  # type: ignore
+
+from pylabrobot.pumps import PumpArray
 from pylabrobot.pumps.agrowpumps import AgrowPumpArray
 
-class AgrowPumpArrayTester(AgrowPumpArray):
-  """
-  AgrowPumpArrayTester allows users to test AgrowPumpArray.
-  """
 
-  def __init__(self, port: str,
-               address: int,
-               pump_index_to_address: Optional[Dict[int, int]] = None):
-    super().__init__(port=port, address=address, pump_index_to_address=pump_index_to_address)
-    self._modbus: Optional[SimulatedModbusClient] = None
-
-  @property
-  def modbus(self) -> "SimulatedModbusClient":
-    """ Returns the simulated Modbus connection to the AgrowPumpArrayTester.
-
-    Returns:
-      SimulatedModbusClient: The Modbus connection to the AgrowPumpArray.
-    """
-
-    if self._modbus is None:
-      raise RuntimeError("Modbus connection not established")
-    return self._modbus
-
-
-  async def setup(self):
-    """ Sets up the Modbus connection to the AgrowPumpArray and creates the
-    pump mappings needed to issue commands.
-
-    Awaitable:
-      self.modbus.connect(): This method connects to the AgrowPumpArray via Modbus.
-    """
-    self._modbus = SimulatedModbusClient()
-    response = self.modbus.connect()
-    if not response:
-      raise ConnectionError("Modbus connection failed during pump setup")
-    self.start_keep_alive_thread()
-    if self.modbus.connected:
-        register_return = \
-          self.modbus.read_holding_registers(19, 2, unit=self.unit)
-        self.agrow_pump_array_num_channels = \
-          int("".join(chr(r // 256) + chr(r % 256) for r in register_return.registers)[2])
-    else:
-      raise ConnectionError("Modbus connection failed during pump setup")
-    self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
-
-
-class SimulatedModbusClient:
+class SimulatedModbusClient(AsyncModbusSerialClient):
   """
   SimulatedModbusClient allows users to simulate Modbus communication.
 
@@ -57,30 +16,77 @@ class SimulatedModbusClient:
   """
 
   def __init__(self, connected: bool = False):
-    self.connected = connected
+    # pylint: disable=super-init-not-called
+    self._connected = connected
+    self._is_socket_open = False
 
-  def connect(self):
-    self.connected = True
+  async def connect(self):
+    self._connected = True
+    self._is_socket_open = True
 
-  @staticmethod
-  def read_holding_registers(*args, **kwargs):
+  def is_socket_open(self):
+    return self._is_socket_open
+
+  def read_holding_registers(self, address, count, **kwargs):
     """ Simulates reading holding registers from the AgrowPumpArray. """
     if "unit" not in kwargs:
       raise ValueError("unit must be specified")
-    if args[0] == 19:
-      return_register = type("return_register",
-                             (object,),
-                             {"registers": [16708, 13824, 0, 0, 0, 0, 0]})()
-      return_register.registers = return_register.registers[:args[1]]
+    if address == 19:
+      return_register = Mock()
+      return_register.registers = [16708, 13824, 0, 0, 0, 0, 0][:count]
       return return_register
 
-  def write_register(self, *args, **kwargs):
-    assert self.connected, "Modbus connection not established"
-    if "unit" not in kwargs:
-      raise ValueError("unit must be specified")
-    if args[0] not in range(100, 107):
-      raise ValueError("address out of range")
+  def is_active(self) -> bool:
+    return True
+
+  write_register = AsyncMock()
 
   def close(self):
     assert self.connected, "Modbus connection not established"
-    self.connected = False
+    self._connected = False
+    self._is_socket_open = False
+
+
+class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
+  """ TestAgrowPumps allows users to test AgrowPumps. """
+
+  async def asyncSetUp(self):
+    self.agrow_backend = AgrowPumpArray(port="simulated", address=1)
+    async def _mock_setup_modbus():
+      # pylint: disable=protected-access
+      self.agrow_backend._modbus = SimulatedModbusClient()
+
+    # pylint: disable=protected-access
+    self.agrow_backend._setup_modbus = _mock_setup_modbus # type: ignore[method-assign]
+
+    self.pump_array = PumpArray(backend=self.agrow_backend)
+    await self.pump_array.setup()
+
+  async def asyncTearDown(self):
+    await self.pump_array.stop()
+
+  async def test_setup(self):
+    self.assertEqual(self.agrow_backend.port, "simulated")
+    self.assertEqual(self.agrow_backend.address, 1)
+    self.assertEqual(self.agrow_backend._pump_index_to_address, # pylint: disable=protected-access
+                      {pump: pump + 100 for pump in range(0, 6)})
+
+  async def test_run_continuously(self):
+    self.agrow_backend.modbus.write_register.reset_mock() # type: ignore[attr-defined]
+    await self.pump_array.run_continuously(speed=1, use_channels=[0])
+    self.agrow_backend.modbus.write_register \
+      .assert_called_once_with(100, 1, unit=1) # type: ignore[attr-defined]
+
+    # invalid speed: cannot be bigger than 100
+    with self.assertRaises(ValueError):
+      await self.pump_array.run_continuously(speed=[101], use_channels=[0])
+
+  async def test_run_revolutions(self):
+    # not implemented for the agrow pump
+    with self.assertRaises(NotImplementedError):
+      await self.pump_array.run_revolutions(num_revolutions=1.0, use_channels=1)
+
+  async def test_halt(self):
+    await self.pump_array.halt()
+    self.agrow_backend.modbus.write_register.assert_has_calls( # type: ignore[attr-defined]
+      [call(100 + i, 0, unit=1) for i in range(6)])

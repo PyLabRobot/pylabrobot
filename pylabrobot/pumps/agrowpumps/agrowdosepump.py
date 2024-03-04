@@ -1,11 +1,12 @@
-import time
-import threading
-from typing import Optional, List, Dict, Union
 import logging
+import threading
+import time
+from typing import Optional, List, Dict
 
 from pymodbus.client import AsyncModbusSerialClient  # type: ignore
 
 from pylabrobot.pumps.backend import PumpArrayBackend
+
 
 logger = logging.getLogger("pylabrobot")
 
@@ -13,6 +14,9 @@ logger = logging.getLogger("pylabrobot")
 class AgrowPumpArray(PumpArrayBackend):
   """
   AgrowPumpArray allows users to control AgrowPumps via Modbus communication.
+
+  https://www.agrowtek.com/doc/im/IM_MODBUS.pdf
+  https://agrowtek.com/doc/im/IM_LX1.pdf
 
   Attributes:
     port: The port that the AgrowPumpArray is connected to.
@@ -27,18 +31,17 @@ class AgrowPumpArray(PumpArrayBackend):
     self.port = port
     self.address = address
     self._keep_alive_thread: Optional[threading.Thread] = None
-    self._pump_index_to_address = None
-    self._modbus: Optional[Union[AsyncModbusSerialClient]] = None
+    self._pump_index_to_address: Optional[Dict[int, int]] = None
+    self._modbus: Optional[AsyncModbusSerialClient] = None
     self._num_channels: Optional[int] = None
     self._keep_alive_thread_active = False
 
   @property
-  def modbus(self) -> Union[AsyncModbusSerialClient]:
+  def modbus(self) -> AsyncModbusSerialClient:
     """ Returns the Modbus connection to the AgrowPumpArray.
 
     Returns:
-      Union[AsyncModbusSerialClient]: The Modbus connection to the
-      AgrowPumpArray.
+      AsyncModbusSerialClient: The Modbus connection to the AgrowPumpArray.
     """
 
     if self._modbus is None:
@@ -74,38 +77,40 @@ class AgrowPumpArray(PumpArrayBackend):
     """
 
     def keep_alive():
-      """ Sends a Modbus request every 25 seconds to keep the
-      connection alive.
+      """ Sends a Modbus request every 25 seconds to keep the connection alive.
+      Sleep for 0.1 seconds so we can respond to `stop` events fast.
       """
+      i = 0
       while self._keep_alive_thread_active:
-        time.sleep(25)
-        self.modbus.read_holding_registers(0, 1, unit=self.address)
+        time.sleep(0.1)
+        i += 1
+        if i == 250:
+          self.modbus.read_holding_registers(0, 1, unit=self.address)
+          i = 0
 
     self._keep_alive_thread_active = True
-    self._keep_alive_thread = threading.Thread(target=keep_alive(), daemon=True)
+    self._keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
     self._keep_alive_thread.start()
 
   async def setup(self):
     """ Sets up the Modbus connection to the AgrowPumpArray and creates the
     pump mappings needed to issue commands.
-
-    Awaitable:
-      self.modbus.connect(): This method connects to the AgrowPumpArray via Modbus.
     """
-    self._modbus = AsyncModbusSerialClient(port=self.port,
-                                  baudrate=115200, timeout=1, stopbits=1, bytesize=8, parity="E",
-                                  retry_on_empty=True)
-    response = self.modbus.connect()
-    if not response or not self.modbus.connected:
-      raise ConnectionError("Modbus connection failed during pump setup")
-    register_return = self.modbus.read_holding_registers(19, 2, unit=self.unit)
+    await self._setup_modbus()
+    register_return = self.modbus.read_holding_registers(19, 2, unit=self.address)
     self._num_channels = \
       int("".join(chr(r // 256) + chr(r % 256) for r in register_return.registers)[2])
     self.start_keep_alive_thread()
     self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
 
-  async def run_revolutions(self, num_revolutions: List[float],
-                            use_channels: List[int]):
+  async def _setup_modbus(self):
+    self._modbus = AsyncModbusSerialClient(port=self.port, baudrate=115200, timeout=1, stopbits=1,
+                                           bytesize=8, parity="E", retry_on_empty=True)
+    response = self.modbus.connect()
+    if not response or not self.modbus.connected:
+      raise ConnectionError("Modbus connection failed during pump setup")
+
+  async def run_revolutions(self, num_revolutions: List[float], use_channels: List[int]):
     """ Run the specified channels at the speed selected. If speed is 0, the pump will be halted.
 
     Args:
@@ -119,8 +124,7 @@ class AgrowPumpArray(PumpArrayBackend):
     raise NotImplementedError(
       "Revolution based pumping commands are not available for this pump array.")
 
-  async def run_continuously(self, speed: List[float],
-                             use_channels: List[int]):
+  async def run_continuously(self, speed: List[float], use_channels: List[int]):
     """ Run pumps at the specified speeds.
 
     Args:
@@ -132,14 +136,12 @@ class AgrowPumpArray(PumpArrayBackend):
       ValueError: Pump speed out of range
     """
 
-    if any(channel not in range(0, self.num_channels) for channel in use_channels):
-      raise ValueError(f"Pump address out of range for this pump array. \
-        Value should be between 0 and {self.num_channels}")
     for pump_index, pump_speed in zip(use_channels, speed):
       pump_speed = int(pump_speed)
       if pump_speed not in range(101):
         raise ValueError("Pump speed out of range. Value should be between 0 and 100.")
-      self.modbus.write_register(self.pump_index_to_address[pump_index], pump_speed, unit=self.unit)
+      self.modbus.write_register(self.pump_index_to_address[pump_index], pump_speed,
+                                 unit=self.address)
 
   async def halt(self):
     """ Halt the entire pump array. """
@@ -148,7 +150,7 @@ class AgrowPumpArray(PumpArrayBackend):
     logger.info("Halting pump array")
     for pump in self.pump_index_to_address:
       address = self.pump_index_to_address[pump]
-      self.modbus.write_register(address, 0, unit=self.unit)
+      self.modbus.write_register(address, 0, unit=self.address)
 
   async def stop(self):
     """ Close the connection to the pump array. """
@@ -158,4 +160,5 @@ class AgrowPumpArray(PumpArrayBackend):
       self._keep_alive_thread_active = False
       self._keep_alive_thread.join()
     self.modbus.close()
+    # TODO(marielle): fix is_socket_open for Async
     assert not self.modbus.is_socket_open(), "Modbus failing to disconnect"

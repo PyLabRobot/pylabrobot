@@ -2,6 +2,8 @@
   "editor.tabSize": 2,
   "files.trimTrailingWhitespace": true,
   "cSpell.words": [
+    "agrow",
+    "agrowpumps",
     "coro",
     "Defaultable",
     "frontmost",
@@ -10,7 +12,7 @@
     "jsonify",
     "klass",
     "labware",
-    "pyhamilton",
+    "modbus",
     "pylabrobot",
     "pytest",
     "subclassing",

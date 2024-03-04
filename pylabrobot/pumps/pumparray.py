@@ -3,6 +3,7 @@ from typing import Union, Optional, List, Literal
 
 from pylabrobot.machine import Machine
 from pylabrobot.pumps.backend import PumpArrayBackend
+from pylabrobot.pumps.errors import NotCalibratedError
 from pylabrobot.pumps.calibration import PumpCalibration
 
 
@@ -64,12 +65,19 @@ class PumpArray(Machine):
       use_channels = [use_channels]
     if isinstance(speed, (float, int)):
       speed = [speed] * len(use_channels)
+
+    if any(channel not in range(0, self.num_channels) for channel in use_channels):
+      raise ValueError(f"Pump address out of range for this pump array. \
+        Value should be between 0 and {self.num_channels}")
+    if any(speed < 0 for speed in speed):
+      raise ValueError("Speed must be positive.")
     if isinstance(speed[0], int):
       speed = [float(x) for x in speed]
     if len(speed) != len(use_channels):
       raise ValueError("Speed and use_channels must be the same length.")
     if any(channel < 0 for channel in use_channels):
       raise ValueError("Channels in use channels must be positive.")
+
     await self.backend.run_continuously(speed=speed,  # type: ignore[arg-type]
                                         use_channels=use_channels)
 
@@ -103,11 +111,11 @@ class PumpArray(Machine):
       revolution ("revolutions").
 
     Raises:
-      TypeError: if the pump is not calibrated.
+      NotCalibratedError: if the pump is not calibrated.
     """
 
     if self.calibration is None:
-      raise TypeError("Pump is not calibrated. Volume based pumping and related functions "
+      raise NotCalibratedError("Pump is not calibrated. Volume based pumping and related functions "
                       "unavailable.")
     if isinstance(use_channels, int):
       use_channels = [use_channels]

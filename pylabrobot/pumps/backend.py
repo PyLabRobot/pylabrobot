@@ -1,10 +1,10 @@
 from abc import ABCMeta, abstractmethod
 from typing import List
 
-from pylabrobot.machine import Machine
+from pylabrobot.machine import MachineBackend
 
 
-class PumpBackend(Machine, metaclass=ABCMeta):
+class PumpBackend(MachineBackend, metaclass=ABCMeta):
   """ Abstract base class for pump backends. """
 
   def run_revolutions(self, num_revolutions: float):
@@ -30,22 +30,20 @@ class PumpBackend(Machine, metaclass=ABCMeta):
     """ Close the connection to the pump. """
 
 
-class PumpArrayBackend(Machine, metaclass=ABCMeta):
+class PumpArrayBackend(MachineBackend, metaclass=ABCMeta):
   """
-    Abstract base class for pump array backends.
+  Abstract base class for pump array backends.
 
-    For more information on some methods and arguments, see the documentation for the
-    :class:`~PumpArray` class.
-
-    """
+  For more information on some methods and arguments, see the documentation for the
+  :class:`~PumpArray` class.
+  """
 
   @property
   @abstractmethod
   def num_channels(self) -> int:
     """ The number of channels that the pump array has. """
 
-  async def run_revolutions(self, num_revolutions: List[float],
-                            use_channels: List[int]):
+  async def run_revolutions(self, num_revolutions: List[float], use_channels: List[int]):
     """Run the specified channels at the speed selected.
     If speed is 0, the pump will be halted.
 
@@ -54,8 +52,7 @@ class PumpArrayBackend(Machine, metaclass=ABCMeta):
       use_channels: pump array channels to run
     """
 
-  async def run_continuously(self, speed: List[float],
-                             use_channels: List[int]):
+  async def run_continuously(self, speed: List[float], use_channels: List[int]):
     """Run for a given number of revolutions.
     Args:
       speed: rate at which to run pump.
