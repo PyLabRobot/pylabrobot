@@ -1716,7 +1716,7 @@ class STAR(HamiltonLiquidHandler):
     cut_off_speed: Optional[List[int]] = None,
     stop_back_volume: Optional[List[int]] = None,
     transport_air_volume: Optional[List[int]] = None,
-    lld_mode: Optional[List[int]] = None,
+    lld_mode: Optional[List[LLDMode]] = None,
     dispense_position_above_z_touch_off: Optional[List[int]] = None,
     gamma_lld_sensitivity: Optional[List[int]] = None,
     dp_lld_sensitivity: Optional[List[int]] = None,
@@ -1860,7 +1860,7 @@ class STAR(HamiltonLiquidHandler):
                                 (hlc.aspiration_blow_out_volume
                                   if hlc is not None else 0)*10))
                             for op, hlc in zip(ops, hamilton_liquid_classes)]
-    lld_mode = _fill_in_defaults(lld_mode, [0]*n)
+    lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF]*n)
     dispense_position_above_z_touch_off = _fill_in_defaults(dispense_position_above_z_touch_off,
       default=[0]*n)
     gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1]*n)
@@ -1902,7 +1902,7 @@ class STAR(HamiltonLiquidHandler):
         stop_back_volume=stop_back_volume,
         transport_air_volume=transport_air_volume,
         blow_out_air_volume=blow_out_air_volumes,
-        lld_mode=lld_mode,
+        lld_mode=[mode.value for mode in lld_mode],
         dispense_position_above_z_touch_off=dispense_position_above_z_touch_off,
         gamma_lld_sensitivity=gamma_lld_sensitivity,
         dp_lld_sensitivity=dp_lld_sensitivity,
