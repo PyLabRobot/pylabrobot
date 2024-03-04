@@ -35,10 +35,16 @@ class TestCalibration(unittest.TestCase):
     self.assertRaises(TypeError, PumpCalibration.load_calibration, json_null_path)
 
   def test_load_from_csv(self):
+    csv_path = os.path.join(plr_directory, "single_column_test_calibration.csv")
+    calibration = PumpCalibration.load_calibration(csv_path)
+    self.assertEqual(calibration[0], 1.0)
+    self.assertEqual(calibration[1], 1.0)
     csv_path = os.path.join(plr_directory, "test_calibration.csv")
     calibration = PumpCalibration.load_calibration(csv_path)
     self.assertEqual(calibration[0], 1.0)
     self.assertEqual(calibration[1], 1.0)
+    csv_path = os.path.join(plr_directory, "null_test_calibration.csv")
+    self.assertRaises(ValueError, PumpCalibration.load_calibration, csv_path)
 
   def test_load_from_dict(self):
     calibration = PumpCalibration.load_calibration({0: 1.0, 1: 2.0})
@@ -76,3 +82,23 @@ class TestCalibration(unittest.TestCase):
     calibration = PumpCalibration.load_calibration(test_value, 2)
     self.assertEqual(calibration[0], 1.0)
     self.assertEqual(calibration[1], 1.0)
+
+  def test_calibration_mode(self):
+    calibration = PumpCalibration([1.0, 2.0], calibration_mode="revolutions")
+    self.assertEqual(calibration.calibration_mode, "revolutions")
+
+    calibration = PumpCalibration.load_calibration({0: 1.0, 1: 2.0}, calibration_mode="revolutions")
+    self.assertEqual(calibration.calibration_mode, "revolutions")
+
+    calibration = PumpCalibration.load_calibration(1.0, 2)
+    self.assertEqual(calibration.calibration_mode, "duration")
+
+  def test_calibration_mode_errors(self):
+    with self.assertRaises(ValueError):
+      PumpCalibration.load_calibration([1.0, 2.0], calibration_mode="invalid")
+
+    with self.assertRaises(ValueError):
+      PumpCalibration.load_calibration({0: 1.0, 1: 2.0}, calibration_mode="invalid")
+
+    with self.assertRaises(ValueError):
+      PumpCalibration.load_calibration(1.0, 2, calibration_mode="invalid")
