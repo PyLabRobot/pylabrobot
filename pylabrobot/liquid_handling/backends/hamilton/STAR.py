@@ -3891,7 +3891,8 @@ class STAR(HamiltonLiquidHandler):
     Dispensing of liquid using PIP.
 
     LLD restrictions!
-      - "dP and Dual LLD" are used in aspiration only. During dispensation LLD is set to OFF.
+      - "dP and Dual LLD" are used in aspiration only. During dispensation all pressure-based 
+        LLD is set to OFF.
       - "side touch off" turns LLD & "Z touch off" to OFF , is not available for simultaneous
         Asp/Disp. command
 
