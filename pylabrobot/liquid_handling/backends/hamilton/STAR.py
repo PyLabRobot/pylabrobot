@@ -1541,16 +1541,22 @@ class STAR(HamiltonLiquidHandler):
       blow_out = [False] * n
 
     if hamilton_liquid_classes is None:
-      hamilton_liquid_classes = [
-        get_star_liquid_class(
+      hamilton_liquid_classes = []
+      for i, op in enumerate(ops):
+        liquid = Liquid.WATER # default to WATER
+        # [-1][0]: get last liquid in well, [0] is indexing into the tuple
+        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
+          liquid = op.liquids[-1][0]
+
+        hamilton_liquid_classes.append(get_star_liquid_class(
           tip_volume=op.tip.maximal_volume,
           is_core=False,
           is_tip=True,
           has_filter=op.tip.has_filter,
-          liquid=op.liquids[-1][0] or Liquid.WATER, # get last liquid in well, first to be aspirated
+          liquid=liquid,
           jet=jet[i],
           blow_out=blow_out[i]
-        ) for i, op in enumerate(ops)]
+        ))
 
     self._assert_valid_resources([op.resource for op in ops])
 
@@ -1810,16 +1816,22 @@ class STAR(HamiltonLiquidHandler):
       blow_out = [False] * n
 
     if hamilton_liquid_classes is None:
-      hamilton_liquid_classes = [
-        get_star_liquid_class(
+      hamilton_liquid_classes = []
+      for i, op in enumerate(ops):
+        liquid = Liquid.WATER # default to WATER
+        # [-1][0]: get last liquid in tip, [0] is indexing into the tuple
+        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
+          liquid = op.liquids[-1][0]
+
+        hamilton_liquid_classes.append(get_star_liquid_class(
           tip_volume=op.tip.maximal_volume,
           is_core=False,
           is_tip=True,
           has_filter=op.tip.has_filter,
-          liquid=op.liquids[-1][0] or Liquid.WATER, # get last liquid in pipette, first to be disp.
+          liquid=liquid,
           jet=jet[i],
-          blow_out=blow_out[i], # see comment in method docstring
-        ) for i, op in enumerate(ops)]
+          blow_out=blow_out[i]
+        ))
 
     # correct volumes using the liquid class
     for op, hlc in zip(ops, hamilton_liquid_classes):
@@ -2083,13 +2095,17 @@ class STAR(HamiltonLiquidHandler):
 
     liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
 
+    liquid_to_be_aspirated = Liquid.WATER
+    if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][0][0] is not None:
+      # [channel][liquid][PyLabRobot.resources.liquid.Liquid]
+      liquid_to_be_aspirated = aspiration.liquids[0][0][0]
     hlc = hlc or get_star_liquid_class(
       tip_volume=tip.maximal_volume,
       is_core=True,
       is_tip=True,
       has_filter=tip.has_filter,
       # get last liquid in pipette, first to be dispensed
-      liquid=aspiration.liquids[-1][0][0] or Liquid.WATER,
+      liquid=liquid_to_be_aspirated,
       jet=jet,
       blow_out=blow_out, # see comment in method docstring
     )
@@ -2263,13 +2279,17 @@ class STAR(HamiltonLiquidHandler):
 
     dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 
+    liquid_to_be_dispensed = Liquid.WATER # default to water.
+    if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
+      # [channel][liquid][PyLabRobot.resources.liquid.Liquid]
+      liquid_to_be_dispensed = dispense.liquids[0][-1][0]
     hlc = hlc or get_star_liquid_class(
       tip_volume=tip.maximal_volume,
       is_core=True,
       is_tip=True,
       has_filter=tip.has_filter,
       # get last liquid in pipette, first to be dispensed
-      liquid=dispense.liquids[-1][0][0] or Liquid.WATER,
+      liquid=liquid_to_be_dispensed,
       jet=jet,
       blow_out=blow_out, # see comment in method docstring
     )
@@ -6168,7 +6188,7 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level: collision control level 1 = high 0 = low. Must be between 0 and 1.
             Default 1.
       acceleration_index_high_acc: acceleration index high acc. Must be between 0 and 4. Default 4.
-      acceleration_index_low_acc: acceleration index high acc. Must be between 0 and 4. Default 1.
+      acceleration_index_low_acc: acceleration index low acc. Must be between 0 and 4. Default 1.
     """
 
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"

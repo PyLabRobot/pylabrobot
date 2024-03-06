@@ -519,6 +519,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "ms0010 0010 0010&mh0000 0000 0000&gi000 000 000&gj0gk0",
       fmt=DISPENSE_RESPONSE_FORMAT)
 
+  async def test_zero_volume_liquid_handling(self):
+    # just test that this does not throw an error
+    self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    await self.lh.aspirate(self.plate["A1"], vols=[0])
+    await self.lh.dispense(self.plate["A1"], vols=[0])
+
   async def test_core_96_tip_pickup(self):
     await self.lh.pick_up_tips96(self.tip_rack)
 
@@ -568,6 +576,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "da#xs#####xd#yh##6#zh####ze####lz####zt####zm##6#iw###ix#fh###df#####dg####vt###"
       "bv#####cm#cs#bs####wh##hv#####hc##hp###hs####es####ev###zv####ej##zq#6###mj###cj#cx#cr###"
       "cw************************pp####")
+
+  async def test_zero_volume_liquid_handling96(self):
+    # just test that this does not throw an error
+    await self.lh.pick_up_tips96(self.tip_rack)
+    assert self.plate.lid is not None
+    self.plate.lid.unassign()
+    await self.lh.aspirate_plate(self.plate, 0)
+    await self.lh.dispense_plate(self.plate, 0)
 
   async def test_iswap(self):
     await self.lh.move_plate(self.plate, self.plt_car[2])
