@@ -1606,7 +1606,7 @@ class STAR(HamiltonLiquidHandler):
     detection_height_difference_for_dual_lld = \
       _fill_in_defaults(detection_height_difference_for_dual_lld, [0]*n)
     swap_speed = _fill_in_defaults(swap_speed,
-      default=[int(hlc.aspiration_swap_speed*10) if hlc is not None else 0
+      default=[int(hlc.aspiration_swap_speed*10) if hlc is not None else 100
                for hlc in hamilton_liquid_classes])
     settling_time = _fill_in_defaults(settling_time,
       default=[int(hlc.aspiration_settling_time*10) if hlc is not None else 0
@@ -1616,7 +1616,7 @@ class STAR(HamiltonLiquidHandler):
     homogenization_position_from_liquid_surface = \
       _fill_in_defaults(homogenization_position_from_liquid_surface, [0]*n)
     homogenization_speed = _fill_in_defaults(homogenization_speed,
-        default=[int(hlc.aspiration_mix_flow_rate*10) if hlc is not None else 0
+        default=[int(hlc.aspiration_mix_flow_rate*10) if hlc is not None else 500
                for hlc in hamilton_liquid_classes])
     homogenization_surface_following_distance = \
       _fill_in_defaults(homogenization_surface_following_distance, [0]*n)
@@ -1878,7 +1878,7 @@ class STAR(HamiltonLiquidHandler):
     gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1]*n)
     dp_lld_sensitivity = _fill_in_defaults(dp_lld_sensitivity, [1]*n)
     swap_speed = _fill_in_defaults(swap_speed,
-      default=[int(hlc.dispense_swap_speed*10) if hlc is not None else 0
+      default=[int(hlc.dispense_swap_speed*10) if hlc is not None else 100
         for hlc in hamilton_liquid_classes])
     settling_time = _fill_in_defaults(settling_time,
       default=[int(hlc.dispense_settling_time*10) if hlc is not None else 0
@@ -1887,7 +1887,7 @@ class STAR(HamiltonLiquidHandler):
     mix_cycles = _fill_in_defaults(mix_cycles, [0]*n)
     mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0]*n)
     mix_speed = _fill_in_defaults(mix_speed,
-      default=[int(hlc.dispense_mix_flow_rate*10) if hlc is not None else 0
+      default=[int(hlc.dispense_mix_flow_rate*10) if hlc is not None else 500
         for hlc in hamilton_liquid_classes])
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0]*n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0]*n)
@@ -3911,7 +3911,7 @@ class STAR(HamiltonLiquidHandler):
     Dispensing of liquid using PIP.
 
     LLD restrictions!
-      - "dP and Dual LLD" are used in aspiration only. During dispensation all pressure-based 
+      - "dP and Dual LLD" are used in aspiration only. During dispensation all pressure-based
         LLD is set to OFF.
       - "side touch off" turns LLD & "Z touch off" to OFF , is not available for simultaneous
         Asp/Disp. command
