@@ -210,6 +210,25 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(plate.get_absolute_location(),
       Coordinate(1000, 1000, 1000))
 
+  async def test_move_lid(self):
+    plate = Plate("plate", size_x=100, size_y=100, size_z=15, lid_height=10, items=[])
+    plate.location = Coordinate(0, 0, 100)
+    lid = Lid(name="lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
+      size_z=plate.lid_height)
+    lid.location = Coordinate(100, 100, 200)
+
+    assert plate.get_absolute_location().x != lid.get_absolute_location().x
+    assert plate.get_absolute_location().y != lid.get_absolute_location().y
+    assert plate.get_absolute_location().z + plate.get_size_z() - plate.lid_height \
+      != lid.get_absolute_location().z
+
+    await self.lh.move_lid(lid, plate)
+
+    assert plate.get_absolute_location().x == lid.get_absolute_location().x
+    assert plate.get_absolute_location().y == lid.get_absolute_location().y
+    assert plate.get_absolute_location().z + plate.get_size_z() - plate.lid_height \
+      == lid.get_absolute_location().z
+
   def test_serialize(self):
     serialized = self.lh.serialize()
     deserialized = LiquidHandler.deserialize(serialized)
