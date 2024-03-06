@@ -580,16 +580,21 @@ class Vantage(HamiltonLiquidHandler):
       blow_out = [False]*len(ops)
 
     if hlcs is None:
-      hlcs = [
-        get_vantage_liquid_class(
+      hlcs = []
+      for j, bo, op in zip(jet, blow_out, ops):
+        liquid = Liquid.WATER # default to WATER
+        # [-1][0]: get last liquid in well, [0] is indexing into the tuple
+        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
+          liquid = op.liquids[-1][0]
+        hlcs.append(get_vantage_liquid_class(
           tip_volume=op.tip.maximal_volume,
           is_core=False,
           is_tip=True,
           has_filter=op.tip.has_filter,
-          liquid=op.liquids[-1][0] or Liquid.WATER,
-          jet=jet[i],
-          blow_out=blow_out[i]
-        ) for i, op in enumerate(ops)]
+          liquid=liquid,
+          jet=j,
+          blow_out=bo
+        ))
 
     self._assert_valid_resources([op.resource for op in ops])
 
@@ -735,16 +740,22 @@ class Vantage(HamiltonLiquidHandler):
       blow_out = [False]*len(ops)
 
     if hlcs is None:
-      hlcs = [
-        get_vantage_liquid_class(
+      hlcs = []
+      for j, bo, op in zip(jet, blow_out, ops):
+        liquid = Liquid.WATER # default to WATER
+        # [-1][0]: get last liquid in tip, [0] is indexing into the tuple
+        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
+          liquid = op.liquids[-1][0]
+        hlcs.append(get_vantage_liquid_class(
           tip_volume=op.tip.maximal_volume,
           is_core=False,
           is_tip=True,
           has_filter=op.tip.has_filter,
-          liquid=op.liquids[-1][0] or Liquid.WATER,
-          jet=jet,
-          blow_out=bo # see method docstring
-        ) for jet, bo, op in zip(jet, blow_out, ops)]
+          liquid=liquid,
+          jet=j,
+          blow_out=bo,
+        ))
+
     self._assert_valid_resources([op.resource for op in ops])
 
     # correct volumes using the liquid class
@@ -916,14 +927,17 @@ class Vantage(HamiltonLiquidHandler):
       (aspiration.offset.z if aspiration.offset is not None else 0)
 
     tip = aspiration.tips[0]
+    liquid_to_be_aspirated = Liquid.WATER # default to water
+    if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][-1][0] is not None:
+      # first part of tuple in last liquid of first well
+      liquid_to_be_aspirated = aspiration.liquids[0][-1][0]
     if hlc is None:
       hlc = get_vantage_liquid_class(
         tip_volume=tip.maximal_volume,
         is_core=True,
         is_tip=True,
         has_filter=tip.has_filter,
-        # first part of tuple in last liquid of first well
-        liquid=aspiration.liquids[0][-1][0] or Liquid.WATER,
+        liquid=liquid_to_be_aspirated,
         jet=jet,
         blow_out=blow_out
       )
@@ -1039,14 +1053,17 @@ class Vantage(HamiltonLiquidHandler):
       (dispense.offset.z if dispense.offset is not None else 0)
 
     tip = dispense.tips[0]
+    liquid_to_be_dispensed = Liquid.WATER # default to WATER
+    if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
+      # first part of tuple in last liquid of first well
+      liquid_to_be_dispensed = dispense.liquids[0][-1][0]
     if hlc is None:
       hlc = get_vantage_liquid_class(
         tip_volume=tip.maximal_volume,
         is_core=True,
         is_tip=True,
         has_filter=tip.has_filter,
-        # first part of tuple in last liquid of first well
-        liquid=dispense.liquids[0][-1][0] or Liquid.WATER,
+        liquid=liquid_to_be_dispensed,
         jet=jet,
         blow_out=blow_out # see method docstring
       )
