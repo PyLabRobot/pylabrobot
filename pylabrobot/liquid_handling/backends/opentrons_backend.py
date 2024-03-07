@@ -28,7 +28,7 @@ from pylabrobot import utils
 
 PYTHON_VERSION = sys.version_info[:2]
 
-if PYTHON_VERSION <= (3, 10):
+if PYTHON_VERSION == (3, 10):
   try:
     import ot_api
     USE_OT = True
@@ -39,7 +39,7 @@ else:
 
 
 class OpentronsBackend(LiquidHandlerBackend):
-  """ Backends for the Opentrons liquid handling robots. Only supported on Python 3.10 and below.
+  """ Backends for the Opentrons liquid handling robots. Only supported on Python 3.10.
   """
 
   pipette_name2volume = {
