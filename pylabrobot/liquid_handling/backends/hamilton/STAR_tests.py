@@ -607,14 +607,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "C0PPid0003xs03475xd0yj1145yd0zj1924zd0th2840te2840gw4gb1237go1300gt20gr1ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#th####te####gw#gb####go####gt##gr#ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0004xs10430xd0yj3282yd0zj2063zd0th2840te2840go0890gr3ga0",
+      "C0PRid0004xs10430xd0yj3282yd0zj2063zd0th2840te2840go1300gr1ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####go####gr#ga#")
 
     await self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0],
       pickup_distance_from_top=8.2, get_direction=GripDirection.FRONT,
       put_direction=GripDirection.FRONT)
     self._assert_command_sent_once(
-      "C0PPid0005xs10430xd0yj3282yd0zj2063zd0gr3th2840te2840gw4go0890gb0827gt20ga0gc1",
+      "C0PPid0005xs10430xd0yj3282yd0zj2063zd0gr1th2840te2840gw4go1300gb1237gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
       "C0PRid0006xs03475xd0yj1145yd0zj1924zd0th2840te2840gr1go1300ga0",
