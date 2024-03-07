@@ -1542,7 +1542,7 @@ class LiquidHandler(Machine):
     elif isinstance(to, Plate):
       to.assign_child_resource(resource=lid)
     else:
-      raise Exception("'to' must be either a Coordinate, ResourceStack or Plate")
+      raise ValueError("'to' must be either a Coordinate, ResourceStack or Plate")
 
   async def move_plate(
     self,
