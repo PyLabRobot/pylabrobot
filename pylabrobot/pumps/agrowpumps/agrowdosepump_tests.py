@@ -18,34 +18,28 @@ class SimulatedModbusClient(AsyncModbusSerialClient):
   def __init__(self, connected: bool = False):
     # pylint: disable=super-init-not-called
     self._connected = connected
-    self._is_socket_open = False
 
   async def connect(self):
     self._connected = True
-    self._is_socket_open = True
 
-  def is_socket_open(self):
-    return self._is_socket_open
+  @property
+  def connected(self):
+    return self._connected
 
-  def read_holding_registers(self, address, count, **kwargs):
+  async def read_holding_registers(self, address, count, **kwargs):
     """ Simulates reading holding registers from the AgrowPumpArray. """
     if "unit" not in kwargs:
       raise ValueError("unit must be specified")
     if address == 19:
-      return_register = Mock()
+      return_register = AsyncMock()
       return_register.registers = [16708, 13824, 0, 0, 0, 0, 0][:count]
       return return_register
-
-  def is_active(self) -> bool:
-    return True
 
   write_register = AsyncMock()
 
   def close(self):
-    assert self.connected, "Modbus connection not established"
+    assert not self.connected, "Modbus connection not established"
     self._connected = False
-    self._is_socket_open = False
-
 
 class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
   """ TestAgrowPumps allows users to test AgrowPumps. """

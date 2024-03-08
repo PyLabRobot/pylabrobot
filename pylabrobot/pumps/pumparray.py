@@ -51,7 +51,7 @@ class PumpArray(Machine):
     await self.backend.run_revolutions(num_revolutions=num_revolutions, use_channels=use_channels)
 
   async def run_continuously(self, speed: Union[float, int, List[float], List[int]],
-                             use_channels: Union[int, List[int]]):
+                              use_channels: Union[int, List[int]]):
     """ Run the specified channels at the specified speeds.
 
     Args:
@@ -82,8 +82,8 @@ class PumpArray(Machine):
                                         use_channels=use_channels)
 
   async def run_for_duration(self, speed: Union[float, int, List[float], List[int]],
-                             use_channels: Union[int, List[int]],
-                             duration: Union[float, int]):
+                              use_channels: Union[int, List[int]],
+                              duration: Union[float, int]):
     """ Run the specified channels at the specified speeds for the specified duration.
 
     Args:
@@ -129,7 +129,7 @@ class PumpArray(Machine):
       raise ValueError("Speed, use_channels, and volume must be the same length.")
     if self.calibration_mode == "duration":
       durations = [channel_volume / self.calibration[channel] for channel, channel_volume in
-                   zip(use_channels, volume)]
+                    zip(use_channels, volume)]
       tasks = [asyncio.create_task(
         self.run_for_duration(speed=channel_speed,
                               use_channels=channel,
@@ -137,10 +137,10 @@ class PumpArray(Machine):
           for channel_speed, channel, duration in zip(speed, use_channels, durations)]
     elif self.calibration_mode == "revolutions":
       num_rotations = [channel_volume / self.calibration[channel] for channel, channel_volume in
-                       zip(use_channels, volume)]
+                        zip(use_channels, volume)]
       tasks = [asyncio.create_task(
         self.run_revolutions(num_revolutions=num_rotation,
-                             use_channels=channel))
+                              use_channels=channel))
           for num_rotation, channel in zip(num_rotations, use_channels)]
     else:
       raise ValueError("Calibration mode must be 'duration' or 'revolutions'.")

@@ -71,11 +71,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       await self.pump_array.run_continuously(speed=[1]*6, use_channels=[2, 3, 4, 5, 6, 7])
 
-    # TODO(marielle): what was invalid here?
-    # with self.assertRaises(ValueError):
-    #   await self.pump_array.run_continuously(speed=[1]*6, use_channels=[0, 1, 2, 3, 4, 5])
-
-    # invalid
+    # invalid: channels must be unique
     with self.assertRaises(ValueError):
       await self.pump_array.run_continuously(speed=[1]*6, use_channels=[1, 1, 1, 1, 1, 1])
 
