@@ -7,6 +7,7 @@ import sys
 from typing import Any, Callable, Dict, List, Optional, Type, cast
 
 from .coordinate import Coordinate
+from .errors import ResourceNotFoundError
 from pylabrobot.serializer import serialize, deserialize
 
 if sys.version_info >= (3, 11):
@@ -296,7 +297,7 @@ class Resource:
       except ValueError:
         pass
 
-    raise ValueError(f"Resource with name '{name}' does not exist.")
+    raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
 
   def get_2d_center_offsets(self, n: int = 1) -> List[Coordinate]:
     """ Get the offsets (from bottom left) of the center(s) of this resource.
