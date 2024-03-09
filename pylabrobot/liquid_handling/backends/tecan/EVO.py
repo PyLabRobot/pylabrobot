@@ -245,8 +245,7 @@ class EVO(TecanLiquidHandler):
       self.roma = RoMa(self, EVO.ROMA)
       await self.roma.position_initialization_x()
       # move to home position (TBD) after initialization
-      await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
-      await self.roma.action_move_vector_coordinate_position()
+      await self._park_roma()
     if self.liha_connected:
       self.liha = LiHa(self, EVO.LIHA)
       await self.liha.position_initialization_x()
@@ -281,6 +280,10 @@ class EVO(TecanLiquidHandler):
   async def _park_liha(self):
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
+
+  async def _park_roma(self):
+    await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
+    await self.roma.action_move_vector_coordinate_position()
 
   # ============== LiquidHandlerBackend methods ==============
 
@@ -868,7 +871,11 @@ class LiHa(EVOArm):
     for module, pos in EVOArm._pos_cache.items():
       if module == self.module:
         continue
-      if cur_x < pos < x or x < pos < cur_x or abs(pos - x) < 1500:
+      if cur_x < x and cur_x < pos < x: # moving right
+        raise TecanError("Invalid command (collision)", self.module, 2)
+      if cur_x > x and cur_x > pos > x:
+        raise TecanError("Invalid command (collision)", self.module, 2)
+      if abs(pos - x) < 1500:
         raise TecanError("Invalid command (collision)", self.module, 2)
 
     await self.backend.send_command(module=self.module, command="PAA", params=list([x, y, ys] + z))
@@ -1173,7 +1180,11 @@ class RoMa(EVOArm):
     for module, pos in EVOArm._pos_cache.items():
       if module == self.module:
         continue
-      if cur_x < pos < x or x < pos < cur_x or abs(pos - x) < 1500:
+      if cur_x < x and cur_x < pos < x: # moving right
+        raise TecanError("Invalid command (collision)", self.module, 2)
+      if cur_x > x and cur_x > pos > x: # moving left
+        raise TecanError("Invalid command (collision)", self.module, 2)
+      if abs(pos - x) < 1500:
         raise TecanError("Invalid command (collision)", self.module, 2)
 
     await self.backend.send_command(module=self.module, command="SAA",
