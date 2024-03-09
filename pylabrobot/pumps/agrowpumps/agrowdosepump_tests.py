@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import AsyncMock, Mock, call
+from unittest.mock import AsyncMock, call
 
 from pymodbus.client import AsyncModbusSerialClient  # type: ignore
 
@@ -27,6 +27,7 @@ class SimulatedModbusClient(AsyncModbusSerialClient):
     return self._connected
 
   async def read_holding_registers(self, address, count, **kwargs):
+    # pylint: disable=invalid-overridden-method
     """ Simulates reading holding registers from the AgrowPumpArray. """
     if "unit" not in kwargs:
       raise ValueError("unit must be specified")
