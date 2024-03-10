@@ -95,10 +95,13 @@ class TestCalibration(unittest.TestCase):
 
   def test_calibration_mode_errors(self):
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration([1.0, 2.0], calibration_mode="invalid")
+      PumpCalibration.load_calibration([1.0, 2.0],
+                                       calibration_mode="invalid") # type: ignore[arg-type]
 
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration({0: 1.0, 1: 2.0}, calibration_mode="invalid")
+      PumpCalibration.load_calibration({0: 1.0, 1: 2.0},
+                                       calibration_mode="invalid") # type: ignore[arg-type]
 
     with self.assertRaises(ValueError):
-      PumpCalibration.load_calibration(1.0, 2, calibration_mode="invalid")
+      PumpCalibration.load_calibration(1.0, 2,
+                                       calibration_mode="invalid") # type: ignore[arg-type]

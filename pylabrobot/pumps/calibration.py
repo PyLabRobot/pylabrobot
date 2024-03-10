@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import csv
+import json
 from typing import Union, Dict, List, Optional, Literal
 
 
@@ -12,9 +12,11 @@ class PumpCalibration:
     calibration: The calibration of the pump or pump array.
   """
 
-  def __init__(self,
-               calibration: Union[List[Union[float, int]]],
-               calibration_mode: Literal["duration", "revolutions"]="duration"):
+  def __init__(
+    self,
+    calibration: List[Union[float, int]],
+    calibration_mode: Literal["duration", "revolutions"] = "duration"
+  ):
     """ Initialize a PumpCalibration object.
 
     Args:
@@ -33,7 +35,7 @@ class PumpCalibration:
     self.calibration = calibration
     self.calibration_mode = calibration_mode
 
-  def __getitem__(self, item) -> Union[float, int]:
+  def __getitem__(self, item: int) -> Union[float, int]:
     return self.calibration[item]  # type: ignore
 
   def __len__(self) -> int:
@@ -42,11 +44,12 @@ class PumpCalibration:
     return len(self.calibration)
 
   @classmethod
-  def load_calibration(cls,
-                       calibration: Optional[Union[dict, list, float, int, str]] = None,
-                       num_items: Optional[int] = None,
-                       calibration_mode: Literal["duration", "revolutions"]="duration")\
-                        -> PumpCalibration:
+  def load_calibration(
+    cls,
+    calibration: Optional[Union[dict, list, float, int, str]] = None,
+    num_items: Optional[int] = None,
+    calibration_mode: Literal["duration", "revolutions"] = "duration"
+  ) -> PumpCalibration:
     """ Load a calibration from a file, dictionary, list, or value. :param calibration: pump
     calibration file, dictionary, list, or value. If None, returns an empty PumpCalibration
     object.
@@ -56,9 +59,6 @@ class PumpCalibration:
       calibration_mode: units of the calibration. "duration" for volume per time, "revolutions" for
         volume per revolution. Defaults to "duration".
       num_items: number of items in the calibration. Required if calibration is a value.
-
-    Returns:
-      PumpCalibration
 
     Raises:
       NotImplementedError: if the calibration filetype or format is not supported.
@@ -88,19 +88,17 @@ class PumpCalibration:
     raise NotImplementedError("Calibration format not supported.")
 
   @classmethod
-  def load_from_json(cls,
-                     file_path: str,
-                     calibration_mode: Literal["duration", "revolutions"]="duration")\
-                      -> PumpCalibration:
+  def load_from_json(
+    cls,
+    file_path: str,
+    calibration_mode: Literal["duration", "revolutions"] = "duration"
+  ) -> PumpCalibration:
     """ Load a calibration from a json file.
 
     Args:
       file_path: json file to load calibration from.
       calibration_mode: units of the calibration. "duration" for volume per time, "revolutions" for
         volume per revolution. Defaults to "duration".
-
-    Returns:
-      PumpCalibration
 
     Raises:
       TypeError: if the calibration pulled from the json is not a dictionary or list.
@@ -117,10 +115,11 @@ class PumpCalibration:
     raise TypeError(f"Calibration pulled from {file_path} is not a dictionary or list.")
 
   @classmethod
-  def load_from_csv(cls,
-                    file_path: str,
-                    calibration_mode: Literal["duration", "revolutions"]="duration")\
-                    -> PumpCalibration:
+  def load_from_csv(
+    cls,
+    file_path: str,
+    calibration_mode: Literal["duration", "revolutions"] = "duration"
+  ) -> PumpCalibration:
     """ Load a calibration from a csv file.
 
     Args:
@@ -128,9 +127,6 @@ class PumpCalibration:
       column is treated as the index, the second column as the value.
       calibration_mode: units of the calibration. "duration" for volume per time, "revolutions" for
         volume per revolution. Defaults to "duration".
-
-    Returns:
-      PumpCalibration
     """
 
     with open(file_path, encoding="utf-8", newline="") as f:
@@ -147,10 +143,11 @@ class PumpCalibration:
       raise ValueError("CSV file must have one or two columns.")
 
   @classmethod
-  def load_from_dict(cls,
-                     calibration: Dict[int, Union[int, float]],
-                     calibration_mode: Literal["duration", "revolutions"]="duration")\
-                      -> PumpCalibration:
+  def load_from_dict(
+    cls,
+    calibration: Dict[int, Union[int, float]],
+    calibration_mode: Literal["duration", "revolutions"] = "duration"
+  ) -> PumpCalibration:
     """ Load a calibration from a dictionary.
 
     Args:
@@ -158,39 +155,38 @@ class PumpCalibration:
       calibration_mode: units of the calibration. "duration" for volume per time, "revolutions" for
         volume per revolution. Defaults to "duration".
 
-    Returns:
-      PumpCalibration
-
     Raises:
       ValueError: if the calibration dictionary is not formatted correctly.
     """
+
     if sorted(calibration.keys()) != list(range(len(calibration))):
       raise ValueError("Keys must be a contiguous range of integers starting at 0.")
-    calibration = [calibration[key] for key in sorted(calibration.keys())]
-    return cls(calibration=calibration, calibration_mode=calibration_mode)
+    calibration_list = [calibration[key] for key in sorted(calibration.keys())]
+    return cls(calibration=calibration_list, calibration_mode=calibration_mode)
 
   @classmethod
-  def load_from_list(cls,
-                     calibration: List[Union[int, float]],
-                     calibration_mode: Literal["duration", "revolutions"]="duration")\
-                      -> PumpCalibration:
+  def load_from_list(
+    cls,
+    calibration: List[Union[int, float]],
+    calibration_mode: Literal["duration", "revolutions"] = "duration"
+  ) -> PumpCalibration:
     """ Load a calibration from a list. Equivalent to PumpCalibration(calibration).
 
     Args:
       calibration: list to load calibration from.
       calibration_mode: units of the calibration. "duration" for volume per time, "revolutions" for
         volume per revolution. Defaults to "duration".
-
-    Returns:
-      PumpCalibration
     """
+
     return cls(calibration=calibration, calibration_mode=calibration_mode)
 
   @classmethod
-  def load_from_value(cls, value: Union[float, int],
-                      num_items: int,
-                       calibration_mode: Literal["duration", "revolutions"]="duration")\
-                        -> PumpCalibration:
+  def load_from_value(
+    cls,
+    value: Union[float, int],
+    num_items: int,
+    calibration_mode: Literal["duration", "revolutions"] = "duration"
+  ) -> PumpCalibration:
     """ Load a calibration from a value. Equivalent to PumpCalibration([value] * num_items).
 
     Args:
@@ -198,9 +194,7 @@ class PumpCalibration:
       num_items: number of items in the calibration.
       calibration_mode: units of the calibration. "duration" for volume per time, "revolutions" for
         volume per revolution. Defaults to "duration".
-
-    Returns:
-      PumpCalibration
     """
+
     calibration = [value] * num_items
     return cls(calibration, calibration_mode)
