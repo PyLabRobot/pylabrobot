@@ -133,7 +133,31 @@ class Move:
   get_direction: GripDirection = GripDirection.FRONT
   put_direction: GripDirection = GripDirection.FRONT
 
-
+  @property
+  def rotation(self) -> int:
+    if self.get_direction == self.put_direction:
+      return 0
+    elif (self.get_direction, self.put_direction) in (
+        (GripDirection.FRONT, GripDirection.RIGHT),
+        (GripDirection.RIGHT, GripDirection.BACK),
+        (GripDirection.BACK, GripDirection.LEFT),
+        (GripDirection.LEFT, GripDirection.FRONT),
+    ):
+      return 270
+    elif set([self.get_direction, self.put_direction]) in (
+        set([GripDirection.FRONT, GripDirection.BACK]),
+        set([GripDirection.LEFT, GripDirection.RIGHT]),
+    ):
+      return 180
+    elif (self.put_direction, self.get_direction) in (
+        (GripDirection.FRONT, GripDirection.RIGHT),
+        (GripDirection.RIGHT, GripDirection.BACK),
+        (GripDirection.BACK, GripDirection.LEFT),
+        (GripDirection.LEFT, GripDirection.FRONT),
+    ):
+      return 90
+    else:
+      raise ValueError(f"Invalid grip directions: {self.get_direction}, {self.put_direction}")
 
 PipettingOp = Union[
   Pickup, Drop, Aspiration, Dispense, AspirationPlate, DispensePlate, PickupTipRack, DropTipRack]
