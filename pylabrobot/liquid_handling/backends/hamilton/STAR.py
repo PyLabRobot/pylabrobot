@@ -2412,7 +2412,12 @@ class STAR(HamiltonLiquidHandler):
       y_direction=0,
       z_position=int(grip_height * 10),
       z_direction=0,
-      grip_direction=grip_direction.value,
+      grip_direction={
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
       minimum_traverse_height_at_beginning_of_a_command=
         minimum_traverse_height_at_beginning_of_a_command,
       z_position_at_the_command_end=z_position_at_the_command_end,
@@ -2451,7 +2456,12 @@ class STAR(HamiltonLiquidHandler):
       y_direction=0,
       z_position=int((location.z + resource.get_size_z() / 2) * 10),
       z_direction=0,
-      grip_direction=grip_direction.value,
+      grip_direction={
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
       minimum_traverse_height_at_beginning_of_a_command=
         minimum_traverse_height_at_beginning_of_a_command,
       collision_control_level=collision_control_level,
@@ -2494,7 +2504,12 @@ class STAR(HamiltonLiquidHandler):
       y_direction=0,
       z_position=int(grip_height * 10),
       z_direction=0,
-      grip_direction=grip_direction.value,
+      grip_direction={
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
       minimum_traverse_height_at_beginning_of_a_command=
         minimum_traverse_height_at_beginning_of_a_command,
       z_position_at_the_command_end=z_position_at_the_command_end,
