@@ -34,12 +34,17 @@ extras_server = [
   "flask[async]",
 ]
 
+
 extras_inheco = [
   "hid"
 ]
 
+extras_agrow = [
+  "pymodbus"
+]
+
 extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets + \
-    extras_visualizer + extras_opentrons + extras_server + extras_inheco + [
+    extras_visualizer + extras_opentrons + extras_server + extras_inheco + extras_agrow + [
     "sphinx_book_theme",
     "myst_nb",
     "sphinx_copybutton",
@@ -72,6 +77,7 @@ setup(
     "inheco": extras_inheco,
     "opentrons": extras_opentrons,
     "server": extras_server,
+    "agrow": extras_agrow,
     "dev": extras_dev,
     "all": extras_all,
   },
