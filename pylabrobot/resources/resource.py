@@ -53,7 +53,7 @@ class Resource:
     self.category = category
     self.model = model
 
-    self.location: Optional[Coordinate] = None
+    self.location: Coordinate = Coordinate.zero()
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
 
@@ -148,7 +148,7 @@ class Resource:
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate],
+    location: Coordinate,
     reassign: bool = True):
     """ Assign a child resource to this resource.
 
@@ -416,7 +416,7 @@ class Resource:
         location = cast(Coordinate, deserialize(location_data))
       else:
         location = None
-      resource.assign_child_resource(child, location=location)
+      resource.assign_child_resource(child, location=location or Coordinate.zero())
 
     return resource
 

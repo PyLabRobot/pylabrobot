@@ -23,7 +23,7 @@ class TestWell(unittest.TestCase):
       "children": [],
       "type": "Well",
       "parent_name": None,
-      "location": None,
+      "location":  {"x": 0, "y": 0, "z": 0, "type": "Coordinate"},
     })
 
     self.assertEqual(Well.deserialize(well.serialize()), well)

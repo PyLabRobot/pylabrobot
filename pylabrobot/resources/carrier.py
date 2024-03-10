@@ -23,7 +23,7 @@ class CarrierSite(Resource):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate],
+    location: Coordinate = Coordinate.zero(),
     reassign: bool = True
   ):
     self.resource = resource
@@ -101,7 +101,7 @@ class Carrier(Resource):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate],
+    location: Coordinate = Coordinate.zero(),
     reassign: bool = True
   ):
     """ Assign a resource to this carrier.

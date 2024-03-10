@@ -86,7 +86,7 @@ class Plate(ItemizedResource[Well]):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate] = None,
+    location: Coordinate = Coordinate.zero(),
     reassign: bool = True
   ):
     if isinstance(resource, Lid):

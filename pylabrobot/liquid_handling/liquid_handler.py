@@ -1689,7 +1689,8 @@ class LiquidHandler(Machine):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate], reassign: bool = True
+    location: Coordinate = Coordinate.zero(),
+    reassign: bool = True,
   ):
     """ Not implement on LiquidHandler, since the deck is managed by the :attr:`deck` attribute. """
     raise NotImplementedError("Cannot assign child resource to liquid handler. Use "
