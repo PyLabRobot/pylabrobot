@@ -25,6 +25,7 @@ from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   Cos_96_DW_1mL,
   Cos_96_DW_500ul,
+  ResourceNotFoundError,
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L, HTF_L
@@ -92,9 +93,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
     # Test unassigning unassigned resource
     self.lh.unassign_resource("plate carrier")
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       self.lh.unassign_resource("plate carrier")
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       self.lh.unassign_resource("this resource is completely new.")
 
     # Test invalid rails.
@@ -122,7 +123,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.lh.deck.get_resource("aspiration plate").name, "aspiration plate")
 
     # Get unknown resource.
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       self.lh.deck.get_resource("unknown resource")
 
   def test_subcoordinates(self):

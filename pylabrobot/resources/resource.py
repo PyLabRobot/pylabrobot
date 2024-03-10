@@ -294,7 +294,7 @@ class Resource:
     for child in self.children:
       try:
         return child.get_resource(name)
-      except ValueError:
+      except ResourceNotFoundError:
         pass
 
     raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")

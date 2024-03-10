@@ -10,6 +10,7 @@ from .carrier import (
 from .container import Container
 from .coordinate import Coordinate
 from .deck import Deck
+from .errors import ResourceNotFoundError
 from .itemized_resource import ItemizedResource, create_equally_spaced
 from .liquid import Liquid
 from .petri_dish import PetriDish, PetriDishHolder
