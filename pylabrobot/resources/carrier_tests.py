@@ -6,6 +6,7 @@ import unittest
 from .carrier import Carrier, TipCarrier, create_homogeneous_carrier_sites
 from .coordinate import Coordinate
 from .deck import Deck
+from .errors import ResourceNotFoundError
 from .resource import Resource
 from .tip_rack import TipRack
 
@@ -74,9 +75,9 @@ class CarrierTests(unittest.TestCase):
     deck.assign_child_resource(carrier, location=Coordinate.zero())
 
     self.assertIsNone(plate.parent)
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       carrier.get_resource("plate")
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       deck.get_resource("plate")
 
   def test_assign_index_error(self):
