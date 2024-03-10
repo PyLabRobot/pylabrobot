@@ -35,15 +35,12 @@ class TestCalibration(unittest.TestCase):
     self.assertRaises(TypeError, PumpCalibration.load_calibration, json_null_path)
 
   def test_load_from_csv(self):
-    csv_path = os.path.join(plr_directory, "single_column_test_calibration.csv")
-    calibration = PumpCalibration.load_calibration(csv_path)
-    self.assertEqual(calibration[0], 1.0)
-    self.assertEqual(calibration[1], 1.0)
     csv_path = os.path.join(plr_directory, "test_calibration.csv")
     calibration = PumpCalibration.load_calibration(csv_path)
     self.assertEqual(calibration[0], 1.0)
     self.assertEqual(calibration[1], 1.0)
-    csv_path = os.path.join(plr_directory, "null_test_calibration.csv")
+
+    csv_path = os.path.join(plr_directory, "test_calibration_three_columns.csv")
     self.assertRaises(ValueError, PumpCalibration.load_calibration, csv_path)
 
   def test_load_from_dict(self):

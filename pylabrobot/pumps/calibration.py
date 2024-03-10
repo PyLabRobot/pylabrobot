@@ -123,8 +123,8 @@ class PumpCalibration:
     """ Load a calibration from a csv file.
 
     Args:
-      file_path: csv file to load calibration from. 0-indexed. For two- column CSV files, the first
-      column is treated as the index, the second column as the value.
+      file_path: csv file to load calibration from. 0-indexed. The first column is treated as the
+        index, the second column as the value.
       calibration_mode: units of the calibration. "duration" for volume per time, "revolutions" for
         volume per revolution. Defaults to "duration".
     """
@@ -132,15 +132,11 @@ class PumpCalibration:
     with open(file_path, encoding="utf-8", newline="") as f:
       csv_file = list(csv.reader(f))
       num_columns = len(csv_file[0])
-      if num_columns == 1:
-        calibration = [float(row[0]) for row in csv_file]
-        return PumpCalibration(calibration=calibration,
-                               calibration_mode=calibration_mode)
-      if num_columns == 2:
-        calibration = {int(row[0]): float(row[1]) for row in csv_file}
-        return PumpCalibration.load_from_dict(calibration=calibration,
-                                              calibration_mode=calibration_mode)
-      raise ValueError("CSV file must have one or two columns.")
+      if num_columns != 2:
+        raise ValueError("CSV file must have two columns.")
+      calibration = {int(row[0]): float(row[1]) for row in csv_file}
+      return PumpCalibration.load_from_dict(calibration=calibration,
+                                            calibration_mode=calibration_mode)
 
   @classmethod
   def load_from_dict(
