@@ -11,19 +11,120 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
   :recursive:
 
     pylabrobot.resources
+    pylabrobot.resources.Carrier
+    pylabrobot.resources.Container
     pylabrobot.resources.Coordinate
     pylabrobot.resources.Deck
     pylabrobot.resources.ItemizedResource
     pylabrobot.resources.create_equally_spaced
     pylabrobot.resources.Lid
+    pylabrobot.resources.Liquid
+    pylabrobot.resources.PetriDish
+    pylabrobot.resources.Plate
+    pylabrobot.resources.PlateCarrier
     pylabrobot.resources.Resource
     pylabrobot.resources.ResourceStack
-    pylabrobot.resources.TipRack
-    pylabrobot.resources.Plate
-    pylabrobot.resources.Carrier
     pylabrobot.resources.tip.Tip
     pylabrobot.resources.TipCarrier
-    pylabrobot.resources.PlateCarrier
+    pylabrobot.resources.TipRack
+    pylabrobot.resources.Trough
+    pylabrobot.resources.Tube
+    pylabrobot.resources.TubeCarrier
+    pylabrobot.resources.TubeRack
+    pylabrobot.resources.Well
+
+
+Azenta
+------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.corning_axygen.plates
+
+
+Boekel
+------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.boekel.tube_carriers
+
+
+Corning Axygen
+--------------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.corning_axygen.plates
+
+
+Corning Costar
+--------------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.corning_costar.plates
+
+
+Falcon
+------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.falcon.tubes
+
+
+Greiner
+-------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.greiner
+    pylabrobot.resources.greiner.plates
+
+
+Hamilton
+--------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.hamilton
+    pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck
+    pylabrobot.resources.hamilton.STARDeck
+    pylabrobot.resources.hamilton.STARLetDeck
+
+
+Limbro
+------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.limbro
+    pylabrobot.resources.limbro.plates
 
 
 ML Star resources
@@ -41,29 +142,42 @@ ML Star resources
     pylabrobot.resources.ml_star.plate_carriers
 
 
-Corning Costar
---------------
+Opentrons
+---------
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    pylabrobot.resources.corning_costar.plates
+    pylabrobot.resources.opentrons
+    pylabrobot.resources.opentrons.deck
+    pylabrobot.resources.opentrons.load
+    pylabrobot.resources.opentrons.plates
+    pylabrobot.resources.opentrons.tip_racks
+    pylabrobot.resources.opentrons.tube_racks
 
 
-Hamilton
---------
+Porvair
+-------
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    pylabrobot.resources.hamilton
-    pylabrobot.resources.hamilton.hamilton_decks.HamiltonDeck
-    pylabrobot.resources.hamilton.STARDeck
-    pylabrobot.resources.hamilton.STARLetDeck
+    pylabrobot.resources.porvair.plates
+
+
+Revvity
+-------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.revvity.plates
 
 
 
@@ -86,6 +200,17 @@ Tecan
     pylabrobot.resources.tecan.wash
 
 
+Thermo Fisher
+-------------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    pylabrobot.resources.thermo_fisher.troughs
+
+
 VWR
 ---
 
@@ -95,21 +220,6 @@ VWR
   :recursive:
 
     pylabrobot.resources.vwr.troughs
-
-
-Opentrons
----------
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-    pylabrobot.resources.opentrons
-    pylabrobot.resources.opentrons.deck
-    pylabrobot.resources.opentrons.load
-    pylabrobot.resources.opentrons.tip_racks
-    pylabrobot.resources.opentrons.plates
 
 
 Tip trackers

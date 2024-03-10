@@ -3,10 +3,11 @@
 import binascii
 import csv
 import struct
+import sys
 import textwrap
 from typing import Dict
 
-from pylabrobot.liquid_handling.liquid_classes import Liquid
+from pylabrobot.resources.liquid import Liquid
 
 
 def liquid_class_to_tip_volume(liquid_class: str) -> float:
@@ -33,7 +34,7 @@ def ieee_754_to_float(dat: bytes) -> float:
 
 
 def main():
-  with open("LiquidClass.csv", "r", encoding="utf-8") as f:
+  with open(sys.argv[1], "r", encoding="utf-8") as f:
     lines = f.readlines()
     lines = lines[1:]
     reader = csv.reader(lines)

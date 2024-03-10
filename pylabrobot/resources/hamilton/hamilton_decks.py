@@ -1,23 +1,21 @@
 from __future__ import annotations
 
+from abc import ABCMeta, abstractmethod
 import inspect
 import logging
-from typing import Callable, Optional, cast
+from typing import Optional, cast
 
-from pylabrobot.resources import (
-  Coordinate,
-  Carrier,
-  Deck,
-  Plate,
-  Resource,
-  TipRack,
-  Trash
-)
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.carrier import Carrier
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.tip_rack import TipRack
+from pylabrobot.resources.trash import Trash
 import pylabrobot.utils.file_parsing as file_parser
-import pylabrobot.resources as resources_module
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("pylabrobot")
 
 
 _RAILS_WIDTH = 22.5 # space between rails (mm)
@@ -37,8 +35,8 @@ def _rails_for_x_coordinate(x: int):
   return int((x - 100.0) / _RAILS_WIDTH) + 1
 
 
-class HamiltonDeck(Deck):
-  """ Hamilton decks. Currently only STARLet and STAR are supported. """
+class HamiltonDeck(Deck, metaclass=ABCMeta):
+  """ Hamilton decks. Currently only STARLet, STAR and Vantage are supported. """
 
   def __init__(
     self,
@@ -48,23 +46,15 @@ class HamiltonDeck(Deck):
     size_z: float,
     name: str = "deck",
     category: str = "deck",
-    resource_assigned_callback: Optional[Callable] = None,
-    resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate.zero(),
-    no_trash: bool = False,
   ):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
-      resource_assigned_callback=resource_assigned_callback,
-      resource_unassigned_callback=resource_unassigned_callback, origin=origin)
+      origin=origin)
     self.num_rails = num_rails
 
-    # assign trash area
-    if not no_trash:
-      trash_x = size_x - 560 # only tested on STARLet, assume STAR is same distance from right max..
-
-      self.assign_child_resource(
-        resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
-        location=Coordinate(x=trash_x, y=190.6, z=137.1)) # z I am not sure about
+  @abstractmethod
+  def rails_to_location(self, rails: int) -> Coordinate:
+    """ Convert a rail identifier to an absolute (x, y, z) coordinate. """
 
   def serialize(self) -> dict:
     """ Serialize this deck. """
@@ -125,7 +115,7 @@ class HamiltonDeck(Deck):
         raise ValueError(f"Resource with name '{resource.name}' already defined.")
 
     if rails is not None:
-      resource_location = Coordinate(x=self._x_coordinate_for_rails(rails), y=63, z=100)
+      resource_location = self.rails_to_location(rails)
     elif location is not None:
       resource_location = location
     else:
@@ -133,7 +123,7 @@ class HamiltonDeck(Deck):
 
     if resource_location is not None: # collision detection
       if resource_location.x + resource.get_size_x() > \
-          self._x_coordinate_for_rails(self.num_rails) and \
+          self.rails_to_location(self.num_rails + 1).x and \
         rails is not None:
         raise ValueError(f"Resource with width {resource.get_size_x()} does not "
                         f"fit at rails {rails}.")
@@ -144,21 +134,20 @@ class HamiltonDeck(Deck):
         og_y = cast(Coordinate, og_resource.location).y
 
         # A resource is not allowed to overlap with another resource. Resources overlap when a
-        # corner of one resource is inside the boundaries other resource.
-        if (og_x <= resource_location.x < og_x + og_resource.get_size_x() or \
-          og_x <= resource_location.x + resource.get_size_x() <
-            og_x + og_resource.get_size_x()) and \
-            (og_y <= resource_location.y < og_y + og_resource.get_size_y() or \
-              og_y <= resource_location.y + resource.get_size_y() <
-                og_y + og_resource.get_size_y()):
+        # corner of one resource is inside the boundaries of another resource.
+        if any([
+          og_x <= resource_location.x < og_x + og_resource.get_size_x(),
+          og_x < resource_location.x + resource.get_size_x() < og_x + og_resource.get_size_x()
+          ]) and any(
+            [
+              og_y <= resource_location.y < og_y + og_resource.get_size_y(),
+              og_y < resource_location.y + resource.get_size_y() < og_y + og_resource.get_size_y()
+            ]
+          ):
           raise ValueError(f"Location {resource_location} is already occupied by resource "
                             f"'{og_resource.name}'.")
 
     return super().assign_child_resource(resource, location=resource_location, reassign=reassign)
-
-  def _x_coordinate_for_rails(self, rails: int):
-    """ Convert a rail identifier to an x coordinate. """
-    return 100.0 + (rails - 1) * _RAILS_WIDTH
 
   @classmethod
   def load_from_lay_file(cls, fn: str) -> HamiltonDeck:
@@ -172,8 +161,11 @@ class HamiltonDeck(Deck):
       Loading from a lay file:
 
       >>> from pylabrobot.resources.hamilton import HamiltonDeck
-      >>> deck = HamiltonDeck.load_from_lay_file("deck.lay")
+      >>> deck = HamiltonSTARDeck.load_from_lay_file("deck.lay")
     """
+
+    # pylint: disable=import-outside-toplevel, cyclic-import
+    import pylabrobot.resources as resources_module
 
     c = None
     with open(fn, "r", encoding="ISO-8859-1") as f:
@@ -188,8 +180,6 @@ class HamiltonDeck(Deck):
 
     deck = cls(num_rails=num_rails,
       size_x=size_x, size_y=size_y, size_z=size_z,
-      resource_assigned_callback=None,
-      resource_unassigned_callback=None,
       origin=Coordinate.zero())
 
     # Get class names of all defined resources.
@@ -310,41 +300,71 @@ class HamiltonDeck(Deck):
     return summary_
 
 
+class HamiltonSTARDeck(HamiltonDeck): # pylint: disable=invalid-name
+  """ Base class for a Hamilton STAR(let) deck. """
+
+  def __init__(
+    self,
+    num_rails: int,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    name="deck",
+    category: str = "deck",
+    origin: Coordinate = Coordinate.zero(),
+    no_trash: bool = False,
+  ) -> None:
+    """ Create a new STAR(let) deck of the given size. """
+
+    super().__init__(
+      num_rails=num_rails,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      name=name,
+      category=category,
+      origin=origin)
+
+    # assign trash area
+    if not no_trash:
+      trash_x = size_x - 560 # only tested on STARLet, assume STAR is same distance from right max..
+
+      self.assign_child_resource(
+        resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
+        location=Coordinate(x=trash_x, y=190.6, z=137.1)) # z I am not sure about
+
+  def rails_to_location(self, rails: int) -> Coordinate:
+    x = 100.0 + (rails - 1) * _RAILS_WIDTH
+    return Coordinate(x=x, y=63, z=100)
+
+
 def STARLetDeck( # pylint: disable=invalid-name
-  resource_assigned_callback: Optional[Callable] = None,
-  resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate.zero(),
-) -> HamiltonDeck:
-  """ A STARLet deck.
+) -> HamiltonSTARDeck:
+  """ Create a new STARLet deck.
 
   Sizes from `HAMILTON\\Config\\ML_Starlet.dck`
   """
 
-  return HamiltonDeck(
+  return HamiltonSTARDeck(
     num_rails=STARLET_NUM_RAILS,
     size_x=STARLET_SIZE_X,
     size_y=STARLET_SIZE_Y,
     size_z=STARLET_SIZE_Z,
-    resource_assigned_callback=resource_assigned_callback,
-    resource_unassigned_callback=resource_unassigned_callback,
     origin=origin)
 
 
 def STARDeck( # pylint: disable=invalid-name
-  resource_assigned_callback: Optional[Callable] = None,
-  resource_unassigned_callback: Optional[Callable] = None,
   origin: Coordinate = Coordinate.zero(),
-) -> HamiltonDeck:
-  """ The Hamilton STAR deck.
+) -> HamiltonSTARDeck:
+  """ Create a new STAR deck.
 
   Sizes from `HAMILTON\\Config\\ML_STAR2.dck`
   """
 
-  return HamiltonDeck(
+  return HamiltonSTARDeck(
     num_rails=STAR_NUM_RAILS,
     size_x=STAR_SIZE_X,
     size_y=STAR_SIZE_Y,
     size_z=STAR_SIZE_Z,
-    resource_assigned_callback=resource_assigned_callback,
-    resource_unassigned_callback=resource_unassigned_callback,
     origin=origin)

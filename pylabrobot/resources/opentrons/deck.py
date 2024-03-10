@@ -1,23 +1,21 @@
 import textwrap
-from typing import Optional, Callable, List
+from typing import Optional, List
 
-from pylabrobot.resources import Coordinate, Deck, Resource, Trash
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.trash import Trash
 
 
 class OTDeck(Deck):
   """ The OpenTron deck. """
 
   def __init__(self, size_x: float = 624.3, size_y: float = 565.2, size_z: float = 900,
-    resource_assigned_callback: Optional[Callable] = None,
-    resource_unassigned_callback: Optional[Callable] = None,
     origin: Coordinate = Coordinate(0, 0, 0),
     no_trash: bool = False, name: str = "deck"):
     # size_z is probably wrong
 
-    super().__init__(size_x=size_x, size_y=size_y, size_z=size_z,
-     resource_assigned_callback=resource_assigned_callback,
-     resource_unassigned_callback=resource_unassigned_callback,
-     origin=origin)
+    super().__init__(size_x=size_x, size_y=size_y, size_z=size_z, origin=origin)
 
     self.slots: List[Optional[Resource]] = [None] * 12
 
@@ -60,7 +58,12 @@ class OTDeck(Deck):
       size_z=82,
     )
 
-    trash_container.assign_child_resource(actual_trash, location=Coordinate(x=82.84, y=53.56, z=5))
+    # Trash location used to be Coordinate(x=86.43, y=82.93, z=0),
+    # this is approximately the center of the trash area.
+    # LiquidHandler will now automatically find the center of the trash before discarding tips,
+    # so this location is no longer needed and we just use Coordinate.zero().
+    # The actual location of the trash is determined by the slot number (12).
+    trash_container.assign_child_resource(actual_trash, location=Coordinate.zero())
     self.assign_child_at_slot(trash_container, 12)
 
   def assign_child_resource(

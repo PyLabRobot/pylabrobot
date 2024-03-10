@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 import sys
 from typing import Any, Dict, Optional, List
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,
@@ -28,7 +28,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   processing. The implementation of `send_command` is left to the subclasses. """
 
   def __init__(self, num_channels: int):
-    super().__init__()
+    LiquidHandlerBackend.__init__(self)
     self._num_channels = num_channels
 
   @property
@@ -87,7 +87,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "flow_rate": serialize(op.flow_rate),
       "liquid_height": serialize(op.liquid_height),
       "blow_out_air_volume": serialize(op.blow_out_air_volume),
-      "liquid": serialize(op.liquid),
+      "liquids": serialize(op.liquids),
     } for op in ops]
     await self.send_command(
       command="aspirate",
@@ -102,7 +102,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "flow_rate": serialize(op.flow_rate),
       "liquid_height": serialize(op.liquid_height),
       "blow_out_air_volume": serialize(op.blow_out_air_volume),
-      "liquid": serialize(op.liquid),
+      "liquids": serialize(op.liquids),
     } for op in ops]
     await self.send_command(
       command="dispense",
@@ -124,7 +124,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "flow_rate": serialize(aspiration.flow_rate),
       "liquid_height": serialize(aspiration.liquid_height),
       "blow_out_air_volume": serialize(aspiration.blow_out_air_volume),
-      "liquid": serialize(aspiration.liquid),
+      "liquids": serialize(aspiration.liquids),
       "tips": [serialize(tip) for tip in aspiration.tips],
     }})
 
@@ -136,17 +136,17 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "flow_rate": serialize(dispense.flow_rate),
       "liquid_height": serialize(dispense.liquid_height),
       "blow_out_air_volume": serialize(dispense.blow_out_air_volume),
-      "liquid": serialize(dispense.liquid),
+      "liquids": serialize(dispense.liquids),
       "tips": [serialize(tip) for tip in dispense.tips],
     }})
 
   async def move_resource(self, move: Move, **backend_kwargs):
     await self.send_command(command="move", data={"move": {
       "resource_name": move.resource.name,
-      "to": serialize(move.to),
+      "to": serialize(move.destination),
       "intermediate_locations": [serialize(loc) for loc in move.intermediate_locations],
       "resource_offset": serialize(move.resource_offset),
-      "to_offset": serialize(move.to_offset),
+      "destination_offset": serialize(move.destination_offset),
       "pickup_distance_from_top": move.pickup_distance_from_top,
       "get_direction": serialize(move.get_direction),
       "put_direction": serialize(move.put_direction),

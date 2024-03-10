@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 import functools
-from typing import Callable
+from typing import Callable, Optional
+
+from pylabrobot.resources import Resource
+
 
 def need_setup_finished(func: Callable):
   """ Decorator for methods that require the liquid handler to be set up.
@@ -14,10 +17,10 @@ def need_setup_finished(func: Callable):
   """
 
   @functools.wraps(func)
-  async def wrapper(self: MachineFrontend, *args, **kwargs):
+  async def wrapper(self: Machine, *args, **kwargs):
     if not self.setup_finished:
       raise RuntimeError("The setup has not finished. See `setup`.")
-    await func(self, *args, **kwargs)
+    return await func(self, *args, **kwargs)
   return wrapper
 
 
@@ -33,11 +36,22 @@ class MachineBackend(ABC):
     pass
 
 
-class MachineFrontend(ABC):
-  """ Abstract class for machine frontends. """
+class Machine(Resource, metaclass=ABCMeta):
+  """ Abstract class for machine frontends. All Machines are Resources. """
 
   @abstractmethod
-  def __init__(self, backend: MachineBackend):
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    backend: MachineBackend,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
+  ):
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
+                     category=category, model=model)
     self.backend = backend
     self._setup_finished = False
 
@@ -53,13 +67,9 @@ class MachineFrontend(ABC):
     await self.backend.stop()
     self._setup_finished = False
 
-  def __del__(self):
-    if self.setup_finished:
-      self.stop()
-
-  def __enter__(self):
-    self.setup()
+  async def __aenter__(self):
+    await self.setup()
     return self
 
-  def __exit__(self, exc_type, exc_value, traceback):
-    self.stop()
+  async def __aexit__(self, exc_type, exc_value, traceback):
+    await self.stop()

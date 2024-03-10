@@ -19,12 +19,12 @@ class TestItemizedResource(unittest.TestCase):
   """ Tests for ItemizedResource """
 
   def setUp(self) -> None:
-    self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, one_dot_max=1, lid_height=10,
+    self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
       items=create_equally_spaced(Well,
       num_items_x=12, num_items_y=8,
       dx=0, dy=0, dz=0,
       item_dx=9, item_dy=9,
-      size_x=9, size_y=9))
+      size_x=9, size_y=9, size_z=9))
     self.plate.location = Coordinate.zero()
     return super().setUp()
 
@@ -41,6 +41,10 @@ class TestItemizedResource(unittest.TestCase):
     self.assertEqual(self.plate.get_item("A1").name, "plate_well_0_0")
     self.assertEqual(self.plate.get_item("B1").name, "plate_well_0_1")
     self.assertEqual(self.plate.get_item("A2").name, "plate_well_1_0")
+
+  def test_get_item_tuple(self):
+    self.assertEqual(self.plate.get_item((0, 0)).name, "plate_well_0_0")
+    self.assertEqual(self.plate.get_item((7, 11)).name, "plate_well_11_7")
 
   def test_well_get_absolute_location(self):
     self.assertEqual(self.plate.get_item(0).get_absolute_location(),
@@ -190,7 +194,7 @@ class TestCreateEquallySpaced(unittest.TestCase):
       num_items_x=3, num_items_y=2,
       dx=0, dy=0, dz=0,
       item_dx=9, item_dy=9,
-      size_x=9, size_y=9)
+      size_x=9, size_y=9, size_z=9)
 
     # assert that ids of items are correct
     ids = [id(item) for item in equally_spaced]
@@ -203,16 +207,16 @@ class TestCreateEquallySpaced(unittest.TestCase):
 
     correct_items = [
       [
-        Well("well_0_0", size_x=9, size_y=9),
-        Well("well_0_1", size_x=9, size_y=9),
+        Well("well_0_0", size_x=9, size_y=9, size_z=9),
+        Well("well_0_1", size_x=9, size_y=9, size_z=9),
       ],
       [
-        Well("well_1_0", size_x=9, size_y=9),
-        Well("well_1_1", size_x=9, size_y=9),
+        Well("well_1_0", size_x=9, size_y=9, size_z=9),
+        Well("well_1_1", size_x=9, size_y=9, size_z=9),
       ],
       [
-        Well("well_2_0", size_x=9, size_y=9),
-        Well("well_2_1", size_x=9, size_y=9),
+        Well("well_2_0", size_x=9, size_y=9, size_z=9),
+        Well("well_2_1", size_x=9, size_y=9, size_z=9),
       ],
     ]
     correct_items[0][0].location = Coordinate( 0, 9, 0)

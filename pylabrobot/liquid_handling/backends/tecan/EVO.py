@@ -251,7 +251,6 @@ class EVO(TecanLiquidHandler):
       self.pnp = PnP(self, EVO.PNP)
       await self.pnp.position_initialization_x()
       await self.pnp.position_absolute_x_axis(7000)
-
     if self.liha_connected:
       self.liha = LiHa(self, EVO.LIHA)
       await self.liha.position_initialization_x()
@@ -289,6 +288,10 @@ class EVO(TecanLiquidHandler):
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
 
+  async def _park_roma(self):
+    await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
+    await self.roma.action_move_vector_coordinate_position()
+
   # ============== LiquidHandlerBackend methods ==============
 
 
@@ -314,7 +317,7 @@ class EVO(TecanLiquidHandler):
     tecan_liquid_classes = [
       get_liquid_class(
         target_volume=op.volume,
-        liquid_class=op.liquid or Liquid.WATER,
+        liquid_class=op.liquids[-1][0] or Liquid.WATER,
         tip_type=op.tip.tip_type
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
@@ -411,7 +414,7 @@ class EVO(TecanLiquidHandler):
     tecan_liquid_classes = [
       get_liquid_class(
         target_volume=op.volume,
-        liquid_class=op.liquid or Liquid.WATER,
+        liquid_class=op.liquids[-1][0] or Liquid.WATER,
         tip_type=op.tip.tip_type
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
@@ -533,7 +536,7 @@ class EVO(TecanLiquidHandler):
     z_range = await self.roma.report_z_param(5)
     x, y, z = self._roma_positions(move.resource, move.resource.get_absolute_location(), z_range)
     h = int(move.resource.get_size_y() * 10)
-    xt, yt, zt = self._roma_positions(move.resource, move.to, z_range)
+    xt, yt, zt = self._roma_positions(move.resource, move.destination, z_range)
 
     # move to resource
     await self.roma.set_smooth_move_x(1)
@@ -897,7 +900,11 @@ class LiHa(EVOArm):
     for module, pos in EVOArm._pos_cache.items():
       if module == self.module:
         continue
-      if cur_x < pos < x or x < pos < cur_x or abs(pos - x) < 1500:
+      if cur_x < x and cur_x < pos < x: # moving right
+        raise TecanError("Invalid command (collision)", self.module, 2)
+      if cur_x > x and cur_x > pos > x:
+        raise TecanError("Invalid command (collision)", self.module, 2)
+      if abs(pos - x) < 1500:
         raise TecanError("Invalid command (collision)", self.module, 2)
 
     await self.backend.send_command(module=self.module, command="PAA", params=list([x, y, ys] + z))
@@ -1202,7 +1209,11 @@ class RoMa(EVOArm):
     for module, pos in EVOArm._pos_cache.items():
       if module == self.module:
         continue
-      if cur_x < pos < x or x < pos < cur_x or abs(pos - x) < 1500:
+      if cur_x < x and cur_x < pos < x: # moving right
+        raise TecanError("Invalid command (collision)", self.module, 2)
+      if cur_x > x and cur_x > pos > x: # moving left
+        raise TecanError("Invalid command (collision)", self.module, 2)
+      if abs(pos - x) < 1500:
         raise TecanError("Invalid command (collision)", self.module, 2)
 
     await self.backend.send_command(module=self.module, command="SAA",

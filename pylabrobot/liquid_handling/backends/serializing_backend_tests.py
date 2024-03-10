@@ -86,8 +86,8 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
         "volume": 10,
         "flow_rate": None,
         "liquid_height": None,
-        "blow_out_air_volume": 0,
-        "liquid": None,
+        "blow_out_air_volume": None,
+        "liquids": [[None, 10]],
       }], "use_channels": [0]})
 
   async def test_dispense(self):
@@ -109,8 +109,8 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
         "volume": 10,
         "flow_rate": None,
         "liquid_height": None,
-        "blow_out_air_volume": 0,
-        "liquid": None,
+        "blow_out_air_volume": None,
+        "liquids": [[None, 10]],
       }], "use_channels": [0]})
 
   async def test_pick_up_tips96(self):
@@ -122,6 +122,9 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     })
 
   async def test_drop_tips96(self):
+    await self.lh.pick_up_tips96(self.tip_rack)
+    self.backend.clear()
+
     await self.lh.drop_tips96(self.tip_rack)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "drop_tips96")
@@ -133,7 +136,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.test_pick_up_tips96() # pick up tips first
     self.backend.clear()
 
-    tips = self.tip_rack.get_all_tips()
+    tips = [channel.get_tip() for channel in self.lh.head96.values()]
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     self.backend.clear()
@@ -146,18 +149,16 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
       "volume": 10,
       "flow_rate": None,
       "liquid_height": None,
-      "blow_out_air_volume": 0,
-      "liquid": None,
+      "blow_out_air_volume": None,
+      "liquids": [[[None, 10]]]*96, # tuple, list of liquids per well, list of wells
       "tips": [serialize(tip) for tip in tips],
     }})
 
   async def test_dispense96(self):
-    await self.test_pick_up_tips96() # pick up tips first
+    await self.test_aspirate96() # aspirate first
     self.backend.clear()
 
-    tips = self.tip_rack.get_all_tips()
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
+    tips = [channel.get_tip() for channel in self.lh.head96.values()]
     self.backend.clear()
     await self.lh.dispense_plate(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
@@ -168,8 +169,8 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
       "volume": 10,
       "flow_rate": None,
       "liquid_height": None,
-      "blow_out_air_volume": 0,
-      "liquid": None,
+      "blow_out_air_volume": None,
+      "liquids": [[[None, 10]]]*96, # tuple, list of liquids per well, list of wells
       "tips": [serialize(tip) for tip in tips],
     }})
 
@@ -184,7 +185,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
         "to": serialize(to),
         "intermediate_locations": [],
         "resource_offset": serialize(Coordinate.zero()),
-        "to_offset": serialize(Coordinate.zero()),
+        "destination_offset": serialize(Coordinate.zero()),
         "pickup_distance_from_top": 13.2,
         "get_direction": "FRONT",
         "put_direction": "FRONT",

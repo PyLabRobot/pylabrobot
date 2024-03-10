@@ -4,7 +4,7 @@
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
 
-from pylabrobot.resources import PlateCarrier, Coordinate, create_homogeneous_carrier_sites
+from pylabrobot.resources.carrier import PlateCarrier, Coordinate, create_homogeneous_carrier_sites
 
 
 def PLT_CAR_L4HD(name: str) -> PlateCarrier:
@@ -369,4 +369,25 @@ def PLT_CAR_P3MD_A01(name: str) -> PlateCarrier:
       site_size_y=127.0,
     ),
     model="PLT_CAR_P3MD_A01"
+  )
+
+
+def PLT_CAR_L5_DWP(name: str) -> PlateCarrier:
+  """ Carrier with Molded Corner Locators for 5 Deep Well Plates (93522-01) """
+  return PlateCarrier(
+    name=name,
+    size_x=135.0,
+    size_y=497.0,
+    size_z=100.0,
+    sites=create_homogeneous_carrier_sites([
+        Coordinate(4.1, 8.2, 82.1),
+        Coordinate(4.1, 104.2, 82.1),
+        Coordinate(4.1, 200.2, 82.1),
+        Coordinate(4.1, 296.2, 82.1),
+        Coordinate(4.1, 392.1, 82.1),
+      ],
+      site_size_x=127.0,
+      site_size_y=86.0,
+    ),
+    model="PLT_CAR_L5_DWP"
   )

@@ -1,8 +1,8 @@
 import sys
-from typing import List, cast
+from typing import List, Optional, cast
 
-from pylabrobot.machine import MachineFrontend, need_setup_finished
-from pylabrobot.resources import Coordinate, Resource, Plate
+from pylabrobot.machine import Machine, need_setup_finished
+from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 
 if sys.version_info >= (3, 8):
@@ -15,42 +15,41 @@ class NoPlateError(Exception):
   pass
 
 
-class PlateReader(Resource, MachineFrontend):
+class PlateReader(Machine):
   """ The front end for plate readers. Plate readers are devices that can read luminescence,
   absorbance, or fluorescence from a plate.
 
   Plate readers are asynchronous, meaning that their methods will return immediately and
-  will not block. If you want to use a plate reader in a synchronous context, use SyncPlateReader
-  instead.
+  will not block.
 
-  Here's an example of how to use this class in a Juptyer Notebook:
+  Here's an example of how to use this class in a Jupyter Notebook:
 
   >>> from pylabrobot.plate_reading.clario_star import CLARIOStar
   >>> pr = PlateReader(backend=CLARIOStar())
   >>> pr.setup()
   >>> await pr.read_luminescence()
   [[value1, value2, value3, ...], [value1, value2, value3, ...], ...
-
-  In a synchronous context, use asyncio.run() to run the asynchronous methods:
-
-  >>> import asyncio
-  >>> from pylabrobot.plate_reading.clario_star import CLARIOStar
-  >>> pr = SyncPlateReader(backend=CLARIOStar())
-  >>> pr.setup()
-  >>> asyncio.run(pr.read_luminescence())
-  [[value1, value2, value3, ...], [value1, value2, value3, ...], ...
   """
 
-  def __init__(self, name: str, backend: PlateReaderBackend) -> None:
-    MachineFrontend.__init__(self, backend=backend)
-    self.backend: PlateReaderBackend = backend
-    Resource.__init__(self, name=name, size_x=0, size_y=0, size_z=0, category="plate_reader")
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    backend: PlateReaderBackend,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
+  ) -> None:
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
+                      category=category, model=model)
+    self.backend: PlateReaderBackend = backend # fix type
 
   def assign_child_resource(self, resource):
     if len(self.children) >= 1:
       raise ValueError("There already is a plate in the plate reader.")
     if not isinstance(resource, Plate):
-      raise ValueError("The resource must be a plate.")
+      raise ValueError("The resource must be a Plate.")
     super().assign_child_resource(resource, location=Coordinate.zero())
 
   def get_plate(self) -> Plate:
@@ -80,10 +79,11 @@ class PlateReader(Resource, MachineFrontend):
     wavelength: int,
     report: Literal["OD", "transmittance"]
   ) -> List[List[float]]:
-    """ Read the absorbance from the plate.
+    """ Read the absorbance from the plate in either OD or transmittance.
 
     Args:
       wavelength: The wavelength to read the absorbance at, in nanometers.
+      report: Whether to report the absorbance in OD or transmittance.
     """
 
     if report not in {"OD", "transmittance"}:

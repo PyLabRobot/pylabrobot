@@ -1,6 +1,6 @@
 from abc import ABCMeta
 import sys
-from typing import Union, TypeVar, Generic, List, Optional, Generator, Type, Sequence, cast
+from typing import Union, Tuple, TypeVar, Generic, List, Optional, Generator, Type, Sequence, cast
 
 import pylabrobot.utils
 
@@ -151,7 +151,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     raise TypeError(f"Invalid identifier type: {type(identifier)}")
 
-  def get_item(self, identifier: Union[str, int]) -> T:
+  def get_item(self, identifier: Union[str, int, Tuple[int, int]]) -> T:
     """ Get the item with the given identifier.
 
     Args:
@@ -170,6 +170,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     if isinstance(identifier, str):
       row, column = pylabrobot.utils.string_to_position(identifier)
+      if not 0 <= row < self.num_items_y or not 0 <= column < self.num_items_x:
+        raise IndexError(f"Identifier '{identifier}' out of range.")
+      identifier = row + column * self.num_items_y
+    elif isinstance(identifier, tuple):
+      row, column = identifier
       if not 0 <= row < self.num_items_y or not 0 <= column < self.num_items_x:
         raise IndexError(f"Identifier '{identifier}' out of range.")
       identifier = row + column * self.num_items_y
