@@ -2398,13 +2398,12 @@ class STAR(HamiltonLiquidHandler):
     # Get center of source plate. Also gripping height and plate width.
     center = resource.get_absolute_location() + resource.center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    plate_width = resource.get_size_x()
-    # plate_width = { # TODO: LH should rotate resources on move_plate
-    #   GripDirection.FRONT: resource.get_size_x(),
-    #   GripDirection.RIGHT: resource.get_size_y(),
-    #   GripDirection.BACK: resource.get_size_x(),
-    #   GripDirection.LEFT: resource.get_size_y(),
-    # }[grip_direction]
+    if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
+      plate_width = resource.get_size_x()
+    elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
+      plate_width = resource.get_size_y()
+    else:
+      raise ValueError("Invalid grip direction")
 
     await self.iswap_get_plate(
       x_position=int(center.x * 10),
@@ -2491,12 +2490,12 @@ class STAR(HamiltonLiquidHandler):
     center = location + resource.center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
     plate_width = resource.get_size_x()
-    # plate_width = { # TODO: LH should rotate resources on move_plate
-    #   GripDirection.FRONT: resource.get_size_x(),
-    #   GripDirection.RIGHT: resource.get_size_y(),
-    #   GripDirection.BACK: resource.get_size_x(),
-    #   GripDirection.LEFT: resource.get_size_y(),
-    # }[grip_direction]
+    if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
+      plate_width = resource.get_size_x()
+    elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
+      plate_width = resource.get_size_y()
+    else:
+      raise ValueError("Invalid grip direction")
 
     await self.iswap_put_plate(
       x_position=int(center.x * 10),
@@ -2586,6 +2585,9 @@ class STAR(HamiltonLiquidHandler):
           acceleration_index=4
         )
       previous_location = location
+
+    if move.rotation != 0:
+      move.resource.rotate(move.rotation)
 
     if use_arm == "iswap":
       await self.iswap_release_picked_up_resource(
