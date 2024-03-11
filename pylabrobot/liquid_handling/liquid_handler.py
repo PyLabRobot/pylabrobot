@@ -103,7 +103,7 @@ class LiquidHandler(Machine):
 
     # assign deck as only child resource, and set location of self to origin.
     self.location = Coordinate.zero()
-    super().assign_child_resource(deck, location=deck.location)
+    super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
   async def setup(self):
     """ Prepare the robot for use. """
@@ -1691,7 +1691,8 @@ class LiquidHandler(Machine):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate], reassign: bool = True
+    location: Coordinate,
+    reassign: bool = True,
   ):
     """ Not implement on LiquidHandler, since the deck is managed by the :attr:`deck` attribute. """
     raise NotImplementedError("Cannot assign child resource to liquid handler. Use "
