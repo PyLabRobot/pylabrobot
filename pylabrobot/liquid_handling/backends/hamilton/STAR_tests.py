@@ -554,7 +554,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
-      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01083ag2500vt050"
+      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000af01083ag2500vt050"
       "bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000hs1200zv0032zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "xs#####xd#yh####zh####ze####lz####zt####zm####iw###ix#fh###af#####ag####vt###"

@@ -2034,7 +2034,7 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
     minimal_end_height: Optional[int] = None,
     lld_search_height: int = 1999,
-    maximum_immersion_depth: int = 1269,
+    maximum_immersion_depth: int = 1869,
     tube_2nd_section_height_measured_from_zm: int = 32,
     tube_2nd_section_ratio: int = 6180,
     immersion_depth: int = 0,
