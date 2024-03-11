@@ -53,7 +53,7 @@ class Resource:
     self.category = category
     self.model = model
 
-    self.location: Coordinate = Coordinate.zero()
+    self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
 

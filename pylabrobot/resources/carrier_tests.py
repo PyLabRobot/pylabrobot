@@ -162,7 +162,7 @@ class CarrierTests(unittest.TestCase):
       "size_x": 135.0,
       "size_y": 497.0,
       "size_z": 13.0,
-      "location": {"x": 0, "y": 0, "z": 0, "type": "Coordinate"},
+      "location": None,
       "category": "tip_carrier",
       "model": None,
       "parent_name": None,

@@ -103,7 +103,7 @@ class LiquidHandler(Machine):
 
     # assign deck as only child resource, and set location of self to origin.
     self.location = Coordinate.zero()
-    super().assign_child_resource(deck, location=deck.location)
+    super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
   async def setup(self):
     """ Prepare the robot for use. """

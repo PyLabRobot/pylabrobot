@@ -111,7 +111,7 @@ class TestResource(unittest.TestCase):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
     self.assertEqual(r.serialize(), {
       "name": "test",
-      "location": {"x": 0, "y": 0, "z": 0, "type": "Coordinate"},
+      "location": None,
       "size_x": 10,
       "size_y": 10,
       "size_z": 10,
@@ -129,7 +129,7 @@ class TestResource(unittest.TestCase):
     self.maxDiff = None
     self.assertEqual(r.serialize(), {
       "name": "test",
-      "location": {"x": 0, "y": 0, "z": 0, "type": "Coordinate"},
+      "location": None,
       "size_x": 10,
       "size_y": 10,
       "size_z": 10,

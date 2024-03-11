@@ -92,7 +92,7 @@ class Carrier(Resource):
     self.sites: List[CarrierSite] = []
     for site in sites:
       site.name = f"carrier-{self.name}-spot-{site.spot}"
-      self.assign_child_resource(site, location=site.location)
+      self.assign_child_resource(site, location=site.location or Coordinate.zero())
 
   @property
   def capacity(self):

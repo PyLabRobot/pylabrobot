@@ -18,7 +18,7 @@ class TestPetriDish(unittest.TestCase):
       "parent_name": None,
       "type": "PetriDish",
       "children": [],
-      "location": {"x": 0, "y": 0, "z": 0, "type": "Coordinate"},
+      "location": None,
       "max_volume": 121500.0,
       "model": None,
     })
@@ -35,7 +35,7 @@ class TestPetriDish(unittest.TestCase):
       "parent_name": None,
       "type": "PetriDishHolder",
       "children": [],
-      "location": {"x": 0, "y": 0, "z": 0, "type": "Coordinate"},
+      "location": None,
       "model": None,
     })
 
