@@ -87,12 +87,14 @@ class Carrier(Resource):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
 
-    sites = sites if sites is not None else []
+    sites = sites or []
 
     self.sites: List[CarrierSite] = []
     for site in sites:
       site.name = f"carrier-{self.name}-spot-{site.spot}"
-      self.assign_child_resource(site, location=site.location or Coordinate.zero())
+      if site.location is None:
+        raise ValueError(f"site {site} has no location")
+      self.assign_child_resource(site, location=site.location)
 
   @property
   def capacity(self):

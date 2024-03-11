@@ -415,8 +415,8 @@ class Resource:
       if location_data is not None:
         location = cast(Coordinate, deserialize(location_data))
       else:
-        location = None
-      resource.assign_child_resource(child, location=location or Coordinate.zero())
+        raise ValueError(f"Child resource '{child.name}' has no location.")
+      resource.assign_child_resource(child, location=location)
 
     return resource
 
