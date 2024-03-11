@@ -25,6 +25,7 @@ from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   Cos_96_DW_1mL,
   Cos_96_DW_500ul,
+  ResourceNotFoundError,
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L, HTF_L
@@ -92,9 +93,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
     # Test unassigning unassigned resource
     self.lh.unassign_resource("plate carrier")
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       self.lh.unassign_resource("plate carrier")
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       self.lh.unassign_resource("this resource is completely new.")
 
     # Test invalid rails.
@@ -122,7 +123,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.lh.deck.get_resource("aspiration plate").name, "aspiration plate")
 
     # Get unknown resource.
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       self.lh.deck.get_resource("unknown resource")
 
   def test_subcoordinates(self):
@@ -209,6 +210,25 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(plt_car[0].resource)
     self.assertEqual(plate.get_absolute_location(),
       Coordinate(1000, 1000, 1000))
+
+  async def test_move_lid(self):
+    plate = Plate("plate", size_x=100, size_y=100, size_z=15, lid_height=10, items=[])
+    plate.location = Coordinate(0, 0, 100)
+    lid = Lid(name="lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
+      size_z=plate.lid_height)
+    lid.location = Coordinate(100, 100, 200)
+
+    assert plate.get_absolute_location().x != lid.get_absolute_location().x
+    assert plate.get_absolute_location().y != lid.get_absolute_location().y
+    assert plate.get_absolute_location().z + plate.get_size_z() - plate.lid_height \
+      != lid.get_absolute_location().z
+
+    await self.lh.move_lid(lid, plate)
+
+    assert plate.get_absolute_location().x == lid.get_absolute_location().x
+    assert plate.get_absolute_location().y == lid.get_absolute_location().y
+    assert plate.get_absolute_location().z + plate.get_size_z() - plate.lid_height \
+      == lid.get_absolute_location().z
 
   def test_serialize(self):
     serialized = self.lh.serialize()

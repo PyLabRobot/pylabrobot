@@ -120,7 +120,13 @@ def main(pc, tc, p, tr, tcr):
 
       size_x = round(float(dim[2][2]) / 10 + dx, 2)
       size_y = round(float(dim[2][3]) / 10 + dy, 2)
-      size_z = (float(dim[3][0]) - float(dim[3][2])) / 10
+      z_travel = float(dim[3][3])
+      z_start = float(dim[3][1])
+      z_dispense = float(dim[3][2])
+      z_max = float(dim[3][0])
+      # the best approximation,
+      # https://forums.pylabrobot.org/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2987
+      size_z = (z_max - z_dispense) / 10
 
       if num_x <= 1 or num_y <= 1:
         continue
@@ -130,10 +136,6 @@ def main(pc, tc, p, tr, tcr):
       dx = round(dx - res_size_x / 2, 2)
       dy = round(dy - res_size_y / 2, 2)
 
-      z_travel = float(dim[3][3])
-      z_start = float(dim[3][1])
-      z_dispense = float(dim[3][2])
-      z_max = float(dim[3][0])
       area = float(dim[4][0])
 
       desc = None
@@ -188,7 +190,9 @@ def main(pc, tc, p, tr, tcr):
         o.write(f'      item_dy={res_size_y},\n')
         o.write(f'      size_x={res_size_x},\n')
         o.write(f'      size_y={res_size_y},\n')
-        if bc == 'TecanTipRack':
+        if bc == 'TecanPlate':
+          o.write(f'      size_z={size_z},\n')
+        elif bc == 'TecanTipRack':
           tip_name = name + "_tip"
           total_tip_length = float(dim[12][0]) / 10
           has_filter = dim[13] == "1"

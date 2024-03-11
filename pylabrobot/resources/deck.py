@@ -81,10 +81,10 @@ class Deck(Resource):
     """ Returns the resource with the given name.
 
     Raises:
-      ValueError: If the resource is not found.
+      ResourceNotFoundError: If the resource is not found.
     """
     if not self.has_resource(name):
-      raise ValueError(f"Resource '{name}' not found")
+      raise ResourceNotFoundError(f"Resource '{name}' not found")
     return self.resources[name]
 
   def has_resource(self, name: str) -> bool:

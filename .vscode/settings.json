@@ -23,6 +23,9 @@
     "websockets"
   ],
   "python.linting.pylintEnabled": true,
+  "python.linting.pylintArgs": ["--disable={c0103}"],
+  "python.linting.mypyEnabled": true,
+  "python.linting.enabled": true,
   "python.testing.pytestArgs": ["."],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
@@ -41,7 +44,5 @@
     "editor.wordWrap": "bounded",
     "editor.wordWrapColumn": 100
   },
-  "python.linting.mypyEnabled": true,
-  "python.linting.enabled": true,
   "mypy.runUsingActiveInterpreter": true
 }

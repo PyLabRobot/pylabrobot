@@ -7,6 +7,7 @@ import sys
 from typing import Any, Callable, Dict, List, Optional, Type, cast
 
 from .coordinate import Coordinate
+from .errors import ResourceNotFoundError
 from pylabrobot.serializer import serialize, deserialize
 
 if sys.version_info >= (3, 11):
@@ -148,7 +149,7 @@ class Resource:
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate],
+    location: Coordinate,
     reassign: bool = True):
     """ Assign a child resource to this resource.
 
@@ -293,10 +294,10 @@ class Resource:
     for child in self.children:
       try:
         return child.get_resource(name)
-      except ValueError:
+      except ResourceNotFoundError:
         pass
 
-    raise ValueError(f"Resource with name '{name}' does not exist.")
+    raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
 
   def get_2d_center_offsets(self, n: int = 1) -> List[Coordinate]:
     """ Get the offsets (from bottom left) of the center(s) of this resource.
@@ -415,7 +416,7 @@ class Resource:
       if location_data is not None:
         location = cast(Coordinate, deserialize(location_data))
       else:
-        location = None
+        raise ValueError(f"Child resource '{child.name}' has no location.")
       resource.assign_child_resource(child, location=location)
 
     return resource

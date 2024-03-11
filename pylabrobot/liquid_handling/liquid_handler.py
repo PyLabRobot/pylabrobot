@@ -103,7 +103,7 @@ class LiquidHandler(Machine):
 
     # assign deck as only child resource, and set location of self to origin.
     self.location = Coordinate.zero()
-    super().assign_child_resource(deck, location=deck.location)
+    super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
   async def setup(self):
     """ Prepare the robot for use. """
@@ -549,9 +549,10 @@ class LiquidHandler(Machine):
   async def discard_tips(
     self,
     use_channels: Optional[List[int]] = None,
+    allow_nonzero_volume: bool = True,
     **backend_kwargs
   ):
-    """ Permanently discard tips.
+    """ Permanently discard tips in the trash.
 
     Examples:
       Discarding the tips on channels 1 and 2:
@@ -584,6 +585,7 @@ class LiquidHandler(Machine):
         tip_spots=[trash]*n,
         use_channels=use_channels,
         offsets=offsets,
+        allow_nonzero_volume=allow_nonzero_volume,
         **backend_kwargs)
 
   @need_setup_finished
@@ -1539,8 +1541,10 @@ class LiquidHandler(Machine):
       self.deck.assign_child_resource(lid, location=to_location)
     elif isinstance(to, ResourceStack): # manage its own resources
       to.assign_child_resource(lid)
+    elif isinstance(to, Plate):
+      to.assign_child_resource(resource=lid)
     else:
-      to.assign_child_resource(lid, location=to_location)
+      raise ValueError("'to' must be either a Coordinate, ResourceStack or Plate")
 
   async def move_plate(
     self,
@@ -1687,7 +1691,8 @@ class LiquidHandler(Machine):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate], reassign: bool = True
+    location: Coordinate,
+    reassign: bool = True,
   ):
     """ Not implement on LiquidHandler, since the deck is managed by the :attr:`deck` attribute. """
     raise NotImplementedError("Cannot assign child resource to liquid handler. Use "

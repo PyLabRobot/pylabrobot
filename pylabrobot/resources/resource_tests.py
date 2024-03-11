@@ -6,6 +6,7 @@ import unittest.mock
 
 from .coordinate import Coordinate
 from .deck import Deck
+from .errors import ResourceNotFoundError
 from .resource import Resource
 
 
@@ -20,7 +21,7 @@ class TestResource(unittest.TestCase):
     self.assertEqual(deck.get_resource("parent"), parent)
     self.assertEqual(deck.get_resource("child"), child)
 
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       deck.get_resource("not_a_resource")
 
   def test_assign_in_order(self):
@@ -80,9 +81,9 @@ class TestResource(unittest.TestCase):
     parent.unassign_child_resource(child)
 
     self.assertIsNone(child.parent)
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       deck.get_resource("child")
-    with self.assertRaises(ValueError):
+    with self.assertRaises(ResourceNotFoundError):
       parent.get_resource("child")
 
   def test_get_all_children(self):
@@ -163,7 +164,7 @@ class TestResource(unittest.TestCase):
   def test_deserialize_location_none(self):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
     c = Resource("child", size_x=1, size_y=1, size_z=1)
-    r.assign_child_resource(c, location=None)
+    r.assign_child_resource(c, location=Coordinate.zero())
     self.assertEqual(Resource.deserialize(r.serialize()), r)
 
   def test_get_center_offsets(self):
