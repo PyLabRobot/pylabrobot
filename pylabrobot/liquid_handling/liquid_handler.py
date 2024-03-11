@@ -549,9 +549,10 @@ class LiquidHandler(Machine):
   async def discard_tips(
     self,
     use_channels: Optional[List[int]] = None,
+    allow_nonzero_volume: bool = True,
     **backend_kwargs
   ):
-    """ Permanently discard tips.
+    """ Permanently discard tips in the trash.
 
     Examples:
       Discarding the tips on channels 1 and 2:
@@ -584,6 +585,7 @@ class LiquidHandler(Machine):
         tip_spots=[trash]*n,
         use_channels=use_channels,
         offsets=offsets,
+        allow_nonzero_volume=allow_nonzero_volume,
         **backend_kwargs)
 
   @need_setup_finished
