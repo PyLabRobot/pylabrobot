@@ -351,6 +351,7 @@ class Vantage(HamiltonLiquidHandler):
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
+    self._traversal_height: float = 245.0
 
   @property
   def module_id_length(self) -> int:
@@ -396,9 +397,9 @@ class Vantage(HamiltonLiquidHandler):
       await self.pip_initialize(
         x_position=[7095]*self.num_channels,
         y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
-        begin_z_deposit_position=[2450] * self.num_channels,
+        begin_z_deposit_position=[int(self._traversal_height * 10)] * self.num_channels,
         end_z_deposit_position=[1235] * self.num_channels,
-        minimal_height_at_command_end=[2450] * self.num_channels,
+        minimal_height_at_command_end=[int(self._traversal_height * 10)] * self.num_channels,
         tip_pattern=[True]*self.num_channels,
         tip_type=[1]*self.num_channels,
         TODO_DI_2=70
@@ -413,8 +414,8 @@ class Vantage(HamiltonLiquidHandler):
       await self.core96_initialize(
         x_position=7347, # TODO: get trash location from deck.
         y_position=2684, # TODO: get trash location from deck.
-        minimal_traverse_height_at_begin_of_command=2450,
-        minimal_height_at_command_end=2450,
+        minimal_traverse_height_at_begin_of_command=int(self._traversal_height * 10),
+        minimal_height_at_command_end=int(self._traversal_height * 10),
         end_z_deposit_position=2020,
       )
 
@@ -429,6 +430,19 @@ class Vantage(HamiltonLiquidHandler):
     if self._num_channels is None:
       raise RuntimeError("num_channels is not set.")
     return self._num_channels
+
+  def set_minimum_traversal_height(self, traversal_height: float):
+    """ Set the minimum traversal height for the robot.
+
+    This refers to the bottom of the pipetting channel when no tip is present, or the bottom of the
+    tip when a tip is present. This value will be used as the default value for the
+    `minimal_traverse_height_at_begin_of_command` and `minimal_height_at_command_end` parameters
+    unless they are explicitly set.
+    """
+
+    assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
+
+    self._traversal_height = traversal_height
 
   # ============== LiquidHandlerBackend methods ==============
 
@@ -465,8 +479,9 @@ class Vantage(HamiltonLiquidHandler):
         begin_z_deposit_position=[int((max_z + max_total_tip_length)*10)]*len(ops),
         end_z_deposit_position=[int((max_z + max_tip_length)*10)]*len(ops),
         minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or \
-          [2450]*len(ops),
-        minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+          [int(self._traversal_height * 10)]*len(ops),
+        minimal_height_at_command_end=minimal_height_at_command_end or \
+          [int(self._traversal_height * 10)]*len(ops),
         tip_handling_method=[1 for _ in tips], # always appears to be 1 # tip.pickup_method.value
         blow_out_air_volume=[0]*len(ops), # Why is this here? Who knows.
       )
@@ -497,8 +512,9 @@ class Vantage(HamiltonLiquidHandler):
         begin_z_deposit_position=[int((max_z+10)*10)]*len(ops), # +10
         end_z_deposit_position=[int(max_z*10)]*len(ops),
         minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or \
-          [2450]*len(ops),
-        minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+          [int(self._traversal_height * 10)]*len(ops),
+        minimal_height_at_command_end=minimal_height_at_command_end or \
+          [int(self._traversal_height * 10)]*len(ops),
         tip_handling_method=[0 for _ in ops], # Always appears to be 0, even in trash.
         # tip_handling_method=[TipDropMethod.DROP.value if isinstance(op.resource, TipSpot) \
         #                      else TipDropMethod.PLACE_SHIFT.value for op in ops],
@@ -624,8 +640,9 @@ class Vantage(HamiltonLiquidHandler):
       type_of_aspiration=type_of_aspiration or [0]*len(ops),
       tip_pattern=channels_involved,
       minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
-        [2450]*len(ops),
-      minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+        [int(self._traversal_height * 10)]*len(ops),
+      minimal_height_at_command_end=minimal_height_at_command_end or \
+        [int(self._traversal_height * 10)]*len(ops),
       lld_search_height=lld_search_height or [int(ls*10) for ls in lld_search_heights],
       clot_detection_height=clot_detection_height or [0]*len(ops),
       liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld or
@@ -799,8 +816,9 @@ class Vantage(HamiltonLiquidHandler):
         [0]*len(ops),
       tube_2nd_section_ratio=tube_2nd_section_ratio or [0]*len(ops),
       minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
-        [2450]*len(ops),
-      minimal_height_at_command_end=minimal_height_at_command_end or [2450]*len(ops),
+        [int(self._traversal_height * 10)]*len(ops),
+      minimal_height_at_command_end=minimal_height_at_command_end or
+        [int(self._traversal_height * 10)]*len(ops),
       dispense_volume=[int(op.volume * 100) for op in ops],
       dispense_speed=[int(fr*10) for fr in flow_rates],
       cut_off_speed=cut_off_speed or [2500]*len(ops),
@@ -834,8 +852,8 @@ class Vantage(HamiltonLiquidHandler):
     pickup: PickupTipRack,
     tip_handling_method: int = 0,
     z_deposit_position: int = 2164,
-    minimal_traverse_height_at_begin_of_command: int = 2450,
-    minimal_height_at_command_end: int = 2450,
+    minimal_traverse_height_at_begin_of_command: Optional[int] = None,
+    minimal_height_at_command_end: Optional[int] = None
   ):
     # assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
@@ -850,16 +868,18 @@ class Vantage(HamiltonLiquidHandler):
       tip_type=ttti,
       tip_handling_method=tip_handling_method,
       z_deposit_position=z_deposit_position,
-      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
-      minimal_height_at_command_end=minimal_height_at_command_end,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
+        int(self._traversal_height*10),
+      minimal_height_at_command_end=minimal_height_at_command_end or
+        int(self._traversal_height*10),
     )
 
   async def drop_tips96(
     self,
     drop: DropTipRack,
     z_deposit_position: int = 2164,
-    minimal_traverse_height_at_begin_of_command: int = 2450,
-    minimal_height_at_command_end: int = 2450
+    minimal_traverse_height_at_begin_of_command: Optional[int] = None,
+    minimal_height_at_command_end: Optional[int] = None
   ):
     # assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = drop.resource.get_item("A1")
@@ -869,8 +889,9 @@ class Vantage(HamiltonLiquidHandler):
       x_position=int(position.x * 10),
       y_position=int(position.y * 10),
       z_deposit_position=z_deposit_position,
-      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
-      minimal_height_at_command_end=minimal_height_at_command_end,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
+        int(self._traversal_height * 10),
+      minimal_height_at_command_end=minimal_height_at_command_end or int(self._traversal_height*10)
     )
 
   async def aspirate96(
@@ -881,8 +902,8 @@ class Vantage(HamiltonLiquidHandler):
     hlc: Optional[HamiltonLiquidClass] = None,
 
     type_of_aspiration: int = 0,
-    minimal_traverse_height_at_begin_of_command: int = 2450,
-    minimal_height_at_command_end: int = 2450,
+    minimal_traverse_height_at_begin_of_command: Optional[int] = None,
+    minimal_height_at_command_end: Optional[int] = None,
     pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
     tube_2nd_section_height_measured_from_zm: int = 0,
     tube_2nd_section_ratio: int = 0,
@@ -961,8 +982,9 @@ class Vantage(HamiltonLiquidHandler):
       x_position=int(position.x * 10),
       y_position=int(position.y * 10),
       type_of_aspiration=type_of_aspiration,
-      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
-      minimal_height_at_command_end=minimal_height_at_command_end,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
+        int(self._traversal_height * 10),
+      minimal_height_at_command_end=minimal_height_at_command_end or int(self._traversal_height*10),
       lld_search_height=int(lld_search_height * 10),
       liquid_surface_at_function_without_lld=int(liquid_height * 10),
       pull_out_distance_to_take_transport_air_in_function_without_lld=\
@@ -1007,8 +1029,8 @@ class Vantage(HamiltonLiquidHandler):
     pull_out_distance_to_take_transport_air_in_function_without_lld: int = 50,
     immersion_depth: int = 0,
     surface_following_distance: int = 29,
-    minimal_traverse_height_at_begin_of_command: int = 2450,
-    minimal_height_at_command_end: int = 2450,
+    minimal_traverse_height_at_begin_of_command: Optional[int] = None,
+    minimal_height_at_command_end: Optional[int] = None,
     cut_off_speed: int = 2500,
     stop_back_volume: int = 0,
     transport_air_volume: Optional[int] = None,
@@ -1098,8 +1120,9 @@ class Vantage(HamiltonLiquidHandler):
         pull_out_distance_to_take_transport_air_in_function_without_lld,
       immersion_depth=immersion_depth,
       surface_following_distance=surface_following_distance,
-      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command,
-      minimal_height_at_command_end=minimal_height_at_command_end,
+      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
+        int(self._traversal_height * 10),
+      minimal_height_at_command_end=minimal_height_at_command_end or int(self._traversal_height*10),
       dispense_volume=int(volume * 100),
       dispense_speed=int(flow_rate * 10),
       cut_off_speed=cut_off_speed,
