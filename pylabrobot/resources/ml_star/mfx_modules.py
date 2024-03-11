@@ -5,9 +5,8 @@ from __future__ import annotations
 import logging
 from typing import List, Optional, Union
 
-from .coordinate import Coordinate
-from .resource import Resource
-
+from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.carrier import Coordinate, create_homogeneous_carrier_sites
 
 logger = logging.getLogger("pylabrobot")
 
@@ -44,7 +43,30 @@ class MFXSite(Resource):
   def __eq__(self, other):
     return super().__eq__(other) and self.spot == other.spot and self.resource == other.resource
 
+def create_mfx_module_sites(
+  locations: List[Coordinate],
+  site_size_x: List[Union[float, int]],
+  site_size_y: List[Union[float, int]]) -> List[MFXSite]:
+  """ Create a list of MFX module sites with the given sizes. """
 
+  sites = []
+  for spot, (l, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
+    site = MFXSite(
+      name = f"mfx-module-site-{spot}",
+      size_x=x, size_y=y, size_z=0, spot=spot)
+    site.location = l
+    sites.append(site)
+  return sites
+
+
+def create_homogeneous_mfx_module_sites(
+  locations: List[Coordinate],
+  site_size_x: float,
+  site_size_y: float) -> List[MFXSite]:
+  """ Create a list of MFX module sites with the same size. """
+
+  n = len(locations)
+  return create_mfx_module_sites(locations, [site_size_x] * n, [site_size_y] * n)
 
 # Define base resource
 class MFXModule(Resource):
@@ -90,15 +112,15 @@ class MFXModule(Resource):
   ):
     """ Assign a resource to this carrier.
 
-    For a carrier, the only valid resource is a :class:`CarrierSite`.
+    For a MFX Module, the only valid resource is a :class:`MFXSite`.
 
     Also see :meth:`~Resource.assign_child_resource`.
 
     Raises:
-      TypeError: If the resource is not a :class:`CarrierSite`.
+      TypeError: If the resource is not a :class:`MFXSite`.
     """
 
-    if not isinstance(resource, CarrierSite):
+    if not isinstance(resource, MFXSite):
       raise TypeError(f"Invalid resource {resource}")
     self.sites.append(resource)
     super().assign_child_resource(resource, location=location)
@@ -124,7 +146,7 @@ class MFXModule(Resource):
 
     self.sites[resource.parent.spot].unassign_child_resource(resource)
 
-  def __getitem__(self, idx: int) -> CarrierSite:
+  def __getitem__(self, idx: int) -> MFXSite:
     """ Get a site by index. """
     if not 0 <= idx < self.capacity:
       raise IndexError(f"Invalid index {idx}")
@@ -146,7 +168,7 @@ class MFXModule(Resource):
     """ Get all resources, using self.__getitem__ (so that the location is within this carrier). """
     return [site.resource for site in self.sites if site.resource is not None]
 
-  def get_sites(self) -> List[CarrierSite]:
+  def get_sites(self) -> List[MFXSite]:
     """ Get all sites. """
     return self.sites
 
@@ -166,7 +188,7 @@ def MFX_TIP_module(name: str) -> MFXModule:
     size_x=135.0,
     size_y=497.0,
     size_z=18.195,
-    sites=create_homogeneous_carrier_sites([
+    sites=create_homogeneous_mfx_module_sites([
         Coordinate(6.2, 10.0, 114.95-18.195),
       ],
       site_size_x=122.4,
@@ -185,8 +207,8 @@ def MFX_DWP_module(name: str) -> MFXModule:
     size_x=135.0,
     size_y=497.0,
     size_z=18.195,
-    sites=create_homogeneous_carrier_sites([
-        Coordinate(4.0, 8.5, 86.15-18.195),
+    sites=create_homogeneous_mfx_module_sites([
+        Coordinate(4.0, 4.5, 178.73-18.195-100), # probe height - carrier_height - deck_height
       ],
       site_size_x=122.4,
       site_size_y=82.6,
