@@ -56,7 +56,8 @@ def need_iswap_parked(method: Callable):
   @functools.wraps(method)
   async def wrapper(self: "STAR", *args, **kwargs):
     if self.iswap_installed and not self.iswap_parked:
-      await self.park_iswap()
+      await self.park_iswap(minimum_traverse_height_at_beginning_of_a_command=
+                            int(self._traversal_height * 10)) # pylint: disable=protected-access
 
     result = await method(self, *args, **kwargs) # pylint: disable=not-callable
 
@@ -1087,6 +1088,7 @@ class STAR(HamiltonLiquidHandler):
     self._num_channels: Optional[int] = None
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
+    self._traversal_height: float = 245.0
 
   @property
   def num_channels(self) -> int:
@@ -1094,6 +1096,19 @@ class STAR(HamiltonLiquidHandler):
     if self._num_channels is None:
       raise RuntimeError("has not loaded num_channels, forgot to call `setup`?")
     return self._num_channels
+
+  def set_minimum_traversal_height(self, traversal_height: float):
+    """ Set the minimum traversal height for the robot.
+
+    This refers to the bottom of the pipetting channel when no tip is present, or the bottom of the
+    tip when a tip is present. This value will be used as the default value for the
+    `minimal_traverse_height_at_begin_of_command` and `minimal_height_at_command_end` parameters
+    unless they are explicitly set.
+    """
+
+    assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
+
+    self._traversal_height = traversal_height
 
   @property
   def module_id_length(self):
@@ -1242,7 +1257,7 @@ class STAR(HamiltonLiquidHandler):
       await self.pre_initialize_instrument()
 
       # if self.core96_head_installed:
-      #   self.initialize_core_96_head()
+      #   self.initialize_core_96_head(z_position_at_the_command_end=int(self._traversal_height*10))
 
     if not initialized or any(tip_presences):
       dy = (4050 - 2175) // (self.num_channels - 1)
@@ -1251,7 +1266,7 @@ class STAR(HamiltonLiquidHandler):
       await self.initialize_pipetting_channels(
         x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
         y_positions=y_positions,
-        begin_of_tip_deposit_process=2450,
+        begin_of_tip_deposit_process=int(self._traversal_height * 10),
         end_of_tip_deposit_process=1220,
         z_position_at_end_of_a_command=3600,
         tip_pattern=[True], # [True] * 8
@@ -1270,7 +1285,8 @@ class STAR(HamiltonLiquidHandler):
       if not iswap_initialized:
         await self.initialize_iswap()
 
-      await self.park_iswap()
+      await self.park_iswap(minimum_traverse_height_at_beginning_of_a_command=
+                            int(self._traversal_height * 10))
       self._iswap_parked = True
 
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
@@ -1315,7 +1331,7 @@ class STAR(HamiltonLiquidHandler):
         tip_type_idx=ttti,
         begin_tip_pick_up_process=int((max_z + max_total_tip_length)*10),
         end_tip_pick_up_process=int((max_z + max_tip_length)*10),
-        minimum_traverse_height_at_beginning_of_a_command=2450,
+        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
         pickup_method=tip.pickup_method,
       )
     except STARFirmwareError as e:
@@ -1382,8 +1398,8 @@ class STAR(HamiltonLiquidHandler):
         tip_pattern=channels_involved,
         begin_tip_deposit_process= begin_tip_deposit_process,
         end_tip_deposit_process= end_tip_deposit_process,
-        minimum_traverse_height_at_beginning_of_a_command=2450,
-        z_position_at_end_of_a_command=2450,
+        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
+        z_position_at_end_of_a_command=int(self._traversal_height * 10),
         discarding_method=drop_method
       )
     except STARFirmwareError as e:
@@ -1456,8 +1472,8 @@ class STAR(HamiltonLiquidHandler):
     ratio_liquid_rise_to_tip_deep_in: Optional[List[int]] = None,
     immersion_depth_2nd_section: Optional[List[int]] = None,
 
-    minimum_traverse_height_at_beginning_of_a_command: int = 2450,
-    min_z_endpos: int = 2450,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
+    min_z_endpos: Optional[int] = None,
 
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
   ):
@@ -1681,8 +1697,8 @@ class STAR(HamiltonLiquidHandler):
         immersion_depth_2nd_section=immersion_depth_2nd_section,
 
         minimum_traverse_height_at_beginning_of_a_command=\
-          minimum_traverse_height_at_beginning_of_a_command,
-        min_z_endpos=min_z_endpos,
+          minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
+        min_z_endpos=min_z_endpos or int(self._traversal_height * 10),
       )
     except STARFirmwareError as e:
       tll: List[int] = []
@@ -1735,8 +1751,8 @@ class STAR(HamiltonLiquidHandler):
     mix_surface_following_distance: Optional[List[int]] = None,
     limit_curve_index: Optional[List[int]] = None,
 
-    minimum_traverse_height_at_beginning_of_a_command: int = 2450,
-    min_z_endpos: int = 2450,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
+    min_z_endpos: Optional[int] = None,
     side_touch_off_distance: int = 0,
 
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
@@ -1928,8 +1944,8 @@ class STAR(HamiltonLiquidHandler):
         limit_curve_index=limit_curve_index,
 
         minimum_traverse_height_at_beginning_of_a_command=
-          minimum_traverse_height_at_beginning_of_a_command,
-        min_z_endpos=min_z_endpos,
+          minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
+        min_z_endpos=min_z_endpos or int(self._traversal_height * 10),
         side_touch_off_distance=side_touch_off_distance,
       )
     except STARFirmwareError as e:
@@ -1956,8 +1972,8 @@ class STAR(HamiltonLiquidHandler):
     pickup: PickupTipRack,
     tip_pickup_method: int = 0,
     z_deposit_position: int = 2164,
-    minimum_height_command_end: int = 2450,
-    minimum_traverse_height_at_beginning_of_a_command: int = 2450
+    minimum_height_command_end: Optional[int] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
   ):
     """ Pick up tips using the 96 head. """
     assert self.core96_head_installed, "96 head must be installed"
@@ -1974,9 +1990,9 @@ class STAR(HamiltonLiquidHandler):
       tip_type_idx=ttti,
       tip_pickup_method=tip_pickup_method,
       z_deposit_position=z_deposit_position,
-      minimum_height_command_end=minimum_height_command_end,
       minimum_traverse_height_at_beginning_of_a_command=
-        minimum_traverse_height_at_beginning_of_a_command,
+        minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
+      minimum_height_command_end=minimum_height_command_end or int(self._traversal_height * 10),
     )
 
   @need_iswap_parked
@@ -1984,8 +2000,8 @@ class STAR(HamiltonLiquidHandler):
     self,
     drop: DropTipRack,
     z_deposit_position: int = 2164,
-    minimum_height_command_end: int = 2450,
-    minimum_traverse_height_at_beginning_of_a_command: int = 2450
+    minimum_height_command_end: Optional[int] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
   ):
     """ Drop tips from the 96 head. """
     assert self.core96_head_installed, "96 head must be installed"
@@ -1997,9 +2013,9 @@ class STAR(HamiltonLiquidHandler):
       x_direction=0,
       y_position=int(position.y * 10),
       z_deposit_position=z_deposit_position,
-      minimum_height_command_end=minimum_height_command_end,
       minimum_traverse_height_at_beginning_of_a_command=
-        minimum_traverse_height_at_beginning_of_a_command,
+        minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
+      minimum_height_command_end=minimum_height_command_end or int(self._traversal_height * 10),
     )
 
   @need_iswap_parked
@@ -2015,8 +2031,8 @@ class STAR(HamiltonLiquidHandler):
     hlc: Optional[HamiltonLiquidClass] = None,
 
     aspiration_type: int = 0,
-    minimum_traverse_height_at_beginning_of_a_command: int = 2450,
-    minimal_end_height: int = 2450,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
+    minimal_end_height: Optional[int] = None,
     lld_search_height: int = 1999,
     maximum_immersion_depth: int = 1269,
     tube_2nd_section_height_measured_from_zm: int = 32,
@@ -2154,8 +2170,8 @@ class STAR(HamiltonLiquidHandler):
       aspiration_type=aspiration_type,
 
       minimum_traverse_height_at_beginning_of_a_command=
-       minimum_traverse_height_at_beginning_of_a_command,
-      minimal_end_height=minimal_end_height,
+       minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
+      minimal_end_height=minimal_end_height or int(self._traversal_height * 10),
       lld_search_height=lld_search_height,
       liquid_surface_at_function_without_lld=liquid_surface_at_function_without_lld,
       pull_out_distance_to_take_transport_air_in_function_without_lld=
@@ -2203,8 +2219,8 @@ class STAR(HamiltonLiquidHandler):
     air_transport_retract_dist=10,
     use_lld: bool = False,
 
-    minimum_traverse_height_at_beginning_of_a_command: int = 2450,
-    minimal_end_height: int = 2450,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
+    minimal_end_height: Optional[int] = None,
     lld_search_height: int = 1999,
     maximum_immersion_depth: int = 1869,
     tube_2nd_section_height_measured_from_zm: int = 32,
@@ -2324,8 +2340,8 @@ class STAR(HamiltonLiquidHandler):
       y_position=int(position.y * 10),
 
       minimum_traverse_height_at_beginning_of_a_command=
-        minimum_traverse_height_at_beginning_of_a_command,
-      minimal_end_height=minimal_end_height,
+        minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
+      minimal_end_height=minimal_end_height or int(self._traversal_height * 10),
       lld_search_height=lld_search_height,
       liquid_surface_at_function_without_lld=
         liquid_surface_at_function_without_lld,
@@ -2394,6 +2410,7 @@ class STAR(HamiltonLiquidHandler):
     """
 
     assert self.iswap_installed, "iswap must be installed"
+    print(minimum_traverse_height_at_beginning_of_a_command, z_position_at_the_command_end)
 
     # Get center of source plate. Also gripping height and plate width.
     center = resource.get_absolute_location() + resource.center() + offset
@@ -2520,7 +2537,7 @@ class STAR(HamiltonLiquidHandler):
   async def move_resource(
     self,
     move: Move,
-    use_arm: str = "iswap",
+    use_arm: Literal["iswap", "core"] = "iswap",
     channel_1: int = 7,
     channel_2: int = 8,
     core_grip_strength: int = 15,
@@ -2550,13 +2567,16 @@ class STAR(HamiltonLiquidHandler):
         grip_direction=move.get_direction,
         pickup_distance_from_top=move.pickup_distance_from_top,
         offset=move.resource_offset,
-        minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10))
+        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
+        z_position_at_the_command_end=int(self._traversal_height * 10),
+      )
     else:
       await self.core_pick_up_resource(
         resource=move.resource,
         pickup_distance_from_top=move.pickup_distance_from_top,
         offset=move.resource_offset,
-        minimum_traverse_height_at_beginning_of_a_command=int(minimum_traverse_height * 10),
+        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
+        minimum_z_position_at_the_command_end=int(self._traversal_height * 10),
         channel_1=channel_1,
         channel_2=channel_2,
         grip_strength=core_grip_strength,
@@ -2571,8 +2591,8 @@ class STAR(HamiltonLiquidHandler):
           location=location,
           resource=move.resource,
           grip_direction=move.get_direction,
-          minimum_traverse_height_at_beginning_of_a_command=
-            int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
+          minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
+            # int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
           collision_control_level=1,
           acceleration_index_high_acc=4,
           acceleration_index_low_acc=1)
@@ -2580,8 +2600,8 @@ class STAR(HamiltonLiquidHandler):
         await self.core_move_picked_up_resource(
           location=location,
           resource=move.resource,
-          minimum_traverse_height_at_beginning_of_a_command=
-            int(previous_location.z + move.resource.get_size_z() / 2) * 10,
+          minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
+            # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
           acceleration_index=4
         )
       previous_location = location
@@ -2596,8 +2616,9 @@ class STAR(HamiltonLiquidHandler):
         offset=move.destination_offset,
         grip_direction=move.put_direction,
         pickup_distance_from_top=move.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=
-          int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
+        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
+          # int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
+        z_position_at_the_command_end=int(self._traversal_height * 10),
       )
     else:
       await self.core_release_picked_up_resource(
@@ -2605,8 +2626,9 @@ class STAR(HamiltonLiquidHandler):
         resource=move.resource,
         offset=move.destination_offset,
         pickup_distance_from_top=move.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=
-          int(previous_location.z + move.resource.get_size_z() / 2) * 10,
+        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
+        z_position_at_the_command_end=int(self._traversal_height * 10),
+          # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
         return_tool=return_core_gripper
       )
 
@@ -4102,9 +4124,9 @@ class STAR(HamiltonLiquidHandler):
       pb=f"{p2:02}",
       tp="2350",
       tz="2250",
-      th="2450",
+      th=int(self._traversal_height * 10),
       tt="14"
-      )
+    )
     self._core_parked = False
     return command_output
 
@@ -4119,24 +4141,24 @@ class STAR(HamiltonLiquidHandler):
       yb="1070",
       tp="2150",
       tz="2050",
-      th="2450",
-      te="2450"
+      th=int(self._traversal_height * 10),
+      te=int(self._traversal_height * 10),
     )
     self._core_parked = True
     return command_output
 
   async def core_pick_up_resource(
-      self,
-      resource: Resource,
-      pickup_distance_from_top: float,
-      offset: Coordinate = Coordinate.zero(),
-      minimum_traverse_height_at_beginning_of_a_command: int = 2750,
-      minimum_z_position_at_the_command_end: int = 2750,
-      grip_strength: int = 15,
-      z_speed: int = 500,
-      y_gripping_speed: int = 50,
-      channel_1: int = 7,
-      channel_2: int = 8,
+    self,
+    resource: Resource,
+    pickup_distance_from_top: float,
+    offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
+    minimum_z_position_at_the_command_end: Optional[int] = None,
+    grip_strength: int = 15,
+    z_speed: int = 500,
+    y_gripping_speed: int = 50,
+    channel_1: int = 7,
+    channel_2: int = 8,
   ):
     """ Pick up resource with CoRe gripper tool
         Low level component of :meth:`move_resource`
@@ -4174,17 +4196,18 @@ class STAR(HamiltonLiquidHandler):
       plate_width = int(grip_width*10) - 30,
       grip_strength=grip_strength,
       minimum_traverse_height_at_beginning_of_a_command=\
-        minimum_traverse_height_at_beginning_of_a_command,
-      minimum_z_position_at_the_command_end=minimum_z_position_at_the_command_end,
+        minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
+      minimum_z_position_at_the_command_end=minimum_z_position_at_the_command_end or
+        int(self._traversal_height * 10),
     )
 
   async def core_move_picked_up_resource(
-      self,
-      location: Coordinate,
-      resource: Resource,
-      minimum_traverse_height_at_beginning_of_a_command: int = 2840,
-      acceleration_index: int = 4,
-      z_speed: int = 500,
+    self,
+    location: Coordinate,
+    resource: Resource,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
+    acceleration_index: int = 4,
+    z_speed: int = 500,
   ):
     """ After a ressource is picked up, move it to a new location but don't release it yet.
     Low level component of :meth:`move_resource`
@@ -4211,18 +4234,18 @@ class STAR(HamiltonLiquidHandler):
       z_position=int(center.z * 10),
       z_speed=z_speed,
       minimum_traverse_height_at_beginning_of_a_command=
-        minimum_traverse_height_at_beginning_of_a_command,
+        minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
     )
 
   async def core_release_picked_up_resource(
-      self,
-      location: Coordinate,
-      resource: Resource,
-      pickup_distance_from_top: float,
-      offset: Coordinate = Coordinate.zero(),
-      minimum_traverse_height_at_beginning_of_a_command: int = 2750,
-      z_position_at_the_command_end: int = 2750,
-      return_tool: bool = True
+    self,
+    location: Coordinate,
+    resource: Resource,
+    pickup_distance_from_top: float,
+    offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
+    z_position_at_the_command_end: Optional[int] = None,
+    return_tool: bool = True
   ):
     """ Place resource with CoRe gripper tool
     Low level component of :meth:`move_resource`
@@ -4254,8 +4277,8 @@ class STAR(HamiltonLiquidHandler):
       z_speed=500,
       open_gripper_position=int(grip_width*10) + 30,
       minimum_traverse_height_at_beginning_of_a_command=
-        minimum_traverse_height_at_beginning_of_a_command,
-      z_position_at_the_command_end=z_position_at_the_command_end,
+        minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
+      z_position_at_the_command_end=z_position_at_the_command_end or int(self._traversal_height*10),
       return_tool=return_tool
     )
 
@@ -4267,18 +4290,18 @@ class STAR(HamiltonLiquidHandler):
     return command_output
 
   async def core_get_plate(
-      self,
-      x_position: int = 0,
-      x_direction: int = 0,
-      y_position: int = 0,
-      y_gripping_speed: int = 50,
-      z_position: int = 0,
-      z_speed: int = 500,
-      open_gripper_position: int = 0,
-      plate_width: int = 0,
-      grip_strength: int = 15,
-      minimum_traverse_height_at_beginning_of_a_command: int = 2750,
-      minimum_z_position_at_the_command_end: int = 2750,
+    self,
+    x_position: int = 0,
+    x_direction: int = 0,
+    y_position: int = 0,
+    y_gripping_speed: int = 50,
+    z_position: int = 0,
+    z_speed: int = 500,
+    open_gripper_position: int = 0,
+    plate_width: int = 0,
+    grip_strength: int = 15,
+    minimum_traverse_height_at_beginning_of_a_command: int = 2750,
+    minimum_z_position_at_the_command_end: int = 2750,
   ):
     """ Get plate with CoRe gripper tool from wasteblock mount. """\
 
@@ -4315,17 +4338,17 @@ class STAR(HamiltonLiquidHandler):
     return command_output
 
   async def core_put_plate(
-      self,
-      x_position: int = 0,
-      x_direction: int = 0,
-      y_position: int = 0,
-      z_position: int = 0,
-      z_press_on_distance: int = 0,
-      z_speed: int = 500,
-      open_gripper_position: int = 0,
-      minimum_traverse_height_at_beginning_of_a_command: int = 2750,
-      z_position_at_the_command_end: int = 2750,
-      return_tool: bool = True
+    self,
+    x_position: int = 0,
+    x_direction: int = 0,
+    y_position: int = 0,
+    z_position: int = 0,
+    z_press_on_distance: int = 0,
+    z_speed: int = 500,
+    open_gripper_position: int = 0,
+    minimum_traverse_height_at_beginning_of_a_command: int = 2750,
+    z_position_at_the_command_end: int = 2750,
+    return_tool: bool = True
   ):
     """ Put plate with CoRe gripper tool and return to wasteblock mount. """
 
@@ -4361,14 +4384,14 @@ class STAR(HamiltonLiquidHandler):
     return command_output
 
   async def core_move_plate_to_position(
-      self,
-      x_position: int = 0,
-      x_direction: int = 0,
-      x_acceleration_index: int = 4,
-      y_position: int = 0,
-      z_position: int = 0,
-      z_speed: int = 500,
-      minimum_traverse_height_at_beginning_of_a_command: int = 3600,
+    self,
+    x_position: int = 0,
+    x_direction: int = 0,
+    x_acceleration_index: int = 4,
+    y_position: int = 0,
+    z_position: int = 0,
+    z_speed: int = 500,
+    minimum_traverse_height_at_beginning_of_a_command: int = 3600,
   ):
     """ Move a plate with CoRe gripper tool. """
 
