@@ -69,7 +69,7 @@ class OTDeck(Deck):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate = Coordinate.zero(),
+    location: Coordinate,
     reassign: bool = True
   ):
     """ Assign a resource to a slot.

@@ -67,7 +67,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate = Coordinate.zero(),
+    location: Optional[Coordinate] = None,
     reassign: bool = False,
     rails: Optional[int] = None,
     replace=False

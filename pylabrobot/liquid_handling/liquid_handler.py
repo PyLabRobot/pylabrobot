@@ -1689,7 +1689,7 @@ class LiquidHandler(Machine):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate = Coordinate.zero(),
+    location: Coordinate,
     reassign: bool = True,
   ):
     """ Not implement on LiquidHandler, since the deck is managed by the :attr:`deck` attribute. """

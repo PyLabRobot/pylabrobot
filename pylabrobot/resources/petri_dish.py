@@ -63,7 +63,7 @@ class PetriDishHolder(Resource):
   def assign_child_resource(
       self,
       resource: Resource,
-      location: Coordinate = Coordinate.zero(),
+      location: Coordinate,
       reassign: bool = True):
     """ Can only assign a single PetriDish """
     if not isinstance(resource, PetriDish):
