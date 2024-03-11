@@ -22,16 +22,11 @@ def MFX_CAR_L5_base(name: str) -> MFXCarrier:
     size_y=497.0,
     size_z=18.195,
     sites=create_homogeneous_carrier_sites([
-        Coordinate(4.0, 8.5, 86.15),
-        Coordinate(4.0, 104.5, 86.15),
-        Coordinate(4.0, 200.5, 86.15),
-        Coordinate(4.0, 296.5, 86.15),
-        Coordinate(4.0, 392.5, 86.15)
-        # Coordinate(0.0, 4.5, 18.195),
-        # Coordinate(0.0, 100.5, 18.195),
-        # Coordinate(0.0, 196.5, 18.195),
-        # Coordinate(0.0, 292.5, 18.195),
-        # Coordinate(0.0, 388.5, 18.195),
+        Coordinate(4.0, 8.5, 18.195),
+        Coordinate(4.0, 104.5, 18.195),
+        Coordinate(4.0, 200.5, 18.195),
+        Coordinate(4.0, 296.5, 18.195),
+        Coordinate(4.0, 392.5, 18.195)
       ],
       site_size_x=135.0,
       site_size_y=94.0,

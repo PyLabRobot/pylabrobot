@@ -68,19 +68,30 @@ def create_homogeneous_mfx_module_sites(
   n = len(locations)
   return create_mfx_module_sites(locations, [site_size_x] * n, [site_size_y] * n)
 
-# Define base resource
+
 class MFXModule(Resource):
   """ Abstract base resource for MFX modules to be placed on a MFX carrier (landscape/portrait, 4/5 positions).
 
   Examples:
-    Creating a `TipCarrier` and assigning one set of tips at location 0 (the bottom):
+    1. Creating MFX module for tips:
+      Creating a `MFXCarrier`,
+      Creating a `MFXModule` for tips,
+      Assigning the `MFXModule` for tips to a carrier_site on the `MFXCarrier`,
+      Creating and assigning a tip_rack to the MFXsite on the MFXModule:
 
-    >>> tip_car = TIP_CAR_480_A00(name='tip carrier')
-    >>> tip_car[0] = STF_L(name='tips_1')
+      >>> mfx_car = MFX_CAR_L5_base(name='mfx_carrier_1')
+      >>> mfx_carrier_1[0] = mfx_tip_module_1 = MFX_TIP_module(name="mfx_tip_module_1")
+      >>> mfx_tip_module_1[0] = tip_50ul_rack = ST_L(name="tip_50ul_rack")
 
+    2. Creating MFX module for plates:
+      Creating a `MFXCarrier`,
+      Creating a `MFXModule` for plates,
+      Assigning the `MFXModule` for plates to a carrier_site on the `MFXCarrier`,
+      Creating and assigning a plate to the MFXsite on the MFXModule:
 
-  Attributes:
-    capacity: The maximum number of items that can be stored in this carrier.
+      >>> mfx_car = MFX_CAR_L5_base(name='mfx_carrier_1')
+      >>> mfx_carrier_1[1] = mfx_dwp_module_1 = MFX_DWP_module(name="mfx_dwp_module_1")
+      >>> mfx_dwp_module_1[0] = Cos96_plate_1 = Cos_96_Rd(name='Cos96_plate_1')
   """
 
   def __init__(
@@ -189,7 +200,7 @@ def MFX_TIP_module(name: str) -> MFXModule:
     size_y=497.0,
     size_z=18.195,
     sites=create_homogeneous_mfx_module_sites([
-        Coordinate(6.2, 10.0, 114.95-18.195),
+        Coordinate(2.2, 1.5, 214.8-18.195-100),# probe height - carrier_height - deck_height
       ],
       site_size_x=122.4,
       site_size_y=82.6,
@@ -208,7 +219,7 @@ def MFX_DWP_module(name: str) -> MFXModule:
     size_y=497.0,
     size_z=18.195,
     sites=create_homogeneous_mfx_module_sites([
-        Coordinate(4.0, 4.5, 178.73-18.195-100), # probe height - carrier_height - deck_height
+        Coordinate(0.0, 0.0, 178.73-18.195-100), # probe height - carrier_height - deck_height
       ],
       site_size_x=122.4,
       site_size_y=82.6,
