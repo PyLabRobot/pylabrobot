@@ -164,7 +164,7 @@ class TestResource(unittest.TestCase):
   def test_deserialize_location_none(self):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
     c = Resource("child", size_x=1, size_y=1, size_z=1)
-    r.assign_child_resource(c, location=None)
+    r.assign_child_resource(c, location=Coordinate.zero())
     self.assertEqual(Resource.deserialize(r.serialize()), r)
 
   def test_get_center_offsets(self):
