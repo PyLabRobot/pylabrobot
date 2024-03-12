@@ -37,6 +37,7 @@ from .greiner import *
 from .hamilton import *
 from .limbro import *
 from .ml_star import *
+from .opentrons import *
 from .porvair import *
 from .revvity import *
 from .tecan import *
