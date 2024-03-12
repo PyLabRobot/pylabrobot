@@ -1236,8 +1236,7 @@ class LiquidHandler(Machine):
           raise ValueError("All wells must be in the same plate")
 
     if not len(wells) == 96:
-      raise NotImplementedError(f"It is not possible to plate aspirate from a {len(wells)}-well "
-                                 "plate")
+      raise ValueError(f"aspirate96 expects 96 wells, got {len(wells)}")
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     all_liquids: List[Sequence[Tuple[Optional[Liquid], float]]] = []
@@ -1346,8 +1345,7 @@ class LiquidHandler(Machine):
           raise ValueError("All wells must be in the same plate")
 
     if not len(wells) == 96:
-      raise NotImplementedError(f"It is not possible to plate aspirate from a {len(wells)}-well "
-                                 "plate")
+      raise ValueError(f"dispense96 expects 96 wells, got {len(wells)}")
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
