@@ -6,7 +6,7 @@ import logging
 from typing import List, Optional, Union
 
 from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.carrier import Coordinate, create_homogeneous_carrier_sites
+from pylabrobot.resources.carrier import Coordinate
 
 logger = logging.getLogger("pylabrobot")
 
@@ -70,7 +70,8 @@ def create_homogeneous_mfx_module_sites(
 
 
 class MFXModule(Resource):
-  """ Abstract base resource for MFX modules to be placed on a MFX carrier (landscape/portrait, 4/5 positions).
+  """ Abstract base resource for MFX modules to be placed
+    on a MFX carrier (landscape/portrait, 4/5 positions).
 
   Examples:
     1. Creating MFX module for tips:
@@ -79,17 +80,16 @@ class MFXModule(Resource):
       Assigning the `MFXModule` for tips to a carrier_site on the `MFXCarrier`,
       Creating and assigning a tip_rack to the MFXsite on the MFXModule:
 
-      >>> mfx_car = MFX_CAR_L5_base(name='mfx_carrier_1')
+      >>> mfx_carrier_1 = MFX_CAR_L5_base(name='mfx_carrier_1')
       >>> mfx_carrier_1[0] = mfx_tip_module_1 = MFX_TIP_module(name="mfx_tip_module_1")
-      >>> mfx_tip_module_1[0] = tip_50ul_rack = ST_L(name="tip_50ul_rack")
+      >>> mfx_tip_module_1[0] = tip_50ul_rack = TIP_50ul_L(name="tip_50ul_rack")
 
     2. Creating MFX module for plates:
-      Creating a `MFXCarrier`,
+      Use the same `MFXCarrier` instance,
       Creating a `MFXModule` for plates,
       Assigning the `MFXModule` for plates to a carrier_site on the `MFXCarrier`,
       Creating and assigning a plate to the MFXsite on the MFXModule:
 
-      >>> mfx_car = MFX_CAR_L5_base(name='mfx_carrier_1')
       >>> mfx_carrier_1[1] = mfx_dwp_module_1 = MFX_DWP_module(name="mfx_dwp_module_1")
       >>> mfx_dwp_module_1[0] = Cos96_plate_1 = Cos_96_Rd(name='Cos96_plate_1')
   """

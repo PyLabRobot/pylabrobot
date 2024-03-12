@@ -6,7 +6,6 @@
 
 from pylabrobot.resources.carrier import (
   MFXCarrier,
-  ShakerCarrier,
   Coordinate,
   create_homogeneous_carrier_sites
 )
