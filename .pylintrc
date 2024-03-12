@@ -147,7 +147,8 @@ disable=abstract-method,
         xrange-builtin,
         zip-builtin-not-iterating,
         missing-module-docstring,  # added
-        missing-function-docstring  # added
+        missing-function-docstring,  # added
+        C0103  # added, invalid module name
 
 
 [REPORTS]
