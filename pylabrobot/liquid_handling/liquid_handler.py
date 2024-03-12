@@ -63,9 +63,9 @@ class LiquidHandler(Machine):
 
   ALLOWED_CALLBACKS = {
     "aspirate",
-    "aspirate_plate",
+    "aspirate96",
     "dispense",
-    "dispense_plate",
+    "dispense96",
     "drop_tips",
     "drop_tips96",
     "move_resource",
@@ -1182,9 +1182,9 @@ class LiquidHandler(Machine):
       raise RuntimeError("No tips have been picked up with the 96 head")
     return await self.drop_tips96(tip_rack)
 
-  async def aspirate_plate(
+  async def aspirate96(
     self,
-    plate: Plate,
+    resource: Union[Plate, List[Well]],
     volume: float,
     flow_rate: Optional[float] = None,
     end_delay: float = 0,
@@ -1196,7 +1196,7 @@ class LiquidHandler(Machine):
     Examples:
       Aspirate an entire 96 well plate:
 
-      >>> lh.aspirate_plate(plate, volume=50)
+      >>> lh.aspirate96(plate, volume=50)
 
     Args:
       resource: Resource name or resource object.
@@ -1218,12 +1218,26 @@ class LiquidHandler(Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
 
-    if plate.has_lid():
-      raise ValueError("Aspirating from plate with lid")
+    if isinstance(resource, Plate):
+      if resource.has_lid():
+        raise ValueError("Aspirating from plate with lid")
+      wells = resource.get_all_items()
+    else:
+      wells = resource
+
+      # ensure that wells are all in the same plate
+      plate = wells[0].parent
+      for well in wells:
+        if well.parent != plate:
+          raise ValueError("All wells must be in the same plate")
+
+    if not len(wells) == 96:
+      raise NotImplementedError(f"It is not possible to plate aspirate from a {len(wells)}-well "
+                                 "plate")
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     all_liquids: List[Sequence[Tuple[Optional[Liquid], float]]] = []
-    for well, channel in zip(plate.get_all_items(), self.head96.values()):
+    for well, channel in zip(wells, self.head96.values()):
       # superfluous to have append in two places but the type checker is very angry and does not
       # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
       if well.tracker.is_disabled or not does_volume_tracking():
@@ -1236,12 +1250,8 @@ class LiquidHandler(Machine):
       for liquid, vol in reversed(liquids):
         channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-    if not (plate.num_items_x == 12 and plate.num_items_y == 8):
-      raise NotImplementedError(f"It is not possible to plate aspirate from an {plate.num_items_x} "
-                                f"by {plate.num_items_y} plate")
-
     aspiration_plate = AspirationPlate(
-      resource=plate,
+      wells=wells,
       volume=volume,
       offset=Coordinate.zero(),
       flow_rate=flow_rate,
@@ -1254,24 +1264,24 @@ class LiquidHandler(Machine):
     try:
       await self.backend.aspirate96(aspiration=aspiration_plate, **backend_kwargs)
     except Exception as error:  # pylint: disable=broad-except
-      for channel, well in zip(self.head96.values(), plate.get_all_items()):
+      for channel, well in zip(self.head96.values(), wells):
         if does_volume_tracking() and not well.tracker.is_disabled:
           well.tracker.rollback()
         channel.get_tip().tracker.rollback()
       self._trigger_callback(
-        "aspirate_plate",
+        "aspirate96",
         liquid_handler=self,
         aspiration=aspiration_plate,
         error=error,
         **backend_kwargs,
       )
     else:
-      for channel, well in zip(self.head96.values(), plate.get_all_items()):
+      for channel, well in zip(self.head96.values(), wells):
         if does_volume_tracking() and not well.tracker.is_disabled:
           well.tracker.commit()
         channel.get_tip().tracker.commit()
       self._trigger_callback(
-        "aspirate_plate",
+        "aspirate96",
         liquid_handler=self,
         aspiration=aspiration_plate,
         error=None,
@@ -1281,9 +1291,9 @@ class LiquidHandler(Machine):
     if end_delay > 0:
       time.sleep(end_delay)
 
-  async def dispense_plate(
+  async def dispense96(
     self,
-    plate: Plate,
+    resource: Union[Plate, List[Well]],
     volume: float,
     flow_rate: Optional[float] = None,
     end_delay: float = 0,
@@ -1295,7 +1305,7 @@ class LiquidHandler(Machine):
     Examples:
       Dispense an entire 96 well plate:
 
-      >>> lh.dispense_plate(plate, volume=50)
+      >>> lh.dispense96(plate, volume=50)
 
     Args:
       resource: Resource name or resource object.
@@ -1317,12 +1327,26 @@ class LiquidHandler(Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
 
-    if plate.has_lid():
-      raise ValueError("Dispensing to plate with lid")
+    if isinstance(resource, Plate):
+      if resource.has_lid():
+        raise ValueError("Aspirating from plate with lid")
+      wells = resource.get_all_items()
+    else:
+      wells = resource
+
+      # ensure that wells are all in the same plate
+      plate = wells[0].parent
+      for well in wells:
+        if well.parent != plate:
+          raise ValueError("All wells must be in the same plate")
+
+    if not len(wells) == 96:
+      raise NotImplementedError(f"It is not possible to plate aspirate from a {len(wells)}-well "
+                                 "plate")
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    for channel, well in zip(self.head96.values(), plate.get_all_items()):
+    for channel, well in zip(self.head96.values(), wells):
       liquids = None # liquids in this well
       # even if the volume tracker is disabled, a liquid (None, volume) is added to the list during
       # the aspiration command
@@ -1333,12 +1357,8 @@ class LiquidHandler(Machine):
       for liquid, vol in liquids:
         well.tracker.add_liquid(liquid=liquid, volume=vol)
 
-    if not (plate.num_items_x == 12 and plate.num_items_y == 8):
-      raise NotImplementedError(f"It is not possible to plate dispense to an {plate.num_items_x} "
-                                f"by {plate.num_items_y} plate")
-
-    dispense_plate = DispensePlate(
-      resource=plate,
+    dispense96 = DispensePlate(
+      wells=wells,
       volume=volume,
       offset=Coordinate.zero(),
       flow_rate=flow_rate,
@@ -1349,30 +1369,30 @@ class LiquidHandler(Machine):
     )
 
     try:
-      await self.backend.dispense96(dispense=dispense_plate, **backend_kwargs)
+      await self.backend.dispense96(dispense=dispense96, **backend_kwargs)
     except Exception as error:  # pylint: disable=broad-except
-      for channel, well in zip(self.head96.values(), plate.get_all_items()):
+      for channel, well in zip(self.head96.values(), wells):
         if does_volume_tracking() and not well.tracker.is_disabled:
           well.tracker.rollback()
         channel.get_tip().tracker.rollback()
 
       self._trigger_callback(
-        "dispense_plate",
+        "dispense96",
         liquid_handler=self,
-        dispense=dispense_plate,
+        dispense=dispense96,
         error=error,
         **backend_kwargs,
       )
     else:
-      for channel, well in zip(self.head96.values(), plate.get_all_items()):
+      for channel, well in zip(self.head96.values(), wells):
         if does_volume_tracking() and not well.tracker.is_disabled:
           well.tracker.commit()
         channel.get_tip().tracker.commit()
 
       self._trigger_callback(
-        "dispense_plate",
+        "dispense96",
         liquid_handler=self,
-        dispense=dispense_plate,
+        dispense=dispense96,
         error=None,
         **backend_kwargs,
       )
@@ -1382,7 +1402,7 @@ class LiquidHandler(Machine):
 
   async def stamp(
     self,
-    source: Plate,
+    source: Plate, # TODO
     target: Plate,
     volume: float,
     aspiration_flow_rate: Optional[float] = None,
@@ -1403,12 +1423,12 @@ class LiquidHandler(Machine):
     assert (source.num_items_x, source.num_items_y) == (target.num_items_x, target.num_items_y), \
       "Source and target plates must be the same shape"
 
-    await self.aspirate_plate(
-      plate=source,
+    await self.aspirate96(
+      resource=source,
       volume=volume,
       flow_rate=aspiration_flow_rate)
-    await self.dispense_plate(
-      plate=source,
+    await self.dispense96(
+      resource=source,
       volume=volume,
       flow_rate=dispense_flow_rate)
 

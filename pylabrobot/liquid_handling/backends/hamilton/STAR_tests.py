@@ -550,7 +550,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # TODO: Hamilton liquid classes
     assert self.plate.lid is not None
     self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, volume=100, blow_out=True)
+    await self.lh.aspirate96(self.plate, volume=100, blow_out=True)
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
@@ -565,10 +565,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack2) # pick up high volume tips
     if self.plate.lid is not None:
       self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, 100, blow_out=True) # aspirate first
+    await self.lh.aspirate96(self.plate, 100, blow_out=True) # aspirate first
 
     with no_volume_tracking():
-      await self.lh.dispense_plate(self.plate, 100, blow_out=True)
+      await self.lh.dispense96(self.plate, 100, blow_out=True)
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
@@ -584,8 +584,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
     assert self.plate.lid is not None
     self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, 0)
-    await self.lh.dispense_plate(self.plate, 0)
+    await self.lh.aspirate96(self.plate, 0)
+    await self.lh.dispense96(self.plate, 0)
 
   async def test_iswap(self):
     await self.lh.move_plate(self.plate, self.plt_car[2])

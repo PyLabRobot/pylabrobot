@@ -339,11 +339,11 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_aspirate_dispense96(self):
     self.plate.get_item("A1").tracker.set_liquids([(None, 10)])
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate_plate(self.plate, volume=10)
+    await self.lh.aspirate96(self.plate, volume=10)
     for i in range(96):
       self.assertTrue(self.lh.head96[i].has_tip)
       self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 10)
-    await self.lh.dispense_plate(self.plate, volume=10)
+    await self.lh.dispense96(self.plate, volume=10)
     for i in range(96):
       self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
 
@@ -449,16 +449,16 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "command": "aspirate96",
       "args": (),
       "kwargs": {"aspiration":
-        AspirationPlate(resource=self.plate, volume=10.0, tips=ts, offset=Coordinate.zero(),
-                      flow_rate=None, liquid_height=None, blow_out_air_volume=None,
-                        liquids=[[(None, 10)]]*96)}})
+        AspirationPlate(wells=self.plate.get_all_items(), volume=10.0, tips=ts,
+                        offset=Coordinate.zero(), flow_rate=None, liquid_height=None,
+                        blow_out_air_volume=None, liquids=[[(None, 10)]]*96)}})
     self.assertEqual(self.get_first_command("dispense96"), {
       "command": "dispense96",
       "args": (),
       "kwargs": {"dispense":
-        DispensePlate(resource=self.plate, volume=10.0, tips=ts, offset=Coordinate.zero(),
-                flow_rate=None, liquid_height=None, blow_out_air_volume=None,
-                liquids=[[(None, 10)]]*96)}})
+        DispensePlate(wells=self.plate.get_all_items(), volume=10.0, tips=ts,
+                      offset=Coordinate.zero(), flow_rate=None, liquid_height=None,
+                      blow_out_air_volume=None, liquids=[[(None, 10)]]*96)}})
     self.backend.clear()
 
   async def test_tip_tracking_double_pickup(self):
