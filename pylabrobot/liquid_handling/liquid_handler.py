@@ -1189,6 +1189,7 @@ class LiquidHandler(Machine):
     self,
     resource: Union[Plate, List[Well]],
     volume: float,
+    offset: Coordinate = Coordinate.zero(),
     flow_rate: Optional[float] = None,
     end_delay: float = 0,
     blow_out_air_volume: Optional[float] = None,
@@ -1256,7 +1257,7 @@ class LiquidHandler(Machine):
     aspiration_plate = AspirationPlate(
       wells=wells,
       volume=volume,
-      offset=Coordinate.zero(),
+      offset=offset,
       flow_rate=flow_rate,
       tips=tips,
       liquid_height=None,
@@ -1298,6 +1299,7 @@ class LiquidHandler(Machine):
     self,
     resource: Union[Plate, List[Well]],
     volume: float,
+    offset: Coordinate = Coordinate.zero(),
     flow_rate: Optional[float] = None,
     end_delay: float = 0,
     blow_out_air_volume: Optional[float] = None,
@@ -1363,7 +1365,7 @@ class LiquidHandler(Machine):
     dispense96 = DispensePlate(
       wells=wells,
       volume=volume,
-      offset=Coordinate.zero(),
+      offset=offset,
       flow_rate=flow_rate,
       tips=tips,
       liquid_height=None,
