@@ -2106,10 +2106,11 @@ class STAR(HamiltonLiquidHandler):
 
     # get the first well and tip as representatives
     top_left_well = aspiration.wells[0]
-    position = top_left_well.get_absolute_location() + top_left_well.center()
+    position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
     tip = aspiration.tips[0]
+    maximum_immersion_depth = int(position.z*10)
 
-    liquid_height = top_left_well.get_absolute_location().z + liquid_height
+    liquid_height = position.z + liquid_height
 
     liquid_to_be_aspirated = Liquid.WATER
     if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][0][0] is not None:
@@ -2287,10 +2288,11 @@ class STAR(HamiltonLiquidHandler):
 
     # get the first well and tip as representatives
     top_left_well = dispense.wells[0]
-    position = top_left_well.get_absolute_location() + top_left_well.center()
+    position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
     tip = dispense.tips[0]
+    maximum_immersion_depth = int(position.z*10)
 
-    liquid_height = top_left_well.get_absolute_location().z + liquid_height
+    liquid_height = position.z + liquid_height
 
     dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 

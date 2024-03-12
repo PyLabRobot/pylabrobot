@@ -939,12 +939,10 @@ class Vantage(HamiltonLiquidHandler):
     # assert self.core96_head_installed, "96 head must be installed"
 
     top_left_well = aspiration.wells[0]
-    position = top_left_well.get_absolute_location() + top_left_well.center()
+    position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
 
-    liquid_height = top_left_well.get_absolute_location().z + (aspiration.liquid_height or 0)
-
-    well_bottoms = top_left_well.get_absolute_location().z + \
-      (aspiration.offset.z if aspiration.offset is not None else 0)
+    liquid_height = position.z + (aspiration.liquid_height or 0)
+    well_bottoms = position.z
 
     tip = aspiration.tips[0]
     liquid_to_be_aspirated = Liquid.WATER # default to water
@@ -1063,14 +1061,12 @@ class Vantage(HamiltonLiquidHandler):
       type_of_dispensing_mode: the type of dispense mode to use. If not provided, it will be
         determined based on the jet, blow_out, and empty parameters.
     """
+
     top_left_well = dispense.wells[0]
-    position = top_left_well.get_absolute_location() + top_left_well.center()
+    position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
 
-    liquid_height = top_left_well.get_absolute_location().z + (dispense.liquid_height or 0) + \
-      (dispense.offset.z if dispense.offset is not None else 0) + 10 # +10?
-
-    well_bottoms = top_left_well.get_absolute_location().z + \
-      (dispense.offset.z if dispense.offset is not None else 0)
+    liquid_height = position.z + (dispense.liquid_height or 0) + 10 # +10?
+    well_bottoms = position.z
 
     tip = dispense.tips[0]
     liquid_to_be_dispensed = Liquid.WATER # default to WATER
