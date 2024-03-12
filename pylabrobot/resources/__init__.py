@@ -33,9 +33,15 @@ from .boekel import *
 from .corning_costar import *
 from .corning_axygen import *
 from .falcon import *
+from .greiner import *
+from .hamilton import *
+from .limbro import *
+from .ml_star import *
 from .porvair import *
 from .revvity import *
+from .tecan import *
 from .thermo_fisher import *
+from .vwr import *
 
 # liquid handling companies
 from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
