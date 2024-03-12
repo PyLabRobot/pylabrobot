@@ -1164,7 +1164,7 @@ class LiquidHandler(Machine):
         raise RuntimeError("All tips must be from the same tip rack")
     return tip_rack
 
-  async def return_tips96(self):
+  async def return_tips96(self, allow_nonzero_volume: bool = False, **backend_kwargs):
     """ Return the tips on the 96 head to the tip rack where they were picked up.
 
     Examples:
@@ -1180,7 +1180,10 @@ class LiquidHandler(Machine):
     tip_rack = self._get_96_head_origin_tip_rack()
     if tip_rack is None:
       raise RuntimeError("No tips have been picked up with the 96 head")
-    return await self.drop_tips96(tip_rack)
+    return await self.drop_tips96(
+      tip_rack,
+      allow_nonzero_volume=allow_nonzero_volume,
+      **backend_kwargs)
 
   async def aspirate96(
     self,
