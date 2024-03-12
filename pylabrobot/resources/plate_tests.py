@@ -1,10 +1,11 @@
-""" Tests for Resource """
 # pylint: disable=missing-class-docstring
 
 import unittest
 
 from .coordinate import Coordinate
+from .itemized_resource import create_equally_spaced
 from .plate import Plate, Lid
+from .well import Well
 
 
 class TestLid(unittest.TestCase):
@@ -35,3 +36,22 @@ class TestLid(unittest.TestCase):
     plate = self.test_add_lid()
     plate.unassign_child_resource(plate.lid)
     self.assertIsNone(plate.lid)
+
+  def test_quadrant(self):
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, items=create_equally_spaced(Well,
+      num_items_x=24, num_items_y=16,
+      dx=1, dy=1, dz=1,
+      item_dx=1, item_dy=1,
+      size_x=1, size_y=1, size_z=1,
+    ))
+    self.assertIn(plate.get_well("A1"), plate.get_quadrant(1))
+    self.assertEqual(len(plate.get_quadrant(1)), 384//4)
+
+    self.assertIn(plate.get_well("A2"), plate.get_quadrant(2))
+    self.assertEqual(len(plate.get_quadrant(2)), 384//4)
+
+    self.assertIn(plate.get_well("B1"), plate.get_quadrant(3))
+    self.assertEqual(len(plate.get_quadrant(3)), 384//4)
+
+    self.assertIn(plate.get_well("B2"), plate.get_quadrant(4))
+    self.assertEqual(len(plate.get_quadrant(4)), 384//4)
