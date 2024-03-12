@@ -14,8 +14,14 @@ logger = logging.getLogger("pylabrobot")
 class MFXSite(Resource):
   """ A single site within a MFX module. """
 
-  def __init__(self, name: str, size_x: float, size_y: float, size_z: float, spot: int,
-    category: str = "mfx_site", model: Optional[str] = None):
+  def __init__(self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    spot: int,
+    category: str = "mfx_site",
+    model: Optional[str] = None):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
     self.resource: Optional[Resource] = None
@@ -46,7 +52,8 @@ class MFXSite(Resource):
 def create_mfx_module_sites(
   locations: List[Coordinate],
   site_size_x: List[Union[float, int]],
-  site_size_y: List[Union[float, int]]) -> List[MFXSite]:
+  site_size_y: List[Union[float, int]],
+  ) -> List[MFXSite]:
   """ Create a list of MFX module sites with the given sizes. """
 
   sites = []
@@ -62,7 +69,7 @@ def create_mfx_module_sites(
 def create_homogeneous_mfx_module_sites(
   locations: List[Coordinate],
   site_size_x: float,
-  site_size_y: float) -> List[MFXSite]:
+  site_size_y: float,) -> List[MFXSite]:
   """ Create a list of MFX module sites with the same size. """
 
   n = len(locations)
@@ -99,16 +106,20 @@ class MFXModule(Resource):
     name: str,
     size_x: float, size_y: float, size_z: float,
     sites: Optional[List[MFXSite]] = None,
-    category: Optional[str] = "carrier",
+    category: Optional[str] = "mfx_module",
     model: Optional[str] = None):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
 
     sites = sites if sites is not None else []
 
-    self.sites: List[MFXSite] = []
+    sites = sites or []
+
+    self.sites: List[CarrierSite] = []
     for site in sites:
-      site.name = f"mfx-{self.name}-spot-{site.spot}"
+      site.name = f"mfx_module-{self.name}-spot-{site.spot}"
+      if site.location is None:
+        raise ValueError(f"mfx_module {site} has no location")
       self.assign_child_resource(site, location=site.location)
 
   @property
@@ -145,7 +156,7 @@ class MFXModule(Resource):
     self.sites[spot].assign_child_resource(resource, location=Coordinate.zero())
 
   def unassign_child_resource(self, resource):
-    """ Unassign a resource from this carrier, checked by name.
+    """ Unassign a resource from this mfx module, checked by name.
     Also see :meth:`~Resource.assign_child_resource`
 
     Args:
@@ -187,8 +198,9 @@ class MFXModule(Resource):
     return super().__eq__(other) and self.sites == other.sites
 
 
-# MFX module library (enables correct z-height offsets for each module)
+# MFX module library
 
+################## 1. Static modules ##################
 
 def MFX_TIP_module(name: str) -> MFXModule:
   """ Hamilton cat. no.: 188160
@@ -198,7 +210,7 @@ def MFX_TIP_module(name: str) -> MFXModule:
     name=name,
     size_x=135.0,
     size_y=497.0,
-    size_z=18.195,
+    size_z=214.8-18.195-100,
     sites=create_homogeneous_mfx_module_sites([
         Coordinate(2.2, 1.5, 214.8-18.195-100),# probe height - carrier_height - deck_height
       ],
@@ -217,12 +229,12 @@ def MFX_DWP_module(name: str) -> MFXModule:
     name=name,
     size_x=135.0,
     size_y=497.0,
-    size_z=18.195,
+    size_z=178.73-18.195-100,
     sites=create_homogeneous_mfx_module_sites([
         Coordinate(0.0, 0.0, 178.73-18.195-100), # probe height - carrier_height - deck_height
       ],
-      site_size_x=122.4,
-      site_size_y=82.6,
+      site_size_x=127.0,
+      site_size_y=86.0,
     ),
     model="MFX_DWP_module"
   )
