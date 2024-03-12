@@ -1200,30 +1200,6 @@ class STAR(HamiltonLiquidHandler):
     """ Parse a response from the machine. """
     return parse_star_fw_string(resp, fmt)
 
-  async def send_raw_command(
-    self,
-    command: str,
-    write_timeout: Optional[int] = None,
-    read_timeout: Optional[int] = None,
-    wait: bool = True
-  ) -> Optional[str]:
-    """ Send a raw command to the machine. """
-    id_index = command.find("id")
-    if id_index == -1:
-      raise ValueError("Command must contain an id.")
-    id_str = command[id_index + 2 : id_index + 6]
-    if not id_str.isdigit():
-      raise ValueError("Id must be a 4 digit int.")
-    id_ = int(id_str)
-
-    return await super()._write_and_read_command(
-      id_=id_,
-      cmd=command,
-      write_timeout=write_timeout,
-      read_timeout=read_timeout,
-      wait=wait,
-    )
-
   async def setup(self):
     """ setup
 
