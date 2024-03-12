@@ -43,10 +43,4 @@ from .tecan import *
 from .thermo_fisher import *
 from .vwr import *
 
-# liquid handling companies
-from .hamilton import HamiltonDeck, STARLetDeck, STARDeck
-from .ml_star import *
-from .opentrons import *
-from .tecan import *
-
 # labware made from 3rd parties that share their designs with PLR
