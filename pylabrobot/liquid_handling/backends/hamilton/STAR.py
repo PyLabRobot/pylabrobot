@@ -9,7 +9,8 @@ import enum
 import functools
 import logging
 import re
-from typing import Callable, Dict, ItemsView, List, Literal, Optional, Sequence, Type, TypeVar, cast, Union
+from typing import Callable, Dict, ItemsView, List, Literal, Optional, Sequence, Type, TypeVar, \
+  Union, cast
 
 from pylabrobot.liquid_handling.backends.hamilton.base import (
   HamiltonLiquidHandler,
@@ -29,7 +30,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
-from pylabrobot.resources import Coordinate, Plate, Resource, TipSpot, Carrier
+from pylabrobot.resources import Coordinate, Resource, TipSpot, Carrier
 from pylabrobot.resources.errors import (
   TooLittleVolumeError,
   TooLittleLiquidError,
@@ -2026,7 +2027,7 @@ class STAR(HamiltonLiquidHandler):
     blow_out: bool = False,
 
     use_lld: bool = False,
-    liquid_height: float = 2,
+    liquid_height: float = 1,
     air_transport_retract_dist: float = 10,
     hlc: Optional[HamiltonLiquidClass] = None,
 
@@ -2102,14 +2103,13 @@ class STAR(HamiltonLiquidHandler):
     """
 
     assert self.core96_head_installed, "96 head must be installed"
-    assert isinstance(aspiration.resource, Plate), "Only ItemizedResource is supported."
 
     # get the first well and tip as representatives
-    well_a1 = aspiration.resource.get_item("A1")
-    position = well_a1.get_absolute_location() + well_a1.center()
+    top_left_well = aspiration.wells[0]
+    position = top_left_well.get_absolute_location() + top_left_well.center()
     tip = aspiration.tips[0]
 
-    liquid_height = aspiration.resource.get_absolute_location().z + liquid_height
+    liquid_height = top_left_well.get_absolute_location().z + liquid_height
 
     liquid_to_be_aspirated = Liquid.WATER
     if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][0][0] is not None:
@@ -2214,7 +2214,7 @@ class STAR(HamiltonLiquidHandler):
     blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
 
-    liquid_height: float = 2,
+    liquid_height: float = 1,
     dispense_mode: Optional[int] = None,
     air_transport_retract_dist=10,
     use_lld: bool = False,
@@ -2284,14 +2284,13 @@ class STAR(HamiltonLiquidHandler):
     """
 
     assert self.core96_head_installed, "96 head must be installed"
-    assert isinstance(dispense.resource, Plate), "Only ItemizedResource is supported."
 
     # get the first well and tip as representatives
-    well_a1 = dispense.resource.get_item("A1")
-    position = well_a1.get_absolute_location() + well_a1.center()
+    top_left_well = dispense.wells[0]
+    position = top_left_well.get_absolute_location() + top_left_well.center()
     tip = dispense.tips[0]
 
-    liquid_height = dispense.resource.get_absolute_location().z + liquid_height
+    liquid_height = top_left_well.get_absolute_location().z + liquid_height
 
     dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 

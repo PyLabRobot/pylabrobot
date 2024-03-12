@@ -47,14 +47,14 @@ class ChatterBoxBackendTests(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips(self.tip_rack["A1"])
     await self.lh.dispense(self.plate["A1"], vols=10)
 
-  async def test_aspirate_plate(self):
+  async def test_aspirate96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate_plate(self.plate, volume=10)
+    await self.lh.aspirate96(self.plate, volume=10)
 
-  async def test_dispense_plate(self):
+  async def test_dispense96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate_plate(self.plate, volume=10)
-    await self.lh.dispense_plate(self.plate, volume=10)
+    await self.lh.aspirate96(self.plate, volume=10)
+    await self.lh.dispense96(self.plate, volume=10)
 
   async def test_move(self):
     await self.lh.move_resource(self.plate, Coordinate(0, 0, 0))
