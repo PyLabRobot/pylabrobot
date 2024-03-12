@@ -111,11 +111,9 @@ class MFXModule(Resource):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
 
-    sites = sites if sites is not None else []
-
     sites = sites or []
 
-    self.sites: List[CarrierSite] = []
+    self.sites: List[MFXSite] = []
     for site in sites:
       site.name = f"mfx_module-{self.name}-spot-{site.spot}"
       if site.location is None:
