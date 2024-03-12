@@ -13,7 +13,7 @@ clean-docs:
 	rm -rf docs/_autosummary
 
 lint:
-	$(BIN)python -m pylint pylabrobot --disable=C0103
+	$(BIN)python -m pylint pylabrobot
 
 test:
 	$(BIN)python -m pytest -s -v

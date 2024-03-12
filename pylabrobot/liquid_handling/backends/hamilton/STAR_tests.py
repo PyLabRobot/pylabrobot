@@ -550,11 +550,11 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # TODO: Hamilton liquid classes
     assert self.plate.lid is not None
     self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, volume=100, blow_out=True)
+    await self.lh.aspirate96(self.plate, volume=100, blow_out=True)
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
-      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01083ag2500vt050"
+      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1871iw000ix0fh000af01083ag2500vt050"
       "bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000hs1200zv0032zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "xs#####xd#yh####zh####ze####lz####zt####zm####iw###ix#fh###af#####ag####vt###"
@@ -565,14 +565,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack2) # pick up high volume tips
     if self.plate.lid is not None:
       self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, 100, blow_out=True) # aspirate first
+    await self.lh.aspirate96(self.plate, 100, blow_out=True) # aspirate first
 
     with no_volume_tracking():
-      await self.lh.dispense_plate(self.plate, 100, blow_out=True)
+      await self.lh.dispense96(self.plate, 100, blow_out=True)
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
-      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01083dg1200vt050"
+      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1871iw000ix0fh000df01083dg1200vt050"
       "bv00000cm0cs1bs0020wh00hv00000hc00hp000hs1200es0050ev000zv0032ej00zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "da#xs#####xd#yh##6#zh####ze####lz####zt####zm##6#iw###ix#fh###df#####dg####vt###"
@@ -584,8 +584,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
     assert self.plate.lid is not None
     self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, 0)
-    await self.lh.dispense_plate(self.plate, 0)
+    await self.lh.aspirate96(self.plate, 0)
+    await self.lh.dispense96(self.plate, 0)
 
   async def test_iswap(self):
     await self.lh.move_plate(self.plate, self.plt_car[2])

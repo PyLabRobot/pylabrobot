@@ -23,7 +23,7 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move
 )
-from pylabrobot.resources import Coordinate, Liquid, Resource, Plate, Well
+from pylabrobot.resources import Coordinate, Liquid, Resource, Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 
@@ -938,14 +938,11 @@ class Vantage(HamiltonLiquidHandler):
     """
     # assert self.core96_head_installed, "96 head must be installed"
 
-    assert isinstance(aspiration.resource, Plate), "Only Plate is supported."
-    well_a1 = aspiration.resource.get_item("A1")
-    position = well_a1.get_absolute_location() + well_a1.center()
+    top_left_well = aspiration.wells[0]
+    position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
 
-    liquid_height = well_a1.get_absolute_location().z + (aspiration.liquid_height or 0)
-
-    well_bottoms = well_a1.get_absolute_location().z + \
-      (aspiration.offset.z if aspiration.offset is not None else 0)
+    liquid_height = position.z + (aspiration.liquid_height or 0)
+    well_bottoms = position.z
 
     tip = aspiration.tips[0]
     liquid_to_be_aspirated = Liquid.WATER # default to water
@@ -967,7 +964,7 @@ class Vantage(HamiltonLiquidHandler):
       else aspiration.volume
 
     # -1 compared to STAR?
-    lld_search_height = well_bottoms + well_a1.get_size_z() + 2.7-1
+    lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0)
@@ -1064,15 +1061,12 @@ class Vantage(HamiltonLiquidHandler):
       type_of_dispensing_mode: the type of dispense mode to use. If not provided, it will be
         determined based on the jet, blow_out, and empty parameters.
     """
-    assert isinstance(dispense.resource, Plate), "Only Plate is supported."
-    well_a1 = dispense.resource.get_item("A1")
-    position = well_a1.get_absolute_location() + well_a1.center()
 
-    liquid_height = well_a1.get_absolute_location().z + (dispense.liquid_height or 0) + \
-      (dispense.offset.z if dispense.offset is not None else 0) + 10 # +10?
+    top_left_well = dispense.wells[0]
+    position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
 
-    well_bottoms = well_a1.get_absolute_location().z + \
-      (dispense.offset.z if dispense.offset is not None else 0)
+    liquid_height = position.z + (dispense.liquid_height or 0) + 10 # +10?
+    well_bottoms = position.z
 
     tip = dispense.tips[0]
     liquid_to_be_dispensed = Liquid.WATER # default to WATER
@@ -1093,7 +1087,7 @@ class Vantage(HamiltonLiquidHandler):
       else dispense.volume
 
     # -1 compared to STAR?
-    lld_search_height = well_bottoms + well_a1.get_size_z() + 2.7-1
+    lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0)

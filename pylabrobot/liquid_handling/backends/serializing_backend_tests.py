@@ -140,11 +140,11 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     self.backend.clear()
-    await self.lh.aspirate_plate(self.plate, volume=10)
+    await self.lh.aspirate96(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate96")
     self.assertEqual(self.backend.sent_commands[0]["data"], {"aspiration": {
-      "resource_name": self.plate.name,
+      "well_names": [well.name for well in self.plate.get_all_items()],
       "offset": serialize(Coordinate.zero()),
       "volume": 10,
       "flow_rate": None,
@@ -160,11 +160,11 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
 
     tips = [channel.get_tip() for channel in self.lh.head96.values()]
     self.backend.clear()
-    await self.lh.dispense_plate(self.plate, volume=10)
+    await self.lh.dispense96(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense96")
     self.assertEqual(self.backend.sent_commands[0]["data"], {"dispense": {
-      "resource_name": self.plate.name,
+      "well_names": [well.name for well in self.plate.get_all_items()],
       "offset": serialize(Coordinate.zero()),
       "volume": 10,
       "flow_rate": None,

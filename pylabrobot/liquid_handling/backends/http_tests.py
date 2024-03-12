@@ -200,7 +200,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
       status=200,
     )
 
-    await self.lh.aspirate_plate(self.plate, 10)
+    await self.lh.aspirate96(self.plate, 10)
 
   @responses.activate
   async def test_dispense96(self):
@@ -222,7 +222,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
       json={"status": "ok"},
       status=200,
     )
-    await self.lh.aspirate_plate(self.plate, 10)
+    await self.lh.aspirate96(self.plate, 10)
 
     responses.add(
       responses.POST,
@@ -232,4 +232,4 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
       status=200,
     )
 
-    await self.lh.dispense_plate(self.plate, 10)
+    await self.lh.dispense96(self.plate, 10)
