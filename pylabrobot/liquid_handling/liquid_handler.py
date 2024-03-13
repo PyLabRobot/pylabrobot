@@ -50,7 +50,7 @@ from .standard import (
   GripDirection
 )
 
-from IPython.display import Audio
+from IPython.display import display, Audio
 
 logger = logging.getLogger("pylabrobot")
 
@@ -1769,12 +1769,12 @@ class OperationCallback(Protocol):
 
 def notFoundAudio():
   display(Audio(
-      url='https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3',
+      url="https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3",
       autoplay=True))
     # https://simpleguics2pygame.readthedocs.io/en/latest/_static/links/snd_links.html
 
 def gotItemAudio():
   display(Audio(
-      url='https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3',
+      url="https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3",
       autoplay=True))
   
