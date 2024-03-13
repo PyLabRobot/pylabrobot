@@ -30,7 +30,7 @@ class MFXSite(Resource):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate],
+    location: Coordinate = Coordinate.zero(),
     reassign: bool = True
   ):
     self.resource = resource
