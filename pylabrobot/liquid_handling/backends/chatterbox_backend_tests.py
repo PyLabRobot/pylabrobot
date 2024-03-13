@@ -13,9 +13,9 @@ class ChatterBoxBackendTests(unittest.IsolatedAsyncioTestCase):
     self.backend = ChatterBoxBackend(num_channels=8)
     self.lh = LiquidHandler(self.backend, deck=self.deck)
     self.tip_rack = HTF_L(name="tip_rack")
-    self.deck.assign_child_resource(self.tip_rack, rails=1)
+    self.deck.assign_child_resource(self.tip_rack, rails=3)
     self.plate = Cos_96_EZWash(name="plate")
-    self.deck.assign_child_resource(self.plate, rails=8)
+    self.deck.assign_child_resource(self.plate, rails=9)
 
   async def asyncSetUp(self) -> None:
     await super().asyncSetUp()

@@ -121,3 +121,7 @@ class Deck(Resource):
     for resource in self.children:
       summary_ += f"{resource.name}: {resource}\n"
     return summary_
+
+  def get_trash_area96(self) -> Trash:
+    deck_class = self.__class__.__name__
+    raise NotImplementedError(f"This method is not implemented by deck '{deck_class}'")

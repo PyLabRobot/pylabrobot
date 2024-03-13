@@ -9,7 +9,7 @@ from typing import List, Optional, Union, Tuple, TYPE_CHECKING
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.coordinate import Coordinate
 if TYPE_CHECKING:
-  from pylabrobot.resources import Container, Plate, Resource, TipRack, Well
+  from pylabrobot.resources import Container, Resource, TipRack, Trash, Well
   from pylabrobot.resources.tip import Tip
   from pylabrobot.resources.tip_rack import TipSpot
 
@@ -42,7 +42,7 @@ class PickupTipRack:
 class DropTipRack:
   """ A drop operation for an entire tip rack. """
 
-  resource: TipRack
+  resource: Union[TipRack, Trash]
   offset: Optional[Coordinate]
 
 

@@ -30,7 +30,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
-from pylabrobot.resources import Coordinate, Resource, TipSpot, Carrier
+from pylabrobot.resources import Carrier, Coordinate, Resource, TipRack, TipSpot, Well
 from pylabrobot.resources.errors import (
   TooLittleVolumeError,
   TooLittleLiquidError,
@@ -38,7 +38,6 @@ from pylabrobot.resources.errors import (
   NoTipError
 )
 from pylabrobot.resources.liquid import Liquid
-from pylabrobot.resources.well import Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
 
 
@@ -1964,9 +1963,10 @@ class STAR(HamiltonLiquidHandler):
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
 
+    x_direction = 0 if position.x > 0 else 1
     return await self.pick_up_tips_core96(
-      x_position=int(position.x * 10),
-      x_direction=0,
+      x_position=abs(int(position.x * 10)),
+      x_direction=x_direction,
       y_position=int(position.y * 10),
       tip_type_idx=ttti,
       tip_pickup_method=tip_pickup_method,
@@ -1986,12 +1986,16 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ Drop tips from the 96 head. """
     assert self.core96_head_installed, "96 head must be installed"
-    tip_a1 = drop.resource.get_item("A1")
-    position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
+    if isinstance(drop.resource, TipRack):
+      tip_a1 = drop.resource.get_item("A1")
+      position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
+    else:
+      position = drop.resource.get_absolute_location() + drop.offset
 
+    x_direction = 0 if position.x > 0 else 1
     return await self.discard_tips_core96(
-      x_position=int(position.x * 10),
-      x_direction=0,
+      x_position=abs(int(position.x * 10)),
+      x_direction=x_direction,
       y_position=int(position.y * 10),
       z_deposit_position=z_deposit_position,
       minimum_traverse_height_at_beginning_of_a_command=

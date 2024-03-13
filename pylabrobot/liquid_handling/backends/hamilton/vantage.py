@@ -23,7 +23,7 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move
 )
-from pylabrobot.resources import Coordinate, Liquid, Resource, Well
+from pylabrobot.resources import Coordinate, Liquid, Resource, TipRack, Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 
@@ -882,8 +882,12 @@ class Vantage(HamiltonLiquidHandler):
     minimal_height_at_command_end: Optional[int] = None
   ):
     # assert self.core96_head_installed, "96 head must be installed"
-    tip_spot_a1 = drop.resource.get_item("A1")
-    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+    if isinstance(drop.resource, TipRack):
+      tip_spot_a1 = drop.resource.get_item("A1")
+      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+    else:
+      raise NotImplementedError("Only TipRacks are supported for dropping tips on Vantage",
+                               f"got {drop.resource}")
 
     return await self.core96_tip_discard(
       x_position=int(position.x * 10),
