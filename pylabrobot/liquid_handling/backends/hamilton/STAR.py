@@ -4440,10 +4440,10 @@ class STAR(HamiltonLiquidHandler):
     # Check if CoRe gripper currently in use
     cores_used = not self._core_parked
     if cores_used:
-        pass
+      pass
     else:
-        raise ValueError("CoRe grippers not yet picked up.")
-    
+      raise ValueError("CoRe grippers not yet picked up.")
+
     # Enable recovery of failed checks
     resource_found = False
     try_counter = 0
@@ -4486,22 +4486,22 @@ class STAR(HamiltonLiquidHandler):
           return False
 
       except STARFirmwareError as exc:
-          exc_message = str(exc)
-          # Parse error message using regex & find all matches
-          pattern = r"P\d+/\d+"
-          matches = re.findall(pattern, exc_message)
-          # Check Z-drive movement error was triggered for channels with CoRE gripper attached
-          zdrive_error_checks = ["/62" in error for error in matches]
-      
-          if all(zdrive_error_checks):
-              resource_found = True
-          else:
-              raise ValueError(f"Unexpected error encountered: {exc}")
-      
-      # Resource was found
-      if audiofeedback:
-        gotItemAudio()
-      return True
+        exc_message = str(exc)
+        # Parse error message using regex & find all matches
+        pattern = r"P\d+/\d+"
+        matches = re.findall(pattern, exc_message)
+        # Check Z-drive movement error was triggered for channels with CoRE gripper attached
+        zdrive_error_checks = ["/62" in error for error in matches]
+
+        if all(zdrive_error_checks):
+          resource_found = True
+        else:
+          raise ValueError(f"Unexpected error encountered: {exc}") from exc
+
+    # Resource was found
+    if audiofeedback:
+      gotItemAudio()
+    return True
 
 
   # TODO:(command:ZB)
