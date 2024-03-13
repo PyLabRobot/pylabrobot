@@ -23,6 +23,7 @@ from pylabrobot.resources import (
   Coordinate,
   CarrierSite,
   Lid,
+  Liquid,
   Plate,
   Tip,
   TipRack,
@@ -134,6 +135,7 @@ class LiquidHandler(Machine):
     head_state = state["head_state"]
     for channel, tracker_state in head_state.items():
       self.head[channel].load_state(tracker_state)
+
 
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.
@@ -771,6 +773,7 @@ class LiquidHandler(Machine):
     end_delay: float = 0,
     offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
     liquid_height: Union[Optional[float], List[Optional[float]]] = None,
+    liquid_classes: Optional[Union[Optional[Liquid], List[Optional[Liquid]]]] = None,
     blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
     **backend_kwargs
   ):
@@ -876,11 +879,14 @@ class LiquidHandler(Machine):
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
-    if does_volume_tracking():
-      liquids = [c.get_tip().tracker.get_liquids(top_volume=vol)
-                for c, vol in zip(self.head.values(), vols)]
+    if liquid_classes is not None:
+      liquids = expand(liquid_classes, n)
     else:
-      liquids = [[(None, vol)] for vol in vols]
+      if does_volume_tracking():
+        liquids = [c.get_tip().tracker.get_liquids(top_volume=vol)
+                  for c, vol in zip(self.head.values(), vols)]
+      else:
+        liquids = [[(None, vol)] for vol in vols]
 
     dispenses = [Dispense(resource=r, volume=v, offset=o, flow_rate=fr, liquid_height=lh, tip=t,
                           liquids=lvs, blow_out_air_volume=bav)
@@ -1471,7 +1477,11 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
+<<<<<<< tecan-dev-branch
+    await self.backend.move_resource(move=Move(
+=======
     move_operation = Move(
+>>>>>>> main
       resource=resource,
       destination=to,
       intermediate_locations=intermediate_locations or [],
@@ -1635,6 +1645,7 @@ class LiquidHandler(Machine):
       get_direction=get_direction,
       put_direction=put_direction,
       **backend_kwargs)
+
 
     plate.unassign()
     if isinstance(to, Coordinate):

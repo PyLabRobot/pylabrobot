@@ -60,7 +60,6 @@ class Machine(Resource, metaclass=ABCMeta):
     return self._setup_finished
 
   async def setup(self):
-    await self.backend.setup()
     self._setup_finished = True
 
   @need_setup_finished
