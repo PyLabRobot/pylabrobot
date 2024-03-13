@@ -39,7 +39,7 @@ from pylabrobot.resources.errors import (
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-
+from pylabrobot.liquid_handling.liquid_handler import notFoundAudio, gotItemAudio
 
 T = TypeVar("T")
 
@@ -4393,6 +4393,107 @@ class STAR(HamiltonLiquidHandler):
     )
 
     return command_output
+
+  async def core_check_resource_exists_at_location_center(
+    self,
+    location: Coordinate,
+    resource: Resource,
+    gripper_y_margin: float = 5,
+    offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_at_beginning_of_a_command: int = 2750,
+    z_position_at_the_command_end: int = 2750,
+    enable_recovery: bool = True,
+    audiofeedback: bool = True
+    ):
+      """ Check existence of resource with CoRe gripper tool
+      a "Get plate using CO-RE gripper" + error handling
+      Which channels are used for resource check is dependent on which channels have been used for
+      `STAR.get_core(p1: int, p2: int)` which is a prerequisite for this check function.
+      
+      Args:
+        resource: Location to place.
+        offset: Offset from resource position in mm.
+        minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of
+          a command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must
+          be between 0 and 3600. Default 3600.
+        z_position_at_the_command_end: Minimum z-Position at end of a command [0.1 mm] (refers to
+          all channels independent of tip pattern parameter 'tm'). Must be between 0 and 3600.
+          Default 3600.
+      """
+
+      center = location + resource.center() + offset + Coordinate(0, 0, resource.get_size_z()/2)
+      # TODO: remove Coordinate once .center() issue has been resolved
+      y_width_to_gripper_bump = resource.get_size_y() - gripper_y_margin*2
+      assert 9 <= y_width_to_gripper_bump <= int(resource.get_size_y()), \
+        f"width between channels must be between 9 and {resource.get_size_y()} mm" \
+      " (i.e. the minimal distance between channels and the max y size of the resource"
+
+      # Check if CoRe gripper currently in use
+      cores_used = not self._core_parked
+      if cores_used:
+          pass
+      else:
+          raise ValueError("CoRe grippers not yet picked up.")
+      
+      # Enable recovery of failed checks
+      resource_found = False
+      try_counter = 0
+      while not resource_found:
+        try:
+          await self.core_get_plate(
+            x_position=int(center.x * 10),
+            y_position=int(center.y * 10),
+            z_position=int(center.z * 10),
+            open_gripper_position=int(y_width_to_gripper_bump * 10),
+            plate_width=int(y_width_to_gripper_bump * 10),
+            # Set default values based on VENUS check_plate commands
+            y_gripping_speed=50,
+            x_direction=0,
+            z_speed=600,
+            grip_strength = 20,
+            # Enable mods of channel z position for check acceleration
+            minimum_traverse_height_at_beginning_of_a_command = \
+              minimum_traverse_height_at_beginning_of_a_command,
+            minimum_z_position_at_the_command_end = z_position_at_the_command_end,
+          )
+          if audiofeedback:
+            notFoundAudio()
+          if enable_recovery:
+            print(f"\nWARNING: Resource '{resource.name}' not found at center" \
+                  f" location {(center.x,center.y,center.z)} during check no {try_counter}.")
+            user_prompt = input("Have you checked resource is present?" \
+                                "\n [ yes ] -> machine will check location again" \
+                                "\n [ abort ] -> machine will abort run\n Answer:"
+                                )
+            if user_prompt == 'yes':
+              try_counter += 1
+              pass
+            elif user_prompt == 'abort':
+              raise ValueError(f"Resource '{resource.name}' not found at center" \
+                                f" location {(center.x,center.y,center.z)}" \
+                                " & error not resolved -> aborted resource movement.")
+          else:
+            # Resource was not found
+            return False
+
+        except STARFirmwareError as exc:
+            exc_message = str(exc)
+            # Parse error message using regex & find all matches
+            pattern = r"P\d+/\d+"
+            matches = re.findall(pattern, exc_message)
+            # Check Z-drive movement error was triggered for channels with CoRE gripper attached
+            zdrive_error_checks = ["/62" in error for error in matches]
+        
+            if all(zdrive_error_checks):
+                resource_found = True
+            else:
+                raise ValueError(f"Unexpected error encountered: {exc}")
+      
+      # Resource was found
+      if audiofeedback:
+        gotItemAudio()
+      return True
+
 
   # TODO:(command:ZB)
 

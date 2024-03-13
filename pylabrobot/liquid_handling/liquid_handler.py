@@ -50,6 +50,8 @@ from .standard import (
   GripDirection
 )
 
+from IPython.display import Audio
+
 logger = logging.getLogger("pylabrobot")
 
 
@@ -1761,3 +1763,18 @@ class LiquidHandler(Machine):
 class OperationCallback(Protocol):
   def __call__(self, handler: "LiquidHandler", *args: Any, **kwargs: Any) -> None:
     ...  # pragma: no cover
+
+
+# Enable audio-feedback - "make liquid handlers talk"
+
+def notFoundAudio():
+  display(Audio(
+      url='https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3',
+      autoplay=True))
+    # https://simpleguics2pygame.readthedocs.io/en/latest/_static/links/snd_links.html
+
+def gotItemAudio():
+  display(Audio(
+      url='https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3',
+      autoplay=True))
+  
