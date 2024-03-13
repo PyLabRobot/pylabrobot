@@ -580,7 +580,7 @@ class LiquidHandler(Machine):
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
     trash = self.deck.get_trash_area()
-    offsets = trash.get_2d_center_offsets(n=n)
+    offsets = list(reversed(trash.centers(yn=n)))
 
     return await self.drop_tips(
         tip_spots=[trash]*n,
@@ -667,7 +667,7 @@ class LiquidHandler(Machine):
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
-      center_offsets = resources.get_2d_center_offsets(n=n)
+      center_offsets = list(reversed(resources.centers(yn=n, zn=0)))
       if offsets is not None:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when aspirating "
@@ -842,7 +842,7 @@ class LiquidHandler(Machine):
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
-      center_offsets = resources.get_2d_center_offsets(n=n)
+      center_offsets = list(reversed(resources.centers(yn=n, zn=0)))
       if offsets is not None:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when dispensing "
