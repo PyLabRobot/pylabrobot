@@ -1,8 +1,9 @@
 import enum
 import math
-from typing import Callable, Optional, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 from pylabrobot.resources.container import Container
+from pylabrobot.resources.liquid import Liquid
 
 
 class WellBottomType(enum.Enum):
@@ -105,3 +106,16 @@ class Well(Container):
       raise NotImplementedError("compute_volume_from_height not implemented.")
 
     return self._compute_volume_from_height(height)
+
+  def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
+    """ Set the liquids in the well.
+
+    (wraps :meth:`~.VolumeTracker.set_liquids`)
+
+    Example:
+      Set the liquids in a well to 10 uL of water:
+
+      >>> well.set_liquids([(Liquid.WATER, 10)])
+    """
+
+    self.tracker.set_liquids(liquids)
