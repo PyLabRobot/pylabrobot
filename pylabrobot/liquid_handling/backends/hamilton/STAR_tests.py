@@ -544,6 +544,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "C0ERid0213xs01179xd0yh2418za2164zh2450ze2450",
                 "xs#####xd#yh####za####zh####ze####")
 
+  async def test_core_96_tip_discard(self):
+    await self.lh.pick_up_tips96(self.tip_rack) # pick up tips first
+    await self.lh.discard_tips96()
+
+    self._assert_command_sent_once(
+      "C0ERid0213xs02321xd1yh1103za2164zh2450ze2450",
+                "xs#####xd#yh####za####zh####ze####")
+
   async def test_core_96_aspirate(self):
     await self.lh.pick_up_tips96(self.tip_rack2) # pick up high volume tips
 

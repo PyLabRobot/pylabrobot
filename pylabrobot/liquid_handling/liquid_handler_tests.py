@@ -507,7 +507,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     tips = self.tip_rack.get_tips("A1:D1")
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1", "D1"], use_channels=[0, 1, 3, 4])
     await self.lh.discard_tips()
-    offsets = self.deck.get_trash_area().get_2d_center_offsets(n=4)
+    offsets = list(reversed(self.deck.get_trash_area().centers(yn=4)))
 
     self.assertEqual(self.get_first_command("drop_tips"), {
       "command": "drop_tips",

@@ -248,9 +248,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       >>> print(deck.summary())
       Rail     Resource                   Type                Coordinates (mm)
-      ==============================================================================================
-      (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
-          │   ├── tip_rack_01            STF_L               (x: 117.900, y: 240.000, z: 100.000)
+      =============================================================================================
+      (1)  ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
+           │   ├── tip_rack_01            STF_L               (x: 117.900, y: 240.000, z: 100.000)
     """
 
     if len(self.get_all_resources()) == 0:
@@ -261,20 +261,20 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     # Print header.
     summary_ = "Rail" + " " * 5 + "Resource" + " " * 19 +  "Type" + " " * 16 + "Coordinates (mm)\n"
-    summary_ += "=" * 95 + "\n"
+    summary_ += "=" * 94 + "\n"
 
     def parse_resource(resource):
       # TODO: print something else if resource is not assigned to a rails.
       rails = _rails_for_x_coordinate(resource.location.x)
-      rail_label = f"({rails})" if rails is not None else "     "
-      r_summary = f"{rail_label:4} ├── {resource.name:27}" + \
+      rail_label = f"({rails})" if rails is not None else "      "
+      r_summary = f"{rail_label:5} ├── {resource.name:27}" + \
             f"{resource.__class__.__name__:20}" + \
             f"{resource.get_absolute_location()}\n"
 
       if isinstance(resource, Carrier):
         for site in resource.get_sites():
           if site.resource is None:
-            r_summary += "     │   ├── <empty>\n"
+            r_summary += "      │   ├── <empty>\n"
           else:
             subresource = site.resource
             if isinstance(subresource, (TipRack, Plate)):
@@ -282,7 +282,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
                 subresource.get_item("A1").center()
             else:
               location = subresource.get_absolute_location()
-            r_summary += f"     │   ├── {subresource.name:23}" + \
+            r_summary += f"      │   ├── {subresource.name:23}" + \
                   f"{subresource.__class__.__name__:20}" + \
                   f"{location}\n"
 
@@ -294,7 +294,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     # Print table body.
     summary_ += parse_resource(sorted_resources[0])
     for resource in sorted_resources[1:]:
-      summary_ += "     │\n"
+      summary_ += "      │\n"
       summary_ += parse_resource(resource)
 
     return summary_
@@ -333,9 +333,18 @@ class HamiltonSTARDeck(HamiltonDeck): # pylint: disable=invalid-name
         resource=Trash("trash", size_x=0, size_y=241.2, size_z=0),
         location=Coordinate(x=trash_x, y=190.6, z=137.1)) # z I am not sure about
 
+      # got this location from a .lay file, but will probably need to be adjusted by the user.
+      self._trash96 = Trash("trash_core96", size_x=82.6, size_y=122.4, size_z=0) # size of tiprack
+      self.assign_child_resource(
+        resource=self._trash96,
+        location=Coordinate(x=-232.1, y=110.3, z=189.0)) # 165.0 -> 189.0
+
   def rails_to_location(self, rails: int) -> Coordinate:
     x = 100.0 + (rails - 1) * _RAILS_WIDTH
     return Coordinate(x=x, y=63, z=100)
+
+  def get_trash_area96(self) -> Trash:
+    return self._trash96
 
 
 def STARLetDeck( # pylint: disable=invalid-name

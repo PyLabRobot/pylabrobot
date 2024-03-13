@@ -30,7 +30,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move
 )
-from pylabrobot.resources import Coordinate, Resource, TipSpot, Carrier
+from pylabrobot.resources import Carrier, Coordinate, Resource, TipRack, TipSpot, Well
 from pylabrobot.resources.errors import (
   TooLittleVolumeError,
   TooLittleLiquidError,
@@ -38,7 +38,6 @@ from pylabrobot.resources.errors import (
   NoTipError
 )
 from pylabrobot.resources.liquid import Liquid
-from pylabrobot.resources.well import Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
 
 
@@ -1233,9 +1232,6 @@ class STAR(HamiltonLiquidHandler):
 
       await self.pre_initialize_instrument()
 
-      # if self.core96_head_installed:
-      #   self.initialize_core_96_head(z_position_at_the_command_end=int(self._traversal_height*10))
-
     if not initialized or any(tip_presences):
       dy = (4050 - 2175) // (self.num_channels - 1)
       y_positions = [4050 - i * dy for i in range(self.num_channels)]
@@ -1250,6 +1246,7 @@ class STAR(HamiltonLiquidHandler):
         tip_type=4, # TODO: get from tip types
         discarding_method=0
       )
+
     if self.autoload_installed:
       autoload_initialized = await self.request_autoload_initialization_status()
       if not autoload_initialized:
@@ -1265,6 +1262,12 @@ class STAR(HamiltonLiquidHandler):
       await self.park_iswap(minimum_traverse_height_at_beginning_of_a_command=
                             int(self._traversal_height * 10))
       self._iswap_parked = True
+
+    if self.core96_head_installed:
+      core96_head_initialized = await self.request_core_96_head_initialization_status()
+      if not core96_head_initialized:
+        await self.initialize_core_96_head(
+          z_position_at_the_command_end=int(self._traversal_height*10))
 
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
     # the core grippers.
@@ -1960,9 +1963,10 @@ class STAR(HamiltonLiquidHandler):
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
 
+    x_direction = 0 if position.x > 0 else 1
     return await self.pick_up_tips_core96(
-      x_position=int(position.x * 10),
-      x_direction=0,
+      x_position=abs(int(position.x * 10)),
+      x_direction=x_direction,
       y_position=int(position.y * 10),
       tip_type_idx=ttti,
       tip_pickup_method=tip_pickup_method,
@@ -1982,12 +1986,16 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ Drop tips from the 96 head. """
     assert self.core96_head_installed, "96 head must be installed"
-    tip_a1 = drop.resource.get_item("A1")
-    position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
+    if isinstance(drop.resource, TipRack):
+      tip_a1 = drop.resource.get_item("A1")
+      position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
+    else:
+      position = drop.resource.get_absolute_location() + drop.offset
 
+    x_direction = 0 if position.x > 0 else 1
     return await self.discard_tips_core96(
-      x_position=int(position.x * 10),
-      x_direction=0,
+      x_position=abs(int(position.x * 10)),
+      x_direction=x_direction,
       y_position=int(position.y * 10),
       z_deposit_position=z_deposit_position,
       minimum_traverse_height_at_beginning_of_a_command=
@@ -4785,6 +4793,11 @@ class STAR(HamiltonLiquidHandler):
     """ Move CoRe 96 Head to Z save position """
 
     return await self.send_command(module="C0", command="EV")
+
+  async def request_core_96_head_initialization_status(self) -> bool:
+    # not available in the C0 docs, so get from module H0 itself instead
+    response = await self.send_command(module="H0", command="QW", fmt="qw#")
+    return bool(response.get("qw", 0) == 1) # type?
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 

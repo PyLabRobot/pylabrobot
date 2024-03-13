@@ -27,6 +27,7 @@ from pylabrobot.resources import (
   Tip,
   TipRack,
   TipSpot,
+  Trash,
   Well,
   TipTracker,
   does_tip_tracking,
@@ -579,7 +580,7 @@ class LiquidHandler(Machine):
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
     trash = self.deck.get_trash_area()
-    offsets = trash.get_2d_center_offsets(n=n)
+    offsets = list(reversed(trash.centers(yn=n)))
 
     return await self.drop_tips(
         tip_spots=[trash]*n,
@@ -666,7 +667,7 @@ class LiquidHandler(Machine):
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
-      center_offsets = resources.get_2d_center_offsets(n=n)
+      center_offsets = list(reversed(resources.centers(yn=n, zn=0)))
       if offsets is not None:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when aspirating "
@@ -841,7 +842,7 @@ class LiquidHandler(Machine):
       # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
       # format, raise an error. If it is not supplied, make it a list of the correct length by
       # spreading channels across the resource evenly.
-      center_offsets = resources.get_2d_center_offsets(n=n)
+      center_offsets = list(reversed(resources.centers(yn=n, zn=0)))
       if offsets is not None:
         if not isinstance(offsets, list) or len(offsets) != n:
           raise ValueError("Number of offsets must match number of channels used when dispensing "
@@ -1077,7 +1078,7 @@ class LiquidHandler(Machine):
 
   async def drop_tips96(
     self,
-    tip_rack: TipRack,
+    resource: Union[TipRack, Trash],
     offset: Coordinate = Coordinate.zero(),
     allow_nonzero_volume: bool = False,
     **backend_kwargs
@@ -1089,8 +1090,12 @@ class LiquidHandler(Machine):
 
       >>> lh.drop_tips96(my_tiprack)
 
+      Drop tips to the trash:
+
+      >>> lh.drop_tips96(lh.deck.get_trash_area96())
+
     Args:
-      tip_rack: The tip rack to drop tips to.
+      resource: The tip rack to drop tips to.
       offset: The offset to use when dropping tips.
       allow_nonzero_volume: If `True`, the tip will be dropped even if its volume is not zero (there
         is liquid in the tip). If `False`, a RuntimeError will be raised if the tip has nonzero
@@ -1103,25 +1108,29 @@ class LiquidHandler(Machine):
       del backend_kwargs[extra]
 
     # queue operation on all tip trackers
-    for i, tip_spot in enumerate(tip_rack.get_all_items()):
+    for i in range(96):
       tip = self.head96[i].get_tip()
       if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
         error = f"Cannot drop tip with volume {tip.tracker.get_used_volume()} on channel {i}"
         raise RuntimeError(error)
-      if does_tip_tracking() and not tip_spot.tracker.is_disabled:
-        tip_spot.tracker.add_tip(tip, commit=False)
+      if isinstance(resource, TipRack):
+        tip_spot = resource.get_item(i)
+        if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+          tip_spot.tracker.add_tip(tip, commit=False)
       self.head96[i].remove_tip()
 
-    drop_operation = DropTipRack(resource=tip_rack, offset=offset)
+    drop_operation = DropTipRack(resource=resource, offset=offset)
     try:
       await self.backend.drop_tips96(
         drop=drop_operation,
         **backend_kwargs
       )
     except Exception as e:  # pylint: disable=broad-except
-      for i, tip_spot in enumerate(tip_rack.get_all_items()):
-        if does_tip_tracking() and not tip_spot.tracker.is_disabled:
-          tip_spot.tracker.rollback()
+      for i in range(96):
+        if isinstance(resource, TipRack):
+          tip_spot = resource.get_item(i)
+          if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+            tip_spot.tracker.rollback()
         self.head96[i].rollback()
       self._trigger_callback(
         "drop_tips96",
@@ -1131,9 +1140,11 @@ class LiquidHandler(Machine):
         **backend_kwargs,
       )
     else:
-      for i, tip_spot in enumerate(tip_rack.get_all_items()):
-        if does_tip_tracking() and not tip_spot.tracker.is_disabled:
-          tip_spot.tracker.commit()
+      for i in range(96):
+        if isinstance(resource, TipRack):
+          tip_spot = resource.get_item(i)
+          if does_tip_tracking() and not tip_spot.tracker.is_disabled:
+            tip_spot.tracker.commit()
         self.head96[i].commit()
       self._trigger_callback(
         "drop_tips96",
@@ -1182,6 +1193,31 @@ class LiquidHandler(Machine):
       raise RuntimeError("No tips have been picked up with the 96 head")
     return await self.drop_tips96(
       tip_rack,
+      allow_nonzero_volume=allow_nonzero_volume,
+      **backend_kwargs)
+
+  async def discard_tips96(self, allow_nonzero_volume: bool = True, **backend_kwargs):
+    """ Permanently discard tips from the 96 head in the trash. This method only works when this
+    LiquidHandler is configured with a deck that implements the `get_trash_area96` method.
+    Otherwise, an `ImplementationError` will be raised.
+
+    Examples:
+      Discard the tips on the 96 head:
+
+      >>> lh.discard_tips96()
+
+    Args:
+      allow_nonzero_volume: If `True`, the tip will be dropped even if its volume is not zero (there
+        is liquid in the tip). If `False`, a RuntimeError will be raised if the tip has nonzero
+        volume.
+      backend_kwargs: Additional keyword arguments for the backend, optional.
+
+    Raises:
+      ImplementationError: If the deck does not implement the `get_trash_area96` method.
+    """
+
+    return await self.drop_tips96(
+      self.deck.get_trash_area96(),
       allow_nonzero_volume=allow_nonzero_volume,
       **backend_kwargs)
 
