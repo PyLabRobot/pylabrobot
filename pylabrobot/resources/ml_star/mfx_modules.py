@@ -127,7 +127,7 @@ class MFXModule(Resource):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate],
+    location: Coordinate,
     reassign: bool = True
   ):
     """ Assign a resource to this carrier.
