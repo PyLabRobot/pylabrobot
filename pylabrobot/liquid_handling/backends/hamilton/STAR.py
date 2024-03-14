@@ -39,7 +39,7 @@ from pylabrobot.resources.errors import (
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-from pylabrobot.liquid_handling.liquid_handler import notFoundAudio, gotItemAudio
+from pylabrobot.audio import notFoundAudio, gotItemAudio
 
 T = TypeVar("T")
 
