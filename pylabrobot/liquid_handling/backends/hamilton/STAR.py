@@ -4430,8 +4430,7 @@ class STAR(HamiltonLiquidHandler):
         bool: True if resource was found, False if resource was not found
       """
 
-    center = location + resource.center() + offset + Coordinate(0, 0, resource.get_size_z()/2)
-    # TODO: remove Coordinate once .center() issue has been resolved
+    center = location + resource.centers()[0] + offset
     y_width_to_gripper_bump = resource.get_size_y() - gripper_y_margin*2
     assert 9 <= y_width_to_gripper_bump <= int(resource.get_size_y()), \
       f"width between channels must be between 9 and {resource.get_size_y()} mm" \
