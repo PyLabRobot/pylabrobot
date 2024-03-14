@@ -50,8 +50,6 @@ from .standard import (
   GripDirection
 )
 
-from IPython.display import display, Audio
-
 logger = logging.getLogger("pylabrobot")
 
 
