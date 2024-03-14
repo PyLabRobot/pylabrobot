@@ -154,6 +154,8 @@ class LiquidHandler(Machine):
         if self.head[channel].has_tip:
           self.head[channel].remove_tip()
       else:
+        if self.head[channel].has_tip: # remove tip so we can update the head.
+          self.head[channel].remove_tip()
         self.head[channel].add_tip(tip)
 
   def clear_head_state(self):
