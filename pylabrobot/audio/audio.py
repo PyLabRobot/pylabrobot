@@ -1,17 +1,34 @@
-""" Defines audio that machines can generate. """
+""" Defines audio that machines can generate.
 
-from IPython.display import display, Audio
+Source of audio: https://simpleguics2pygame.readthedocs.io/en/latest/_static/links/snd_links.html
+"""
+
+try:
+  from IPython.display import display, Audio
+  USE_AUDIO = True
+except ImportError:
+  USE_AUDIO = False
+
+
+def can_play_audio():
+  return USE_AUDIO
 
 
 # ====== 1. Identifying items on deck (e.g. through LLD or Z-drive engagement) ======
 
-def notFoundAudio():
+def play_not_found():
+  if not can_play_audio():
+    return
+
   display(Audio(
       url="https://codeskulptor-demos.commondatastorage.googleapis.com/pang/arrow.mp3",
       autoplay=True))
-    # https://simpleguics2pygame.readthedocs.io/en/latest/_static/links/snd_links.html
 
-def gotItemAudio():
+
+def play_got_item():
+  if not can_play_audio():
+    return
+
   display(Audio(
       url="https://codeskulptor-demos.commondatastorage.googleapis.com/descent/gotitem.mp3",
       autoplay=True))

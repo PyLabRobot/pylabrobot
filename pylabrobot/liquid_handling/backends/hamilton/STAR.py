@@ -39,7 +39,7 @@ from pylabrobot.resources.errors import (
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-from pylabrobot.audio import notFoundAudio, gotItemAudio
+from pylabrobot import audio
 
 T = TypeVar("T")
 
@@ -4403,13 +4403,13 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 2750,
     z_position_at_the_command_end: int = 2750,
     enable_recovery: bool = True,
-    audiofeedback: bool = True
-    ) -> bool:
+    audio_feedback: bool = True
+  ) -> bool:
     """ Check existence of resource with CoRe gripper tool
       a "Get plate using CO-RE gripper" + error handling
       Which channels are used for resource check is dependent on which channels have been used for
       `STAR.get_core(p1: int, p2: int)` which is a prerequisite for this check function.
-      
+
       Args:
         location: Location to check for resource
         resource: Resource to check for.
@@ -4423,7 +4423,7 @@ class STAR(HamiltonLiquidHandler):
           all channels independent of tip pattern parameter 'tm'). Must be between 0 and 3600.
           Default 3600.
         enable_recovery: if True will ask for user input if resource was not found
-        audiofeedback: enable controlling computer to emit different sounds when 
+        audio_feedback: enable controlling computer to emit different sounds when
           finding/not finding the resource
 
       Returns:
@@ -4434,13 +4434,11 @@ class STAR(HamiltonLiquidHandler):
     y_width_to_gripper_bump = resource.get_size_y() - gripper_y_margin*2
     assert 9 <= y_width_to_gripper_bump <= int(resource.get_size_y()), \
       f"width between channels must be between 9 and {resource.get_size_y()} mm" \
-    " (i.e. the minimal distance between channels and the max y size of the resource"
+      " (i.e. the minimal distance between channels and the max y size of the resource"
 
     # Check if CoRe gripper currently in use
     cores_used = not self._core_parked
-    if cores_used:
-      pass
-    else:
+    if not cores_used:
       raise ValueError("CoRe grippers not yet picked up.")
 
     # Enable recovery of failed checks
@@ -4464,18 +4462,24 @@ class STAR(HamiltonLiquidHandler):
             minimum_traverse_height_at_beginning_of_a_command,
           minimum_z_position_at_the_command_end = z_position_at_the_command_end,
         )
-        if audiofeedback:
-          notFoundAudio()
+      except STARFirmwareError as exc:
+        for module_error in exc.errors.values():
+          if module_error.trace_information == 62:
+            resource_found = True
+          else:
+            raise ValueError(f"Unexpected error encountered: {exc}") from exc
+      else:
+        if audio_feedback:
+          audio.play_not_found()
         if enable_recovery:
           print(f"\nWARNING: Resource '{resource.name}' not found at center" \
-                f" location {(center.x,center.y,center.z)} during check no {try_counter}.")
+                f" location {(center.x, center.y, center.z)} during check no {try_counter}.")
           user_prompt = input("Have you checked resource is present?" \
                               "\n [ yes ] -> machine will check location again" \
                               "\n [ abort ] -> machine will abort run\n Answer:"
                               )
           if user_prompt == "yes":
             try_counter += 1
-            pass
           elif user_prompt == "abort":
             raise ValueError(f"Resource '{resource.name}' not found at center" \
                               f" location {(center.x,center.y,center.z)}" \
@@ -4484,22 +4488,9 @@ class STAR(HamiltonLiquidHandler):
           # Resource was not found
           return False
 
-      except STARFirmwareError as exc:
-        exc_message = str(exc)
-        # Parse error message using regex & find all matches
-        pattern = r"P\d+/\d+"
-        matches = re.findall(pattern, exc_message)
-        # Check Z-drive movement error was triggered for channels with CoRE gripper attached
-        zdrive_error_checks = ["/62" in error for error in matches]
-
-        if all(zdrive_error_checks):
-          resource_found = True
-        else:
-          raise ValueError(f"Unexpected error encountered: {exc}") from exc
-
     # Resource was found
-    if audiofeedback:
-      gotItemAudio()
+    if audio_feedback:
+      audio.play_got_item()
     return True
 
 
