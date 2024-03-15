@@ -342,7 +342,36 @@ class Resource:
     return new_resource
 
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:
-    """ Get the center of this resource. """
+    """ Get the center of this resource.
+
+    Args:
+      x: If `True`, the x-coordinate will be the center, otherwise it will be 0.
+      y: If `True`, the y-coordinate will be the center, otherwise it will be 0.
+      z: If `True`, the z-coordinate will be the center, otherwise it will be 0.
+
+    Examples:
+      Get the center of a resource in the xy plane:
+
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.center()
+
+      Coordinate(x=6.0, y=6.0, z=0.0)
+
+      Get the center of a resource with only the x-coordinate:
+
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.center(x=True, y=False, z=False)
+
+      Coordinate(x=6.0, y=0.0, z=0.0)
+
+      Get the center of a resource in the x, y, and z directions:
+
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.center(x=True, y=True, z=True)
+
+      Coordinate(x=6.0, y=6.0, z=6.0)
+    """
+
     return Coordinate(
       self.get_size_x() / 2 if x else 0,
       self.get_size_y() / 2 if y else 0,
@@ -364,21 +393,21 @@ class Resource:
       Get the center of a resource:
 
       >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
-      >>> r.center()
+      >>> r.centers()
 
       Coordinate(x=6.0, y=6.0, z=6.0)
 
       Get the center of a resource with 2 points in the x direction:
 
       >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
-      >>> r.center(xn=2)
+      >>> r.centers(xn=2)
 
       [Coordinate(x=4.0, y=6.0, z=6.0), Coordinate(x=9.0, y=6.0, z=6.0)]
 
       Get the center of a resource with 2 points in the x and y directions:
 
       >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
-      >>> r.center(xn=2, yn=2)
+      >>> r.centers(xn=2, yn=2)
       [Coordinate(x=4.0, y=4.0, z=6.0), Coordinate(x=8.0, y=4.0, z=6.0),
        Coordinate(x=4.0, y=8.0, z=6.0), Coordinate(x=8.0, y=8.0, z=6.0)]
     """
