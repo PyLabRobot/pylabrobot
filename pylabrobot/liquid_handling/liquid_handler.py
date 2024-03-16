@@ -8,7 +8,6 @@ import json
 import logging
 import numbers
 import threading
-import time
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
 
@@ -762,7 +761,7 @@ class LiquidHandler(Machine):
       )
 
     if end_delay > 0:
-      time.sleep(end_delay)
+      await asyncio.sleep(end_delay)
 
   @need_setup_finished
   async def dispense(
@@ -933,7 +932,7 @@ class LiquidHandler(Machine):
       )
 
     if end_delay > 0:
-      time.sleep(end_delay)
+      await asyncio.sleep(end_delay)
 
   async def transfer(
     self,
@@ -1330,7 +1329,7 @@ class LiquidHandler(Machine):
       )
 
     if end_delay > 0:
-      time.sleep(end_delay)
+      await asyncio.sleep(end_delay)
 
   async def dispense96(
     self,
@@ -1439,7 +1438,7 @@ class LiquidHandler(Machine):
       )
 
     if end_delay > 0:
-      time.sleep(end_delay)
+      await asyncio.sleep(end_delay)
 
   async def stamp(
     self,
