@@ -1,6 +1,4 @@
-""" Liquid handling module for PyLabRobot """
-
-from .backends import STAR, SerializingSavingBackend
+from .backends import *
 from .liquid_handler import LiquidHandler
 from .standard import (
   Pickup,
