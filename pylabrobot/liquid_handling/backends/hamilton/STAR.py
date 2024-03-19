@@ -39,7 +39,7 @@ from pylabrobot.resources.errors import (
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-
+from pylabrobot import audio
 
 T = TypeVar("T")
 
@@ -4393,6 +4393,106 @@ class STAR(HamiltonLiquidHandler):
     )
 
     return command_output
+
+  async def core_check_resource_exists_at_location_center(
+    self,
+    location: Coordinate,
+    resource: Resource,
+    gripper_y_margin: float = 5,
+    offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_at_beginning_of_a_command: int = 2750,
+    z_position_at_the_command_end: int = 2750,
+    enable_recovery: bool = True,
+    audio_feedback: bool = True
+  ) -> bool:
+    """ Check existence of resource with CoRe gripper tool
+      a "Get plate using CO-RE gripper" + error handling
+      Which channels are used for resource check is dependent on which channels have been used for
+      `STAR.get_core(p1: int, p2: int)` which is a prerequisite for this check function.
+
+      Args:
+        location: Location to check for resource
+        resource: Resource to check for.
+        gripper_y_margin = Distance between the front / back wall of the resource
+          and the grippers during "bumping" / checking
+        offset: Offset from resource position in mm.
+        minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of
+          a command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm').
+          Must be between 0 and 3600. Default 3600.
+        z_position_at_the_command_end: Minimum z-Position at end of a command [0.1 mm] (refers to
+          all channels independent of tip pattern parameter 'tm'). Must be between 0 and 3600.
+          Default 3600.
+        enable_recovery: if True will ask for user input if resource was not found
+        audio_feedback: enable controlling computer to emit different sounds when
+          finding/not finding the resource
+
+      Returns:
+        bool: True if resource was found, False if resource was not found
+      """
+
+    center = location + resource.centers()[0] + offset
+    y_width_to_gripper_bump = resource.get_size_y() - gripper_y_margin*2
+    assert 9 <= y_width_to_gripper_bump <= int(resource.get_size_y()), \
+      f"width between channels must be between 9 and {resource.get_size_y()} mm" \
+      " (i.e. the minimal distance between channels and the max y size of the resource"
+
+    # Check if CoRe gripper currently in use
+    cores_used = not self._core_parked
+    if not cores_used:
+      raise ValueError("CoRe grippers not yet picked up.")
+
+    # Enable recovery of failed checks
+    resource_found = False
+    try_counter = 0
+    while not resource_found:
+      try:
+        await self.core_get_plate(
+          x_position=int(center.x * 10),
+          y_position=int(center.y * 10),
+          z_position=int(center.z * 10),
+          open_gripper_position=int(y_width_to_gripper_bump * 10),
+          plate_width=int(y_width_to_gripper_bump * 10),
+          # Set default values based on VENUS check_plate commands
+          y_gripping_speed=50,
+          x_direction=0,
+          z_speed=600,
+          grip_strength = 20,
+          # Enable mods of channel z position for check acceleration
+          minimum_traverse_height_at_beginning_of_a_command = \
+            minimum_traverse_height_at_beginning_of_a_command,
+          minimum_z_position_at_the_command_end = z_position_at_the_command_end,
+        )
+      except STARFirmwareError as exc:
+        for module_error in exc.errors.values():
+          if module_error.trace_information == 62:
+            resource_found = True
+          else:
+            raise ValueError(f"Unexpected error encountered: {exc}") from exc
+      else:
+        if audio_feedback:
+          audio.play_not_found()
+        if enable_recovery:
+          print(f"\nWARNING: Resource '{resource.name}' not found at center" \
+                f" location {(center.x, center.y, center.z)} during check no {try_counter}.")
+          user_prompt = input("Have you checked resource is present?" \
+                              "\n [ yes ] -> machine will check location again" \
+                              "\n [ abort ] -> machine will abort run\n Answer:"
+                              )
+          if user_prompt == "yes":
+            try_counter += 1
+          elif user_prompt == "abort":
+            raise ValueError(f"Resource '{resource.name}' not found at center" \
+                              f" location {(center.x,center.y,center.z)}" \
+                              " & error not resolved -> aborted resource movement.")
+        else:
+          # Resource was not found
+          return False
+
+    # Resource was found
+    if audio_feedback:
+      audio.play_got_item()
+    return True
+
 
   # TODO:(command:ZB)
 
