@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import json
 import logging
 import numbers
 import threading
-import time
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
 
@@ -101,6 +101,7 @@ class LiquidHandler(Machine):
 
     self.head: Dict[int, TipTracker] = {}
     self.head96: Dict[int, TipTracker] = {}
+    self._default_use_channels: Optional[List[int]] = None
 
     # assign deck as only child resource, and set location of self to origin.
     self.location = Coordinate.zero()
@@ -154,6 +155,8 @@ class LiquidHandler(Machine):
         if self.head[channel].has_tip:
           self.head[channel].remove_tip()
       else:
+        if self.head[channel].has_tip: # remove tip so we can update the head.
+          self.head[channel].remove_tip()
         self.head[channel].add_tip(tip)
 
   def clear_head_state(self):
@@ -345,7 +348,10 @@ class LiquidHandler(Machine):
     offsets = expand(offsets, len(tip_spots))
 
     if use_channels is None:
-      use_channels = list(range(len(tip_spots)))
+      if self._default_use_channels is None:
+        use_channels = list(range(len(tip_spots)))
+      else:
+        use_channels = self._default_use_channels
 
     self._make_sure_channels_exist(use_channels)
 
@@ -456,7 +462,10 @@ class LiquidHandler(Machine):
     offsets = expand(offsets, len(tip_spots))
 
     if use_channels is None:
-      use_channels = list(range(len(tip_spots)))
+      if self._default_use_channels is None:
+        use_channels = list(range(len(tip_spots)))
+      else:
+        use_channels = self._default_use_channels
 
     self._make_sure_channels_exist(use_channels)
 
@@ -658,7 +667,13 @@ class LiquidHandler(Machine):
     # which case all channels will aspirate from there, or a list of resources.
     if isinstance(resources, Resource): # if single resource, space channels evenly
       if use_channels is None:
-        use_channels = [0]
+        if self._default_use_channels is None:
+          if isinstance(vols, list):
+            use_channels = list(range(len(vols)))
+          else:
+            use_channels = [0]
+        else:
+          use_channels = self._default_use_channels
 
       self._make_sure_channels_exist(use_channels)
 
@@ -760,7 +775,7 @@ class LiquidHandler(Machine):
       )
 
     if end_delay > 0:
-      time.sleep(end_delay)
+      await asyncio.sleep(end_delay)
 
   @need_setup_finished
   async def dispense(
@@ -833,7 +848,13 @@ class LiquidHandler(Machine):
     # which case all channels will dispense to there, or a list of resources.
     if isinstance(resources, Resource): # if single resource, space channels evenly
       if use_channels is None:
-        use_channels = list(range(len(vols))) if isinstance(vols, list) else [0]
+        if self._default_use_channels is None:
+          if isinstance(vols, list):
+            use_channels = list(range(len(vols)))
+          else:
+            use_channels = [0]
+        else:
+          use_channels = self._default_use_channels
 
       self._make_sure_channels_exist(use_channels)
 
@@ -931,7 +952,7 @@ class LiquidHandler(Machine):
       )
 
     if end_delay > 0:
-      time.sleep(end_delay)
+      await asyncio.sleep(end_delay)
 
   async def transfer(
     self,
@@ -1014,6 +1035,35 @@ class LiquidHandler(Machine):
         flow_rates=dispense_flow_rates,
         use_channels=[0],
         **backend_kwargs)
+
+  @contextlib.contextmanager
+  def use_channels(self, channels: List[int]):
+    """ Temporarily use the specified channels as a default argument to `use_channels`.
+
+    Examples:
+      Use channel index 2 for all liquid handling operations inside the context:
+
+      >>> with lh.use_channels([2]):
+      ...   lh.pick_up_tips(tip_rack["A1"])
+      ...   lh.aspirate(plate["A1"], 50)
+      ...   lh.dispense(plate["A1"], 50)
+
+      This is equivalent to:
+
+      >>> lh.pick_up_tips(tip_rack["A1"], use_channels=[2])
+      >>> lh.aspirate(plate["A1"], 50, use_channels=[2])
+      >>> lh.dispense(plate["A1"], 50, use_channels=[2])
+
+      Within the context manager, you can override the default channels by specifying the
+      `use_channels` argument explicitly.
+    """
+
+    self._default_use_channels = channels
+
+    try:
+      yield
+    finally:
+      self._default_use_channels = None
 
   async def pick_up_tips96(
     self,
@@ -1328,7 +1378,7 @@ class LiquidHandler(Machine):
       )
 
     if end_delay > 0:
-      time.sleep(end_delay)
+      await asyncio.sleep(end_delay)
 
   async def dispense96(
     self,
@@ -1437,7 +1487,7 @@ class LiquidHandler(Machine):
       )
 
     if end_delay > 0:
-      time.sleep(end_delay)
+      await asyncio.sleep(end_delay)
 
   async def stamp(
     self,

@@ -279,6 +279,27 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         "use_channels": [0], "ops": [
           Drop(tip_spot, tip=tip, offset=Coordinate(x=1, y=1, z=1))]}})
 
+  async def test_with_use_channels(self):
+    tip_spot = self.tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+    with self.lh.use_channels([2]):
+      await self.lh.pick_up_tips([tip_spot])
+      await self.lh.drop_tips([tip_spot])
+
+    self.assertEqual(self.get_first_command("pick_up_tips"), {
+      "command": "pick_up_tips",
+      "args": (),
+      "kwargs": {
+        "use_channels": [2],
+        "ops": [
+          Pickup(tip_spot, tip=tip, offset=None)]}})
+    self.assertEqual(self.get_first_command("drop_tips"), {
+      "command": "drop_tips",
+      "args": (),
+      "kwargs": {
+        "use_channels": [2], "ops": [
+          Drop(tip_spot, tip=tip, offset=None)]}})
+
   async def test_offsets_asp_disp(self):
     well = self.plate.get_item("A1")
     well.tracker.set_liquids([(None, 10)])
