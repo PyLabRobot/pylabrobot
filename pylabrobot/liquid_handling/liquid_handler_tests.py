@@ -606,13 +606,8 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_save_state(self):
     set_volume_tracking(enabled=True)
 
-    # a mini protocol
-    self.plate.get_item("A1").tracker.set_liquids([(None, 10)])
-    await self.lh.pick_up_tips(self.tip_rack["A1"])
-    await self.lh.aspirate(self.plate["A1"], vols=10)
-    await self.lh.dispense(self.plate["A2"], vols=10)
-
-    # save the state
+    # set and save the state
+    self.plate.get_item("A2").tracker.set_liquids([(None, 10)])
     state_filename = tempfile.mktemp()
     self.lh.deck.save_state_to_file(fn=state_filename)
 

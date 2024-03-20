@@ -108,40 +108,41 @@ class TestSTARResponseParsing(unittest.TestCase):
     with self.assertRaises(STARFirmwareError) as ctx:
       self.star.check_fw_string_error("C0QMid1111 er01/30")
     e = ctx.exception
-    self.assertEqual(len(e), 1)
-    assert "Master" in e
-    self.assertIsInstance(e["Master"], CommandSyntaxError)
-    self.assertEqual(e["Master"].message, "Unknown command")
+    self.assertEqual(len(e.errors), 1)
+    self.assertIn("Master", e.errors)
+    self.assertIsInstance(e.errors["Master"], CommandSyntaxError)
+    self.assertEqual(e.errors["Master"].message, "Unknown command")
 
   def test_parse_response_slave_errors(self):
     with self.assertRaises(STARFirmwareError) as ctx:
       self.star.check_fw_string_error("C0QMid1111 er99/00 P100/00 P235/00 P402/98 PG08/76")
     e = ctx.exception
-    self.assertEqual(len(e), 3)
-    assert "Master" not in e
-    assert "Pipetting channel 1" not in e
-    self.assertEqual(e["Pipetting channel 2"].raw_response, "35/00")
-    self.assertEqual(e["Pipetting channel 4"].raw_response, "02/98")
-    self.assertEqual(e["Pipetting channel 16"].raw_response, "08/76")
+    self.assertEqual(len(e.errors), 3)
+    self.assertNotIn("Master", e.errors)
+    self.assertNotIn("Pipetting channel 1", e.errors)
 
-    self.assertIsInstance(e["Pipetting channel 2"], UnknownHamiltonError)
-    self.assertIsInstance(e["Pipetting channel 4"], HardwareError)
-    self.assertIsInstance(e["Pipetting channel 16"], HamiltonNoTipError)
+    self.assertEqual(e.errors["Pipetting channel 2"].raw_response, "35/00")
+    self.assertEqual(e.errors["Pipetting channel 4"].raw_response, "02/98")
+    self.assertEqual(e.errors["Pipetting channel 16"].raw_response, "08/76")
 
-    self.assertEqual(e["Pipetting channel 2"].message, "No error")
-    self.assertEqual(e["Pipetting channel 4"].message, "Unknown trace information code 98")
-    self.assertEqual(e["Pipetting channel 16"].message, "Tip already picked up")
+    self.assertIsInstance(e.errors["Pipetting channel 2"], UnknownHamiltonError)
+    self.assertIsInstance(e.errors["Pipetting channel 4"], HardwareError)
+    self.assertIsInstance(e.errors["Pipetting channel 16"], HamiltonNoTipError)
+
+    self.assertEqual(e.errors["Pipetting channel 2"].message, "No error")
+    self.assertEqual(e.errors["Pipetting channel 4"].message, "Unknown trace information code 98")
+    self.assertEqual(e.errors["Pipetting channel 16"].message, "Tip already picked up")
 
   def test_parse_slave_response_errors(self):
     with self.assertRaises(STARFirmwareError) as ctx:
       self.star.check_fw_string_error("P1OQid1111er30")
 
     e = ctx.exception
-    self.assertEqual(len(e), 1)
-    assert "Master" not in e
-    assert "Pipetting channel 1" in e
-    self.assertIsInstance(e["Pipetting channel 1"], UnknownHamiltonError)
-    self.assertEqual(e["Pipetting channel 1"].message, "Unknown command")
+    self.assertEqual(len(e.errors), 1)
+    self.assertNotIn("Master", e.errors)
+    self.assertIn("Pipetting channel 1", e.errors)
+    self.assertIsInstance(e.errors["Pipetting channel 1"], UnknownHamiltonError)
+    self.assertEqual(e.errors["Pipetting channel 1"].message, "Unknown command")
 
 
 class STARUSBCommsMocker(STAR):

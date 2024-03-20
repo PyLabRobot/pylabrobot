@@ -6,10 +6,7 @@ import re
 import sys
 from typing import Dict, List, Optional, Sequence, Union, cast
 
-from pylabrobot.liquid_handling.backends.hamilton.base import (
-  HamiltonLiquidHandler,
-  HamiltonFirmwareError
-)
+from pylabrobot.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass, get_vantage_liquid_class)
 from pylabrobot.liquid_handling.standard import (
@@ -252,7 +249,7 @@ ipg_errors = {
 }
 
 
-class VantageFirmwareError(HamiltonFirmwareError):
+class VantageFirmwareError(Exception):
   def __init__(self, errors, raw_response):
     self.errors = errors
     self.raw_response = raw_response
@@ -266,8 +263,8 @@ class VantageFirmwareError(HamiltonFirmwareError):
       self.raw_response == __value.raw_response
 
 
-def vantage_response_string_to_error(string: str) -> HamiltonFirmwareError:
-  """ Convert a Vantage firmware response string to a HamiltonFirmwareError. Assumes that the
+def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
+  """ Convert a Vantage firmware response string to a VantageFirmwareError. Assumes that the
   response is an error response. """
 
   try:
