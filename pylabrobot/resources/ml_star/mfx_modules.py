@@ -62,7 +62,7 @@ class MFX_TIP_module(MFXModule):
     super().__init__(
       name=name,
       size_x=135.0,
-      size_y=497.0,
+      size_y=94.0,
       size_z=214.8-18.195-100,
       model="MFX_TIP_module"
     )
@@ -82,7 +82,7 @@ class MFX_TIP_module(MFXModule):
     # site_size_y=82.6,
     return self.assign_child_resource(
       tip_rack,
-      location=Coordinate(2.2, 1.5, 214.8-18.195-100), # probe height - carrier_height - deck_height
+      location=Coordinate(6.2, 5.0, 214.8-18.195-100), # probe height - carrier_height - deck_height
       reassign=reassign)
 
 
@@ -95,7 +95,7 @@ class MFX_DWP_module(MFXModule):
     super().__init__(
       name=name,
       size_x=135.0,
-      size_y=497.0,
+      size_y=94.0,
       size_z=178.73-18.195-100,
       model="MFX_TIP_module"
     )
@@ -115,5 +115,5 @@ class MFX_DWP_module(MFXModule):
     # site_size_y=86.0,
     return self.assign_child_resource(
     plate,
-    location=Coordinate(0.0, 0.0, 178.73-18.195-100), # probe height - carrier_height - deck_height
+    location=Coordinate(4.0, 3.5, 178.73-18.195-100), # probe height - carrier_height - deck_height
     reassign=reassign)
