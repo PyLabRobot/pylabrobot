@@ -13,12 +13,11 @@ logger = logging.getLogger("pylabrobot")
 class CarrierSite(Resource):
   """ A single site within a carrier. """
 
-  def __init__(self, name: str, size_x: float, size_y: float, size_z: float, spot: int,
+  def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
     category: str = "carrier_site", model: Optional[str] = None):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
     self.resource: Optional[Resource] = None
-    self.spot: int = spot
 
   def assign_child_resource(
     self,
@@ -33,14 +32,8 @@ class CarrierSite(Resource):
     self.resource = None
     return super().unassign_child_resource(resource)
 
-  def serialize(self):
-    return {
-      "spot": self.spot,
-      **super().serialize()
-    }
-
   def __eq__(self, other):
-    return super().__eq__(other) and self.spot == other.spot and self.resource == other.resource
+    return super().__eq__(other) and self.resource == other.resource
 
 
 class Carrier(Resource):
@@ -90,8 +83,8 @@ class Carrier(Resource):
     sites = sites or []
 
     self.sites: List[CarrierSite] = []
-    for site in sites:
-      site.name = f"carrier-{self.name}-spot-{site.spot}"
+    for spot, site in enumerate(sites):
+      site.name = f"carrier-{self.name}-spot-{spot}"
       if site.location is None:
         raise ValueError(f"site {site} has no location")
       self.assign_child_resource(site, location=site.location)
@@ -140,7 +133,9 @@ class Carrier(Resource):
       ValueError: If the resource is not assigned to this carrier.
     """
 
-    self.sites[resource.parent.spot].unassign_child_resource(resource)
+    if not isinstance(resource.parent, CarrierSite) or not resource.parent.parent == self:
+      raise ValueError(f"Resource {resource} is not assigned to this carrier")
+    resource.unassign()
 
   def __getitem__(self, idx: int) -> CarrierSite:
     """ Get a site by index. """
@@ -258,7 +253,8 @@ def create_carrier_sites(
   for spot, (l, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
     site = CarrierSite(
       name = f"carrier-site-{spot}",
-      size_x=x, size_y=y, size_z=0, spot=spot)
+      # size_x=x, size_y=y, size_z=0, spot=spot)
+      size_x=x, size_y=y, size_z=0)
     site.location = l
     sites.append(site)
   return sites
