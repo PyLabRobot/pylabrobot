@@ -3,19 +3,16 @@ This file defines interfaces for all supported Hamilton liquid handling robots.
 """
 # pylint: disable=invalid-sequence-index, dangerous-default-value
 
-from abc import ABC
+from abc import ABCMeta
 import datetime
 import enum
 import functools
 import logging
 import re
-from typing import Callable, Dict, ItemsView, List, Literal, Optional, Sequence, Type, TypeVar, \
-  Union, cast
+from typing import Callable, Dict, List, Literal, Optional, Sequence, Type, TypeVar, Union, cast
 
-from pylabrobot.liquid_handling.backends.hamilton.base import (
-  HamiltonLiquidHandler,
-  HamiltonFirmwareError
-)
+from pylabrobot.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
+from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass, get_star_liquid_class)
 from pylabrobot.liquid_handling.standard import (
@@ -207,7 +204,7 @@ def parse_star_fw_string(resp: str, fmt: str = "") -> dict:
   return info
 
 
-class STARModuleError(ABC):
+class STARModuleError(Exception, metaclass=ABCMeta):
   """ Base class for all Hamilton backend errors, raised by a single module. """
 
   def __init__(
@@ -812,7 +809,7 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       53: "Robotic channel task busy"
     }
   elif module_identifier in ["PX", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "PA",
-                              "PB", "PC", "PD", "PE", "PF", "PG"]:
+                             "PB", "PC", "PD", "PE", "PF", "PG"]:
     table = {
       0: "No error",
       20: "No communication to EEPROM",
@@ -945,66 +942,18 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
   return f"Unknown trace information code {trace_information:02}"
 
 
-class STARFirmwareError(HamiltonFirmwareError):
-  """
-  All Hamilton machine errors.
-
-  Example:
-    >>> try:
-    ...   lh.pick_up_tips([True, True, True])
-    ... except STARFirmwareError as e:
-    ...   print(e)
-    STARFirmwareError({
-      'Pipetting channel 1': NoTipError('Tip already picked up'),
-      'Pipetting channel 3': NoTipError('Tip already picked up'),
-    })
-
-    >>> try:
-    ...   lh.pick_up_tips([True, False, True])
-    ... except STARFirmwareError as e:
-    ...   if 'Pipetting channel 1' in e:
-    ...     print('Pipetting channel 1 error: ', e['Pipetting channel 1'], e.error_code)
-    Pipetting channel 1 error:  NoTipError('Tip already picked up'), '08/76'
-  """
-
-  def __init__(self, errors: Dict[str, STARModuleError], raw_response: Optional[str] = None):
-    self.raw_response = raw_response
+class STARFirmwareError(Exception):
+  def __init__(self, errors: Dict[str, STARModuleError], raw_response: str):
     self.errors = errors
-
-  def __str__(self) -> str:
-    return f"STARFirmwareError(errors={self.errors}, raw_response={self.raw_response})"
+    self.raw_response = raw_response
 
   def __repr__(self) -> str:
-    return str(self)
-
-  def __len__(self) -> int:
-    return len(self.errors)
-
-  def __getitem__(self, key: str):
-    return self.errors[key]
-
-  def __setitem__(self, key: str, value: STARModuleError):
-    self.errors[key] = value
-
-  def __contains__(self, key: str) -> bool:
-    return key in self.errors
-
-  def items(self) -> ItemsView[str, STARModuleError]:
-    return self.errors.items()
-
-  def error_for_channel(self, channel: int) -> Optional[STARModuleError]:
-    """ Return the error for a given channel.
-
-    .. warning::
-      Channel here is 1-indexed, like the firmware API, but STAR uses 0-indexed channels.
-    """
-
-    return self.errors.get(f"Pipetting channel {channel}")
+    return f"{self.__class__.__name__}(errors={self.errors}, raw_response={self.raw_response})"
 
 
 def star_firmware_string_to_error(
   error_code_dict: Dict[str, str],
-  raw_response: Optional[str] = None,
+  raw_response: str,
 ) -> STARFirmwareError:
   """ Convert a firmware string to a STARFirmwareError. """
 
@@ -1035,6 +984,45 @@ def star_firmware_string_to_error(
     errors.pop("Master")
 
   return STARFirmwareError(errors=errors, raw_response=raw_response)
+
+
+def convert_star_module_error_to_plr_error(error: STARModuleError) -> Optional[Exception]:
+  """ Convert an error returned by a specific STAR module to a Hamilton error. """
+  # TipAlreadyFittedError -> HasTipError
+  if isinstance(error, TipAlreadyFittedError):
+    return HasTipError()
+
+  # HamiltonNoTipError -> NoTipError
+  if isinstance(error, HamiltonNoTipError):
+    return NoTipError(error.message)
+
+  if error.trace_information == 75:
+    return NoTipError(error.message)
+
+  if error.trace_information in {70, 71}:
+    return TooLittleLiquidError(error.message)
+
+  if error.trace_information in {54}:
+    return TooLittleVolumeError(error.message)
+
+  return None
+
+
+def convert_star_firmware_error_to_plr_error(error: STARFirmwareError) -> Optional[Exception]:
+  """ Check if a STARFirmwareError can be converted to a native PLR error. If so, return it, else
+  return `None`. """
+
+  # if all errors are channel errors, return a ChannelizedError
+  if all(e.startswith("Pipetting channel ") for e in error.errors):
+    def _channel_to_int(channel: str) -> int:
+      return int(channel.split(" ")[-1]) - 1 # star is 1-indexed, plr is 0-indexed
+    errors = {
+      _channel_to_int(module_name): convert_star_module_error_to_plr_error(error) or error
+      for module_name, error in error.errors.items()
+    }
+    return ChannelizedError(errors=errors, raw_response=error.raw_response)
+
+  return None
 
 
 def _dispensing_mode_for_op(empty: bool, jet: bool, blow_out: bool) -> int:
@@ -1183,7 +1171,7 @@ class STAR(HamiltonLiquidHandler):
       he = star_firmware_string_to_error(error_code_dict=errors_dict, raw_response=resp)
 
       # If there is a faulty parameter error, request which parameter that is.
-      for module_name, error in he.items():
+      for module_name, error in he.errors.items():
         if error.message == "Unknown parameter":
           # temp. disabled until we figure out how to handle async in parse response (the
           # background thread does not have an event loop, and I'm not sure if it should.)
@@ -1191,7 +1179,8 @@ class STAR(HamiltonLiquidHandler):
           # he[module_name].message += f" ({vp})" # pylint: disable=unnecessary-dict-index-lookup
 
           # pylint: disable=unnecessary-dict-index-lookup
-          he[module_name].message += " (call lh.backend.request_name_of_last_faulty_parameter)"
+          he.errors[module_name].message += \
+            " (call lh.backend.request_name_of_last_faulty_parameter)"
 
       raise he
 
@@ -1315,23 +1304,8 @@ class STAR(HamiltonLiquidHandler):
         pickup_method=tip.pickup_method,
       )
     except STARFirmwareError as e:
-      tip_already_fitted_errors: List[int] = []
-      no_tip_present_errors: List[int] = []
-      for i in range(1, self.num_channels+1):
-        channel_error = e.error_for_channel(i)
-        if channel_error is None:
-          continue
-        if isinstance(channel_error, TipAlreadyFittedError):
-          tip_already_fitted_errors.append(i-1)
-        elif channel_error.trace_information in [75]:
-          no_tip_present_errors.append(i-1)
-      if len(tip_already_fitted_errors) > 0:
-        raise HasTipError(f"Tip already fitted on channels {tip_already_fitted_errors}") \
-          from e
-      elif len(no_tip_present_errors) > 0:
-        raise NoTipError("No tip present in locations for channels "
-                                  f"{no_tip_present_errors}") from e
-
+      if plr_e := convert_star_firmware_error_to_plr_error(e):
+        raise plr_e from e
       raise e
 
   @need_iswap_parked
@@ -1383,15 +1357,8 @@ class STAR(HamiltonLiquidHandler):
         discarding_method=drop_method
       )
     except STARFirmwareError as e:
-      tip_errors: List[int] = []
-      for i in range(1, self.num_channels+1):
-        channel_error = e.error_for_channel(i)
-        if isinstance(channel_error, HamiltonNoTipError):
-          tip_errors.append(i-1)
-
-      if len(tip_errors) > 0:
-        raise NoTipError(f"No tip present on channels {tip_errors}") from e
-
+      if plr_e := convert_star_firmware_error_to_plr_error(e):
+        raise plr_e from e
       raise e
 
   def _assert_valid_resources(self, resources: Sequence[Resource]) -> None:
@@ -1681,24 +1648,8 @@ class STAR(HamiltonLiquidHandler):
         min_z_endpos=min_z_endpos or int(self._traversal_height * 10),
       )
     except STARFirmwareError as e:
-      tll: List[int] = []
-      tlv: List[int] = []
-      for i in range(1, self.num_channels+1):
-        channel_error = e.error_for_channel(i)
-        if channel_error is None:
-          continue
-        if channel_error.trace_information in [70, 71]: # too little / no liquid
-          tll.append(i-1)
-        elif channel_error.trace_information in [54]: # "Position out of permitted area" = too much
-          tlv.append(i-1)
-
-      if len(tll) > 0:
-        raise TooLittleLiquidError(f"There is not enough liquid in containers where the "
-                                      f"following channels were trying to aspirate: {tll}") from e
-      if len(tlv) > 0:
-        raise TooLittleVolumeError(f"There is too much liquid in the following channels: {tlv}") \
-          from e
-
+      if plr_e := convert_star_firmware_error_to_plr_error(e):
+        raise plr_e from e
       raise e
 
   @need_iswap_parked
@@ -1929,19 +1880,8 @@ class STAR(HamiltonLiquidHandler):
         side_touch_off_distance=side_touch_off_distance,
       )
     except STARFirmwareError as e:
-      tll: List[int] = []
-      for i in range(1, self.num_channels+1):
-        channel_error = e.error_for_channel(i)
-        if channel_error is None:
-          continue
-        if channel_error.trace_information in [54]: # "Position out of permitted area" = too little
-          tll.append(i-1)
-
-      if len(tll) > 0:
-        raise \
-          TooLittleVolumeError(f"There is not enough liquid in the following channels: {tll}") \
-          from e
-
+      if plr_e := convert_star_firmware_error_to_plr_error(e):
+        raise plr_e from e
       raise e
 
     return ret
