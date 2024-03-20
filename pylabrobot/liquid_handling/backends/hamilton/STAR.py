@@ -2335,7 +2335,6 @@ class STAR(HamiltonLiquidHandler):
     """
 
     assert self.iswap_installed, "iswap must be installed"
-    print(minimum_traverse_height_at_beginning_of_a_command, z_position_at_the_command_end)
 
     # Get center of source plate. Also gripping height and plate width.
     center = resource.get_absolute_location() + resource.center() + offset
