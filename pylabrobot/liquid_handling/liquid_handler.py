@@ -604,7 +604,6 @@ class LiquidHandler(Machine):
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
-    end_delay: float = 0,
     offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
     liquid_height: Union[Optional[float], List[Optional[float]]] = None,
     blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
@@ -647,8 +646,6 @@ class LiquidHandler(Machine):
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(wells)` channels will be used.
       flow_rates: the aspiration speed. In ul/s. If `None`, the backend default will be used.
-      end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
-        the tips used in the aspiration are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
         aspiration location. If `None`, no offset will be applied.
       liquid_height: The height of the liquid in the well wrt the bottom, in mm.
@@ -774,9 +771,6 @@ class LiquidHandler(Machine):
       **backend_kwargs,
     )
 
-    if end_delay > 0:
-      await asyncio.sleep(end_delay)
-
   @need_setup_finished
   async def dispense(
     self,
@@ -784,7 +778,6 @@ class LiquidHandler(Machine):
     vols: Union[List[float], float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
-    end_delay: float = 0,
     offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
     liquid_height: Union[Optional[float], List[Optional[float]]] = None,
     blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
@@ -827,8 +820,6 @@ class LiquidHandler(Machine):
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
       flow_rates: the flow rates, in ul/s. If `None`, the backend default will be used.
-      end_delay: The delay after the last dispense in seconds, optional. This is useful for when
-        the tips used in the dispense are dripping.
       offsets: List of offsets for each channel, a translation that will be applied to the
         dispense location. If `None`, no offset will be applied.
       liquid_height: The height of the liquid in the well wrt the bottom, in mm.
@@ -955,9 +946,6 @@ class LiquidHandler(Machine):
       error=error,
       **backend_kwargs,
     )
-
-    if end_delay > 0:
-      await asyncio.sleep(end_delay)
 
   async def transfer(
     self,
@@ -1282,7 +1270,6 @@ class LiquidHandler(Machine):
     volume: float,
     offset: Coordinate = Coordinate.zero(),
     flow_rate: Optional[float] = None,
-    end_delay: float = 0,
     blow_out_air_volume: Optional[float] = None,
     **backend_kwargs
   ):
@@ -1300,8 +1287,6 @@ class LiquidHandler(Machine):
       volume: The volume to aspirate from each well.
       flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend default
         will be used.
-      end_delay: The delay after the last aspiration in seconds, optional. This is useful for when
-        the tips used in the aspiration are dripping.
       blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
         backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
@@ -1382,16 +1367,12 @@ class LiquidHandler(Machine):
         **backend_kwargs,
       )
 
-    if end_delay > 0:
-      await asyncio.sleep(end_delay)
-
   async def dispense96(
     self,
     resource: Union[Plate, List[Well]],
     volume: float,
     offset: Coordinate = Coordinate.zero(),
     flow_rate: Optional[float] = None,
-    end_delay: float = 0,
     blow_out_air_volume: Optional[float] = None,
     **backend_kwargs
   ):
@@ -1409,8 +1390,6 @@ class LiquidHandler(Machine):
       volume: The volume to dispense to each well.
       flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend default
         will be used.
-      end_delay: The delay after the last dispense in seconds, optional. This is useful for when
-        the tips used in the dispense are dripping.
       blow_out_air_volume: The volume of air to dispense after the liquid, in ul. If `None`, the
         backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
@@ -1490,9 +1469,6 @@ class LiquidHandler(Machine):
         error=None,
         **backend_kwargs,
       )
-
-    if end_delay > 0:
-      await asyncio.sleep(end_delay)
 
   async def stamp(
     self,
