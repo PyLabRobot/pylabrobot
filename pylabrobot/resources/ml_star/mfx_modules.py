@@ -86,8 +86,8 @@ class MFX_TIP_module(MFXModule):
       reassign=reassign)
 
 
-class MFX_DWP_module(MFXModule):
-  """ Hamilton cat. no.: 188042
+class MFX_DWP_RB_module(MFXModule):
+  """ Hamilton cat. no.: 188229 (MFX DWP module rack-based)
   Module to position a Deep Well Plate / tube racks (MATRIX or MICRONICS) / NUNC reagent trough.
   """
 
