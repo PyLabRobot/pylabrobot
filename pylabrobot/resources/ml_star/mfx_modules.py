@@ -7,6 +7,7 @@ from typing import Optional
 
 from pylabrobot.resources.carrier import Coordinate
 from pylabrobot.resources.resource import Resource
+from pylabrobot.serializer import serialize
 
 
 logger = logging.getLogger("pylabrobot")
@@ -71,7 +72,9 @@ class MFXModule(Resource):
     self._child_resource = resource
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "child_resource_location": self._child_resource_location}
+    return {
+      **super().serialize(),
+      "child_resource_location": serialize(self._child_resource_location)}
 
 ################## MFX module library #################
 
