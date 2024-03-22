@@ -1733,6 +1733,8 @@ class LiquidHandler(Machine):
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       to.assign_child_resource(plate)
+    elif isinstance(to, MFXModule):
+      to.assign_child_resource(plate, location=to.child_resource_location)
     else:
       to.assign_child_resource(plate, location=to_location)
 
