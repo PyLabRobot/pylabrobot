@@ -37,6 +37,10 @@ if PYTHON_VERSION == (3, 10):
 else:
   USE_OT = False
 
+# https://github.com/Opentrons/opentrons/issues/14590
+# https://forums.pylabrobot.org/t/connect-pylabrobot-to-ot2/2862/18
+_OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
+
 
 class OpentronsBackend(LiquidHandlerBackend):
   """ Backends for the Opentrons liquid handling robots. Only supported on Python 3.10.
@@ -73,6 +77,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.set_port(port)
 
     self.defined_labware: Dict[str, str] = {}
+    self.ot_api_version: Optional[str] = None
     self.left_pipette: Optional[Dict[str, str]] = None
     self.right_pipette: Optional[Dict[str, str]] = None
 
@@ -94,6 +99,10 @@ class OpentronsBackend(LiquidHandlerBackend):
     self.left_pipette, self.right_pipette = ot_api.lh.add_mounted_pipettes()
 
     self.left_pipette_has_tip = self.right_pipette_has_tip = False
+
+    # get api version
+    health = ot_api.health.get()
+    self.ot_api_version = health["api_version"]
 
   @property
   def num_channels(self) -> int:
@@ -129,6 +138,10 @@ class OpentronsBackend(LiquidHandlerBackend):
     await super().assigned_resource_callback(resource)
 
     if resource.name == "deck":
+      return
+
+    if cast(str, self.ot_api_version) >= _OT_DECK_IS_ADDRESSABLE_AREA_VERSION and \
+      resource.name == "trash_container":
       return
 
     slot = self._get_resource_slot(resource)
@@ -334,7 +347,12 @@ class OpentronsBackend(LiquidHandlerBackend):
     # this feels wrong, why should backends check?
     assert op.resource.parent is not None, "must not be a floating resource"
 
-    labware_id = self.defined_labware[op.resource.parent.name] # get name of tip rack
+    use_fixed_trash = cast(str, self.ot_api_version) >= _OT_DECK_IS_ADDRESSABLE_AREA_VERSION and \
+                        op.resource.name == "trash"
+    if use_fixed_trash:
+      labware_id = "fixedTrash"
+    else:
+      labware_id = self.defined_labware[op.resource.parent.name] # get name of tip rack
     tip_max_volume = op.tip.maximal_volume
     pipette_id = self.select_tip_pipette(tip_max_volume, with_tip=True)
     if not pipette_id:
@@ -348,8 +366,13 @@ class OpentronsBackend(LiquidHandlerBackend):
     # ad-hoc offset adjustment that makes it smoother.
     offset_z += 10
 
-    ot_api.lh.drop_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
-      offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
+    if use_fixed_trash:
+      ot_api.lh.move_to_addressable_area_for_drop_tip(pipette_id=pipette_id,
+        offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
+      ot_api.lh.drop_tip_in_place(pipette_id=pipette_id)
+    else:
+      ot_api.lh.drop_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
+        offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
     if self.left_pipette is not None and pipette_id == self.left_pipette["pipetteId"]:
       self.left_pipette_has_tip = False
