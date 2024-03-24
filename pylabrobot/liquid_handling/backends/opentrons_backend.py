@@ -73,6 +73,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.set_port(port)
 
     self.defined_labware: Dict[str, str] = {}
+    self.left_pipette: Optional[Dict[str, str]] = None
+    self.right_pipette: Optional[Dict[str, str]] = None
 
   def serialize(self) -> dict:
     return {
@@ -277,19 +279,15 @@ class OpentronsBackend(LiquidHandlerBackend):
       The id of the pipette, or None if no pipette is available.
     """
 
-    left_volume = right_volume = None
     if self.left_pipette is not None:
       left_volume = OpentronsBackend.pipette_name2volume[self.left_pipette["name"]]
+      if left_volume == tip_max_volume and with_tip == self.left_pipette_has_tip:
+        return cast(str, self.left_pipette["pipetteId"])
+
     if self.right_pipette is not None:
       right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
-
-    if left_volume is not None and left_volume == tip_max_volume and \
-      with_tip == self.left_pipette_has_tip:
-      return cast(str, self.left_pipette["pipetteId"])
-
-    if right_volume is not None and right_volume == tip_max_volume and \
-      with_tip == self.right_pipette_has_tip:
-      return cast(str, self.right_pipette["pipetteId"])
+      if right_volume == tip_max_volume and with_tip == self.right_pipette_has_tip:
+        return cast(str, self.right_pipette["pipetteId"])
 
     return None
 
@@ -319,7 +317,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.lh.pick_up_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
-    if pipette_id == self.left_pipette["pipetteId"]:
+    if self.left_pipette is not None and pipette_id == self.left_pipette["pipetteId"]:
       self.left_pipette_has_tip = True
     else:
       self.right_pipette_has_tip = True
@@ -353,7 +351,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.lh.drop_tip(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
 
-    if pipette_id == self.left_pipette["pipetteId"]:
+    if self.left_pipette is not None and pipette_id == self.left_pipette["pipetteId"]:
       self.left_pipette_has_tip = False
     else:
       self.right_pipette_has_tip = False
@@ -373,26 +371,24 @@ class OpentronsBackend(LiquidHandlerBackend):
       The id of the pipette, or None if no pipette is available.
     """
 
-    left_volume = right_volume = None
     if self.left_pipette is not None:
       left_volume = OpentronsBackend.pipette_name2volume[self.left_pipette["name"]]
+      if left_volume >= volume and self.left_pipette_has_tip:
+        return cast(str, self.left_pipette["pipetteId"])
+
     if self.right_pipette is not None:
       right_volume = OpentronsBackend.pipette_name2volume[self.right_pipette["name"]]
-
-    if left_volume is not None and left_volume >= volume and self.left_pipette_has_tip:
-      return cast(str, self.left_pipette["pipetteId"])
-
-    if right_volume is not None and right_volume >= volume and self.right_pipette_has_tip:
-      return cast(str, self.right_pipette["pipetteId"])
+      if right_volume >= volume and self.right_pipette_has_tip:
+        return cast(str, self.right_pipette["pipetteId"])
 
     return None
 
   def get_pipette_name(self, pipette_id: str) -> str:
     """ Get the name of a pipette from its id. """
 
-    if pipette_id == self.left_pipette["pipetteId"]:
+    if self.left_pipette is not None and pipette_id == self.left_pipette["pipetteId"]:
       return cast(str, self.left_pipette["name"])
-    if pipette_id == self.right_pipette["pipetteId"]:
+    if self.right_pipette is not None and pipette_id == self.right_pipette["pipetteId"]:
       return cast(str, self.right_pipette["name"])
     raise ValueError(f"Unknown pipette id: {pipette_id}")
 
@@ -547,10 +543,13 @@ class OpentronsBackend(LiquidHandlerBackend):
       force_direct: If True, move the pipette head directly in all dimensions.
     """
 
-    if pipette_id == "left":
+    if self.left_pipette is not None and pipette_id == "left":
       pipette_id = self.left_pipette["pipetteId"]
-    elif pipette_id == "right":
+    elif self.right_pipette is not None and pipette_id == "right":
       pipette_id = self.right_pipette["pipetteId"]
+
+    if pipette_id is None:
+      raise ValueError("No pipette id given or left/right pipette not available.")
 
     ot_api.lh.move_arm(
       pipette_id=pipette_id,
