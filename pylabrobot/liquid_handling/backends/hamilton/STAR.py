@@ -1263,7 +1263,6 @@ class STAR(HamiltonLiquidHandler):
 
   # ============== LiquidHandlerBackend methods ==============
 
-  @need_iswap_parked
   async def pick_up_tips(
     self,
     ops: List[Pickup],
@@ -1307,7 +1306,6 @@ class STAR(HamiltonLiquidHandler):
         raise plr_e from e
       raise e
 
-  @need_iswap_parked
   async def drop_tips(
     self,
     ops: List[Drop],
@@ -1376,7 +1374,6 @@ class STAR(HamiltonLiquidHandler):
     DUAL = 3
     Z_TOUCH_OFF = 4
 
-  @need_iswap_parked
   async def aspirate(
     self,
     ops: List[Aspiration],
@@ -1651,7 +1648,6 @@ class STAR(HamiltonLiquidHandler):
         raise plr_e from e
       raise e
 
-  @need_iswap_parked
   async def dispense(
     self,
     ops: List[Dispense],
@@ -1885,7 +1881,6 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
-  @need_iswap_parked
   async def pick_up_tips96(
     self,
     pickup: PickupTipRack,
@@ -1915,7 +1910,6 @@ class STAR(HamiltonLiquidHandler):
       minimum_height_command_end=minimum_height_command_end or int(self._traversal_height * 10),
     )
 
-  @need_iswap_parked
   async def drop_tips96(
     self,
     drop: DropTipRack,
@@ -1942,7 +1936,6 @@ class STAR(HamiltonLiquidHandler):
       minimum_height_command_end=minimum_height_command_end or int(self._traversal_height * 10),
     )
 
-  @need_iswap_parked
   async def aspirate96(
     self,
     aspiration: AspirationPlate,
@@ -2129,7 +2122,6 @@ class STAR(HamiltonLiquidHandler):
       recording_mode=0,
     )
 
-  @need_iswap_parked
   async def dispense96(
     self,
     dispense: DispensePlate,
@@ -3435,6 +3427,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.2 Tip handling commands using PIP --------------
 
+  @need_iswap_parked
   async def pick_up_tip(
     self,
     x_positions: List[int],
@@ -3487,6 +3480,7 @@ class STAR(HamiltonLiquidHandler):
       td=pickup_method.value,
     )
 
+  @need_iswap_parked
   async def discard_tip(
     self,
     x_positions: List[int],
@@ -3553,6 +3547,7 @@ class STAR(HamiltonLiquidHandler):
 
   # TODO:(command:DC) Set multiple dispense values using PIP
 
+  @need_iswap_parked
   async def aspirate_pip(
     self,
     aspiration_type: List[int] = [0],
@@ -3814,6 +3809,7 @@ class STAR(HamiltonLiquidHandler):
       in_=[f"{in_:04}" for in_ in immersion_depth_2nd_section],
     )
 
+  @need_iswap_parked
   async def dispense_pip(
     self,
     tip_pattern: List[bool],
@@ -4844,6 +4840,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
+  @need_iswap_parked
   async def pick_up_tips_core96(
     self,
     x_position: int,
@@ -4893,6 +4890,7 @@ class STAR(HamiltonLiquidHandler):
       ze=f"{minimum_height_command_end:04}",
     )
 
+  @need_iswap_parked
   async def discard_tips_core96(
     self,
     x_position: int,
@@ -4940,6 +4938,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
 
+  @need_iswap_parked
   async def aspirate_core_96(
     self,
     aspiration_type: int = 0,
@@ -5119,6 +5118,7 @@ class STAR(HamiltonLiquidHandler):
       cx=recording_mode,
     )
 
+  @need_iswap_parked
   async def dispense_core_96(
     self,
     dispensing_mode: int = 0,
