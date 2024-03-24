@@ -1250,7 +1250,6 @@ class STAR(HamiltonLiquidHandler):
 
       await self.park_iswap(minimum_traverse_height_at_beginning_of_a_command=
                             int(self._traversal_height * 10))
-      self._iswap_parked = True
 
     if self.core96_head_installed:
       core96_head_initialized = await self.request_core_96_head_initialization_status()
@@ -4030,6 +4029,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
+  @need_iswap_parked
   async def get_core(self, p1: int, p2: int):
     """ Get CoRe gripper tool from wasteblock mount. """
     if not 0 <= p1 < self.num_channels:
@@ -4054,6 +4054,7 @@ class STAR(HamiltonLiquidHandler):
     self._core_parked = False
     return command_output
 
+  @need_iswap_parked
   async def put_core(self):
     """ Put CoRe gripper tool at wasteblock mount. """
     command_output = await self.send_command(
@@ -4213,6 +4214,7 @@ class STAR(HamiltonLiquidHandler):
       command="ZO")
     return command_output
 
+  @need_iswap_parked
   async def core_get_plate(
     self,
     x_position: int = 0,
@@ -4261,6 +4263,7 @@ class STAR(HamiltonLiquidHandler):
 
     return command_output
 
+  @need_iswap_parked
   async def core_put_plate(
     self,
     x_position: int = 0,
@@ -4307,6 +4310,7 @@ class STAR(HamiltonLiquidHandler):
 
     return command_output
 
+  @need_iswap_parked
   async def core_move_plate_to_position(
     self,
     x_position: int = 0,
