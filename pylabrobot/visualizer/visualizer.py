@@ -312,7 +312,7 @@ class Visualizer:
       raise RuntimeError("Could not find Visualizer files. Please run from the root of the "
                          "repository.")
 
-    def start_server():
+    def start_server(lock):
       ws_host, ws_port, fs_host, fs_port = self.ws_host, self.ws_port, self.fs_host, self.fs_port
 
       # try to start the server. If the port is in use, try with another port until it succeeds.
@@ -350,14 +350,22 @@ class Visualizer:
             QuietSimpleHTTPRequestHandler)
           print(f"File server started at http://{self.fs_host}:{self.fs_port} . "
                  "Open this URL in your browser.")
+          lock.release()
           break
         except OSError:
           self.fs_port += 1
 
       self.httpd.serve_forever()
 
-    self._fst = threading.Thread(name="visualizer_fs", target=start_server, daemon=True)
+    lock = threading.Lock()
+    lock.acquire() # pylint: disable=consider-using-with
+    self._fst = threading.Thread(name="visualizer_fs", target=start_server, args=(lock,),
+                                 daemon=True)
     self.fst.start()
+
+    # Wait for the server to start before opening the browser so that we can get the correct port.
+    while lock.locked():
+      time.sleep(0.001)
 
     if self.open_browser:
       webbrowser.open(f"http://{self.fs_host}:{self.fs_port}")
