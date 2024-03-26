@@ -100,8 +100,8 @@ def MFX_TIP_module(name: str) -> MFXModule:
   )
 
 
-def MFX_DWP_module(name: str) -> MFXModule:
-  """ Hamilton cat. no.: 188042
+def MFX_DWP_rackbased_module(name: str) -> MFXModule:
+  """ Hamilton cat. no.: 188229
   Module to position a Deep Well Plate / tube racks (MATRIX or MICRONICS) / NUNC reagent trough.
   """
 
