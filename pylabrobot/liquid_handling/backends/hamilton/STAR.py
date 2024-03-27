@@ -537,6 +537,12 @@ class DecapperHandlingError(STARModuleError):
   Code: 33
   """
 
+class HoodOpenError(STARModuleError):
+  """
+  Hood is open (Not from documentaiton, but observed)
+
+  Code: 36
+  """
 
 class SlaveError(STARModuleError):
   """ Slave error
@@ -808,6 +814,10 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       52: "Imaging channel task busy",
       53: "Robotic channel task busy"
     }
+  elif module_identifier == "I0":
+    table = {
+      36: "Hamilton will not run while the hood is open"
+    }
   elif module_identifier in ["PX", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "PA",
                              "PB", "PC", "PD", "PE", "PF", "PG"]:
     table = {
@@ -946,9 +956,7 @@ class STARFirmwareError(Exception):
   def __init__(self, errors: Dict[str, STARModuleError], raw_response: str):
     self.errors = errors
     self.raw_response = raw_response
-
-  def __repr__(self) -> str:
-    return f"{self.__class__.__name__}(errors={self.errors}, raw_response={self.raw_response})"
+    super().__init__(f"{errors}, {raw_response}")
 
 
 def star_firmware_string_to_error(
@@ -968,6 +976,9 @@ def star_firmware_string_to_error(
       if error_code == 0: # No error
         continue
       error_class = error_code_to_exception(error_code)
+    elif module_id == "I0" and error == "36":
+      error_class = HoodOpenError
+      trace_information = int(error)
     else:
       # Slave modules: er## (just trace information)
       error_class = UnknownHamiltonError
