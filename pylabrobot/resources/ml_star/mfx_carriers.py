@@ -12,18 +12,20 @@ from pylabrobot.resources.carrier import (
 
 
 def MFX_CAR_L5_base(name: str) -> MFXCarrier:
-  """ Hamilton cat. no.: 188039 """
+  """ Hamilton cat. no.: 188039
+  Labware carrier base for up to 5 Multiflex Modules
+  """
   return MFXCarrier(
     name=name,
     size_x=135.0,
     size_y=497.0,
     size_z=18.195,
     sites=create_homogeneous_carrier_sites([
-        Coordinate(0.0, 4.5, 18.195),
-        Coordinate(0.0, 100.5, 18.195),
-        Coordinate(0.0, 196.5, 18.195),
-        Coordinate(0.0, 292.5, 18.195),
-        Coordinate(0.0, 388.5, 18.195),
+        Coordinate(0.0, 5.0, 18.195),
+        Coordinate(0.0, 101.0, 18.195),
+        Coordinate(0.0, 197.0, 18.195),
+        Coordinate(0.0, 293.0, 18.195),
+        Coordinate(0.0, 389.0, 18.195)
       ],
       site_size_x=135.0,
       site_size_y=94.0,

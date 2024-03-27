@@ -16,7 +16,7 @@ def _compute_volume_from_height_FrameStar_96_wellplate_skirted(h: float):
     d=5.5,
     h_cone=9.8,
     h_cylinder=5.2,
-    liquid_height=15)
+    liquid_height=h)
 
 
 #: Azenta4titudeFrameStar_96_wellplate_skirted
