@@ -537,12 +537,14 @@ class DecapperHandlingError(STARModuleError):
   Code: 33
   """
 
+
 class HoodOpenError(STARModuleError):
   """
-  Hood is open (Not from documentaiton, but observed)
+  Hood is open (Not from documentation, but observed)
 
   Code: 36
   """
+
 
 class SlaveError(STARModuleError):
   """ Slave error
@@ -785,7 +787,7 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
   """ Convert a trace identifier to an error message. """
   table = None
 
-  if module_identifier == "C0":
+  if module_identifier == "C0": # master
     table = {
       10: "CAN error",
       11: "Slave command time out",
@@ -814,7 +816,7 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       52: "Imaging channel task busy",
       53: "Robotic channel task busy"
     }
-  elif module_identifier == "I0":
+  elif module_identifier == "I0": # autoload
     table = {
       36: "Hamilton will not run while the hood is open"
     }
