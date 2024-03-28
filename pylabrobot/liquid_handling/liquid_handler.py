@@ -24,6 +24,7 @@ from pylabrobot.resources import (
   Coordinate,
   CarrierSite,
   Lid,
+  MFXModule,
   Plate,
   Tip,
   TipRack,
@@ -1689,6 +1690,8 @@ class LiquidHandler(Machine):
         z=to_location.z  + to.get_size_z())
     elif isinstance(to, Coordinate):
       to_location = to
+    elif isinstance(to, MFXModule):
+      to_location = to.get_absolute_location() + to.child_resource_location
     else:
       to_location = to.get_absolute_location()
 
@@ -1711,6 +1714,8 @@ class LiquidHandler(Machine):
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       to.assign_child_resource(plate)
+    elif isinstance(to, MFXModule):
+      to.assign_child_resource(plate, location=to.child_resource_location)
     else:
       to.assign_child_resource(plate, location=to_location)
 
