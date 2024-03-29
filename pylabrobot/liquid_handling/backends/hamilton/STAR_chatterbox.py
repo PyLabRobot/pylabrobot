@@ -24,13 +24,29 @@ class STARChatterBoxBackend(ChatterBoxBackend):
   async def get_core(self, p1: int, p2: int):
     print(f"Getting core from {p1} to {p2}")
 
-  async def iswap_pick_up_resource(self, resource: Resource, grip_direction: GripDirection, **backend_kwargs):
+  async def iswap_pick_up_resource(
+    self,
+    resource: Resource,
+    grip_direction: GripDirection,
+    **backend_kwargs
+  ):
     print(f"Pick up resource {resource.name} with {grip_direction}.")
 
-  async def iswap_move_picked_up_resource(self, location: Coordinate, resource: Resource, **backend_kwargs):
+  async def iswap_move_picked_up_resource(
+    self,
+    location: Coordinate,
+    resource: Resource,
+    **backend_kwargs
+  ):
     print(f"Move picked up resource {resource.name} to {location}")
 
-  async def iswap_release_picked_up_resource(self, location: Coordinate, resource: Resource, grip_direction: GripDirection, **backend_kwargs):
+  async def iswap_release_picked_up_resource(
+    self,
+    location: Coordinate,
+    resource: Resource,
+    grip_direction: GripDirection,
+    **backend_kwargs
+  ):
     print(f"Release picked up resource {resource.name} at {location} with {grip_direction}.")
 
   async def send_command(self, module, command, *args, **kwargs):
