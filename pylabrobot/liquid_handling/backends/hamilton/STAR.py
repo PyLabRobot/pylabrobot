@@ -538,7 +538,7 @@ class DecapperHandlingError(STARModuleError):
   """
 
 
-class HoodOpenError(STARModuleError):
+class StopError(STARModuleError):
   """
   Hood is open (Not from documentation, but observed)
 
@@ -979,7 +979,7 @@ def star_firmware_string_to_error(
         continue
       error_class = error_code_to_exception(error_code)
     elif module_id == "I0" and error == "36":
-      error_class = HoodOpenError
+      error_class = StopError
       trace_information = int(error)
     else:
       # Slave modules: er## (just trace information)
