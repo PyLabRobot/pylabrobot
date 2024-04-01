@@ -16,7 +16,7 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on **Hamilton STAR** (this will work on any operating system!):
 
 ```python
-from pylabrobot import LiquidHandler
+from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import STAR
 from pylabrobot.resources import Deck
 
