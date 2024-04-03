@@ -1,7 +1,7 @@
 import asyncio
 from typing import Union, Optional, List, Literal
 
-from pylabrobot.machine import Machine
+from pylabrobot.machines.machine import Machine
 from pylabrobot.pumps.backend import PumpArrayBackend
 from pylabrobot.pumps.errors import NotCalibratedError
 from pylabrobot.pumps.calibration import PumpCalibration
