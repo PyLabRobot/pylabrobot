@@ -12,7 +12,7 @@ import threading
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
 
-from pylabrobot.machine import Machine, need_setup_finished
+from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.plate_reading import PlateReader

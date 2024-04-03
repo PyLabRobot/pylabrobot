@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 import sys
 from typing import List, Optional, Type
 
-from pylabrobot.machine import MachineBackend
+from pylabrobot.machines.backends import MachineBackend
 
 if sys.version_info >= (3, 8):
   from typing import Literal

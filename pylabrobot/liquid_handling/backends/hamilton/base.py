@@ -6,9 +6,9 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 
-from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
+from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import TipSpot, Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 

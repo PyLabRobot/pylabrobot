@@ -6,7 +6,7 @@ import time
 from typing import List, Optional, TYPE_CHECKING
 import libusb_package
 
-from pylabrobot.machine import MachineBackend
+from pylabrobot.machines.backends.machine import MachineBackend
 
 try:
   import usb.core

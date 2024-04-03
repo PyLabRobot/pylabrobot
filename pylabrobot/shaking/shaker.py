@@ -1,7 +1,7 @@
 import asyncio
 from typing import Optional
 
-from pylabrobot.machine import Machine
+from pylabrobot.machines.machine import Machine
 
 from .backend import ShakerBackend
 
