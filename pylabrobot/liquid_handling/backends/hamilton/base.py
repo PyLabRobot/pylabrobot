@@ -7,6 +7,7 @@ import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 
 from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
 from pylabrobot.resources import TipSpot, Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
@@ -16,7 +17,7 @@ T = TypeVar("T")
 logger = logging.getLogger("pylabrobot")
 
 
-class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
+class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
   """
