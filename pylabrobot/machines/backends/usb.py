@@ -6,7 +6,7 @@ import time
 from typing import List, Optional, TYPE_CHECKING
 import libusb_package
 
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.machines.backends.machine import MachineBackend
 
 try:
   import usb.core
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("pylabrobot")
 
 
-class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
+class USBBackend(MachineBackend, metaclass=ABCMeta):
   """ An abstract class for liquid handler backends that talk over a USB cable. Provides read/write
   functionality, including timeout handling. """
 

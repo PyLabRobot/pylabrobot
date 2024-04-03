@@ -7,7 +7,8 @@ This file defines interfaces for all supported Tecan liquid handling robots.
 from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional, Tuple, Sequence, TypeVar, Union
 
-from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
+from pylabrobot.machines.backends import USBBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.liquid_classes.tecan import TecanLiquidClass, get_liquid_class
 from pylabrobot.liquid_handling.backends.tecan.errors import TecanError, error_code_to_exception
 from pylabrobot.liquid_handling.standard import (
@@ -34,7 +35,7 @@ from pylabrobot.resources import (
 
 T = TypeVar("T")
 
-class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
+class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
   """
   Abstract base class for Tecan liquid handling robot backends.
   """
