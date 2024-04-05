@@ -169,7 +169,6 @@ class CarrierTests(unittest.TestCase):
       "parent_name": None,
       "children": [
         {
-          "spot": 0,
           "name": "carrier-tip_car-spot-0",
           "type": "CarrierSite",
           "size_x": 10,
@@ -187,7 +186,6 @@ class CarrierTests(unittest.TestCase):
           "model": None
         },
         {
-          "spot": 1,
           "name": "carrier-tip_car-spot-1",
           "type": "CarrierSite",
           "size_x": 10,
@@ -205,7 +203,6 @@ class CarrierTests(unittest.TestCase):
           "model": None
         },
         {
-          "spot": 2,
           "name": "carrier-tip_car-spot-2",
           "type": "CarrierSite",
           "size_x": 10,
@@ -223,7 +220,6 @@ class CarrierTests(unittest.TestCase):
           "model": None
         },
         {
-          "spot": 3,
           "name": "carrier-tip_car-spot-3",
           "type": "CarrierSite",
           "size_x": 10,
@@ -241,7 +237,6 @@ class CarrierTests(unittest.TestCase):
           "model": None
         },
         {
-          "spot": 4,
           "name": "carrier-tip_car-spot-4",
           "type": "CarrierSite",
           "size_x": 10,

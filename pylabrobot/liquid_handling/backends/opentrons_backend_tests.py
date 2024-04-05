@@ -12,28 +12,8 @@ from pylabrobot.resources.opentrons import (
 )
 
 
-@unittest.skipIf(sys.version_info != (3, 10), "requires Python 3.10")
-class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
-  """ Tests for setup and stop """
-  @patch("ot_api.runs.create")
-  @patch("ot_api.lh.add_mounted_pipettes")
-  @patch("ot_api.labware.add")
-  @patch("ot_api.labware.define")
-  async def test_setup(self, mock_define, mock_add, mock_add_mounted_pipettes, mock_create):
-    mock_create.return_value = "run-id"
-    mock_add_mounted_pipettes.return_value = ("left-pipette-id", "right-pipette-id")
-    mock_add.side_effect = _mock_add
-    mock_define.side_effect = _mock_define
-
-    self.backend = OpentronsBackend(host="localhost", port=1338)
-    self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
-    await self.lh.setup()
-
-  def test_serialize(self):
-    serialized = OpentronsBackend(host="localhost", port=1337).serialize()
-    self.assertEqual(serialized, {"type": "OpentronsBackend", "host": "localhost", "port": 1337})
-    self.assertEqual(OpentronsBackend.deserialize(serialized).__class__.__name__,
-      "OpentronsBackend")
+def _is_python_3_10():
+  return sys.version_info[:2] == (3, 10)
 
 
 def _mock_define(lw):
@@ -48,7 +28,42 @@ def _mock_add(load_name, namespace, slot, version, labware_id, display_name):
   return labware_id
 
 
-@unittest.skipIf(sys.version_info != (3, 10), "requires Python 3.10")
+def _mock_health_get():
+  return {
+    "api_version": "7.0.1",
+  }
+
+
+@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
+class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
+  """ Tests for setup and stop """
+  @patch("ot_api.runs.create")
+  @patch("ot_api.lh.add_mounted_pipettes")
+  @patch("ot_api.labware.add")
+  @patch("ot_api.labware.define")
+  @patch("ot_api.health.get")
+  async def test_setup(self, mock_health_get, mock_define, mock_add, mock_add_mounted_pipettes,
+                       mock_create):
+    mock_create.return_value = "run-id"
+    mock_add_mounted_pipettes.return_value = (
+      {"pipetteId": "left-pipette-id", "name": "p20_single_gen2"},
+      {"pipetteId": "right-pipette-id", "name": "p20_single_gen2"})
+    mock_add.side_effect = _mock_add
+    mock_define.side_effect = _mock_define
+    mock_health_get.side_effect = _mock_health_get
+
+    self.backend = OpentronsBackend(host="localhost", port=1338)
+    self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
+    await self.lh.setup()
+
+  def test_serialize(self):
+    serialized = OpentronsBackend(host="localhost", port=1337).serialize()
+    self.assertEqual(serialized, {"type": "OpentronsBackend", "host": "localhost", "port": 1337})
+    self.assertEqual(OpentronsBackend.deserialize(serialized).__class__.__name__,
+      "OpentronsBackend")
+
+
+@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
 class OpentronsBackendDefinitionTests(unittest.IsolatedAsyncioTestCase):
   """ Test for the callback when assigning labware to the deck. """
 
@@ -56,11 +71,16 @@ class OpentronsBackendDefinitionTests(unittest.IsolatedAsyncioTestCase):
   @patch("ot_api.lh.add_mounted_pipettes")
   @patch("ot_api.labware.add")
   @patch("ot_api.labware.define")
-  async def asyncSetUp(self, mock_define, mock_add, mock_add_mounted_pipettes, mock_create):
+  @patch("ot_api.health.get")
+  async def asyncSetUp(self, mock_health_get, mock_define, mock_add, mock_add_mounted_pipettes,
+                       mock_create):
     mock_create.return_value = "run-id"
-    mock_add_mounted_pipettes.return_value = ("left-pipette-id", "right-pipette-id")
+    mock_add_mounted_pipettes.return_value = (
+      {"pipetteId": "left-pipette-id", "name": "p20_single_gen2"},
+      {"pipetteId": "right-pipette-id", "name": "p20_single_gen2"})
     mock_add.side_effect = _mock_add
     mock_define.side_effect = _mock_define
+    mock_health_get.side_effect = _mock_health_get
 
     self.backend = OpentronsBackend(host="localhost", port=1338)
     self.deck = OTDeck()
@@ -80,21 +100,24 @@ class OpentronsBackendDefinitionTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_at_slot(self.plate, slot=11)
 
 
-@unittest.skipIf(sys.version_info != (3, 10), "requires Python 3.10")
+@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
 class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   """ Tests Opentrons commands """
 
   @patch("ot_api.runs.create")
   @patch("ot_api.lh.add_mounted_pipettes")
-  @patch("ot_api.labware.define")
   @patch("ot_api.labware.add")
-  async def asyncSetUp(self, mock_add, mock_define, mock_add_mounted_pipettes, mock_create):
+  @patch("ot_api.labware.define")
+  @patch("ot_api.health.get")
+  async def asyncSetUp(self, mock_health_get, mock_define, mock_add, mock_add_mounted_pipettes,
+                       mock_create):
     mock_add.side_effect = _mock_add
     mock_define.side_effect = _mock_define
     mock_add_mounted_pipettes.return_value = (
       {"pipetteId": "left-pipette-id", "name": "p20_single_gen2"},
       {"pipetteId": "right-pipette-id", "name": "p20_single_gen2"})
     mock_create.return_value = "run-id"
+    mock_health_get.side_effect = _mock_health_get
 
     self.backend = OpentronsBackend(host="localhost", port=1338)
     self.deck = OTDeck()

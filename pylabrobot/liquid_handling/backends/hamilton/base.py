@@ -6,8 +6,9 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 
-from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
+from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import TipSpot, Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
@@ -16,11 +17,7 @@ T = TypeVar("T")
 logger = logging.getLogger("pylabrobot")
 
 
-class HamiltonFirmwareError(Exception, metaclass=ABCMeta):
-  """ Base class for all Hamilton backend errors, raised by firmware. """
-
-
-class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
+class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
   """
@@ -180,9 +177,6 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       fmt: A format to use for the response. If `None`, the response is not parsed.
       kwargs: any named parameters. The parameter name should also be 2 characters long. The value
         can be of any size.
-
-    Raises:
-      HamiltonFirmwareError: if an error response is received.
 
     Returns:
       A dictionary containing the parsed response, or None if no response was read within `timeout`.
@@ -419,3 +413,27 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
     """
 
     return [await self.get_or_assign_tip_type_index(tip) for tip in tips]
+
+  async def send_raw_command(
+    self,
+    command: str,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait: bool = True
+  ) -> Optional[str]:
+    """ Send a raw command to the machine. """
+    id_index = command.find("id")
+    if id_index == -1:
+      raise ValueError("Command must contain an id.")
+    id_str = command[id_index + 2 : id_index + 6]
+    if not id_str.isdigit():
+      raise ValueError("Id must be a 4 digit int.")
+    id_ = int(id_str)
+
+    return await self._write_and_read_command(
+      id_=id_,
+      cmd=command,
+      write_timeout=write_timeout,
+      read_timeout=read_timeout,
+      wait=wait,
+    )

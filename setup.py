@@ -7,7 +7,8 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 
 extras_fw = [
-  "pyusb"
+  "pyusb",
+  "libusb_package<=1.0.26.2"
 ]
 
 extras_http = [

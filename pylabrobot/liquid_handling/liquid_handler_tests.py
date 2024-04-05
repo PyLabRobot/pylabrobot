@@ -279,6 +279,27 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         "use_channels": [0], "ops": [
           Drop(tip_spot, tip=tip, offset=Coordinate(x=1, y=1, z=1))]}})
 
+  async def test_with_use_channels(self):
+    tip_spot = self.tip_rack.get_item("A1")
+    tip = tip_spot.get_tip()
+    with self.lh.use_channels([2]):
+      await self.lh.pick_up_tips([tip_spot])
+      await self.lh.drop_tips([tip_spot])
+
+    self.assertEqual(self.get_first_command("pick_up_tips"), {
+      "command": "pick_up_tips",
+      "args": (),
+      "kwargs": {
+        "use_channels": [2],
+        "ops": [
+          Pickup(tip_spot, tip=tip, offset=None)]}})
+    self.assertEqual(self.get_first_command("drop_tips"), {
+      "command": "drop_tips",
+      "args": (),
+      "kwargs": {
+        "use_channels": [2], "ops": [
+          Drop(tip_spot, tip=tip, offset=None)]}})
+
   async def test_offsets_asp_disp(self):
     well = self.plate.get_item("A1")
     well.tracker.set_liquids([(None, 10)])
@@ -339,11 +360,11 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_aspirate_dispense96(self):
     self.plate.get_item("A1").tracker.set_liquids([(None, 10)])
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate_plate(self.plate, volume=10)
+    await self.lh.aspirate96(self.plate, volume=10)
     for i in range(96):
       self.assertTrue(self.lh.head96[i].has_tip)
       self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 10)
-    await self.lh.dispense_plate(self.plate, volume=10)
+    await self.lh.dispense96(self.plate, volume=10)
     for i in range(96):
       self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
 
@@ -449,16 +470,16 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "command": "aspirate96",
       "args": (),
       "kwargs": {"aspiration":
-        AspirationPlate(resource=self.plate, volume=10.0, tips=ts, offset=Coordinate.zero(),
-                      flow_rate=None, liquid_height=None, blow_out_air_volume=None,
-                        liquids=[[(None, 10)]]*96)}})
+        AspirationPlate(wells=self.plate.get_all_items(), volume=10.0, tips=ts,
+                        offset=Coordinate.zero(), flow_rate=None, liquid_height=None,
+                        blow_out_air_volume=None, liquids=[[(None, 10)]]*96)}})
     self.assertEqual(self.get_first_command("dispense96"), {
       "command": "dispense96",
       "args": (),
       "kwargs": {"dispense":
-        DispensePlate(resource=self.plate, volume=10.0, tips=ts, offset=Coordinate.zero(),
-                flow_rate=None, liquid_height=None, blow_out_air_volume=None,
-                liquids=[[(None, 10)]]*96)}})
+        DispensePlate(wells=self.plate.get_all_items(), volume=10.0, tips=ts,
+                      offset=Coordinate.zero(), flow_rate=None, liquid_height=None,
+                      blow_out_air_volume=None, liquids=[[(None, 10)]]*96)}})
     self.backend.clear()
 
   async def test_tip_tracking_double_pickup(self):
@@ -507,7 +528,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     tips = self.tip_rack.get_tips("A1:D1")
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1", "D1"], use_channels=[0, 1, 3, 4])
     await self.lh.discard_tips()
-    offsets = self.deck.get_trash_area().get_2d_center_offsets(n=4)
+    offsets = list(reversed(self.deck.get_trash_area().centers(yn=4)))
 
     self.assertEqual(self.get_first_command("drop_tips"), {
       "command": "drop_tips",
@@ -585,13 +606,8 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_save_state(self):
     set_volume_tracking(enabled=True)
 
-    # a mini protocol
-    self.plate.get_item("A1").tracker.set_liquids([(None, 10)])
-    await self.lh.pick_up_tips(self.tip_rack["A1"])
-    await self.lh.aspirate(self.plate["A1"], vols=10)
-    await self.lh.dispense(self.plate["A2"], vols=10)
-
-    # save the state
+    # set and save the state
+    self.plate.get_item("A2").tracker.set_liquids([(None, 10)])
     state_filename = tempfile.mktemp()
     self.lh.deck.save_state_to_file(fn=state_filename)
 

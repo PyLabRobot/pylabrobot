@@ -108,40 +108,41 @@ class TestSTARResponseParsing(unittest.TestCase):
     with self.assertRaises(STARFirmwareError) as ctx:
       self.star.check_fw_string_error("C0QMid1111 er01/30")
     e = ctx.exception
-    self.assertEqual(len(e), 1)
-    assert "Master" in e
-    self.assertIsInstance(e["Master"], CommandSyntaxError)
-    self.assertEqual(e["Master"].message, "Unknown command")
+    self.assertEqual(len(e.errors), 1)
+    self.assertIn("Master", e.errors)
+    self.assertIsInstance(e.errors["Master"], CommandSyntaxError)
+    self.assertEqual(e.errors["Master"].message, "Unknown command")
 
   def test_parse_response_slave_errors(self):
     with self.assertRaises(STARFirmwareError) as ctx:
       self.star.check_fw_string_error("C0QMid1111 er99/00 P100/00 P235/00 P402/98 PG08/76")
     e = ctx.exception
-    self.assertEqual(len(e), 3)
-    assert "Master" not in e
-    assert "Pipetting channel 1" not in e
-    self.assertEqual(e["Pipetting channel 2"].raw_response, "35/00")
-    self.assertEqual(e["Pipetting channel 4"].raw_response, "02/98")
-    self.assertEqual(e["Pipetting channel 16"].raw_response, "08/76")
+    self.assertEqual(len(e.errors), 3)
+    self.assertNotIn("Master", e.errors)
+    self.assertNotIn("Pipetting channel 1", e.errors)
 
-    self.assertIsInstance(e["Pipetting channel 2"], UnknownHamiltonError)
-    self.assertIsInstance(e["Pipetting channel 4"], HardwareError)
-    self.assertIsInstance(e["Pipetting channel 16"], HamiltonNoTipError)
+    self.assertEqual(e.errors["Pipetting channel 2"].raw_response, "35/00")
+    self.assertEqual(e.errors["Pipetting channel 4"].raw_response, "02/98")
+    self.assertEqual(e.errors["Pipetting channel 16"].raw_response, "08/76")
 
-    self.assertEqual(e["Pipetting channel 2"].message, "No error")
-    self.assertEqual(e["Pipetting channel 4"].message, "Unknown trace information code 98")
-    self.assertEqual(e["Pipetting channel 16"].message, "Tip already picked up")
+    self.assertIsInstance(e.errors["Pipetting channel 2"], UnknownHamiltonError)
+    self.assertIsInstance(e.errors["Pipetting channel 4"], HardwareError)
+    self.assertIsInstance(e.errors["Pipetting channel 16"], HamiltonNoTipError)
+
+    self.assertEqual(e.errors["Pipetting channel 2"].message, "No error")
+    self.assertEqual(e.errors["Pipetting channel 4"].message, "Unknown trace information code 98")
+    self.assertEqual(e.errors["Pipetting channel 16"].message, "Tip already picked up")
 
   def test_parse_slave_response_errors(self):
     with self.assertRaises(STARFirmwareError) as ctx:
       self.star.check_fw_string_error("P1OQid1111er30")
 
     e = ctx.exception
-    self.assertEqual(len(e), 1)
-    assert "Master" not in e
-    assert "Pipetting channel 1" in e
-    self.assertIsInstance(e["Pipetting channel 1"], UnknownHamiltonError)
-    self.assertEqual(e["Pipetting channel 1"].message, "Unknown command")
+    self.assertEqual(len(e.errors), 1)
+    self.assertNotIn("Master", e.errors)
+    self.assertIn("Pipetting channel 1", e.errors)
+    self.assertIsInstance(e.errors["Pipetting channel 1"], UnknownHamiltonError)
+    self.assertEqual(e.errors["Pipetting channel 1"].message, "Unknown command")
 
 
 class STARUSBCommsMocker(STAR):
@@ -544,17 +545,25 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "C0ERid0213xs01179xd0yh2418za2164zh2450ze2450",
                 "xs#####xd#yh####za####zh####ze####")
 
+  async def test_core_96_tip_discard(self):
+    await self.lh.pick_up_tips96(self.tip_rack) # pick up tips first
+    await self.lh.discard_tips96()
+
+    self._assert_command_sent_once(
+      "C0ERid0213xs02321xd1yh1103za2164zh2450ze2450",
+                "xs#####xd#yh####za####zh####ze####")
+
   async def test_core_96_aspirate(self):
     await self.lh.pick_up_tips96(self.tip_rack2) # pick up high volume tips
 
     # TODO: Hamilton liquid classes
     assert self.plate.lid is not None
     self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, volume=100, blow_out=True)
+    await self.lh.aspirate96(self.plate, volume=100, blow_out=True)
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
-      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1269iw000ix0fh000af01083ag2500vt050"
+      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1871iw000ix0fh000af01083ag2500vt050"
       "bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000hs1200zv0032zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "xs#####xd#yh####zh####ze####lz####zt####zm####iw###ix#fh###af#####ag####vt###"
@@ -565,14 +574,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack2) # pick up high volume tips
     if self.plate.lid is not None:
       self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, 100, blow_out=True) # aspirate first
+    await self.lh.aspirate96(self.plate, 100, blow_out=True) # aspirate first
 
     with no_volume_tracking():
-      await self.lh.dispense_plate(self.plate, 100, blow_out=True)
+      await self.lh.dispense96(self.plate, 100, blow_out=True)
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
-      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1869iw000ix0fh000df01083dg1200vt050"
+      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1871iw000ix0fh000df01083dg1200vt050"
       "bv00000cm0cs1bs0020wh00hv00000hc00hp000hs1200es0050ev000zv0032ej00zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "da#xs#####xd#yh##6#zh####ze####lz####zt####zm##6#iw###ix#fh###df#####dg####vt###"
@@ -584,8 +593,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
     assert self.plate.lid is not None
     self.plate.lid.unassign()
-    await self.lh.aspirate_plate(self.plate, 0)
-    await self.lh.dispense_plate(self.plate, 0)
+    await self.lh.aspirate96(self.plate, 0)
+    await self.lh.dispense96(self.plate, 0)
 
   async def test_iswap(self):
     await self.lh.move_plate(self.plate, self.plt_car[2])

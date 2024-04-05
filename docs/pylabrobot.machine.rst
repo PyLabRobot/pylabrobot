@@ -1,4 +1,4 @@
-.. currentmodule:: pylabrobot.machine
+.. currentmodule:: pylabrobot.machines
 
 Machine is a backend'd Resource. Check out the contributing section for more information.
 
@@ -7,5 +7,6 @@ Machine is a backend'd Resource. Check out the contributing section for more inf
   :nosignatures:
   :recursive:
 
-    pylabrobot.machine.Machine
-    pylabrobot.machine.MachineBackend
+    pylabrobot.machines.machine.Machine
+    pylabrobot.machines.backends.machine.MachineBackend
+    pylabrobot.machines.backends.usb.USBBackend

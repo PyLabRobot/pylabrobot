@@ -62,10 +62,12 @@ class ChatterBoxBackend(LiquidHandlerBackend):
     print(f"Dropping tips to {drop.resource.name}.")
 
   async def aspirate96(self, aspiration: AspirationPlate):
-    print(f"Aspirating {aspiration.volume} from {aspiration.resource}.")
+    plate = aspiration.wells[0].parent
+    print(f"Aspirating {aspiration.volume} from {plate}.")
 
   async def dispense96(self, dispense: DispensePlate):
-    print(f"Dispensing {dispense.volume} to {dispense.resource}.")
+    plate = dispense.wells[0].parent
+    print(f"Dispensing {dispense.volume} to {plate}.")
 
   async def move_resource(self, move: Move, **backend_kwargs):
     print(f"Moving {move}.")

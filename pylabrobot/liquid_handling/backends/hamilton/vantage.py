@@ -6,10 +6,7 @@ import re
 import sys
 from typing import Dict, List, Optional, Sequence, Union, cast
 
-from pylabrobot.liquid_handling.backends.hamilton.base import (
-  HamiltonLiquidHandler,
-  HamiltonFirmwareError
-)
+from pylabrobot.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass, get_vantage_liquid_class)
 from pylabrobot.liquid_handling.standard import (
@@ -23,7 +20,7 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Move
 )
-from pylabrobot.resources import Coordinate, Liquid, Resource, Plate, Well
+from pylabrobot.resources import Coordinate, Liquid, Resource, TipRack, Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 
@@ -252,7 +249,7 @@ ipg_errors = {
 }
 
 
-class VantageFirmwareError(HamiltonFirmwareError):
+class VantageFirmwareError(Exception):
   def __init__(self, errors, raw_response):
     self.errors = errors
     self.raw_response = raw_response
@@ -266,8 +263,8 @@ class VantageFirmwareError(HamiltonFirmwareError):
       self.raw_response == __value.raw_response
 
 
-def vantage_response_string_to_error(string: str) -> HamiltonFirmwareError:
-  """ Convert a Vantage firmware response string to a HamiltonFirmwareError. Assumes that the
+def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
+  """ Convert a Vantage firmware response string to a VantageFirmwareError. Assumes that the
   response is an error response. """
 
   try:
@@ -422,6 +419,7 @@ class Vantage(HamiltonLiquidHandler):
     ipg_initialized = await self.ipg_request_initialization_status()
     if not ipg_initialized:
       await self.ipg_initialize()
+    if not await self.ipg_get_parking_status():
       await self.ipg_park()
 
   @property
@@ -882,8 +880,12 @@ class Vantage(HamiltonLiquidHandler):
     minimal_height_at_command_end: Optional[int] = None
   ):
     # assert self.core96_head_installed, "96 head must be installed"
-    tip_spot_a1 = drop.resource.get_item("A1")
-    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+    if isinstance(drop.resource, TipRack):
+      tip_spot_a1 = drop.resource.get_item("A1")
+      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+    else:
+      raise NotImplementedError("Only TipRacks are supported for dropping tips on Vantage",
+                               f"got {drop.resource}")
 
     return await self.core96_tip_discard(
       x_position=int(position.x * 10),
@@ -938,14 +940,11 @@ class Vantage(HamiltonLiquidHandler):
     """
     # assert self.core96_head_installed, "96 head must be installed"
 
-    assert isinstance(aspiration.resource, Plate), "Only Plate is supported."
-    well_a1 = aspiration.resource.get_item("A1")
-    position = well_a1.get_absolute_location() + well_a1.center()
+    top_left_well = aspiration.wells[0]
+    position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
 
-    liquid_height = well_a1.get_absolute_location().z + (aspiration.liquid_height or 0)
-
-    well_bottoms = well_a1.get_absolute_location().z + \
-      (aspiration.offset.z if aspiration.offset is not None else 0)
+    liquid_height = position.z + (aspiration.liquid_height or 0)
+    well_bottoms = position.z
 
     tip = aspiration.tips[0]
     liquid_to_be_aspirated = Liquid.WATER # default to water
@@ -967,7 +966,7 @@ class Vantage(HamiltonLiquidHandler):
       else aspiration.volume
 
     # -1 compared to STAR?
-    lld_search_height = well_bottoms + well_a1.get_size_z() + 2.7-1
+    lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0)
@@ -1064,15 +1063,12 @@ class Vantage(HamiltonLiquidHandler):
       type_of_dispensing_mode: the type of dispense mode to use. If not provided, it will be
         determined based on the jet, blow_out, and empty parameters.
     """
-    assert isinstance(dispense.resource, Plate), "Only Plate is supported."
-    well_a1 = dispense.resource.get_item("A1")
-    position = well_a1.get_absolute_location() + well_a1.center()
 
-    liquid_height = well_a1.get_absolute_location().z + (dispense.liquid_height or 0) + \
-      (dispense.offset.z if dispense.offset is not None else 0) + 10 # +10?
+    top_left_well = dispense.wells[0]
+    position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
 
-    well_bottoms = well_a1.get_absolute_location().z + \
-      (dispense.offset.z if dispense.offset is not None else 0)
+    liquid_height = position.z + (dispense.liquid_height or 0) + 10 # +10?
+    well_bottoms = position.z
 
     tip = dispense.tips[0]
     liquid_to_be_dispensed = Liquid.WATER # default to WATER
@@ -1093,7 +1089,7 @@ class Vantage(HamiltonLiquidHandler):
       else dispense.volume
 
     # -1 compared to STAR?
-    lld_search_height = well_bottoms + well_a1.get_size_z() + 2.7-1
+    lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0)
@@ -4803,13 +4799,15 @@ class Vantage(HamiltonLiquidHandler):
       command="AA",
     )
 
-  async def ipg_get_parking_status(self):
-    """ Get parking status """
+  async def ipg_get_parking_status(self) -> bool:
+    """ Get parking status. Returns `True` if parked. """
 
-    return await self.send_command(
+    resp = await self.send_command(
       module="A1RM",
       command="RG",
+      fmt={"rg": "int"}
     )
+    return resp is not None and resp["rg"] == 1
 
   async def ipg_query_tip_presence(self):
     """ Query Tip presence """
