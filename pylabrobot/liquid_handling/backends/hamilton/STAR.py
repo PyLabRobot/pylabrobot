@@ -4050,6 +4050,7 @@ class STAR(HamiltonLiquidHandler):
     if not 1 <= p2 <= self.num_channels:
       raise ValueError(f"channel_2 must be between 1 and {self.num_channels}")
 
+    assert self.deck is not None, "must have deck defined to access CoRe grippers"
     deck_size = self.deck.get_size_x()
     if deck_size == STARLET_SIZE_X:
       xs = "07975"
@@ -4077,7 +4078,7 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   async def put_core(self):
     """ Put CoRe gripper tool at wasteblock mount. """
-
+    assert self.deck is not None, "must have deck defined to access CoRe grippers"
     deck_size = self.deck.get_size_x()
     if deck_size == STARLET_SIZE_X:
       xs = "07975"
