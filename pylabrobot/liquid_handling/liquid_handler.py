@@ -97,6 +97,7 @@ class LiquidHandler(Machine):
     self._callbacks: Dict[str, OperationCallback] = {}
 
     self.deck = deck
+    self.backend.deck = self.deck
     # register callbacks for sending resource assignment/unassignment to backend
     self.deck.register_did_assign_resource_callback(self._send_assigned_resource_to_backend)
     self.deck.register_did_unassign_resource_callback(self._send_unassigned_resource_to_backend)

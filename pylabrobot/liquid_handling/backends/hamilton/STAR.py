@@ -34,6 +34,7 @@ from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError
 )
+from pylabrobot.resources.hamilton.hamilton_decks import STAR_SIZE_X, STARLET_SIZE_X, HamiltonDeck
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
 from pylabrobot import audio
@@ -1066,6 +1067,7 @@ class STAR(HamiltonLiquidHandler):
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
+    deck: Optional[HamiltonDeck] = None,
   ):
     """ Create a new STAR interface.
 
@@ -1083,7 +1085,9 @@ class STAR(HamiltonLiquidHandler):
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
-      id_product=0x8000)
+      id_product=0x8000,
+      deck=deck,
+    )
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
@@ -4046,10 +4050,17 @@ class STAR(HamiltonLiquidHandler):
     if not 1 <= p2 <= self.num_channels:
       raise ValueError(f"channel_2 must be between 1 and {self.num_channels}")
 
+    deck_size = self.deck.get_size_x()
+    if deck_size == STARLET_SIZE_X:
+      xs = "07975"
+    elif deck_size == STAR_SIZE_X:
+      xs = "13375"
+    else:
+      raise ValueError(f"Deck size {deck_size} not supported")
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs="07975",
+      xs=xs,
       xd="0",
       ya="1250",
       yb="1070",
@@ -4066,10 +4077,18 @@ class STAR(HamiltonLiquidHandler):
   @need_iswap_parked
   async def put_core(self):
     """ Put CoRe gripper tool at wasteblock mount. """
+
+    deck_size = self.deck.get_size_x()
+    if deck_size == STARLET_SIZE_X:
+      xs = "07975"
+    elif deck_size == STAR_SIZE_X:
+      xs = "13375"
+    else:
+      raise ValueError(f"Deck size {deck_size} not supported")
     command_output = await self.send_command(
       module="C0",
       command="ZS",
-      xs="07975",
+      xs=xs,
       xd="0",
       ya="1250",
       yb="1070",
