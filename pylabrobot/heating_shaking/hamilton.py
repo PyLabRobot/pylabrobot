@@ -3,9 +3,11 @@ from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 from pylabrobot.machines.backends.usb import USBBackend
 from enum import Enum
 
+
 class PlateLockPosition(Enum):
   LOCKED = 1
   UNLOCKED = 0
+
 
 class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
   """
@@ -13,7 +15,7 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
   an Heat Shaker Box
   """
 
-  def __init__(self, shaker_index:int, id_vendor:int = 0x8af, id_product:int = 0x8002) -> None:
+  def __init__(self, shaker_index:int, id_vendor: int = 0x8af, id_product: int = 0x8002) -> None:
     """
     Multiple Hamilton Heater Shakers can be connected to the same Heat Shaker Box. Each has A
     separate 'shaker index'
@@ -42,9 +44,6 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     self.command_id = (self.command_id + 1) % 10_000
     return USBBackend.read(self)
 
-  def _move_plate_lock(self, position: PlateLockPosition):
-    self._send_command("lp", lp=position.value)
-
   async def shake(
     self,
     speed: float = 800,
@@ -61,14 +60,32 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
     # Initialize plate lock
-    self._send_command("li")
+    await self._initialize_lock()
     self._move_plate_lock(PlateLockPosition.UNLOCKED)
-
-    speed_str = str(speed).zfill(4)
-    acceleration_str = str(acceleration).zfill(5)
-    self._send_command("sb", st=direction, sv=speed_str, sr=acceleration_str) # Start shaking
+    self._start_shaking(direction=direction, speed=speed, acceleration=acceleration)
 
   async def stop_shaking(self):
-    self._send_command("sc") # Stop shaking
-    self._send_command("sw") # Wait for stop
-    self._move_plate_lock(PlateLockPosition.LOCKED)
+    """ Shaker `stop_shaking` implementation. """
+    await self._stop_shaking()
+    await self._wait_for_stop()
+    await self._move_plate_lock(PlateLockPosition.LOCKED)
+
+  async def _move_plate_lock(self, position: PlateLockPosition):
+    return self._send_command("LP", lp=position.value)
+
+  async def _initialize_lock(self):
+    return self._send_command("LI")
+
+  async def _start_shaking(self, direction: int, speed: int, acceleration: int):
+    """ Firmware command for starting shaking. """
+    speed_str = str(speed).zfill(4)
+    acceleration_str = str(acceleration).zfill(5)
+    return self._send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
+
+  async def _stop_shaking(self):
+    """ Firmware command for stopping shaking. """
+    return self._send_command("SC")
+
+  async def _wait_for_stop(self):
+    """ Firmware command for waiting for shaking to stop. """
+    return self._send_command("SW")
