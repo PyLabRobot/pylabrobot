@@ -97,7 +97,6 @@ class LiquidHandler(Machine):
     self._callbacks: Dict[str, OperationCallback] = {}
 
     self.deck = deck
-    self.backend.deck = self.deck
     # register callbacks for sending resource assignment/unassignment to backend
     self.deck.register_did_assign_resource_callback(self._send_assigned_resource_to_backend)
     self.deck.register_did_unassign_resource_callback(self._send_unassigned_resource_to_backend)
@@ -116,6 +115,7 @@ class LiquidHandler(Machine):
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
+    self.backend.set_deck(self.deck)
     await super().setup()
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}

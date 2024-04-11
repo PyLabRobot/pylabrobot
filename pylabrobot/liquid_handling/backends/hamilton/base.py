@@ -10,7 +10,6 @@ from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
 from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import TipSpot, Well
-from pylabrobot.resources.hamilton.hamilton_decks import HamiltonDeck
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 T = TypeVar("T")
@@ -31,7 +30,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
-    deck: Optional[HamiltonDeck] = None,
   ):
     """
 
@@ -42,15 +40,16 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       read_timeout: The timeout for  from the Hamilton machine in seconds.
       num_channels: the number of pipette channels present on the robot.
     """
-    self.deck = deck
 
-    super().__init__(
+    USBBackend.__init__(
+      self,
       address=device_address,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_vendor=0x08af,
       id_product=id_product)
+    LiquidHandlerBackend.__init__(self)
 
     self.id_ = 0
 
