@@ -23,6 +23,7 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     assert shaker_index >= 0, "Shaker index must be non-negative"
     self.shaker_index = shaker_index
     self.command_id = 0
+    self.lock_initialized = False
 
     HeaterShakerBackend.__init__(self)
     USBBackend.__init__(self, id_vendor, id_product)
@@ -48,21 +49,22 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     self,
     speed: float = 800,
     direction: Literal[0,1] = 0,
-    acceleration: float = 1_000,
+    acceleration: int = 1_000,
   ):
     """
     speed: steps per second
     direction: 0 for positive, 1 for negative
     acceleration: increments per second
     """
-    assert 20 <= speed <= 2_000, "Speed must be between 20 and 2_000"
+    int_speed = int(speed)
+    assert 20 <= int_speed <= 2_000, "Speed must be between 20 and 2_000"
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
-    # Initialize plate lock
-    await self._initialize_lock()
-    self._move_plate_lock(PlateLockPosition.UNLOCKED)
-    self._start_shaking(direction=direction, speed=speed, acceleration=acceleration)
+    if not self.lock_initialized:
+      await self._initialize_lock()
+    await self._move_plate_lock(PlateLockPosition.UNLOCKED)
+    await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
 
   async def stop_shaking(self):
     """ Shaker `stop_shaking` implementation. """
@@ -74,7 +76,10 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     return self._send_command("LP", lp=position.value)
 
   async def _initialize_lock(self):
-    return self._send_command("LI")
+    """ Firmware command initialize lock. """
+    result = self._send_command("LI")
+    self.lock_initialized = True
+    return result
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
     """ Firmware command for starting shaking. """
@@ -89,3 +94,12 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
   async def _wait_for_stop(self):
     """ Firmware command for waiting for shaking to stop. """
     return self._send_command("SW")
+
+  async def set_temperature(self, temperature: float):
+    raise NotImplementedError()
+
+  async def get_current_temperature(self) -> float:
+    raise NotImplementedError()
+
+  async def deactivate(self):
+    raise NotImplementedError()
