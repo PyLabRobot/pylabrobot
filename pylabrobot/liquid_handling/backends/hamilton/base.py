@@ -41,13 +41,15 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       num_channels: the number of pipette channels present on the robot.
     """
 
-    super().__init__(
+    USBBackend.__init__(
+      self,
       address=device_address,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_vendor=0x08af,
       id_product=id_product)
+    LiquidHandlerBackend.__init__(self)
 
     self.id_ = 0
 
