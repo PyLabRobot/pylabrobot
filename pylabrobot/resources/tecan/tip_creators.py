@@ -30,6 +30,23 @@ class TecanTip(Tip):
     self.tip_type = tip_type
 
 
+def TecanTip400() -> TecanTip:
+  """ reusable initialization for TECAN 400 microliter tips
+  seemingly fitting_depth has no effect on the protocol
+  These tips are around 117mm long from screw at top to
+  bottom. The total_tip_length parameter was optimized to 
+  39mm through trial and error. Better documentation needed
+  to explain parameters and their relation to the specs of the
+  tips. """
+  return TecanTip(
+    has_filter=False,
+    total_tip_length=39,
+    maximal_volume=400,
+    fitting_depth=37,
+    tip_type=TipType.STANDARD
+  )
+
+
 def standard_fixed_tip() -> TecanTip:
   """ Default standard fixed tip """
   return TecanTip(

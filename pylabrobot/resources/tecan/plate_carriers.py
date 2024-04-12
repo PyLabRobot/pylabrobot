@@ -12,6 +12,7 @@ from pylabrobot.resources.carrier import (
   create_homogeneous_carrier_sites
 )
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
+from pylabrobot.serializer import serialize, deserialize
 
 
 class TecanPlateCarrier(PlateCarrier, TecanResource):
@@ -43,6 +44,28 @@ class TecanPlateCarrier(PlateCarrier, TecanResource):
     self.roma_z_safe = roma_z_safe
     self.roma_z_travel = roma_z_travel
     self.roma_z_end = roma_z_end
+
+  def serialize(self) -> dict:
+    """ Serialize this resource. """
+    return {
+      "name": self.name,
+      "type": self.__class__.__name__,
+      "size_x": self._size_x,
+      "size_y": self._size_y,
+      "size_z": self._size_z,
+      "roma_x": self.roma_x,
+      "roma_y": self.roma_y,
+      "roma_z_safe": self.roma_z_safe,
+      "roma_z_travel": self.roma_z_travel,
+      "roma_z_end": self.roma_z_end,
+      "location": serialize(self.location),
+      "category": self.category,
+      "model": self.model,
+      "off_x": self.off_x,
+      "off_y": self.off_y,
+      "children": [child.serialize() for child in self.children],
+      "parent_name": self.parent.name if self.parent is not None else None
+    }
 
 
 def MP_2Pos_portrait_No_Robot_Access(name: str) -> TecanPlateCarrier:
