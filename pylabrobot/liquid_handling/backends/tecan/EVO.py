@@ -5,7 +5,8 @@ This file defines interfaces for all supported Tecan liquid handling robots.
 # pylint: disable=invalid-name
 
 from abc import ABCMeta, abstractmethod
-from typing import Dict, List, Optional, Tuple, Sequence, TypeVar, Union
+import functools
+from typing import Callable, Dict, List, Optional, Tuple, Sequence, TypeVar, Union
 
 from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
 from pylabrobot.liquid_handling.liquid_classes.tecan import TecanLiquidClass, get_liquid_class
@@ -34,6 +35,58 @@ from pylabrobot.resources import (
 
 T = TypeVar("T")
 
+
+def need_roma_parked(method: Callable):
+  """Ensure that the roma is in parked position before running command.
+
+  If the roma is not parked, it gets parked before running the command.
+  """
+
+  @functools.wraps(method)
+  async def wrapper(self: "EVO", *args, **kwargs):
+    if self.roma_connected and not self.roma_parked:
+      await self.park_roma()
+
+    result = await method(self, *args, **kwargs) # pylint: disable=not-callable
+
+    return result
+  return wrapper
+
+
+def need_liha_parked(method: Callable):
+  """Ensure that the liha is in parked position before running command.
+
+  If the liha is not parked, it gets parked before running the command.
+  """
+
+  @functools.wraps(method)
+  async def wrapper(self: "EVO", *args, **kwargs):
+    if self.liha_connected and not self.liha_parked:
+      await self.park_liha()
+
+    result = await method(self, *args, **kwargs) # pylint: disable=not-callable
+
+    return result
+  return wrapper
+
+
+def need_pnp_parked(method: Callable):
+  """Ensure that the pnp is in parked position before running command.
+
+  If the pnp is not parked, it gets parked before running the command.
+  """
+
+  @functools.wraps(method)
+  async def wrapper(self: "EVO", *args, **kwargs):
+    if self.pnp_connected and not self.pnp_parked:
+      await self.park_pnp()
+
+    result = await method(self, *args, **kwargs) # pylint: disable=not-callable
+
+    return result
+  return wrapper
+
+
 class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
   """
   Abstract base class for Tecan liquid handling robot backends.
@@ -61,6 +114,9 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
       id_product=0x4000)
 
     self._cache: Dict[str, List[Optional[int]]] = {}
+    self._roma_parked = False
+    self._liha_parked = False
+    self._pnp_parked = False
 
   def _assemble_command(
     self,
@@ -222,6 +278,10 @@ class EVO(TecanLiquidHandler):
       raise RuntimeError("mca_connected not set, forgot to call `setup`?")
     return self._mca_connected
 
+  @property
+  def roma_parked(self) -> bool:
+    return self._roma_parked
+
   def serialize(self) -> dict:
     return {
       **super().serialize(),
@@ -244,13 +304,11 @@ class EVO(TecanLiquidHandler):
     if self.roma_connected: # position_initialization_x in reverse order from setup_arm
       self.roma = RoMa(self, EVO.ROMA)
       await self.roma.position_initialization_x()
-      # move to home position (TBD) after initialization
-      await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
-      await self.roma.action_move_vector_coordinate_position()
+      await self.park_roma()
     if self.pnp_connected:
       self.pnp = PnP(self, EVO.PNP)
       await self.pnp.position_initialization_x()
-      await self.pnp.position_absolute_x_axis(7000)
+      await self.park_pnp()
     if self.liha_connected:
       self.liha = LiHa(self, EVO.LIHA)
       await self.liha.position_initialization_x()
@@ -260,7 +318,7 @@ class EVO(TecanLiquidHandler):
     self._y_range = (await self.liha.report_y_param(5))[0]
     self._z_range = (await self.liha.report_z_param(5))[0]
 
-    # # Initialize plungers. Assumes wash station assigned at rail 1.
+    # Initialize plungers. Assumes wash station assigned at rail 1.
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
     await self.liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
@@ -270,7 +328,6 @@ class EVO(TecanLiquidHandler):
     await self.liha.set_end_speed_plunger([1800] * self.num_channels)
     await self.liha.move_plunger_relative([-100] * self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
-
 
   async def setup_arm(self, module):
     try:
@@ -284,17 +341,23 @@ class EVO(TecanLiquidHandler):
     await self.send_command(module, command="BMX", params=[2])
     return True
 
-  async def _park_liha(self):
+  async def park_liha(self):
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
 
-  async def _park_roma(self):
+  async def park_roma(self):
     await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
+    self._roma_parked = True
+
+  async def park_pnp(self):
+    await self.pnp.position_absolute_x_axis(7000)
+    self._pnp_parked = True
 
   # ============== LiquidHandlerBackend methods ==============
 
-
+  @need_roma_parked
+  @need_pnp_parked
   async def aspirate(
     self,
     ops: List[Aspiration],
@@ -307,10 +370,7 @@ class EVO(TecanLiquidHandler):
       use_channels: The channels to use for the operations.
     """
 
-    await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
-    await self.roma.action_move_vector_coordinate_position()
-    await self.pnp.position_absolute_x_axis(7000)
-
+    self._liha_parked = False
 
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
 
@@ -322,8 +382,7 @@ class EVO(TecanLiquidHandler):
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
     for op, tlc in zip(ops, tecan_liquid_classes):
-      # op.volume = tlc.compute_corrected_volume(op.volume) if tlc is not None else op.volume
-      op.volume = op.volume
+      op.volume = tlc.compute_corrected_volume(op.volume) if tlc is not None else op.volume
 
     ys = int(ops[0].resource.get_size_y() * 10)
     zadd: List[Optional[int]] = [0] * self.num_channels
@@ -369,7 +428,7 @@ class EVO(TecanLiquidHandler):
       await self.liha.set_search_submerge(sbl)
       shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels
       await self.liha.set_z_travel_height(shz)
-      # await self.liha.move_detect_liquid(self._bin_use_channels(use_channels), zadd)
+      await self.liha.move_detect_liquid(self._bin_use_channels(use_channels), zadd)
       await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
 
     # aspirate + retract
@@ -384,11 +443,13 @@ class EVO(TecanLiquidHandler):
     await self.liha.move_absolute_z(z_positions["start"]) # TODO: use retract_position and offset
 
     # aspirate airgap
-    # pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "tag")
-    # await self.liha.position_valve_logical(pvl)
-    # await self.liha.set_end_speed_plunger(sep)
-    # await self.liha.move_plunger_relative(ppr)
+    pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "tag")
+    await self.liha.position_valve_logical(pvl)
+    await self.liha.set_end_speed_plunger(sep)
+    await self.liha.move_plunger_relative(ppr)
 
+  @need_roma_parked
+  @need_pnp_parked
   async def dispense(
     self,
     ops: List[Dispense],
@@ -401,12 +462,7 @@ class EVO(TecanLiquidHandler):
       use_channels: The channels to use for the dispense operations.
     """
 
-
-
-    await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
-    await self.roma.action_move_vector_coordinate_position()
-    await self.pnp.position_absolute_x_axis(7000)
-
+    self._liha_parked = False
 
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
     ys = int(ops[0].resource.get_size_y() * 10)
@@ -419,10 +475,9 @@ class EVO(TecanLiquidHandler):
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
     for op, tlc in zip(ops, tecan_liquid_classes):
-      # op.volume = tlc.compute_corrected_volume(op.volume) + \
-      #   tlc.aspirate_lag_volume + tlc.aspirate_tag_volume \
-      #   if tlc is not None else op.volume
-      op.volume = op.volume
+      op.volume = tlc.compute_corrected_volume(op.volume) + \
+        tlc.aspirate_lag_volume + tlc.aspirate_tag_volume \
+        if tlc is not None else op.volume
 
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
@@ -439,6 +494,8 @@ class EVO(TecanLiquidHandler):
     await self.liha.set_tracking_distance_z(stz) # -2100 and 2100
     await self.liha.move_tracking_relative(mtr) # -3150 and 3150
 
+  @need_roma_parked
+  @need_pnp_parked
   async def pick_up_tips(
     self,
     ops: List[Pickup],
@@ -453,6 +510,8 @@ class EVO(TecanLiquidHandler):
 
     assert min(use_channels) >= self.num_channels - self.diti_count, \
       f"DiTis can only be configured for the last {self.diti_count} channels"
+
+    self._liha_parked = False
 
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
@@ -481,6 +540,8 @@ class EVO(TecanLiquidHandler):
     await self.liha.get_disposable_tip(self._bin_use_channels(use_channels), 768, 210)
     # TODO: check z params
 
+  @need_roma_parked
+  @need_pnp_parked
   async def drop_tips(
     self,
     ops: List[Drop],
@@ -496,6 +557,8 @@ class EVO(TecanLiquidHandler):
     assert min(use_channels) >= self.num_channels - self.diti_count, \
       f"DiTis can only be configured for the last {self.diti_count} channels"
     assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
+
+    self._liha_parked = False
 
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
@@ -523,13 +586,14 @@ class EVO(TecanLiquidHandler):
   async def dispense96(self, dispense: DispensePlate):
     raise NotImplementedError()
 
+  @need_liha_parked
   async def move_resource(self, move: Move):
     """ Pick up a resource and move it to a new location. """
 
     # TODO: implement PnP for moving tubes
     assert self.roma_connected
-    await self._park_liha()
 
+    # FIXME: what are these two lines for?
     await self.liha.position_initialization_x()
     await self.pnp.position_absolute_x_axis(1500)
 
@@ -537,6 +601,8 @@ class EVO(TecanLiquidHandler):
     x, y, z = self._roma_positions(move.resource, move.resource.get_absolute_location(), z_range)
     h = int(move.resource.get_size_y() * 10)
     xt, yt, zt = self._roma_positions(move.resource, move.destination, z_range)
+
+    self._roma_parked = False
 
     # move to resource
     await self.roma.set_smooth_move_x(1)
@@ -559,7 +625,6 @@ class EVO(TecanLiquidHandler):
     await self.roma.set_fast_speed_r(2000, 600)
     await self.roma.set_gripper_params(100, 75)
     await self.roma.grip_plate(h - 100)
-
 
     # move to target
     await self.roma.set_target_window_class(1, 0, 0, 0, 135, 0)
@@ -584,7 +649,6 @@ class EVO(TecanLiquidHandler):
     await self.roma.action_move_vector_coordinate_position()
     await self.roma.set_fast_speed_y(3500, 1000)
     await self.roma.set_fast_speed_r(2000, 600)
-
 
   def _first_valid(
     self,
@@ -1277,6 +1341,7 @@ class RoMa(EVOArm):
 
     await self.backend.send_command(module=self.module, command="STW",
                                     params=[wc, x, y, z, r, g])
+
 
 class PnP(EVOArm):
   """

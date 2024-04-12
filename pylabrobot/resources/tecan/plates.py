@@ -12,7 +12,6 @@ from typing import List, Optional
 from pylabrobot.resources.plate import Plate, Well
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
-from pylabrobot.serializer import serialize, deserialize
 
 
 class TecanPlate(Plate, TecanResource):
@@ -29,9 +28,6 @@ class TecanPlate(Plate, TecanResource):
     z_dispense: float,
     z_max: float,
     area: float,
-    num_items_x: int = 0,
-    num_items_y: int = 0,
-    one_dot_max: float = 0,
     items: Optional[List[List[Well]]] = None,
     category: str = "tecan_plate",
     lid_height: float = 0,
@@ -39,8 +35,7 @@ class TecanPlate(Plate, TecanResource):
     model: Optional[str] = None,
   ):
     super().__init__(name, size_x, size_y, size_z, items,
-      category=category, lid_height=lid_height, with_lid=with_lid, model=model,
-      num_items_x=num_items_x, num_items_y=num_items_y, one_dot_max=one_dot_max)
+      category=category, lid_height=lid_height, with_lid=with_lid, model=model)
 
     self.z_travel = z_travel
     self.z_start = z_start
@@ -51,25 +46,15 @@ class TecanPlate(Plate, TecanResource):
   def serialize(self) -> dict:
     """ Serialize this resource. """
     return {
-      "name": self.name,
-      "type": self.__class__.__name__,
-      "size_x": self._size_x,
-      "size_y": self._size_y,
-      "size_z": self._size_z,
-      "location": serialize(self.location),
+      **super().serialize(),
       "z_travel": self.z_travel,
       "z_start": self.z_start,
       "z_dispense": self.z_dispense,
       "z_max": self.z_max,
       "area": self.area,
-      "num_items_x": self.num_items_x,
-      "num_items_y": self.num_items_y,
       "one_dot_max": self.one_dot_max,
-      "category": self.category,
-      "model": self.model,
-      "children": [child.serialize() for child in self.children],
-      "parent_name": self.parent.name if self.parent is not None else None
     }
+
 
 def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
   """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306

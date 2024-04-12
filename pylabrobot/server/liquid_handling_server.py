@@ -5,17 +5,17 @@ import asyncio
 import json
 import os
 import threading
-from typing import Any, Coroutine, List, Tuple, Type, Optional, cast
+from typing import Any, Coroutine, List, Tuple, Optional, cast
 
 from flask import Blueprint, Flask, request, jsonify, current_app
-from flask_cors import CORS, cross_origin
+from flask_cors import CORS
 import werkzeug
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
-from pylabrobot.liquid_handling.standard import PipettingOp, Pickup, Aspiration, Dispense, Drop, Move
-from pylabrobot.resources import Coordinate, Deck, Tip, Liquid, TecanTip400
-from pylabrobot.serializer import serialize, deserialize
+from pylabrobot.liquid_handling.standard import Pickup, Aspiration, Dispense, Drop
+from pylabrobot.resources import Coordinate, Deck, Tip, Liquid
+from pylabrobot.serializer import deserialize
 
 
 lh_api = Blueprint("liquid handling", __name__)
@@ -61,6 +61,11 @@ def add_and_run_task(task: Task):
   task.run_in_thread()
   return task.serialize(id_)
 
+class ErrorResponse(Exception):
+  def __init__(self, data: dict, status_code: int):
+    self.data = data
+    self.status_code = status_code
+
 
 @lh_api.route("/")
 def index():
@@ -94,7 +99,6 @@ def get_status():
 
 @lh_api.route("/move_plate", methods=["POST"])
 async def move_plate():
-
   data = request.get_json()
 
   resource_name = data["resource_name"]
@@ -107,31 +111,10 @@ async def move_plate():
 
 @lh_api.route("/layout", methods=["GET"])
 def get_layout():
-  """ API Endpoint to inspect the current design of the deck
-  Bo 20230912 """
+  """ API Endpoint to inspect the current design of the deck """
   layout = current_app.lh.deck.serialize()
   return jsonify({"layout": layout})
 
-@lh_api.route("/update_head_state", methods=["POST"])
-def update_head_state():
-  """ API Endpoint to update liquid handler head.
-  Useful for TECAN with non-reuable tips.
-  TO DO: Pass tip type as parameter
-  Bo 20230912 """
-
-  current_app.lh.clear_head_state()
-  current_app.lh.update_head_state({0:TecanTip400()})
-  current_app.lh.update_head_state({1:TecanTip400()})
-  current_app.lh.update_head_state({2:TecanTip400()})
-  current_app.lh.update_head_state({3:TecanTip400()})
-  current_app.lh.update_head_state({4:TecanTip400()})
-  current_app.lh.update_head_state({5:TecanTip400()})
-  current_app.lh.update_head_state({6:TecanTip400()})
-  current_app.lh.update_head_state({7:TecanTip400()})
-
-  result = True
-
-  return jsonify({"result": result})
 
 @lh_api.route("/labware", methods=["POST"])
 def define_labware():
@@ -143,18 +126,12 @@ def define_labware():
     return jsonify({"error": "json data must be a dict"}), 400
 
   try:
-    print(data["deck"])
     deck = Deck.deserialize(data=data["deck"])
     current_app.lh.deck = deck
   except KeyError as e:
     return jsonify({"error": "missing key in json data: " + str(e)}), 400
 
   return jsonify({"status": "ok"})
-
-class ErrorResponse(Exception):
-  def __init__(self, data: dict, status_code: int):
-    self.data = data
-    self.status_code = status_code
 
 
 @lh_api.route("/pick-up-tips", methods=["POST"])
@@ -291,7 +268,8 @@ async def dispense():
 def create_app(lh: LiquidHandler):
   """ Create a Flask app with the given LiquidHandler """
   app = Flask(__name__)
-  cors = CORS(app)
+  cors = CORS()
+  cors.init_app(app)
   app.lh = lh
   app.register_blueprint(lh_api)
   return app

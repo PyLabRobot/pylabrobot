@@ -12,7 +12,7 @@ import threading
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
 
-from pylabrobot.machine import Machine, need_setup_finished
+from pylabrobot.machines import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.plate_reading import PlateReader
@@ -35,7 +35,6 @@ from pylabrobot.resources import (
   does_tip_tracking,
   does_volume_tracking
 )
-from pylabrobot.resources.liquid import Liquid
 from pylabrobot.utils.list import expand
 
 from .backends import LiquidHandlerBackend
@@ -138,7 +137,6 @@ class LiquidHandler(Machine):
     head_state = state["head_state"]
     for channel, tracker_state in head_state.items():
       self.head[channel].load_state(tracker_state)
-
 
   def update_head_state(self, state: Dict[int, Optional[Tip]]):
     """ Update the state of the liquid handler head.
@@ -782,7 +780,6 @@ class LiquidHandler(Machine):
     flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
     offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
     liquid_height: Union[Optional[float], List[Optional[float]]] = None,
-    liquid_classes: Optional[Union[Optional[Liquid], List[Optional[Liquid]]]] = None,
     blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
     **backend_kwargs
   ):
@@ -898,11 +895,7 @@ class LiquidHandler(Machine):
       liquids = [c.get_tip().tracker.get_liquids(top_volume=vol)
                 for c, vol in zip(self.head.values(), vols)]
     else:
-      if does_volume_tracking():
-        liquids = [c.get_tip().tracker.get_liquids(top_volume=vol)
-                  for c, vol in zip(self.head.values(), vols)]
-      else:
-        liquids = [[(None, vol)] for vol in vols]
+      liquids = [[(None, vol)] for vol in vols]
 
     # create operations
     dispenses = [Dispense(resource=r, volume=v, offset=o, flow_rate=fr, liquid_height=lh, tip=t,
@@ -1709,7 +1702,6 @@ class LiquidHandler(Machine):
       get_direction=get_direction,
       put_direction=put_direction,
       **backend_kwargs)
-
 
     plate.unassign()
     if isinstance(to, Coordinate):
