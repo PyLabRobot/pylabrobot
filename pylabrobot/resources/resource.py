@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import itertools
 import json
 import logging
 import sys
@@ -149,7 +150,7 @@ class Resource:
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Optional[Coordinate],
+    location: Coordinate,
     reassign: bool = True):
     """ Assign a child resource to this resource.
 
@@ -299,24 +300,6 @@ class Resource:
 
     raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
 
-  def get_2d_center_offsets(self, n: int = 1) -> List[Coordinate]:
-    """ Get the offsets (from bottom left) of the center(s) of this resource.
-
-    If `n` is greater than one, the offsets are equally spaced along a column (the y axis), all
-    having the same x and z coordinates. The z coordinate is the bottom of the resource.
-
-    The offsets are returned from high y (back) to low y (front).
-    """
-
-    dx = self.get_size_x() / 2
-    dy = self.get_size_y() / (n+1)
-    offsets = [Coordinate(dx, dy * (i+1), 0) for i in range(n)]
-    return list(reversed(offsets))
-
-  def get_2d_center_offset(self) -> Coordinate:
-    """ Get the offset (from bottom left) of the center of this resource. """
-    return self.get_2d_center_offsets()[0]
-
   def rotate(self, degrees: int):
     """ Rotate counter clockwise by the given number of degrees.
 
@@ -358,10 +341,89 @@ class Resource:
     new_resource.rotate(degrees)
     return new_resource
 
-  def center(self) -> Coordinate:
-    """ Get the center of the bottom plane of this resource. """
+  def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:
+    """ Get the center of this resource.
 
-    return Coordinate(self.get_size_x() / 2, self.get_size_y() / 2, 0)
+    Args:
+      x: If `True`, the x-coordinate will be the center, otherwise it will be 0.
+      y: If `True`, the y-coordinate will be the center, otherwise it will be 0.
+      z: If `True`, the z-coordinate will be the center, otherwise it will be 0.
+
+    Examples:
+      Get the center of a resource in the xy plane:
+
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.center()
+
+      Coordinate(x=6.0, y=6.0, z=0.0)
+
+      Get the center of a resource with only the x-coordinate:
+
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.center(x=True, y=False, z=False)
+
+      Coordinate(x=6.0, y=0.0, z=0.0)
+
+      Get the center of a resource in the x, y, and z directions:
+
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.center(x=True, y=True, z=True)
+
+      Coordinate(x=6.0, y=6.0, z=6.0)
+    """
+
+    return Coordinate(
+      self.get_size_x() / 2 if x else 0,
+      self.get_size_y() / 2 if y else 0,
+      self.get_size_z() / 2 if z else 0
+    )
+
+  def centers(self, xn: int = 1, yn: int = 1, zn: int = 1) -> List[Coordinate]:
+    """ Get equally spaced points in the x, y, and z directions.
+
+    Args:
+      xn: the number of points in the x direction.
+      yn: the number of points in the y direction.
+      zn: the number of points in the z direction.
+
+    Returns:
+      A grid of points in the x, y, and z directions.
+
+    Examples:
+      Get the center of a resource:
+
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.centers()
+
+      Coordinate(x=6.0, y=6.0, z=6.0)
+
+      Get the center of a resource with 2 points in the x direction:
+
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.centers(xn=2)
+
+      [Coordinate(x=4.0, y=6.0, z=6.0), Coordinate(x=9.0, y=6.0, z=6.0)]
+
+      Get the center of a resource with 2 points in the x and y directions:
+
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.centers(xn=2, yn=2)
+      [Coordinate(x=4.0, y=4.0, z=6.0), Coordinate(x=8.0, y=4.0, z=6.0),
+       Coordinate(x=4.0, y=8.0, z=6.0), Coordinate(x=8.0, y=8.0, z=6.0)]
+    """
+
+    def _get_centers(n, dim_size):
+      if n < 0:
+        raise ValueError(f"Invalid number of points: {n}")
+      if n == 0:
+        return [0]
+      return [(i+1) * dim_size/(n+1)  for i in range(n)]
+
+    xs = _get_centers(xn, self.get_size_x())
+    ys = _get_centers(yn, self.get_size_y())
+    zs = _get_centers(zn, self.get_size_z())
+
+    return [Coordinate(x, y, z) for x, y, z in itertools.product(xs, ys, zs)]
 
   def save(self, fn: str, indent: Optional[int] = None):
     """ Save a resource to a JSON file.
@@ -416,7 +478,7 @@ class Resource:
       if location_data is not None:
         location = cast(Coordinate, deserialize(location_data))
       else:
-        location = None
+        raise ValueError(f"Child resource '{child.name}' has no location.")
       resource.assign_child_resource(child, location=location)
 
     return resource

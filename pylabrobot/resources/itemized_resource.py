@@ -155,10 +155,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """ Get the item with the given identifier.
 
     Args:
-      identifier: The identifier of the item. Either a string or an integer. If an integer, it is
-        the index of the item in the list of items (counted from 0, top to bottom, left to right).
-        If a string, it uses transposed MS Excel style notation, e.g. "A1" for the first item, "B1"
-        for the item below that, etc.
+      identifier: The identifier of the item. Either a string, an integer, or a tuple. If an
+      integer, it is the index of the item in the list of items (counted from 0, top to bottom, left
+      to right).  If a string, it uses transposed MS Excel style notation, e.g. "A1" for the first
+      item, "B1" for the item below that, etc. If a tuple, it is (row, column).
 
     Returns:
       The item with the given identifier.

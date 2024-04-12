@@ -108,7 +108,7 @@ class Plate(ItemizedResource[Well]):
     return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
             f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})")
 
-  def get_well(self, identifier: Union[str, int]) -> Well:
+  def get_well(self, identifier: Union[str, int, Tuple[int, int]]) -> Well:
     """ Get the item with the given identifier.
 
     See :meth:`~.get_item` for more information.
@@ -180,3 +180,27 @@ class Plate(ItemizedResource[Well]):
 
     for well in self.get_all_items():
       well.tracker.enable()
+
+  def get_quadrant(self, quadrant: int) -> List[Well]:
+    """ Return the wells in the specified quadrant. Quadrants are overlapping and refer to
+    alternating rows and columns of the plate. Quadrant 1 contains A1, A3, C1, etc. Quadrant 2
+    contains A2, quadrant 3 contains B1, and quadrant 4 contains B2. """
+
+    if quadrant == 1:
+      return [self.get_well((row, column))
+                for row in range(0, self.num_items_y, 2)
+                for column in range(0, self.num_items_x, 2)]
+    elif quadrant == 2:
+      return [self.get_well((row, column))
+                for row in range(0, self.num_items_y, 2)
+                for column in range(1, self.num_items_x, 2)]
+    elif quadrant == 3:
+      return [self.get_well((row, column))
+                for row in range(1, self.num_items_y, 2)
+                for column in range(0, self.num_items_x, 2)]
+    elif quadrant == 4:
+      return [self.get_well((row, column))
+                for row in range(1, self.num_items_y, 2)
+                for column in range(1, self.num_items_x, 2)]
+    else:
+      raise ValueError(f"Invalid quadrant number: {quadrant}. Quadrant must be 1, 2, 3, or 4.")

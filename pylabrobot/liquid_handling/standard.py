@@ -9,7 +9,7 @@ from typing import List, Optional, Union, Tuple, TYPE_CHECKING
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.coordinate import Coordinate
 if TYPE_CHECKING:
-  from pylabrobot.resources import Container, Plate, Resource, TipRack
+  from pylabrobot.resources import Container, Resource, TipRack, Trash, Well
   from pylabrobot.resources.tip import Tip
   from pylabrobot.resources.tip_rack import TipSpot
 
@@ -42,7 +42,7 @@ class PickupTipRack:
 class DropTipRack:
   """ A drop operation for an entire tip rack. """
 
-  resource: TipRack
+  resource: Union[TipRack, Trash]
   offset: Optional[Coordinate]
 
 
@@ -78,7 +78,7 @@ class Dispense:
 class AspirationPlate:
   """ Contains information about an aspiration from a plate (in a single movement). """
 
-  resource: Plate
+  wells: List[Well]
   offset: Optional[Coordinate]
   tips: List[Tip]
   volume: float
@@ -92,7 +92,7 @@ class AspirationPlate:
 class DispensePlate:
   """ Contains information about an aspiration from a plate (in a single movement). """
 
-  resource: Plate
+  wells: List[Well]
   offset: Optional[Coordinate]
   tips: List[Tip]
   volume: float
@@ -158,5 +158,4 @@ class Move:
       return 90
     raise ValueError(f"Invalid grip directions: {self.get_direction}, {self.put_direction}")
 
-PipettingOp = Union[
-  Pickup, Drop, Aspiration, Dispense, AspirationPlate, DispensePlate, PickupTipRack, DropTipRack]
+PipettingOp = Union[Pickup, Drop, Aspiration, Dispense]

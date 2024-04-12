@@ -164,13 +164,17 @@ class TestResource(unittest.TestCase):
   def test_deserialize_location_none(self):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
     c = Resource("child", size_x=1, size_y=1, size_z=1)
-    r.assign_child_resource(c, location=None)
+    r.assign_child_resource(c, location=Coordinate.zero())
     self.assertEqual(Resource.deserialize(r.serialize()), r)
 
   def test_get_center_offsets(self):
     r = Resource("test", size_x=10, size_y=120, size_z=10)
-    self.assertEqual(r.get_2d_center_offsets(), [Coordinate(5, 60, 0)])
-    self.assertEqual(r.get_2d_center_offsets(n=2), [Coordinate(5, 80, 0), Coordinate(5, 40, 0)])
+    self.assertEqual(r.centers(), [Coordinate(5.0, 60, 5.0)])
+    self.assertEqual(r.centers(zn=0), [Coordinate(5.0, 60, 0.0)])
+
+    self.assertEqual(r.centers(yn=2), [Coordinate(5.0, 40.0, 5.0), Coordinate(5.0, 80.0, 5.0)])
+    self.assertEqual(r.centers(yn=3), [Coordinate(5.0, 30.0, 5.0), Coordinate(5.0, 60.0, 5.0),
+                                       Coordinate(5.0, 90.0, 5.0)])
 
   def test_rotation90(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
