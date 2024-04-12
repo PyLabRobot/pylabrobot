@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import List
 
-from pylabrobot.machine import MachineBackend
+from pylabrobot.machines.backends import MachineBackend
 from pylabrobot.resources import Resource, Powder
 
 

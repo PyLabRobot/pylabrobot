@@ -4,8 +4,9 @@ from abc import ABCMeta, abstractmethod
 import logging
 import time
 from typing import List, Optional, TYPE_CHECKING
+import libusb_package
 
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.machines.backends.machine import MachineBackend
 
 try:
   import usb.core
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("pylabrobot")
 
 
-class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
+class USBBackend(MachineBackend, metaclass=ABCMeta):
   """ An abstract class for liquid handler backends that talk over a USB cable. Provides read/write
   functionality, including timeout handling. """
 
@@ -149,7 +150,11 @@ class USBBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     """ Get a list of available devices that match the specified vendor and product IDs, and serial
     number and address if specified. """
 
-    found_devices = usb.core.find(idVendor=self.id_vendor, idProduct=self.id_product, find_all=True)
+    found_devices = libusb_package.find(
+      idVendor=self.id_vendor,
+      idProduct=self.id_product,
+      find_all=True
+    )
     devices: List["usb.core.Device"] = []
     for dev in found_devices:
       if self.address is not None:

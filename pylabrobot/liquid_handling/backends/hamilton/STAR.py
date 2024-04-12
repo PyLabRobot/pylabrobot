@@ -34,6 +34,7 @@ from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError
 )
+from pylabrobot.resources.hamilton.hamilton_decks import STAR_SIZE_X, STARLET_SIZE_X
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
 from pylabrobot import audio
@@ -538,6 +539,14 @@ class DecapperHandlingError(STARModuleError):
   """
 
 
+class StopError(STARModuleError):
+  """
+  Hood is open (Not from documentation, but observed)
+
+  Code: 36
+  """
+
+
 class SlaveError(STARModuleError):
   """ Slave error
 
@@ -779,7 +788,7 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
   """ Convert a trace identifier to an error message. """
   table = None
 
-  if module_identifier == "C0":
+  if module_identifier == "C0": # master
     table = {
       10: "CAN error",
       11: "Slave command time out",
@@ -807,6 +816,10 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       51: "Tube gripper task busy",
       52: "Imaging channel task busy",
       53: "Robotic channel task busy"
+    }
+  elif module_identifier == "I0": # autoload
+    table = {
+      36: "Hamilton will not run while the hood is open"
     }
   elif module_identifier in ["PX", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "PA",
                              "PB", "PC", "PD", "PE", "PF", "PG"]:
@@ -946,9 +959,7 @@ class STARFirmwareError(Exception):
   def __init__(self, errors: Dict[str, STARModuleError], raw_response: str):
     self.errors = errors
     self.raw_response = raw_response
-
-  def __repr__(self) -> str:
-    return f"{self.__class__.__name__}(errors={self.errors}, raw_response={self.raw_response})"
+    super().__init__(f"{errors}, {raw_response}")
 
 
 def star_firmware_string_to_error(
@@ -968,6 +979,9 @@ def star_firmware_string_to_error(
       if error_code == 0: # No error
         continue
       error_class = error_code_to_exception(error_code)
+    elif module_id == "I0" and error == "36":
+      error_class = StopError
+      trace_information = int(error)
     else:
       # Slave modules: er## (just trace information)
       error_class = UnknownHamiltonError
@@ -1070,7 +1084,8 @@ class STAR(HamiltonLiquidHandler):
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
-      id_product=0x8000)
+      id_product=0x8000,
+    )
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
@@ -1250,7 +1265,6 @@ class STAR(HamiltonLiquidHandler):
 
       await self.park_iswap(minimum_traverse_height_at_beginning_of_a_command=
                             int(self._traversal_height * 10))
-      self._iswap_parked = True
 
     if self.core96_head_installed:
       core96_head_initialized = await self.request_core_96_head_initialization_status()
@@ -1264,7 +1278,6 @@ class STAR(HamiltonLiquidHandler):
 
   # ============== LiquidHandlerBackend methods ==============
 
-  @need_iswap_parked
   async def pick_up_tips(
     self,
     ops: List[Pickup],
@@ -1308,7 +1321,6 @@ class STAR(HamiltonLiquidHandler):
         raise plr_e from e
       raise e
 
-  @need_iswap_parked
   async def drop_tips(
     self,
     ops: List[Drop],
@@ -1377,7 +1389,6 @@ class STAR(HamiltonLiquidHandler):
     DUAL = 3
     Z_TOUCH_OFF = 4
 
-  @need_iswap_parked
   async def aspirate(
     self,
     ops: List[Aspiration],
@@ -1652,7 +1663,6 @@ class STAR(HamiltonLiquidHandler):
         raise plr_e from e
       raise e
 
-  @need_iswap_parked
   async def dispense(
     self,
     ops: List[Dispense],
@@ -1886,7 +1896,6 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
-  @need_iswap_parked
   async def pick_up_tips96(
     self,
     pickup: PickupTipRack,
@@ -1916,7 +1925,6 @@ class STAR(HamiltonLiquidHandler):
       minimum_height_command_end=minimum_height_command_end or int(self._traversal_height * 10),
     )
 
-  @need_iswap_parked
   async def drop_tips96(
     self,
     drop: DropTipRack,
@@ -1943,7 +1951,6 @@ class STAR(HamiltonLiquidHandler):
       minimum_height_command_end=minimum_height_command_end or int(self._traversal_height * 10),
     )
 
-  @need_iswap_parked
   async def aspirate96(
     self,
     aspiration: AspirationPlate,
@@ -2130,7 +2137,6 @@ class STAR(HamiltonLiquidHandler):
       recording_mode=0,
     )
 
-  @need_iswap_parked
   async def dispense96(
     self,
     dispense: DispensePlate,
@@ -3436,6 +3442,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.2 Tip handling commands using PIP --------------
 
+  @need_iswap_parked
   async def pick_up_tip(
     self,
     x_positions: List[int],
@@ -3488,6 +3495,7 @@ class STAR(HamiltonLiquidHandler):
       td=pickup_method.value,
     )
 
+  @need_iswap_parked
   async def discard_tip(
     self,
     x_positions: List[int],
@@ -3554,6 +3562,7 @@ class STAR(HamiltonLiquidHandler):
 
   # TODO:(command:DC) Set multiple dispense values using PIP
 
+  @need_iswap_parked
   async def aspirate_pip(
     self,
     aspiration_type: List[int] = [0],
@@ -3815,6 +3824,7 @@ class STAR(HamiltonLiquidHandler):
       in_=[f"{in_:04}" for in_ in immersion_depth_2nd_section],
     )
 
+  @need_iswap_parked
   async def dispense_pip(
     self,
     tip_pattern: List[bool],
@@ -4030,6 +4040,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.5 CoRe gripper commands --------------
 
+  @need_iswap_parked
   async def get_core(self, p1: int, p2: int):
     """ Get CoRe gripper tool from wasteblock mount. """
     if not 0 <= p1 < self.num_channels:
@@ -4037,10 +4048,21 @@ class STAR(HamiltonLiquidHandler):
     if not 1 <= p2 <= self.num_channels:
       raise ValueError(f"channel_2 must be between 1 and {self.num_channels}")
 
+    # This appears to be deck.get_size_x() - 562.5, but let's keep an explicit check so that we
+    # can catch unknown deck sizes. Can the grippers exist at another location? If so, define it as
+    # a resource on the robot deck and use deck.get_resource().get_absolute_location().
+    deck_size = self.deck.get_size_x()
+    if deck_size == STARLET_SIZE_X:
+      xs = "07975" # 1360-797.5 = 562.5
+    elif deck_size == STAR_SIZE_X:
+      xs = "13375" # 1900-1337.5 = 562.5
+    else:
+      raise ValueError(f"Deck size {deck_size} not supported")
+
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs="07975",
+      xs=xs,
       xd="0",
       ya="1250",
       yb="1070",
@@ -4054,12 +4076,21 @@ class STAR(HamiltonLiquidHandler):
     self._core_parked = False
     return command_output
 
+  @need_iswap_parked
   async def put_core(self):
     """ Put CoRe gripper tool at wasteblock mount. """
+    assert self.deck is not None, "must have deck defined to access CoRe grippers"
+    deck_size = self.deck.get_size_x()
+    if deck_size == STARLET_SIZE_X:
+      xs = "07975"
+    elif deck_size == STAR_SIZE_X:
+      xs = "13375"
+    else:
+      raise ValueError(f"Deck size {deck_size} not supported")
     command_output = await self.send_command(
       module="C0",
       command="ZS",
-      xs="07975",
+      xs=xs,
       xd="0",
       ya="1250",
       yb="1070",
@@ -4213,6 +4244,7 @@ class STAR(HamiltonLiquidHandler):
       command="ZO")
     return command_output
 
+  @need_iswap_parked
   async def core_get_plate(
     self,
     x_position: int = 0,
@@ -4261,6 +4293,7 @@ class STAR(HamiltonLiquidHandler):
 
     return command_output
 
+  @need_iswap_parked
   async def core_put_plate(
     self,
     x_position: int = 0,
@@ -4307,6 +4340,7 @@ class STAR(HamiltonLiquidHandler):
 
     return command_output
 
+  @need_iswap_parked
   async def core_move_plate_to_position(
     self,
     x_position: int = 0,
@@ -4840,6 +4874,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.10.2 Tip handling using CoRe 96 Head --------------
 
+  @need_iswap_parked
   async def pick_up_tips_core96(
     self,
     x_position: int,
@@ -4889,6 +4924,7 @@ class STAR(HamiltonLiquidHandler):
       ze=f"{minimum_height_command_end:04}",
     )
 
+  @need_iswap_parked
   async def discard_tips_core96(
     self,
     x_position: int,
@@ -4936,6 +4972,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.10.3 Liquid handling using CoRe 96 Head --------------
 
+  @need_iswap_parked
   async def aspirate_core_96(
     self,
     aspiration_type: int = 0,
@@ -5115,6 +5152,7 @@ class STAR(HamiltonLiquidHandler):
       cx=recording_mode,
     )
 
+  @need_iswap_parked
   async def dispense_core_96(
     self,
     dispensing_mode: int = 0,

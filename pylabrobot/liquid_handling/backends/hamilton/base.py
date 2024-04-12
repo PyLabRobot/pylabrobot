@@ -6,8 +6,9 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 
-from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
+from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import TipSpot, Well
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
@@ -16,7 +17,7 @@ T = TypeVar("T")
 logger = logging.getLogger("pylabrobot")
 
 
-class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
+class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
   """
@@ -40,13 +41,15 @@ class HamiltonLiquidHandler(USBBackend, metaclass=ABCMeta):
       num_channels: the number of pipette channels present on the robot.
     """
 
-    super().__init__(
+    USBBackend.__init__(
+      self,
       address=device_address,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_vendor=0x08af,
       id_product=id_product)
+    LiquidHandlerBackend.__init__(self)
 
     self.id_ = 0
 

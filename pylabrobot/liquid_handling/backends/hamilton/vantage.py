@@ -419,6 +419,7 @@ class Vantage(HamiltonLiquidHandler):
     ipg_initialized = await self.ipg_request_initialization_status()
     if not ipg_initialized:
       await self.ipg_initialize()
+    if not await self.ipg_get_parking_status():
       await self.ipg_park()
 
   @property
@@ -4798,13 +4799,15 @@ class Vantage(HamiltonLiquidHandler):
       command="AA",
     )
 
-  async def ipg_get_parking_status(self):
-    """ Get parking status """
+  async def ipg_get_parking_status(self) -> bool:
+    """ Get parking status. Returns `True` if parked. """
 
-    return await self.send_command(
+    resp = await self.send_command(
       module="A1RM",
       command="RG",
+      fmt={"rg": "int"}
     )
+    return resp is not None and resp["rg"] == 1
 
   async def ipg_query_tip_presence(self):
     """ Query Tip presence """

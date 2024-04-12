@@ -45,16 +45,18 @@ class TecanDeck(Deck):
     name: str = "deck",
     category: str = "deck",
     origin: Coordinate = Coordinate(0, 0, 0),
+    with_wash_station: bool = True
   ):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       origin=origin)
     self.num_rails = num_rails
 
-    wash = Wash_Station(name="wash_station")
-    wash[0] = Wash_Station_Cleaner_deep(name="wash_clean_deep")
-    wash[1] = Wash_Station_Waste(name="wash_waste")
-    wash[2] = Wash_Station_Cleaner_shallow(name="wash_clean_shallow")
-    self.assign_child_resource(wash, rails=1)
+    if with_wash_station:
+      wash = Wash_Station(name="wash_station")
+      wash[0] = Wash_Station_Cleaner_deep(name="wash_clean_deep")
+      wash[1] = Wash_Station_Waste(name="wash_waste")
+      wash[2] = Wash_Station_Cleaner_shallow(name="wash_clean_shallow")
+      self.assign_child_resource(wash, rails=1)
 
   def serialize(self) -> dict:
     return {

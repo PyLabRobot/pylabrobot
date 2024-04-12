@@ -122,7 +122,7 @@ def standard_volume_tip_with_filter() -> HamiltonTip:
   """ Low volume tip without a filter (`tt01` in venus) """
   return HamiltonTip(
     has_filter=True,
-    total_tip_length=59.9, # 60 in the ctr file, but 59.9 in the log file (519-80)/10
+    total_tip_length=59.9, # 60 in the ctr file, but 59.9 in the log file (519+80)/10
     maximal_volume=360,
     tip_size=TipSize.STANDARD_VOLUME,
     pickup_method=TipPickupMethod.OUT_OF_RACK

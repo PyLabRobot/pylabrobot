@@ -8,7 +8,8 @@ from abc import ABCMeta, abstractmethod
 import functools
 from typing import Callable, Dict, List, Optional, Tuple, Sequence, TypeVar, Union
 
-from pylabrobot.liquid_handling.backends.USBBackend import USBBackend
+from pylabrobot.machines.backends import USBBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.liquid_classes.tecan import TecanLiquidClass, get_liquid_class
 from pylabrobot.liquid_handling.backends.tecan.errors import TecanError, error_code_to_exception
 from pylabrobot.liquid_handling.standard import (
@@ -87,7 +88,7 @@ def need_pnp_parked(method: Callable):
   return wrapper
 
 
-class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
+class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
   """
   Abstract base class for Tecan liquid handling robot backends.
   """
@@ -106,12 +107,14 @@ class TecanLiquidHandler(USBBackend, metaclass=ABCMeta):
       read_timeout: The timeout for reading from the Tecan machine in seconds.
     """
 
-    super().__init__(
+    USBBackend.__init__(
+      self,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_vendor=0x0C47,
       id_product=0x4000)
+    LiquidHandlerBackend.__init__(self)
 
     self._cache: Dict[str, List[Optional[int]]] = {}
     self._roma_parked = False

@@ -1,7 +1,7 @@
 import sys
 from typing import List, Optional, cast
 
-from pylabrobot.machine import Machine, need_setup_finished
+from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 

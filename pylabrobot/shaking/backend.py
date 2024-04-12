@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from pylabrobot.machine import MachineBackend
+from pylabrobot.machines.backends import MachineBackend
 
 
 class ShakerBackend(MachineBackend, metaclass=ABCMeta):

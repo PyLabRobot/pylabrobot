@@ -12,7 +12,7 @@ import threading
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
 
-from pylabrobot.machines import Machine, need_setup_finished
+from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.plate_reading import PlateReader
@@ -25,6 +25,7 @@ from pylabrobot.resources import (
   CarrierSite,
   Lid,
   Liquid,
+  MFXModule,
   Plate,
   Tip,
   TipRack,
@@ -114,6 +115,7 @@ class LiquidHandler(Machine):
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
+    self.backend.set_deck(self.deck)
     await super().setup()
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
@@ -1689,6 +1691,8 @@ class LiquidHandler(Machine):
         z=to_location.z  + to.get_size_z())
     elif isinstance(to, Coordinate):
       to_location = to
+    elif isinstance(to, MFXModule):
+      to_location = to.get_absolute_location() + to.child_resource_location
     else:
       to_location = to.get_absolute_location()
 
@@ -1711,6 +1715,8 @@ class LiquidHandler(Machine):
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       to.assign_child_resource(plate)
+    elif isinstance(to, MFXModule):
+      to.assign_child_resource(plate, location=to.child_resource_location)
     else:
       to.assign_child_resource(plate, location=to_location)
 
