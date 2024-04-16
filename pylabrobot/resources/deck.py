@@ -105,8 +105,7 @@ class Deck(Resource):
       >>> lh.deck.clear()
     """
 
-    all_resources = list(self.resources.values()) # can't change size during iteration
-    for resource in all_resources:
+    for resource in self.children:
       resource.unassign()
 
   def get_trash_area(self) -> Trash:
