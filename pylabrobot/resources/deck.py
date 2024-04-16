@@ -108,7 +108,9 @@ class Deck(Resource):
       >>> lh.deck.clear(include_trash=True)
     """
 
-    for resource in self.children:
+    children_names = [child.name for child in self.children]
+    for resource_name in children_names:
+      resource = self.get_resource(resource_name)
       if isinstance(resource, Trash) and not include_trash:
         continue
       resource.unassign()
