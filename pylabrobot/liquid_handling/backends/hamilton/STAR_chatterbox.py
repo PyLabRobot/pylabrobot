@@ -1,6 +1,7 @@
 # pylint: disable=unused-argument
 
 from pylabrobot.liquid_handling.backends.chatterbox_backend import ChatterBoxBackend
+from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
 from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   GripDirection,
@@ -8,7 +9,7 @@ from pylabrobot.liquid_handling.standard import (
 from pylabrobot.resources.coordinate import Coordinate
 
 
-class STARChatterBoxBackend(ChatterBoxBackend):
+class STARChatterBoxBackend(STAR):
   """ Chatter box backend for 'STAR' """
 
   def __init__(self, num_channels: int = 8):
@@ -16,6 +17,9 @@ class STARChatterBoxBackend(ChatterBoxBackend):
     super().__init__()
     self._num_channels = num_channels
     self._iswap_parked = True
+
+  async def setup(self):
+    print("Setting up STARChatterBoxBackend.")
 
   @property
   def iswap_parked(self) -> bool:
