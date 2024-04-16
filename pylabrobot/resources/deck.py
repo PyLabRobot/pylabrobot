@@ -95,18 +95,22 @@ class Deck(Resource):
     """ Returns a list of all resources in the deck. """
     return list(self.resources.values())
 
-  def clear(self):
+  def clear(self, include_trash: bool = False):
     """ Removes all resources from the deck.
 
     Examples:
-
       Clearing all resources on a liquid handler deck:
 
       >>> lh.deck.clear()
+
+      Clearing all resources on a liquid handler deck, including the trash area:
+
+      >>> lh.deck.clear(include_trash=True)
     """
 
-    all_resources = list(self.resources.values()) # can't change size during iteration
-    for resource in all_resources:
+    for resource in self.children:
+      if isinstance(resource, Trash) and not include_trash:
+        continue
       resource.unassign()
 
   def get_trash_area(self) -> Trash:
