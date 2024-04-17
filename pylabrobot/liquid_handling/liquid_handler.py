@@ -382,15 +382,7 @@ class LiquidHandler(Machine):
     # actually pick up the tips
     error: Optional[Exception] = None
     try:
-      hastip = True
-      print("somthing happened")
-      for TipSpot in tip_spots:
-        if not TipSpot.has_tip: 
-          hastip = False
-      
-      if hastip:
-        print("tip are there in tip spots")
-        await self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
+      await self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
     except Exception as e:  # pylint: disable=broad-except
       error = e
 
