@@ -844,7 +844,7 @@ class Vantage(HamiltonLiquidHandler):
       limit_curve_index=limit_curve_index or [0]*len(ops),
       recording_mode=recording_mode or 0,
     )
-#z deposit is origoanlly 2164
+
   async def pick_up_tips96(
     self,
     pickup: PickupTipRack,
