@@ -2,14 +2,7 @@
 
 from typing import Optional
 
-from pylabrobot.liquid_handling.backends.chatterbox_backend import ChatterBoxBackend
 from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
-from pylabrobot.resources import Resource
-from pylabrobot.liquid_handling.standard import (
-  GripDirection,
-)
-from pylabrobot.resources.coordinate import Coordinate
-
 
 class STARChatterBoxBackend(STAR):
   """ Chatter box backend for 'STAR' """
@@ -24,13 +17,14 @@ class STARChatterBoxBackend(STAR):
     return [i for i in range(self._num_channels)]
   
   async def request_machine_configuration(self):
-    print("conf req")
     self.conf = {'kb': 11, 'kp': 8, 'id': 2}
+    #configuration is directly copied from a STARlet w/ 8p, iswap, and autoload 
     return self.conf
 
   async def request_extended_configuration(self):
-    # This extended configuration is directly copied from a STARlet w/ 8p, iswap, and autoload 
+    
     self.extended_conf = {'ka': 65537, 'ke': 0, 'xt': 30, 'xa': 30, 'xw': 8000, 'xl': 3, 'xn': 0, 'xr': 0, 'xo': 0, 'xm': 3500, 'xx': 6000, 'xu': 3700, 'xv': 3700, 'kc': 0, 'kr': 0, 'ys': 90, 'kl': 360, 'km': 360, 'ym': 6065, 'yu': 60, 'yx': 60, 'id': 3}
+    #extended configuration is directly copied from a STARlet w/ 8p, iswap, and autoload 
     return self.extended_conf
   
   async def request_iswap_initialization_status(self) -> bool:
