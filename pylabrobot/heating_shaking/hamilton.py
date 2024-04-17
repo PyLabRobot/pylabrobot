@@ -23,13 +23,13 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     assert shaker_index >= 0, "Shaker index must be non-negative"
     self.shaker_index = shaker_index
     self.command_id = 0
-    self.lock_initialized = False
 
     HeaterShakerBackend.__init__(self)
     USBBackend.__init__(self, id_vendor, id_product)
 
   async def setup(self):
     await USBBackend.setup(self)
+    await self._initialize_lock()
 
   async def stop(self):
     await USBBackend.stop(self)
@@ -61,24 +61,25 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
-    if not self.lock_initialized:
-      await self._initialize_lock()
-    await self._move_plate_lock(PlateLockPosition.UNLOCKED)
     await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
 
   async def stop_shaking(self):
     """ Shaker `stop_shaking` implementation. """
     await self._stop_shaking()
     await self._wait_for_stop()
-    await self._move_plate_lock(PlateLockPosition.LOCKED)
 
   async def _move_plate_lock(self, position: PlateLockPosition):
     return self._send_command("LP", lp=position.value)
 
+  async def lock_plate(self):
+    await self._move_plate_lock(PlateLockPosition.LOCKED)
+
+  async def unlock_plate(self):
+    await self._move_plate_lock(PlateLockPosition.UNLOCKED)
+
   async def _initialize_lock(self):
     """ Firmware command initialize lock. """
     result = self._send_command("LI")
-    self.lock_initialized = True
     return result
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
