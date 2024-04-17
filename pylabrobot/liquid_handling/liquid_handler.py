@@ -525,7 +525,7 @@ class LiquidHandler(Machine):
       **backend_kwargs,
     )
 
-  async def return_tips(self, **backend_kwargs):
+  async def return_tips(self, use_channels: Optional[list[int]] = None, **backend_kwargs):
     """ Return all tips that are currently picked up to their original place.
 
     Examples:
@@ -545,6 +545,8 @@ class LiquidHandler(Machine):
     channels: List[int] = []
 
     for channel, tracker in self.head.items():
+      if use_channels is not None and channel not in use_channels:
+        continue
       if tracker.has_tip:
         origin = tracker.get_tip_origin()
         if origin is None:
