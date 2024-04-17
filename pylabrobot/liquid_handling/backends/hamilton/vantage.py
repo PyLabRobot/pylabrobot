@@ -413,7 +413,7 @@ class Vantage(HamiltonLiquidHandler):
         y_position=2684, # TODO: get trash location from deck.
         minimal_traverse_height_at_begin_of_command=int(self._traversal_height * 10),
         minimal_height_at_command_end=int(self._traversal_height * 10),
-        end_z_deposit_position=2020,
+        end_z_deposit_position=2420,
       )
 
     ipg_initialized = await self.ipg_request_initialization_status()
