@@ -37,8 +37,12 @@ class DeckTests(unittest.TestCase):
 
   def test_clear(self):
     deck = Deck()
-    resource = Resource(name="resource", size_x=1, size_y=1, size_z=1)
-    deck.assign_child_resource(resource, location=Coordinate.zero())
+    r1 = Resource(name="r1", size_x=1, size_y=1, size_z=1)
+    r2 = Resource(name="r2", size_x=1, size_y=1, size_z=1)
+    r3 = Resource(name="r3", size_x=1, size_y=1, size_z=1)
+    deck.assign_child_resource(r1, location=Coordinate.zero())
+    deck.assign_child_resource(r2, location=Coordinate(x=2))
+    deck.assign_child_resource(r3, location=Coordinate(x=4))
     deck.clear()
     with self.assertRaises(ResourceNotFoundError):
       deck.get_resource("resource")
