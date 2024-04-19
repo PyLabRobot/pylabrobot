@@ -8,6 +8,7 @@ class OpentronsTemperatureModuleV2(TemperatureController):
   """ Opentrons temperature module v2.
 
   https://opentrons.com/products/modules/temperature/
+  https://shop.opentrons.com/aluminum-block-set/
   """
 
   def __init__(self, name: str, opentrons_id: str):
@@ -16,19 +17,15 @@ class OpentronsTemperatureModuleV2(TemperatureController):
     Args:
       name: Name of the temperature module.
       opentrons_id: Opentrons ID of the temperature module. Get it from
-        `OpentronsTemperatureModuleBackend.list_connected_modules()`.
+        `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
     """
 
     TemperatureController.__init__(
       self=self,
       name=name,
-      size_x=112.0,
-      size_y=73.6,
-
-      # size_x=127.0,
-      # size_y=86.0,
-
-      size_z=140.0,
+      size_x=193.5,
+      size_y=89.2,
+      size_z=84.0, # height without any aluminum block
       backend=OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id),
       category="temperature_controller",
       model="opentrons_temperature_module_v2"
