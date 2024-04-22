@@ -1,0 +1,19 @@
+status checks:
+- door open - bool
+- door locked - bool
+- bucket locked - bool
+- balanced - bool
+- in motion - bool
+- amp enabled - bool
+- homing - bool
+
+settings:
+- relative centrifugal force (rpm and x g) - 30 to 3000 rpm or 0.1 to 1006.2 x g
+- acceleration - 0 to 100
+- braking - 0 to 100
+- time to spin or total time
+
+other variables:
+- tachometer
+- home position
+- current position

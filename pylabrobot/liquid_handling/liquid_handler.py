@@ -372,6 +372,7 @@ class LiquidHandler(Machine):
       if not does_tip_tracking() and self.head[channel].has_tip:
         self.head[channel].remove_tip() # override the tip if a tip exists
       self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
+      op.resource.tracker.add_tip(op.tip, origin=op.resource, commit=False)
 
     # fix the backend kwargs
     extras = self._check_args(self.backend.pick_up_tips, backend_kwargs,
@@ -379,7 +380,7 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # actually pick up the tips
+    # actually pick up the tips ---- check if there is actually a tip, not jsut a tip spot
     error: Optional[Exception] = None
     try:
       await self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
