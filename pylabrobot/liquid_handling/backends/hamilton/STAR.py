@@ -6360,7 +6360,8 @@ class STAR(HamiltonLiquidHandler):
     z_position: int = 0,
     z_direction: int = 0,
     location: int = 0,
-    hotel_depth: int = 0,
+    hotel_depth: int = 1300,
+    grip_direction:int = 1,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
@@ -6378,7 +6379,7 @@ class STAR(HamiltonLiquidHandler):
       z_position: Plate gripping height in Z direction. Must be between 0 and 3600. Default 0.
       z_direction: Z-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
       location: location. 0 = Stack 1 = Hotel. Must be between 0 and 1. Default 0.
-      hotel_depth: Hotel depth [0.1mm]. Must be between 0 and 3000. Default 13000.
+      hotel_depth: Hotel depth [0.1mm]. Must be between 0 and 3000. Default 1300.
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of
         a command 0.1mm]. Must be between 0 and 3600. Default 3600.
       collision_control_level: collision control level 1 = high 0 = low. Must be between 0 and 1.
@@ -6406,15 +6407,16 @@ class STAR(HamiltonLiquidHandler):
     return await self.send_command(
       module="C0",
       command="PT",
-      xs=x_position,
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yj=y_position,
+      yj=f"{y_position:04}",
       yd=y_direction,
-      zj=z_position,
+      zj=f"{z_position:04}",
       zd=z_direction,
       hh=location,
-      hd=hotel_depth,
-      th=minimum_traverse_height_at_beginning_of_a_command,
+      hd=f"{hotel_depth:04}",
+      gr=grip_direction,
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
       ga=collision_control_level,
       xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
     )
