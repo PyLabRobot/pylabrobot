@@ -139,6 +139,17 @@ def ot_definition_to_resource(
         items=cast(List[List[Tube]], wells),
         model=data["metadata"]["displayName"]
       )
+    if display_category == "adapter":
+      # Implemented for aluminum block adapters for temperature controlling module
+      # https://shop.opentrons.com/aluminum-block-set/
+      return TubeRack(
+        name=name,
+        size_x=size_x,
+        size_y=size_y,
+        size_z=size_z,
+        items=cast(List[List[Tube]], wells),
+        model=data["metadata"]["displayName"]
+      )
 
   raise UnknownResourceType(f"Unknown resource type '{display_category}'.")
 
