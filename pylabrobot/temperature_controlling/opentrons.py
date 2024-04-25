@@ -31,6 +31,7 @@ class OpentronsTemperatureModuleV2(TemperatureController):
     )
 
     self.backend = OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id)
+    self.tube_rack = tube_rack
 
     if tube_rack is not None:
       self.assign_child_resource(tube_rack, location=Coordinate(x=0, y=0, z=0))
