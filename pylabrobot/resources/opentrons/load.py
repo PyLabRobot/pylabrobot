@@ -40,7 +40,7 @@ def ot_definition_to_resource(
   size_y = data["dimensions"]["yDimension"]
   size_z = data["dimensions"]["zDimension"]
 
-  if display_category in ["wellPlate", "tipRack", "tubeRack"]:
+  if display_category in ["wellPlate", "tipRack", "tubeRack", "adapter"]:
     items = data["ordering"]
     wells: List[List[Union[TipSpot, Well, Tube]]] = [] # TODO: can we use TypeGuard?
 
