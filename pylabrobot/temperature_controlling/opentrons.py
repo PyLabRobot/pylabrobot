@@ -1,10 +1,11 @@
 from typing import Optional
 
 from pylabrobot.resources import Coordinate, ItemizedResource
+from pylabrobot.resources.opentrons.module import OTModule
 from pylabrobot.temperature_controlling.temperature_controller import TemperatureController
 from pylabrobot.temperature_controlling.opentrons_backend import OpentronsTemperatureModuleBackend
 
-class OpentronsTemperatureModuleV2(TemperatureController):
+class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
   """ Opentrons temperature module v2.
 
   https://opentrons.com/products/modules/temperature/
