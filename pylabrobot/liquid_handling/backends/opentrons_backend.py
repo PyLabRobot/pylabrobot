@@ -22,8 +22,7 @@ from pylabrobot.resources import (
   TipRack,
   TipSpot
 )
-from pylabrobot.resources.opentrons import OTDeck
-from pylabrobot.temperature_controlling import OpentronsTemperatureModuleV2
+from pylabrobot.resources.opentrons import OTDeck, OTModule
 from pylabrobot import utils
 
 PYTHON_VERSION = sys.version_info[:2]
@@ -147,7 +146,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     slot = self._get_resource_slot(resource)
 
     # check if resource is actually a Module
-    if isinstance(resource, OpentronsTemperatureModuleV2):
+    if isinstance(resource, OTModule):
       ot_api.modules.load_module(
         slot=slot,
         model="temperatureModuleV2",
