@@ -41,7 +41,10 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self) -> None:
     await super().asyncSetUp()
-    self.pump_array = PumpArray(backend=self.mock_backend, calibration=None)
+    self.pump_array = PumpArray(backend=self.mock_backend,
+                                calibration=None,
+                                size_x=0, size_y=0, size_z=0,
+                                name="pump_array")
     await self.pump_array.setup()
 
   async def asyncTearDown(self) -> None:
