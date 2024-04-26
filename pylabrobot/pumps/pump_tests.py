@@ -41,7 +41,10 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self) -> None:
     await super().asyncSetUp()
-    self.pump_array = PumpArray(backend=self.mock_backend, calibration=None)
+    self.pump_array = PumpArray(backend=self.mock_backend,
+                                calibration=None,
+                                size_x=0, size_y=0, size_z=0,
+                                name="pump_array")
     await self.pump_array.setup()
 
   async def asyncTearDown(self) -> None:
@@ -99,7 +102,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
 
   async def test_volume_pump_duration(self):
     self.pump_array.calibration = self.test_calibration
-    self.pump_array.calibration_mode = "duration"
+    self.pump_array.calibration.calibration_mode = "duration"
 
     # valid: can use an int or float
     self.pump_array.run_for_duration = AsyncMock() # type: ignore[method-assign]
@@ -108,7 +111,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
 
   async def test_volume_pump_revolutions(self):
     self.pump_array.calibration = self.test_calibration
-    self.pump_array.calibration_mode = "revolutions"
+    self.pump_array.calibration.calibration_mode = "revolutions"
 
     # valid: can use an int or float
     self.pump_array.run_revolutions = AsyncMock() # type: ignore[method-assign]
