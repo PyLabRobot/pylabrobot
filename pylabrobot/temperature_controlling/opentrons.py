@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.temperature_controlling.temperature_controller import TemperatureController
 from pylabrobot.temperature_controlling.opentrons_backend import OpentronsTemperatureModuleBackend
@@ -9,7 +11,7 @@ class OpentronsTemperatureModuleV2(TemperatureController):
   https://shop.opentrons.com/aluminum-block-set/
   """
 
-  def __init__(self, name: str, opentrons_id: str, child: ItemizedResource = None):
+  def __init__(self, name: str, opentrons_id: str, child: Optional[ItemizedResource] = None):
     """ Create a new Opentrons temperature module v2.
 
     Args:
@@ -35,5 +37,3 @@ class OpentronsTemperatureModuleV2(TemperatureController):
 
     if child is not None:
       self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=0))
-
-
