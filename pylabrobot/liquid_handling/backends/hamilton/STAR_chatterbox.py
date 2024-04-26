@@ -1,15 +1,11 @@
 # pylint: disable=unused-argument
 
-from pylabrobot.liquid_handling.backends.chatterbox_backend import ChatterBoxBackend
-from pylabrobot.resources import Resource
-from pylabrobot.liquid_handling.standard import (
-  GripDirection,
-)
-from pylabrobot.resources.coordinate import Coordinate
+from typing import Optional
 
+from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
 
-class STARChatterBoxBackend(ChatterBoxBackend):
-  """ Chatter box backend for 'STAR' """
+class STARChatterBoxBackend(STAR):
+  """ Chatter box backend for "STAR" """
 
   def __init__(self, num_channels: int = 8):
     """ Initialize a chatter box backend. """
@@ -17,40 +13,38 @@ class STARChatterBoxBackend(ChatterBoxBackend):
     self._num_channels = num_channels
     self._iswap_parked = True
 
+  async def request_tip_presence(self):
+    return list(range(self.num_channels))
+
+  async def request_machine_configuration(self):
+    # configuration is directly copied from a STARlet w/ 8p, iswap, and autoload
+    self.conf = {"kb": 11, "kp": 8, "id": 2}
+    return self.conf
+
+  async def request_extended_configuration(self):
+    self._extended_conf = {"ka": 65537, "ke": 0, "xt": 30, "xa": 30, "xw": 8000, "xl": 3, "xn": 0,
+                          "xr": 0, "xo": 0, "xm": 3500, "xx": 6000, "xu": 3700, "xv": 3700, "kc": 0,
+                          "kr": 0, "ys": 90, "kl": 360, "km": 360, "ym": 6065, "yu": 60, "yx": 60,
+                          "id": 3}
+    #extended configuration is directly copied from a STARlet w/ 8p, iswap, and autoload
+    return self.extended_conf
+
+  async def request_iswap_initialization_status(self) -> bool:
+    return True
+
   @property
   def iswap_parked(self) -> bool:
     return self._iswap_parked is True
 
-  async def get_core(self, p1: int, p2: int):
-    print(f"Getting core from {p1} to {p2}")
-
-  async def iswap_pick_up_resource(
-    self,
-    resource: Resource,
-    grip_direction: GripDirection,
-    **backend_kwargs
-  ):
-    print(f"Pick up resource {resource.name} with {grip_direction}.")
-
-  async def iswap_move_picked_up_resource(
-    self,
-    location: Coordinate,
-    resource: Resource,
-    **backend_kwargs
-  ):
-    print(f"Move picked up resource {resource.name} to {location}")
-
-  async def iswap_release_picked_up_resource(
-    self,
-    location: Coordinate,
-    resource: Resource,
-    grip_direction: GripDirection,
-    **backend_kwargs
-  ):
-    print(f"Release picked up resource {resource.name} at {location} with {grip_direction}.")
-
   async def send_command(self, module, command, *args, **kwargs):
     print(f"Sending command: {module}{command} with args {args} and kwargs {kwargs}.")
 
-  async def send_raw_command(self, command: str, **kwargs):
+  async def send_raw_command(
+    self,
+    command: str,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait: bool = True
+  ) -> Optional[str]:
     print(f"Sending raw command: {command}")
+    return None

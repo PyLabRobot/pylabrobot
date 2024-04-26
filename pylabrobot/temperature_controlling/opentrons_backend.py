@@ -23,7 +23,7 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
 
     Args:
       opentrons_id: Opentrons ID of the temperature module. Get it from
-        `OpentronsTemperatureModuleBackend.list_connected_modules()`.
+        `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
     """
     self.opentrons_id = opentrons_id
 

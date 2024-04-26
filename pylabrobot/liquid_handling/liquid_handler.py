@@ -115,6 +115,7 @@ class LiquidHandler(Machine):
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
+    self.backend.set_deck(self.deck)
     await super().setup()
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
@@ -524,7 +525,7 @@ class LiquidHandler(Machine):
       **backend_kwargs,
     )
 
-  async def return_tips(self, **backend_kwargs):
+  async def return_tips(self, use_channels: Optional[list[int]] = None, **backend_kwargs):
     """ Return all tips that are currently picked up to their original place.
 
     Examples:
@@ -544,6 +545,8 @@ class LiquidHandler(Machine):
     channels: List[int] = []
 
     for channel, tracker in self.head.items():
+      if use_channels is not None and channel not in use_channels:
+        continue
       if tracker.has_tip:
         origin = tracker.get_tip_origin()
         if origin is None:

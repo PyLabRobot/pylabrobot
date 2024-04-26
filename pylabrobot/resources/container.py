@@ -1,11 +1,10 @@
-from abc import ABCMeta
 from typing import Any, Dict, Optional
 
 from .resource import Resource
 from .volume_tracker import VolumeTracker
 
 
-class Container(Resource, metaclass=ABCMeta):
+class Container(Resource):
   """ A container is an abstract base class for a resource that can hold liquid. """
 
   def __init__(
