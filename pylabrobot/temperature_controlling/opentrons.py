@@ -24,7 +24,7 @@ class OpentronsTemperatureModuleV2(TemperatureController):
       name=name,
       size_x=193.5,
       size_y=89.2,
-      size_z=84.0,  # height without any aluminum block
+      size_z=84.0, # height without any aluminum block
       backend=OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id),
       category="temperature_controller",
       model="opentrons_temperature_module_v2"
@@ -35,5 +35,3 @@ class OpentronsTemperatureModuleV2(TemperatureController):
 
     if child is not None:
       self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=0))
-
-
