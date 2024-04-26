@@ -159,6 +159,3 @@ def opentrons_24_aluminumblock_nest_1point5ml_snapcap(name: str) -> TubeRack:
     name=name,
     version=1
   ))
-
-
-
