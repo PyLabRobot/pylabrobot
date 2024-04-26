@@ -1092,6 +1092,12 @@ class STAR(HamiltonLiquidHandler):
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
     self._traversal_height: float = 245.0
+    self._unsafe = UnSafe(self)
+
+  @property
+  def unsafe(self) -> "UnSafe":
+    """ Actions that have a higher risk of damaging the robot. Use with care! """
+    return self._unsafe
 
   @property
   def num_channels(self) -> int:
@@ -6360,7 +6366,8 @@ class STAR(HamiltonLiquidHandler):
     z_position: int = 0,
     z_direction: int = 0,
     location: int = 0,
-    hotel_depth: int = 0,
+    hotel_depth: int = 1300,
+    grip_direction: int = 1,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
@@ -6378,7 +6385,7 @@ class STAR(HamiltonLiquidHandler):
       z_position: Plate gripping height in Z direction. Must be between 0 and 3600. Default 0.
       z_direction: Z-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
       location: location. 0 = Stack 1 = Hotel. Must be between 0 and 1. Default 0.
-      hotel_depth: Hotel depth [0.1mm]. Must be between 0 and 3000. Default 13000.
+      hotel_depth: Hotel depth [0.1mm]. Must be between 0 and 3000. Default 1300.
       minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of
         a command 0.1mm]. Must be between 0 and 3600. Default 3600.
       collision_control_level: collision control level 1 = high 0 = low. Must be between 0 and 1.
@@ -6406,15 +6413,16 @@ class STAR(HamiltonLiquidHandler):
     return await self.send_command(
       module="C0",
       command="PT",
-      xs=x_position,
+      xs=f"{x_position:05}",
       xd=x_direction,
-      yj=y_position,
+      yj=f"{y_position:04}",
       yd=y_direction,
-      zj=z_position,
+      zj=f"{z_position:04}",
       zd=z_direction,
       hh=location,
-      hd=hotel_depth,
-      th=minimum_traverse_height_at_beginning_of_a_command,
+      hd=f"{hotel_depth:04}",
+      gr=grip_direction,
+      th=f"{minimum_traverse_height_at_beginning_of_a_command:04}",
       ga=collision_control_level,
       xe=f"{acceleration_index_high_acc} {acceleration_index_low_acc}"
     )
@@ -6913,3 +6921,160 @@ class STAR(HamiltonLiquidHandler):
     result_in_mm = float(get_llds["lh"][channel_idx-1] / 10)
 
     return result_in_mm
+
+
+class UnSafe:
+  """
+  Namespace for actions that are unsafe to perfom.
+  For example, actions that send the iSWAP outside of the Hamilton Deck
+  """
+
+  def __init__(self, star: "STAR"):
+    self.star = star
+
+  async def put_in_hotel(
+    self,
+    hotel_center_x_coord: int = 0,
+    hotel_center_y_coord: int = 0,
+    hotel_center_z_coord: int = 0,
+    # for direction, 0 is positive, 1 is negative
+    hotel_center_x_direction: Literal[0, 1] = 0,
+    hotel_center_y_direction: Literal[0, 1] = 0,
+    hotel_center_z_direction: Literal[0, 1] = 0,
+    clearance_height: int = 50,
+    hotel_depth: int = 1_300,
+    grip_direction:GripDirection = GripDirection.FRONT,
+    traverse_height_at_beginning: int = 3_600,
+    z_position_at_end: int = 3_600,
+    grip_strength: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] = 5,
+    open_gripper_position: int = 860,
+    collision_control: Literal[0, 1] = 1,
+    high_acceleration_index: Literal[1, 2, 3, 4] = 4,
+    low_acceleration_index: Literal[1, 2, 3, 4] = 1,
+    fold_up_at_end: bool = True,
+  ):
+    """
+    A hotel is a location to store a plate. This can be a loading
+    dock for an external machine such as a cytomat or a centrifuge.
+
+    Take care when using this command to interact with hotels located
+    outside of the hamilton deck area. Ensure that rotations of the
+    iSWAP arm don't collide with anything.
+
+    tip: set the hotel depth big enough so that the boundary is inside the
+    hamilton deck. The iSWAP rotations will happen before it enters the hotel.
+
+    The units of all relevant variables are in 0.1mm
+    """
+
+    assert 0 <= hotel_center_x_coord <= 9_999
+    assert 0 <= hotel_center_y_coord <= 6_500
+    assert 0 <= hotel_center_z_coord <= 3_500
+    assert 0 <= clearance_height <= 999
+    assert 0 <= hotel_depth <= 3_000
+    assert 0 <= traverse_height_at_beginning <= 3_600
+    assert 0 <= z_position_at_end <= 3_600
+    assert 0 <= open_gripper_position <= 9_999
+
+    return await self.star.send_command(
+      module="C0",
+      command="PI",
+      xs=f"{hotel_center_x_coord:05}",
+      xd=hotel_center_x_direction,
+      yj=f"{hotel_center_y_coord:04}",
+      yd=hotel_center_y_direction,
+      zj=f"{hotel_center_z_coord:04}",
+      zd=hotel_center_z_direction,
+      zc=f"{clearance_height:03}",
+      hd=f"{hotel_depth:04}",
+      gr={
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
+      th=f"{traverse_height_at_beginning:04}",
+      te=f"{z_position_at_end:04}",
+      gw=grip_strength,
+      go=f"{open_gripper_position:04}",
+      ga=collision_control,
+      xe=f"{high_acceleration_index} {low_acceleration_index}",
+      gc=int(fold_up_at_end),
+    )
+
+  async def get_from_hotel(
+    self,
+    hotel_center_x_coord: int = 0,
+    hotel_center_y_coord: int = 0,
+    hotel_center_z_coord: int = 0,
+    # for direction, 0 is positive, 1 is negative
+    hotel_center_x_direction: Literal[0, 1] = 0,
+    hotel_center_y_direction: Literal[0, 1] = 0,
+    hotel_center_z_direction: Literal[0, 1] = 0,
+    clearance_height: int = 50,
+    hotel_depth: int = 1_300,
+    grip_direction:GripDirection = GripDirection.FRONT,
+    traverse_height_at_beginning: int = 3_600,
+    z_position_at_end: int = 3_600,
+    grip_strength: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] = 5,
+    open_gripper_position: int = 860,
+    plate_width: int = 800,
+    plate_width_tolerance: int = 20,
+    collision_control: Literal[0, 1]=1,
+    high_acceleration_index: Literal[1, 2, 3, 4] = 4,
+    low_acceleration_index: Literal[1, 2, 3, 4] = 1,
+    fold_up_at_end: bool = True,
+  ):
+    """
+    A hotel is a location to store a plate. This can be a loading
+    dock for an external machine such as a cytomat or a centrifuge.
+
+    Take care when using this command to interact with hotels located
+    outside of the hamilton deck area. Ensure that rotations of the
+    iSWAP arm don't collide with anything.
+
+    tip: set the hotel depth big enough so that the boundary is inside the
+    hamilton deck. The iSWAP rotations will happen before it enters the hotel.
+
+    The units of all relevant variables are in 0.1mm
+    """
+
+    assert 0 <= hotel_center_x_coord <= 9_999
+    assert 0 <= hotel_center_y_coord <= 6_500
+    assert 0 <= hotel_center_z_coord <= 3_500
+    assert 0 <= clearance_height <= 999
+    assert 0 <= hotel_depth <= 3_000
+    assert 0 <= traverse_height_at_beginning <= 3_600
+    assert 0 <= z_position_at_end <= 3_600
+    assert 0 <= open_gripper_position <= 9_999
+    assert 0 <= plate_width <= 9_999
+    assert 0 <= plate_width_tolerance <= 99
+
+    return await self.star.send_command(
+      module="C0",
+      command="PO",
+      xs=f"{hotel_center_x_coord:05}",
+      xd=hotel_center_x_direction,
+      yj=f"{hotel_center_y_coord:04}",
+      yd=hotel_center_y_direction,
+      zj=f"{hotel_center_z_coord:04}",
+      zd=hotel_center_z_direction,
+      zc=f"{clearance_height:03}",
+      hd=f"{hotel_depth:04}",
+      gr={
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
+      th=f"{traverse_height_at_beginning:04}",
+      te=f"{z_position_at_end:04}",
+      gw=grip_strength,
+      go=f"{open_gripper_position:04}",
+      gb=f"{plate_width:04}",
+      gt=f"{plate_width_tolerance:02}",
+      ga=collision_control,
+      xe=f"{high_acceleration_index} {low_acceleration_index}",
+      gc=int(fold_up_at_end),
+    )
+
