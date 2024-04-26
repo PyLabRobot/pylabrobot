@@ -1,5 +1,5 @@
 import asyncio
-from typing import Union, Optional, List, Literal
+from typing import Union, Optional, List
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.pumps.backend import PumpArrayBackend
@@ -18,12 +18,28 @@ class PumpArray(Machine):
     num_channels: The number of channels that the pump array has.
   """
 
-  def __init__(self, backend: PumpArrayBackend, calibration: Optional[PumpCalibration] = None):
-    self._setup_finished = False
-    self.backend: PumpArrayBackend = backend
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    backend: PumpArrayBackend,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
+    calibration: Optional[PumpCalibration] = None,
+  ):
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      backend=backend,
+      category=category,
+      model=model,
+    )
+    self.backend: PumpArrayBackend = backend # fix type
     self.calibration = calibration
-    self.calibration_mode: Optional[Literal["duration", "revolutions"]] = \
-      calibration.calibration_mode if calibration else None
 
   @property
   def num_channels(self) -> int:
