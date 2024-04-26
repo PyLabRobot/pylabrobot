@@ -7078,3 +7078,37 @@ class UnSafe:
       gc=int(fold_up_at_end),
     )
 
+  async def rotate_iswap(
+    self,
+    position: int = 33,
+    gripper_velocity: int = 55_000,
+    gripper_acceleration: int = 170,
+    gripper_protection: Literal[0,1,2,3,4,5,6,7] = 5,
+    wrist_velocity: int = 48_000,
+    wrist_acceleration: int = 145,
+    wrist_protection: Literal[0,1,2,3,4,5,6,7] = 5,
+  ):
+    """
+    Rotate the iswap to a predifined position.
+
+    Velocity units are "incr/sec"
+    Acceleration units are "1_000 incr/sec**2"
+
+    For a list of the possible positions see the pylabrobot documentation on the R0 module.
+    """
+    assert 20 <= gripper_velocity <= 75_000
+    assert 5 <= gripper_acceleration <= 200
+    assert 20 <= wrist_velocity <= 65_000
+    assert 20 <= wrist_acceleration <= 200
+
+    return await self.star.send_command(
+      module="R0",
+      command="PD",
+      pd=position,
+      wv=f"{gripper_velocity:05}",
+      wr=f"{gripper_acceleration:03}",
+      ww=gripper_protection,
+      tv=f"{wrist_velocity:05}",
+      tr=f"{wrist_acceleration:03}",
+      tw=wrist_protection,
+    )
