@@ -143,7 +143,7 @@ class PumpArray(Machine):
       raise ValueError("Volume must be positive.")
     if not len(speed) == len(use_channels) == len(volume):
       raise ValueError("Speed, use_channels, and volume must be the same length.")
-    if self.calibration_mode == "duration":
+    if self.calibration.calibration_mode == "duration":
       durations = [channel_volume / self.calibration[channel] for channel, channel_volume in
                     zip(use_channels, volume)]
       tasks = [asyncio.create_task(
@@ -151,7 +151,7 @@ class PumpArray(Machine):
                               use_channels=channel,
                               duration=duration))
           for channel_speed, channel, duration in zip(speed, use_channels, durations)]
-    elif self.calibration_mode == "revolutions":
+    elif self.calibration.calibration_mode == "revolutions":
       num_rotations = [channel_volume / self.calibration[channel] for channel, channel_volume in
                         zip(use_channels, volume)]
       tasks = [asyncio.create_task(
