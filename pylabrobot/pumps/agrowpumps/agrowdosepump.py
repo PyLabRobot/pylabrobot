@@ -121,6 +121,12 @@ class AgrowPumpArray(PumpArrayBackend):
     if not self.modbus.connected:
       raise ConnectionError("Modbus connection failed during pump setup")
 
+  async def serialize(self):
+    return {
+    **super().serialize(),
+    "port": self.port,
+    "address": self.address}
+
   async def run_revolutions(self, num_revolutions: List[float], use_channels: List[int]):
     """ Run the specified channels at the speed selected. If speed is 0, the pump will be halted.
 
