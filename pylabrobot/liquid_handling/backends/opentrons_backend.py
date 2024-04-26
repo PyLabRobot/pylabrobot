@@ -1,5 +1,5 @@
 import sys
-from typing import Dict, Optional, List, cast
+from typing import Dict, Optional, List, cast, Union
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
@@ -112,10 +112,13 @@ class OpentronsBackend(LiquidHandlerBackend):
     self.defined_labware = {}
     await super().stop()
 
-  def _get_resource_slot(self, resource: Resource) -> int:
-    """ Get the ultimate slot of a given resource. Some resources are assigned to another resource,
+  def _get_resource_ot_location(self, resource: Resource) -> Union[str, int]:
+    """ Get the ultimate location of a given resource. Some resources are assigned to another resource,
     such as a temperature controller, and we need to find the slot of the parent resource. Nesting
     may be deeper than one level, so we need to traverse the tree from the bottom up. """
+
+    if isinstance(resource.parent, OpentronsTemperatureModuleV2):
+      return self.defined_labware[resource.parent.name]
 
     slot = None
     while resource.parent is not None:
@@ -144,16 +147,20 @@ class OpentronsBackend(LiquidHandlerBackend):
       resource.name == "trash_container":
       return
 
-    slot = self._get_resource_slot(resource)
+    ot_location = self._get_resource_ot_location(resource)
 
     # check if resource is actually a Module
     if isinstance(resource, OpentronsTemperatureModuleV2):
+      assert isinstance(ot_location, int)
       ot_api.modules.load_module(
-        slot=slot,
+        slot=ot_location,
         model="temperatureModuleV2",
         module_id=resource.backend.opentrons_id
       )
-      # call self to assign the tube rack
+
+      self.defined_labware[resource.name] = resource.backend.opentrons_id
+
+      # call self to assign the child to module
       await self.assigned_resource_callback(resource.child)
       return
 
@@ -261,7 +268,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.labware.add(
       load_name=definition,
       namespace=namespace,
-      slot=slot,
+      ot_location=ot_location,
       version=version,
       labware_id=labware_uuid,
       display_name=resource.name)
