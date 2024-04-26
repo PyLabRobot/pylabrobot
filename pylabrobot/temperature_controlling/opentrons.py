@@ -9,7 +9,7 @@ class OpentronsTemperatureModuleV2(TemperatureController):
   https://shop.opentrons.com/aluminum-block-set/
   """
 
-  def __init__(self, name: str, opentrons_id: str, tube_rack: ItemizedResource = None):
+  def __init__(self, name: str, opentrons_id: str, child: ItemizedResource = None):
     """ Create a new Opentrons temperature module v2.
 
     Args:
@@ -31,9 +31,9 @@ class OpentronsTemperatureModuleV2(TemperatureController):
     )
 
     self.backend = OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id)
-    self.tube_rack = tube_rack
+    self.child = child
 
-    if tube_rack is not None:
-      self.assign_child_resource(tube_rack, location=Coordinate(x=0, y=0, z=0))
+    if child is not None:
+      self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=0))
 
 

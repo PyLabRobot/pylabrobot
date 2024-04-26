@@ -154,7 +154,7 @@ class OpentronsBackend(LiquidHandlerBackend):
         module_id=resource.backend.opentrons_id
       )
       # call self to assign the tube rack
-      await self.assigned_resource_callback(resource.tube_rack)
+      await self.assigned_resource_callback(resource.child)
       return
 
     well_names = [well.name for well in resource.children]
