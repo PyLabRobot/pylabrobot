@@ -33,9 +33,9 @@ class Masterflex(PumpBackend):
 
   async def serialize(self):
     return {
-    **super().serialize(),
-    "com_port": self.com_port,
-    "ser": self.ser}
+      "com_port": self.com_port,
+      "ser": self.ser
+      }
 
   async def stop(self):
     assert self.ser is not None, "Pump not initialized"
