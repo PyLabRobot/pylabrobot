@@ -1087,6 +1087,10 @@ class STAR(HamiltonLiquidHandler):
       id_product=0x8000,
     )
 
+    self.iswap_installed: Optional[bool] = None
+    self.autoload_installed: Optional[bool] = None
+    self.core96_head_installed: Optional[bool] = None
+
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
     self._core_parked: Optional[bool] = None
