@@ -89,8 +89,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     }
 
   async def setup(self):
-    await super().setup()
-
     # create run
     run_id = ot_api.runs.create()
     ot_api.set_run(run_id)
@@ -110,12 +108,11 @@ class OpentronsBackend(LiquidHandlerBackend):
 
   async def stop(self):
     self.defined_labware = {}
-    await super().stop()
 
   def _get_resource_ot_location(self, resource: Resource) -> Union[str, int]:
-    """ Get the ultimate location of a given resource. Some resources are assigned to another resource,
-    such as a temperature controller, and we need to find the slot of the parent resource. Nesting
-    may be deeper than one level, so we need to traverse the tree from the bottom up. """
+    """ Get the OT location (slot or area) of a given resource. Some resources are assigned to
+    another resource, such as plates on a temperature controller, and we need to find the slot of
+    the parent resource (site). """
 
     if isinstance(resource.parent, OpentronsTemperatureModuleV2):
       return self.defined_labware[resource.parent.name]
@@ -155,13 +152,16 @@ class OpentronsBackend(LiquidHandlerBackend):
       ot_api.modules.load_module(
         slot=ot_location,
         model="temperatureModuleV2",
-        module_id=resource.backend.opentrons_id
+        module_id=resource.backend.opentrons_id # type: ignore
       )
 
-      self.defined_labware[resource.name] = resource.backend.opentrons_id
+      self.defined_labware[resource.name] = resource.backend.opentrons_id # type: ignore
 
       # call self to assign the child to module
-      await self.assigned_resource_callback(resource.child)
+      if hasattr(resource, "child") and resource.child is not None:
+        await self.assigned_resource_callback(resource.child)
+      else:
+        raise RuntimeError(f"Module {resource.name} must have a child when it assigned.")
       return
 
     well_names = [well.name for well in resource.children]
