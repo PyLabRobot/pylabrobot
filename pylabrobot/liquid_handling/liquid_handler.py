@@ -1555,6 +1555,11 @@ class LiquidHandler(Machine):
 
     result = await self.backend.move_resource(move=move_operation, **backend_kwargs)
 
+    # rotate the resource if the move operation has a rotation.
+    # this code should be expanded to also update the resource's location
+    if move_operation.rotation != 0:
+      move_operation.resource.rotate(move_operation.rotation)
+
     self._trigger_callback(
       "move_resource",
       liquid_handler=self,
@@ -1709,6 +1714,8 @@ class LiquidHandler(Machine):
       put_direction=put_direction,
       **backend_kwargs)
 
+    # Some of the code below should probably be moved to `move_resource` so that is can be shared
+    # with the `move_lid` convenience method.
     plate.unassign()
     if isinstance(to, Coordinate):
       to_location -= self.deck.location # passed as an absolute location, but stored as relative
