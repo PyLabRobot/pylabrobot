@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional, Union
-import time 
+import time
 import asyncio
 
 from .backend import CentrifugeBackend
@@ -19,24 +19,41 @@ logger = logging.getLogger("pylabrobot")
 class AgilentCentrifuge(CentrifugeBackend):
     """ A centrifuge backend for the Agilent Centrifuge. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet. """
-  
+
     def __init__(self):
         self.dev: Optional[Device] = None
-        
+
     async def setup(self):
         if not USE_FTDI:
-            raise RuntimeError("tbd")    
-        
+            raise RuntimeError("to do")
+
         self.dev = Device()
         self.dev.open()
-        self.dev.baudrate = 1200 # TODO: this is standard baud rate, but not the one that the robot uses I believe - alternatively can try all baud rates
-        self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0) # 8 bit size, 1 stop bit, no parity
-        #self.dev.ftdi_fn.ftdi_setflowctrl(0) # TODO: check 
-        self.dev.ftdi_fn.ftdi_set_latency_timer(16)
 
-        await self.initialize() # TODO: test initialize()
-        #await self.request_eeprom_data() # TODO: write request eeprom data()
+        self.dev.ftdi_fn.ftdi_usb_purge_buffers()
+        self.dev.ftdi_fn.ftdi_usb_purge_buffers()
+        self.dev.ftdi_fn.ftdi_usb_reset()
+
+        self.dev.ftdi_fn.ftdi_set_latency_timer(16)
+        self.dev.read(64)
+
+        self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0) # 8 bit size, 1 stop bit, no parity
+        self.dev.ftdi_fn.ftdi_setdtr(True)
+        self.dev.ftdi_fn.ftdi_setrts(True)
+
+        self.dev.ftdi_fn.ftdi_setflowctrl(0)
+        self.dev.baudrate = 9600 # TODO: this is standard baud rate, but not the one that the robot uses I believe - alternatively can try all baud rates
+
+        self.dev.ftdi_fn.ftdi_setrts(True)
+        self.dev.ftdi_fn.ftdi_setdtr(True)
+
+        self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0) # 8 bit size, 1 stop bit, no parity
+        self.dev.ftdi_fn.ftdi_setflowctrl(0)
+
         
+        # await self.initialize() # TODO: test initialize()
+        # await self.request_eeprom_data() # TODO: write request eeprom data()
+
     async def stop(self):
         if self.dev is not None:
             self.dev.close()
@@ -88,7 +105,7 @@ class AgilentCentrifuge(CentrifugeBackend):
             raise RuntimeError("Device not initialized")
 
         logger.debug("sending %s", cmd.hex())
-        
+
         # TODO: cmd = 4 start bytes + cmd (content / unique) + 4 bytes + 5 bytes
 
         # w = self.dev.write(cmd)
@@ -105,23 +122,19 @@ class AgilentCentrifuge(CentrifugeBackend):
     async def read_command_status(self): # TODO: fix after fixing send()
         status = await self.send(bytearray([0xaa, 0x01, 0x0e, 0x0f]))
         return status
-    
-    async def initialize(self):
-        # packets = bytearray([])
-        # packet = bytearray([0x00]*20)
-        # packets.append(packet)
-        # for i in range(33):
-        #     packet = bytearray([0xaa])  # First byte is constant - aa
-        #     packet.append(i & 0xFF)  # Second byte increments from 00
-        #     packet.append(0x0e)  # Third byte is constant - 0e
-        #     packet.append(0x0e + (i & 0xFF))  # Fourth byte increments from 0x0e
-        #     packet.extend([0x00] * 8)  # Remaining 8 bytes are zeros
-        #     packets.append(packet)
 
-        # packet = bytearray([0xaa, 0xff, 0x0f, 0x0e])
-        # packets.append(packet)
-        # packets = bytearray(packets)
-        check = await self.send(bytearray([0xaa, 0xff, 0x0f, 0x0e]))
+    async def initialize(self):
+        for i in range(33):
+            packet = b"\xaa"  # First byte is constant
+            packet += bytes([i & 0xFF])  # Second byte increments
+            packet += b"\x0e"  # Third byte is constant
+            packet += bytes([0x0e + (i & 0xFF)])  # Fourth byte increments from 0x0e
+            packet += bytes([0x00] * 8)  # Remaining 8 bytes are zeros
+            await self.send(packet)
+
+        packet = b""
+        packet += b"\xaa\xff\x0f\x0e"
+        check = await self.send(packet)
         print(check)
         if check == 0x89:
             print("Initialization successful")
