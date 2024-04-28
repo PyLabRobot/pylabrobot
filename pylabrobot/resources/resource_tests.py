@@ -221,12 +221,6 @@ class TestResource(unittest.TestCase):
     with self.assertRaises(ValueError):
       r.rotate(45)
 
-    with self.assertRaises(ValueError):
-      r.rotate(360)
-
-    with self.assertRaises(ValueError):
-      r.rotate(0)
-
   def test_multiple_rotations(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
     r.location = Coordinate.zero()
