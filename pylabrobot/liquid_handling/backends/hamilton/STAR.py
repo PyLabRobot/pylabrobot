@@ -2446,7 +2446,6 @@ class STAR(HamiltonLiquidHandler):
     # Get center of source plate. Also gripping height and plate width.
     center = location + resource.center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    plate_width = resource.get_size_x()
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
       plate_width = resource.get_size_x()
     elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
@@ -2545,9 +2544,6 @@ class STAR(HamiltonLiquidHandler):
           acceleration_index=4
         )
       previous_location = location
-
-    if move.rotation != 0:
-      move.resource.rotate(move.rotation)
 
     if use_arm == "iswap":
       await self.iswap_release_picked_up_resource(
