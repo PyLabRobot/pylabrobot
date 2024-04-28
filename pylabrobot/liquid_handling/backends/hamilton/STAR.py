@@ -2430,6 +2430,7 @@ class STAR(HamiltonLiquidHandler):
     self,
     location: Coordinate,
     resource: Resource,
+    rotation: int,
     offset: Coordinate,
     grip_direction: GripDirection,
     pickup_distance_from_top: float,
@@ -2439,17 +2440,25 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ After a resource is picked up, release it at the specified location.
     Low level component of :meth:`move_resource`
+
+    Args:
+      location: The location to release the resource (bottom front left corner).
+      resource: The resource to release.
+      rotation: The rotation of the resource's final orientation wrt the pickup orientation.
+      offset: offset for location
+      grip_direction: The direction of the iswap arm on release.
+      pickup_distance_from_top: How far from the top the resource was picked up.
     """
 
     assert self.iswap_installed, "iswap must be installed"
 
     # Get center of source plate. Also gripping height and plate width.
-    center = location + resource.center() + offset
+    center = location + resource.rotated(rotation).center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.get_size_x()
+      plate_width = resource.rotated(rotation).get_size_x()
     elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.get_size_y()
+      plate_width = resource.rotated(rotation).get_size_y()
     else:
       raise ValueError("Invalid grip direction")
 
@@ -2549,6 +2558,7 @@ class STAR(HamiltonLiquidHandler):
       await self.iswap_release_picked_up_resource(
         location=move.destination,
         resource=move.resource,
+        rotation=move.rotation,
         offset=move.destination_offset,
         grip_direction=move.put_direction,
         pickup_distance_from_top=move.pickup_distance_from_top,

@@ -309,7 +309,7 @@ class Resource:
 
     effective_degrees = degrees % 360
 
-    if effective_degrees == 0 or effective_degrees % 90 != 0:
+    if effective_degrees % 90 != 0:
       raise ValueError(f"Invalid rotation: {degrees}")
 
     for child in self.children:
