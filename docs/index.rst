@@ -34,14 +34,14 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: Liquid handling
 
    basic
    using-the-visualizer
    using-trackers
    writing-robot-agnostic-methods
-
+   hamilton-star/hamilton-star
 
 .. toctree::
    :maxdepth: 1

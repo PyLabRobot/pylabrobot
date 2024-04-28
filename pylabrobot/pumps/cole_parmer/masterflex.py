@@ -31,6 +31,12 @@ class Masterflex(PumpBackend):
     self.ser.write(b"\x05") # Enquiry; ready to send.
     self.ser.write(b"\x05P02\r")
 
+  async def serialize(self):
+    return {
+      "com_port": self.com_port,
+      "ser": self.ser
+      }
+
   async def stop(self):
     assert self.ser is not None, "Pump not initialized"
     self.ser.close()

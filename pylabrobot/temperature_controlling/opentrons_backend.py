@@ -23,7 +23,7 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
 
     Args:
       opentrons_id: Opentrons ID of the temperature module. Get it from
-        `OpentronsTemperatureModuleBackend.list_connected_modules()`.
+        `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
     """
     self.opentrons_id = opentrons_id
 
@@ -32,11 +32,10 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
                          " Only supported on Python 3.10.")
 
   async def setup(self):
-    await super().setup()
+    pass
 
   async def stop(self):
     await self.deactivate()
-    await super().stop()
 
   async def set_temperature(self, temperature: float):
     ot_api.modules.temperature_module_set_temperature(celsius=temperature,

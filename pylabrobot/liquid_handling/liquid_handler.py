@@ -526,7 +526,7 @@ class LiquidHandler(Machine):
       **backend_kwargs,
     )
 
-  async def return_tips(self, **backend_kwargs):
+  async def return_tips(self, use_channels: Optional[list[int]] = None, **backend_kwargs):
     """ Return all tips that are currently picked up to their original place.
 
     Examples:
@@ -546,6 +546,8 @@ class LiquidHandler(Machine):
     channels: List[int] = []
 
     for channel, tracker in self.head.items():
+      if use_channels is not None and channel not in use_channels:
+        continue
       if tracker.has_tip:
         origin = tracker.get_tip_origin()
         if origin is None:
@@ -1554,6 +1556,11 @@ class LiquidHandler(Machine):
 
     result = await self.backend.move_resource(move=move_operation, **backend_kwargs)
 
+    # rotate the resource if the move operation has a rotation.
+    # this code should be expanded to also update the resource's location
+    if move_operation.rotation != 0:
+      move_operation.resource.rotate(move_operation.rotation)
+
     self._trigger_callback(
       "move_resource",
       liquid_handler=self,
@@ -1708,6 +1715,8 @@ class LiquidHandler(Machine):
       put_direction=put_direction,
       **backend_kwargs)
 
+    # Some of the code below should probably be moved to `move_resource` so that is can be shared
+    # with the `move_lid` convenience method.
     plate.unassign()
     if isinstance(to, Coordinate):
       to_location -= self.deck.location # passed as an absolute location, but stored as relative

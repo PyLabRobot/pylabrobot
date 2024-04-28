@@ -139,3 +139,23 @@ def opentrons_24_tuberack_generic_2ml_screwcap(name: str) -> TubeRack:
     version=1
   ))
 
+def opentrons_96_well_aluminum_block(name: str) -> TubeRack:
+  return cast(TubeRack, load_shared_opentrons_resource(
+    definition="opentrons_96_well_aluminum_block",
+    name=name,
+    version=1
+  ))
+
+def opentrons_24_aluminumblock_generic_2ml_screwcap(name: str) -> TubeRack:
+  return cast(TubeRack, load_shared_opentrons_resource(
+    definition="opentrons_24_aluminumblock_generic_2ml_screwcap",
+    name=name,
+    version=2
+  ))
+
+def opentrons_24_aluminumblock_nest_1point5ml_snapcap(name: str) -> TubeRack:
+  return cast(TubeRack, load_shared_opentrons_resource(
+    definition="opentrons_24_aluminumblock_nest_1.5ml_snapcap",
+    name=name,
+    version=1
+  ))
