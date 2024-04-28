@@ -6381,8 +6381,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.17.3 Hotel handling commands --------------
 
-  # TODO:(command:PO) Get plate from hotel
-  # TODO:(command:PI) Put plate to hotel
+  # implemented in UnSafe class
 
   # -------------- 3.17.4 Barcode commands --------------
 
@@ -7000,7 +6999,7 @@ class UnSafe:
     The units of all relevant variables are in 0.1mm
     """
 
-    assert 0 <= hotel_center_x_coord <= 9_999
+    assert 0 <= hotel_center_x_coord <= 99_999
     assert 0 <= hotel_center_y_coord <= 6_500
     assert 0 <= hotel_center_z_coord <= 3_500
     assert 0 <= clearance_height <= 999
@@ -7072,7 +7071,7 @@ class UnSafe:
     The units of all relevant variables are in 0.1mm
     """
 
-    assert 0 <= hotel_center_x_coord <= 9_999
+    assert 0 <= hotel_center_x_coord <= 99_999
     assert 0 <= hotel_center_y_coord <= 6_500
     assert 0 <= hotel_center_z_coord <= 3_500
     assert 0 <= clearance_height <= 999
