@@ -6,7 +6,6 @@ from pylabrobot.machines.machine import Machine
 
 from .backend import ThermocyclerBackend
 
-
 class Thermocycler(Machine):
   """ Thermocycler. """
 

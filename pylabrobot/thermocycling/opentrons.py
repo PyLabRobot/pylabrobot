@@ -1,10 +1,8 @@
-from pylabrobot.resources import Coordinate, ItemizedResource, Tube
-from pylabrobot.resources.itemized_resource import create_equally_spaced
+from pylabrobot.resources.opentrons.module import OTModule
 from pylabrobot.thermocycling.thermocycler import Thermocycler
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerModuleBackend
 
-
-class OpentronsThermocyclerModuleV1(Thermocycler):
+class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
   """ Opentrons thermocycler v1.
 
   https://opentrons.com/products/modules/thermocycler/

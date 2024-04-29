@@ -23,7 +23,6 @@ from pylabrobot.resources import (
   TipSpot
 )
 from pylabrobot.resources.opentrons import OTDeck, OTModule
-from pylabrobot.temperature_controlling import OpentronsTemperatureModuleV2
 from pylabrobot import utils
 
 PYTHON_VERSION = sys.version_info[:2]
