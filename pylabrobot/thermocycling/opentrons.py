@@ -18,10 +18,10 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
       name: Name of the thermocycler module.
       opentrons_id: Opentrons ID of the thermocycler module. Get it from
         `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
+      child: Optional child resource like a well plate to use on the thermocycler module.
     """
 
-    Thermocycler.__init__(
-      self=self,
+    super().__init__(
       name=name,
       size_x=172.0,  # dimensions of entire box = 172.0 mm
       size_y=249.0,  # dimensions of entire box = 249.0 mm
@@ -31,4 +31,8 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
       model="opentrons_thermocycler_module_v1"
     )
 
-    b = OpentronsThermocyclerModuleBackend(opentrons_id=opentrons_id)
+    self.backend = OpentronsThermocyclerModuleBackend(opentrons_id=opentrons_id)
+    self.child = child
+    if child is not None:
+      # todo: maybe allow single tubes or rows of tubes to be specified as child resources
+      self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=0))
