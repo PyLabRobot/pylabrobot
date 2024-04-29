@@ -20,7 +20,7 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
       opentrons_id: Opentrons ID of the temperature module. Get it from
         `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
       child: Optional child resource like a tube rack or well plate to use on the
-        temperature controller module.`
+        temperature controller module.
     """
 
     super().__init__(
