@@ -38,6 +38,8 @@ from pylabrobot.resources import (
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.utils.list import expand
 
+from pylabrobot.resources.errors import HasTipError, NoTipError
+
 from .backends import LiquidHandlerBackend
 from .standard import (
   Pickup,
@@ -367,12 +369,11 @@ class LiquidHandler(Machine):
 
     # queue operations on the trackers
     for channel, op in zip(use_channels, pickups):
-      if does_tip_tracking() and not op.resource.tracker.is_disabled:
+      if does_tip_tracking() and not op.resource.tracker.is_disabled and not self.head[channel].has_tip:
         op.resource.tracker.remove_tip()
       if not does_tip_tracking() and self.head[channel].has_tip:
-        self.head[channel].remove_tip() # override the tip if a tip exists
+        raise HasTipError(f"Channel has tip")
       self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
-      op.resource.tracker.add_tip(op.tip, origin=op.resource, commit=False)
 
     # fix the backend kwargs
     extras = self._check_args(self.backend.pick_up_tips, backend_kwargs,
@@ -380,7 +381,7 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # actually pick up the tips ---- check if there is actually a tip, not jsut a tip spot
+    # actually pick up the tips
     error: Optional[Exception] = None
     try:
       await self.backend.pick_up_tips(ops=pickups, use_channels=use_channels, **backend_kwargs)
@@ -486,7 +487,7 @@ class LiquidHandler(Machine):
 
     # queue operations on the trackers
     for channel, op in zip(use_channels, drops):
-      if does_tip_tracking() and isinstance(op.resource, TipSpot) and \
+      if does_tip_tracking() and isinstance(op.resource, TipSpot) and not op.resource.has_tip and \
           not op.resource.tracker.is_disabled:
         op.resource.tracker.add_tip(op.tip, commit=False)
       self.head[channel].remove_tip()
