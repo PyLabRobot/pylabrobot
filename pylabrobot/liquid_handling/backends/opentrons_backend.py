@@ -23,7 +23,6 @@ from pylabrobot.resources import (
   TipSpot
 )
 from pylabrobot.resources.opentrons import OTDeck, OTModule
-from pylabrobot.temperature_controlling import OpentronsTemperatureModuleV2
 from pylabrobot import utils
 
 PYTHON_VERSION = sys.version_info[:2]
@@ -114,7 +113,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     another resource, such as plates on a temperature controller, and we need to find the slot of
     the parent resource (site). """
 
-    if isinstance(resource.parent, OpentronsTemperatureModuleV2):
+    if isinstance(resource.parent, OTModule):
       return self.defined_labware[resource.parent.name]
 
     slot = None
