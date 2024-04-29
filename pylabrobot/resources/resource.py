@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import itertools
 import json
 import logging
@@ -46,7 +45,7 @@ class Resource:
     size_y: float,
     size_z: float,
     category: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
     self._name = name
     self._size_x = size_x
@@ -59,7 +58,7 @@ class Resource:
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
 
-    self.rotation = 0
+    self.rotation = 0 # TODO: like location, this should be wrt parent
 
     self._will_assign_resource_callbacks: List[WillAssignResourceCallback] = []
     self._did_assign_resource_callbacks: List[DidAssignResourceCallback] = []
@@ -76,6 +75,7 @@ class Resource:
       "size_y": self._size_y,
       "size_z": self._size_z,
       "location": serialize(self.location),
+      "rotation": self.rotation,
       "category": self.category,
       "model": self.model,
       "children": [child.serialize() for child in self.children],
@@ -97,13 +97,6 @@ class Resource:
     if self.parent is not None:
       raise RuntimeError("Cannot change the name of a resource that is assigned.")
     self._name = name
-
-  def copy(self):
-    """ Copy this resource. """
-    if self.parent is not None:
-      raise ValueError("Cannot copy a resource that is assigned to another resource.")
-
-    return copy.deepcopy(self)
 
   def __eq__(self, other):
     return (
@@ -330,14 +323,19 @@ class Resource:
 
     self.rotation = (self.rotation + degrees) % 360
 
-  def rotated(self, degrees: int) -> Self: # type: ignore
+  def copy(self) -> Self:
+    resource_copy = self.__class__.deserialize(self.serialize())
+    resource_copy.load_all_state(self.serialize_all_state())
+    return resource_copy
+
+  def rotated(self, degrees: int) -> Self:
     """ Return a copy of this resource rotated by the given number of degrees.
 
     Args:
       degrees: must be a multiple of 90, but not also 360.
     """
 
-    new_resource = copy.deepcopy(self)
+    new_resource = self.copy()
     new_resource.rotate(degrees)
     return new_resource
 
@@ -467,7 +465,9 @@ class Resource:
     for key in ["type", "parent_name", "location"]: # delete meta keys
       del data_copy[key]
     children_data = data_copy.pop("children")
+    rotation = data_copy.pop("rotation")
     resource = subclass(**data_copy)
+    resource.rotation = rotation
 
     for child_data in children_data:
       child_cls = get_resource_class_from_string(child_data["type"])

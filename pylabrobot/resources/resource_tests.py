@@ -113,6 +113,7 @@ class TestResource(unittest.TestCase):
     self.assertEqual(r.serialize(), {
       "name": "test",
       "location": None,
+      "rotation": 0,
       "size_x": 10,
       "size_y": 10,
       "size_z": 10,
@@ -131,6 +132,7 @@ class TestResource(unittest.TestCase):
     self.assertEqual(r.serialize(), {
       "name": "test",
       "location": None,
+      "rotation": 0,
       "size_x": 10,
       "size_y": 10,
       "size_z": 10,
@@ -142,6 +144,7 @@ class TestResource(unittest.TestCase):
             "type": "Coordinate",
             "x": 5, "y": 5, "z": 5,
           },
+          "rotation": 0,
           "size_x": 1,
           "size_y": 1,
           "size_z": 1,
