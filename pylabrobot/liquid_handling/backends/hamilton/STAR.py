@@ -1087,6 +1087,10 @@ class STAR(HamiltonLiquidHandler):
       id_product=0x8000,
     )
 
+    self.iswap_installed: Optional[bool] = None
+    self.autoload_installed: Optional[bool] = None
+    self.core96_head_installed: Optional[bool] = None
+
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
     self._core_parked: Optional[bool] = None
@@ -2426,6 +2430,7 @@ class STAR(HamiltonLiquidHandler):
     self,
     location: Coordinate,
     resource: Resource,
+    rotation: int,
     offset: Coordinate,
     grip_direction: GripDirection,
     pickup_distance_from_top: float,
@@ -2435,18 +2440,25 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ After a resource is picked up, release it at the specified location.
     Low level component of :meth:`move_resource`
+
+    Args:
+      location: The location to release the resource (bottom front left corner).
+      resource: The resource to release.
+      rotation: The rotation of the resource's final orientation wrt the pickup orientation.
+      offset: offset for location
+      grip_direction: The direction of the iswap arm on release.
+      pickup_distance_from_top: How far from the top the resource was picked up.
     """
 
     assert self.iswap_installed, "iswap must be installed"
 
     # Get center of source plate. Also gripping height and plate width.
-    center = location + resource.center() + offset
+    center = location + resource.rotated(rotation).center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    plate_width = resource.get_size_x()
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.get_size_x()
+      plate_width = resource.rotated(rotation).get_size_x()
     elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.get_size_y()
+      plate_width = resource.rotated(rotation).get_size_y()
     else:
       raise ValueError("Invalid grip direction")
 
@@ -2542,13 +2554,11 @@ class STAR(HamiltonLiquidHandler):
         )
       previous_location = location
 
-    if move.rotation != 0:
-      move.resource.rotate(move.rotation)
-
     if use_arm == "iswap":
       await self.iswap_release_picked_up_resource(
         location=move.destination,
         resource=move.resource,
+        rotation=move.rotation,
         offset=move.destination_offset,
         grip_direction=move.put_direction,
         pickup_distance_from_top=move.pickup_distance_from_top,
@@ -6256,6 +6266,39 @@ class STAR(HamiltonLiquidHandler):
     self._iswap_parked = False
     return command_output
 
+  async def iswap_rotate(
+    self,
+    position: int = 33,
+    gripper_velocity: int = 55_000,
+    gripper_acceleration: int = 170,
+    gripper_protection: Literal[0,1,2,3,4,5,6,7] = 5,
+    wrist_velocity: int = 48_000,
+    wrist_acceleration: int = 145,
+    wrist_protection: Literal[0,1,2,3,4,5,6,7] = 5,
+  ):
+    """
+    Rotate the iswap to a predifined position.
+    Velocity units are "incr/sec"
+    Acceleration units are "1_000 incr/sec**2"
+    For a list of the possible positions see the pylabrobot documentation on the R0 module.
+    """
+    assert 20 <= gripper_velocity <= 75_000
+    assert 5 <= gripper_acceleration <= 200
+    assert 20 <= wrist_velocity <= 65_000
+    assert 20 <= wrist_acceleration <= 200
+
+    return await self.send_command(
+      module="R0",
+      command="PD",
+      pd=position,
+      wv=f"{gripper_velocity:05}",
+      wr=f"{gripper_acceleration:03}",
+      ww=gripper_protection,
+      tv=f"{wrist_velocity:05}",
+      tr=f"{wrist_acceleration:03}",
+      tw=wrist_protection,
+    )
+
   async def move_plate_to_position(
     self,
     x_position: int = 0,
@@ -6348,8 +6391,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.17.3 Hotel handling commands --------------
 
-  # TODO:(command:PO) Get plate from hotel
-  # TODO:(command:PI) Put plate to hotel
+  # implemented in UnSafe class
 
   # -------------- 3.17.4 Barcode commands --------------
 
@@ -6967,7 +7009,7 @@ class UnSafe:
     The units of all relevant variables are in 0.1mm
     """
 
-    assert 0 <= hotel_center_x_coord <= 9_999
+    assert 0 <= hotel_center_x_coord <= 99_999
     assert 0 <= hotel_center_y_coord <= 6_500
     assert 0 <= hotel_center_z_coord <= 3_500
     assert 0 <= clearance_height <= 999
@@ -7039,7 +7081,7 @@ class UnSafe:
     The units of all relevant variables are in 0.1mm
     """
 
-    assert 0 <= hotel_center_x_coord <= 9_999
+    assert 0 <= hotel_center_x_coord <= 99_999
     assert 0 <= hotel_center_y_coord <= 6_500
     assert 0 <= hotel_center_z_coord <= 3_500
     assert 0 <= clearance_height <= 999
@@ -7077,4 +7119,3 @@ class UnSafe:
       xe=f"{high_acceleration_index} {low_acceleration_index}",
       gc=int(fold_up_at_end),
     )
-

@@ -11,11 +11,16 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
 from typing import Optional
 
 from pylabrobot.resources import Coordinate, ItemizedResource
+from pylabrobot.resources.opentrons.module import OTModule
 from pylabrobot.temperature_controlling.temperature_controller import TemperatureController
 from pylabrobot.temperature_controlling.opentrons_backend import OpentronsTemperatureModuleBackend
 
+<<<<<<< HEAD
 class OpentronsTemperatureModuleV2(TemperatureController):
 >>>>>>> upstream/main
+=======
+class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
+>>>>>>> fbbd504e41c47abf7df79eed4de8e1a91e5124c2
   """ Opentrons temperature module v2.
 
   https://opentrons.com/products/modules/temperature/

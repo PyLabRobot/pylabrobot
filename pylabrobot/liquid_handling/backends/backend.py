@@ -46,7 +46,6 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   async def setup(self):
     """ Set up the robot. This method should be called before any other method is called. """
     assert self._deck is not None, "Deck not set"
-    await super().setup()
 
   async def assigned_resource_callback(self, resource: Resource):
     """ Called when a new resource was assigned to the robot.
