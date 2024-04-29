@@ -1,3 +1,6 @@
+from typing import Optional
+
+from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.resources.opentrons.module import OTModule
 from pylabrobot.thermocycling.thermocycler import Thermocycler
 from pylabrobot.thermocycling.opentrons_backend import OpentronsThermocyclerModuleBackend
@@ -8,7 +11,7 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
   https://opentrons.com/products/modules/thermocycler/
   """
 
-  def __init__(self, name: str, opentrons_id: str):
+  def __init__(self, name: str, opentrons_id: str, child: Optional[ItemizedResource] = None):
     """ Create a new Opentrons thermocycler module v1.
 
     Args:
