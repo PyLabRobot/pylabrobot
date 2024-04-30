@@ -173,7 +173,8 @@ class Thermocycler(Machine):
 
 async def run_profile(self, profile: list, block_max_volume: Optional[float]=None):
     """ Run a profile on the thermocycler. A profile is a list of dictionaries with items `temperature` and `duration`
-    that specify individual steps.
+    that specify individual steps inspired from the Opentrons python API:
+    https://docs.opentrons.com/v2/modules/thermocycler.html#thermocycler-profiles
 
     Args:
       profile: A list of steps with keys `temperature` in Celsius and `duration` in seconds. For example:
