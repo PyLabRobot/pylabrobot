@@ -1085,7 +1085,7 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # queue operation on all tip trackers
+    # queue operation on all tip trackers TODO: needs fixing?
     for i, tip_spot in enumerate(tip_rack.get_all_items()):
       if not does_tip_tracking() and self.head96[i].has_tip:
         self.head96[i].remove_tip()
