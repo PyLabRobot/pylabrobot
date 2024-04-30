@@ -19,7 +19,7 @@ class Pickup:
   """ A pickup operation. """
   resource: TipSpot
   offset: Optional[Coordinate]
-  tip: Tip  # TODO: perhaps we can remove this, because the tip spot has the tip? TipSpot also has the function has_tip()
+  tip: Tip # TODO: perhaps we can remove this, because the tip spot has the tip?
 
 
 @dataclass
