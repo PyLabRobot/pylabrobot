@@ -487,7 +487,7 @@ class LiquidHandler(Machine):
 
     # queue operations on the trackers
     for channel, op in zip(use_channels, drops):
-      if does_tip_tracking() and isinstance(op.resource, TipSpot) and not op.resource.has_tip and \
+      if does_tip_tracking() and isinstance(op.resource, TipSpot) and \
           not op.resource.tracker.is_disabled:
         op.resource.tracker.add_tip(op.tip, commit=False)
       self.head[channel].remove_tip()
