@@ -483,17 +483,17 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.backend.clear()
 
   async def test_tip_tracking_double_pickup(self):
-    await self.lh.pick_up_tips(self.tip_rack["A1"])
-
     set_tip_tracking(enabled=True)
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
     with self.assertRaises(HasTipError):
       await self.lh.pick_up_tips(self.tip_rack["A2"])
     await self.lh.drop_tips(self.tip_rack["A1"])
     # pick_up_tips should work even after causing a HasTipError
-    await self.lh.pick_up_tips(self.tip_rack["A2"]) 
+    await self.lh.pick_up_tips(self.tip_rack["A2"])
     await self.lh.drop_tips(self.tip_rack["A2"])
     set_tip_tracking(enabled=False)
 
+    self.lh.clear_head_state()
     with no_tip_tracking():
       await self.lh.pick_up_tips(self.tip_rack["A2"])
 
@@ -589,6 +589,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       with self.assertWarns(UserWarning): # extra kwargs should warn
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[4],
           non_default=True, does_not_exist=True)
+      self.lh.clear_head_state()
       # We override default to False, so this should raise an assertion error. To test whether
       # overriding default to True works.
       with self.assertRaises(AssertionError):
@@ -598,6 +599,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[5])
 
       set_strictness(Strictness.STRICT)
+      self.lh.clear_head_state()
       await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, use_channels=[6])
       with self.assertRaises(TypeError): # cannot have extra kwargs
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[7],
