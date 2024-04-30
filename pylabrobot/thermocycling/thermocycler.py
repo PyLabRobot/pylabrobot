@@ -171,7 +171,7 @@ class Thermocycler(Machine):
     self.target_lid_temperature = None
     return await self.backend.deactivate()
 
-async def run_profile(self, profile: list, block_max_volume: Optional[float]=None):
+  async def run_profile(self, profile: list, block_max_volume: Optional[float]=None):
     """ Run a profile on the thermocycler. A profile is a list of dictionaries with items `temperature` and `duration`
     that specify individual steps inspired from the Opentrons python API:
     https://docs.opentrons.com/v2/modules/thermocycler.html#thermocycler-profiles
@@ -184,5 +184,5 @@ async def run_profile(self, profile: list, block_max_volume: Optional[float]=Non
             {"temperature":72, "duration":60}
           ]
       block_max_volume (optional): Amount of liquid in uL of the most-full well in labware loaded onto the thermocycler.
-    """
+      """
     return await self.backend.run_profile(profile, block_max_volume)
