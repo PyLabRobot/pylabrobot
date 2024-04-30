@@ -20,7 +20,7 @@ class SaverBackend(LiquidHandlerBackend):
     self.commands_received = []
 
   async def stop(self):
-    await super().stop()
+    pass
 
   def serialize(self) -> dict:
     return {**super().serialize(), "num_channels": self.num_channels}

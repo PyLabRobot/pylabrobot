@@ -44,12 +44,11 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     raise NotImplementedError
 
   async def setup(self):
-    await self.send_command(command="setup")
     await super().setup()
+    await self.send_command(command="setup")
 
   async def stop(self):
     await self.send_command(command="stop")
-    await super().stop()
 
   def serialize(self) -> dict:
     return {**super().serialize(), "num_channels": self.num_channels}

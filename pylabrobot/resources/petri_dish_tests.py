@@ -19,6 +19,7 @@ class TestPetriDish(unittest.TestCase):
       "type": "PetriDish",
       "children": [],
       "location": None,
+      "rotation": 0,
       "max_volume": 121500.0,
       "model": None,
     })
@@ -36,6 +37,7 @@ class TestPetriDish(unittest.TestCase):
       "type": "PetriDishHolder",
       "children": [],
       "location": None,
+      "rotation": 0,
       "model": None,
     })
 
@@ -48,6 +50,7 @@ class TestPetriDish(unittest.TestCase):
       "size_z": 14.5,
       "children": [],
       "location": None,
+      "rotation": 0,
       "model": None,
       "type": "PetriDishHolder",
       "parent_name": None,
@@ -78,10 +81,12 @@ class TestPetriDish(unittest.TestCase):
             "y": 0.0,
             "z": 0.0,
           },
+          "rotation": 0,
           "model": None,
         }
       ],
       "location": None,
+      "rotation": 0,
       "model": None,
       "type": "PetriDishHolder",
       "parent_name": None,

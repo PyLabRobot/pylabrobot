@@ -23,7 +23,7 @@ def _mock_define(lw):
     }
   }
 
-def _mock_add(load_name, namespace, slot, version, labware_id, display_name):
+def _mock_add(load_name, namespace, ot_location, version, labware_id, display_name):
   # pylint: disable=unused-argument
   return labware_id
 

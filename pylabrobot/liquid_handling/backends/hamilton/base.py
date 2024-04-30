@@ -58,6 +58,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, float]] = {}
     self._tth2tti: dict[int, int] = {} # hash to tip type index
 
+  async def setup(self):
+    await LiquidHandlerBackend.setup(self)
+    await USBBackend.setup(self)
+
   async def stop(self):
     self._waiting_tasks.clear()
     await super().stop()

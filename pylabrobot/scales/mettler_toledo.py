@@ -132,14 +132,12 @@ class MettlerToledoWXS205SDU(ScaleBackend):
     self.ser: Optional[serial.Serial] = None
 
   async def setup(self) -> None:
-    await super().setup()
     self.ser = serial.Serial(self.port, baudrate=9600, timeout=1)
 
     # set output unit to grams
     await self.send_command("M21 0 0")
 
   async def stop(self) -> None:
-    await super().stop()
     if self.ser is not None:
       self.ser.close()
       self.ser = None

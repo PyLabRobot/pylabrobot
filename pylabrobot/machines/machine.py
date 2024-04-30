@@ -25,6 +25,7 @@ def need_setup_finished(func: Callable):
     return await func(self, *args, **kwargs)
   return wrapper
 
+
 class Machine(Resource, metaclass=ABCMeta):
   """ Abstract class for machine frontends. All Machines are Resources. """
 

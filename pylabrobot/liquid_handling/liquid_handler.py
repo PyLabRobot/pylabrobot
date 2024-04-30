@@ -15,6 +15,7 @@ import warnings
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.errors import ChannelizedError
+from pylabrobot.resources.errors import HasTipError
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
   Container,
@@ -367,10 +368,10 @@ class LiquidHandler(Machine):
 
     # queue operations on the trackers
     for channel, op in zip(use_channels, pickups):
+      if self.head[channel].has_tip:
+        raise HasTipError("Channel has tip")
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
         op.resource.tracker.remove_tip()
-      if not does_tip_tracking() and self.head[channel].has_tip:
-        self.head[channel].remove_tip() # override the tip if a tip exists
       self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
 
     # fix the backend kwargs
@@ -1555,6 +1556,11 @@ class LiquidHandler(Machine):
 
     result = await self.backend.move_resource(move=move_operation, **backend_kwargs)
 
+    # rotate the resource if the move operation has a rotation.
+    # this code should be expanded to also update the resource's location
+    if move_operation.rotation != 0:
+      move_operation.resource.rotate(move_operation.rotation)
+
     self._trigger_callback(
       "move_resource",
       liquid_handler=self,
@@ -1709,6 +1715,8 @@ class LiquidHandler(Machine):
       put_direction=put_direction,
       **backend_kwargs)
 
+    # Some of the code below should probably be moved to `move_resource` so that is can be shared
+    # with the `move_lid` convenience method.
     plate.unassign()
     if isinstance(to, Coordinate):
       to_location -= self.deck.location # passed as an absolute location, but stored as relative
