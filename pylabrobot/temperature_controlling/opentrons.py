@@ -30,7 +30,7 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
       size_z=84.0, # height without any aluminum block
       backend=OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id),
       category="temperature_controller",
-      model="opentrons_temperature_module_v2"
+      model="temperatureModuleV2"  # Must match OT moduleModel in list_connected_modules()
     )
 
     self.backend = OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id)
