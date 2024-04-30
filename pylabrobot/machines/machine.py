@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Optional, Callable, Type
 
 from pylabrobot.machines.backends import MachineBackend
-from pylabrobot.resources import Resource
+from pylabrobot.resources import Resource, get_resource_class_from_string
 
 import functools
 
@@ -57,30 +57,7 @@ class Machine(Resource, metaclass=ABCMeta):
   def deserialize(cls, data: dict):
     data_copy = data.copy() # copy data because we will be modifying it
     backend_data = data_copy.pop("backend")
-
-    def find_subclass(
-      class_name: str,
-      cls: Type[MachineBackend] = MachineBackend
-    ) -> Optional[Type[MachineBackend]]:
-      """ Recursively find a MachineBackend with the correct name.
-
-      Args:
-        class_name: The name of the class to find.
-        cls: The class to search in.
-
-      Returns:
-        The class with the given name, or `None` if no such class exists.
-      """
-
-      if cls.__name__ == class_name:
-        return cls
-      for subclass in cls.__subclasses__():
-        subclass_ = find_subclass(class_name=class_name, cls=subclass)
-        if subclass_ is not None:
-          return subclass_
-      return None
-
-    backend_subclass = find_subclass(backend_data["type"])
+    backend_subclass = get_resource_class_from_string(backend_data["type"], cls = MachineBackend)
     if backend_subclass is None:
       raise ValueError(f"Could not find subclass with name '{backend_data['type']}'")
     if issubclass(backend_subclass, ABCMeta):
