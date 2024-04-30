@@ -53,5 +53,5 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """ Deactivate the thermocycler (turn of heat)"""
 
   @abstractmethod
-  async def run_profule(self, profile: list, block_max_volume: float):
+  async def run_profile(self, profile: list, block_max_volume: float):
     """ Run a thermocycler profile """
