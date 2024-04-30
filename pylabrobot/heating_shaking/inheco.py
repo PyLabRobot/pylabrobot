@@ -37,7 +37,7 @@ class InhecoThermoShake(HeaterShakerBackend):
       "vid": self.vid,
       "pid": self.pid,
       "serial_number": self.serial_number
-      }
+    }
 
   @typing.no_type_check
   def _generate_packets(self, msg):
