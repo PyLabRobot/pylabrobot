@@ -150,7 +150,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       assert isinstance(ot_location, int)
       ot_api.modules.load_module(
         slot=ot_location,
-        model="temperatureModuleV2",
+        model=resource.model,
         module_id=resource.backend.opentrons_id # type: ignore
       )
 
