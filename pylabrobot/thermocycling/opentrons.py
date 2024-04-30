@@ -11,14 +11,13 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
   https://opentrons.com/products/modules/thermocycler/
   """
 
-  def __init__(self, name: str, opentrons_id: str, child: Optional[ItemizedResource] = None):
+  def __init__(self, name: str, opentrons_id: str):
     """ Create a new Opentrons thermocycler module v1.
 
     Args:
       name: Name of the thermocycler module.
       opentrons_id: Opentrons ID of the thermocycler module. Get it from
         `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
-      child: Optional child resource like a well plate to use on the thermocycler module.
     """
 
     super().__init__(
@@ -32,7 +31,8 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
     )
 
     self.backend = OpentronsThermocyclerModuleBackend(opentrons_id=opentrons_id)
+    child = ItemizedResource()  # todo implement custom resource
     self.child = child
     if child is not None:
       # todo: maybe allow single tubes or rows of tubes to be specified as child resources
-      self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=500))
+      self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=0))
