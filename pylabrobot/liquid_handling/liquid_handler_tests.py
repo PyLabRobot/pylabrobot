@@ -489,7 +489,8 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(HasTipError):
       await self.lh.pick_up_tips(self.tip_rack["A2"])
     await self.lh.drop_tips(self.tip_rack["A1"])
-    await self.lh.pick_up_tips(self.tip_rack["A2"]) # pick_up_tips should be able to work even after causing a HasTipError
+    # pick_up_tips should work even after causing a HasTipError
+    await self.lh.pick_up_tips(self.tip_rack["A2"]) 
     await self.lh.drop_tips(self.tip_rack["A2"])
     set_tip_tracking(enabled=False)
 

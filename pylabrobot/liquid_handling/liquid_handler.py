@@ -369,7 +369,7 @@ class LiquidHandler(Machine):
     # queue operations on the trackers
     for channel, op in zip(use_channels, pickups):
       if self.head[channel].has_tip:
-        raise HasTipError(f"Channel has tip")
+        raise HasTipError("Channel has tip")
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
         op.resource.tracker.remove_tip()
       self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
@@ -1085,7 +1085,7 @@ class LiquidHandler(Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    # queue operation on all tip trackers TODO: needs fixing?
+    # queue operation on all tip trackers
     for i, tip_spot in enumerate(tip_rack.get_all_items()):
       if not does_tip_tracking() and self.head96[i].has_tip:
         self.head96[i].remove_tip()
