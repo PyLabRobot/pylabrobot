@@ -28,11 +28,11 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
       size_z=155.0,
       backend=OpentronsThermocyclerModuleBackend(opentrons_id=opentrons_id),
       category="thermocycler",
-      model="opentrons_thermocycler_module_v1"
+      model="thermocyclerModuleV1"
     )
 
     self.backend = OpentronsThermocyclerModuleBackend(opentrons_id=opentrons_id)
     self.child = child
     if child is not None:
       # todo: maybe allow single tubes or rows of tubes to be specified as child resources
-      self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=0))
+      self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=500))
