@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import Optional, Callable
+from typing import Optional, Callable, Type
 
 from pylabrobot.machines.backends import MachineBackend
 from pylabrobot.resources import Resource
@@ -47,6 +47,48 @@ class Machine(Resource, metaclass=ABCMeta):
   @property
   def setup_finished(self) -> bool:
     return self._setup_finished
+
+  def serialize(self) -> dict:
+    return {**super().serialize(),
+            "backend": self.backend.serialize()}
+
+  @classmethod
+  def deserialize(cls, data: dict):
+    data_copy = data.copy() # copy data because we will be modifying it
+    backend_data = data_copy.pop("backend")
+
+    def find_subclass(
+      class_name: str,
+      cls: Type[MachineBackend] = MachineBackend
+    ) -> Optional[Type[MachineBackend]]:
+      """ Recursively find a MachineBackend with the correct name.
+
+      Args:
+        class_name: The name of the class to find.
+        cls: The class to search in.
+
+      Returns:
+        The class with the given name, or `None` if no such class exists.
+      """
+
+      if cls.__name__ == class_name:
+        return cls
+      for subclass in cls.__subclasses__():
+        subclass_ = find_subclass(class_name=class_name, cls=subclass)
+        if subclass_ is not None:
+          return subclass_
+      return None
+
+    backend_subclass = find_subclass(backend_data["type"])
+    if backend_subclass is None:
+      raise ValueError(f"Could not find subclass with name '{backend_data['type']}'")
+    if issubclass(backend_subclass, ABCMeta):
+      raise ValueError(f"Subclass with name '{backend_data['type']}' is abstract")
+    assert issubclass(backend_subclass, MachineBackend)
+    del backend_data["type"]
+    backend = backend_subclass(**backend_data) # pylint: disable=abstract-class-instantiated
+    data_copy["backend"] = backend
+    return super().deserialize(data_copy)
 
   async def setup(self):
     await self.backend.setup()

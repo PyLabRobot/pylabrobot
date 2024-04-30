@@ -62,6 +62,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     self._waiting_tasks.clear()
     await super().stop()
 
+  def serialize(self) -> dict:
+    usb_backend_serialized = USBBackend.serialize(self)
+    liquid_handler_serialized = LiquidHandlerBackend.serialize(self)
+    return {**usb_backend_serialized, **liquid_handler_serialized}
+
   @property
   @abstractmethod
   def module_id_length(self) -> int:

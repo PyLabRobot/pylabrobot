@@ -242,3 +242,17 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     logging.warning("Closing connection to USB device.")
     usb.util.dispose_resources(self.dev)
     self.dev = None
+
+  def serialize(self) -> dict:
+    """ Serialize the backend to a dictionary. """
+
+    return {
+      **super().serialize(),
+      "id_vendor": self.id_vendor,
+      "id_product": self.id_product,
+      "address": self.address,
+      "serial_number": self.serial_number,
+      "packet_read_timeout": self.packet_read_timeout,
+      "read_timeout": self.read_timeout,
+      "write_timeout": self.write_timeout
+    }

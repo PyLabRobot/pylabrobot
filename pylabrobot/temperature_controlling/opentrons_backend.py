@@ -38,6 +38,9 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
     await self.deactivate()
     await super().stop()
 
+  def serialize(self) -> dict:
+    return {**super().serialize(), "opentrons_id": self.opentrons_id}
+
   async def set_temperature(self, temperature: float):
     ot_api.modules.temperature_module_set_temperature(celsius=temperature,
                                                       module_id=self.opentrons_id)

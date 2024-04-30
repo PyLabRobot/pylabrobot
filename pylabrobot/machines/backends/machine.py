@@ -11,3 +11,6 @@ class MachineBackend(ABC):
   @abstractmethod
   async def stop(self):
     pass
+
+  def serialize(self) -> dict:
+    return {"type": self.__class__.__name__}

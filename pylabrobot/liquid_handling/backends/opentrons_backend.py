@@ -113,9 +113,9 @@ class OpentronsBackend(LiquidHandlerBackend):
     await super().stop()
 
   def _get_resource_ot_location(self, resource: Resource) -> Union[str, int]:
-    """ Get the ultimate location of a given resource. Some resources are assigned to another resource,
-    such as a temperature controller, and we need to find the slot of the parent resource. Nesting
-    may be deeper than one level, so we need to traverse the tree from the bottom up. """
+    """ Get the ultimate location of a given resource. Some resources are assigned to another
+    resource, such as a temperature controller, and we need to find the slot of the parent resource.
+    Nesting may be deeper than one level, so we need to traverse the tree from the bottom up. """
 
     if isinstance(resource.parent, OpentronsTemperatureModuleV2):
       return self.defined_labware[resource.parent.name]

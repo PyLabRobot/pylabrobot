@@ -51,6 +51,9 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.send_command(command="stop")
     await super().stop()
 
+  def serialize(self) -> dict:
+    return {**super().serialize(), "num_channels": self.num_channels}
+
   async def assigned_resource_callback(self, resource: Resource):
     await self.send_command(command="resource_assigned", data={"resource": resource.serialize(),
       "parent_name": (resource.parent.name if resource.parent else None)})
