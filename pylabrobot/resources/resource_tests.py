@@ -113,6 +113,7 @@ class TestResource(unittest.TestCase):
     self.assertEqual(r.serialize(), {
       "name": "test",
       "location": None,
+      "rotation": 0,
       "size_x": 10,
       "size_y": 10,
       "size_z": 10,
@@ -131,6 +132,7 @@ class TestResource(unittest.TestCase):
     self.assertEqual(r.serialize(), {
       "name": "test",
       "location": None,
+      "rotation": 0,
       "size_x": 10,
       "size_y": 10,
       "size_z": 10,
@@ -142,6 +144,7 @@ class TestResource(unittest.TestCase):
             "type": "Coordinate",
             "x": 5, "y": 5, "z": 5,
           },
+          "rotation": 0,
           "size_x": 1,
           "size_y": 1,
           "size_z": 1,
@@ -220,12 +223,6 @@ class TestResource(unittest.TestCase):
 
     with self.assertRaises(ValueError):
       r.rotate(45)
-
-    with self.assertRaises(ValueError):
-      r.rotate(360)
-
-    with self.assertRaises(ValueError):
-      r.rotate(0)
 
   def test_multiple_rotations(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
