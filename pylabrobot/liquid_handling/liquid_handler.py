@@ -15,6 +15,7 @@ import warnings
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.errors import ChannelizedError
+from pylabrobot.resources.errors import HasTipError
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
   Container,
@@ -367,10 +368,10 @@ class LiquidHandler(Machine):
 
     # queue operations on the trackers
     for channel, op in zip(use_channels, pickups):
+      if self.head[channel].has_tip:
+        raise HasTipError("Channel has tip")
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
         op.resource.tracker.remove_tip()
-      if not does_tip_tracking() and self.head[channel].has_tip:
-        self.head[channel].remove_tip() # override the tip if a tip exists
       self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
 
     # fix the backend kwargs
