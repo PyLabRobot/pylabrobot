@@ -108,12 +108,12 @@ class Thermocycler(Machine):
 
   async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5):
     """ Wait for the temperature to reach the target temperature. The target temperature must be
-        set by `set_temperature()`.
+      set by `set_temperature()`.
 
-        Args:
-          timeout: Timeout in seconds.
-          tolerance: Tolerance in Celsius.
-        """
+      Args:
+        timeout: Timeout in seconds.
+        tolerance: Tolerance in Celsius.
+      """
     if self.target_temperature is None:
       raise RuntimeError("Target temperature is not set.")
     start = time.time()
@@ -170,3 +170,18 @@ class Thermocycler(Machine):
     self.target_block_temperature = None
     self.target_lid_temperature = None
     return await self.backend.deactivate()
+
+async def run_profile(self, profile: list, block_max_volume: Optional[float]=None):
+    """ Run a profile on the thermocycler. A profile is a list of dictionaries with items `temperature` and `duration`
+    that specify individual steps.
+
+    Args:
+      profile: A list of steps with keys `temperature` in Celsius and `duration` in seconds. For example:
+        profile = [
+            {"temperature":95, "duration":30},
+            {"temperature":57, "duration":30},
+            {"temperature":72, "duration":60}
+          ]
+      block_max_volume (optional): Amount of liquid in uL of the most-full well in labware loaded onto the thermocycler.
+    """
+    return await self.backend.run_profile(profile, block_max_volume)

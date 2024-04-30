@@ -1,5 +1,5 @@
 import sys
-from typing import cast
+from typing import cast, Optional
 
 from pylabrobot.thermocycling.backend import ThermocyclerBackend
 
@@ -53,16 +53,20 @@ class OpentronsThermocyclerModuleBackend(ThermocyclerBackend):
 
   async def set_temperature(self, temperature: float):
     """ Acceptable target temperatures are between 37 and 110 °C. """
-    ot_api.modules.thermocycler_set_lid_temperature(celsius=temperature, module_id=self.opentrons_id)
-    ot_api.modules.thermocycler_set_block_temperature(celsius=temperature, module_id=self.opentrons_id)
+    ot_api.modules.thermocycler_set_lid_temperature(celsius=temperature,
+                                                    module_id=self.opentrons_id)
+    ot_api.modules.thermocycler_set_block_temperature(celsius=temperature,
+                                                      module_id=self.opentrons_id)
 
   async  def set_lid_temperature(self, temperature: float):
     """ Acceptable target temperatures are between 37 and 110 °C. """
-    ot_api.modules.thermocycler_set_lid_temperature(celsius=temperature, module_id=self.opentrons_id)
+    ot_api.modules.thermocycler_set_lid_temperature(celsius=temperature,
+                                                    module_id=self.opentrons_id)
 
   async  def set_block_temperature(self, temperature: float):
     """ Acceptable target temperatures are between 37 and 110 °C. """
-    ot_api.modules.thermocycler_set_block_temperature(celsius=temperature, module_id=self.opentrons_id)
+    ot_api.modules.thermocycler_set_block_temperature(celsius=temperature,
+                                                      module_id=self.opentrons_id)
 
   async  def get_temperature(self):
     modules = ot_api.modules.list_connected_modules()
@@ -90,3 +94,17 @@ class OpentronsThermocyclerModuleBackend(ThermocyclerBackend):
   async  def deactivate(self):
     ot_api.modules.thermocycler_deactivate_lid(module_id=self.opentrons_id)
     ot_api.modules.thermocycler_deactivate_block(module_id=self.opentrons_id)
+
+  async def run_profile(self, profile: list, block_max_volume: Optional[float] = None):
+    # Transform the profile to use the key names required by the Opentrons HTTP API
+    transformed_profile = [
+      {"celsius": step["temperature"], "holdSeconds": step["duration"]}
+      for step in profile
+    ]
+
+    if block_max_volume is None:
+      block_max_volume = 25  # Opentrons default block_max_volume is 25uL
+      # https://docs.opentrons.com/v2/modules/thermocycler.html#thermocycler-profiles
+    ot_api.modules.thermocycler_run_profile(profile=transformed_profile,
+                                            block_max_volume=block_max_volume,
+                                            module_id=self.opentrons_id)
