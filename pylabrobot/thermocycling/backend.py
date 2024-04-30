@@ -29,15 +29,15 @@ class ThermocyclerBackend(MachineBackend, metaclass=ABCMeta):
     """ Set the block temperature of the thermocycler in Celsius. """
 
   @abstractmethod
-  async def get_current_temperature(self) -> float:
+  async def get_temperature(self) -> float:
     """ Get the current temperature of the thermocycler in Celsius """
 
   @abstractmethod
-  async def get_current_lid_temperature(self) -> float:
+  async def get_lid_temperature(self) -> float:
     """ Get the current lid temperature of the thermocycler in Celsius """
 
   @abstractmethod
-  async def get_current_block_temperature(self) -> float:
+  async def get_block_temperature(self) -> float:
     """ Get the current block temperature of the thermocycler in Celsius """
 
   @abstractmethod

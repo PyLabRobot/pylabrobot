@@ -70,29 +70,83 @@ class Thermocycler(Machine):
     self.target_block_temperature = temperature
     return await self.backend.set_block_temperature(temperature)
 
-  async def get_current_temperature(self) -> float:
+  async def wait_for_lid_temperature(self, timeout: float = 300.0, tolerance: float = 0.5):
+    """ Wait for the lid temperature to reach the target temperature. The target temperature must be
+    set by `set_lid_temperature()`.
+
+    Args:
+      timeout: Timeout in seconds.
+      tolerance: Tolerance in Celsius.
+    """
+    if self.target_lid_temperature is None:
+      raise RuntimeError("Target temperature is not set.")
+    start = time.time()
+    while time.time() - start < timeout:
+      temperature = await self.get_lid_temperature()
+      if abs(temperature - self.target_temperature) < tolerance:
+        return
+      await asyncio.sleep(1.0)
+    raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
+
+  async def wait_for_block_temperature(self, timeout: float = 300.0, tolerance: float = 0.5):
+    """ Wait for the block temperature to reach the target temperature. The target temperature must be
+    set by `set_block_temperature()`.
+
+    Args:
+      timeout: Timeout in seconds.
+      tolerance: Tolerance in Celsius.
+    """
+    if self.target_block_temperature is None:
+      raise RuntimeError("Target temperature is not set.")
+    start = time.time()
+    while time.time() - start < timeout:
+      temperature = await self.get_lid_temperature()
+      if abs(temperature - self.target_temperature) < tolerance:
+        return
+      await asyncio.sleep(1.0)
+    raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
+
+  async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5):
+    """ Wait for the temperature to reach the target temperature. The target temperature must be
+        set by `set_temperature()`.
+
+        Args:
+          timeout: Timeout in seconds.
+          tolerance: Tolerance in Celsius.
+        """
+    if self.target_temperature is None:
+      raise RuntimeError("Target temperature is not set.")
+    start = time.time()
+    while time.time() - start < timeout:
+      temperature = await self.get_temperature()
+      if abs(temperature - self.target_temperature) < tolerance:
+        return
+      await asyncio.sleep(1.0)
+    raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
+
+  async def get_temperature(self) -> float:
     """ Get the current temperature of the thermocycler in Celsius.
 
     Returns:
       Temperature in Celsius.
     """
-    return await self.backend.get_current_temperature()
+    return await self.backend.get_temperature()
 
-  async def get_current_lid_temperature(self) -> float:
+  async def get_lid_temperature(self) -> float:
     """ Get the current lid temperature of the thermocycler in Celsius.
 
     Returns:
       Temperature in Celsius.
     """
-    return await self.backend.get_current_lid_temperature()
+    return await self.backend.get_lid_temperature()
 
-  async def get_current_block_temperature(self) -> float:
+  async def get_block_temperature(self) -> float:
     """ Get the current block temperature of the thermocycler in Celsius.
 
     Returns:
       Temperature in Celsius.
     """
-    return await self.backend.get_current_block_temperature()
+    return await self.backend.get_block_temperature()
 
   async def deactivate_lid(self):
     """ Deactivate the lid of the thermocycler (turns off heat). This will stop the heating

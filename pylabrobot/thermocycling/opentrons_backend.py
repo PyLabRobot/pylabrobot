@@ -52,30 +52,33 @@ class OpentronsThermocyclerModuleBackend(ThermocyclerBackend):
     raise RuntimeError(f"Module with id '{self.opentrons_id}' not found")
 
   async def set_temperature(self, temperature: float):
-    ot_api.modules.thermocycler_set_lid_temperature_module(celsius=temperature, module_id=self.opentrons_id)
-    ot_api.modules.thermocycler_set_block_temperature_module(celsius=temperature, module_id=self.opentrons_id)
+    """ Acceptable target temperatures are between 37 and 110 °C. """
+    ot_api.modules.thermocycler_set_lid_temperature(celsius=temperature, module_id=self.opentrons_id)
+    ot_api.modules.thermocycler_set_block_temperature(celsius=temperature, module_id=self.opentrons_id)
 
   async  def set_lid_temperature(self, temperature: float):
+    """ Acceptable target temperatures are between 37 and 110 °C. """
     ot_api.modules.thermocycler_set_lid_temperature(celsius=temperature, module_id=self.opentrons_id)
 
   async  def set_block_temperature(self, temperature: float):
+    """ Acceptable target temperatures are between 37 and 110 °C. """
     ot_api.modules.thermocycler_set_block_temperature(celsius=temperature, module_id=self.opentrons_id)
 
-  async  def get_current_temperature(self):
+  async  def get_temperature(self):
     modules = ot_api.modules.list_connected_modules()
     for module in modules:
       if module["id"] == self.opentrons_id:
         return cast(float, module["data"]["currentTemperature"])
     raise RuntimeError(f"Module with id '{self.opentrons_id}' not found")
 
-  async  def get_current_lid_temperature(self):
+  async  def get_lid_temperature(self):
     modules = ot_api.modules.list_connected_modules()
     for module in modules:
       if module["id"] == self.opentrons_id:
         return cast(float, module["data"]["lidTemperature"])
     raise RuntimeError(f"Module with id '{self.opentrons_id}' not found")
 
-  async  def get_current_block_temperature(self):
+  async  def get_block_temperature(self):
     raise NotImplementedError(f"Block temperature data not available for Opentrons")
 
   async  def deactivate_lid(self):
