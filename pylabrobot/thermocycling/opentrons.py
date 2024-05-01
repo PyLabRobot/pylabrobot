@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.resources.opentrons.module import OTModule
 from pylabrobot.thermocycling.thermocycler import Thermocycler
@@ -12,7 +10,9 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
   """
 
   def __init__(self, name: str, opentrons_id: str):
-    """ Create a new Opentrons thermocycler module v1.
+    """ Create a new Opentrons thermocycler module v1. Currently, the child resource
+    on the thermocycler requires a custom implementation to prevent the pipette head
+    from crashing into the side of the well plate. This implementation...
 
     Args:
       name: Name of the thermocycler module.
