@@ -21,14 +21,7 @@ class TestMachine(unittest.TestCase):
       return {**super().serialize(), "mock_param": self.mock_param}
 
   class MockMachine(Machine):
-    def __init__(self, # pylint: disable=useless-parent-delegation
-                 name,
-                 size_x,
-                 size_y, size_z,
-                 backend,
-                 category=None,
-                 model=None):
-      super().__init__(name, size_x, size_y, size_z, backend, category, model)
+    pass
 
   def test_serialize(self):
     m = self.MockMachine(name="test",

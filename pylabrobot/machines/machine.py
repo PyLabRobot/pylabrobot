@@ -29,7 +29,6 @@ def need_setup_finished(func: Callable):
 class Machine(Resource, metaclass=ABCMeta):
   """ Abstract class for machine frontends. All Machines are Resources. """
 
-  @abstractmethod
   def __init__(
     self,
     name: str,
