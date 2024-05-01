@@ -32,13 +32,9 @@ class AgrowPumpArray(PumpArrayBackend):
     if not isinstance(port, str):
       raise ValueError("Port must be a string")
     self.port = port
-    if not isinstance(address, int):
-      raise ValueError("Pump address must be an integer or convertible to an integer")
-    else:
-      address = int(address)
     if address not in range(0, 256):
       raise ValueError("Pump address out of range")
-    self.address = address
+    self.address = int(address)
     self._keep_alive_thread: Optional[threading.Thread] = None
     self._pump_index_to_address: Optional[Dict[int, int]] = None
     self._modbus: Optional[AsyncModbusSerialClient] = None
