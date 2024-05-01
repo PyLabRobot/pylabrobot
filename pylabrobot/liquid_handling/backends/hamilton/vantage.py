@@ -867,7 +867,7 @@ class Vantage(HamiltonLiquidHandler):
       y_position=int(position.y * 10),
       tip_type=ttti,
       tip_handling_method=tip_handling_method,
-      z_deposit_position=int(z_deposit_position),
+      z_deposit_position=z_deposit_position,
       minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
         int(self._traversal_height*10),
       minimal_height_at_command_end=minimal_height_at_command_end or
@@ -894,7 +894,7 @@ class Vantage(HamiltonLiquidHandler):
     return await self.core96_tip_discard(
       x_position=int(position.x * 10),
       y_position=int(position.y * 10),
-      z_deposit_position=int(z_deposit_position),
+      z_deposit_position=z_deposit_position,
       minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
         int(self._traversal_height * 10),
       minimal_height_at_command_end=minimal_height_at_command_end or int(self._traversal_height*10)
