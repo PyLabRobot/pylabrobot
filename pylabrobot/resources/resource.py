@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Type, cast
 from .coordinate import Coordinate
 from .errors import ResourceNotFoundError
 from pylabrobot.serializer import serialize, deserialize
+from pylabrobot.utils.object_parsing import find_subclass
 
 if sys.version_info >= (3, 11):
   from typing import Self
@@ -457,7 +458,7 @@ class Resource:
 
     data_copy = data.copy() # copy data because we will be modifying it
 
-    subclass = get_resource_class_from_string(data["type"])
+    subclass = find_subclass(data["type"], cls=Resource)
     if subclass is None:
       raise ValueError(f"Could not find subclass with name '{data['type']}'")
     assert issubclass(subclass, cls) # mypy does not know the type after the None check...
@@ -470,7 +471,7 @@ class Resource:
     resource.rotation = rotation
 
     for child_data in children_data:
-      child_cls = get_resource_class_from_string(child_data["type"])
+      child_cls = find_subclass(child_data["type"], cls=Resource)
       if child_cls is None:
         raise ValueError(f"Could not find subclass with name {child_data['type']}")
       child = child_cls.deserialize(child_data)
@@ -642,26 +643,3 @@ class Resource:
   def _state_updated(self):
     for callback in self._resource_state_updated_callbacks:
       callback(self.serialize_state())
-
-
-def get_resource_class_from_string(
-  class_name: str,
-  cls: Type[Resource] = Resource
-) -> Optional[Type[Resource]]:
-  """ Recursively find a subclass with the correct name.
-
-  Args:
-    class_name: The name of the class to find.
-    cls: The class to search in.
-
-  Returns:
-    The class with the given name, or `None` if no such class exists.
-  """
-
-  if cls.__name__ == class_name:
-    return cls
-  for subclass in cls.__subclasses__():
-    subclass_ = get_resource_class_from_string(class_name=class_name, cls=subclass)
-    if subclass_ is not None:
-      return subclass_
-  return None

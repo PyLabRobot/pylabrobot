@@ -758,9 +758,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
      DROP_TIP_FORMAT)
 
   def test_serialize(self):
-    serialized = STAR().serialize()
-    deserialized = LiquidHandlerBackend.deserialize(serialized)
-    self.assertEqual(deserialized.__class__.__name__, "STAR")
+    serialized = LiquidHandler(backend=STAR(), deck=STARLetDeck()).serialize()
+    deserialized = LiquidHandler.deserialize(serialized)
+    self.assertEqual(deserialized.__class__.__name__, "LiquidHandler")
+    self.assertEqual(deserialized.backend.__class__.__name__, "STAR")
 
   async def test_move_core(self):
     await self.lh.move_plate(self.plate, self.plt_car[1], pickup_distance_from_top=13,

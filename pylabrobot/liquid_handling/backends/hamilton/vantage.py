@@ -324,6 +324,7 @@ class Vantage(HamiltonLiquidHandler):
   def __init__(
     self,
     device_address: Optional[int] = None,
+    serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -331,8 +332,9 @@ class Vantage(HamiltonLiquidHandler):
     """ Create a new STAR interface.
 
     Args:
-      device_address: the USB device address of the Hamilton STAR. Only useful if using more than
+      device_address: the USB device address of the Hamilton Vantage. Only useful if using more than
         one Hamilton machine over USB.
+      serial_number: the serial number of the Hamilton Vantage.
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
       write_timeout: timeout in seconds for writing a command.
@@ -344,7 +346,8 @@ class Vantage(HamiltonLiquidHandler):
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
-      id_product=0x8003)
+      id_product=0x8003,
+      serial_number=serial_number)
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
