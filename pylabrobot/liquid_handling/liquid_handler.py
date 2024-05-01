@@ -12,7 +12,7 @@ import threading
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
 
-from pylabrobot.machines.machine import Machine, MachineBackend, need_setup_finished
+from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.resources.errors import HasTipError
@@ -1764,7 +1764,7 @@ class LiquidHandler(Machine):
 
     deck_data = data["children"][0]
     deck = Deck.deserialize(data=deck_data)
-    backend = MachineBackend.deserialize(data=data["backend"])
+    backend = LiquidHandlerBackend.deserialize(data=data["backend"])
     return cls(deck=deck, backend=backend)
 
   @classmethod
