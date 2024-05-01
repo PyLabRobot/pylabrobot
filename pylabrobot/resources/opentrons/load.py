@@ -167,7 +167,7 @@ def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack, TubeRac
     Load a tip rack:
 
     >>> from pylabrobot.resources.opentrons import load_opentrons_resource
-    >>> load_opentron_resource("opentrons/definitions/2/96_standard.json", "96Standard")
+    >>> load_opentrons_resource("opentrons/definitions/2/96_standard.json", "96Standard")
 
   """
 
