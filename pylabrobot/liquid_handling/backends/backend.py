@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import List, Type, Optional
+from typing import List, Optional
 
 from pylabrobot.machines.backends import MachineBackend
 from pylabrobot.resources import Deck, Resource

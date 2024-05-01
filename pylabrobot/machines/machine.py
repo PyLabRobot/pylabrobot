@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import Optional, Callable, Type
+from typing import Optional, Callable
 
 from pylabrobot.machines.backends import MachineBackend
 from pylabrobot.resources import Resource
-from pylabrobot.utils.object_parsing import find_subclass
 
 import functools
 
