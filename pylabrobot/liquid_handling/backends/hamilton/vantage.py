@@ -852,7 +852,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     pickup: PickupTipRack,
     tip_handling_method: int = 0,
-    z_deposit_position: int = 216.4,
+    z_deposit_position: float = 216.4,
     minimal_traverse_height_at_begin_of_command: Optional[int] = None,
     minimal_height_at_command_end: Optional[int] = None
   ):
@@ -863,7 +863,7 @@ class Vantage(HamiltonLiquidHandler):
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     offset_z = pickup.offset.z if pickup.offset is not None else 0
-    z_deposit_position = (z_deposit_position + offset_z) * 10
+    z_deposit_position = int((z_deposit_position + offset_z) * 10)
 
     return await self.core96_tip_pick_up(
       x_position=int(position.x * 10),
@@ -880,7 +880,7 @@ class Vantage(HamiltonLiquidHandler):
   async def drop_tips96(
     self,
     drop: DropTipRack,
-    z_deposit_position: int = 216.4,
+    z_deposit_position: float = 216.4,
     minimal_traverse_height_at_begin_of_command: Optional[int] = None,
     minimal_height_at_command_end: Optional[int] = None
   ):
@@ -892,7 +892,7 @@ class Vantage(HamiltonLiquidHandler):
       raise NotImplementedError("Only TipRacks are supported for dropping tips on Vantage",
                                f"got {drop.resource}")
     offset_z = drop.offset.z if drop.offset is not None else 0
-    z_deposit_position = (z_deposit_position + offset_z) * 10
+    z_deposit_position = int((z_deposit_position + offset_z) * 10)
 
     return await self.core96_tip_discard(
       x_position=int(position.x * 10),
