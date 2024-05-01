@@ -1064,6 +1064,7 @@ class STAR(HamiltonLiquidHandler):
   def __init__(
     self,
     device_address: Optional[int] = None,
+    serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -1073,6 +1074,8 @@ class STAR(HamiltonLiquidHandler):
     Args:
       device_address: the USB device address of the Hamilton STAR. Only useful if using more than
         one Hamilton machine over USB.
+      serial_number: the serial number of the Hamilton STAR. Only useful if using more than one
+        Hamilton machine over USB.
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
       write_timeout: timeout in seconds for writing a command.
@@ -1085,6 +1088,7 @@ class STAR(HamiltonLiquidHandler):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_product=0x8000,
+      serial_number=serial_number
     )
 
     self.iswap_installed: Optional[bool] = None
@@ -1133,14 +1137,6 @@ class STAR(HamiltonLiquidHandler):
     if self._extended_conf is None:
       raise RuntimeError("has not loaded extended_conf, forgot to call `setup`?")
     return self._extended_conf
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "packet_read_timeout": self.packet_read_timeout,
-      "read_timeout": self.read_timeout,
-      "write_timeout": self.write_timeout,
-    }
 
   @property
   def iswap_parked(self) -> bool:

@@ -34,6 +34,11 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
   async def stop(self):
     await USBBackend.stop(self)
 
+  def serialize(self) -> dict:
+    usb_backend_serialized = USBBackend.serialize(self)
+    heater_shaker_serialized = HeaterShakerBackend.serialize(self)
+    return {**usb_backend_serialized, **heater_shaker_serialized, "shaker_index": self.shaker_index}
+
   def _send_command(self, command: str, **kwargs):
     assert len(command) == 2, "Command must be 2 characters long"
     args = "".join([f"{key}{value}" for key, value in kwargs.items()])
