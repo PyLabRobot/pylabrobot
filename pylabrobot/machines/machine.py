@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
 from typing import Optional, Callable
 
 from pylabrobot.machines.backends import MachineBackend
