@@ -785,7 +785,6 @@ def _compute_volume_from_height_Cos_6_Fb(h: float):
     h_cylinder=18.2,
     liquid_height=h)
 
-#: Azenta4titudeFrameStar_96_wellplate_skirted
 def Cos_6_Fb(name: str, with_lid: bool = True) -> Plate:
   # Corning-Costar product no.: 3516; well_volume=16.8 mL
   return Plate(
@@ -799,14 +798,11 @@ def Cos_6_Fb(name: str, with_lid: bool = True) -> Plate:
     items=create_equally_spaced(Well,
       num_items_x=3,
       num_items_y=2,
-
       dx=7.0,
       dy=5.45,
       dz=0.3,
-
       item_dx=38.45,
       item_dy=38.45,
-
       size_x=35.0,
       size_y=35.0,
       size_z=17.5,
