@@ -6,7 +6,7 @@ from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 
-from pylabrobot.resources.volume_functions import _compute_volume_from_height_Cos_6_Fb
+from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_1segment_round_fbottom
 
 
 def _compute_volume_from_height_Cos_1536_10ul(h: float) -> float:
@@ -778,12 +778,11 @@ def Cos_96_Vb_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def _compute_volume_from_height_Cos_6_Fb(h: float):
-  if h > 42.5:
+  if h > 18.0:
     raise ValueError(f"Height {h} is too large for Cos_6_Fb")
   return calculate_liquid_volume_container_1segment_round_fbottom(
-    d=5.5,
-    h_cone=9.8,
-    h_cylinder=5.2,
+    d=35.0,
+    h_cylinder=18.2,
     liquid_height=h)
 
 #: Azenta4titudeFrameStar_96_wellplate_skirted
@@ -803,14 +802,14 @@ def Cos_6_Fb(name: str, with_lid: bool = True) -> Plate:
 
       dx=7.0,
       dy=5.45,
-      dz=1.54,
+      dz=0.3,
 
       item_dx=38.45,
       item_dy=38.45,
 
       size_x=35.0,
       size_y=35.0,
-      size_z=17.6,
+      size_z=17.5,
       bottom_type=WellBottomType.FLAT,
       compute_volume_from_height=_compute_volume_from_height_Cos_6_Fb,
       cross_section_type=CrossSectionType.CIRCLE
