@@ -6,6 +6,7 @@ from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.itemized_resource import create_equally_spaced
 
+from pylabrobot.resources.volume_functions import _compute_volume_from_height_Cos_6_Fb
 
 
 def _compute_volume_from_height_Cos_1536_10ul(h: float) -> float:
@@ -774,3 +775,52 @@ def Cos_96_Vb_L(name: str, with_lid: bool = False) -> Plate:
 def Cos_96_Vb_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Vb """
   return Cos_96_Vb(name=name, with_lid=with_lid).rotated(90)
+
+
+def _compute_volume_from_height_Cos_6_Fb(h: float):
+  if h > 42.5:
+    raise ValueError(f"Height {h} is too large for Cos_6_Fb")
+  return calculate_liquid_volume_container_1segment_round_fbottom(
+    d=5.5,
+    h_cone=9.8,
+    h_cylinder=5.2,
+    liquid_height=h)
+
+#: Azenta4titudeFrameStar_96_wellplate_skirted
+def Cos_6_Fb(name: str, with_lid: bool = True) -> Plate:
+  # Corning-Costar product no.: 3516; well_volume=16.8 mL
+  return Plate(
+    name=name,
+    size_x=127.0,
+    size_y=86.0,
+    size_z=19.85,
+    with_lid=with_lid,
+    model="Cos_6_Fb",
+    lid_height=2,
+    items=create_equally_spaced(Well,
+      num_items_x=3,
+      num_items_y=2,
+
+      dx=7.0,
+      dy=5.45,
+      dz=1.54,
+
+      item_dx=38.45,
+      item_dy=38.45,
+
+      size_x=35.0,
+      size_y=35.0,
+      size_z=17.6,
+      bottom_type=WellBottomType.FLAT,
+      compute_volume_from_height=_compute_volume_from_height_Cos_6_Fb,
+      cross_section_type=CrossSectionType.CIRCLE
+    ),
+  )
+
+#: Azenta4titudeFrameStar_96_wellplate_skirted_L
+def Cos_6_Fb_L(name: str, with_lid: bool = True) -> Plate:
+  return Cos_6_Fb(name=name, with_lid=with_lid)
+
+#: Azenta4titudeFrameStar_96_wellplate_skirted_P
+def Cos_6_Fb_P(name: str, with_lid: bool = True) -> Plate:
+  return Cos_6_Fb(name=name, with_lid=with_lid).rotated(90)
