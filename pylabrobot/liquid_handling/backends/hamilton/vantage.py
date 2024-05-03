@@ -324,6 +324,7 @@ class Vantage(HamiltonLiquidHandler):
   def __init__(
     self,
     device_address: Optional[int] = None,
+    serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -331,8 +332,9 @@ class Vantage(HamiltonLiquidHandler):
     """ Create a new STAR interface.
 
     Args:
-      device_address: the USB device address of the Hamilton STAR. Only useful if using more than
+      device_address: the USB device address of the Hamilton Vantage. Only useful if using more than
         one Hamilton machine over USB.
+      serial_number: the serial number of the Hamilton Vantage.
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
       write_timeout: timeout in seconds for writing a command.
@@ -344,7 +346,8 @@ class Vantage(HamiltonLiquidHandler):
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
-      id_product=0x8003)
+      id_product=0x8003,
+      serial_number=serial_number)
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
@@ -849,7 +852,7 @@ class Vantage(HamiltonLiquidHandler):
     self,
     pickup: PickupTipRack,
     tip_handling_method: int = 0,
-    z_deposit_position: int = 216.4,
+    z_deposit_position: float = 216.4,
     minimal_traverse_height_at_begin_of_command: Optional[int] = None,
     minimal_height_at_command_end: Optional[int] = None
   ):
@@ -860,14 +863,14 @@ class Vantage(HamiltonLiquidHandler):
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     offset_z = pickup.offset.z if pickup.offset is not None else 0
-    z_deposit_position = (z_deposit_position + offset_z) * 10
+    z_deposit_position = int((z_deposit_position + offset_z) * 10)
 
     return await self.core96_tip_pick_up(
       x_position=int(position.x * 10),
       y_position=int(position.y * 10),
       tip_type=ttti,
       tip_handling_method=tip_handling_method,
-      z_deposit_position=int(z_deposit_position),
+      z_deposit_position=z_deposit_position,
       minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
         int(self._traversal_height*10),
       minimal_height_at_command_end=minimal_height_at_command_end or
@@ -877,7 +880,7 @@ class Vantage(HamiltonLiquidHandler):
   async def drop_tips96(
     self,
     drop: DropTipRack,
-    z_deposit_position: int = 216.4,
+    z_deposit_position: float = 216.4,
     minimal_traverse_height_at_begin_of_command: Optional[int] = None,
     minimal_height_at_command_end: Optional[int] = None
   ):
@@ -889,12 +892,12 @@ class Vantage(HamiltonLiquidHandler):
       raise NotImplementedError("Only TipRacks are supported for dropping tips on Vantage",
                                f"got {drop.resource}")
     offset_z = drop.offset.z if drop.offset is not None else 0
-    z_deposit_position = (z_deposit_position + offset_z) * 10
+    z_deposit_position = int((z_deposit_position + offset_z) * 10)
 
     return await self.core96_tip_discard(
       x_position=int(position.x * 10),
       y_position=int(position.y * 10),
-      z_deposit_position=int(z_deposit_position),
+      z_deposit_position=z_deposit_position,
       minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
         int(self._traversal_height * 10),
       minimal_height_at_command_end=minimal_height_at_command_end or int(self._traversal_height*10)

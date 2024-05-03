@@ -142,6 +142,9 @@ class MettlerToledoWXS205SDU(ScaleBackend):
       self.ser.close()
       self.ser = None
 
+  def serialize(self) -> dict:
+    return {**super().serialize(), "port": self.port}
+
   async def send_command(self, command: str, timeout: int = 60) -> MettlerToledoResponse:
     """ Send a command to the scale and receive the response.
 
