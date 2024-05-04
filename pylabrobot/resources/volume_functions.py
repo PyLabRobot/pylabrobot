@@ -211,7 +211,5 @@ def calculate_liquid_volume_container_1segment_round_fbottom(
     raise ValueError("""WARNING: Liquid overflow detected;
     check your labware definiton and/or that you are using the right labware.""")
 
-  # cylinder_liquid_height = liquid_height - r
   cylinder_liquid_volume = math.pi * r**2 * liquid_height
-
-  return float(cylinder_liquid_volume)
+  return cylinder_liquid_volume
