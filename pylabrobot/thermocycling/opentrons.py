@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pylabrobot.resources import Coordinate, ItemizedResource
 from pylabrobot.resources.opentrons.module import OTModule
 from pylabrobot.thermocycling.thermocycler import Thermocycler
@@ -9,15 +11,17 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
   https://opentrons.com/products/modules/thermocycler/
   """
 
-  def __init__(self, name: str, opentrons_id: str):
+  def __init__(self, name: str, opentrons_id: str, child: Optional[ItemizedResource] = None):
     """ Create a new Opentrons thermocycler module v1. Currently, the child resource
     on the thermocycler requires a custom implementation to prevent the pipette head
-    from crashing into the side of the well plate. This implementation...
+    from crashing into the side of the well plate; try defining custom labware with a higher z.
 
     Args:
       name: Name of the thermocycler module.
       opentrons_id: Opentrons ID of the thermocycler module. Get it from
         `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
+      child: Optional child resource like a tube rack or well plate to use on the
+        temperature controller module.
     """
 
     super().__init__(
@@ -31,8 +35,7 @@ class OpentronsThermocyclerModuleV1(Thermocycler, OTModule):
     )
 
     self.backend = OpentronsThermocyclerModuleBackend(opentrons_id=opentrons_id)
-    child = ItemizedResource()  # todo implement custom resource
     self.child = child
     if child is not None:
       # todo: maybe allow single tubes or rows of tubes to be specified as child resources
-      self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=0))
+      self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=100))
