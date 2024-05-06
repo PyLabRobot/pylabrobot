@@ -1252,7 +1252,7 @@ class STAR(HamiltonLiquidHandler):
         begin_of_tip_deposit_process=int(self._traversal_height * 10),
         end_of_tip_deposit_process=1220,
         z_position_at_end_of_a_command=3600,
-        tip_pattern=[True], # [True] * 8
+        tip_pattern=[True] * self.num_channels,
         tip_type=4, # TODO: get from tip types
         discarding_method=0
       )
