@@ -635,6 +635,30 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     set_volume_tracking(enabled=False)
 
 
+class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    self.backend = backends.SaverBackend(num_channels=8)
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    self.tip_rack = STF_L(name="tip_rack")
+    self.plate = Cos_96_DW_1mL(name="plate")
+    self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
+    await self.lh.setup()
+    set_volume_tracking(enabled=True)
+
+  async def asyncTearDown(self):
+    set_volume_tracking(enabled=False)
+
+  async def test_dispense_with_volume_tracking(self):
+    well = self.plate.get_item("A1")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    well.tracker.set_liquids([(None, 10)])
+    await self.lh.aspirate([well], vols=10)
+    await self.lh.dispense([well], vols=10)
+    self.assertEqual(well.tracker.liquids, [(None, 10)])
+
+
 class LiquidHandlerForTesting(LiquidHandler):
   ALLOWED_CALLBACKS = {
     "test_operation",
