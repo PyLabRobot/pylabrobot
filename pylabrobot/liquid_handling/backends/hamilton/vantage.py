@@ -2087,7 +2087,7 @@ class Vantage(HamiltonLiquidHandler):
       zr=tube_2nd_section_ratio,
       th=minimal_traverse_height_at_begin_of_command,
       te=minimal_height_at_command_end,
-      dv=dispense_volume,
+      dv=[f"{vol:04}" for vol in dispense_volume], # it appears at least 4 digits are needed
       ds=dispense_speed,
       ss=cut_off_speed,
       rv=stop_back_volume,
