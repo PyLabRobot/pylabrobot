@@ -1481,7 +1481,7 @@ class STAR(HamiltonLiquidHandler):
         the bottom of the well (presumably) to aspirate from.
       detection_height_difference_for_dual_lld: Difference between the gamma and DP LLD heights if
         the LLD mode is DUAL.
-      swap_speed: Unknown.
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The time to wait after homogenization.
       homogenization_volume: The volume to aspirate for homogenization.
       homogenization_cycles: The number of cycles to perform for homogenization.
@@ -1739,7 +1739,7 @@ class STAR(HamiltonLiquidHandler):
         position.
       gamma_lld_sensitivity: The gamma LLD sensitivity. (1 = high, 4 = low)
       dp_lld_sensitivity: The dp LLD sensitivity. (1 = high, 4 = low)
-      swap_speed: The homogenization speed.
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The settling time.
       mix_volume: The volume to use for homogenization.
       mix_cycles: The number of homogenization cycles.
@@ -2027,7 +2027,7 @@ class STAR(HamiltonLiquidHandler):
       transport_air_volume: The volume of air to aspirate after the liquid.
       pre_wetting_volume: The volume of liquid to use for pre-wetting.
       gamma_lld_sensitivity: The sensitivity of the gamma liquid level detection.
-      swap_speed: unknown.
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The time to wait after aspirating.
       homogenization_volume: The volume of liquid to aspirate for homogenization.
       homogenization_cycles: The number of cycles to perform for homogenization.
@@ -2208,7 +2208,7 @@ class STAR(HamiltonLiquidHandler):
       liquid_surface_sink_distance_at_the_end_of_dispense: Unknown.
       transport_air_volume: Transport air volume, to dispense before aspiration.
       gamma_lld_sensitivity: Gamma LLD sensitivity.
-      swap_speed: Unknown.
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: Settling time, in 0.1 seconds.
       mixing_volume: Mixing volume, in ul.
       mixing_cycles: Mixing cycles.
