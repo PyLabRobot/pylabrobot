@@ -21,7 +21,8 @@ class Lid(Resource):
     size_x: float,
     size_y: float,
     size_z: float,
-    category: str = "lid"
+    category: str = "lid",
+    model: Optional[str] = None
   ):
     """ Create a lid for a plate.
 
@@ -31,7 +32,8 @@ class Lid(Resource):
       size_y: Size of the lid in y-direction.
       size_z: Size of the lid in z-direction.
     """
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
+                     model=model)
 
 
 class Plate(ItemizedResource[Well]):
@@ -82,6 +84,9 @@ class Plate(ItemizedResource[Well]):
 
       lid = Lid(name + "_lid", size_x=size_x, size_y=size_y, size_z=lid_height)
       self.assign_child_resource(lid)
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), "lid_height": self.lid_height}
 
   def assign_child_resource(
     self,

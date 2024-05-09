@@ -31,6 +31,14 @@ class InhecoThermoShake(HeaterShakerBackend):
     await self.stop_temperature_control()
     self.device.close()
 
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "vid": self.vid,
+      "pid": self.pid,
+      "serial_number": self.serial_number
+    }
+
   @typing.no_type_check
   def _generate_packets(self, msg):
     """ Generate packets for the given message.

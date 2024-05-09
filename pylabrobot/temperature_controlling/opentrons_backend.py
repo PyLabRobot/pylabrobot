@@ -32,11 +32,13 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
                          " Only supported on Python 3.10.")
 
   async def setup(self):
-    await super().setup()
+    pass
 
   async def stop(self):
     await self.deactivate()
-    await super().stop()
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), "opentrons_id": self.opentrons_id}
 
   async def set_temperature(self, temperature: float):
     ot_api.modules.temperature_module_set_temperature(celsius=temperature,

@@ -27,6 +27,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     self,
     id_product: int,
     device_address: Optional[int] = None,
+    serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -36,6 +37,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     Args:
       device_address: The USB address of the Hamilton device. Only useful if using more than one
         Hamilton device.
+      serial_number: The serial number of the Hamilton device. Only useful if using more than one
+        Hamilton device.
       packet_read_timeout: The timeout for reading packets from the Hamilton machine in seconds.
       read_timeout: The timeout for  from the Hamilton machine in seconds.
       num_channels: the number of pipette channels present on the robot.
@@ -43,12 +46,13 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
 
     USBBackend.__init__(
       self,
-      address=device_address,
+      device_address=device_address,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_vendor=0x08af,
-      id_product=id_product)
+      id_product=id_product,
+      serial_number=serial_number)
     LiquidHandlerBackend.__init__(self)
 
     self.id_ = 0
@@ -58,9 +62,20 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, float]] = {}
     self._tth2tti: dict[int, int] = {} # hash to tip type index
 
+  async def setup(self):
+    await LiquidHandlerBackend.setup(self)
+    await USBBackend.setup(self)
+
   async def stop(self):
     self._waiting_tasks.clear()
     await super().stop()
+
+  def serialize(self) -> dict:
+    usb_backend_serialized = USBBackend.serialize(self)
+    del usb_backend_serialized["id_vendor"]
+    del usb_backend_serialized["id_product"]
+    liquid_handler_serialized = LiquidHandlerBackend.serialize(self)
+    return {**usb_backend_serialized, **liquid_handler_serialized}
 
   @property
   @abstractmethod

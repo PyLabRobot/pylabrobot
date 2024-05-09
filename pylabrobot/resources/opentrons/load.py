@@ -40,7 +40,9 @@ def ot_definition_to_resource(
   size_y = data["dimensions"]["yDimension"]
   size_z = data["dimensions"]["zDimension"]
 
-  if display_category in ["wellPlate", "tipRack", "tubeRack"]:
+  tube_rack_display_cats = {"adapter", "aluminumBlock", "tubeRack"}
+
+  if display_category in ["wellPlate", "tipRack", "tubeRack", "adapter", "aluminumBlock"]:
     items = data["ordering"]
     wells: List[List[Union[TipSpot, Well, Tube]]] = [] # TODO: can we use TypeGuard?
 
@@ -101,7 +103,7 @@ def ot_definition_to_resource(
           )
           tip_spot.location = location
           wells[i].append(tip_spot)
-        elif display_category == "tubeRack":
+        elif display_category in tube_rack_display_cats:
           tube = Tube(
             name=item,
             size_x=well_size_x,
@@ -130,7 +132,9 @@ def ot_definition_to_resource(
         items=cast(List[List[TipSpot]], wells),
         model=data["metadata"]["displayName"]
       )
-    if display_category == "tubeRack":
+    if display_category in tube_rack_display_cats:
+      # Implemented for aluminum block adapters for temperature controlling module
+      # https://shop.opentrons.com/aluminum-block-set/
       return TubeRack(
         name=name,
         size_x=size_x,
@@ -163,7 +167,7 @@ def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack, TubeRac
     Load a tip rack:
 
     >>> from pylabrobot.resources.opentrons import load_opentrons_resource
-    >>> load_opentron_resource("opentrons/definitions/2/96_standard.json", "96Standard")
+    >>> load_opentrons_resource("opentrons/definitions/2/96_standard.json", "96Standard")
 
   """
 

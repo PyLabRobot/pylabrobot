@@ -30,8 +30,10 @@ class ChatterBoxBackend(LiquidHandlerBackend):
     print("Setting up the robot.")
 
   async def stop(self):
-    await super().stop()
     print("Stopping the robot.")
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), "num_channels": self.num_channels}
 
   @property
   def num_channels(self) -> int:

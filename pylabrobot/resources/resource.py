@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import copy
 import itertools
 import json
 import logging
 import sys
-from typing import Any, Callable, Dict, List, Optional, Type, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from .coordinate import Coordinate
 from .errors import ResourceNotFoundError
 from pylabrobot.serializer import serialize, deserialize
+from pylabrobot.utils.object_parsing import find_subclass
 
 if sys.version_info >= (3, 11):
   from typing import Self
@@ -46,7 +46,7 @@ class Resource:
     size_y: float,
     size_z: float,
     category: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
     self._name = name
     self._size_x = size_x
@@ -59,7 +59,7 @@ class Resource:
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
 
-    self.rotation = 0
+    self.rotation = 0 # TODO: like location, this should be wrt parent
 
     self._will_assign_resource_callbacks: List[WillAssignResourceCallback] = []
     self._did_assign_resource_callbacks: List[DidAssignResourceCallback] = []
@@ -76,6 +76,7 @@ class Resource:
       "size_y": self._size_y,
       "size_z": self._size_z,
       "location": serialize(self.location),
+      "rotation": self.rotation,
       "category": self.category,
       "model": self.model,
       "children": [child.serialize() for child in self.children],
@@ -97,13 +98,6 @@ class Resource:
     if self.parent is not None:
       raise RuntimeError("Cannot change the name of a resource that is assigned.")
     self._name = name
-
-  def copy(self):
-    """ Copy this resource. """
-    if self.parent is not None:
-      raise ValueError("Cannot copy a resource that is assigned to another resource.")
-
-    return copy.deepcopy(self)
 
   def __eq__(self, other):
     return (
@@ -309,7 +303,7 @@ class Resource:
 
     effective_degrees = degrees % 360
 
-    if effective_degrees == 0 or effective_degrees % 90 != 0:
+    if effective_degrees % 90 != 0:
       raise ValueError(f"Invalid rotation: {degrees}")
 
     for child in self.children:
@@ -330,14 +324,19 @@ class Resource:
 
     self.rotation = (self.rotation + degrees) % 360
 
-  def rotated(self, degrees: int) -> Self: # type: ignore
+  def copy(self) -> Self:
+    resource_copy = self.__class__.deserialize(self.serialize())
+    resource_copy.load_all_state(self.serialize_all_state())
+    return resource_copy
+
+  def rotated(self, degrees: int) -> Self:
     """ Return a copy of this resource rotated by the given number of degrees.
 
     Args:
       degrees: must be a multiple of 90, but not also 360.
     """
 
-    new_resource = copy.deepcopy(self)
+    new_resource = self.copy()
     new_resource.rotate(degrees)
     return new_resource
 
@@ -459,7 +458,7 @@ class Resource:
 
     data_copy = data.copy() # copy data because we will be modifying it
 
-    subclass = get_resource_class_from_string(data["type"])
+    subclass = find_subclass(data["type"], cls=Resource)
     if subclass is None:
       raise ValueError(f"Could not find subclass with name '{data['type']}'")
     assert issubclass(subclass, cls) # mypy does not know the type after the None check...
@@ -467,10 +466,12 @@ class Resource:
     for key in ["type", "parent_name", "location"]: # delete meta keys
       del data_copy[key]
     children_data = data_copy.pop("children")
+    rotation = data_copy.pop("rotation")
     resource = subclass(**data_copy)
+    resource.rotation = rotation
 
     for child_data in children_data:
-      child_cls = get_resource_class_from_string(child_data["type"])
+      child_cls = find_subclass(child_data["type"], cls=Resource)
       if child_cls is None:
         raise ValueError(f"Could not find subclass with name {child_data['type']}")
       child = child_cls.deserialize(child_data)
@@ -642,26 +643,3 @@ class Resource:
   def _state_updated(self):
     for callback in self._resource_state_updated_callbacks:
       callback(self.serialize_state())
-
-
-def get_resource_class_from_string(
-  class_name: str,
-  cls: Type[Resource] = Resource
-) -> Optional[Type[Resource]]:
-  """ Recursively find a subclass with the correct name.
-
-  Args:
-    class_name: The name of the class to find.
-    cls: The class to search in.
-
-  Returns:
-    The class with the given name, or `None` if no such class exists.
-  """
-
-  if cls.__name__ == class_name:
-    return cls
-  for subclass in cls.__subclasses__():
-    subclass_ = get_resource_class_from_string(class_name=class_name, cls=subclass)
-    if subclass_ is not None:
-      return subclass_
-  return None

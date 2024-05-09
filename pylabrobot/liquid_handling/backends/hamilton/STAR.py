@@ -1064,6 +1064,7 @@ class STAR(HamiltonLiquidHandler):
   def __init__(
     self,
     device_address: Optional[int] = None,
+    serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -1073,6 +1074,8 @@ class STAR(HamiltonLiquidHandler):
     Args:
       device_address: the USB device address of the Hamilton STAR. Only useful if using more than
         one Hamilton machine over USB.
+      serial_number: the serial number of the Hamilton STAR. Only useful if using more than one
+        Hamilton machine over USB.
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
       write_timeout: timeout in seconds for writing a command.
@@ -1085,13 +1088,24 @@ class STAR(HamiltonLiquidHandler):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_product=0x8000,
+      serial_number=serial_number
     )
+
+    self.iswap_installed: Optional[bool] = None
+    self.autoload_installed: Optional[bool] = None
+    self.core96_head_installed: Optional[bool] = None
 
     self._iswap_parked: Optional[bool] = None
     self._num_channels: Optional[int] = None
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
     self._traversal_height: float = 245.0
+    self._unsafe = UnSafe(self)
+
+  @property
+  def unsafe(self) -> "UnSafe":
+    """ Actions that have a higher risk of damaging the robot. Use with care! """
+    return self._unsafe
 
   @property
   def num_channels(self) -> int:
@@ -1123,14 +1137,6 @@ class STAR(HamiltonLiquidHandler):
     if self._extended_conf is None:
       raise RuntimeError("has not loaded extended_conf, forgot to call `setup`?")
     return self._extended_conf
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "packet_read_timeout": self.packet_read_timeout,
-      "read_timeout": self.read_timeout,
-      "write_timeout": self.write_timeout,
-    }
 
   @property
   def iswap_parked(self) -> bool:
@@ -1246,7 +1252,7 @@ class STAR(HamiltonLiquidHandler):
         begin_of_tip_deposit_process=int(self._traversal_height * 10),
         end_of_tip_deposit_process=1220,
         z_position_at_end_of_a_command=3600,
-        tip_pattern=[True], # [True] * 8
+        tip_pattern=[True] * self.num_channels,
         tip_type=4, # TODO: get from tip types
         discarding_method=0
       )
@@ -2420,6 +2426,7 @@ class STAR(HamiltonLiquidHandler):
     self,
     location: Coordinate,
     resource: Resource,
+    rotation: int,
     offset: Coordinate,
     grip_direction: GripDirection,
     pickup_distance_from_top: float,
@@ -2429,18 +2436,25 @@ class STAR(HamiltonLiquidHandler):
   ):
     """ After a resource is picked up, release it at the specified location.
     Low level component of :meth:`move_resource`
+
+    Args:
+      location: The location to release the resource (bottom front left corner).
+      resource: The resource to release.
+      rotation: The rotation of the resource's final orientation wrt the pickup orientation.
+      offset: offset for location
+      grip_direction: The direction of the iswap arm on release.
+      pickup_distance_from_top: How far from the top the resource was picked up.
     """
 
     assert self.iswap_installed, "iswap must be installed"
 
     # Get center of source plate. Also gripping height and plate width.
-    center = location + resource.center() + offset
+    center = location + resource.rotated(rotation).center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    plate_width = resource.get_size_x()
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.get_size_x()
+      plate_width = resource.rotated(rotation).get_size_x()
     elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.get_size_y()
+      plate_width = resource.rotated(rotation).get_size_y()
     else:
       raise ValueError("Invalid grip direction")
 
@@ -2536,13 +2550,11 @@ class STAR(HamiltonLiquidHandler):
         )
       previous_location = location
 
-    if move.rotation != 0:
-      move.resource.rotate(move.rotation)
-
     if use_arm == "iswap":
       await self.iswap_release_picked_up_resource(
         location=move.destination,
         resource=move.resource,
+        rotation=move.rotation,
         offset=move.destination_offset,
         grip_direction=move.put_direction,
         pickup_distance_from_top=move.pickup_distance_from_top,
@@ -6250,6 +6262,39 @@ class STAR(HamiltonLiquidHandler):
     self._iswap_parked = False
     return command_output
 
+  async def iswap_rotate(
+    self,
+    position: int = 33,
+    gripper_velocity: int = 55_000,
+    gripper_acceleration: int = 170,
+    gripper_protection: Literal[0,1,2,3,4,5,6,7] = 5,
+    wrist_velocity: int = 48_000,
+    wrist_acceleration: int = 145,
+    wrist_protection: Literal[0,1,2,3,4,5,6,7] = 5,
+  ):
+    """
+    Rotate the iswap to a predifined position.
+    Velocity units are "incr/sec"
+    Acceleration units are "1_000 incr/sec**2"
+    For a list of the possible positions see the pylabrobot documentation on the R0 module.
+    """
+    assert 20 <= gripper_velocity <= 75_000
+    assert 5 <= gripper_acceleration <= 200
+    assert 20 <= wrist_velocity <= 65_000
+    assert 20 <= wrist_acceleration <= 200
+
+    return await self.send_command(
+      module="R0",
+      command="PD",
+      pd=position,
+      wv=f"{gripper_velocity:05}",
+      wr=f"{gripper_acceleration:03}",
+      ww=gripper_protection,
+      tv=f"{wrist_velocity:05}",
+      tr=f"{wrist_acceleration:03}",
+      tw=wrist_protection,
+    )
+
   async def move_plate_to_position(
     self,
     x_position: int = 0,
@@ -6342,8 +6387,7 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.17.3 Hotel handling commands --------------
 
-  # TODO:(command:PO) Get plate from hotel
-  # TODO:(command:PI) Put plate to hotel
+  # implemented in UnSafe class
 
   # -------------- 3.17.4 Barcode commands --------------
 
@@ -6361,7 +6405,7 @@ class STAR(HamiltonLiquidHandler):
     z_direction: int = 0,
     location: int = 0,
     hotel_depth: int = 1300,
-    grip_direction:int = 1,
+    grip_direction: int = 1,
     minimum_traverse_height_at_beginning_of_a_command: int = 3600,
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
@@ -6915,3 +6959,159 @@ class STAR(HamiltonLiquidHandler):
     result_in_mm = float(get_llds["lh"][channel_idx-1] / 10)
 
     return result_in_mm
+
+
+class UnSafe:
+  """
+  Namespace for actions that are unsafe to perfom.
+  For example, actions that send the iSWAP outside of the Hamilton Deck
+  """
+
+  def __init__(self, star: "STAR"):
+    self.star = star
+
+  async def put_in_hotel(
+    self,
+    hotel_center_x_coord: int = 0,
+    hotel_center_y_coord: int = 0,
+    hotel_center_z_coord: int = 0,
+    # for direction, 0 is positive, 1 is negative
+    hotel_center_x_direction: Literal[0, 1] = 0,
+    hotel_center_y_direction: Literal[0, 1] = 0,
+    hotel_center_z_direction: Literal[0, 1] = 0,
+    clearance_height: int = 50,
+    hotel_depth: int = 1_300,
+    grip_direction:GripDirection = GripDirection.FRONT,
+    traverse_height_at_beginning: int = 3_600,
+    z_position_at_end: int = 3_600,
+    grip_strength: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] = 5,
+    open_gripper_position: int = 860,
+    collision_control: Literal[0, 1] = 1,
+    high_acceleration_index: Literal[1, 2, 3, 4] = 4,
+    low_acceleration_index: Literal[1, 2, 3, 4] = 1,
+    fold_up_at_end: bool = True,
+  ):
+    """
+    A hotel is a location to store a plate. This can be a loading
+    dock for an external machine such as a cytomat or a centrifuge.
+
+    Take care when using this command to interact with hotels located
+    outside of the hamilton deck area. Ensure that rotations of the
+    iSWAP arm don't collide with anything.
+
+    tip: set the hotel depth big enough so that the boundary is inside the
+    hamilton deck. The iSWAP rotations will happen before it enters the hotel.
+
+    The units of all relevant variables are in 0.1mm
+    """
+
+    assert 0 <= hotel_center_x_coord <= 99_999
+    assert 0 <= hotel_center_y_coord <= 6_500
+    assert 0 <= hotel_center_z_coord <= 3_500
+    assert 0 <= clearance_height <= 999
+    assert 0 <= hotel_depth <= 3_000
+    assert 0 <= traverse_height_at_beginning <= 3_600
+    assert 0 <= z_position_at_end <= 3_600
+    assert 0 <= open_gripper_position <= 9_999
+
+    return await self.star.send_command(
+      module="C0",
+      command="PI",
+      xs=f"{hotel_center_x_coord:05}",
+      xd=hotel_center_x_direction,
+      yj=f"{hotel_center_y_coord:04}",
+      yd=hotel_center_y_direction,
+      zj=f"{hotel_center_z_coord:04}",
+      zd=hotel_center_z_direction,
+      zc=f"{clearance_height:03}",
+      hd=f"{hotel_depth:04}",
+      gr={
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
+      th=f"{traverse_height_at_beginning:04}",
+      te=f"{z_position_at_end:04}",
+      gw=grip_strength,
+      go=f"{open_gripper_position:04}",
+      ga=collision_control,
+      xe=f"{high_acceleration_index} {low_acceleration_index}",
+      gc=int(fold_up_at_end),
+    )
+
+  async def get_from_hotel(
+    self,
+    hotel_center_x_coord: int = 0,
+    hotel_center_y_coord: int = 0,
+    hotel_center_z_coord: int = 0,
+    # for direction, 0 is positive, 1 is negative
+    hotel_center_x_direction: Literal[0, 1] = 0,
+    hotel_center_y_direction: Literal[0, 1] = 0,
+    hotel_center_z_direction: Literal[0, 1] = 0,
+    clearance_height: int = 50,
+    hotel_depth: int = 1_300,
+    grip_direction:GripDirection = GripDirection.FRONT,
+    traverse_height_at_beginning: int = 3_600,
+    z_position_at_end: int = 3_600,
+    grip_strength: Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] = 5,
+    open_gripper_position: int = 860,
+    plate_width: int = 800,
+    plate_width_tolerance: int = 20,
+    collision_control: Literal[0, 1]=1,
+    high_acceleration_index: Literal[1, 2, 3, 4] = 4,
+    low_acceleration_index: Literal[1, 2, 3, 4] = 1,
+    fold_up_at_end: bool = True,
+  ):
+    """
+    A hotel is a location to store a plate. This can be a loading
+    dock for an external machine such as a cytomat or a centrifuge.
+
+    Take care when using this command to interact with hotels located
+    outside of the hamilton deck area. Ensure that rotations of the
+    iSWAP arm don't collide with anything.
+
+    tip: set the hotel depth big enough so that the boundary is inside the
+    hamilton deck. The iSWAP rotations will happen before it enters the hotel.
+
+    The units of all relevant variables are in 0.1mm
+    """
+
+    assert 0 <= hotel_center_x_coord <= 99_999
+    assert 0 <= hotel_center_y_coord <= 6_500
+    assert 0 <= hotel_center_z_coord <= 3_500
+    assert 0 <= clearance_height <= 999
+    assert 0 <= hotel_depth <= 3_000
+    assert 0 <= traverse_height_at_beginning <= 3_600
+    assert 0 <= z_position_at_end <= 3_600
+    assert 0 <= open_gripper_position <= 9_999
+    assert 0 <= plate_width <= 9_999
+    assert 0 <= plate_width_tolerance <= 99
+
+    return await self.star.send_command(
+      module="C0",
+      command="PO",
+      xs=f"{hotel_center_x_coord:05}",
+      xd=hotel_center_x_direction,
+      yj=f"{hotel_center_y_coord:04}",
+      yd=hotel_center_y_direction,
+      zj=f"{hotel_center_z_coord:04}",
+      zd=hotel_center_z_direction,
+      zc=f"{clearance_height:03}",
+      hd=f"{hotel_depth:04}",
+      gr={
+        GripDirection.FRONT: 1,
+        GripDirection.RIGHT: 2,
+        GripDirection.BACK: 3,
+        GripDirection.LEFT: 4,
+      }[grip_direction],
+      th=f"{traverse_height_at_beginning:04}",
+      te=f"{z_position_at_end:04}",
+      gw=grip_strength,
+      go=f"{open_gripper_position:04}",
+      gb=f"{plate_width:04}",
+      gt=f"{plate_width_tolerance:02}",
+      ga=collision_control,
+      xe=f"{high_acceleration_index} {low_acceleration_index}",
+      gc=int(fold_up_at_end),
+    )

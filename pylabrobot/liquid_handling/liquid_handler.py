@@ -15,6 +15,7 @@ import warnings
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.errors import ChannelizedError
+from pylabrobot.resources.errors import HasTipError
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
   Container,
@@ -367,10 +368,10 @@ class LiquidHandler(Machine):
 
     # queue operations on the trackers
     for channel, op in zip(use_channels, pickups):
+      if self.head[channel].has_tip:
+        raise HasTipError("Channel has tip")
       if does_tip_tracking() and not op.resource.tracker.is_disabled:
         op.resource.tracker.remove_tip()
-      if not does_tip_tracking() and self.head[channel].has_tip:
-        self.head[channel].remove_tip() # override the tip if a tip exists
       self.head[channel].add_tip(op.tip, origin=op.resource, commit=False)
 
     # fix the backend kwargs
@@ -763,7 +764,7 @@ class LiquidHandler(Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
-        (self.head[channel].commit if success else self.head[channel].rollback)()
+        (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
 
     # trigger callback
     self._trigger_callback(
@@ -930,7 +931,7 @@ class LiquidHandler(Machine):
       error = e
 
     # determine which channels were successful
-    successes = [error is not None] * len(dispenses)
+    successes = [error is None] * len(dispenses)
     if error is not None and isinstance(error, ChannelizedError):
       successes = [channel_idx not in error.errors for channel_idx in use_channels]
 
@@ -939,11 +940,11 @@ class LiquidHandler(Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
-        (self.head[channel].commit if success else self.head[channel].rollback)()
+        (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
 
     # trigger callback
     self._trigger_callback(
-      "aspirate",
+      "dispense",
       liquid_handler=self,
       operations=dispenses,
       use_channels=use_channels,
@@ -1555,6 +1556,11 @@ class LiquidHandler(Machine):
 
     result = await self.backend.move_resource(move=move_operation, **backend_kwargs)
 
+    # rotate the resource if the move operation has a rotation.
+    # this code should be expanded to also update the resource's location
+    if move_operation.rotation != 0:
+      move_operation.resource.rotate(move_operation.rotation)
+
     self._trigger_callback(
       "move_resource",
       liquid_handler=self,
@@ -1709,6 +1715,8 @@ class LiquidHandler(Machine):
       put_direction=put_direction,
       **backend_kwargs)
 
+    # Some of the code below should probably be moved to `move_resource` so that is can be shared
+    # with the `move_lid` convenience method.
     plate.unassign()
     if isinstance(to, Coordinate):
       to_location -= self.deck.location # passed as an absolute location, but stored as relative
@@ -1721,19 +1729,6 @@ class LiquidHandler(Machine):
       to.assign_child_resource(plate, location=to.child_resource_location)
     else:
       to.assign_child_resource(plate, location=to_location)
-
-  def serialize(self) -> dict:
-    """ Serialize the liquid handler to a dictionary.
-
-    Returns:
-      A dictionary representation of the liquid handler.
-    """
-
-    return {
-      # "children": self.deck.serialize(),
-      **super().serialize(),
-      "backend": self.backend.serialize()
-    }
 
   def register_callback(self, method_name: str, callback: OperationCallback):
     """Registers a callback for a specific method."""
@@ -1767,11 +1762,10 @@ class LiquidHandler(Machine):
       data: A dictionary representation of the liquid handler.
     """
 
-    backend_data = data.pop("backend")
-    backend = LiquidHandlerBackend.deserialize(backend_data)
     deck_data = data["children"][0]
     deck = Deck.deserialize(data=deck_data)
-    return LiquidHandler(deck=deck, backend=backend)
+    backend = LiquidHandlerBackend.deserialize(data=data["backend"])
+    return cls(deck=deck, backend=backend)
 
   @classmethod
   def load(cls, path: str) -> LiquidHandler:

@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 import asyncio
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 
 from pymodbus.client import AsyncModbusSerialClient  # type: ignore
 
@@ -28,9 +28,13 @@ class AgrowPumpArray(PumpArrayBackend):
     pump_index_to_address: A dictionary that maps pump indices to their Modbus addresses.
   """
 
-  def __init__(self, port: str, address: int):
+  def __init__(self, port: str, address: Union[int, str]):
+    if not isinstance(port, str):
+      raise ValueError("Port must be a string")
     self.port = port
-    self.address = address
+    if address not in range(0, 256):
+      raise ValueError("Pump address out of range")
+    self.address = int(address)
     self._keep_alive_thread: Optional[threading.Thread] = None
     self._pump_index_to_address: Optional[Dict[int, int]] = None
     self._modbus: Optional[AsyncModbusSerialClient] = None
@@ -120,6 +124,9 @@ class AgrowPumpArray(PumpArrayBackend):
     await self.modbus.connect()
     if not self.modbus.connected:
       raise ConnectionError("Modbus connection failed during pump setup")
+
+  def serialize(self):
+    return {**super().serialize(), "port": self.port, "address": self.address}
 
   async def run_revolutions(self, num_revolutions: List[float], use_channels: List[int]):
     """ Run the specified channels at the speed selected. If speed is 0, the pump will be halted.

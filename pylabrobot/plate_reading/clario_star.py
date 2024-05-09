@@ -114,7 +114,7 @@ class CLARIOStar(PlateReaderBackend):
     return resp
 
   async def read_command_status(self):
-    status = await self.send(bytearray([0x02, 0x00, 0x09, 0x0c, 0x80, 0x00, 0x00, 0x97, 0x0d]))
+    status = await self.send(b"\x02\x00\x09\x0c\x80\x00\x00\x97\x0d")
     return status
 
   async def _wait_for_ready_and_return(self, ret, timeout=150):
@@ -150,28 +150,25 @@ class CLARIOStar(PlateReaderBackend):
 
   async def initialize(self):
     command_response = await self.send(
-      bytearray([0x02, 0x00, 0x0D, 0x0C, 0x01, 0x00, 0x00, 0x10, 0x02, 0x00, 0x00, 0x2E, 0x0D]))
+      b"\x02\x00\x0D\x0C\x01\x00\x00\x10\x02\x00\x00\x2E\x0D")
     return await self._wait_for_ready_and_return(command_response)
 
   async def request_eeprom_data(self):
     eeprom_response = await self.send(
-      bytearray([0x02, 0x00, 0x0F, 0x0C, 0x05, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x29,
-        0x0D]))
+      b"\x02\x00\x0F\x0C\x05\x07\x00\x00\x00\x00\x00\x00\x00\x29\x0d")
     return await self._wait_for_ready_and_return(eeprom_response)
 
   async def open(self):
-    open_response = await self.send(bytearray([0x02, 0x00, 0x0E, 0x0C, 0x03, 0x01, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x20, 0x0D]))
+    open_response = await self.send(b"\x02\x00\x0E\x0C\x03\x01\x00\x00\x00\x00\x00\x00\x20\x0D")
     return await self._wait_for_ready_and_return(open_response)
 
   async def close(self):
-    close_response = await self.send(bytearray([0x02, 0x00, 0x0E, 0x0C, 0x03, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x1F, 0x0D]))
+    close_response = await self.send(b"\x02\x00\x0E\x0C\x03\x00\x00\x00\x00\x00\x00\x00\x1F\x0D")
     return await self._wait_for_ready_and_return(close_response)
 
   async def _mp_and_focus_height_value(self):
-    mp_and_focus_height_value_response = await self.send(bytearray([0x02, 0x00, 0x0F, 0x0C, 0x05,
-      0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x39, 0x0D]))
+    mp_and_focus_height_value_response = await self.send(b"\x02\x00\x0F\x0C\x05\17\x00\x00\x00\x00"+
+                                                         b"\x00\x00\x00\x39\x0D")
     return await self._wait_for_ready_and_return(mp_and_focus_height_value_response)
 
   async def _run_luminescence(self, focal_height: float):
@@ -237,18 +234,14 @@ class CLARIOStar(PlateReaderBackend):
         return run_response
 
   async def _read_order_values(self):
-    return await self.send(
-      bytearray([0x02, 0x00, 0x0F, 0x0C, 0x05, 0x1D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3F,
-      0x0D]))
+    return await self.send(b"\x02\x00\x0F\x0C\x05\x1D\x00\x00\x00\x00\x00\x00\x00\x3F\x0D")
 
   async def _status_hw(self):
-    status_hw_response = await self.send(bytearray([0x02, 0x00, 0x09, 0x0C, 0x81, 0x00, 0x00, 0x98,
-      0x0D]))
+    status_hw_response = await self.send(b"\x02\x00\x09\x0C\x81\x00\x00\x98\x0D")
     return await self._wait_for_ready_and_return(status_hw_response)
 
   async def _get_measurement_values(self):
-    return await self.send(bytearray([0x02, 0x00, 0x0F, 0x0C, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x24, 0x0D]))
+    return await self.send(b"\x02\x00\x0F\x0C\x05\x02\x00\x00\x00\x00\x00\x00\x00\x24\x0D")
 
   async def read_luminescence(self, focal_height: float = 13) -> List[List[float]]:
     """ Read luminescence values from the plate reader. """
