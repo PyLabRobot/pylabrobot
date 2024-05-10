@@ -365,6 +365,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     return make_generator(indices, batch_size, repeat)
 
+  def __repr__(self) -> str:
+    return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
+            f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})")
+
   @staticmethod
   def _occupied_func(x: Resource):
     return "O" if x.children else "-"
@@ -398,13 +402,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     item_list = [LETTERS[i] + ":  " + spacer.join(row) for i, row in enumerate(item_grid)]
     item_text = "\n".join(item_list)
 
-    return info_str + "\n" + header_row + "\n" + item_text
+    # Simple footer with dimensions.
+    footer_text = f"{self.num_items_x}x{self.num_items_y} {self.__class__.__name__}"
+
+    return info_str + "\n" + header_row + "\n" + item_text + "\n" + footer_text
 
   def print_grid(self, occupied_func=None):
     print(self.make_grid(occupied_func=occupied_func))
-
-  def __repr__(self) -> str:
-    return f"{self.num_items_x}x{self.num_items_y} {self.__class__.__name__}"
 
   def serialize(self) -> dict:
     return {
