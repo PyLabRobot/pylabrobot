@@ -1,6 +1,7 @@
 from abc import ABCMeta
 import sys
 from typing import Union, Tuple, TypeVar, Generic, List, Optional, Generator, Type, Sequence, cast
+from string import ascii_uppercase as LETTERS
 
 import pylabrobot.utils
 
