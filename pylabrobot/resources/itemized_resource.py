@@ -385,13 +385,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       ["O" if self.get_item((i, j)).children else "-" for j in range(self.num_items_x)]
       for i in range(self.num_items_y)
     ]
-    spacer = (" " * max(1, max_digits))
+    spacer = " " * max(1, max_digits)
     item_grid = [LETTERS[i] + ":  " + spacer.join(row) for i, row in enumerate(item_grid)]
     item_grid = "\n".join(item_grid)
 
     # Build the final representation.
     return info_str + "\n" + header_row + "\n" + item_grid
-  
+
   def serialize(self) -> dict:
     return {
       **super().serialize(),
