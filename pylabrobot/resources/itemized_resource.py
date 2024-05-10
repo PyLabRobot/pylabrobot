@@ -365,9 +365,18 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     return make_generator(indices, batch_size, repeat)
 
-  def __repr__(self) -> str:
+  @staticmethod
+  def _occupied_func(x: Resource):
+    return "O" if x.children else "-"
+
+  def make_grid(self, occupied_func=None):
+    # The "occupied_func" is a function that checks if a resource has something in it,
+    # and returns a single character representing its status.
+    if occupied_func is None:
+      occupied_func = self._occupied_func
+
     # Make a title with summary information.
-    info_str = f"{self.num_items_x}x{self.num_items_y} {self.__class__.__name__}"
+    info_str = repr(self)
 
     if self.num_items_y > len(LETTERS):
       # TODO: This will work up to 384-well plates.
@@ -382,15 +391,20 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     # Create the item grid with resource absence/presence information.
     item_grid = [
-      ["O" if self.get_item((i, j)).children else "-" for j in range(self.num_items_x)]
+      [occupied_func(self.get_item((i, j))) for j in range(self.num_items_x)]
       for i in range(self.num_items_y)
     ]
     spacer = " " * max(1, max_digits)
     item_list = [LETTERS[i] + ":  " + spacer.join(row) for i, row in enumerate(item_grid)]
     item_text = "\n".join(item_list)
 
-    # Build the final representation.
     return info_str + "\n" + header_row + "\n" + item_text
+
+  def print_grid(self, occupied_func=None):
+    print(self.make_grid(occupied_func=occupied_func))
+
+  def __repr__(self) -> str:
+    return f"{self.num_items_x}x{self.num_items_y} {self.__class__.__name__}"
 
   def serialize(self) -> dict:
     return {
