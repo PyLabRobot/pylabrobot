@@ -4650,7 +4650,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="RB",
       fmt="rb####",
-      pn=pipetting_channel_index,
+      pn=f"{pipetting_channel_index:02}",
     )
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
@@ -4674,7 +4674,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="RD",
       fmt="rd####",
-      pn=pipetting_channel_index,
+      pn=f"{pipetting_channel_index:02}",
     )
 
   async def request_tip_presence(self) -> List[int]:
