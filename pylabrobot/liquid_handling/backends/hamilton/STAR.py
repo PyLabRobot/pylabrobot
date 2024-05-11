@@ -1305,8 +1305,10 @@ class STAR(HamiltonLiquidHandler):
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
     max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
 
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
-      # not sure why this is necessary, but it is according to log files and experiments
+    # not sure why this is necessary, but it is according to log files and experiments
+    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
+      max_tip_length += 2
+    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
       max_tip_length -= 2
 
     try:
