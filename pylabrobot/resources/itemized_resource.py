@@ -1,6 +1,7 @@
 from abc import ABCMeta
 import sys
 from typing import Union, Tuple, TypeVar, Generic, List, Optional, Generator, Type, Sequence, cast
+from string import ascii_uppercase as LETTERS
 
 import pylabrobot.utils
 
@@ -363,6 +364,51 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       raise ValueError(f"Invalid direction '{direction}'.")
 
     return make_generator(indices, batch_size, repeat)
+
+  def __repr__(self) -> str:
+    return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
+            f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})")
+
+  @staticmethod
+  def _occupied_func(item: T):
+    return "O" if item.children else "-"
+
+  def make_grid(self, occupied_func=None):
+    # The "occupied_func" is a function that checks if a resource has something in it,
+    # and returns a single character representing its status.
+    if occupied_func is None:
+      occupied_func = self._occupied_func
+
+    # Make a title with summary information.
+    info_str = repr(self)
+
+    if self.num_items_y > len(LETTERS):
+      # TODO: This will work up to 384-well plates.
+      return info_str + " (too many rows to print)"
+
+    # Calculate the maximum number of digits required for any column index.
+    max_digits = len(str(self.num_items_x))
+
+    # Create the header row with numbers aligned to the columns.
+    # Use right-alignment specifier.
+    header_row = "    " + " ".join(f"{i+1:<{max_digits}}" for i in range(self.num_items_x))
+
+    # Create the item grid with resource absence/presence information.
+    item_grid = [
+      [occupied_func(self.get_item((i, j))) for j in range(self.num_items_x)]
+      for i in range(self.num_items_y)
+    ]
+    spacer = " " * max(1, max_digits)
+    item_list = [LETTERS[i] + ":  " + spacer.join(row) for i, row in enumerate(item_grid)]
+    item_text = "\n".join(item_list)
+
+    # Simple footer with dimensions.
+    footer_text = f"{self.num_items_x}x{self.num_items_y} {self.__class__.__name__}"
+
+    return info_str + "\n" + header_row + "\n" + item_text + "\n" + footer_text
+
+  def print_grid(self, occupied_func=None):
+    print(self.make_grid(occupied_func=occupied_func))
 
   def serialize(self) -> dict:
     return {
