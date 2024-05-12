@@ -117,7 +117,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
   @staticmethod
   def _occupied_func(item: TipSpot):
-    return "V" if x.has_tip() else "-"
+    return "V" if item.has_tip() else "-"
 
   def get_tip(self, identifier: Union[str, int]) -> Tip:
     """ Get the item with the given identifier.
