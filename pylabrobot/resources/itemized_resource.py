@@ -370,8 +370,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
             f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})")
 
   @staticmethod
-  def _occupied_func(x: Resource):
-    return "O" if x.children else "-"
+  def _occupied_func(item: T):
+    return "O" if item.children else "-"
 
   def make_grid(self, occupied_func=None):
     # The "occupied_func" is a function that checks if a resource has something in it,
