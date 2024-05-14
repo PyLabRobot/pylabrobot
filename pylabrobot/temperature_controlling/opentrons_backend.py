@@ -41,13 +41,16 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
     return {**super().serialize(), "opentrons_id": self.opentrons_id}
 
   async def set_temperature(self, temperature: float):
+    # pylint: disable=possibly-used-before-assignment
     ot_api.modules.temperature_module_set_temperature(celsius=temperature,
                                                       module_id=self.opentrons_id)
 
   async def deactivate(self):
+    # pylint: disable=possibly-used-before-assignment
     ot_api.modules.temperature_module_deactivate(module_id=self.opentrons_id)
 
   async def get_current_temperature(self) -> float:
+    # pylint: disable=possibly-used-before-assignment
     modules = ot_api.modules.list_connected_modules()
     for module in modules:
       if module["id"] == self.opentrons_id:
