@@ -1,6 +1,7 @@
 """ Alpaqua magnetic racks """
 # currently implemented as MFX_modules to enable simple and fast assignment of plates to them
 from pylabrobot.resources.ml_star.mfx_modules import MFXModule
+from pylabrobot.resources.coordinate import Coordinate
 
 
 def Alpaqua_96_magnum_flx(name: str) -> MFXModule:
