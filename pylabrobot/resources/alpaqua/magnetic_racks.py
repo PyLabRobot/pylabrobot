@@ -4,6 +4,7 @@ from typing import Optional
 
 from pylabrobot.resources.ml_star.mfx_modules import MFXModule
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import WellBottomType
 
@@ -25,10 +26,12 @@ class _Alpaqua_96_magnum_flx(MFXModule):
 
   def assign_child_resource(
     self,
-    resource: Plate,
+    resource: Resource,
     location: Optional[Coordinate] = None,
     reassign: bool = True
   ):
+    if not isinstance(resource, Plate):
+      raise ValueError("Only plates can be assigned to Alpaqua 96 magnum flx.")
     if resource.get_well(0).bottom_type not in {WellBottomType.U, WellBottomType.V}:
       raise ValueError("Only plates with U or V bottom can be assigned to Alpaqua 96 magnum flx.")
     return super().assign_child_resource(resource, location, reassign)
