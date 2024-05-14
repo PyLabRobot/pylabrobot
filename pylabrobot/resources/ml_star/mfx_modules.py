@@ -51,6 +51,7 @@ class MFXModule(Resource):
     # site where resources will be placed on this module
     self._child_resource_location = child_resource_location
     self._child_resource: Optional[Resource] = None
+    self.skirt_height = skirt_height
 
   @property
   def child_resource_location(self) -> Coordinate:
