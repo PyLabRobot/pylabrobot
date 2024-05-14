@@ -28,6 +28,7 @@ from .volume_tracker import VolumeTracker, does_volume_tracking, no_volume_track
 from .resource_stack import ResourceStack
 
 # labware manufacturers and suppliers
+from .alpaqua import *
 from .azenta import *
 from .boekel import *
 from .corning_costar import *
