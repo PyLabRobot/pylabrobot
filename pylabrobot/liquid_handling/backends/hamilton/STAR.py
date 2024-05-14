@@ -6751,6 +6751,8 @@ class STAR(HamiltonLiquidHandler):
     # Ensure proper temperature input handling
     if isinstance(temp, (float, int)):
       safe_temp_str = f"{int(temp * 10):04d}"
+    else:
+      safe_temp_str = str(temp)
 
     return await self.send_command(
       module=f"T{device_number}",
@@ -6838,6 +6840,8 @@ class STAR(HamiltonLiquidHandler):
     # Ensure proper temperature input handling
     if isinstance(temp, (float, int)):
       safe_temp_str = f"{int(temp * 10):04d}"
+    else:
+      safe_temp_str = str(temp)
 
     return await self.send_command(
       module=f"T{device_number}",

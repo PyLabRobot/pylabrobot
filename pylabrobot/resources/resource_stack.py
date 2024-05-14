@@ -91,6 +91,8 @@ class ResourceStack(Resource):
       resource_location = Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
       resource_location = Coordinate(0, 0, self.get_size_z())
+    else:
+      raise ValueError("self.direction must be one of 'x', 'y', or 'z'")
 
     super().assign_child_resource(resource, location=resource_location)
 
