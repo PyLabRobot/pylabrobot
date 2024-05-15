@@ -38,7 +38,7 @@ def PLT_CAR_L4_SHAKER(name: str) -> MFXCarrier:
   Template carrier with 4 positions for Hamilton Heater Shaker.
   Occupies 7 tracks (7T). Can be screwed onto the deck.
   """
-  return ShakerCarrier(
+  return MFXCarrier(
     name=name,
     size_x=157.5,
     size_y=497.0,
