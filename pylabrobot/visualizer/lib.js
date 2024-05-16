@@ -920,7 +920,7 @@ class TubeRack extends Resource {
   }
 }
 
-class Tube extends Container{
+class Tube extends Container {
   draggable = false;
   canDelete = false;
 
@@ -929,21 +929,16 @@ class Tube extends Container{
   }
 
   drawMainShape() {
-    
-      return new Konva.Circle({
-        radius: (1.25*this.size_x) / 2,
-        fill: Tube.colorForVolume(this.getVolume(), this.maxVolume),
-        stroke: "black",
-        strokeWidth: 1,
-        offsetX: -this.size_x / 2,
-        offsetY: -this.size_y / 2,
-      });
-     
-    }
-
+    return new Konva.Circle({
+      radius: (1.25 * this.size_x) / 2,
+      fill: Tube.colorForVolume(this.getVolume(), this.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+      offsetX: -this.size_x / 2,
+      offsetY: -this.size_y / 2,
+    });
   }
-
-
+}
 
 class LiquidHandler extends Resource {
   drawMainShape() {
@@ -989,9 +984,9 @@ function classForResourceType(type) {
     case "LiquidHandler":
       return LiquidHandler;
     case "TubeRack":
-        return TubeRack;
+      return TubeRack;
     case "Tube":
-        return Tube;
+      return Tube;
     default:
       return Resource;
   }
