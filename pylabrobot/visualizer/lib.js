@@ -879,6 +879,71 @@ class CarrierSite extends Resource {
   }
 }
 
+class TubeRack extends Resource {
+  constructor(resourceData, parent = undefined) {
+    super(resourceData, parent);
+    const { num_items_x, num_items_y } = resourceData;
+    this.num_items_x = num_items_x;
+    this.num_items_y = num_items_y;
+  }
+
+  drawMainShape() {
+    return new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: "#122D42",
+      stroke: "black",
+      strokeWidth: 1,
+    });
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        num_items_x: this.num_items_x,
+        num_items_y: this.num_items_y,
+      },
+    };
+  }
+
+  update() {
+    super.update();
+
+    // Rename the children
+    for (let i = 0; i < this.num_items_x; i++) {
+      for (let j = 0; j < this.num_items_y; j++) {
+        const child = this.children[i * this.num_items_y + j];
+        child.name = `${this.name}_tube_${i}_${j}`;
+      }
+    }
+  }
+}
+
+class Tube extends Container{
+  draggable = false;
+  canDelete = false;
+
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
+  }
+
+  drawMainShape() {
+    
+      return new Konva.Circle({
+        radius: (1.25*this.size_x) / 2,
+        fill: Tube.colorForVolume(this.getVolume(), this.maxVolume),
+        stroke: "black",
+        strokeWidth: 1,
+        offsetX: -this.size_x / 2,
+        offsetY: -this.size_y / 2,
+      });
+     
+    }
+
+  }
+
+
 class LiquidHandler extends Resource {
   drawMainShape() {
     return undefined; // just draw the children (deck and so on)
@@ -922,6 +987,10 @@ function classForResourceType(type) {
       return HamiltonSTARDeck;
     case "LiquidHandler":
       return LiquidHandler;
+    case "TubeRack":
+      return TubeRack;
+    case "Tube":
+      return Tube;
     default:
       return Resource;
   }
