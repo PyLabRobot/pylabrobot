@@ -50,13 +50,10 @@ class TubeRack(ItemizedResource[Tube]):
     assert location is not None, "Location must be specified for resource."
     return super().assign_child_resource(resource, location=location, reassign=reassign)
 
-  def unassign_child_resource(self, resource):
-    return super().unassign_child_resource(resource)
-  
   def __repr__(self) -> str:
     return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
             f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})")
-  
+
   def get_tube(self, identifier: Union[str, int, Tuple[int, int]]) -> Tube:
     """ Get the item with the given identifier.
 
