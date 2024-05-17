@@ -739,6 +739,7 @@ class LiquidHandler(Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           op.resource.tracker.remove_liquid(op.volume)
+        #TODO add check for CC here, only care about CC when adding a liquid to a tip
         for liquid, volume in reversed(op.liquids):
           op.tip.tracker.add_liquid(liquid=liquid, volume=volume)
 
@@ -764,6 +765,7 @@ class LiquidHandler(Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
+          #TODO add in CC check here
         (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
 
     # trigger callback
@@ -1332,6 +1334,7 @@ class LiquidHandler(Machine):
         all_liquids.append(liquids)
 
       for liquid, vol in reversed(liquids):
+        #TODO add check for CC
         channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
     aspiration_plate = AspirationPlate(
