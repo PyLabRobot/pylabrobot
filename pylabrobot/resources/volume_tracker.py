@@ -14,6 +14,8 @@ this.cross_contamination_tracking_enabled = False # type: ignore
 
 def set_volume_tracking(enabled: bool):
   this.volume_tracking_enabled = enabled # type: ignore
+  if enabled == False:
+    this.cross_contamination_tracking_enabled = False # type: ignore
 
 def does_volume_tracking() -> bool:
   return this.volume_tracking_enabled # type: ignore
@@ -22,10 +24,13 @@ def does_volume_tracking() -> bool:
 def no_volume_tracking():
   old_value = this.volume_tracking_enabled
   this.volume_tracking_enabled = False # type: ignore
+  this.cross_contamination_tracking_enabled = False # type: ignore
   yield
   this.volume_tracking_enabled = old_value # type: ignore
 
 def set_cross_contamination_tracking(enabled: bool):
+  if enabled == True:
+    assert this.volume_tracking_enabled == True, "Cross contamination tracking only possible if volume tracking active."
   this.cross_contamination_tracking_enabled = enabled # type: ignore
 
 def does_cross_contamination_tracking() -> bool:
