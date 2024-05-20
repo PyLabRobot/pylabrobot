@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+#<<<<<<< HEAD
 from typing import List, Optional
 
 from pylabrobot.resources.resource import Resource
@@ -117,7 +117,7 @@ class ResourceStack(Resource):
       raise ValueError("Stack is empty")
 
     return self.children[-1]
-=======
+
 from typing import List, Optional
 
 from pylabrobot.resources.resource import Resource
@@ -238,4 +238,4 @@ class ResourceStack(Resource):
       raise ValueError("Stack is empty")
 
     return self.children[-1]
->>>>>>> 1919727e2d142ec81d2a1a8adc02acf9a7b1f96b
+#>>>>>>> 1919727e2d142ec81d2a1a8adc02acf9a7b1f96b
