@@ -58,7 +58,7 @@ class VolumeTracker:
     liquid_history: Optional[set] = None
   ) -> None:
     self._is_disabled = False
-    self._is_cross_contamination_tracking_disabled = True
+    self._is_cross_contamination_tracking_disabled = False
     self.max_volume = max_volume
 
     self.liquids: List[Tuple[Optional[Liquid], float]] = liquids or []
@@ -136,8 +136,10 @@ class VolumeTracker:
         f"Container has too little volume: {volume}uL > {self.get_free_volume()}uL.")
 
     # Update the liquid history tracker if needed
-    if not self.is_cross_contamination_tracking_disabled:
-      self.liquid_history.update(liquid)
+    if not self._is_cross_contamination_tracking_disabled:
+      print(liquid)
+      self.liquid_history.add(liquid)
+      print(self.liquid_history)
 
     # If the last liquid is the same as the one we want to add, just add the volume to it.
     if len(self.pending_liquids) > 0:
