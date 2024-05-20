@@ -98,7 +98,7 @@ class VolumeTracker:
     self.pending_liquids = liquids
 
     if not self.is_cross_contamination_tracking_disabled:
-      self.liquid_history.update(liquids)
+      self.liquid_history.update([l[0] for l in liquids])
 
     if self._callback is not None:
       self._callback()
@@ -137,9 +137,7 @@ class VolumeTracker:
 
     # Update the liquid history tracker if needed
     if not self._is_cross_contamination_tracking_disabled:
-      print(liquid)
       self.liquid_history.add(liquid)
-      print(self.liquid_history)
 
     # If the last liquid is the same as the one we want to add, just add the volume to it.
     if len(self.pending_liquids) > 0:
