@@ -47,7 +47,7 @@ def calculate_liquid_height_in_container_2segments_square_vbottom(
       raise ValueError("""WARNING: Liquid overflow detected;
       check your labware definition and/or that you are using the right labware.""")
 
-  return liquid_height
+  return float(liquid_height)
 
 
 def calculate_liquid_height_in_container_2segments_square_ubottom(
@@ -74,7 +74,7 @@ def calculate_liquid_height_in_container_2segments_square_ubottom(
 
   if liquid_volume <= full_hemisphere_volume:
     # Liquid volume is within the hemisphere
-    def volume_of_spherical_cap(h):
+    def volume_of_spherical_cap(h: float):
       return (1/3) * math.pi * h**2 * (3*r - h)
 
     # Binary search to solve for h
