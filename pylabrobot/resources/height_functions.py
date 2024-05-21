@@ -78,7 +78,7 @@ def calculate_liquid_height_in_container_2segments_square_ubottom(
       return (1/3) * math.pi * h**2 * (3*r - h)
 
     # Binary search to solve for h
-    low, high = 0, r
+    low, high = 0.0, r
     tolerance = 1e-6
     while high - low > tolerance:
       mid = (low + high) / 2
