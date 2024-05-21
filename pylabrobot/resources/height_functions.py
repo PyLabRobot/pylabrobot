@@ -1,4 +1,4 @@
-# General use functions for calculating the height of 
+# General use functions for calculating the height of
 # a liquid inside different container geometries
 
 import math
