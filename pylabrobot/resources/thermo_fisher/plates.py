@@ -24,10 +24,12 @@ def ThermoScientific_96_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
   - Material: Polypropylene (AB-1068, polystyrene)
   - Suitable for Autoclaving (15 minutes at 121°C) or Gamma Irradiation
   - Resistant to DMSO (100%); Ethanol (100%); Isopropanol (100%)
-  - Round well shape designed for optimal sample recovery or square shape to maximize sample volume within ANSI footprint design
+  - Round well shape designed for optimal sample recovery or square shape to
+    maximize sample volume within ANSI footprint design
   - Each well has an independent sealing rim to prevent cross-contamination
   - U-bottomed wells ideally suited for sample resuspension
-  - Sealing options: Adhesive Seals, Heat Seals, Storage Plate Caps and Cap Strips, and Storage Plate Sealing Mats
+  - Sealing options: Adhesive Seals, Heat Seals, Storage Plate Caps and Cap
+    Strips, and Storage Plate Sealing Mats
   - Cleanroom manufactured
   - ANSI-format for compatibility with automated systems
   """
