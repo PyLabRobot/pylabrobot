@@ -85,6 +85,9 @@ class VolumeTracker:
       else:
         removed_liquids.append((liquid, liquid_volume))
 
+    if self._callback is not None:
+      self._callback()
+
     return removed_liquids
 
   def add_liquid(self, liquid: Optional["Liquid"], volume: float) -> None:
@@ -103,6 +106,9 @@ class VolumeTracker:
         self.pending_liquids.append((liquid, volume))
     else:
       self.pending_liquids.append((liquid, volume))
+
+    if self._callback is not None:
+      self._callback()
 
   def get_used_volume(self) -> float:
     """ Get the used volume of the container. Note that this includes pending operations. """

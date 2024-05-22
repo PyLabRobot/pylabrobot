@@ -842,10 +842,10 @@ def trace_information_to_string(module_identifier: str, trace_information: int) 
       55: "Y-drive blocked",
       56: "Y-drive not initialized",
       57: "Y-drive movement error",
-      60: "X-drive blocked",
-      61: "X-drive not initialized",
-      62: "X-drive movement error",
-      63: "X-drive limit stop not found",
+      60: "Z-drive blocked",
+      61: "Z-drive not initialized",
+      62: "Z-drive movement error",
+      63: "Z-drive limit stop not found",
       70: "No liquid level found (possibly because no liquid was present)",
       71: "Not enough liquid present (Immersion depth or surface following position possiby"
           "below minimal access range)",
@@ -1064,6 +1064,7 @@ class STAR(HamiltonLiquidHandler):
   def __init__(
     self,
     device_address: Optional[int] = None,
+    serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -1073,6 +1074,8 @@ class STAR(HamiltonLiquidHandler):
     Args:
       device_address: the USB device address of the Hamilton STAR. Only useful if using more than
         one Hamilton machine over USB.
+      serial_number: the serial number of the Hamilton STAR. Only useful if using more than one
+        Hamilton machine over USB.
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
       write_timeout: timeout in seconds for writing a command.
@@ -1085,6 +1088,7 @@ class STAR(HamiltonLiquidHandler):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_product=0x8000,
+      serial_number=serial_number
     )
 
     self.iswap_installed: Optional[bool] = None
@@ -1133,14 +1137,6 @@ class STAR(HamiltonLiquidHandler):
     if self._extended_conf is None:
       raise RuntimeError("has not loaded extended_conf, forgot to call `setup`?")
     return self._extended_conf
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "packet_read_timeout": self.packet_read_timeout,
-      "read_timeout": self.read_timeout,
-      "write_timeout": self.write_timeout,
-    }
 
   @property
   def iswap_parked(self) -> bool:
@@ -1256,7 +1252,7 @@ class STAR(HamiltonLiquidHandler):
         begin_of_tip_deposit_process=int(self._traversal_height * 10),
         end_of_tip_deposit_process=1220,
         z_position_at_end_of_a_command=3600,
-        tip_pattern=[True], # [True] * 8
+        tip_pattern=[True] * self.num_channels,
         tip_type=4, # TODO: get from tip types
         discarding_method=0
       )
@@ -1309,8 +1305,10 @@ class STAR(HamiltonLiquidHandler):
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
     max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
 
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
-      # not sure why this is necessary, but it is according to log files and experiments
+    # not sure why this is necessary, but it is according to log files and experiments
+    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
+      max_tip_length += 2
+    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
       max_tip_length -= 2
 
     try:
@@ -1485,7 +1483,7 @@ class STAR(HamiltonLiquidHandler):
         the bottom of the well (presumably) to aspirate from.
       detection_height_difference_for_dual_lld: Difference between the gamma and DP LLD heights if
         the LLD mode is DUAL.
-      swap_speed: Unknown.
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The time to wait after homogenization.
       homogenization_volume: The volume to aspirate for homogenization.
       homogenization_cycles: The number of cycles to perform for homogenization.
@@ -1743,7 +1741,7 @@ class STAR(HamiltonLiquidHandler):
         position.
       gamma_lld_sensitivity: The gamma LLD sensitivity. (1 = high, 4 = low)
       dp_lld_sensitivity: The dp LLD sensitivity. (1 = high, 4 = low)
-      swap_speed: The homogenization speed.
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The settling time.
       mix_volume: The volume to use for homogenization.
       mix_cycles: The number of homogenization cycles.
@@ -2032,7 +2030,7 @@ class STAR(HamiltonLiquidHandler):
       transport_air_volume: The volume of air to aspirate after the liquid.
       pre_wetting_volume: The volume of liquid to use for pre-wetting.
       gamma_lld_sensitivity: The sensitivity of the gamma liquid level detection.
-      swap_speed: unknown.
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The time to wait after aspirating.
       homogenization_volume: The volume of liquid to aspirate for homogenization.
       homogenization_cycles: The number of cycles to perform for homogenization.
@@ -2213,7 +2211,7 @@ class STAR(HamiltonLiquidHandler):
       liquid_surface_sink_distance_at_the_end_of_dispense: Unknown.
       transport_air_volume: Transport air volume, to dispense before aspiration.
       gamma_lld_sensitivity: Gamma LLD sensitivity.
-      swap_speed: Unknown.
+      swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: Settling time, in 0.1 seconds.
       mixing_volume: Mixing volume, in ul.
       mixing_cycles: Mixing cycles.
@@ -4072,7 +4070,7 @@ class STAR(HamiltonLiquidHandler):
     if deck_size == STARLET_SIZE_X:
       xs = "07975" # 1360-797.5 = 562.5
     elif deck_size == STAR_SIZE_X:
-      xs = "13375" # 1900-1337.5 = 562.5
+      xs = "13385" # 1900-1337.5 = 562.5, plus a manual adjustment of + 10
     else:
       raise ValueError(f"Deck size {deck_size} not supported")
 
@@ -4081,8 +4079,8 @@ class STAR(HamiltonLiquidHandler):
       command="ZT",
       xs=xs,
       xd="0",
-      ya="1250",
-      yb="1070",
+      ya="1240",
+      yb="1065",
       pa=f"{p1:02}",
       pb=f"{p2:02}",
       tp="2350",
@@ -4101,7 +4099,7 @@ class STAR(HamiltonLiquidHandler):
     if deck_size == STARLET_SIZE_X:
       xs = "07975"
     elif deck_size == STAR_SIZE_X:
-      xs = "13375"
+      xs = "13385"
     else:
       raise ValueError(f"Deck size {deck_size} not supported")
     command_output = await self.send_command(
@@ -4109,8 +4107,8 @@ class STAR(HamiltonLiquidHandler):
       command="ZS",
       xs=xs,
       xd="0",
-      ya="1250",
-      yb="1070",
+      ya="1240",
+      yb="1065",
       tp="2150",
       tz="2050",
       th=int(self._traversal_height * 10),
@@ -4653,7 +4651,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="RB",
       fmt="rb####",
-      pn=pipetting_channel_index,
+      pn=f"{pipetting_channel_index:02}",
     )
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
@@ -4677,7 +4675,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="RD",
       fmt="rd####",
-      pn=pipetting_channel_index,
+      pn=f"{pipetting_channel_index:02}",
     )
 
   async def request_tip_presence(self) -> List[int]:
@@ -6754,6 +6752,8 @@ class STAR(HamiltonLiquidHandler):
     # Ensure proper temperature input handling
     if isinstance(temp, (float, int)):
       safe_temp_str = f"{int(temp * 10):04d}"
+    else:
+      safe_temp_str = str(temp)
 
     return await self.send_command(
       module=f"T{device_number}",
@@ -6841,6 +6841,8 @@ class STAR(HamiltonLiquidHandler):
     # Ensure proper temperature input handling
     if isinstance(temp, (float, int)):
       safe_temp_str = f"{int(temp * 10):04d}"
+    else:
+      safe_temp_str = str(temp)
 
     return await self.send_command(
       module=f"T{device_number}",

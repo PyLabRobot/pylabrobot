@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import List, Type, Optional
+from typing import List, Optional
 
 from pylabrobot.machines.backends import MachineBackend
 from pylabrobot.resources import Deck, Resource
@@ -105,39 +105,6 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def move_resource(self, move: Move):
     """ Move a resource to a new location. """
-
-  def serialize(self):
-    """ Serialize the backend so that an equivalent backend can be created by passing the dict
-    as kwargs to the initializer. The dict must contain a key "type" that specifies the type of
-    backend to create. This key will be removed from the dict before passing it to the initializer.
-    """
-
-    return {
-      "type": self.__class__.__name__,
-    }
-
-  @classmethod
-  def deserialize(cls, data: dict) -> LiquidHandlerBackend:
-    """ Deserialize the backend. Unless a custom serialization method is implemented, this method
-    should not be overridden. """
-
-    # Recursively find a subclass with the correct name
-    def find_subclass(cls: Type[LiquidHandlerBackend], name: str) -> \
-      Optional[Type[LiquidHandlerBackend]]:
-      if cls.__name__ == name:
-        return cls
-      for subclass in cls.__subclasses__():
-        subclass_ = find_subclass(subclass, name)
-        if subclass_ is not None:
-          return subclass_
-      return None
-
-    subclass = find_subclass(cls, data["type"])
-    if subclass is None:
-      raise ValueError(f"Could not find subclass with name {data['type']}")
-
-    del data["type"]
-    return subclass(**data)
 
   async def prepare_for_manual_channel_operation(self, channel: int):
     """ Prepare the robot for manual operation. """

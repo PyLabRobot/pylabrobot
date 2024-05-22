@@ -188,3 +188,28 @@ def calculate_liquid_volume_container_2segments_round_ubottom(
     liquid_volume = full_hemisphere_volume + cylinder_liquid_volume
 
   return float(liquid_volume)
+
+
+def calculate_liquid_volume_container_1segment_round_fbottom(
+  d: float,
+  h_cylinder: float,
+  liquid_height: float
+) -> float:
+  """
+  Calculate the volume of liquid in a container with a cylindrical shape.
+
+  Parameters:
+    d (float): The diameter of the base of the hemisphere and cylinder in mm.
+    h_cylinder (float): The height of the cylinder in mm.
+    liquid_height (float): The height of the liquid in the container in mm.
+
+  Returns:
+    float: The volume of the liquid in cubic millimeters.
+  """
+  r = d/2
+  if liquid_height > h_cylinder:
+    raise ValueError("""WARNING: Liquid overflow detected;
+    check your labware definiton and/or that you are using the right labware.""")
+
+  cylinder_liquid_volume = math.pi * r**2 * liquid_height
+  return cylinder_liquid_volume
