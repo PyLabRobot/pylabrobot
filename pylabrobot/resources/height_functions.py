@@ -8,8 +8,41 @@ def _height_of_volume_in_spherical_cap(
   r: float,
   liquid_volume: float
 ) -> float:
+  """
+  Calculate the height of liquid in a spherical cap given the radius of the
+  sphere and the volume of the liquid.
+
+  This function uses binary search to determine the height of the liquid
+  within a spherical cap (a portion of a sphere).
+
+  Parameters:
+    r (float): The radius of the sphere in millimeters.
+    liquid_volume (float): The volume of the liquid in microliter/cubic millimeters.
+
+  Returns:
+    float: The height of the liquid in the spherical cap in millimeters.
+
+  Raises:
+    ValueError: If the liquid volume exceeds the volume of a hemisphere
+    of the given radius.
+
+  Example:
+    >>> _height_of_volume_in_spherical_cap(6.9, 100)
+    2.28 # units: mm
+
+  Notes:
+    - The height is calculated with a precision defined by the tolerance
+      value (1e-6).
+  """
+
   def volume_of_spherical_cap(h: float):
     return (1/3) * math.pi * h**2 * (3*r - h)
+
+  # Maximum volume of the spherical cap with height equal to the radius
+  max_volume = volume_of_spherical_cap(r)
+  if liquid_volume > max_volume:
+    raise ValueError("""WARNING: Liquid volume exceeds the volume of a
+                         hemisphere of the given radius.""")
 
   # Binary search to solve for h
   low, high = 0.0, r
@@ -21,6 +54,7 @@ def _height_of_volume_in_spherical_cap(
     else:
       high = mid
   liquid_height = (low + high) / 2
+
   return liquid_height
 
 
