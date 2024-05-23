@@ -1919,6 +1919,7 @@ class STAR(HamiltonLiquidHandler):
     assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
+    z_deposit_position += int(pickup.offset.z*10) if pickup.offset is not None else 0
 
     x_direction = 0 if position.x > 0 else 1
     return await self.pick_up_tips_core96(
