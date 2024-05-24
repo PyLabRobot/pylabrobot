@@ -20,8 +20,8 @@ class MachineBackend(ABC):
     class_name = data.pop("type")
     subclass = find_subclass(class_name, cls=cls)
     if subclass is None:
-      raise ValueError(f"Could not find subclass with name '{data['type']}'")
+      raise ValueError(f'Could not find subclass with name "{data["type"]}"')
     if issubclass(subclass, ABCMeta):
-      raise ValueError(f"Subclass with name '{data['type']}' is abstract")
+      raise ValueError(f'Subclass with name "{data["type"]}" is abstract')
     assert issubclass(subclass, cls)
     return subclass(**data)
