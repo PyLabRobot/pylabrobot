@@ -745,8 +745,8 @@ class LiquidHandler(Machine):
             if (next(reversed(op.liquids))[0] not in op.tip.tracker.liquid_history) and \
             bool(op.tip.tracker.liquid_history):
               raise CrossContaminationError(
-              f"Attempting to aspirate {next(reversed(op.liquids))[0]} with \
-                a tip contaminated with {op.tip.tracker.liquid_history}.")
+              f"Attempting to aspirate {next(reversed(op.liquids))[0]} with "
+              f"a tip contaminated with {op.tip.tracker.liquid_history}.")
           op.resource.tracker.remove_liquid(op.volume)
         for liquid, volume in reversed(op.liquids):
           if does_cross_contamination_tracking():
