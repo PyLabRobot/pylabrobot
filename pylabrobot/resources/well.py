@@ -110,23 +110,23 @@ class Well(Container):
     return self._compute_volume_from_height(height)
 
   def compute_height_from_volume(self, liquid_volume: float) -> float:
-      """ Compute the height of liquid in a well relative to the well's bottom
-        from the volume of the liquid.
+    """ Compute the height of liquid in a well relative to the well's bottom
+      from the volume of the liquid.
 
-      Args:
-        liquid_volume: Volume of the liquid in the well.
+    Args:
+      liquid_volume: Volume of the liquid in the well.
 
-      Returns:
-        Height of the liquid in the well relative to the bottom.
+    Returns:
+      Height of the liquid in the well relative to the bottom.
 
-      Raises:
-        NotImplementedError: If the plate does not have a volume computation function.
-      """
+    Raises:
+      NotImplementedError: If the plate does not have a volume computation function.
+    """
 
-      if self._compute_height_from_volume is None:
-        raise NotImplementedError("compute_height_from_volume not implemented.")
+    if self._compute_height_from_volume is None:
+      raise NotImplementedError("compute_height_from_volume not implemented.")
 
-      return self._compute_height_from_volume(liquid_volume)
+    return self._compute_height_from_volume(liquid_volume)
 
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """ Set the liquids in the well.
