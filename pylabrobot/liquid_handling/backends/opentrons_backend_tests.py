@@ -19,7 +19,7 @@ def _is_python_3_10():
 def _mock_define(lw):
   return {
     "data": {
-      "definitionUri": f"lw['namespace']/{lw['metadata']['displayName']}/1"
+      "definitionUri": f'lw["namespace"]/{lw["metadata"]["displayName"]}/1'
     }
   }
 
