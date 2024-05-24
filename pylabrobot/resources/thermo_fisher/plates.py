@@ -21,7 +21,7 @@ def _compute_volume_from_height_ThermoScientific_96_1200ul_Rd(h: float):
     liquid_height=h)
 
 def _compute_height_from_volume_ThermoScientific_96_1200ul_Rd(liquid_volume: float):
-  if liquid_volume > 1260:
+  if liquid_volume > 1260: # 5% tolerance
     raise ValueError(f"Volume {liquid_volume} is too large for ThermoScientific_96_1200ul_Rd")
   return round(calculate_liquid_height_in_container_2segments_square_ubottom(
     x=8.15,
