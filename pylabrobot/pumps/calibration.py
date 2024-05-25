@@ -87,6 +87,16 @@ class PumpCalibration:
       raise NotImplementedError("Calibration filetype not supported.")
     raise NotImplementedError("Calibration format not supported.")
 
+  def serialize(self) -> dict:
+    return {
+      "calibration": self.calibration,
+      "calibration_mode": self.calibration_mode
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict) -> PumpCalibration:
+    return cls(calibration=data["calibration"], calibration_mode=data["calibration_mode"])
+
   @classmethod
   def load_from_json(
     cls,

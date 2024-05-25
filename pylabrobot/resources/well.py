@@ -129,28 +129,6 @@ class Well(Container):
 
     return self._compute_height_from_volume(liquid_volume)
 
-  def bottom(self, z_offset: float = 0.0):
-    """ Compute the absolute coordinate of the bottom of a well, with the potential
-      to conveniantly declare a z_offset directly.
-    """
-    
-    if self.location is None:
-      return None
-    else:
-      well_bottom_coordinate = self.get_absolute_location() + self.center()
-      return well_bottom_coordinate + Coordinate(0,0,z_offset)
-  
-  def top(self, z_offset: float = 0.0):
-    """ Compute the absolute coordinate of the top of a well, with the potential
-      to conveniantly declare a z_offset directly.
-    """
-    
-    if self.location is None:
-      return None
-    else:
-      well_top_coordinate = self.get_absolute_location() + self.center() + Coordinate(0,0,self.get_size_z())
-      return well_top_coordinate + Coordinate(0,0,z_offset)
-
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """ Set the liquids in the well.
 
