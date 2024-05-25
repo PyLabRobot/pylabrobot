@@ -2,6 +2,7 @@ import enum
 import math
 from typing import Callable, List, Optional, Tuple, Union
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.container import Container
 from pylabrobot.resources.liquid import Liquid
 
@@ -78,8 +79,6 @@ class Well(Container):
     self.bottom_type = bottom_type
     self._compute_volume_from_height = compute_volume_from_height
     self.cross_section_type = cross_section_type
-    self.bottom = compute_well_bottom_coordinate
-    self.top = compute_well_top_coordinate
 
     self.tracker.register_callback(self._state_updated)
 
@@ -109,17 +108,28 @@ class Well(Container):
 
     return self._compute_volume_from_height(height)
   
-  def compute_well_bottom_coordinate(self, z_offset: float = 0.0) -> float:
-    """ Compute the 2D center coordinate of the bottom of a well, with the potential
+  def bottom(self, z_offset: float = 0.0):
+    """ Compute the absolute coordinate of the bottom of a well, with the potential
       to conveniantly declare a z_offset directly.
     """
-
-    if self._compute_volume_from_height is None:
-      raise NotImplementedError("compute_volume_from_height not implemented.")
-
-    return self._compute_volume_from_height(height)
-
-
+    
+    if self.location is None:
+      return None
+    else:
+      well_bottom_coordinate = self.get_absolute_location() + self.center()
+      return well_bottom_coordinate+Coordinate(0,0,z_offset)
+  
+  def top(self, z_offset: float = 0.0):
+    """ Compute the absolute coordinate of the top of a well, with the potential
+      to conveniantly declare a z_offset directly.
+    """
+    
+    if self.location is None:
+      return None
+    else:
+      well_top_coordinate = self.get_absolute_location() + self.center() + Coordinate(0,0,self.get_size_z())
+      return well_top_coordinate+Coordinate(0,0,z_offset)
+    
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """ Set the liquids in the well.
 
