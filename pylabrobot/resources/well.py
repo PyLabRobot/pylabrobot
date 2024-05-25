@@ -39,6 +39,7 @@ class Well(Container):
     bottom_type: Union[WellBottomType, str] = WellBottomType.UNKNOWN, category: str = "well",
     max_volume: Optional[float] = None, model: Optional[str] = None,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
+    compute_height_from_volume: Optional[Callable[[float], float]] = None,
     cross_section_type: Union[CrossSectionType, str] = CrossSectionType.CIRCLE):
     """ Create a new well.
 
@@ -78,6 +79,7 @@ class Well(Container):
       max_volume=max_volume, model=model)
     self.bottom_type = bottom_type
     self._compute_volume_from_height = compute_volume_from_height
+    self._compute_height_from_volume = compute_height_from_volume
     self.cross_section_type = cross_section_type
 
     self.tracker.register_callback(self._state_updated)
@@ -107,7 +109,26 @@ class Well(Container):
       raise NotImplementedError("compute_volume_from_height not implemented.")
 
     return self._compute_volume_from_height(height)
-  
+
+  def compute_height_from_volume(self, liquid_volume: float) -> float:
+    """ Compute the height of liquid in a well relative to the well's bottom
+      from the volume of the liquid.
+
+    Args:
+      liquid_volume: Volume of the liquid in the well.
+
+    Returns:
+      Height of the liquid in the well relative to the bottom.
+
+    Raises:
+      NotImplementedError: If the plate does not have a volume computation function.
+    """
+
+    if self._compute_height_from_volume is None:
+      raise NotImplementedError("compute_height_from_volume not implemented.")
+
+    return self._compute_height_from_volume(liquid_volume)
+
   def bottom(self, z_offset: float = 0.0):
     """ Compute the absolute coordinate of the bottom of a well, with the potential
       to conveniantly declare a z_offset directly.
@@ -129,7 +150,7 @@ class Well(Container):
     else:
       well_top_coordinate = self.get_absolute_location() + self.center() + Coordinate(0,0,self.get_size_z())
       return well_top_coordinate + Coordinate(0,0,z_offset)
-    
+
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """ Set the liquids in the well.
 
