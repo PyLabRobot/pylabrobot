@@ -78,6 +78,8 @@ class Well(Container):
     self.bottom_type = bottom_type
     self._compute_volume_from_height = compute_volume_from_height
     self.cross_section_type = cross_section_type
+    self.bottom = compute_well_bottom_coordinate
+    self.top = compute_well_top_coordinate
 
     self.tracker.register_callback(self._state_updated)
 
@@ -106,6 +108,17 @@ class Well(Container):
       raise NotImplementedError("compute_volume_from_height not implemented.")
 
     return self._compute_volume_from_height(height)
+  
+  def compute_well_bottom_coordinate(self, z_offset: float = 0.0) -> float:
+    """ Compute the 2D center coordinate of the bottom of a well, with the potential
+      to conveniantly declare a z_offset directly.
+    """
+
+    if self._compute_volume_from_height is None:
+      raise NotImplementedError("compute_volume_from_height not implemented.")
+
+    return self._compute_volume_from_height(height)
+
 
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """ Set the liquids in the well.
