@@ -29,6 +29,7 @@ class CarrierSite(Resource):
     location: Coordinate = Coordinate.zero(),
     reassign: bool = True
   ):
+    
     # TODO: add conditional logic to modify Plate position based on whether
     # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
     self.resource = resource
