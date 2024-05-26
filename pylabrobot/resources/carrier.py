@@ -254,7 +254,7 @@ def create_carrier_sites(
   locations: List[Coordinate],
   site_size_x: List[Union[float, int]],
   site_size_y: List[Union[float, int]],
-  site_pedestal_size_z: List[Union[float, int]] = None
+  site_pedestal_size_z: Optional[List[Union[float, int]]] = None
   ) -> List[CarrierSite]:
   """ Create a list of carrier sites with the given sizes. """
 
@@ -274,7 +274,7 @@ def create_homogeneous_carrier_sites(
   locations: List[Coordinate],
   site_size_x: float,
   site_size_y: float,
-  site_pedestal_size_z: Union[float, int] = None
+  site_pedestal_size_z: Optional[Union[float, int]] = None
   ) -> List[CarrierSite]:
   """ Create a list of carrier sites with the same size. """
 

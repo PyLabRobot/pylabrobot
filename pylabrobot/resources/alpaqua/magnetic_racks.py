@@ -19,7 +19,7 @@ class _Alpaqua_96_magnum_flx(MFXModule):
     size_x=127.0,
     size_y=86.0,
     size_z=26.5,
-    skirt_height=6.2,
+    pedestal_size_z=6.2,
     child_resource_location=Coordinate(-1.0, 0, 26.5),
     model="Alpaqua_96_magnum_flx",
     )
