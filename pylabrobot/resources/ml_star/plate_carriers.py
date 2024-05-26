@@ -49,7 +49,9 @@ def PLT_CAR_L5AC(name: str) -> PlateCarrier:
 
 
 def PLT_CAR_L5AC_A00(name: str) -> PlateCarrier:
-  """ Carrier for 5 deep well 96 Well PCR Plates """
+  """ Carrier for 5 deep well 96 Well PCR Plates 
+  Hamilton cat. no.: 182090
+  """
   return PlateCarrier(
     name=name,
     size_x=135.0,
@@ -64,6 +66,7 @@ def PLT_CAR_L5AC_A00(name: str) -> PlateCarrier:
       ],
       site_size_x=127.0,
       site_size_y=86.0,
+      site_pedestal_size_z=-5.0
     ),
     model="PLT_CAR_L5AC_A00"
   )

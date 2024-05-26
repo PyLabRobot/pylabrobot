@@ -14,10 +14,14 @@ class CarrierSite(Resource):
   """ A single site within a carrier. """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
-    category: str = "carrier_site", model: Optional[str] = None):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
-      model=model)
+    category: str = "carrier_site",
+    pedestal_size_z: Optional[float] = None,
+    model: Optional[str] = None):
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
+      category=category, model=model)
     self.resource: Optional[Resource] = None
+    self.pedestal_size_z: Optional[float] = pedestal_size_z
+    # TODO: add self.pedestal_2D_offset if necessary in the future
 
   def assign_child_resource(
     self,
@@ -25,6 +29,8 @@ class CarrierSite(Resource):
     location: Coordinate = Coordinate.zero(),
     reassign: bool = True
   ):
+    # TODO: add conditional logic to modify Plate position based on whether
+    # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
     self.resource = resource
     return super().assign_child_resource(resource, location=location)
 
@@ -246,15 +252,17 @@ class TubeCarrier(Carrier):
 def create_carrier_sites(
   locations: List[Coordinate],
   site_size_x: List[Union[float, int]],
-  site_size_y: List[Union[float, int]]) -> List[CarrierSite]:
+  site_size_y: List[Union[float, int]],
+  site_pedestal_size_z: Optional[List[Union[float, int]]] = None
+  ) -> List[CarrierSite]:
   """ Create a list of carrier sites with the given sizes. """
 
   sites = []
-  for spot, (l, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
+  for spot, (l, x, y, p_z) in enumerate(zip(locations, site_size_x, site_size_y, site_pedestal_size_z)):
     site = CarrierSite(
       name = f"carrier-site-{spot}",
       # size_x=x, size_y=y, size_z=0, spot=spot)
-      size_x=x, size_y=y, size_z=0)
+      size_x=x, size_y=y, size_z=0, pedestal_size_z=p_z)
     site.location = l
     sites.append(site)
   return sites
@@ -263,8 +271,10 @@ def create_carrier_sites(
 def create_homogeneous_carrier_sites(
   locations: List[Coordinate],
   site_size_x: float,
-  site_size_y: float) -> List[CarrierSite]:
+  site_size_y: float,
+  site_pedestal_size_z: Optional[float] = None
+  ) -> List[CarrierSite]:
   """ Create a list of carrier sites with the same size. """
 
   n = len(locations)
-  return create_carrier_sites(locations, [site_size_x] * n, [site_size_y] * n)
+  return create_carrier_sites(locations, [site_size_x] * n, [site_size_y] * n, [site_pedestal_size_z] * n)
