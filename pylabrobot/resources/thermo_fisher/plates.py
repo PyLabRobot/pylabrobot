@@ -7,7 +7,10 @@ from pylabrobot.resources.itemized_resource import create_equally_spaced
 from pylabrobot.resources.plate import Plate
 
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_ubottom
+from pylabrobot.resources.height_functions import calculate_liquid_height_in_container_2segments_square_ubottom
 
+
+# # # # # # # # # # ThermoScientific_96_1200ul_Rd # # # # # # # # # #
 
 def _compute_volume_from_height_ThermoScientific_96_1200ul_Rd(h: float):
   if h > 20.5:
@@ -17,8 +20,14 @@ def _compute_volume_from_height_ThermoScientific_96_1200ul_Rd(h: float):
     h_cuboid=16.45,
     liquid_height=h)
 
+def _compute_height_from_volume_ThermoScientific_96_1200ul_Rd(liquid_volume: float):
+  if liquid_volume > 1260: # 5% tolerance
+    raise ValueError(f"Volume {liquid_volume} is too large for ThermoScientific_96_1200ul_Rd")
+  return round(calculate_liquid_height_in_container_2segments_square_ubottom(
+    x=8.15,
+    h_cuboid=16.45,
+    liquid_volume=liquid_volume),3)
 
-#: ThermoScientific_96_1200ul_Rd
 def ThermoScientific_96_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
   """ Fisher Scientific/Thermo Fisher cat. no.: 10243223/AB1127.
   - Material: Polypropylene (AB-1068, polystyrene)
@@ -53,16 +62,15 @@ def ThermoScientific_96_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
       size_y=8.3,
       size_z=20.5,
       bottom_type=WellBottomType.U,
+      cross_section_type=CrossSectionType.RECTANGLE,
       compute_volume_from_height=_compute_volume_from_height_ThermoScientific_96_1200ul_Rd,
-      cross_section_type=CrossSectionType.RECTANGLE
+      compute_height_from_volume=_compute_height_from_volume_ThermoScientific_96_1200ul_Rd
     ),
   )
-
 
 #: ThermoScientific_96_1200ul_Rd_L
 def ThermoScientific_96_1200ul_Rd_L(name: str, with_lid: bool = False) -> Plate:
   return ThermoScientific_96_1200ul_Rd(name=name, with_lid=with_lid)
-
 
 #: ThermoScientific_96_1200ul_Rd_P
 def ThermoScientific_96_1200ul_Rd_P(name: str, with_lid: bool = False) -> Plate:
