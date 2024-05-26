@@ -43,4 +43,4 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 ---
 ### Hamilton carrier naming guide
 
-<img src="ims/Hamilton_carrier_naming_guide.png" alt="Hamilton_carrier_naming_guide" width="250"/>
+<img src="ims/Hamilton_carrier_naming_guide.png" alt="Hamilton_carrier_naming_guide" width="400"/>
