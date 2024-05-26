@@ -893,7 +893,6 @@ def Plate_Corning_No_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
       size_dx=4.5,
       size_dy=4.5,
       size_y=13.0,
-      size_z=13.9,
       size_z=17.3,
     ),
   )
