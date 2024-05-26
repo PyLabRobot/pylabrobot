@@ -29,7 +29,7 @@ class CarrierSite(Resource):
     location: Coordinate = Coordinate.zero(),
     reassign: bool = True
   ):
-    
+
     # TODO: add conditional logic to modify Plate position based on whether
     # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
     self.resource = resource
@@ -254,12 +254,13 @@ def create_carrier_sites(
   locations: List[Coordinate],
   site_size_x: List[Union[float, int]],
   site_size_y: List[Union[float, int]],
-  site_pedestal_size_z: Optional[List[Union[float, int]]] = None
+  site_pedestal_size_z: List[Union[float, int]] = None
   ) -> List[CarrierSite]:
   """ Create a list of carrier sites with the given sizes. """
 
   sites = []
-  for spot, (l, x, y, p_z) in enumerate(zip(locations, site_size_x, site_size_y, site_pedestal_size_z)):
+  for spot, (l, x, y, p_z) in enumerate(zip(locations, site_size_x, site_size_y,
+    site_pedestal_size_z)):
     site = CarrierSite(
       name = f"carrier-site-{spot}",
       # size_x=x, size_y=y, size_z=0, spot=spot)
@@ -273,9 +274,10 @@ def create_homogeneous_carrier_sites(
   locations: List[Coordinate],
   site_size_x: float,
   site_size_y: float,
-  site_pedestal_size_z: Optional[float] = None
+  site_pedestal_size_z: Union[float, int] = None
   ) -> List[CarrierSite]:
   """ Create a list of carrier sites with the same size. """
 
   n = len(locations)
-  return create_carrier_sites(locations, [site_size_x] * n, [site_size_y] * n, [site_pedestal_size_z] * n)
+  return create_carrier_sites(locations, [site_size_x] * n, [site_size_y] * n,
+    [site_pedestal_size_z] * n)

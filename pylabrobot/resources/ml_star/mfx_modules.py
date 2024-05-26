@@ -27,7 +27,7 @@ class MFXModule(Resource):
       >>> mfx_carrier_1 = MFX_CAR_L5_base(name='mfx_carrier_1')
       >>> mfx_carrier_1[0] = mfx_tip_module_1 = MFX_TIP_module(name="mfx_tip_module_1")
       >>> tip_50ul_rack = TIP_50ul_L(name="tip_50ul_rack")
-      >>> mfx_tip_module_1[0].assign_child_resource(tip_50ul_rack)
+      >>> mfx_tip_module_1.assign_child_resource(tip_50ul_rack)
 
     2. Creating MFX module for plates:
       Use the same `MFXCarrier` instance,
@@ -37,7 +37,7 @@ class MFXModule(Resource):
 
       >>> mfx_carrier_1[1] = mfx_dwp_module_1 = MFX_DWP_rackbased_module(name="mfx_dwp_module_1")
       >>> Cos96_plate_1 = Cos_96_Rd(name='cos96_plate_1')
-      >>> mfx_dwp_module_1[0].assign_child_resource(Cos96_plate_1)
+      >>> mfx_dwp_module_1.assign_child_resource(Cos96_plate_1)
   """
 
   def __init__(
@@ -45,7 +45,6 @@ class MFXModule(Resource):
     name: str,
     size_x: float, size_y: float, size_z: float,
     child_resource_location: Coordinate,
-    skirt_height: float = 0,
     category: Optional[str] = "mfx_module",
     pedestal_size_z: Optional[float] = None,
     model: Optional[str] = None):
@@ -72,7 +71,7 @@ class MFXModule(Resource):
 
     # TODO: add conditional logic to modify Plate position based on whether
     # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
-    
+
     if self._child_resource is not None and not reassign:
       raise ValueError(f"{self.name} already has a child resource assigned")
     super().assign_child_resource(
