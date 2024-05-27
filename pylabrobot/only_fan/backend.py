@@ -11,7 +11,7 @@ class FanBackend(MachineBackend, metaclass=ABCMeta):
     """ Set up the fan. This should be called before any other methods. """
 
   @abstractmethod
-  async def turn_on_fan(self) -> None:
+  async def turn_on_fan(self, speed: int) -> None:
     """ Turn the fan on at a specified speed, between 0-100 as an integer. Allows for run time
     duration to be set (in seconds)  """
 
