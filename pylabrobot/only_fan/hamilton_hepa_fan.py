@@ -63,6 +63,7 @@ class HamiltonHepaFan(FanBackend):
     await self.send(b'\x55\xc1\x01\x11\x00\x7b')
 
   async def stop(self):
+    await self.stop_fan()
     if self.dev is not None:
       self.dev.close()
 
