@@ -29,9 +29,12 @@ class Fan(Machine):
     self.backend: FanBackend = backend # fix type
 
   async def setup(self):
-    """ Intialize and set up the fan """
-
+    """ Intialize and set up the fan. """
     await self.backend.setup()
+
+  async def stop(self):
+    """ Stop the fan and close the connection. """
+    await self.backend.stop()
 
   async def turn_on_fan(self,speed,duration=None):
     """ Intialize and set up the fan at speed, where speed is an integer percent between 0 and 100
@@ -46,7 +49,3 @@ class Fan(Machine):
   async def stop_fan(self):
     """ Stop the fan """
     await self.backend.stop_fan()
-
-  async def close(self):
-    """ Close the connection to the fan """
-    await self.backend.close()
