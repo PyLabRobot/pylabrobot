@@ -67,7 +67,7 @@ PyLabRobot also provides a layer of general-purpose abstractions for plate reade
 ```python
 from pylabrobot.plate_reading import PlateReader, ClarioStar
 
-pr = PlateReader(name="plate reader", backend=ClarioStar())
+pr = PlateReader(name="plate reader", backend=ClarioStar(), size_x=1, size_y=1, size_z=1)
 await pr.setup()
 
 # Use in combination with a liquid handler
