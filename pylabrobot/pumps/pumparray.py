@@ -51,6 +51,20 @@ class PumpArray(Machine):
 
     return self.backend.num_channels
 
+  def serialize(self) -> dict:
+    if self.calibration is None:
+      return super().serialize()
+    return {**super().serialize(), "calibration": self.calibration.serialize()}
+
+  @classmethod
+  def deserialize(cls, data: dict):
+    data_copy = data.copy()
+    calibration_data = data_copy.pop("calibration", None)
+    if calibration_data is not None:
+      calibration = PumpCalibration.deserialize(calibration_data)
+      data_copy["calibration"] = calibration
+    return super().deserialize(data_copy)
+
   async def run_revolutions(self, num_revolutions: Union[float, List[float]],
                             use_channels: Union[int, List[int]]):
     """ Run the specified channels for the specified number of revolutions.
