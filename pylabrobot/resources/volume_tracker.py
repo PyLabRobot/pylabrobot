@@ -3,10 +3,9 @@ import copy
 import sys
 from typing import Callable, List, Tuple, Optional, cast
 
-from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError
+from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError, CrossContaminationError
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.serializer import serialize, deserialize
-
 
 this = sys.modules[__name__]
 this.volume_tracking_enabled = False # type: ignore
@@ -138,6 +137,14 @@ class VolumeTracker:
 
     # Update the liquid history tracker if needed
     if not self._is_cross_contamination_tracking_disabled:
+
+      # If this is a new liquid, and if the tip isn't clean
+      if (liquid not in self.liquid_history) and \
+            bool(self.liquid_history):
+              raise CrossContaminationError(
+              f"Attempting to aspirate {liquid} with "
+              f"a tip contaminated with {this.liquid_history}.")
+
       self.liquid_history.add(liquid)
 
     # If the last liquid is the same as the one we want to add, just add the volume to it.

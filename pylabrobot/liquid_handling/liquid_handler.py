@@ -740,22 +740,8 @@ class LiquidHandler(Machine):
     for op in aspirations:
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
-          if does_cross_contamination_tracking():
-            # Check if liquid history is empty
-            if (next(reversed(op.liquids))[0] not in op.tip.tracker.liquid_history) and \
-            bool(op.tip.tracker.liquid_history):
-              raise CrossContaminationError(
-              f"Attempting to aspirate {next(reversed(op.liquids))[0]} with "
-              f"a tip contaminated with {op.tip.tracker.liquid_history}.")
           op.resource.tracker.remove_liquid(op.volume)
         for liquid, volume in reversed(op.liquids):
-          if does_cross_contamination_tracking():
-            # Check if liquid history is empty
-            if (liquid not in op.tip.tracker.liquid_history) and \
-            bool(op.tip.tracker.liquid_history):
-              raise CrossContaminationError(
-                f"Attempting to aspirate {next(reversed(op.liquids))[0]} with \
-                  a tip contaminated with {op.tip.tracker.liquid_history}.")
           op.tip.tracker.add_liquid(liquid=liquid, volume=volume)
 
     extras = self._check_args(self.backend.aspirate, backend_kwargs,
