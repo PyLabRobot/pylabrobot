@@ -145,37 +145,37 @@ class Resource:
       Coordinate(x=12.0, y=0.0, z=0.0)
     """
 
-    x: float
+    x_: float
     if x.lower() in {"l", "left"}:
-      x = 0
+      x_ = 0
     elif x.lower() in {"c", "center"}:
-      x = self.get_size_x() / 2
+      x_ = self.get_size_x() / 2
     elif x.lower() in {"r", "right"}:
-      x = self.get_size_x()
+      x_ = self.get_size_x()
     else:
       raise ValueError(f"Invalid x value: {x}")
 
-    y: float
+    y_: float
     if y.lower() in {"b", "back"}:
-      y = self.get_size_y()
+      y_ = self.get_size_y()
     elif y.lower() in {"c", "center"}:
-      y = self.get_size_y() / 2
+      y_ = self.get_size_y() / 2
     elif y.lower() in {"f", "front"}:
-      y = 0
+      y_ = 0
     else:
       raise ValueError(f"Invalid y value: {y}")
 
-    z: float
+    z_: float
     if z.lower() in {"t", "top"}:
-      z = self.get_size_z()
+      z_ = self.get_size_z()
     elif z.lower() in {"c", "center"}:
-      z = self.get_size_z() / 2
+      z_ = self.get_size_z() / 2
     elif z.lower() in {"b", "bottom"}:
-      z = 0
+      z_ = 0
     else:
       raise ValueError(f"Invalid z value: {z}")
 
-    return Coordinate(x, y, z)
+    return Coordinate(x_, y_, z_)
 
   def get_absolute_location(self, x: str = "l", y: str = "f", z: str = "b") -> Coordinate:
     """ Get the absolute location of this resource, probably within the
