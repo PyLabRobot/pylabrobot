@@ -119,13 +119,79 @@ class Resource:
   def __hash__(self) -> int:
     return hash(repr(self))
 
-  def get_absolute_location(self) -> Coordinate:
+  def get_anchor(self, x: str, y: str, z: str) -> Coordinate:
+    """ Get a relative location within the resource.
+
+    Args:
+      x: `"l"`/`"left"`, `"c"`/`"center"`, or `"r"`/`"right"`
+      y: `"b"`/`"back"`, `"c"`/`"center"`, or `"f"`/`"front"`
+      z: `"t"`/`"top"`, `"c"`/`"center"`, or `"b"`/`"bottom"`
+
+    Returns:
+      A relative location within the resource, the anchor point wrt the left front bottom corner.
+
+    Examples:
+      >>> r = Resource("resource", size_x=12, size_y=12, size_z=12)
+      >>> r.get_anchor("l", "b", "t")
+
+      Coordinate(x=0.0, y=12.0, z=12.0)
+
+      >>> r.get_anchor("c", "c", "c")
+
+      Coordinate(x=6.0, y=6.0, z=6.0)
+
+      >>> r.get_anchor("r", "f", "b")
+
+      Coordinate(x=12.0, y=0.0, z=0.0)
+    """
+
+    x: float
+    if x.lower() in {"l", "left"}:
+      x = 0
+    elif x.lower() in {"c", "center"}:
+      x = self.get_size_x() / 2
+    elif x.lower() in {"r", "right"}:
+      x = self.get_size_x()
+    else:
+      raise ValueError(f"Invalid x value: {x}")
+
+    y: float
+    if y.lower() in {"b", "back"}:
+      y = self.get_size_y()
+    elif y.lower() in {"c", "center"}:
+      y = self.get_size_y() / 2
+    elif y.lower() in {"f", "front"}:
+      y = 0
+    else:
+      raise ValueError(f"Invalid y value: {y}")
+
+    z: float
+    if z.lower() in {"t", "top"}:
+      z = self.get_size_z()
+    elif z.lower() in {"c", "center"}:
+      z = self.get_size_z() / 2
+    elif z.lower() in {"b", "bottom"}:
+      z = 0
+    else:
+      raise ValueError(f"Invalid z value: {z}")
+
+    return Coordinate(x, y, z)
+
+  def get_absolute_location(self, x: str = "l", y: str = "f", z: str = "b") -> Coordinate:
     """ Get the absolute location of this resource, probably within the
-    :class:`pylabrobot.resources.Deck`. """
+    :class:`pylabrobot.resources.Deck`. The `x`, `y`, and `z` arguments specify the anchor point
+    within the resource. The default is the left front bottom corner.
+
+    Args:
+      x: `"l"`/`"left"`, `"c"`/`"center"`, or `"r"`/`"right"`
+      y: `"b"`/`"back"`, `"c"`/`"center"`, or `"f"`/`"front"`
+      z: `"t"`/`"top"`, `"c"`/`"center"`, or `"b"`/`"bottom"`
+    """
+
     assert self.location is not None, "Resource has no location."
     if self.parent is None:
       return self.location
-    return self.parent.get_absolute_location() + self.location
+    return self.parent.get_absolute_location() + self.location + self.get_anchor(x=x, y=y, z=z)
 
   def get_size_x(self) -> float:
     if self.rotation in {90, 270}:
