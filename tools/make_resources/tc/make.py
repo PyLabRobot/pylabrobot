@@ -126,7 +126,7 @@ def main(pc, tc, p, tr, tcr):
       z_max = float(dim[3][0])
       # the best approximation,
       # https://forums.pylabrobot.org/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2987
-      size_z = (z_max - z_dispense) / 10
+      size_z = (z_max - z_start) / 10
 
       if num_x <= 1 or num_y <= 1:
         continue
