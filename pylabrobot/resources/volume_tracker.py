@@ -64,7 +64,7 @@ class VolumeTracker:
     self.liquids: List[Tuple[Optional[Liquid], float]] = liquids or []
     self.pending_liquids: List[Tuple[Optional[Liquid], float]] = pending_liquids or []
 
-    self.liquid_history: set = liquid_history or set()
+    self.liquid_history: set={liquid for liquid in (liquid_history or set()) if liquid is not None}
 
     self._callback: Optional[VolumeTrackerCallback] = None
 
@@ -139,12 +139,13 @@ class VolumeTracker:
     if not self._is_cross_contamination_tracking_disabled:
 
       # If this is a new liquid, and if the tip isn't clean
-      if (liquid not in self.liquid_history) and \
-            bool(self.liquid_history):
-              raise CrossContaminationError(
-              f"Attempting to aspirate {liquid} with "
-              f"a tip contaminated with {this.liquid_history}.")
+      if liquid is not None and (liquid not in self.liquid_history) and self.liquid_history:
+        raise CrossContaminationError(
+            f"Attempting to aspirate {liquid} with "
+            f"a tip contaminated with {self.liquid_history}.")
 
+    # Add the new liquid to the history if it's not None
+    if liquid is not None:
       self.liquid_history.add(liquid)
 
     # If the last liquid is the same as the one we want to add, just add the volume to it.
