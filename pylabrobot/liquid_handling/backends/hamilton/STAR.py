@@ -9040,6 +9040,7 @@ class STAR(HamiltonLiquidHandler):
     assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
+    z_deposit_position += int(pickup.offset.z*10) if pickup.offset is not None else 0
 
     x_direction = 0 if position.x > 0 else 1
     return await self.pick_up_tips_core96(
@@ -11190,7 +11191,7 @@ class STAR(HamiltonLiquidHandler):
     if deck_size == STARLET_SIZE_X:
       xs = "07975" # 1360-797.5 = 562.5
     elif deck_size == STAR_SIZE_X:
-      xs = "13375" # 1900-1337.5 = 562.5
+      xs = "13385" # 1900-1337.5 = 562.5, plus a manual adjustment of + 10
     else:
       raise ValueError(f"Deck size {deck_size} not supported")
 
@@ -11199,8 +11200,8 @@ class STAR(HamiltonLiquidHandler):
       command="ZT",
       xs=xs,
       xd="0",
-      ya="1250",
-      yb="1070",
+      ya="1240",
+      yb="1065",
       pa=f"{p1:02}",
       pb=f"{p2:02}",
       tp="2350",
@@ -11219,7 +11220,7 @@ class STAR(HamiltonLiquidHandler):
     if deck_size == STARLET_SIZE_X:
       xs = "07975"
     elif deck_size == STAR_SIZE_X:
-      xs = "13375"
+      xs = "13385"
     else:
       raise ValueError(f"Deck size {deck_size} not supported")
     command_output = await self.send_command(
@@ -11227,8 +11228,8 @@ class STAR(HamiltonLiquidHandler):
       command="ZS",
       xs=xs,
       xd="0",
-      ya="1250",
-      yb="1070",
+      ya="1240",
+      yb="1065",
       tp="2150",
       tz="2050",
       th=int(self._traversal_height * 10),
