@@ -95,9 +95,10 @@ class Reservoir(ItemizedResource[Well]):
     """ Update the liquid in the volume tracker for each well in the reservoir.
 
     Args:
-      liquids: A list of liquids, one for each well in the reservoir. The list can be a list of lists,
-        where each inner list contains the liquids for each well in a column. If a single tuple is
-        given, the volume is assumed to be the same for all wells. Liquids are in uL.
+      liquids: A list of liquids, one for each well in the reservoir. The list can be a
+      list of lists, where each inner list contains the liquids for each well in a column.
+      If a single tuple is given, the volume is assumed to be the same for all wells.
+      Liquids are in uL.
 
     Raises:
       ValueError: If the number of liquids does not match the number of wells in the reservoir.

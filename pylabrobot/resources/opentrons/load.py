@@ -183,7 +183,7 @@ def ot_definition_to_resource(
   raise UnknownResourceType(f"Unknown resource type '{display_category}'.")
 
 
-def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack, TubeRack]:
+def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack, TubeRack, Reservoir]:
   """ Load an Opentrons resource from a file.
 
   Args:
@@ -216,7 +216,7 @@ def load_shared_opentrons_resource(
   definition: str,
   name: str,
   version: int = 1
-) -> Union[Plate, TipRack, TubeRack]:
+) -> Union[Plate, TipRack, TubeRack, Reservoir]:
   """ Load an Opentrons resource from the shared Opentrons resource library.
 
   See https://github.com/Opentrons/opentrons/tree/edge/shared-data.
