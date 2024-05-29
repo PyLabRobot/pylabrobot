@@ -18,5 +18,4 @@ class NoTipError(Exception):
   """ Raised when a tip was expected but none was found. """
 
 class CrossContaminationError(Exception):
-  """ Raised when attempting to aspirate from a well with \
-      a tip that has touched a different liquid. """
+  """ Raised when attempting to aspirate from a well with a tip that has touched a different liquid. """

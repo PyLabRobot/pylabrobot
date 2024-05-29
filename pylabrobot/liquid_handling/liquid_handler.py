@@ -57,6 +57,18 @@ from .standard import (
 
 logger = logging.getLogger("pylabrobot")
 
+def check_clean(liquid, liquid_history):
+  """Helper function used to check if adding a liquid to the container
+     would result in cross contamination"""
+
+  return (liquid not in liquid_history and bool(liquid_history))
+
+def check_updateable(src_tracker, dest_tracker):
+  """Helper function used to check if it is possible to update the
+     liquid_history of src based on contents of dst"""
+
+  return (not src_tracker.is_cross_contamination_tracking_disabled) and \
+      bool(dest_tracker.is_cross_contamination_tracking_disabled)
 
 class LiquidHandler(Machine):
   """
@@ -740,8 +752,24 @@ class LiquidHandler(Machine):
     for op in aspirations:
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
+
+          # Cross contamination check
+          if does_cross_contamination_tracking():
+            if check_clean(next(reversed(op.liquids))[0], op.tip.tracker.liquid_history):
+              raise CrossContaminationError(
+                f"Attempting to aspirate {next(reversed(op.liquids))[0]} with \
+                    a tip contaminated with {op.tip.tracker.liquid_history}.")
+
           op.resource.tracker.remove_liquid(op.volume)
         for liquid, volume in reversed(op.liquids):
+
+          # Cross contamination check
+          if does_cross_contamination_tracking():
+            if check_clean(liquid, op.tip.tracker.liquid_history):
+              raise CrossContaminationError(
+                f"Attempting to aspirate {next(reversed(op.liquids))[0]} with \
+                    a tip contaminated with {op.tip.tracker.liquid_history}.")
+
           op.tip.tracker.add_liquid(liquid=liquid, volume=volume)
 
     extras = self._check_args(self.backend.aspirate, backend_kwargs,
@@ -916,9 +944,9 @@ class LiquidHandler(Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           # Update the liquid history of the tip to reflect new liquid
-          if (not op.tip.tracker.is_cross_contamination_tracking_disabled) and \
-              not op.resource.tracker.is_cross_contamination_tracking_disabled:
+          if check_updateable(op.tip.tracker, op.resource.tracker):
             op.tip.tracker.liquid_history = op.resource.tracker.liquid_history
+
           for liquid, volume in op.liquids:
             op.resource.tracker.add_liquid(liquid=liquid, volume=volume)
         op.tip.tracker.remove_liquid(op.volume)
@@ -1338,13 +1366,14 @@ class LiquidHandler(Machine):
         all_liquids.append(liquids)
 
       for liquid, vol in reversed(liquids):
+
+        # Cross contamination check
         if does_cross_contamination_tracking():
-            # Check if liquid history is empty
-          if (liquid not in channel.get_tip().tracker.liquid_history) and \
-              bool(channel.get_tip().tracker.liquid_history):
+          if check_clean(liquid, channel.get_tip().tracker.liquid_history):
             raise CrossContaminationError(
-                f"Attempting to aspirate {liquid} with a tip \
-                  contaminated with {channel.get_tip().tracker.liquid_history}.")
+                f"Attempting to aspirate {liquid} with \
+                    a tip contaminated with {channel.get_tip().tracker.liquid_history}.")
+
         channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
     aspiration_plate = AspirationPlate(
