@@ -728,64 +728,17 @@ class Reservoir extends Resource {
     };
   }
 
-  drawWell(x, y, width, height) {
-    return new Konva.Rect({
-      x: x,
-      y: y,
-      width: width,
-      height: height,
-      fill: "#8D99AE",
-      stroke: "black",
-      strokeWidth: 1,
-    });
-  }
-
   update() {
     super.update();
 
-    // Clear existing shapes in the konvaGroup
-    this.konvaGroup.destroyChildren();
-
-    const wellWidth = this.size_x / this.num_items_x;
-    const wellHeight = this.size_y / this.num_items_y;
-
+    // Rename the children
     for (let i = 0; i < this.num_items_x; i++) {
       for (let j = 0; j < this.num_items_y; j++) {
-        const x = i * wellWidth;
-        const y = j * wellHeight;
-
-        let wellShape = this.drawWell(x, y, wellWidth, wellHeight);
-
-        // Add the well shape to the Konva layer (or group)
-        this.konvaGroup.add(wellShape);
-
-        // Update the children array (or however you manage child resources)
-        const childIndex = i * this.num_items_y + j;
-        const resourceData = {
-          cross_section_type: "rect",
-          size_x: wellWidth,
-          size_y: wellHeight,
-          location: { x, y },
-        };
-
-        if (this.children[childIndex]) {
-          this.children[childIndex].shape = wellShape;
-          this.children[childIndex].name = `${this.name}_well_${i}_${j}`;
-          this.children[childIndex].cross_section_type = "rect";
-          this.children[childIndex].size_x = wellWidth;
-          this.children[childIndex].size_y = wellHeight;
-        } else {
-          // Create and add a new child if it doesn't exist
-          const well = new Well(resourceData, this);
-          well.shape = wellShape;
-          well.name = `${this.name}_well_${i}_${j}`;
-          this.children[childIndex] = well;
-        }
+        const child = this.children[i * this.num_items_y + j];
+        child.name = `${this.name}_well_${i}_${j}`;
       }
     }
 
-    // Redraw the Konva layer
-    this.konvaGroup.getLayer().batchDraw();
   }
 }
 
@@ -816,6 +769,8 @@ class Well extends Container {
         fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
+        offsetX: this.size_x / 2,
+        offsetY: this.size_y / 2,
       });
     }
   }

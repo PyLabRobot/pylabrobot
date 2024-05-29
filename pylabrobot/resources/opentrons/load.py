@@ -15,7 +15,7 @@ from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.tube import Tube
 from pylabrobot.resources.tube_rack import TubeRack
-from pylabrobot.resources.well import Well
+from pylabrobot.resources.well import Well, CrossSectionType
 
 
 if TYPE_CHECKING:
@@ -28,7 +28,7 @@ class UnknownResourceType(Exception):
 
 def ot_definition_to_resource(
   data: "LabwareDefinition",
-  name: str) -> Union[Plate, TipRack, TubeRack]:
+  name: str) -> Union[Plate, TipRack, TubeRack, Reservoir]:
   """ Convert an Opentrons definition file to a PyLabRobot resource file. """
 
   if not USE_OT:
@@ -74,13 +74,21 @@ def ot_definition_to_resource(
         well_size_z = well_data["depth"]
 
         location=Coordinate(x=well_data["x"], y=well_data["y"], z=well_data["z"])
+
         if display_category == "wellPlate":
+
+          if well_data["shape"] == "rectangular":
+            cross_section_type = CrossSectionType.RECTANGLE
+          else:
+            cross_section_type = CrossSectionType.CIRCLE
+
           well = Well(
             name=item,
             size_x=well_size_x,
             size_y=well_size_y,
             size_z=well_size_z,
-            max_volume=well_data["totalLiquidVolume"]
+            max_volume=well_data["totalLiquidVolume"],
+            cross_section_type=cross_section_type
           )
           well.location = location
           wells[i].append(well)
@@ -116,12 +124,19 @@ def ot_definition_to_resource(
           tube.location = location
           wells[i].append(tube)
         elif display_category == "reservoir":
+
+          if well_data["shape"] == "rectangular":
+            cross_section_type = CrossSectionType.RECTANGLE
+          else:
+            cross_section_type = CrossSectionType.CIRCLE
+
           well = Well(
             name=item,
             size_x=well_size_x,
             size_y=well_size_y,
             size_z=well_size_z,
-            max_volume=well_data["totalLiquidVolume"]
+            max_volume=well_data["totalLiquidVolume"],
+            cross_section_type=cross_section_type
           )
           well.location = location
           wells[i].append(well)
