@@ -1079,7 +1079,6 @@ class STAR(HamiltonLiquidHandler):
       packet_read_timeout: timeout in seconds for reading a single packet.
       read_timeout: timeout in seconds for reading a full response.
       write_timeout: timeout in seconds for writing a command.
-      num_channels: the number of pipette channels present on the robot.
     """
 
     super().__init__(
