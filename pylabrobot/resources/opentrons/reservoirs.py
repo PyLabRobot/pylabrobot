@@ -1,47 +1,45 @@
 from typing import cast
 
 from pylabrobot.resources.opentrons.load import load_shared_opentrons_resource
-from pylabrobot.resources.trough import Trough
+from pylabrobot.resources.reservoir import Reservoir
 
-# OpenTrons Labware calls PLR 'Troughs' 'Reservoirs'
-
-def agilent_1_reservoir_290ml(name: str) -> Trough:
-  return cast(Trough, load_shared_opentrons_resource(
+def agilent_1_reservoir_290ml(name: str) -> Reservoir:
+  return cast(Reservoir, load_shared_opentrons_resource(
     definition="agilent_1_reservoir_290ml",
     name=name,
     version=1
   ))
 
-def axygen_1_reservoir_90ml(name: str) -> Trough:
-  return cast(Trough, load_shared_opentrons_resource(
+def axygen_1_reservoir_90ml(name: str) -> Reservoir:
+  return cast(Reservoir, load_shared_opentrons_resource(
     definition="axygen_1_reservoir_90ml",
     name=name,
     version=1
   ))
 
-def nest_12_reservoir_15ml(name: str) -> Trough:
-  return cast(Trough, load_shared_opentrons_resource(
+def nest_12_reservoir_15ml(name: str) -> Reservoir:
+  return cast(Reservoir, load_shared_opentrons_resource(
     definition="nest_12_reservoir_15ml",
     name=name,
     version=1
   ))
 
-def nest_1_reservoir_195ml(name: str) -> Trough:
-  return cast(Trough, load_shared_opentrons_resource(
+def nest_1_reservoir_195ml(name: str) -> Reservoir:
+  return cast(Reservoir, load_shared_opentrons_resource(
     definition="nest_1_reservoir_195ml",
     name=name,
     version=1
   ))
 
-def nest_1_reservoir_290ml(name: str) -> Trough:
-  return cast(Trough, load_shared_opentrons_resource(
+def nest_1_reservoir_290ml(name: str) -> Reservoir:
+  return cast(Reservoir, load_shared_opentrons_resource(
     definition="nest_1_reservoir_290ml",
     name=name,
     version=1
   ))
 
-def usascientific_12_reservoir_22ml(name: str) -> Trough:
-  return cast(Trough, load_shared_opentrons_resource(
+def usascientific_12_reservoir_22ml(name: str) -> Reservoir:
+  return cast(Reservoir, load_shared_opentrons_resource(
     definition="usascientific_12_reservoir_22ml",
     name=name,
     version=1

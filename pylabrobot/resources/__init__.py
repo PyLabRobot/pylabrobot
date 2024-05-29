@@ -16,9 +16,11 @@ from .liquid import Liquid
 from .petri_dish import PetriDish, PetriDishHolder
 from .plate import Plate, Lid, Well
 from .powder import Powder
+from .reservoir import Reservoir
 from .resource import Resource
 from .tip_rack import TipRack, TipSpot
 from .trash import Trash
+from .trough import Trough
 from .tube import Tube
 from .tube_rack import TubeRack
 

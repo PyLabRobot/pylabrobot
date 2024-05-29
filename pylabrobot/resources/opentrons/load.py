@@ -10,6 +10,7 @@ except ImportError:
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.reservoir import Reservoir
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.tube import Tube
@@ -42,7 +43,8 @@ def ot_definition_to_resource(
 
   tube_rack_display_cats = {"adapter", "aluminumBlock", "tubeRack"}
 
-  if display_category in ["wellPlate", "tipRack", "tubeRack", "adapter", "aluminumBlock"]:
+  if display_category in ["wellPlate", "tipRack", "tubeRack", "adapter", "aluminumBlock",
+                          "reservoir"]:
     items = data["ordering"]
     wells: List[List[Union[TipSpot, Well, Tube]]] = [] # TODO: can we use TypeGuard?
 
@@ -113,6 +115,16 @@ def ot_definition_to_resource(
           )
           tube.location = location
           wells[i].append(tube)
+        elif display_category == "reservoir":
+          well = Well(
+            name=item,
+            size_x=well_size_x,
+            size_y=well_size_y,
+            size_z=well_size_z,
+            max_volume=well_data["totalLiquidVolume"]
+          )
+          well.location = location
+          wells[i].append(well)
 
     if display_category == "wellPlate":
       return Plate(
@@ -141,6 +153,15 @@ def ot_definition_to_resource(
         size_y=size_y,
         size_z=size_z,
         items=cast(List[List[Tube]], wells),
+        model=data["metadata"]["displayName"]
+      )
+    if display_category == "reservoir":
+      return Reservoir(
+        name=name,
+        size_x=size_x,
+        size_y=size_y,
+        size_z=size_z,
+        items=cast(List[List[Well]], wells),
         model=data["metadata"]["displayName"]
       )
 
