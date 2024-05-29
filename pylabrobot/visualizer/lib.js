@@ -378,7 +378,7 @@ class Resource {
     this.draw(resourceLayer);
   }
 
-  setState() {}
+  setState() { }
 }
 
 class Deck extends Resource {
@@ -601,8 +601,7 @@ class Container extends Resource {
   aspirate(volume) {
     if (volume > this.getVolume()) {
       throw new Error(
-        `Aspirating ${volume}uL from well ${
-          this.name
+        `Aspirating ${volume}uL from well ${this.name
         } with ${this.getVolume()}uL`
       );
     }
@@ -698,6 +697,95 @@ class Trough extends Container {
     mainShape.add(background);
     mainShape.add(liquidLayer);
     return mainShape;
+  }
+}
+
+class Reservoir extends Resource {
+  constructor(resourceData, parent = undefined) {
+    super(resourceData, parent);
+    const { num_items_x, num_items_y } = resourceData;
+    this.num_items_x = num_items_x;
+    this.num_items_y = num_items_y;
+  }
+
+  drawMainShape() {
+    return new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: "#2B2D42",
+      stroke: "black",
+      strokeWidth: 1,
+    });
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        num_items_x: this.num_items_x,
+        num_items_y: this.num_items_y,
+      },
+    };
+  }
+
+  drawWell(x, y, width, height) {
+    return new Konva.Rect({
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      fill: "#8D99AE",
+      stroke: "black",
+      strokeWidth: 1,
+    });
+  }
+
+  update() {
+    super.update();
+
+    // Clear existing shapes in the konvaGroup
+    this.konvaGroup.destroyChildren();
+
+    const wellWidth = this.size_x / this.num_items_x;
+    const wellHeight = this.size_y / this.num_items_y;
+
+    for (let i = 0; i < this.num_items_x; i++) {
+      for (let j = 0; j < this.num_items_y; j++) {
+        const x = i * wellWidth;
+        const y = j * wellHeight;
+
+        let wellShape = this.drawWell(x, y, wellWidth, wellHeight);
+
+        // Add the well shape to the Konva layer (or group)
+        this.konvaGroup.add(wellShape);
+
+        // Update the children array (or however you manage child resources)
+        const childIndex = i * this.num_items_y + j;
+        const resourceData = {
+          cross_section_type: "rect",
+          size_x: wellWidth,
+          size_y: wellHeight,
+          location: { x, y },
+        };
+
+        if (this.children[childIndex]) {
+          this.children[childIndex].shape = wellShape;
+          this.children[childIndex].name = `${this.name}_well_${i}_${j}`;
+          this.children[childIndex].cross_section_type = "rect";
+          this.children[childIndex].size_x = wellWidth;
+          this.children[childIndex].size_y = wellHeight;
+        } else {
+          // Create and add a new child if it doesn't exist
+          const well = new Well(resourceData, this);
+          well.shape = wellShape;
+          well.name = `${this.name}_well_${i}_${j}`;
+          this.children[childIndex] = well;
+        }
+      }
+    }
+
+    // Redraw the Konva layer
+    this.konvaGroup.getLayer().batchDraw();
   }
 }
 
@@ -844,7 +932,7 @@ class TipSpot extends Resource {
 
 // Nothing special.
 class Trash extends Resource {
-  dropTip(layer) {} // just ignore
+  dropTip(layer) { } // just ignore
 
   drawMainShape() {
     if (resources["deck"].constructor.name) {
@@ -855,9 +943,9 @@ class Trash extends Resource {
 }
 
 // Nothing special.
-class Carrier extends Resource {}
-class PlateCarrier extends Carrier {}
-class TipCarrier extends Carrier {}
+class Carrier extends Resource { }
+class PlateCarrier extends Carrier { }
+class TipCarrier extends Carrier { }
 
 class CarrierSite extends Resource {
   constructor(resourceData, parent) {
@@ -976,6 +1064,8 @@ function classForResourceType(type) {
       return Container;
     case "Trough":
       return Trough;
+    case "Reservoir":
+      return Reservoir;
     case "VantageDeck":
       alert(
         "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"
