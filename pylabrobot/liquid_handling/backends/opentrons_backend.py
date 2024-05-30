@@ -10,10 +10,8 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseContainer,
   Move
 )
 from pylabrobot.resources import (
@@ -543,10 +541,10 @@ class OpentronsBackend(LiquidHandlerBackend):
   async def drop_tips96(self, drop: DropTipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(self, aspiration: AspirationPlate):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: DispensePlate):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
   async def move_resource(self, move: Move):

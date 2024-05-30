@@ -18,10 +18,8 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseContainer,
   Move
 )
 from pylabrobot.resources import (
@@ -499,10 +497,10 @@ class EVO(TecanLiquidHandler):
   async def drop_tips96(self, drop: DropTipRack):
     raise NotImplementedError()
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(self, aspiration: AspirationPlate):
     raise NotImplementedError()
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: DispensePlate):
     raise NotImplementedError()
 
   async def move_resource(self, move: Move):

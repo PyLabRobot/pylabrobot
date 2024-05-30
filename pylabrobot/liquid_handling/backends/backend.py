@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from pylabrobot.machines.backends import MachineBackend
 from pylabrobot.resources import Deck, Resource
@@ -12,10 +12,8 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseContainer,
   Move,
 )
 
@@ -97,11 +95,11 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """ Drop tips to the specified resource using CoRe 96. """
 
   @abstractmethod
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(self, aspiration: AspirationPlate):
     """ Aspirate from all wells in 96 well plate. """
 
   @abstractmethod
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: DispensePlate):
     """ Dispense to all wells in 96 well plate. """
 
   @abstractmethod

@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import sys
-from typing import Any, Dict, Optional, List, Union
+from typing import Any, Dict, Optional, List
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.resources import Resource
@@ -11,10 +11,8 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseContainer,
   Move,
 )
 from pylabrobot.serializer import serialize
@@ -120,8 +118,9 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.send_command(command="drop_tips96", data={
       "resource_name": drop.resource.name, "offset": serialize(drop.offset)})
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
-    data = {"aspiration": {
+  async def aspirate96(self, aspiration: AspirationPlate):
+    await self.send_command(command="aspirate96", data={"aspiration": {
+      "well_names": [well.name for well in aspiration.wells],
       "offset": serialize(aspiration.offset),
       "volume": aspiration.volume,
       "flow_rate": serialize(aspiration.flow_rate),
@@ -129,15 +128,11 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "blow_out_air_volume": serialize(aspiration.blow_out_air_volume),
       "liquids": serialize(aspiration.liquids),
       "tips": [serialize(tip) for tip in aspiration.tips],
-    }}
-    if isinstance(aspiration, AspirationPlate):
-      data["aspiration"]["well_names"] = [well.name for well in aspiration.wells]
-    else:
-      data["trough"] = aspiration.container.name
-    await self.send_command(command="aspirate96", data=data)
+    }})
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
-    data = {"dispense": {
+  async def dispense96(self, dispense: DispensePlate):
+    await self.send_command(command="dispense96", data={"dispense": {
+      "well_names": [well.name for well in dispense.wells],
       "offset": serialize(dispense.offset),
       "volume": dispense.volume,
       "flow_rate": serialize(dispense.flow_rate),
@@ -145,12 +140,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "blow_out_air_volume": serialize(dispense.blow_out_air_volume),
       "liquids": serialize(dispense.liquids),
       "tips": [serialize(tip) for tip in dispense.tips],
-    }}
-    if isinstance(dispense, DispensePlate):
-      data["dispense"]["well_names"] = [well.name for well in dispense.wells]
-    else:
-      data["trough"] = dispense.container.name
-    await self.send_command(command="dispense96", data=data)
+    }})
 
   async def move_resource(self, move: Move, **backend_kwargs):
     await self.send_command(command="move", data={"move": {
