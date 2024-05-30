@@ -11,10 +11,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationTrough,
+  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseTrough,
+  DispenseContainer,
   Move
 )
 
@@ -65,18 +65,18 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   async def drop_tips96(self, drop: DropTipRack, **backend_kwargs):
     print(f"Dropping tips to {drop.resource.name}.")
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationTrough]):
+  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
     if isinstance(aspiration, AspirationPlate):
       resource = aspiration.wells[0].parent
     else:
-      resource = aspiration.trough
+      resource = aspiration.container
     print(f"Aspirating {aspiration.volume} from {resource}.")
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseTrough]):
+  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
     if isinstance(dispense, DispensePlate):
       resource = dispense.wells[0].parent
     else:
-      resource = dispense.trough
+      resource = dispense.container
     print(f"Dispensing {dispense.volume} to {resource}.")
 
   async def move_resource(self, move: Move, **backend_kwargs):

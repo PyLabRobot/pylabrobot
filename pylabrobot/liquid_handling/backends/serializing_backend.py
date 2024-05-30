@@ -11,10 +11,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationTrough,
+  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseTrough,
+  DispenseContainer,
   Move,
 )
 from pylabrobot.serializer import serialize
@@ -120,7 +120,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.send_command(command="drop_tips96", data={
       "resource_name": drop.resource.name, "offset": serialize(drop.offset)})
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationTrough]):
+  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
     data = {"aspiration": {
       "offset": serialize(aspiration.offset),
       "volume": aspiration.volume,
@@ -136,7 +136,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       data["trough"] = aspiration.trough.name
     await self.send_command(command="aspirate96", data=data) 
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseTrough]):
+  async def dispense96(self, dispense: Union[DispensePlate, AspirationContainer]):
     data = {"dispense": {
       "offset": serialize(dispense.offset),
       "volume": dispense.volume,
