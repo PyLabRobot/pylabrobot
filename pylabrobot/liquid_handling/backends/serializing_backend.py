@@ -134,9 +134,9 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       data["well_names"] = [well.name for well in aspiration.wells]
     else:
       data["trough"] = aspiration.trough.name
-    await self.send_command(command="aspirate96", data=data) 
+    await self.send_command(command="aspirate96", data=data)
 
-  async def dispense96(self, dispense: Union[DispensePlate, AspirationContainer]):
+  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
     data = {"dispense": {
       "offset": serialize(dispense.offset),
       "volume": dispense.volume,

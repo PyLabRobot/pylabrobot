@@ -33,7 +33,6 @@ from pylabrobot.resources import (
   Trash,
   Well,
   TipTracker,
-  Container,
   does_tip_tracking,
   does_volume_tracking
 )
@@ -1530,8 +1529,8 @@ class LiquidHandler(Machine):
       all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
       for channel, well in zip(self.head96.values(), wells):
         liquids = None # liquids in this well
-        # even if the volume tracker is disabled, a liquid (None, volume) is added to the list during
-        # the aspiration command
+        # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
+        # during the aspiration command
         l = channel.get_tip().tracker.remove_liquid(volume=volume)
         liquids = list(reversed(l))
         all_liquids.append(liquids)

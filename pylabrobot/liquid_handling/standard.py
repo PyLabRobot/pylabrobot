@@ -9,7 +9,7 @@ from typing import List, Optional, Union, Tuple, TYPE_CHECKING
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.coordinate import Coordinate
 if TYPE_CHECKING:
-  from pylabrobot.resources import Container, Resource, TipRack, Trash, Well, Container
+  from pylabrobot.resources import Container, Resource, TipRack, Trash, Well
   from pylabrobot.resources.tip import Tip
   from pylabrobot.resources.tip_rack import TipSpot
 
