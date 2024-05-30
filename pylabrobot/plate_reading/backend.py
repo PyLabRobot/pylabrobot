@@ -76,7 +76,7 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
 
     subclass = find_subclass(cls, data["type"])
     if subclass is None:
-      raise ValueError(f"Could not find subclass with name {data['type']}")
+      raise ValueError(f"Could not find subclass with name {data["type"]}")
 
     del data["type"]
     return subclass(**data)
