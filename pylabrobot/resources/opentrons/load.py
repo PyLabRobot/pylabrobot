@@ -10,7 +10,6 @@ except ImportError:
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
-from pylabrobot.resources.reservoir import Reservoir
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.tube import Tube
@@ -28,7 +27,7 @@ class UnknownResourceType(Exception):
 
 def ot_definition_to_resource(
   data: "LabwareDefinition",
-  name: str) -> Union[Plate, TipRack, TubeRack, Reservoir]:
+  name: str) -> Union[Plate, TipRack, TubeRack]:
   """ Convert an Opentrons definition file to a PyLabRobot resource file. """
 
   if not USE_OT:
@@ -171,7 +170,7 @@ def ot_definition_to_resource(
         model=data["metadata"]["displayName"]
       )
     if display_category == "reservoir":
-      return Reservoir(
+      return Plate(
         name=name,
         size_x=size_x,
         size_y=size_y,
@@ -183,7 +182,7 @@ def ot_definition_to_resource(
   raise UnknownResourceType(f"Unknown resource type '{display_category}'.")
 
 
-def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack, TubeRack, Reservoir]:
+def load_opentrons_resource(fn: str, name: str) -> Union[Plate, TipRack, TubeRack]:
   """ Load an Opentrons resource from a file.
 
   Args:
@@ -216,7 +215,7 @@ def load_shared_opentrons_resource(
   definition: str,
   name: str,
   version: int = 1
-) -> Union[Plate, TipRack, TubeRack, Reservoir]:
+) -> Union[Plate, TipRack, TubeRack]:
   """ Load an Opentrons resource from the shared Opentrons resource library.
 
   See https://github.com/Opentrons/opentrons/tree/edge/shared-data.
