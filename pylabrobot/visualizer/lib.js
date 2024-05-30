@@ -378,7 +378,7 @@ class Resource {
     this.draw(resourceLayer);
   }
 
-  setState() { }
+  setState() {}
 }
 
 class Deck extends Resource {
@@ -601,7 +601,8 @@ class Container extends Resource {
   aspirate(volume) {
     if (volume > this.getVolume()) {
       throw new Error(
-        `Aspirating ${volume}uL from well ${this.name
+        `Aspirating ${volume}uL from well ${
+          this.name
         } with ${this.getVolume()}uL`
       );
     }
@@ -697,48 +698,6 @@ class Trough extends Container {
     mainShape.add(background);
     mainShape.add(liquidLayer);
     return mainShape;
-  }
-}
-
-class Reservoir extends Resource {
-  constructor(resourceData, parent = undefined) {
-    super(resourceData, parent);
-    const { num_items_x, num_items_y } = resourceData;
-    this.num_items_x = num_items_x;
-    this.num_items_y = num_items_y;
-  }
-
-  drawMainShape() {
-    return new Konva.Rect({
-      width: this.size_x,
-      height: this.size_y,
-      fill: "#2B2D42",
-      stroke: "black",
-      strokeWidth: 1,
-    });
-  }
-
-  serialize() {
-    return {
-      ...super.serialize(),
-      ...{
-        num_items_x: this.num_items_x,
-        num_items_y: this.num_items_y,
-      },
-    };
-  }
-
-  update() {
-    super.update();
-
-    // Rename the children
-    for (let i = 0; i < this.num_items_x; i++) {
-      for (let j = 0; j < this.num_items_y; j++) {
-        const child = this.children[i * this.num_items_y + j];
-        child.name = `${this.name}_well_${i}_${j}`;
-      }
-    }
-
   }
 }
 
@@ -887,7 +846,7 @@ class TipSpot extends Resource {
 
 // Nothing special.
 class Trash extends Resource {
-  dropTip(layer) { } // just ignore
+  dropTip(layer) {} // just ignore
 
   drawMainShape() {
     if (resources["deck"].constructor.name) {
@@ -898,9 +857,9 @@ class Trash extends Resource {
 }
 
 // Nothing special.
-class Carrier extends Resource { }
-class PlateCarrier extends Carrier { }
-class TipCarrier extends Carrier { }
+class Carrier extends Resource {}
+class PlateCarrier extends Carrier {}
+class TipCarrier extends Carrier {}
 
 class CarrierSite extends Resource {
   constructor(resourceData, parent) {
@@ -1019,8 +978,6 @@ function classForResourceType(type) {
       return Container;
     case "Trough":
       return Trough;
-    case "Reservoir":
-      return Reservoir;
     case "VantageDeck":
       alert(
         "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"

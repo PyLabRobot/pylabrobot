@@ -123,7 +123,6 @@ def ot_definition_to_resource(
           tube.location = location
           wells[i].append(tube)
         elif display_category == "reservoir":
-
           if well_data["shape"] == "rectangular":
             cross_section_type = CrossSectionType.RECTANGLE
           else:
