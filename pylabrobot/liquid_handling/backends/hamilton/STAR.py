@@ -22,10 +22,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationTrough,
+  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseTrough,
+  DispenseContainer,
   GripDirection,
   Move
 )
@@ -1963,7 +1963,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def aspirate96(
     self,
-    aspiration: Union[AspirationPlate, AspirationTrough],
+    aspiration: Union[AspirationPlate, AspirationContainer],
     jet: bool = False,
     blow_out: bool = False,
 
@@ -2050,7 +2050,7 @@ class STAR(HamiltonLiquidHandler):
       top_left_well = aspiration.wells[0]
       position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
     else:
-      position = aspiration.trough.get_absolute_location(y="b") + aspiration.offset
+      position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
 
     tip = aspiration.tips[0]
     maximum_immersion_depth = int(position.z*10)
@@ -2153,7 +2153,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: Union[DispensePlate, DispenseTrough],
+    dispense: Union[DispensePlate, DispenseContainer],
     jet: bool = False,
     empty: bool = False,
     blow_out: bool = False,
@@ -2235,7 +2235,7 @@ class STAR(HamiltonLiquidHandler):
       top_left_well = dispense.wells[0]
       position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
     else:
-      position = dispense.trough.get_absolute_location(y="b") + dispense.offset
+      position = dispense.container.get_absolute_location(y="b") + dispense.offset
     tip = dispense.tips[0]
     maximum_immersion_depth = int(position.z*10)
 

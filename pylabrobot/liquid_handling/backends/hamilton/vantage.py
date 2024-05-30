@@ -16,10 +16,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationTrough,
+  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseTrough,
+  DispenseContainer,
   Move
 )
 from pylabrobot.resources import Coordinate, Liquid, Resource, TipRack, Well
@@ -907,7 +907,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def aspirate96(
     self,
-    aspiration: Union[AspirationPlate, AspirationTrough],
+    aspiration: Union[AspirationPlate, AspirationContainer],
     jet: bool = False,
     blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
@@ -956,9 +956,9 @@ class Vantage(HamiltonLiquidHandler):
       well_bottoms = position.z
       lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
     else:
-      position = aspiration.trough.get_absolute_location(y="b") + aspiration.offset
+      position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
       bottom = position.z
-      lld_search_height = bottom + aspiration.trough.get_size_z() + 2.7-1
+      lld_search_height = bottom + aspiration.container.get_size_z() + 2.7-1
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
@@ -1029,7 +1029,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: Union[DispensePlate, DispenseTrough],
+    dispense: Union[DispensePlate, DispenseContainer],
     jet: bool = False,
     blow_out: bool = False, # "empty" in the VENUS liquid editor
     empty: bool = False, # truly "empty", does not exist in liquid editor, dm4
@@ -1084,9 +1084,9 @@ class Vantage(HamiltonLiquidHandler):
       well_bottoms = position.z
       lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
     else:
-      position = dispense.trough.get_absolute_location(y="b") + dispense.offset
+      position = dispense.container.get_absolute_location(y="b") + dispense.offset
       bottom = position.z
-      lld_search_height = bottom + dispense.trough.get_size_z() + 2.7-1
+      lld_search_height = bottom + dispense.container.get_size_z() + 2.7-1
 
     liquid_height = position.z + (dispense.liquid_height or 0)
 

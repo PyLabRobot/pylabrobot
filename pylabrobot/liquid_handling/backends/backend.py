@@ -12,10 +12,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationTrough,
+  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseTrough,
+  DispenseContainer,
   Move,
 )
 
@@ -97,11 +97,11 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """ Drop tips to the specified resource using CoRe 96. """
 
   @abstractmethod
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationTrough]):
+  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
     """ Aspirate from all wells in 96 well plate. """
 
   @abstractmethod
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseTrough]):
+  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
     """ Dispense to all wells in 96 well plate. """
 
   @abstractmethod

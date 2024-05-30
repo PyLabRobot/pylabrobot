@@ -33,7 +33,7 @@ from pylabrobot.resources import (
   Trash,
   Well,
   TipTracker,
-  Trough,
+  Container,
   does_tip_tracking,
   does_volume_tracking
 )
@@ -48,10 +48,10 @@ from .standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationTrough,
+  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseTrough,
+  DispenseContainer,
   Move,
   GripDirection
 )
@@ -1276,26 +1276,26 @@ class LiquidHandler(Machine):
 
   async def aspirate96(
     self,
-    resource: Union[Plate, Trough, List[Well]],
+    resource: Union[Plate, Container, List[Well]],
     volume: float,
     offset: Coordinate = Coordinate.zero(),
     flow_rate: Optional[float] = None,
     blow_out_air_volume: Optional[float] = None,
     **backend_kwargs
   ):
-    """ Aspirate from all wells in a plate or from a trough of a sufficient size.
+    """ Aspirate from all wells in a plate or from a container of a sufficient size.
 
     Examples:
-      Aspirate an entire 96 well plate or a trough of sufficient size:
+      Aspirate an entire 96 well plate or a container of sufficient size:
 
       >>> lh.aspirate96(plate, volume=50)
-      >>> lh.aspirate96(trough, volume=50)
+      >>> lh.aspirate96(container, volume=50)
 
     Args:
-      resource (Union[Plate, Trough, List[Well]]): Resource object or list of wells.
+      resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
       volume (float): The volume to aspirate through each channel
       offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or trough is defined to be. Defaults to Coordinate.zero().
+        the plate or container is defined to be. Defaults to Coordinate.zero().
       flow_rate ([Optional[float]]): The flow rate to use when aspirating, in ul/s. If `None`, the
         backend default will be used.
       blow_out_air_volume ([Optional[float]]): The volume of air to aspirate after the liquid, in
@@ -1309,17 +1309,16 @@ class LiquidHandler(Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
 
-    if isinstance(resource, Trough):
+    if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
-        raise ValueError("Trough too small to accommodate 96 head")
-      await self._aspirate96_trough(resource=resource,
+        raise ValueError("Container too small to accommodate 96 head")
+      await self._aspirate96_container(resource=resource,
                               volume=volume,
                               tips=tips,
                               offset=offset,
                               flow_rate=flow_rate,
                               blow_out_air_volume=blow_out_air_volume,
                               **backend_kwargs)
-
 
     else:
       if isinstance(resource, Plate):
@@ -1391,8 +1390,8 @@ class LiquidHandler(Machine):
           **backend_kwargs,
         )
 
-  async def _aspirate96_trough(self,
-    resource: Trough,
+  async def _aspirate96_container(self,
+    resource: Container,
     volume: float,
     tips: List[Tip],
     offset: Coordinate = Coordinate.zero(),
@@ -1400,13 +1399,13 @@ class LiquidHandler(Machine):
     blow_out_air_volume: Optional[float] = None,
     **backend_kwargs
   ):
-    """ Helper function to aspirate from a trough.
+    """ Helper function to aspirate from a container.
 
     Args:
-      resource (Trough): Trough object.
+      resource (Container): Container object.
       volume (float): The volume to aspirate through each channel.
       offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or trough is defined to be. Defaults to Coordinate.zero().
+        the plate or container is defined to be. Defaults to Coordinate.zero().
       flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend default
         will be used.
       blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
@@ -1427,8 +1426,8 @@ class LiquidHandler(Machine):
       for liquid, vol in reversed(liquids):
         channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-    aspiration_trough = AspirationTrough(
-      trough=resource,
+    aspiration_container = AspirationContainer(
+      container=resource,
       volume=volume,
       offset=offset,
       flow_rate=flow_rate,
@@ -1439,7 +1438,7 @@ class LiquidHandler(Machine):
     )
 
     try:
-      await self.backend.aspirate96(aspiration=aspiration_trough, **backend_kwargs)
+      await self.backend.aspirate96(aspiration=aspiration_container, **backend_kwargs)
     except Exception as error:  # pylint: disable=broad-except
       for channel in self.head96.values():
         if does_volume_tracking() and not resource.tracker.is_disabled:
@@ -1448,7 +1447,7 @@ class LiquidHandler(Machine):
       self._trigger_callback(
         "aspirate96",
         liquid_handler=self,
-        aspiration=aspiration_trough,
+        aspiration=aspiration_container,
         error=error,
         **backend_kwargs,
       )
@@ -1460,14 +1459,14 @@ class LiquidHandler(Machine):
       self._trigger_callback(
         "aspirate96",
         liquid_handler=self,
-        aspiration=aspiration_trough,
+        aspiration=aspiration_container,
         error=None,
         **backend_kwargs,
       )
 
   async def dispense96(
     self,
-    resource: Union[Plate, Trough, List[Well]],
+    resource: Union[Plate, Container, List[Well]],
     volume: float,
     offset: Coordinate = Coordinate.zero(),
     flow_rate: Optional[float] = None,
@@ -1482,10 +1481,10 @@ class LiquidHandler(Machine):
       >>> lh.dispense96(plate, volume=50)
 
     Args:
-      resource (Union[Plate, Trough, List[Well]]): Resource object or list of wells.
+      resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
       volume (float): The volume to dispense through each channel
       offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or trough is defined to be. Defaults to Coordinate.zero().
+        the plate or container is defined to be. Defaults to Coordinate.zero().
       flow_rate ([Optional[float]]): The flow rate to use when dispensing, in ul/s. If `None`, the
         backend default will be used.
       blow_out_air_volume ([Optional[float]]): The volume of air to dispense after the liquid, in
@@ -1499,10 +1498,10 @@ class LiquidHandler(Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
 
-    if isinstance(resource, Trough):
+    if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
-        raise ValueError("Trough too small to accommodate 96 head")
-      await self._dispense96_trough(resource=resource,
+        raise ValueError("Container too small to accommodate 96 head")
+      await self._dispense96_container(resource=resource,
                               volume=volume,
                               tips=tips,
                               offset=offset,
@@ -1580,8 +1579,8 @@ class LiquidHandler(Machine):
           **backend_kwargs,
         )
 
-  async def _dispense96_trough(self,
-    resource: Trough,
+  async def _dispense96_container(self,
+    resource: Container,
     volume: float,
     tips: List[Tip],
     offset: Coordinate = Coordinate.zero(),
@@ -1589,13 +1588,13 @@ class LiquidHandler(Machine):
     blow_out_air_volume: Optional[float] = None,
     **backend_kwargs
   ):
-    """ Helper function to dispense to a trough.
+    """ Helper function to dispense to a container.
 
     Args:
-      resource (Trough): Trough object.
+      resource (Container): Container object.
       volume (float): The volume to dispense through each channel.
       offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or trough is defined to be. Defaults to Coordinate.zero().
+        the plate or container is defined to be. Defaults to Coordinate.zero().
       flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend default
         will be used.
       blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
@@ -1616,8 +1615,8 @@ class LiquidHandler(Machine):
       for liquid, vol in reversed(liquids):
         channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-    dispense_trough = DispenseTrough(
-      trough=resource,
+    dispense_container = DispenseContainer(
+      container=resource,
       volume=volume,
       offset=offset,
       flow_rate=flow_rate,
@@ -1628,7 +1627,7 @@ class LiquidHandler(Machine):
     )
 
     try:
-      await self.backend.dispense96(dispense=dispense_trough, **backend_kwargs)
+      await self.backend.dispense96(dispense=dispense_container, **backend_kwargs)
     except Exception as error:  # pylint: disable=broad-except
       for channel in self.head96.values():
         if does_volume_tracking() and not resource.tracker.is_disabled:
@@ -1637,7 +1636,7 @@ class LiquidHandler(Machine):
       self._trigger_callback(
         "dispense96",
         liquid_handler=self,
-        dispense=dispense_trough,
+        dispense=dispense_container,
         error=error,
         **backend_kwargs,
       )
@@ -1649,7 +1648,7 @@ class LiquidHandler(Machine):
       self._trigger_callback(
         "dispense96",
         liquid_handler=self,
-        aspiration=dispense_trough,
+        aspiration=dispense_container,
         error=None,
         **backend_kwargs,
       )

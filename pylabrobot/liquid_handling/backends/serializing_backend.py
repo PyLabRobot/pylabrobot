@@ -11,10 +11,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
-  AspirationTrough,
+  AspirationContainer,
   Dispense,
   DispensePlate,
-  DispenseTrough,
+  DispenseContainer,
   Move,
 )
 from pylabrobot.serializer import serialize
@@ -120,7 +120,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     await self.send_command(command="drop_tips96", data={
       "resource_name": drop.resource.name, "offset": serialize(drop.offset)})
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationTrough]):
+  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
     if isinstance(aspiration, AspirationPlate):
       await self.send_command(command="aspirate96", data={"aspiration": {
         "well_names": [well.name for well in aspiration.wells],
@@ -134,7 +134,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       }})
     else:
       await self.send_command(command="aspirate96", data={"aspiration": {
-        "trough": aspiration.trough.name,
+        "container": aspiration.container.name,
         "offset": serialize(aspiration.offset),
         "volume": aspiration.volume,
         "flow_rate": serialize(aspiration.flow_rate),
@@ -144,7 +144,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "tips": [serialize(tip) for tip in aspiration.tips],
       }})
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseTrough]):
+  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
     if isinstance(dispense, DispensePlate):
       await self.send_command(command="dispense96", data={"dispense": {
         "well_names": [well.name for well in dispense.wells],
@@ -158,7 +158,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       }})
     else:
       await self.send_command(command="dispense96", data={"dispense": {
-        "trough": dispense.trough.name,
+        "container": dispense.container.name,
         "offset": serialize(dispense.offset),
         "volume": dispense.volume,
         "flow_rate": serialize(dispense.flow_rate),

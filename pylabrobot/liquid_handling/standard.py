@@ -9,7 +9,7 @@ from typing import List, Optional, Union, Tuple, TYPE_CHECKING
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.coordinate import Coordinate
 if TYPE_CHECKING:
-  from pylabrobot.resources import Container, Resource, TipRack, Trash, Well, Trough
+  from pylabrobot.resources import Container, Resource, TipRack, Trash, Well, Container
   from pylabrobot.resources.tip import Tip
   from pylabrobot.resources.tip_rack import TipSpot
 
@@ -102,10 +102,10 @@ class DispensePlate:
   liquids: List[List[Tuple[Optional[Liquid], float]]]
 
 @dataclass
-class AspirationTrough:
+class AspirationContainer:
   """ Contains information about an aspiration from a plate (in a single movement). """
 
-  trough: Trough
+  container: Container
   offset: Optional[Coordinate]
   tips: List[Tip]
   volume: float
@@ -116,10 +116,10 @@ class AspirationTrough:
 
 
 @dataclass
-class DispenseTrough:
+class DispenseContainer:
   """ Contains information about an aspiration from a plate (in a single movement). """
 
-  trough: Trough
+  container: Container
   offset: Optional[Coordinate]
   tips: List[Tip]
   volume: float
