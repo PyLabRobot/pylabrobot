@@ -728,6 +728,8 @@ class Well extends Container {
         fill: Well.colorForVolume(this.getVolume(), this.maxVolume),
         stroke: "black",
         strokeWidth: 1,
+        offsetX: this.size_x / 2,
+        offsetY: this.size_y / 2,
       });
     }
   }
