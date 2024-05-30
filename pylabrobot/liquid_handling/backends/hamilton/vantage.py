@@ -16,8 +16,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
+  AspirationTrough,
   Dispense,
   DispensePlate,
+  DispenseTrough,
   Move
 )
 from pylabrobot.resources import Coordinate, Liquid, Resource, TipRack, Well
@@ -905,7 +907,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def aspirate96(
     self,
-    aspiration: AspirationPlate,
+    aspiration: Union[AspirationPlate, AspirationTrough],
     jet: bool = False,
     blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
@@ -947,11 +949,18 @@ class Vantage(HamiltonLiquidHandler):
     """
     # assert self.core96_head_installed, "96 head must be installed"
 
-    top_left_well = aspiration.wells[0]
-    position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
+    if isinstance(aspiration, AspirationPlate):
+      top_left_well = aspiration.wells[0]
+      position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
+      # -1 compared to STAR?
+      well_bottoms = position.z
+      lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
+    else:
+      position = aspiration.trough.get_absolute_location(y="b") + aspiration.offset
+      bottom = position.z
+      lld_search_height = bottom + aspiration.trough.get_size_z() + 2.7-1
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
-    well_bottoms = position.z
 
     tip = aspiration.tips[0]
     liquid_to_be_aspirated = Liquid.WATER # default to water
@@ -971,9 +980,6 @@ class Vantage(HamiltonLiquidHandler):
 
     volume = hlc.compute_corrected_volume(aspiration.volume) if hlc is not None \
       else aspiration.volume
-
-    # -1 compared to STAR?
-    lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0)
@@ -1023,7 +1029,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: DispensePlate,
+    dispense: Union[DispensePlate, DispenseTrough],
     jet: bool = False,
     blow_out: bool = False, # "empty" in the VENUS liquid editor
     empty: bool = False, # truly "empty", does not exist in liquid editor, dm4
@@ -1071,11 +1077,18 @@ class Vantage(HamiltonLiquidHandler):
         determined based on the jet, blow_out, and empty parameters.
     """
 
-    top_left_well = dispense.wells[0]
-    position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
+    if isinstance(dispense, DispensePlate):
+      top_left_well = dispense.wells[0]
+      position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
+      # -1 compared to STAR?
+      well_bottoms = position.z
+      lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
+    else:
+      position = dispense.trough.get_absolute_location(y="b") + dispense.offset
+      bottom = position.z
+      lld_search_height = bottom + dispense.trough.get_size_z() + 2.7-1
 
-    liquid_height = position.z + (dispense.liquid_height or 0) + 10 # +10?
-    well_bottoms = position.z
+    liquid_height = position.z + (dispense.liquid_height or 0)
 
     tip = dispense.tips[0]
     liquid_to_be_dispensed = Liquid.WATER # default to WATER
@@ -1094,9 +1107,6 @@ class Vantage(HamiltonLiquidHandler):
       )
     volume = hlc.compute_corrected_volume(dispense.volume) if hlc is not None \
       else dispense.volume
-
-    # -1 compared to STAR?
-    lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
 
     transport_air_volume = transport_air_volume or \
       (int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0)
