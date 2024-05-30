@@ -133,7 +133,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     if isinstance(aspiration, AspirationPlate):
       data["aspiration"]["well_names"] = [well.name for well in aspiration.wells]
     else:
-      data["trough"] = aspiration.container.name
+      data["aspiration"]["trough"] = aspiration.container.name
     await self.send_command(command="aspirate96", data=data)
 
   async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
@@ -149,7 +149,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     if isinstance(dispense, DispensePlate):
       data["dispense"]["well_names"] = [well.name for well in dispense.wells]
     else:
-      data["trough"] = dispense.container.name
+      data["dispense"]["trough"] = dispense.container.name
     await self.send_command(command="dispense96", data=data)
 
   async def move_resource(self, move: Move, **backend_kwargs):
