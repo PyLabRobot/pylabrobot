@@ -1088,7 +1088,7 @@ class Vantage(HamiltonLiquidHandler):
       bottom = position.z
       lld_search_height = bottom + dispense.container.get_size_z() + 2.7-1
 
-    liquid_height = position.z + (dispense.liquid_height or 0)
+    liquid_height = position.z + (dispense.liquid_height or 0) + 10
 
     tip = dispense.tips[0]
     liquid_to_be_dispensed = Liquid.WATER # default to WATER

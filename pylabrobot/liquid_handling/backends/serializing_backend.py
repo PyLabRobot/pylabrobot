@@ -131,7 +131,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "tips": [serialize(tip) for tip in aspiration.tips],
     }}
     if isinstance(aspiration, AspirationPlate):
-      data["well_names"] = [well.name for well in aspiration.wells]
+      data["aspiration"]["well_names"] = [well.name for well in aspiration.wells]
     else:
       data["trough"] = aspiration.container.name
     await self.send_command(command="aspirate96", data=data)
@@ -147,7 +147,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "tips": [serialize(tip) for tip in dispense.tips],
     }}
     if isinstance(dispense, DispensePlate):
-      data["well_names"] = [well.name for well in dispense.wells]
+      data["dispense"]["well_names"] = [well.name for well in dispense.wells]
     else:
       data["trough"] = dispense.container.name
     await self.send_command(command="dispense96", data=data)
