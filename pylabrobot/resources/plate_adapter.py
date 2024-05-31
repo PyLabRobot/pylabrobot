@@ -39,11 +39,16 @@ class PlateAdapter(Resource):
         size_z (float): The size of the PlateAdapter in the z dimension.
         dx (float): The x-coordinate offset for well positioning.
         dy (float): The y-coordinate offset for well positioning.
-        dz (float): The z-coordinate offset for well positioning, i.e. the outside-bottom of a well.
-        adapter_item_dx (Literal[9.0, 4.5, 2.25], optional): The x-dimension spacing of wells. Defaults to 9.0.
-        adapter_item_dy (Literal[9.0, 4.5, 2.25], optional): The y-dimension spacing of wells. Defaults to 9.0.
-        site_pedestal_z (Optional[float], optional): The z-coordinate of the site pedestal. Defaults to None.
-        category (Optional[str], optional): The category of the PlateAdapter. Defaults to "plate_adapter".
+        dz (float): The z-coordinate offset for well positioning, i.e. the outside-bottom
+          of a well.
+        adapter_item_dx (Literal[9.0, 4.5, 2.25], optional): The x-dimension spacing of
+          wells. Defaults to 9.0.
+        adapter_item_dy (Literal[9.0, 4.5, 2.25], optional): The y-dimension spacing of 
+        wells. Defaults to 9.0.
+        site_pedestal_z (Optional[float], optional): The z-coordinate of the site pedestal.
+          Defaults to None.
+        category (Optional[str], optional): The category of the PlateAdapter.
+          Defaults to "plate_adapter".
         model (Optional[str], optional): The model of the PlateAdapter. Defaults to None.
    
   Examples:
@@ -90,13 +95,13 @@ class PlateAdapter(Resource):
     self.dz = dz
     self.adapter_hole_size_x = adapter_hole_size_x
     self.adapter_hole_size_y = adapter_hole_size_y
-    self.adapter_hole_size_z = self.get_size_z() - self.dz 
+    self.adapter_hole_size_z = self.get_size_z() - self.dz
     self.adapter_hole_dx = adapter_hole_dx
     self.adapter_hole_dy = adapter_hole_dy
     self.site_pedestal_z = site_pedestal_z
 
   @property
-  def child_resource_location(self) -> Coordinate:
+  def child_resource_location(self) -> Optional[Coordinate]:
     return self._child_resource_location
 
   def assign_child_resource(
@@ -109,7 +114,7 @@ class PlateAdapter(Resource):
     will autoadjust the placement location based on the PlateAdapter-Plate relationship. """
 
     if self._child_resource is not None and not reassign:
-      raise ValueError(f"{self.name} already has a child resource assigned")    
+      raise ValueError(f"{self.name} already has a child resource assigned")
     if not isinstance(resource, Plate):
       raise ValueError("Only plates can be assigned to Alpaqua 96 magnum flx.")
     
@@ -123,17 +128,18 @@ class PlateAdapter(Resource):
     y_locations = sorted(OrderedDict.fromkeys([well_n.location.y
       for well_n in resource.children]))
 
-    def calculate_well_spacing(float_list: List[float]) -> Optional[float]:
+    def calculate_well_spacing(float_list: List[float]) -> float:
       """ Calculate the difference between every x and x+1 element in the list of floats. """
       if len(float_list) < 2:
-          return None
+        return None
       differences = [round(float_list[i+1] - float_list[i],2) for i in range(len(float_list) - 1)]
-      if len(list(OrderedDict.fromkeys(differences))) == 1:
-          return differences[0]
-      return None  # Explicitly return None if no single spacing value is found
+      if differences[0] == None:
+        raise ValueError("well spacing has to be uniform, and cannot be None")
+      elif len(list(OrderedDict.fromkeys(differences))) == 1:
+        return differences[0]
 
     
-    plate_dx, plate_dy = x_locations[0], y_locations[0]
+    plate_dx, plate_dy = float(x_locations[0]), float(y_locations[0])
     plate_item_dx = abs(calculate_well_spacing(x_locations))
     plate_item_dy = abs(calculate_well_spacing(y_locations))
     well_size_x = resource.children[0].get_size_x()
