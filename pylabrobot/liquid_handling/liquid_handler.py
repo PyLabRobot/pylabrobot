@@ -11,6 +11,7 @@ import numbers
 import threading
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
+from collections import OrderedDict
 
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
@@ -27,6 +28,7 @@ from pylabrobot.resources import (
   Lid,
   MFXModule,
   Plate,
+  PlateAdapter,
   Tip,
   TipRack,
   TipSpot,
@@ -1878,6 +1880,19 @@ class LiquidHandler(Machine):
       to_location = to
     elif isinstance(to, MFXModule):
       to_location = to.get_absolute_location() + to.child_resource_location
+    elif isinstance(to, PlateAdapter):
+      # Calculate location adjustment of Plate based on PlateAdapter geometry
+      x_locations = sorted(OrderedDict.fromkeys([well_n.location.x
+        for well_n in plate.children]))
+      y_locations = sorted(OrderedDict.fromkeys([well_n.location.y
+        for well_n in plate.children]))
+      plate_dx, plate_dy = x_locations[0], y_locations[0]
+      well_size_x = plate.children[0].get_size_x()
+      well_size_y = plate.children[0].get_size_y()
+      plate_x_adjustment = to.dx - plate_dx + to.adapter_hole_size_x/2 - well_size_x/2
+      plate_y_adjustment = to.dy - plate_dy + to.adapter_hole_size_x/2 - well_size_y/2
+      adjusted_plate_anchor = Coordinate(plate_x_adjustment, plate_y_adjustment, to.dz)
+      to_location = to.get_absolute_location() + adjusted_plate_anchor
     else:
       to_location = to.get_absolute_location()
 
@@ -1903,6 +1918,8 @@ class LiquidHandler(Machine):
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       to.assign_child_resource(plate)
     elif isinstance(to, MFXModule):
+      to.assign_child_resource(plate, location=to.child_resource_location)
+    elif isinstance(to, PlateAdapter):
       to.assign_child_resource(plate, location=to.child_resource_location)
     else:
       to.assign_child_resource(plate, location=to_location)
