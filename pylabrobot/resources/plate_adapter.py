@@ -75,9 +75,9 @@ class PlateAdapter(Resource):
     dx: float, dy: float, dz: float,
     adapter_hole_size_x: float,
     adapter_hole_size_y: float,
-    adapter_hole_dx: float = 9.0, 
+    site_pedestal_z: float,
+    adapter_hole_dx: float = 9.0,
     adapter_hole_dy: float = 9.0,
-    site_pedestal_z: Union[float, None] = None,
     category: Optional[str] = "plate_adapter",
     model: Optional[str] = None
     ):
@@ -85,7 +85,7 @@ class PlateAdapter(Resource):
       raise ValueError("adapter_hole_dx must be one of 9.0, 4.5, or 2.25")
     if adapter_hole_dy not in {9.0, 4.5, 2.25}:
       raise ValueError("adapter_hole_dy must be one of 9.0, 4.5, or 2.25")
-     
+
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
     self._child_resource_location = None
@@ -117,28 +117,29 @@ class PlateAdapter(Resource):
       raise ValueError(f"{self.name} already has a child resource assigned")
     if not isinstance(resource, Plate):
       raise ValueError("Only plates can be assigned to Alpaqua 96 magnum flx.")
-    
+
     # TODO: have discussion oon whether to transfer flat bottom error checking
     # TODO: check whether allPlate children information could
       # be made accessible from the Plate class
-    
+
     # Calculate Plate information (which is not directly accessible from the Plate class)
     x_locations = sorted(OrderedDict.fromkeys([well_n.location.x
       for well_n in resource.children]))
     y_locations = sorted(OrderedDict.fromkeys([well_n.location.y
       for well_n in resource.children]))
 
-    def calculate_well_spacing(float_list: List[float]) -> float:
+    def calculate_well_spacing(float_list: List[float]):
       """ Calculate the difference between every x and x+1 element in the list of floats. """
       if len(float_list) < 2:
         return None
       differences = [round(float_list[i+1] - float_list[i],2) for i in range(len(float_list) - 1)]
-      if differences[0] == None:
+      if differences[0] is None:
         raise ValueError("well spacing has to be uniform, and cannot be None")
       elif len(list(OrderedDict.fromkeys(differences))) == 1:
         return differences[0]
+      else:
+        raise ValueError("well spacing has to be uniform")
 
-    
     plate_dx, plate_dy = float(x_locations[0]), float(y_locations[0])
     plate_item_dx = abs(calculate_well_spacing(x_locations))
     plate_item_dy = abs(calculate_well_spacing(y_locations))
@@ -154,7 +155,7 @@ class PlateAdapter(Resource):
     # Calculate adjustment to place center of H1_plate on top of center of H1_adapter
     plate_x_adjustment = self.dx - plate_dx + self.adapter_hole_size_x/2 - well_size_x/2
     plate_y_adjustment = self.dy - plate_dy + self.adapter_hole_size_x/2 - well_size_y/2
-    # TODO: create plate_z_adjustment based on PlateAdapter.adapter_hole_size_z & 
+    # TODO: create plate_z_adjustment based on PlateAdapter.adapter_hole_size_z &
       # Plate.well.get_size_z() relationship, when Plate definitions are fixed
 
     adjusted_plate_anchor = Coordinate(plate_x_adjustment, plate_y_adjustment, self.dz)
