@@ -906,6 +906,7 @@ class LiquidHandler(Machine):
     for requested_bav, done_bav in zip(blow_out_air_volume, self._blow_out_air_volume):
       if requested_bav is not None and requested_bav > done_bav:
         raise BlowOutVolumeError("Blowout volume is larger than aspirated volume")
+    self._blow_out_air_volume = None
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
