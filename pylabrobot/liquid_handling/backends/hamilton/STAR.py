@@ -22,8 +22,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
+  AspirationContainer,
   Dispense,
   DispensePlate,
+  DispenseContainer,
   GripDirection,
   Move
 )
@@ -1961,7 +1963,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def aspirate96(
     self,
-    aspiration: AspirationPlate,
+    aspiration: Union[AspirationPlate, AspirationContainer],
     jet: bool = False,
     blow_out: bool = False,
 
@@ -2044,8 +2046,12 @@ class STAR(HamiltonLiquidHandler):
     assert self.core96_head_installed, "96 head must be installed"
 
     # get the first well and tip as representatives
-    top_left_well = aspiration.wells[0]
-    position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
+    if isinstance(aspiration, AspirationPlate):
+      top_left_well = aspiration.wells[0]
+      position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
+    else:
+      position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
+
     tip = aspiration.tips[0]
     maximum_immersion_depth = int(position.z*10)
 
@@ -2147,7 +2153,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: DispensePlate,
+    dispense: Union[DispensePlate, DispenseContainer],
     jet: bool = False,
     empty: bool = False,
     blow_out: bool = False,
@@ -2225,8 +2231,11 @@ class STAR(HamiltonLiquidHandler):
     assert self.core96_head_installed, "96 head must be installed"
 
     # get the first well and tip as representatives
-    top_left_well = dispense.wells[0]
-    position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
+    if isinstance(dispense, DispensePlate):
+      top_left_well = dispense.wells[0]
+      position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
+    else:
+      position = dispense.container.get_absolute_location(y="b") + dispense.offset
     tip = dispense.tips[0]
     maximum_immersion_depth = int(position.z*10)
 
