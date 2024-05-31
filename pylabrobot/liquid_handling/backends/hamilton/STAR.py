@@ -1835,7 +1835,7 @@ class STAR(HamiltonLiquidHandler):
       default=[int(hlc.dispense_air_transport_volume*10) if hlc is not None else 0
       for hlc in hamilton_liquid_classes])
     blow_out_air_volumes = [int((op.blow_out_air_volume or
-                                (hlc.aspiration_blow_out_volume
+                                (hlc.dispense_blow_out_volume
                                   if hlc is not None else 0)*10))
                             for op, hlc in zip(ops, hamilton_liquid_classes)]
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF]*n)
