@@ -86,9 +86,9 @@ class PlateAdapter(Resource):
     if adapter_hole_dy not in {9.0, 4.5, 2.25}:
       raise ValueError("adapter_hole_dy must be one of 9.0, 4.5, or 2.25")
 
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, 
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
       category=category or "plate_adapter", model=model)
-    
+
     self._child_resource_location = None
     self._child_resource: Optional[Resource] = None
     self.dx = dx
