@@ -51,7 +51,8 @@ class Plate(ItemizedResource[Well]):
     category: str = "plate",
     lid_height: float = 0,
     with_lid: bool = False,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted"
   ):
     """ Initialize a Plate resource.
 
@@ -78,6 +79,7 @@ class Plate(ItemizedResource[Well]):
       num_items_y=num_items_y, category=category, model=model)
     self.lid: Optional[Lid] = None
     self.lid_height = lid_height
+    self.plate_type = plate_type
 
     if with_lid:
       assert lid_height > 0, "Lid height must be greater than 0 if with_lid == True."
