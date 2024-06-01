@@ -19,7 +19,7 @@ class OTDeck(Deck):
 
     self.slots: List[Optional[Resource]] = [None] * 12
 
-    self.slot_locations = [
+    self.slot_locations=[
       Coordinate(x=0.0,   y=0.0,   z=0.0),
       Coordinate(x=132.5, y=0.0,   z=0.0),
       Coordinate(x=265.0, y=0.0,   z=0.0),

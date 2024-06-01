@@ -153,7 +153,7 @@ def write_plate_carrier_definition(out_file, plate_carrier: PlateCarrier, descri
   out_file.write(f"    size_x={plate_carrier._size_x},\n")
   out_file.write(f"    size_y={plate_carrier._size_y},\n")
   out_file.write(f"    size_z={plate_carrier._size_z},\n")
-  out_file.write( "    sites=create_homogeneous_carrier_sites([\n")
+  out_file.write( "    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[\n")
   for site in plate_carrier.sites:
     out_file.write(f"        Coordinate({site.location.x}, {site.location.y}, {site.location.z})" +
                     ",\n")
@@ -184,7 +184,7 @@ def write_tip_carrier_definition(out_file, tip_carrier: TipCarrier, description:
   out_file.write(f"    size_x={tip_carrier._size_x},\n")
   out_file.write(f"    size_y={tip_carrier._size_y},\n")
   out_file.write(f"    size_z={tip_carrier._size_z},\n")
-  out_file.write( "    sites=create_homogeneous_carrier_sites([\n")
+  out_file.write( "    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[\n")
   for site in tip_carrier.sites:
     out_file.write(f"        Coordinate({site.location.x}, {site.location.y}, {site.location.z})" +
                     ",\n")
@@ -215,7 +215,7 @@ def write_flex_carrier_definition(out_file, flex_carrier: MFXCarrier, descriptio
   out_file.write(f"    size_x={flex_carrier._size_x},\n")
   out_file.write(f"    size_y={flex_carrier._size_y},\n")
   out_file.write(f"    size_z={flex_carrier._size_z},\n")
-  out_file.write( "    sites=create_homogeneous_carrier_sites([\n")
+  out_file.write( "    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[\n")
   for site in flex_carrier.sites:
     out_file.write(f"        Coordinate({site.location.x}, {site.location.y}, {site.location.z})" +
                     ",\n")

@@ -1,11 +1,10 @@
 from abc import ABCMeta
 import sys
-from typing import Union, Tuple, TypeVar, Generic, List, Optional, Generator, Type, Sequence, cast
+from typing import Union, Tuple, TypeVar, Generic, List, Optional, Generator, Sequence, cast
 from string import ascii_uppercase as LETTERS
 
 import pylabrobot.utils
 
-from .coordinate import Coordinate
 from .resource import Resource
 
 if sys.version_info >= (3, 8):

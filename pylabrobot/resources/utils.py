@@ -1,8 +1,9 @@
 from typing import List, Type, TypeVar
 
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource import Resource
 
-T = TypeVar("T")
+T = TypeVar("T", bound=Resource)
 
 
 def create_equally_spaced_2d(
@@ -12,7 +13,8 @@ def create_equally_spaced_2d(
   item_dx: float, item_dy: float,
   **kwargs
 ) -> List[List[T]]:
-  """ Make equally spaced resources in a 2D grid. See :meth:`create_equally_spaced_2d` for a 1D grid.
+  """ Make equally spaced resources in a 2D grid. Also see :meth:`create_equally_spaced_x` and
+  :meth:`create_equally_spaced_y`.
 
   Args:
     klass: The class of the resource to create
@@ -53,7 +55,7 @@ def create_equally_spaced_x(
   dx: float, dy: float, dz: float,
   item_dx: float,
   **kwargs
-) -> List[List[T]]:
+) -> List[T]:
   """ Make equally spaced resources over the x-axis. See :meth:`create_equaly_spaced_2d` for more
   details.
 
@@ -87,7 +89,7 @@ def create_equally_spaced_y(
   dx: float, dy: float, dz: float,
   item_dy: float,
   **kwargs
-) -> List[List[T]]:
+) -> List[T]:
   """ Make equally spaced resources over the y-axis. See :meth:`create_equaly_spaced_2d` for more
   details.
 
