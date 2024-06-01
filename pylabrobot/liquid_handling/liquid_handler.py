@@ -56,8 +56,11 @@ from .standard import (
 )
 
 
-
 logger = logging.getLogger("pylabrobot")
+
+
+class BlowOutVolumeError(Exception):
+  ...
 
 
 class LiquidHandler(Machine):
@@ -109,6 +112,8 @@ class LiquidHandler(Machine):
     self.head: Dict[int, TipTracker] = {}
     self.head96: Dict[int, TipTracker] = {}
     self._default_use_channels: Optional[List[int]] = None
+
+    self._blow_out_air_volume: Optional[List[Optional[float]]] = None
 
     # assign deck as only child resource, and set location of self to origin.
     self.location = Coordinate.zero()
@@ -719,6 +724,7 @@ class LiquidHandler(Machine):
     flow_rates = expand(flow_rates, n)
     liquid_height = expand(liquid_height, n)
     blow_out_air_volume = expand(blow_out_air_volume, n)
+    self._blow_out_air_volume = blow_out_air_volume
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
@@ -895,6 +901,13 @@ class LiquidHandler(Machine):
     flow_rates = expand(flow_rates, n)
     liquid_height = expand(liquid_height, n)
     blow_out_air_volume = expand(blow_out_air_volume, n)
+    if any(bav is not None for bav in blow_out_air_volume):
+      if self._blow_out_air_volume is None:
+        raise BlowOutVolumeError("No blowout volume was aspirated.")
+      for requested_bav, done_bav in zip(blow_out_air_volume, self._blow_out_air_volume):
+        if requested_bav is not None and done_bav is not None and requested_bav > done_bav:
+          raise BlowOutVolumeError("Blowout volume is larger than aspirated volume")
+    self._blow_out_air_volume = None
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
