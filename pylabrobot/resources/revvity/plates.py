@@ -4,13 +4,13 @@
 
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well, WellBottomType
-from pylabrobot.resources.itemized_resource import create_equally_spaced
+from pylabrobot.resources.utils import create_equally_spaced_2d
 
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_round_vbottom
 
 
 def _compute_volume_from_height_Revvity_ProxiPlate_384Plus(h: float):
-  """ Simplification: instead of 3 segment (hemisphere-frustum of cone-cylinder) 
+  """ Simplification: instead of 3 segment (hemisphere-frustum of cone-cylinder)
   -> 2 segment (cone-cylinder)
   """
   if h > 77:
@@ -34,7 +34,7 @@ def Revvity_ProxiPlate_384Plus(name: str, with_lid: bool = False) -> Plate:
     with_lid=with_lid,
     model="Revvity_ProxiPlate_384Plus",
     lid_height=10,
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=24,
       num_items_y=16,
       dx=10.45,

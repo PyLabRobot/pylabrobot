@@ -6,7 +6,7 @@ from pylabrobot.resources import (
   Coordinate,
   Plate,
   Well,
-  create_equally_spaced
+  create_equally_spaced_2d
 )
 
 if sys.version_info >= (3, 8):
@@ -20,7 +20,7 @@ class TestItemizedResource(unittest.TestCase):
 
   def setUp(self) -> None:
     self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
-      items=create_equally_spaced(Well,
+      items=create_equally_spaced_2d(Well,
       num_items_x=12, num_items_y=8,
       dx=0, dy=0, dz=0,
       item_dx=9, item_dy=9,
@@ -186,11 +186,11 @@ class TestItemizedResource(unittest.TestCase):
 
 
 class TestCreateEquallySpaced(unittest.TestCase):
-  """ Test for create_equally_spaced function. """
+  """ Test for create_equally_spaced_2d function. """
 
   def test_create_equally_spaced(self):
     self.maxDiff = None
-    equally_spaced = create_equally_spaced(Well,
+    equally_spaced = create_equally_spaced_2d(Well,
       num_items_x=3, num_items_y=2,
       dx=0, dy=0, dz=0,
       item_dx=9, item_dy=9,

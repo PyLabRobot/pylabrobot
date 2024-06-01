@@ -180,7 +180,7 @@ def main(pc, tc, p, tr, tcr):
         o.write(f'    z_dispense={z_dispense},\n')
         o.write(f'    z_max={z_max},\n')
         o.write(f'    area={area},\n')
-        o.write(f'    items=create_equally_spaced({it},\n')
+        o.write(f'    items=create_equally_spaced_2d({it},\n')
         o.write(f'      num_items_x={num_x},\n')
         o.write(f'      num_items_y={num_y},\n')
         o.write(f'      dx={dx},\n')
