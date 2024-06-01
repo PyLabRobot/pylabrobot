@@ -45,7 +45,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       size_y: The size of the resource in the y direction.
       size_z: The size of the resource in the z direction.
       items: The items on the resource. See
-        :func:`pylabrobot.resources.create_equally_spaced`. Note that items
+        :func:`pylabrobot.resources.create_equally_spaced_2d`. Note that items
         names will be prefixed with the resource name. Defaults to `[]`.
       num_items_x: The number of items in the x direction. This method can only and must be used if
         `items` is not specified.
@@ -57,11 +57,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     Examples:
 
       Creating a plate with 96 wells with
-      :func:`pylabrobot.resources.create_equally_spaced`:
+      :func:`pylabrobot.resources.create_equally_spaced_2d`:
 
         >>> from pylabrobot.resources import Plate
         >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
-        ...   items=create_equally_spaced(Well
+        ...   items=create_equally_spaced_2d(Well
         ...     dx=0, dy=0, dz=0, item_size_x=1, item_size_y=1,
         ...     num_items_x=1, num_items_y=1))
 
@@ -430,47 +430,3 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     down, then right. """
 
     return self.get_items(range(self.num_items))
-
-
-def create_equally_spaced(
-    klass: Type[T],
-    num_items_x: int, num_items_y: int,
-    dx: float, dy: float, dz: float,
-    item_dx: float, item_dy: float,
-    **kwargs
-) -> List[List[T]]:
-  """ Make equally spaced resources.
-
-  See :class:`ItemizedResource` for more details.
-
-  Args:
-    klass: The class of the resource to create
-    num_items_x: The number of items in the x direction
-    num_items_y: The number of items in the y direction
-    dx: The bottom left corner for items in the left column
-    dy: The bottom left corner for items in the top row
-    dz: The z coordinate for all items
-    item_dx: The size of the items in the x direction
-    item_dy: The size of the items in the y direction
-    **kwargs: Additional keyword arguments to pass to the resource constructor
-
-  Returns:
-    A list of lists of resources. The outer list contains the columns, and the inner list contains
-    the items in each column.
-  """
-
-  # TODO: It probably makes more sense to transpose this.
-
-  items: List[List[T]] = []
-  for i in range(num_items_x):
-    items.append([])
-    for j in range(num_items_y):
-      name = f"{klass.__name__.lower()}_{i}_{j}"
-      item = klass(
-        name=name,
-        **kwargs
-      )
-      item.location=Coordinate(x=dx + i * item_dx, y=dy + (num_items_y-j-1) * item_dy, z=dz)
-      items[i].append(item)
-
-  return items

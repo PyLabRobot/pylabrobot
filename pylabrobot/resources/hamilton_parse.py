@@ -12,7 +12,7 @@ from pylabrobot.resources import (
   TipSpot,
   Well,
   WellBottomType,
-  create_equally_spaced,
+  create_equally_spaced_2d,
   create_homogeneous_carrier_sites
 )
 from pylabrobot.resources.ml_star.tip_creators import (
@@ -189,7 +189,7 @@ def create_plate_for_writing(
     size_z=size_z,
     num_items_x=num_items_x,
     num_items_y=num_items_y,
-    items=create_equally_spaced(
+    items=create_equally_spaced_2d(
       Well,
       num_items_x=num_items_x,
       num_items_y=num_items_y,
@@ -263,7 +263,7 @@ def create_tip_rack_for_writing(filepath: str) -> Tuple[TipRack, Optional[str]]:
     size_x=size_x,
     size_y=size_y,
     size_z=size_z,
-    items=create_equally_spaced(
+    items=create_equally_spaced_2d(
       TipSpot,
       num_items_x=num_items_x,
       num_items_y=num_items_y,
