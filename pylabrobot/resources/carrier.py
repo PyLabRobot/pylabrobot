@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional, Type, TypeVar, Union
 
 from .coordinate import Coordinate
 from .resource import Resource
@@ -15,8 +15,8 @@ class CarrierSite(Resource):
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
     category: str = "carrier_site", model: Optional[str] = None):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
-      model=model)
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
+      category=category, model=model)
     self.resource: Optional[Resource] = None
 
   def assign_child_resource(
@@ -243,28 +243,38 @@ class TubeCarrier(Carrier):
       sites,category=category, model=model)
 
 
+T = TypeVar("T", bound=CarrierSite)
+
+
 def create_carrier_sites(
+  klass: Type[T],
   locations: List[Coordinate],
   site_size_x: List[Union[float, int]],
-  site_size_y: List[Union[float, int]]) -> List[CarrierSite]:
+  site_size_y: List[Union[float, int]],
+  **kwargs
+) -> List[T]:
   """ Create a list of carrier sites with the given sizes. """
 
   sites = []
   for spot, (l, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
-    site = CarrierSite(
+    site = klass(
       name = f"carrier-site-{spot}",
-      # size_x=x, size_y=y, size_z=0, spot=spot)
-      size_x=x, size_y=y, size_z=0)
+      size_x=x, size_y=y, size_z=0,
+      **kwargs)
     site.location = l
     sites.append(site)
   return sites
 
 
 def create_homogeneous_carrier_sites(
+  klass: Type[T],
   locations: List[Coordinate],
   site_size_x: float,
-  site_size_y: float) -> List[CarrierSite]:
+  site_size_y: float,
+  **kwargs
+  ) -> List[T]:
   """ Create a list of carrier sites with the same size. """
 
   n = len(locations)
-  return create_carrier_sites(locations, [site_size_x] * n, [site_size_y] * n)
+  return create_carrier_sites(klass=klass, locations=locations, site_size_x=[site_size_x]*n,
+                              site_size_y=[site_size_y]*n, **kwargs)
