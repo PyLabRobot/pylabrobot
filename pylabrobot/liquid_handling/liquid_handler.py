@@ -1320,18 +1320,37 @@ class LiquidHandler(Machine):
       del backend_kwargs[extra]
 
     tips = [channel.get_tip() for channel in self.head96.values()]
+    all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
+    aspiration: Union[AspirationPlate, AspirationContainer]
 
     if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
-      await self._aspirate96_container(resource=resource,
-                              volume=volume,
-                              tips=tips,
-                              offset=offset,
-                              flow_rate=flow_rate,
-                              blow_out_air_volume=blow_out_air_volume,
-                              **backend_kwargs)
 
+      for channel in self.head96.values():
+        # superfluous to have append in two places but the type checker is very angry and does not
+        # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
+        liquids: List[Tuple[Optional[Liquid], float]]
+        if resource.tracker.is_disabled or not does_volume_tracking():
+          liquids = [(None, volume)]
+          all_liquids.append(liquids)
+        else:
+          liquids = resource.tracker.remove_liquid(volume=volume) # type: ignore
+          all_liquids.append(liquids)
+
+        for liquid, vol in reversed(liquids):
+          channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
+
+      aspiration = AspirationContainer(
+        container=resource,
+        volume=volume,
+        offset=offset,
+        flow_rate=flow_rate,
+        tips=tips,
+        liquid_height=None,
+        blow_out_air_volume=blow_out_air_volume,
+        liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
+      )
     else:
       if isinstance(resource, Plate):
         if resource.has_lid():
@@ -1349,8 +1368,6 @@ class LiquidHandler(Machine):
       if not len(wells) == 96:
         raise ValueError(f"aspirate96 expects 96 wells, got {len(wells)}")
 
-      # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-      all_liquids: List[Sequence[Tuple[Optional[Liquid], float]]] = []
       for well, channel in zip(wells, self.head96.values()):
         # superfluous to have append in two places but the type checker is very angry and does not
         # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
@@ -1364,7 +1381,7 @@ class LiquidHandler(Machine):
         for liquid, vol in reversed(liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      aspiration_plate = AspirationPlate(
+      aspiration = AspirationPlate(
         wells=wells,
         volume=volume,
         offset=offset,
@@ -1375,103 +1392,29 @@ class LiquidHandler(Machine):
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
       )
 
-      try:
-        await self.backend.aspirate96(aspiration=aspiration_plate, **backend_kwargs)
-      except Exception as error:  # pylint: disable=broad-except
-        for channel, well in zip(self.head96.values(), wells):
-          if does_volume_tracking() and not well.tracker.is_disabled:
-            well.tracker.rollback()
-          channel.get_tip().tracker.rollback()
-        self._trigger_callback(
-          "aspirate96",
-          liquid_handler=self,
-          aspiration=aspiration_plate,
-          error=error,
-          **backend_kwargs,
-        )
-      else:
-        for channel, well in zip(self.head96.values(), wells):
-          if does_volume_tracking() and not well.tracker.is_disabled:
-            well.tracker.commit()
-          channel.get_tip().tracker.commit()
-        self._trigger_callback(
-          "aspirate96",
-          liquid_handler=self,
-          aspiration=aspiration_plate,
-          error=None,
-          **backend_kwargs,
-        )
-
-  async def _aspirate96_container(self,
-    resource: Container,
-    volume: float,
-    tips: List[Tip],
-    offset: Coordinate = Coordinate.zero(),
-    flow_rate: Optional[float] = None,
-    blow_out_air_volume: Optional[float] = None,
-    **backend_kwargs
-  ):
-    """ Helper function to aspirate from a container.
-
-    Args:
-      resource (Container): Container object.
-      volume (float): The volume to aspirate through each channel.
-      offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or container is defined to be. Defaults to Coordinate.zero().
-      flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend default
-        will be used.
-      blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
-        backend default will be used.
-      backend_kwargs: Additional keyword arguments for the backend, optional.
-    """
-    all_liquids: List[Sequence[Tuple[Optional[Liquid], float]]] = []
-    for channel in self.head96.values():
-      # superfluous to have append in two places but the type checker is very angry and does not
-      # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
-      if resource.tracker.is_disabled or not does_volume_tracking():
-        liquids = [(None, volume)]
-        all_liquids.append(liquids)
-      else:
-        liquids = resource.tracker.remove_liquid(volume=volume) # type: ignore
-        all_liquids.append(liquids)
-
-      for liquid, vol in reversed(liquids):
-        channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
-
-    aspiration_container = AspirationContainer(
-      container=resource,
-      volume=volume,
-      offset=offset,
-      flow_rate=flow_rate,
-      tips=tips,
-      liquid_height=None,
-      blow_out_air_volume=blow_out_air_volume,
-      liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
-    )
-
     try:
-      await self.backend.aspirate96(aspiration=aspiration_container, **backend_kwargs)
+      await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
     except Exception as error:  # pylint: disable=broad-except
-      for channel in self.head96.values():
-        if does_volume_tracking() and not resource.tracker.is_disabled:
-          resource.tracker.rollback()
+      for channel, well in zip(self.head96.values(), wells):
+        if does_volume_tracking() and not well.tracker.is_disabled:
+          well.tracker.rollback()
         channel.get_tip().tracker.rollback()
       self._trigger_callback(
         "aspirate96",
         liquid_handler=self,
-        aspiration=aspiration_container,
+        aspiration=aspiration,
         error=error,
         **backend_kwargs,
       )
     else:
-      for channel in self.head96.values():
-        if does_volume_tracking() and not resource.tracker.is_disabled:
-          resource.tracker.commit()
+      for channel, well in zip(self.head96.values(), wells):
+        if does_volume_tracking() and not well.tracker.is_disabled:
+          well.tracker.commit()
         channel.get_tip().tracker.commit()
       self._trigger_callback(
         "aspirate96",
         liquid_handler=self,
-        aspiration=aspiration_container,
+        aspiration=aspiration,
         error=None,
         **backend_kwargs,
       )
@@ -1509,18 +1452,37 @@ class LiquidHandler(Machine):
       del backend_kwargs[extra]
 
     tips = [channel.get_tip() for channel in self.head96.values()]
+    all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
+    dispense: Union[DispensePlate, DispenseContainer]
 
     if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
-      await self._dispense96_container(resource=resource,
-                              volume=volume,
-                              tips=tips,
-                              offset=offset,
-                              flow_rate=flow_rate,
-                              blow_out_air_volume=blow_out_air_volume,
-                              **backend_kwargs)
 
+      for channel in self.head96.values():
+        # superfluous to have append in two places but the type checker is very angry and does not
+        # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
+        liquids: List[Tuple[Optional[Liquid], float]]
+        if resource.tracker.is_disabled or not does_volume_tracking():
+          liquids = [(None, volume)]
+          all_liquids.append(liquids)
+        else:
+          liquids = resource.tracker.remove_liquid(volume=volume) # type: ignore
+          all_liquids.append(liquids)
+
+        for liquid, vol in reversed(liquids):
+          channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
+
+      dispense = DispenseContainer(
+        container=resource,
+        volume=volume,
+        offset=offset,
+        flow_rate=flow_rate,
+        tips=tips,
+        liquid_height=None,
+        blow_out_air_volume=blow_out_air_volume,
+        liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
+      )
     else:
       if isinstance(resource, Plate):
         if resource.has_lid():
@@ -1538,10 +1500,7 @@ class LiquidHandler(Machine):
       if not len(wells) == 96:
         raise ValueError(f"dispense96 expects 96 wells, got {len(wells)}")
 
-      # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-      all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
       for channel, well in zip(self.head96.values(), wells):
-        liquids = None # liquids in this well
         # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
         # during the aspiration command
         l = channel.get_tip().tracker.remove_liquid(volume=volume)
@@ -1551,7 +1510,7 @@ class LiquidHandler(Machine):
         for liquid, vol in liquids:
           well.tracker.add_liquid(liquid=liquid, volume=vol)
 
-      dispense96 = DispensePlate(
+      dispense = DispensePlate(
         wells=wells,
         volume=volume,
         offset=offset,
@@ -1562,105 +1521,31 @@ class LiquidHandler(Machine):
         liquids=all_liquids,
       )
 
-      try:
-        await self.backend.dispense96(dispense=dispense96, **backend_kwargs)
-      except Exception as error:  # pylint: disable=broad-except
-        for channel, well in zip(self.head96.values(), wells):
-          if does_volume_tracking() and not well.tracker.is_disabled:
-            well.tracker.rollback()
-          channel.get_tip().tracker.rollback()
-
-        self._trigger_callback(
-          "dispense96",
-          liquid_handler=self,
-          dispense=dispense96,
-          error=error,
-          **backend_kwargs,
-        )
-      else:
-        for channel, well in zip(self.head96.values(), wells):
-          if does_volume_tracking() and not well.tracker.is_disabled:
-            well.tracker.commit()
-          channel.get_tip().tracker.commit()
-
-        self._trigger_callback(
-          "dispense96",
-          liquid_handler=self,
-          dispense=dispense96,
-          error=None,
-          **backend_kwargs,
-        )
-
-  async def _dispense96_container(self,
-    resource: Container,
-    volume: float,
-    tips: List[Tip],
-    offset: Coordinate = Coordinate.zero(),
-    flow_rate: Optional[float] = None,
-    blow_out_air_volume: Optional[float] = None,
-    **backend_kwargs
-  ):
-    """ Helper function to dispense to a container.
-
-    Args:
-      resource (Container): Container object.
-      volume (float): The volume to dispense through each channel.
-      offset (Coordinate): Adjustment to where the 96 head should go to aspirate relative to where
-        the plate or container is defined to be. Defaults to Coordinate.zero().
-      flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend default
-        will be used.
-      blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
-        backend default will be used.
-      backend_kwargs: Additional keyword arguments for the backend, optional.
-    """
-    all_liquids: List[Sequence[Tuple[Optional[Liquid], float]]] = []
-    for channel in self.head96.values():
-      # superfluous to have append in two places but the type checker is very angry and does not
-      # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
-      if resource.tracker.is_disabled or not does_volume_tracking():
-        liquids = [(None, volume)]
-        all_liquids.append(liquids)
-      else:
-        liquids = resource.tracker.remove_liquid(volume=volume) # type: ignore
-        all_liquids.append(liquids)
-
-      for liquid, vol in reversed(liquids):
-        channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
-
-    dispense_container = DispenseContainer(
-      container=resource,
-      volume=volume,
-      offset=offset,
-      flow_rate=flow_rate,
-      tips=tips,
-      liquid_height=None,
-      blow_out_air_volume=blow_out_air_volume,
-      liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
-    )
-
     try:
-      await self.backend.dispense96(dispense=dispense_container, **backend_kwargs)
+      await self.backend.dispense96(dispense=dispense, **backend_kwargs)
     except Exception as error:  # pylint: disable=broad-except
-      for channel in self.head96.values():
-        if does_volume_tracking() and not resource.tracker.is_disabled:
-          resource.tracker.rollback()
+      for channel, well in zip(self.head96.values(), wells):
+        if does_volume_tracking() and not well.tracker.is_disabled:
+          well.tracker.rollback()
         channel.get_tip().tracker.rollback()
+
       self._trigger_callback(
         "dispense96",
         liquid_handler=self,
-        dispense=dispense_container,
+        dispense=dispense,
         error=error,
         **backend_kwargs,
       )
     else:
-      for channel in self.head96.values():
-        if does_volume_tracking() and not resource.tracker.is_disabled:
-          resource.tracker.commit()
+      for channel, well in zip(self.head96.values(), wells):
+        if does_volume_tracking() and not well.tracker.is_disabled:
+          well.tracker.commit()
         channel.get_tip().tracker.commit()
+
       self._trigger_callback(
         "dispense96",
         liquid_handler=self,
-        aspiration=dispense_container,
+        dispense=dispense,
         error=None,
         **backend_kwargs,
       )
