@@ -41,7 +41,7 @@ def Wash_Station(name: str) -> TecanWashStation:
     size_z=0.0,
     off_x=12.5,
     off_y=24.7,
-    sites=create_carrier_sites(locations = [
+    sites=create_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(12.2, 106.7, 0.0),
         Coordinate(11.0, 180.7, 0.0),
         Coordinate(12.2, 281.7, 0.0),

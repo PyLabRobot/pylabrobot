@@ -33,7 +33,7 @@ def main(pc, tc, p, tr, tcr):
       size_y = float(dim[2][1]) / 10
       size_z = float(dim[1][2]) / 10
 
-      locations = []
+      locations=[]
       site_size_x = []
       site_size_y = []
       desc = ""
@@ -47,7 +47,7 @@ def main(pc, tc, p, tr, tcr):
           x = float(site_dim[1][0]) / 10
           y = size_y - h - float(site_dim[1][1]) / 10
           z = float(site_dim[1][2]) / 10 + size_z
-          locations = [Coordinate(x, y, z)] + locations
+          locations=[Coordinate(x, y, z)] + locations
           site_size_x = [w] + site_size_x
           site_size_y = [h] + site_size_y
 
@@ -79,7 +79,7 @@ def main(pc, tc, p, tr, tcr):
         o.write(f'    off_y={off_y},\n')
         if all(x == site_size_x[0] for x in site_size_x) and \
            all(y == site_size_y[0] for y in site_size_y):
-          o.write(f'    sites=create_homogeneous_carrier_sites(locations=[\n')
+          o.write(f'    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[\n')
           for l in locations:
             o.write(f'        {repr(l)},\n')
           o.write(f'      ],\n')
@@ -87,7 +87,7 @@ def main(pc, tc, p, tr, tcr):
           o.write(f'      site_size_y={site_size_y[0]},\n')
           o.write(f'    ),\n')
         else:
-          o.write(f'    sites=create_carrier_sites(locations = [\n')
+          o.write(f'    sites=create_carrier_sites(CarrierSite, locations=[\n')
           for l in locations:
             o.write(f'        {repr(l)},\n')
           o.write(f'      ], site_size_x=[\n')
@@ -180,7 +180,7 @@ def main(pc, tc, p, tr, tcr):
         o.write(f'    z_dispense={z_dispense},\n')
         o.write(f'    z_max={z_max},\n')
         o.write(f'    area={area},\n')
-        o.write(f'    items=create_equally_spaced({it},\n')
+        o.write(f'    items=create_equally_spaced_2d({it},\n')
         o.write(f'      num_items_x={num_x},\n')
         o.write(f'      num_items_y={num_y},\n')
         o.write(f'      dx={dx},\n')

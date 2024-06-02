@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional, Type, TypeVar, Union
 
 from .coordinate import Coordinate
 from .resource import Resource
@@ -14,13 +14,10 @@ class CarrierSite(Resource):
   """ A single site within a carrier. """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
-    category: str = "carrier_site",
-    pedestal_size_z: Optional[float] = None,
-    model: Optional[str] = None):
+    category: str = "carrier_site", model: Optional[str] = None):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
       category=category, model=model)
     self.resource: Optional[Resource] = None
-    self.pedestal_size_z: Optional[float] = pedestal_size_z
     # TODO: add self.pedestal_2D_offset if necessary in the future
 
   def assign_child_resource(
@@ -250,36 +247,38 @@ class TubeCarrier(Carrier):
       sites,category=category, model=model)
 
 
+T = TypeVar("T", bound=CarrierSite)
+
+
 def create_carrier_sites(
+  klass: Type[T],
   locations: List[Coordinate],
   site_size_x: List[Union[float, int]],
   site_size_y: List[Union[float, int]],
-  site_pedestal_size_z: Optional[List[Union[float, int, None]]] = None
-  ) -> List[CarrierSite]:
+  **kwargs
+) -> List[T]:
   """ Create a list of carrier sites with the given sizes. """
 
   sites = []
-  if site_pedestal_size_z is None:
-    site_pedestal_size_z = [None] * len(locations)
-  for spot, (l, x, y, p_z) in enumerate(zip(locations, site_size_x, site_size_y,
-    site_pedestal_size_z)):
-    site = CarrierSite(
+  for spot, (l, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
+    site = klass(
       name = f"carrier-site-{spot}",
-      # size_x=x, size_y=y, size_z=0, spot=spot)
-      size_x=x, size_y=y, size_z=0, pedestal_size_z=p_z)
+      size_x=x, size_y=y, size_z=0,
+      **kwargs)
     site.location = l
     sites.append(site)
   return sites
 
 
 def create_homogeneous_carrier_sites(
+  klass: Type[T],
   locations: List[Coordinate],
   site_size_x: float,
   site_size_y: float,
-  site_pedestal_size_z: Optional[Union[float, int, None]] = None
-  ) -> List[CarrierSite]:
+  **kwargs
+  ) -> List[T]:
   """ Create a list of carrier sites with the same size. """
 
   n = len(locations)
-  return create_carrier_sites(locations, [site_size_x] * n, [site_size_y] * n,
-    [site_pedestal_size_z] * n)
+  return create_carrier_sites(klass=klass, locations=locations, site_size_x=[site_size_x]*n,
+                              site_size_y=[site_size_y]*n, **kwargs)

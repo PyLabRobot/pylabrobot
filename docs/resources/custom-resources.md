@@ -125,7 +125,7 @@ class Tube(Container):
 Next, let's define the custom plate. The `Tube` class is passed as a type argument to the `ItemizedResource` class with `[Tube]`:
 
 ```python
-from pylabrobot.resources import ItemizedResource, create_equally_spaced
+from pylabrobot.resources import ItemizedResource, create_equally_spaced_2d
 
 class TubePlate(ItemizedResource[Tube]):
   def __init__(self, name: str):
@@ -134,7 +134,7 @@ class TubePlate(ItemizedResource[Tube]):
       size_x=127.0,
       size_y=86.0,
       size_z=45.0,
-      items=create_equally_spaced(Tube,
+      items=create_equally_spaced_2d(Tube,
         num_items_x=12,
         num_items_y=8,
         dx=9.5,
@@ -146,7 +146,7 @@ class TubePlate(ItemizedResource[Tube]):
     )
 ```
 
-The {meth}`pylabrobot.resources.create_equally_spaced` function creates a list of items, equally spaced in a grid.
+The {meth}`pylabrobot.resources.create_equally_spaced_2d` function creates a list of items, equally spaced in a grid.
 
 This resource is automatically compatible with the rest of PyLabRobot. For example, we can aspirate from the plate:
 
