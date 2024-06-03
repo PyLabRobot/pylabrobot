@@ -20,6 +20,11 @@ var resources = {}; // name -> Resource object
 
 let trash;
 
+// Used in gif generation
+let isRecording = false;
+let recordingCounter = 0; // Counter to track the number of recorded frames
+let images = [];
+
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
   // A snapping resource is a spot within a plate/tip carrier or the OT deck.
@@ -376,6 +381,12 @@ class Resource {
 
   update() {
     this.draw(resourceLayer);
+
+    if (isRecording) {
+      const dataURL = stage.toDataURL();
+      images.push(dataURL);
+      saveImage(dataURL, images.length - 1);
+    }
   }
 
   setState() { }
@@ -1096,3 +1107,95 @@ window.addEventListener("load", function () {
     afterStageSetup();
   }
 });
+
+
+
+async function startRecording() {
+  isRecording = true;
+  recordingCounter = 0; // Reset the recording counter
+
+  directoryHandle = await window.showDirectoryPicker();
+
+  document.getElementById('stop-recording-button').disabled = false;
+  document.getElementById('start-recording-button').disabled = true;
+}
+
+function stopRecording() {
+  isRecording = false;
+
+  createGIF();
+
+  document.getElementById('stop-recording-button').disabled = true;
+  document.getElementById('start-recording-button').disabled = false;
+
+  console.log("End of stopRecording function\n\n\n");
+}
+
+async function saveImage(dataURL, index) {
+
+  const fileHandle = await directoryHandle.getFileHandle(`image_${index}.png`, { create: true });
+  const writable = await fileHandle.createWritable();
+  const response = await fetch(dataURL);
+  const blob = await response.blob();
+  await writable.write(blob);
+  await writable.close();
+}
+
+async function createGIF() {
+
+  const gif = new GIF({
+    workers: 2,
+    quality: 10,
+    height: stage.height,
+    width: stage.width
+  });
+
+  const files = [];
+  for await (const entry of directoryHandle.values()) {
+    if (entry.kind === 'file' && entry.name.endsWith('.png')) {
+      files.push(entry);
+    }
+  }
+
+  // Sort files based on numerical order extracted from the filename
+  files.sort((a, b) => {
+    const aNumber = parseInt(a.name.match(/(\d+)\.png$/)[1], 10);
+    const bNumber = parseInt(b.name.match(/(\d+)\.png$/)[1], 10);
+    return aNumber - bNumber;
+  });
+
+  for (const fileHandle of files) {
+    const file = await fileHandle.getFile();
+    const img = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = stage.width;
+    canvas.height = stage.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    gif.addFrame(ctx, { delay: 1 });  // Adjust the delay as needed
+  }
+
+  gif.on('finished', async function (blob) {
+    const gifHandle = await directoryHandle.getFileHandle('animation.gif', { create: true });
+    const writable = await gifHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    const url = URL.createObjectURL(blob);
+    const img = document.createElement('img');
+    img.src = url;
+    document.body.appendChild(img);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'animation.gif';
+    a.click();
+  });
+
+  gif.render();
+}
+
+// Set up event listeners for the buttons
+document.getElementById('start-recording-button').addEventListener('click', startRecording);
+document.getElementById('stop-recording-button').addEventListener('click', stopRecording);
+
+

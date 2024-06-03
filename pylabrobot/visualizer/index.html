@@ -15,9 +15,6 @@
       integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3"
       crossorigin="anonymous"
     />
-
-    <script src="https://unpkg.com/konva@8/konva.min.js"></script>
-
     <link href="./main.css" rel="stylesheet" />
   </head>
   <body>
@@ -36,9 +33,20 @@
     <div class="content">
       <main>
         <div id="kanvas"></div>
+        <!-- Add buttons to start and stop recording -->
+        <button id="start-recording-button" class="btn btn-primary mt-3">Start Recording</button>
+        <button id="stop-recording-button" class="btn btn-danger mt-3" disabled>Stop Recording</button>
       </main>
     </div>
 
+    <!-- Load JavaScript libraries -->
+    <script src="https://unpkg.com/konva@8/konva.min.js"></script>
+    <!-- Load gif.js library -->
+    <script src="./gif.js"></script>
+    <script src="./gif.worker.js"></script>
+
+
+    <!-- Load custom scripts -->
     <script src="./lib.js"></script>
     <script src="./vis.js"></script>
 
