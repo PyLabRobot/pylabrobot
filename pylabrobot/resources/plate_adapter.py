@@ -121,7 +121,7 @@ class PlateAdapter(Resource):
       raise ValueError("Only plates can be assigned to Alpaqua 96 magnum flx.")
 
     # TODO: have discussion oon whether to transfer flat bottom error checking
-    # TODO: check whether allPlate children information could
+    # TODO: check whether all Plate children information could
     # be made accessible from the Plate class
 
     # Calculate Plate information (which is not directly accessible from the Plate class)
@@ -149,10 +149,17 @@ class PlateAdapter(Resource):
     well_size_y = resource.children[0].get_size_y()
     # true_dz = resource.get_size_z() - resource.children[0].get_size_z()
 
-    # Well positioning check
-    assert (plate_item_dx, plate_item_dy) in [(9.0, 9.0), (4.5, 4.5), (2.25, 2.25)], \
-      "PlateAdapter only accepts plates with a well spacing of " + \
-      "9x9, 4.5x4.5 or 2.25x2.25mm^2 (ANSI SLAS 4-2004 (R2012): Well Positions)"
+    # Well-grid to hole-grid compatibility check
+    valid_spacings = [(9.0, 9.0), (4.5, 4.5), (2.25, 2.25)] # TODO: discuss 24-DWP extension
+    spacing_str = ', '.join([f"{dx}x{dy}" for dx, dy in valid_spacings])
+    error_message = f"{spacing_str}mm^2 (ANSI SLAS 4-2004 (R2012): Well Positions)"
+
+    assert (plate_item_dx, plate_item_dy) in valid_spacings, \
+        f"PlateAdapter only accepts plates with a well spacing of {error_message}"
+    assert (self.adapter_hole_dx, self.adapter_hole_dy) in valid_spacings, \
+        f"PlateAdapter has to have a hole spacing of {error_message}"
+    assert (plate_item_dx, plate_item_dy) == (self.adapter_hole_dx, self.adapter_hole_dy), \
+        "Plate well spacing must be equivalent to adapter hole spacing"
 
     # Calculate adjustment to place center of H1_plate on top of center of H1_adapter
     plate_x_adjustment = self.dx - plate_dx + self.adapter_hole_size_x/2 - well_size_x/2
