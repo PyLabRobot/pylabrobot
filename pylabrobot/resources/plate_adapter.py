@@ -24,7 +24,7 @@ class PlateAdapter(Resource):
     As a result of the PlateAdapter well_holes having a different dx & dy than the plates,
     the precise anchor location `to` which the plate is moved has to be calculated on the fly.
 
-    This PlateAdapter class is capable of doing so, and is therefore the base class for 
+    This PlateAdapter class is capable of doing so, and is therefore the base class for
     diverse resources, e.g.:
     - plate adapters (e.g. for semi- and non-skirted plates which cannot be used on standard
       carrier sites)
@@ -43,14 +43,14 @@ class PlateAdapter(Resource):
           of a well.
         adapter_item_dx (Literal[9.0, 4.5, 2.25], optional): The x-dimension spacing of
           wells. Defaults to 9.0.
-        adapter_item_dy (Literal[9.0, 4.5, 2.25], optional): The y-dimension spacing of 
+        adapter_item_dy (Literal[9.0, 4.5, 2.25], optional): The y-dimension spacing of
         wells. Defaults to 9.0.
         site_pedestal_z (Optional[float], optional): The z-coordinate of the site pedestal.
           Defaults to None.
         category (Optional[str], optional): The category of the PlateAdapter.
           Defaults to "plate_adapter".
         model (Optional[str], optional): The model of the PlateAdapter. Defaults to None.
-   
+
   Examples:
     1. Using a "magnetic rack" as a PlateAdapter:
 
@@ -105,16 +105,9 @@ class PlateAdapter(Resource):
   def child_resource_location(self) -> Optional[Coordinate]:
     return self._child_resource_location
 
-  def _compute_child_location(
-    self,
-    resource: Plate,
-  ) -> Coordinate:
-    """ Automatically computes the location of the `Plate`child resource
-    in relationship to the `PlateAdapter` to align the `Plate` well-grid
-    with the adapter's hole grid. """
-
-    if not isinstance(resource, Plate):
-      raise TypeError("Only plates can be assigned to Alpaqua 96 magnum flx.")
+  def _compute_child_location(self, resource: Plate) -> Coordinate:
+    """ Compute the location of the `Plate` child resource in relationship to the `PlateAdapter` to
+    align the `Plate` well-grid with the adapter's hole grid. """
 
     # Calculate Plate information (which is not directly accessible from the Plate class)
     x_locations = sorted(OrderedDict.fromkeys([well_n.location.x
@@ -165,13 +158,15 @@ class PlateAdapter(Resource):
 
   def assign_child_resource(
     self,
-    resource: Plate,
+    resource: Resource,
     location: Optional[Coordinate] = None,
     reassign: bool = True
   ):
-    """Assign a Plate to a PlateAdapter. If `location` is not provided,
-    the resource will autoadjust the placement location based on the
-    PlateAdapter-Plate relationship."""
+    """Assign a Plate to a PlateAdapter. If `location` is not provided, the resource will autoadjust
+    the placement location based on the PlateAdapter-Plate relationship. """
+
+    if not isinstance(resource, Plate):
+      raise TypeError("Only plates can be assigned to plate adapters")
 
     if self._child_resource is not None and not reassign:
       raise ValueError(f"{self.name} already has a child resource assigned")
@@ -192,4 +187,5 @@ class PlateAdapter(Resource):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "child_resource_location": serialize(self._child_resource_location)}
+      "child_resource_location": serialize(self._child_resource_location)
+    }
