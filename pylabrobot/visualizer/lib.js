@@ -391,6 +391,7 @@ class Resource {
 
       if (recordingCounter % 8 == 0) {
 
+        /*
         var dataURL = stage.toDataURL({ pixelRatio: 2.3 });
 
         var myImg = new Image;
@@ -401,6 +402,8 @@ class Resource {
         myImg.height = canvasHeight * 2;
 
         frameImages.push(myImg);
+        */
+        stageToBlob(stage, handleBlob);
       }
       recordingCounter += 1;
 
@@ -1087,8 +1090,8 @@ function loadResource(resourceData) {
 
 window.addEventListener("load", function () {
   const canvas = document.getElementById("kanvas");
-  canvasWidth = canvas.offsetWidth;
-  canvasHeight = canvas.offsetHeight;
+  canvasWidth = 800 //canvas.offsetWidth;
+  canvasHeight = 600 //canvas.offsetHeight;
 
   stage = new Konva.Stage({
     container: "kanvas",
@@ -1116,9 +1119,30 @@ window.addEventListener("load", function () {
     };
   });
 
+  // make white background
+
+  var background = new Konva.Rect({
+    x: 0,
+    y: 0,
+    width: stage.width(),
+    height: stage.height(),
+    fill: "white",
+    listening: false
+  })
+
   // add the layer to the stage
   stage.add(layer);
   stage.add(resourceLayer);
+
+  layer.add(background);
+
+  // the stage is draggable
+  // that means absolute position of background may change
+  // so we need to reset it back to {0, 0}
+
+  stage.on('dragmove', () => {
+    background.absolutePosition({ x: 0, y: 0 });
+  });
 
   // Check if there is an after stage setup callback, and if so, call it.
   if (typeof afterStageSetup === "function") {
@@ -1129,6 +1153,8 @@ window.addEventListener("load", function () {
 async function startRecording() {
   isRecording = true;
 
+  frameImages = [];
+
   document.getElementById('stop-recording-button').disabled = false;
   document.getElementById('start-recording-button').disabled = true;
 }
@@ -1137,14 +1163,19 @@ function stopRecording() {
   isRecording = false;
 
   //render the final image
+  /*
   var dataURL = stage.toDataURL({ pixelRatio: 2.3 });
   var myImg = new Image;
   myImg.src = dataURL;
   myImg.width = canvasWidth * 2;
   myImg.height = canvasHeight * 2;
 
+
+
   //frameImages.push(imageData);
   frameImages.push(myImg);
+  */
+  stageToBlob(stage, handleBlob);
 
   gif = new GIF({
     workers: 10,
@@ -1159,7 +1190,6 @@ function stopRecording() {
     gif.addFrame(frameImages[i], { delay: 1 });
   }
 
-
   gif.on('progress', function (p) {
     var info = document.getElementById('progressBar');
     info.innerText = ' GIF Rendering Progress: ' + Math.round(p * 100) + '%';
@@ -1168,7 +1198,33 @@ function stopRecording() {
   document.getElementById('stop-recording-button').disabled = true;
   document.getElementById('start-recording-button').disabled = false;
 
-  console.log("End of stopRecording function\n\n\n");
+}
+
+// Function to convert stage to a Blob and handle the Blob
+function stageToBlob(stage, callback) {
+  stage.toBlob({
+    pixelRatio: 2,
+    callback: function (blob) {
+      callback(blob);
+    },
+    mimeType: 'image/png'
+  });
+}
+
+// Function to handle the Blob (e.g., create an Image element and add it to frameImages)
+function handleBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  const myImg = new Image();
+
+  myImg.src = url;
+  myImg.width = canvasWidth * 2;
+  myImg.height = canvasHeight * 2;
+
+  frameImages.push(myImg);
+
+  myImg.onload = function () {
+    URL.revokeObjectURL(url); // Free up memory
+  };
 }
 
 // Set up event listeners for the buttons
