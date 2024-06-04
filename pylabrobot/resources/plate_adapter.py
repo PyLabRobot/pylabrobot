@@ -135,14 +135,6 @@ class PlateAdapter(Resource):
     # true_dz = resource.get_size_z() - resource.children[0].get_size_z()
 
     # Well-grid to hole-grid compatibility check
-    valid_spacings = [(9.0, 9.0), (4.5, 4.5), (2.25, 2.25)] # TODO: discuss 24-DWP extension
-    spacing_str = ", ".join([f"{dx}x{dy}" for dx, dy in valid_spacings])
-    error_message = f"{spacing_str}mm^2 (ANSI SLAS 4-2004 (R2012): Well Positions)"
-
-    assert (plate_item_dx, plate_item_dy) in valid_spacings, \
-        f"PlateAdapter only accepts plates with a well spacing of {error_message}"
-    assert (self.adapter_hole_dx, self.adapter_hole_dy) in valid_spacings, \
-        f"PlateAdapter has to have a hole spacing of {error_message}"
     assert (plate_item_dx, plate_item_dy) == (self.adapter_hole_dx, self.adapter_hole_dy), \
         "Plate well spacing must be equivalent to adapter hole spacing"
 
