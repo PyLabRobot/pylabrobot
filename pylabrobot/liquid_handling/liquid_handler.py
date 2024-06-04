@@ -1882,16 +1882,7 @@ class LiquidHandler(Machine):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateAdapter):
       # Calculate location adjustment of Plate based on PlateAdapter geometry
-      x_locations = sorted(OrderedDict.fromkeys([well_n.location.x
-        for well_n in plate.children]))
-      y_locations = sorted(OrderedDict.fromkeys([well_n.location.y
-        for well_n in plate.children]))
-      plate_dx, plate_dy = x_locations[0], y_locations[0]
-      well_size_x = plate.children[0].get_size_x()
-      well_size_y = plate.children[0].get_size_y()
-      plate_x_adjustment = to.dx - plate_dx + to.adapter_hole_size_x/2 - well_size_x/2
-      plate_y_adjustment = to.dy - plate_dy + to.adapter_hole_size_x/2 - well_size_y/2
-      adjusted_plate_anchor = Coordinate(plate_x_adjustment, plate_y_adjustment, to.dz)
+      adjusted_plate_anchor = to._compute_child_location(plate)
       to_location = to.get_absolute_location() + adjusted_plate_anchor
     else:
       to_location = to.get_absolute_location()

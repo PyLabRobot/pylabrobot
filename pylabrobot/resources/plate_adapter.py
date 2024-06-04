@@ -105,25 +105,17 @@ class PlateAdapter(Resource):
   def child_resource_location(self) -> Optional[Coordinate]:
     return self._child_resource_location
 
-  def assign_child_resource(
+  def _compute_child_location(
     self,
     resource: Plate,
-    location: Optional[Coordinate] = None,
-    reassign: bool = True
-  ):
-    """Assign a Plate to a PlateAdapter. If `location` is not provided,
-    the resource will autoadjust the placement location based on the
-    PlateAdapter-Plate relationship."""
+  ) -> Coordinate:
+    """ Automatically computes the location of the `Plate`child resource
+    in relationship to the `PlateAdapter` to align the `Plate` well-grid
+    with the adapter's hole grid. """
 
-    if self._child_resource is not None and not reassign:
-      raise ValueError(f"{self.name} already has a child resource assigned")
     if not isinstance(resource, Plate):
-      raise ValueError("Only plates can be assigned to Alpaqua 96 magnum flx.")
-
-    # TODO: have discussion oon whether to transfer flat bottom error checking
-    # TODO: check whether all Plate children information could
-    # be made accessible from the Plate class
-
+      raise TypeError("Only plates can be assigned to Alpaqua 96 magnum flx.")
+    
     # Calculate Plate information (which is not directly accessible from the Plate class)
     x_locations = sorted(OrderedDict.fromkeys([well_n.location.x
       for well_n in resource.children]))
@@ -151,7 +143,7 @@ class PlateAdapter(Resource):
 
     # Well-grid to hole-grid compatibility check
     valid_spacings = [(9.0, 9.0), (4.5, 4.5), (2.25, 2.25)] # TODO: discuss 24-DWP extension
-    spacing_str = ', '.join([f"{dx}x{dy}" for dx, dy in valid_spacings])
+    spacing_str = ", ".join([f"{dx}x{dy}" for dx, dy in valid_spacings])
     error_message = f"{spacing_str}mm^2 (ANSI SLAS 4-2004 (R2012): Well Positions)"
 
     assert (plate_item_dx, plate_item_dy) in valid_spacings, \
@@ -168,11 +160,32 @@ class PlateAdapter(Resource):
     # Plate.well.get_size_z() relationship, when Plate definitions are fixed
 
     adjusted_plate_anchor = Coordinate(plate_x_adjustment, plate_y_adjustment, self.dz)
-    self._child_resource_location = adjusted_plate_anchor
+    return adjusted_plate_anchor
+  
+
+  def assign_child_resource(
+    self,
+    resource: Plate,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True
+  ):
+    """Assign a Plate to a PlateAdapter. If `location` is not provided,
+    the resource will autoadjust the placement location based on the
+    PlateAdapter-Plate relationship."""
+
+    if self._child_resource is not None and not reassign:
+      raise ValueError(f"{self.name} already has a child resource assigned")
+    
+    # TODO: have discussion oon whether to transfer flat bottom error checking
+    # TODO: check whether all Plate children information could
+    # be made accessible from the Plate class
+
+    if location is None:
+      self._child_resource_location = self._compute_child_location(resource)
 
     super().assign_child_resource(
       resource=resource,
-      location=location or adjusted_plate_anchor,
+      location=location or self._child_resource_location,
       reassign=reassign)
     self._child_resource = resource
 
