@@ -73,6 +73,8 @@ class Plate(ItemizedResource[Well]):
       well_size_y: Size of the wells in the y direction.
       lid_height: Height of the lid in mm, only used if `with_lid` is True.
       with_lid: Whether the plate has a lid.
+      plate_type: Type of the plate. One of "skirted", "semi-skirted", or "non-skirted". A
+        WIP: https://github.com/PyLabRobot/pylabrobot/pull/152#discussion_r1625831517
     """
 
     super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
