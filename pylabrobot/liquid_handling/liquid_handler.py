@@ -34,6 +34,7 @@ from pylabrobot.resources import (
   Trash,
   Well,
   TipTracker,
+  VolumeTracker,
   does_tip_tracking,
   does_volume_tracking,
   does_cross_contamination_tracking
@@ -61,9 +62,7 @@ def check_contaminated(liquid, liquid_history):
   """Helper function used to check if adding a liquid to the container
      would result in cross contamination"""
 
-  return (liquid not in liquid_history and bool(liquid_history))
-
-def check_updateable(src_tracker, dest_tracker):
+def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
   """Helper function used to check if it is possible to update the
      liquid_history of src based on contents of dst"""
 
@@ -221,7 +220,7 @@ class LiquidHandler(Machine):
     r.unassign()
 
   def summary(self):
-    """ Prints a string summary of the deck layout.  """
+    """ Prints a string summary of the deck layout. """
 
     print(self.deck.summary())
 
@@ -937,7 +936,7 @@ class LiquidHandler(Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           # Update the liquid history of the tip to reflect new liquid
-          if check_updateable(op.tip.tracker, op.resource.tracker):
+          if check_updatable(op.tip.tracker, op.resource.tracker):
             op.tip.tracker.liquid_history = op.resource.tracker.liquid_history
 
           for liquid, volume in op.liquids:
