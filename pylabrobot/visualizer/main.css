@@ -56,3 +56,12 @@ h3.form-row-header {
   font-weight: bold;
   margin-bottom: 8px;
 }
+
+.btn-green {
+  background-color: green;
+  color: white;
+}
+
+.btn-green:hover {
+  background-color: darkgreen;
+}

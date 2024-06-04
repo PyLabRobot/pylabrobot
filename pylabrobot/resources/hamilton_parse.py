@@ -2,6 +2,7 @@ import os
 from typing import Tuple, Optional
 
 from pylabrobot.resources import (
+  CarrierSite,
   Coordinate,
   CrossSectionType,
   MFXCarrier,
@@ -12,7 +13,7 @@ from pylabrobot.resources import (
   TipSpot,
   Well,
   WellBottomType,
-  create_equally_spaced,
+  create_equally_spaced_2d,
   create_homogeneous_carrier_sites
 )
 from pylabrobot.resources.ml_star.tip_creators import (
@@ -189,7 +190,7 @@ def create_plate_for_writing(
     size_z=size_z,
     num_items_x=num_items_x,
     num_items_y=num_items_y,
-    items=create_equally_spaced(
+    items=create_equally_spaced_2d(
       Well,
       num_items_x=num_items_x,
       num_items_y=num_items_y,
@@ -263,7 +264,7 @@ def create_tip_rack_for_writing(filepath: str) -> Tuple[TipRack, Optional[str]]:
     size_x=size_x,
     size_y=size_y,
     size_z=size_z,
-    items=create_equally_spaced(
+    items=create_equally_spaced_2d(
       TipSpot,
       num_items_x=num_items_x,
       num_items_y=num_items_y,
@@ -311,7 +312,8 @@ def create_plate_carrier_for_writing(filepath: str) -> Tuple[PlateCarrier, Optio
     size_x=size_x,
     size_y=size_y,
     size_z=size_z,
-    sites=create_homogeneous_carrier_sites(sites, site_size_x=site_width, site_size_y=site_height),
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=sites,
+                                           site_size_x=site_width, site_size_y=site_height),
     model=cname
   )
   return plate_carrier, description
@@ -345,7 +347,8 @@ def create_tip_carrier_for_writing(filepath: str) -> Tuple[TipCarrier, Optional[
     size_x=size_x,
     size_y=size_y,
     size_z=size_z,
-    sites=create_homogeneous_carrier_sites(sites, site_size_x=site_width, site_size_y=site_height),
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=sites,
+                                           site_size_x=site_width, site_size_y=site_height),
     model=cname
   )
   return tip_carrier, description
@@ -382,7 +385,8 @@ def create_flex_carrier_for_writing(filepath: str) -> Tuple[MFXCarrier, Optional
     size_x=size_x,
     size_y=size_y,
     size_z=size_z,
-    sites=create_homogeneous_carrier_sites(sites, site_size_x=site_width, site_size_y=site_height),
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=sites,
+                                           site_size_x=site_width, site_size_y=site_height),
     model=cname
   )
   return flex_carrier, description

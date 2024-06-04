@@ -4,7 +4,7 @@
 
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
-from pylabrobot.resources.itemized_resource import create_equally_spaced
+from pylabrobot.resources.utils import create_equally_spaced_2d
 
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_round_vbottom
 
@@ -30,7 +30,7 @@ def Azenta4titudeFrameStar_96_wellplate_skirted(name: str, with_lid: bool = Fals
     with_lid=with_lid,
     model="Azenta4titudeFrameStar_96_wellplate_skirted",
     lid_height=5,
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=11.0,
