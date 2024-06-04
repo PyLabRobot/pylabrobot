@@ -105,7 +105,7 @@ class PlateAdapter(Resource):
   def child_resource_location(self) -> Optional[Coordinate]:
     return self._child_resource_location
 
-  def _compute_child_location(self, resource: Plate) -> Coordinate:
+  def compute_plate_location(self, resource: Plate) -> Coordinate:
     """ Compute the location of the `Plate` child resource in relationship to the `PlateAdapter` to
     align the `Plate` well-grid with the adapter's hole grid. """
 
@@ -176,7 +176,7 @@ class PlateAdapter(Resource):
     # be made accessible from the Plate class
 
     if location is None:
-      self._child_resource_location = self._compute_child_location(resource)
+      self._child_resource_location = self.compute_plate_location(resource)
 
     super().assign_child_resource(
       resource=resource,
