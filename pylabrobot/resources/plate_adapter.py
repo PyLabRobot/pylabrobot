@@ -115,7 +115,7 @@ class PlateAdapter(Resource):
 
     if not isinstance(resource, Plate):
       raise TypeError("Only plates can be assigned to Alpaqua 96 magnum flx.")
-    
+
     # Calculate Plate information (which is not directly accessible from the Plate class)
     x_locations = sorted(OrderedDict.fromkeys([well_n.location.x
       for well_n in resource.children]))
@@ -161,7 +161,7 @@ class PlateAdapter(Resource):
 
     adjusted_plate_anchor = Coordinate(plate_x_adjustment, plate_y_adjustment, self.dz)
     return adjusted_plate_anchor
-  
+
 
   def assign_child_resource(
     self,
@@ -175,7 +175,7 @@ class PlateAdapter(Resource):
 
     if self._child_resource is not None and not reassign:
       raise ValueError(f"{self.name} already has a child resource assigned")
-    
+
     # TODO: have discussion oon whether to transfer flat bottom error checking
     # TODO: check whether all Plate children information could
     # be made accessible from the Plate class

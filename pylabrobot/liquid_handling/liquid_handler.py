@@ -11,7 +11,6 @@ import numbers
 import threading
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
-from collections import OrderedDict
 
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
