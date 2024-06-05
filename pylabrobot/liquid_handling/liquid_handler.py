@@ -1345,9 +1345,6 @@ class LiquidHandler(Machine):
           liquids = resource.tracker.remove_liquid(volume=volume) # type: ignore
           all_liquids.append(liquids)
 
-        for liquid, vol in reversed(liquids):
-          channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
-
       aspiration = AspirationContainer(
         container=resource,
         volume=volume,
@@ -1384,9 +1381,6 @@ class LiquidHandler(Machine):
         else:
           liquids = well.tracker.remove_liquid(volume=volume) # type: ignore
           all_liquids.append(liquids)
-
-        for liquid, vol in reversed(liquids):
-          channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
       aspiration = AspirationPlate(
         wells=wells,
