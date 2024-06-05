@@ -37,3 +37,14 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 |--------------------|--------------------|--------------------|
 | 'MFX_TIP_module'<br>Part no.: 188160 or 188040<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188040) <br>Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack) | <img src="ims/MFX_TIP_module_188040.jpg" alt="MFX_TIP_module" width="250"/> | `MFX_TIP_module` |
 | 'MFX_DWP_rackbased_module'<br>Part no.: 188229?<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188229) (<-non-functional link?) <br>MFX DWP module rack-based | <img src="ims/MFX_DWP_RB_module_188229_.jpg" alt="MFX_DWP_rackbased_module" width="250"/> | `MFX_DWP_rackbased_module` |
+
+
+---
+
+### Currently defined MFX carriers:
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | <img src="ims/Hamilton_96_adapter_188182.png" alt="Hamilton_96_adapter_188182" width="250"/> | `Hamilton_96_adapter_188182` |
+
+

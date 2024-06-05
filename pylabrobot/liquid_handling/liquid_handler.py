@@ -27,6 +27,7 @@ from pylabrobot.resources import (
   Lid,
   MFXModule,
   Plate,
+  PlateAdapter,
   Tip,
   TipRack,
   TipSpot,
@@ -1759,6 +1760,10 @@ class LiquidHandler(Machine):
       to_location = to
     elif isinstance(to, MFXModule):
       to_location = to.get_absolute_location() + to.child_resource_location
+    elif isinstance(to, PlateAdapter):
+      # Calculate location adjustment of Plate based on PlateAdapter geometry
+      adjusted_plate_anchor = to.compute_plate_location(plate)
+      to_location = to.get_absolute_location() + adjusted_plate_anchor
     else:
       to_location = to.get_absolute_location()
 
@@ -1785,6 +1790,8 @@ class LiquidHandler(Machine):
       to.assign_child_resource(plate)
     elif isinstance(to, MFXModule):
       to.assign_child_resource(plate, location=to.child_resource_location)
+    elif isinstance(to, PlateAdapter):
+      to.assign_child_resource(plate, location=to.compute_plate_location(plate))
     else:
       to.assign_child_resource(plate, location=to_location)
 
