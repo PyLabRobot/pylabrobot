@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import logging
 from typing import Optional, List
-from collections import OrderedDict
 
 from pylabrobot.resources.carrier import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.plate import Plate
-
-from pylabrobot.serializer import serialize
 
 
 logger = logging.getLogger("pylabrobot")
@@ -105,8 +102,9 @@ class PlateAdapter(Resource):
     align the `Plate` well-grid with the adapter's hole grid. """
 
     # Calculate Plate information (which is not directly accessible from the Plate class)
-    x_locations = sorted(set(well_n.location.x for well_n in resource.children))
-    y_locations = sorted(set(well_n.location.y for well_n in resource.children))
+    # Child locations are never None, so we can safely ignore the type error
+    x_locations = sorted(set(well_n.location.x for well_n in resource.children)) # type: ignore
+    y_locations = sorted(set(well_n.location.y for well_n in resource.children)) # type: ignore
 
     def calculate_well_spacing(float_list: List[float]):
       """ Calculate the difference between every x and x+1 element in the list of floats. """
