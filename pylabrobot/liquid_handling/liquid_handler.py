@@ -198,24 +198,6 @@ class LiquidHandler(Machine):
     information to the backend. """
     self._run_async_in_thread(self.backend.unassigned_resource_callback, resource.name)
 
-  def unassign_resource(self, resource: Union[str, Resource]): # TODO: remove this.
-    """ Unassign an assigned resource.
-
-    Args:
-      resource: The resource to unassign.
-
-    Raises:
-      KeyError: If the resource is not currently assigned to this liquid handler.
-    """
-
-    if isinstance(resource, Resource):
-      resource = resource.name
-
-    r = self.deck.get_resource(resource)
-    if r is None:
-      raise KeyError(f"Resource '{resource}' is not assigned to this liquid handler.")
-    r.unassign()
-
   def summary(self):
     """ Prints a string summary of the deck layout.  """
 

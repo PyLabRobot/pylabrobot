@@ -81,23 +81,6 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       dbl_plt_car_3 = PLT_CAR_L5AC_A00(name="double placed carrier 3")
       self.deck.assign_child_resource(dbl_plt_car_3, rails=20)
 
-    # Test carrier with same name.
-    with self.assertRaises(ValueError):
-      same_name_carrier = PLT_CAR_L5AC_A00(name="plate carrier")
-      self.deck.assign_child_resource(same_name_carrier, rails=10)
-    # Should not raise when replacing.
-    self.deck.assign_child_resource(same_name_carrier, rails=10, replace=True)
-    # Should not raise when unassinged.
-    self.lh.unassign_resource("plate carrier")
-    self.deck.assign_child_resource(same_name_carrier, rails=10, replace=True)
-
-    # Test unassigning unassigned resource
-    self.lh.unassign_resource("plate carrier")
-    with self.assertRaises(ResourceNotFoundError):
-      self.lh.unassign_resource("plate carrier")
-    with self.assertRaises(ResourceNotFoundError):
-      self.lh.unassign_resource("this resource is completely new.")
-
     # Test invalid rails.
     with self.assertRaises(ValueError):
       self.deck.assign_child_resource(plt_car, rails=-1)
