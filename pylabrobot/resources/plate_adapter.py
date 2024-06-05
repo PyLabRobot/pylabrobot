@@ -89,7 +89,6 @@ class PlateAdapter(Resource):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
       category=category or "plate_adapter", model=model)
 
-    self._child_resource_location = None
     self._child_resource: Optional[Resource] = None
     self.dx = dx
     self.dy = dy
@@ -100,10 +99,6 @@ class PlateAdapter(Resource):
     self.adapter_hole_dx = adapter_hole_dx
     self.adapter_hole_dy = adapter_hole_dy
     self.site_pedestal_z = site_pedestal_z
-
-  @property
-  def child_resource_location(self) -> Optional[Coordinate]:
-    return self._child_resource_location
 
   def compute_plate_location(self, resource: Plate) -> Coordinate:
     """ Compute the location of the `Plate` child resource in relationship to the `PlateAdapter` to
@@ -161,17 +156,8 @@ class PlateAdapter(Resource):
     # TODO: check whether all Plate children information could
     # be made accessible from the Plate class
 
-    if location is None:
-      self._child_resource_location = self.compute_plate_location(resource)
-
     super().assign_child_resource(
       resource=resource,
-      location=location or self._child_resource_location,
+      location=location or self.compute_plate_location(resource),
       reassign=reassign)
     self._child_resource = resource
-
-  def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "child_resource_location": serialize(self._child_resource_location)
-    }

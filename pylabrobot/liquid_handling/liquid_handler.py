@@ -1910,7 +1910,7 @@ class LiquidHandler(Machine):
     elif isinstance(to, MFXModule):
       to.assign_child_resource(plate, location=to.child_resource_location)
     elif isinstance(to, PlateAdapter):
-      to.assign_child_resource(plate, location=to.child_resource_location)
+      to.assign_child_resource(plate, location=to.compute_plate_location(plate))
     else:
       to.assign_child_resource(plate, location=to_location)
 
