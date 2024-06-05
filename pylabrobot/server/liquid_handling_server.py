@@ -10,6 +10,8 @@ from typing import Any, Coroutine, List, Tuple, Type, Optional, cast
 from flask import Blueprint, Flask, request, jsonify, current_app
 import werkzeug
 
+from pylabrobot import configure
+from pylabrobot.config.service.json_config import JsonReader
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import Pickup, Aspiration, Dispense, Drop
@@ -243,6 +245,14 @@ async def dispense():
     flow_rates=[d.flow_rate for d in dispenses],
     use_channels=use_channels
   )))
+
+CONFIG_READER = JsonReader()
+
+@lh_api.route("/config", methods=["POST"])
+async def config():
+  cfg = CONFIG_READER.read(request.stream)
+  configure(cfg)
+  return jsonify(cfg.as_dict)
 
 
 def create_app(lh: LiquidHandler):
