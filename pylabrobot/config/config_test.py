@@ -95,7 +95,7 @@ async def test_file_reader_writer(tmp_dir, fake_config):
 
 @pytest.mark.asyncio
 async def test_load_config_creates_default():
-  cfg = load_config("test_config", create_default=True)
+  cfg = load_config("test_config", create_default=True, create_module_level=False)
   cwd = Path.cwd()
   assert (cwd / "test_config.ini").exists()
   assert cfg == Config()
