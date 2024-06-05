@@ -24,7 +24,7 @@ DEFAULT_WRITER = FileWriter(
 )
 
 
-def get_file(base_name: str, _dir: Path) -> Path | None:
+def get_file(base_name: str, _dir: Path) -> Optional[Path]:
   for ext in DEFAULT_READER.reader_map.keys():
     cfg = _dir / f"{base_name}.{ext}"
     if cfg.exists():
@@ -32,7 +32,8 @@ def get_file(base_name: str, _dir: Path) -> Path | None:
   return None
 
 
-def get_config_file(base_name: str, cur_dir: Optional[str] = None) -> Path | None:
+def get_config_file(base_name: str, cur_dir: Optional[str] = None) -> Optional[
+  Path]:
   """Get the path to the config file.
 
   Args:
@@ -65,7 +66,8 @@ def get_dir_to_create_config_file_in() -> Path:
   return cur_dir
 
 
-def load_config(base_file_name: str, create_default: bool = False, create_module_level: bool = True) -> Config:
+def load_config(base_file_name: str, create_default: bool = False,
+                create_module_level: bool = True) -> Config:
   """Load a Config object from a file.
 
   Args:
