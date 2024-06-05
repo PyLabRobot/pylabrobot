@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import IO
+from typing import IO, Union
 
 from pylabrobot.config.config import Config
 from pylabrobot.config.service.reader import ConfigReader
@@ -36,7 +36,7 @@ class MultiReader(ConfigReader[str]):
   def __init__(self, reader_map: dict[str, ConfigReader[IO]]):
     self.reader_map = reader_map
 
-  def read(self, r: str | Path) -> Config:
+  def read(self, r: Union[str, Path]) -> Config:
     """Read a Config object from a file."""
     if isinstance(r, str):
       r = Path(r)

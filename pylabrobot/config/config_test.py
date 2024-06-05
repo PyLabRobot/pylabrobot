@@ -1,4 +1,3 @@
-import asyncio
 import configparser
 from dataclasses import asdict
 from pathlib import Path
@@ -49,7 +48,7 @@ def ini_config(ini_path, fake_config):
   return make_ini_config
 
 
-async def run_file_reader_test(
+def run_file_reader_test(
   format_reader: type[ConfigReader],
   create_cfg: Callable[[], Path], should_be: Config
 ):
@@ -61,7 +60,7 @@ async def run_file_reader_test(
   assert cfg == should_be
 
 
-async def run_file_reader_writer_test(
+def run_file_reader_writer_test(
   format_reader: type[ConfigWriter],
   format_writer: type[ConfigWriter],
   write_to: Path,
@@ -78,23 +77,17 @@ async def run_file_reader_writer_test(
   assert cfg == should_be
 
 
-@pytest.mark.asyncio
-async def test_file_reader_writer(tmp_dir, fake_config):
+def test_file_reader_writer(tmp_dir, fake_config):
   cases = (
     (IniReader, IniWriter, "fake_config.ini"),
   )
-  futures = []
   for rdr, wr, fp in cases:
-    futures.append(
-      run_file_reader_writer_test(
-        rdr, wr, tmp_dir / fp, fake_config
-      )
+    run_file_reader_writer_test(
+      rdr, wr, tmp_dir / fp, fake_config
     )
-  await asyncio.gather(*futures)
 
 
-@pytest.mark.asyncio
-async def test_load_config_creates_default():
+def test_load_config_creates_default():
   cfg = load_config("test_config", create_default=True, create_module_level=False)
   cwd = Path.cwd()
   assert (cwd / "test_config.ini").exists()

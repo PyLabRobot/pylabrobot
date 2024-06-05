@@ -51,7 +51,6 @@ extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets 
     "sphinx_copybutton",
     "pytest",
     "pytest-timeout",
-    "pytest-asyncio"
     "pylint",
     "mypy",
     "responses"
