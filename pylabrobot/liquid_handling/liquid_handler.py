@@ -182,6 +182,7 @@ class LiquidHandler(Machine):
       loop = asyncio.new_event_loop()
       asyncio.set_event_loop(loop)
       loop.run_until_complete(func(*args, **kwargs))
+      loop.close()
 
     t = threading.Thread(target=callback, args=args, kwargs=kwargs)
     t.start()
