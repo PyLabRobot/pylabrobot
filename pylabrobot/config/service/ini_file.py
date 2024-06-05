@@ -24,8 +24,7 @@ class IniWriter(ConfigWriter):
   def write(self, w: TextIO, cfg: Config):
     """Write a Config object to an IO stream in INI format."""
     config = configparser.ConfigParser()
-    cfg_dict = cfg.as_dict
-    for k, v in cfg_dict.items():
+    for k, v in cfg.as_dict.items():
       config[k] = v
 
     config.write(w)
