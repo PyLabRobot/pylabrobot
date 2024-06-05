@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import IO, Union
+from typing import IO, Union, Dict
 
 from pylabrobot.config.config import Config
 from pylabrobot.config.service.reader import ConfigReader
@@ -33,7 +33,7 @@ class FileWriter(ConfigWriter[str]):
 class MultiReader(ConfigReader[str]):
   """A ConfigReader that can read from multiple formats"""
 
-  def __init__(self, reader_map: dict[str, ConfigReader[IO]]):
+  def __init__(self, reader_map: Dict[str, ConfigReader]):
     self.reader_map = reader_map
 
   def read(self, r: Union[str, Path]) -> Config:

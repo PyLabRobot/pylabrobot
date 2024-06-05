@@ -1,7 +1,5 @@
-import configparser
-from dataclasses import asdict
 from pathlib import Path
-from typing import Callable
+from typing import Type
 
 import pytest
 
@@ -27,42 +25,9 @@ def fake_config(tmp_dir):
   )
 
 
-@pytest.fixture
-def ini_path(tmp_dir):
-  return tmp_dir / "config.ini"
-
-
-@pytest.fixture
-def ini_config(ini_path, fake_config):
-  def make_ini_config():
-    config = configparser.ConfigParser()
-    cfg_dict = asdict(fake_config)
-    for k, v in cfg_dict.items():
-      config[k] = v
-
-    with open(ini_path, "w") as f:
-      config.write(f)
-
-    return ini_path
-
-  return make_ini_config
-
-
-def run_file_reader_test(
-  format_reader: type[ConfigReader],
-  create_cfg: Callable[[], Path], should_be: Config
-):
-  path = create_cfg()
-  rdr = FileReader(
-    format_reader=format_reader(),
-  )
-  cfg = rdr.read(path)
-  assert cfg == should_be
-
-
 def run_file_reader_writer_test(
-  format_reader: type[ConfigWriter],
-  format_writer: type[ConfigWriter],
+  format_reader: Type[ConfigReader],
+  format_writer: Type[ConfigWriter],
   write_to: Path,
   should_be: Config,
 ):
@@ -88,7 +53,8 @@ def test_file_reader_writer(tmp_dir, fake_config):
 
 
 def test_load_config_creates_default():
-  cfg = load_config("test_config", create_default=True, create_module_level=False)
+  cfg = load_config("test_config", create_default=True,
+                    create_module_level=False)
   cwd = Path.cwd()
   assert (cwd / "test_config.ini").exists()
   assert cfg == Config()
