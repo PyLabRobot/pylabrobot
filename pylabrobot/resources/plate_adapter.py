@@ -18,53 +18,53 @@ logger = logging.getLogger("pylabrobot")
 
 class PlateAdapter(Resource):
   """ Abstract base resource for a PlateAdapter, a resource which has a standardized
-    well-grid (96-, 384- or 1536- well-plates with 9x9, 4.5x4.5 or 2.25x2.25 mm^2) onto
-    which a plate (skirted, sem-, and non-skirted) is placed.
+  well-grid (96-, 384- or 1536- well-plates with 9x9, 4.5x4.5 or 2.25x2.25 mm^2) onto
+  which a plate (skirted, sem-, and non-skirted) is placed.
 
-    As a result of the PlateAdapter well_holes having a different dx & dy than the plates,
-    the precise anchor location `to` which the plate is moved has to be calculated on the fly.
+  As a result of the PlateAdapter well_holes having a different dx & dy than the plates,
+  the precise anchor location `to` which the plate is moved has to be calculated on the fly.
 
-    This PlateAdapter class is capable of doing so, and is therefore the base class for
-    diverse resources, e.g.:
-    - plate adapters (e.g. for semi- and non-skirted plates which cannot be used on standard
-      carrier sites)
-    - plate adapters for shakers/heater-shakers/temperature control machines
-    - magnetic racks
-    - On-Deck ThermoCyclers (OTDCs)
+  This PlateAdapter class is capable of doing so, and is therefore the base class for
+  diverse resources, e.g.:
+  - plate adapters (e.g. for semi- and non-skirted plates which cannot be used on standard
+    carrier sites)
+  - plate adapters for shakers/heater-shakers/temperature control machines
+  - magnetic racks
+  - On-Deck ThermoCyclers (OTDCs)
 
-   Args:
-        name (str): The name of the PlateAdapter.
-        size_x (float): The size of the PlateAdapter in the x dimension.
-        size_y (float): The size of the PlateAdapter in the y dimension.
-        size_z (float): The size of the PlateAdapter in the z dimension.
-        dx (float): The x-coordinate offset for well positioning.
-        dy (float): The y-coordinate offset for well positioning.
-        dz (float): The z-coordinate offset for well positioning, i.e. the outside-bottom
-          of a well.
-        adapter_item_dx (Literal[9.0, 4.5, 2.25], optional): The x-dimension spacing of
-          wells. Defaults to 9.0.
-        adapter_item_dy (Literal[9.0, 4.5, 2.25], optional): The y-dimension spacing of
+  Args:
+      name (str): The name of the PlateAdapter.
+      size_x (float): The size of the PlateAdapter in the x dimension.
+      size_y (float): The size of the PlateAdapter in the y dimension.
+      size_z (float): The size of the PlateAdapter in the z dimension.
+      dx (float): The x-coordinate offset for well positioning.
+      dy (float): The y-coordinate offset for well positioning.
+      dz (float): The z-coordinate offset for well positioning, i.e. the outside-bottom
+        of a well.
+      adapter_item_dx (Literal[9.0, 4.5, 2.25], optional): The x-dimension spacing of
         wells. Defaults to 9.0.
-        site_pedestal_z (Optional[float], optional): The z-coordinate of the site pedestal.
-          Defaults to None.
-        category (Optional[str], optional): The category of the PlateAdapter.
-          Defaults to "plate_adapter".
-        model (Optional[str], optional): The model of the PlateAdapter. Defaults to None.
+      adapter_item_dy (Literal[9.0, 4.5, 2.25], optional): The y-dimension spacing of
+      wells. Defaults to 9.0.
+      site_pedestal_z (Optional[float], optional): The z-coordinate of the site pedestal.
+        Defaults to None.
+      category (Optional[str], optional): The category of the PlateAdapter.
+        Defaults to "plate_adapter".
+      model (Optional[str], optional): The model of the PlateAdapter. Defaults to None.
 
   Examples:
     1. Using a "magnetic rack" as a PlateAdapter:
 
       Define a `MFXCarrier`, define a `MFXModule` for deep well plates,
       assign the DWP module to the MFXCarrier:
-      >>> mfx_carrier_1 = MFX_CAR_L5_base(name='mfx_carrier_1')
+      >>> mfx_carrier_1 = MFX_CAR_L5_base(name="mfx_carrier_1")
       >>> mfx_carrier_1[1] = mfx_dwp_module_1 = MFX_DWP_module(name="mfx_dwp_module_1")
 
       Define Alpaqua magnet as a PlateAdapter & assign to mfx_dwp_module_1:
-      >>> Alpaqua_magnum_flx_1 = Alpaqua_magnum_flx(name='Alpaqua_magnum_flx_1')
+      >>> Alpaqua_magnum_flx_1 = Alpaqua_magnum_flx(name="Alpaqua_magnum_flx_1")
       >>> mfx_dwp_module_1.assign_child_resource(Alpaqua_magnum_flx_1)
 
       Define Cos_96_Rd plate & assign to PlateAdapter:
-      >>> Cos96_plate_1 = Cos_96_Rd(name='Cos96_plate_1')
+      >>> Cos96_plate_1 = Cos_96_Rd(name="Cos96_plate_1")
       >>> Alpaqua_magnum_flx_1.assign_child_resource(Cos96_plate_1)
   """
 
@@ -80,7 +80,7 @@ class PlateAdapter(Resource):
     adapter_hole_dy: float = 9.0,
     category: Optional[str] = None,
     model: Optional[str] = None
-    ):
+  ):
     if adapter_hole_dx not in {9.0, 4.5, 2.25}:
       raise ValueError("adapter_hole_dx must be one of 9.0, 4.5, or 2.25")
     if adapter_hole_dy not in {9.0, 4.5, 2.25}:
@@ -110,22 +110,17 @@ class PlateAdapter(Resource):
     align the `Plate` well-grid with the adapter's hole grid. """
 
     # Calculate Plate information (which is not directly accessible from the Plate class)
-    x_locations = sorted(OrderedDict.fromkeys([well_n.location.x
-      for well_n in resource.children]))
-    y_locations = sorted(OrderedDict.fromkeys([well_n.location.y
-      for well_n in resource.children]))
+    x_locations = sorted(set(well_n.location.x for well_n in resource.children))
+    y_locations = sorted(set(well_n.location.y for well_n in resource.children))
 
     def calculate_well_spacing(float_list: List[float]):
       """ Calculate the difference between every x and x+1 element in the list of floats. """
       if len(float_list) < 2:
         return None
       differences = [round(float_list[i+1] - float_list[i],2) for i in range(len(float_list) - 1)]
-      if differences[0] is None:
-        raise ValueError("well spacing has to be uniform, and cannot be None")
-      elif len(list(OrderedDict.fromkeys(differences))) == 1:
+      if len(set(differences)) == 1:
         return differences[0]
-      else:
-        raise ValueError("well spacing has to be uniform")
+      raise ValueError("well spacing has to be uniform")
 
     plate_dx, plate_dy = float(x_locations[0]), float(y_locations[0])
     plate_item_dx = abs(calculate_well_spacing(x_locations))
@@ -146,7 +141,6 @@ class PlateAdapter(Resource):
 
     adjusted_plate_anchor = Coordinate(plate_x_adjustment, plate_y_adjustment, self.dz)
     return adjusted_plate_anchor
-
 
   def assign_child_resource(
     self,
