@@ -15,8 +15,7 @@ logger = logging.getLogger("pylabrobot")
 
 class PlateAdapter(Resource):
   """ Abstract base resource for a PlateAdapter, a resource which has a standardized
-  well-grid (96-, 384- or 1536- well-plates with 9x9, 4.5x4.5 or 2.25x2.25 mm^2) onto
-  which a plate (skirted, sem-, and non-skirted) is placed.
+  well-grid onto which a plate (skirted, sem-, and non-skirted) is placed.
 
   As a result of the PlateAdapter well_holes having a different dx & dy than the plates,
   the precise anchor location `to` which the plate is moved has to be calculated on the fly.
@@ -30,23 +29,18 @@ class PlateAdapter(Resource):
   - On-Deck ThermoCyclers (OTDCs)
 
   Args:
-      name (str): The name of the PlateAdapter.
-      size_x (float): The size of the PlateAdapter in the x dimension.
-      size_y (float): The size of the PlateAdapter in the y dimension.
-      size_z (float): The size of the PlateAdapter in the z dimension.
-      dx (float): The x-coordinate offset for well positioning.
-      dy (float): The y-coordinate offset for well positioning.
-      dz (float): The z-coordinate offset for well positioning, i.e. the outside-bottom
-        of a well.
-      adapter_item_dx (Literal[9.0, 4.5, 2.25], optional): The x-dimension spacing of
-        wells. Defaults to 9.0.
-      adapter_item_dy (Literal[9.0, 4.5, 2.25], optional): The y-dimension spacing of
-      wells. Defaults to 9.0.
-      site_pedestal_z (Optional[float], optional): The z-coordinate of the site pedestal.
-        Defaults to None.
-      category (Optional[str], optional): The category of the PlateAdapter.
-        Defaults to "plate_adapter".
-      model (Optional[str], optional): The model of the PlateAdapter. Defaults to None.
+    name: The name of the PlateAdapter.
+    size_x: The size of the PlateAdapter in the x dimension.
+    size_y: The size of the PlateAdapter in the y dimension.
+    size_z: The size of the PlateAdapter in the z dimension.
+    dx: The x-coordinate offset for well positioning.
+    dy: The y-coordinate offset for well positioning.
+    dz: The z-coordinate offset for well positioning, i.e. the outside-bottom of a well.
+    adapter_item_dx: The x-dimension spacing of wells. Defaults to 9.0.
+    adapter_item_dy: The y-dimension spacing of wells. Defaults to 9.0.
+    site_pedestal_z: The z-coordinate of the site pedestal.  Defaults to None.
+    category: The category of the PlateAdapter.  Defaults to "plate_adapter".
+    model: The model of the PlateAdapter. Defaults to None.
 
   Examples:
     1. Using a "magnetic rack" as a PlateAdapter:
@@ -78,7 +72,6 @@ class PlateAdapter(Resource):
     category: Optional[str] = None,
     model: Optional[str] = None
   ):
-
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
       category=category or "plate_adapter", model=model)
 
