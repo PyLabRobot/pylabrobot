@@ -42,17 +42,16 @@ def get_config_file(base_name: str, cur_dir: Optional[str] = None) -> Optional[
   Returns:
   The path to the config file.
   """
-  if cur_dir is None:
-    cur_dir = Path.cwd()
+  cdir = Path(cur_dir) if cur_dir is not None else Path.cwd()
 
-  cfg = get_file(base_name, cur_dir)
+  cfg = get_file(base_name, cdir)
   if cfg is not None:
     return cfg
 
-  if cur_dir.parent == cur_dir:
+  if cdir.parent == cdir:
     return None
 
-  return get_config_file(base_name, cur_dir.parent)
+  return get_config_file(base_name, cdir.parent)
 
 
 def get_dir_to_create_config_file_in() -> Path:

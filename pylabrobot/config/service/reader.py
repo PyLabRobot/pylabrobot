@@ -3,7 +3,7 @@ from typing import TypeVar, Generic
 
 from pylabrobot.config.config import Config
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ConfigReader(Generic[T], ABC):
