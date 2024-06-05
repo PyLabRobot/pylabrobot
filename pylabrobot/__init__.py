@@ -1,6 +1,7 @@
 import datetime
 import logging
 from pathlib import Path
+from typing import Union
 
 from pylabrobot.__version__ import __version__
 
@@ -12,7 +13,7 @@ CONFIG = load_config(CONFIG_FILE_NAME, create_default=True)
 """The loaded configuration for pylabrobot."""
 
 
-def setup_logger(log_dir: Path | str, level: int):
+def setup_logger(log_dir: Union[Path, str], level: int):
   """
   Set up the logger for pylabrobot. If the log_dir does not exist, it will be created.
 
