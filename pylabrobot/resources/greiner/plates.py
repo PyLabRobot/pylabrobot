@@ -4,7 +4,7 @@
 
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well, WellBottomType
-from pylabrobot.resources.itemized_resource import create_equally_spaced
+from pylabrobot.resources.utils import create_equally_spaced_2d
 
 
 def _compute_volume_from_height_Gre_384_Sq(h: float) -> float:
@@ -23,7 +23,7 @@ def Gre_384_Sq(name: str, with_lid: bool = False) -> Plate:
     size_z=14.5,
     with_lid=with_lid,
     model="Gre_384_Sq",
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=24,
       num_items_y=16,
       # dy=-1215.5, # from hamilton definition
@@ -57,7 +57,7 @@ def Gre_1536_Sq(name: str, with_lid: bool = False) -> Plate:
     size_z=10.4,
     with_lid=with_lid,
     model="Gre_1536_Sq",
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=48,
       num_items_y=32,
       dx=9.5,
@@ -103,7 +103,7 @@ def Greiner96Well_655_101(name: str, with_lid: bool = False) -> Plate:
     size_z=14.4,
     with_lid=with_lid,
     model="Greiner96Well_655_101",
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=9.5,
@@ -138,7 +138,7 @@ def Greiner96Well_650_201_RB(name: str, with_lid: bool = False) -> Plate:
     size_z=14.6,
     with_lid=with_lid,
     model="Greiner96Well_650_201_RB",
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=9.88,

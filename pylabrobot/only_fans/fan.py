@@ -34,18 +34,23 @@ class Fan(Machine):
 
   async def stop(self):
     """ Stop the fan and close the connection. """
+    await self.backend.turn_off()
     await self.backend.stop()
 
-  async def turn_on_fan(self,speed,duration=None):
-    """ Intialize and set up the fan at speed, where speed is an integer percent between 0 and 100
+  async def turn_on(self, intensity: int, duration=None):
+    """ Run the fan
+
+    Args:
+      intensity: integer percent between 0 and 100
+      duration: time to run the fan for. If None, run until `turn_off` is called.
     """
 
-    await self.backend.turn_on_fan(speed)
+    await self.backend.turn_on(intensity=intensity)
 
     if duration is not None:
       await asyncio.sleep(duration)
-      await self.backend.stop_fan()
+      await self.backend.turn_off()
 
-  async def stop_fan(self):
-    """ Stop the fan """
-    await self.backend.stop_fan()
+  async def turn_off(self):
+    """ Turn the fan off, but do not close the connection. """
+    await self.backend.turn_off()

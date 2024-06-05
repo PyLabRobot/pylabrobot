@@ -4,7 +4,7 @@
 
 from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
-from pylabrobot.resources.itemized_resource import create_equally_spaced
+from pylabrobot.resources.utils import create_equally_spaced_2d
 
 
 def _compute_volume_from_height_Limbro_24_Large(h: float) -> float:
@@ -24,7 +24,7 @@ def Limbro_24_Large(name: str, with_lid: bool = False) -> Plate:
     with_lid=with_lid,
     model="Limbro_24_Large",
     lid_height=10,
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=4,
       num_items_y=6,
       dx=6.0,
@@ -58,7 +58,7 @@ def Limbro_24_Small(name: str, with_lid: bool = False) -> Plate:
     with_lid=with_lid,
     model="Limbro_24_Small",
     lid_height=10,
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=4,
       num_items_y=6,
       dx=17.5,
@@ -92,7 +92,7 @@ def Limbro_48_Large(name: str, with_lid: bool = False) -> Plate:
     with_lid=with_lid,
     model="Limbro_48_Large",
     lid_height=10,
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=4,
       num_items_y=12,
       dx=16.0,
@@ -126,7 +126,7 @@ def Limbro_96_Large(name: str, with_lid: bool = False) -> Plate:
     with_lid=with_lid,
     model="Limbro_96_Large",
     lid_height=10,
-    items=create_equally_spaced(Well,
+    items=create_equally_spaced_2d(Well,
       num_items_x=8,
       num_items_y=12,
       dx=9.0,

@@ -47,11 +47,11 @@ container = Container(name="container", size_x=10, size_y=10, size_z=10)
 
 Resources that contain items in a grid are subclasses of {class}`pylabrobot.resources.itemized_resource.ItemizedResource`. This class provides convenient methods for accessing the child-resources, such as by integer or SBS "A1" style-notation, as well as for traversing items in an `ItemizedResource`. Examples of subclasses of `ItemizedResource`s are {class}`pylabrobot.resources.plate.Plate` and {class}`pylabrobot.resources.tip_rack.TipRack`.
 
-To instantiate an `ItemizedResource`, it is convenient to use the `pylabrobot.resources.itemized_resource.create_equally_spaced` method to quickly initialize a grid of child-resources in a grid. Here's an example of a simple `ItemizedResource`:
+To instantiate an `ItemizedResource`, it is convenient to use the `pylabrobot.resources.utils.create_equally_spaced_2d` method to quickly initialize a grid of child-resources in a grid. Here's an example of a simple `ItemizedResource`:
 
 ```python
 from pylabrobot.resources import ItemizedResource
-from pylabrobot.resources.itemized_resource import create_equally_spaced
+from pylabrobot.resources.utils import create_equally_spaced_2d
 from pylabrobot.resources.well import Well, WellBottomType
 
 plate = ItemizedResource(
@@ -59,7 +59,7 @@ plate = ItemizedResource(
   size_x=127,
   size_y=86,
   size_z=10,
-  items=create_equally_spaced(
+  items=create_equally_spaced_2d(
     Well,                            # the class of the items
     num_items_x=12,
     num_items_y=8,
