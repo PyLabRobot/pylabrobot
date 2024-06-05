@@ -1,7 +1,6 @@
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Union
 
 LOG_FROM_STRING = {
   "DEBUG": logging.DEBUG,
@@ -11,13 +10,7 @@ LOG_FROM_STRING = {
   "CRITICAL": logging.CRITICAL,
 }
 
-LOG_TO_STRING = {
-  logging.DEBUG: "DEBUG",
-  logging.INFO: "INFO",
-  logging.WARNING: "WARNING",
-  logging.ERROR: "ERROR",
-  logging.CRITICAL: "CRITICAL",
-}
+LOG_TO_STRING = {v: k for k, v in LOG_FROM_STRING.items()}
 
 
 @dataclass
@@ -28,7 +21,7 @@ class Config:
   class Logging:
     """The logging configuration."""
     level: int = logging.INFO
-    log_dir: Union[str, Path] = Path(".")
+    log_dir: Path = Path(".")
 
   logging: Logging = field(default_factory=Logging)
 
