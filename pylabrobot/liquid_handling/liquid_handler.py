@@ -59,15 +59,15 @@ from .standard import (
 logger = logging.getLogger("pylabrobot")
 
 def check_contaminated(liquid, liquid_history):
-  """Helper function used to check if adding a liquid to the container
-     would result in cross contamination"""
+  """ Check if adding a liquid to the container would result in cross contamination """
+  return liquid not in liquid_history and len(liquid_history) > 0
 
 def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
-  """Helper function used to check if it is possible to update the
-     liquid_history of src based on contents of dst"""
+  """ Check if it is possible to update the liquid_history of src based on contents of dst """
 
   return (not src_tracker.is_cross_contamination_tracking_disabled) and \
       bool(not dest_tracker.is_cross_contamination_tracking_disabled)
+
 
 class LiquidHandler(Machine):
   """
@@ -754,8 +754,6 @@ class LiquidHandler(Machine):
           op.resource.tracker.remove_liquid(op.volume)
 
         for liquid, volume in reversed(op.liquids):
-
-          # Cross contamination check
           if does_cross_contamination_tracking():
             if check_contaminated(liquid, op.tip.tracker.liquid_history):
               raise CrossContaminationError(
@@ -1358,8 +1356,6 @@ class LiquidHandler(Machine):
         all_liquids.append(liquids)
 
       for liquid, vol in reversed(liquids):
-
-        # Cross contamination check
         if does_cross_contamination_tracking():
           if check_contaminated(liquid, channel.get_tip().tracker.liquid_history):
             raise CrossContaminationError(
