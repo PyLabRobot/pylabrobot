@@ -7,7 +7,7 @@ created and written to the project directory containing the .git directory. If
 this does not exist, the current directory will be used.
 """
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from pylabrobot.config.config import Config
 from pylabrobot.config.service.file import MultiReader, FileWriter
@@ -32,8 +32,10 @@ def get_file(base_name: str, _dir: Path) -> Optional[Path]:
   return None
 
 
-def get_config_file(base_name: str, cur_dir: Optional[str] = None) -> Optional[
-  Path]:
+def get_config_file(
+  base_name: str,
+  cur_dir: Optional[Union[str, Path]] = None
+) -> Optional[Path]:
   """Get the path to the config file.
 
   Args:

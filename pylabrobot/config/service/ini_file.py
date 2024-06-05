@@ -7,7 +7,7 @@ from pylabrobot.config.service.reader import ConfigReader
 from pylabrobot.config.service.writer import ConfigWriter
 
 
-class IniReader(ConfigReader[TextIO]):
+class IniReader(ConfigReader):
   """A ConfigReader that reads from an IO stream that INI formatted."""
 
   def read(self, r: TextIO) -> Config:
@@ -18,7 +18,7 @@ class IniReader(ConfigReader[TextIO]):
     return Config(logging=Config.Logging(log_dir=Path(log_config["log_dir"])))
 
 
-class IniWriter(ConfigWriter[TextIO]):
+class IniWriter(ConfigWriter):
   """A ConfigWriter that writes to an IO stream in INI format."""
 
   def write(self, w: TextIO, cfg: Config):
