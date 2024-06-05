@@ -27,7 +27,7 @@ class Config:
   @dataclass
   class Logging:
     """The logging configuration."""
-    level: str = logging.INFO
+    level: int = logging.INFO
     log_dir: Union[str, Path] = Path(".")
 
   logging: Logging = field(default_factory=Logging)
