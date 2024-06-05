@@ -70,6 +70,7 @@ setup(
   install_requires=["typing_extensions"],
   url="https://github.com/pylabrobot/pylabrobot.git",
   package_data={"pylabrobot": ["visualizer/*"]},
+  data_files=[(".", ["defaults/pylabrobot.ini"])],
   extras_require={
     "fw": extras_fw,
     "http": extras_http,
