@@ -61,7 +61,7 @@ class TecanDeck(Deck):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "num_rails": self.num_rails
+      "num_rails": self.num_rails,
     }
 
   def assign_child_resource(

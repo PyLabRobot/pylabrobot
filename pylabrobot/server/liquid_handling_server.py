@@ -5,9 +5,10 @@ import asyncio
 import json
 import os
 import threading
-from typing import Any, Coroutine, List, Tuple, Type, Optional, cast
+from typing import Any, Coroutine, List, Tuple, Optional, cast
 
 from flask import Blueprint, Flask, request, jsonify, current_app
+from flask_cors import CORS
 import werkzeug
 
 from pylabrobot.liquid_handling import LiquidHandler
@@ -60,6 +61,11 @@ def add_and_run_task(task: Task):
   task.run_in_thread()
   return task.serialize(id_)
 
+class ErrorResponse(Exception):
+  def __init__(self, data: dict, status_code: int):
+    self.data = data
+    self.status_code = status_code
+
 
 @lh_api.route("/")
 def index():
@@ -91,6 +97,25 @@ def get_status():
   return jsonify({"status": status})
 
 
+@lh_api.route("/move_plate", methods=["POST"])
+async def move_plate():
+  data = request.get_json()
+
+  resource_name = data["resource_name"]
+  to = data["to"]
+  resource = current_app.lh.deck.get_resource(resource_name)
+  resource_to = current_app.lh.deck.get_resource(to)
+
+  return add_and_run_task(Task(current_app.lh.move_plate(resource, resource_to)))
+
+
+@lh_api.route("/layout", methods=["GET"])
+def get_layout():
+  """ API Endpoint to inspect the current design of the deck """
+  layout = current_app.lh.deck.serialize()
+  return jsonify({"layout": layout})
+
+
 @lh_api.route("/labware", methods=["POST"])
 def define_labware():
   try:
@@ -107,11 +132,6 @@ def define_labware():
     return jsonify({"error": "missing key in json data: " + str(e)}), 400
 
   return jsonify({"status": "ok"})
-
-class ErrorResponse(Exception):
-  def __init__(self, data: dict, status_code: int):
-    self.data = data
-    self.status_code = status_code
 
 
 @lh_api.route("/pick-up-tips", methods=["POST"])
@@ -248,6 +268,8 @@ async def dispense():
 def create_app(lh: LiquidHandler):
   """ Create a Flask app with the given LiquidHandler """
   app = Flask(__name__)
+  cors = CORS()
+  cors.init_app(app)
   app.lh = lh
   app.register_blueprint(lh_api)
   return app

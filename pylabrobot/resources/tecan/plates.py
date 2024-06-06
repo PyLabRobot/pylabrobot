@@ -32,7 +32,7 @@ class TecanPlate(Plate, TecanResource):
     category: str = "tecan_plate",
     lid_height: float = 0,
     with_lid: bool = False,
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
     super().__init__(name, size_x, size_y, size_z, items,
       category=category, lid_height=lid_height, with_lid=with_lid, model=model)
@@ -42,6 +42,18 @@ class TecanPlate(Plate, TecanResource):
     self.z_dispense = z_dispense
     self.z_max = z_max
     self.area = area
+
+  def serialize(self) -> dict:
+    """ Serialize this resource. """
+    return {
+      **super().serialize(),
+      "z_travel": self.z_travel,
+      "z_start": self.z_start,
+      "z_dispense": self.z_dispense,
+      "z_max": self.z_max,
+      "area": self.area,
+      "one_dot_max": self.one_dot_max,
+    }
 
 
 def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:

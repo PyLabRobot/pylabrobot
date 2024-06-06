@@ -44,6 +44,19 @@ class TecanPlateCarrier(PlateCarrier, TecanResource):
     self.roma_z_travel = roma_z_travel
     self.roma_z_end = roma_z_end
 
+  def serialize(self) -> dict:
+    """ Serialize this resource. """
+    return {
+      **super().serialize(),
+      "roma_x": self.roma_x,
+      "roma_y": self.roma_y,
+      "roma_z_safe": self.roma_z_safe,
+      "roma_z_travel": self.roma_z_travel,
+      "roma_z_end": self.roma_z_end,
+      "off_x": self.off_x,
+      "off_y": self.off_y,
+    }
+
 
 def MP_2Pos_portrait_No_Robot_Access(name: str) -> TecanPlateCarrier:
   """ Tecan part no. 10613007 """

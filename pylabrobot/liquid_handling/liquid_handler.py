@@ -25,6 +25,7 @@ from pylabrobot.resources import (
   Coordinate,
   CarrierSite,
   Lid,
+  Liquid,
   MFXModule,
   Plate,
   PlateAdapter,
@@ -37,7 +38,6 @@ from pylabrobot.resources import (
   does_tip_tracking,
   does_volume_tracking
 )
-from pylabrobot.resources.liquid import Liquid
 from pylabrobot.utils.list import expand
 
 from .backends import LiquidHandlerBackend
