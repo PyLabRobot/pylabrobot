@@ -16,7 +16,7 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     pylabrobot.resources.Coordinate
     pylabrobot.resources.Deck
     pylabrobot.resources.ItemizedResource
-    pylabrobot.resources.create_equally_spaced
+    pylabrobot.resources.utils.create_equally_spaced_2d
     pylabrobot.resources.Lid
     pylabrobot.resources.Liquid
     pylabrobot.resources.PetriDish

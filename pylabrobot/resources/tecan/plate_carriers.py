@@ -54,7 +54,7 @@ def MP_2Pos_portrait_No_Robot_Access(name: str) -> TecanPlateCarrier:
     size_z=62.5,
     off_x=12.0,
     off_y=24.7,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(47.5, 8.8, 62.5),
         Coordinate(47.5, 172.3, 62.5),
       ],
@@ -74,7 +74,7 @@ def MP_2_Pos_portrait(name: str) -> TecanPlateCarrier:
     size_z=62.5,
     off_x=12.0,
     off_y=24.7,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(47.5, 34.3, 62.5),
         Coordinate(47.5, 172.3, 62.5),
       ],
@@ -99,7 +99,7 @@ def MP_3Pos_PCR(name: str) -> TecanPlateCarrier:
     roma_z_safe=946,
     roma_z_travel=1938,
     roma_z_end=2566,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(5.5, 13.5, 62.5),
         Coordinate(5.5, 109.5, 62.5),
         Coordinate(5.5, 205.5, 62.5),
@@ -125,7 +125,7 @@ def MP_3Pos_TePS(name: str) -> TecanPlateCarrier:
     roma_z_safe=780,
     roma_z_travel=2012,
     roma_z_end=2543,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(7.6, 38.0, 84.0),
         Coordinate(7.6, 151.5, 84.0),
         Coordinate(7.6, 265.0, 84.0),
@@ -151,7 +151,7 @@ def LI___MP_3Pos(name: str) -> TecanPlateCarrier:
     roma_z_safe=946,
     roma_z_travel=1938,
     roma_z_end=2537,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(5.5, 13.5, 62.5),
         Coordinate(5.5, 109.5, 62.5),
         Coordinate(5.5, 205.5, 62.5),
@@ -172,7 +172,7 @@ def MP_4Pos_landscape(name: str) -> TecanPlateCarrier:
     size_z=83.0,
     off_x=7.5,
     off_y=70.0,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(10.2, 44.5, 83.0),
         Coordinate(10.2, 136.0, 83.0),
         Coordinate(10.2, 227.5, 83.0),
@@ -194,7 +194,7 @@ def MP_12Pos_landscape(name: str) -> TecanPlateCarrier:
     size_z=32.0,
     off_x=11.5,
     off_y=35.0,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(280.4, 16.8, 32.0),
         Coordinate(280.4, 113.7, 32.0),
         Coordinate(280.4, 209.9, 32.0),
@@ -224,7 +224,7 @@ def MP_8Pos_landscape(name: str) -> TecanPlateCarrier:
     size_z=32.0,
     off_x=11.5,
     off_y=35.0,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(141.4, 16.8, 32.0),
         Coordinate(141.4, 113.7, 32.0),
         Coordinate(141.4, 209.9, 32.0),
@@ -249,7 +249,7 @@ def MP_20Pos_landscape(name: str) -> TecanPlateCarrier:
     size_z=32.0,
     off_x=11.5,
     off_y=35.0,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(557.4, 16.8, 32.0),
         Coordinate(557.4, 113.7, 32.0),
         Coordinate(557.4, 209.9, 32.0),
@@ -286,7 +286,7 @@ def MP_16Pos_landscape(name: str) -> TecanPlateCarrier:
     size_z=32.0,
     off_x=11.5,
     off_y=35.0,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(419.0, 16.8, 32.0),
         Coordinate(419.0, 113.7, 32.0),
         Coordinate(419.0, 209.9, 32.0),
@@ -325,7 +325,7 @@ def MP_3Pos(name: str) -> TecanPlateCarrier:
     roma_z_safe=946,
     roma_z_travel=1938,
     roma_z_end=2537,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(5.5, 13.5, 62.5),
         Coordinate(5.5, 109.5, 62.5),
         Coordinate(5.5, 205.5, 62.5),
@@ -351,7 +351,7 @@ def MP_3Pos_Cooled(name: str) -> TecanPlateCarrier:
     roma_z_safe=946,
     roma_z_travel=1853,
     roma_z_end=2534,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(17.0, 27.5, 54.0),
         Coordinate(17.0, 123.5, 54.0),
         Coordinate(17.0, 219.5, 54.0),
@@ -377,7 +377,7 @@ def MP_3Pos_Fixed(name: str) -> TecanPlateCarrier:
     roma_z_safe=946,
     roma_z_travel=1938,
     roma_z_end=2537,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(10.5, 47.6, 62.5),
         Coordinate(10.5, 143.6, 62.5),
         Coordinate(10.5, 239.6, 62.5),
@@ -403,7 +403,7 @@ def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
         size_z=6.0,
         off_x=12.0,
         off_y=11.0,
-        sites=create_homogeneous_carrier_sites(locations=[
+        sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
             Coordinate(11.7, 10.5, 6.0),
             Coordinate(11.0, 106.4, 6.0),
             Coordinate(11.0, 202.8, 6.0),
@@ -427,7 +427,7 @@ def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
     roma_z_safe=610,
     roma_z_travel=2418,
     roma_z_end=2503,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(10.4, 11.5, 6.0),
         Coordinate(10.4, 107.5, 6.0),
         Coordinate(10.4, 203.5, 6.0),
@@ -448,7 +448,7 @@ def MP_3Pos_No_Robot_Access(name: str) -> TecanPlateCarrier:
     size_z=62.5,
     off_x=12.0,
     off_y=24.7,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(5.5, 13.5, 62.5),
         Coordinate(5.5, 113.5, 62.5),
         Coordinate(5.5, 213.5, 62.5),
@@ -474,7 +474,7 @@ def MP_4Pos(name: str) -> TecanPlateCarrier:
     roma_z_safe=946,
     roma_z_travel=1938,
     roma_z_end=2476,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(10.0, 3.5, 62.7),
         Coordinate(10.0, 99.5, 62.7),
         Coordinate(10.0, 195.5, 62.7),
@@ -501,7 +501,7 @@ def MP_4Pos_flat(name: str) -> TecanPlateCarrier:
     roma_z_safe=946,
     roma_z_travel=1938,
     roma_z_end=2475,
-    sites=create_homogeneous_carrier_sites(locations=[
+    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
         Coordinate(10.0, 3.5, 6.9),
         Coordinate(10.0, 99.5, 6.9),
         Coordinate(10.0, 195.5, 6.9),

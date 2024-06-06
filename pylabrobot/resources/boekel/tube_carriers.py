@@ -1,5 +1,5 @@
+from pylabrobot.resources.carrier import CarrierSite, TubeCarrier, create_carrier_sites
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.carrier import TubeCarrier, create_carrier_sites
 
 
 def boekel_50mL_falcon_carrier(name: str) -> TubeCarrier: # pylint: disable=invalid-name
@@ -18,7 +18,7 @@ def boekel_50mL_falcon_carrier(name: str) -> TubeCarrier: # pylint: disable=inva
     size_x=174,
     size_y=52,
     size_z=95,
-    sites=create_carrier_sites(
+    sites=create_carrier_sites(klass=CarrierSite,
       locations=[Coordinate(x=x, y=11, z=5) for x in [11, 46, 91, 127]],
       site_size_x=[30]*4,
       site_size_y=[30]*4
@@ -43,7 +43,7 @@ def boekel_15mL_falcon_carrier(name: str) -> TubeCarrier: # pylint: disable=inva
     size_x=174,
     size_y=52,
     size_z=95,
-    sites=create_carrier_sites(
+    sites=create_carrier_sites(klass=CarrierSite,
       locations=[Coordinate(x=x, y=27, z=5)  for x in [5, 34, 63, 88, 118, 147]] +
                 [Coordinate(x=x, y=4.5, z=5) for x in [5, 34, 63, 88, 118, 147]],
       site_size_x=[17]*16,
@@ -71,7 +71,7 @@ def boekel_1_5mL_microcentrifuge_carrier(name: str) -> TubeCarrier: # pylint: di
     size_x=174,
     size_y=52,
     size_z=95,
-    sites=create_carrier_sites(
+    sites=create_carrier_sites(klass=CarrierSite,
       locations=[Coordinate(x=x, y=57, z=5) for x in x_locs] +
                 [Coordinate(x=x, y=48, z=5) for x in x_locs] +
                 [Coordinate(x=x, y=39, z=5) for x in x_locs] +
@@ -101,7 +101,7 @@ def boekel_mini_microcentrifuge_carrier(name: str) -> TubeCarrier: # pylint: dis
     size_x=174,
     size_y=52,
     size_z=95,
-    sites=create_carrier_sites(
+    sites=create_carrier_sites(klass=CarrierSite,
       locations=[Coordinate(x=x, y=68.5, z=5) for x in x_locs] +
                 [Coordinate(x=x, y=50, z=5) for x in x_locs] +
                 [Coordinate(x=x, y=31, z=5) for x in x_locs] +
