@@ -850,7 +850,7 @@ def Cos_6_MWP_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
 # # # # # # # # # # Cos_96_DWP_2mL_Vb # # # # # # # # # #
 
 def _compute_volume_from_height_Cos_96_DWP_2mL_Vb(h: float) -> float:
-  if h > 20.5:
+  if h > 44.1: # 5% tolerance
     raise ValueError(f"Height {h} is too large for Cos_96_DWP_2mL_Vb")
   return calculate_liquid_volume_container_2segments_square_vbottom(
     x=8.0,
