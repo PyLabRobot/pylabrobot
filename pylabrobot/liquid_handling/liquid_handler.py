@@ -58,9 +58,11 @@ from .standard import (
 
 logger = logging.getLogger("pylabrobot")
 
-def check_contaminated(liquid, liquid_history):
+def check_contaminated(liquid_history_tip, liquid_history_well):
   """Helper function used to check if adding a liquid to the container
      would result in cross contamination"""
+
+  return not liquid_history_tip.issubset(liquid_history_well) and len(liquid_history_tip) > 0
 
 def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
   """Helper function used to check if it is possible to update the
@@ -753,15 +755,14 @@ class LiquidHandler(Machine):
         if not op.resource.tracker.is_disabled:
           op.resource.tracker.remove_liquid(op.volume)
 
+        # Cross contamination check
+        if does_cross_contamination_tracking():
+          if check_contaminated(op.tip.tracker.liquid_history, op.resource.tracker.liquid_history):
+            raise CrossContaminationError(
+              f"Attempting to aspirate {next(reversed(op.liquids))[0]} with a tip contaminated "
+              f"with {op.tip.tracker.liquid_history}.")
+
         for liquid, volume in reversed(op.liquids):
-
-          # Cross contamination check
-          if does_cross_contamination_tracking():
-            if check_contaminated(liquid, op.tip.tracker.liquid_history):
-              raise CrossContaminationError(
-                f"Attempting to aspirate {next(reversed(op.liquids))[0]} with a tip contaminated"
-                f"with {op.tip.tracker.liquid_history}.")
-
           op.tip.tracker.add_liquid(liquid=liquid, volume=volume)
 
     extras = self._check_args(self.backend.aspirate, backend_kwargs,
@@ -1361,10 +1362,10 @@ class LiquidHandler(Machine):
 
         # Cross contamination check
         if does_cross_contamination_tracking():
-          if check_contaminated(liquid, channel.get_tip().tracker.liquid_history):
+          if check_contaminated(channel.get_tip.tracker.liquid_history,well.tracker.liquid_history):
             raise CrossContaminationError(
-                f"Attempting to aspirate {liquid} with a tip contaminated with"
-                f"{channel.get_tip().tracker.liquid_history}.")
+              f"Attempting to aspirate {liquid} with a tip contaminated "
+              f"with {well.tracker.liquid_history}.")
 
         channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 

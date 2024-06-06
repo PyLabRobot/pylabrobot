@@ -9,8 +9,8 @@ import unittest.mock
 
 from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
 from pylabrobot.resources import no_tip_tracking, set_tip_tracking
-from pylabrobot.resources.errors import HasTipError, NoTipError
-from pylabrobot.resources.volume_tracker import set_volume_tracking
+from pylabrobot.resources.errors import HasTipError, NoTipError, CrossContaminationError
+from pylabrobot.resources.volume_tracker import set_volume_tracking, set_cross_contamination_tracking
 
 from . import backends
 from .liquid_handler import LiquidHandler, OperationCallback
@@ -657,6 +657,62 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     await self.lh.aspirate([well], vols=10)
     await self.lh.dispense([well], vols=10)
     self.assertEqual(well.tracker.liquids, [(None, 10)])
+
+class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    self.backend = backends.SaverBackend(num_channels=8)
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    self.tip_rack = STF_L(name="tip_rack")
+    self.plate = Cos_96_DW_1mL(name="plate")
+    self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
+    await self.lh.setup()
+    set_volume_tracking(enabled=True)
+    set_cross_contamination_tracking(enabled=True)
+
+
+  async def asyncTearDown(self):
+    set_volume_tracking(enabled=False)
+    set_cross_contamination_tracking(enabled=False)
+
+
+  async def test_aspirate_with_contaminated_tip(self):
+    dye_1_well = self.plate.get_item("A1")
+    dye_2_well = self.plate.get_item("A2")
+    dest_well = self.plate.get_item("A3")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    dye_1_well.tracker.set_liquids([("Dye 1", 10)])
+    dye_2_well.tracker.set_liquids([("Dye 2", 10)])
+    await self.lh.aspirate([dye_1_well], vols=10)
+    await self.lh.dispense([dest_well], vols=10)
+    with self.assertRaises(CrossContaminationError):
+      await self.lh.aspirate([dye_2_well], vols=10)
+
+  async def test_aspirate_from_same_well_twice(self):
+    src_well = self.plate.get_item("A1")
+    dst_well = self.plate.get_item("A2")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    src_well.tracker.set_liquids([("Dye 1", 20)])
+    await self.lh.aspirate([src_well], vols=10)
+    await self.lh.dispense([dst_well], vols=10)
+    self.assertEqual(dst_well.tracker.liquids, [("Dye 1", 10)])
+    await self.lh.aspirate([src_well], vols=10)
+    await self.lh.dispense([dst_well], vols=10)
+    self.assertEqual(dst_well.tracker.liquids, [("Dye 1", 20)])
+
+
+  async def test_aspirate_from_well_with_partial_overlap(self):
+    pure_dye_well = self.plate.get_item("A1")
+    mix_dye_well = self.plate.get_item("A2")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    pure_dye_well.tracker.set_liquids([("Dye 1", 20)])
+    mix_dye_well.tracker.set_liquids([("Water", 20)])
+    await self.lh.aspirate([pure_dye_well], vols=10)
+    await self.lh.dispense([mix_dye_well], vols=10)
+    self.assertEqual(mix_dye_well.tracker.liquids, [("Water", 20), ("Dye 1", 10)]) # order matters
+    with self.assertRaises(CrossContaminationError):
+      self.lh.aspirate([pure_dye_well], vols=10)
 
 
 class LiquidHandlerForTesting(LiquidHandler):
