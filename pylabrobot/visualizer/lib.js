@@ -21,7 +21,6 @@ var resources = {}; // name -> Resource object
 let trash;
 
 let gif;
-let ctx;
 
 let resourceImage;
 
@@ -29,7 +28,7 @@ let resourceImage;
 let isRecording = false;
 let recordingCounter = 0; // Counter to track the number of recorded frames
 var frameImages = [];
-let recordingInterval;
+let frameInterval = 8;
 
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
@@ -389,29 +388,11 @@ class Resource {
     this.draw(resourceLayer);
 
     if (isRecording) {
-
-      /*
-
-      if (recordingCounter % 8 == 0) {
-
-
-        var dataURL = stage.toDataURL({ pixelRatio: 2.3 });
-
-        var myImg = new Image;
-
-        myImg.src = dataURL;
-
-        myImg.width = canvasWidth * 2;
-        myImg.height = canvasHeight * 2;
-
-        frameImages.push(myImg);
-
+      // If we want to save this frame, save it
+      if (recordingCounter % frameInterval == 0) {
         stageToBlob(stage, handleBlob);
       }
       recordingCounter += 1;
-
-      */
-
     }
   }
 
@@ -1095,8 +1076,8 @@ function loadResource(resourceData) {
 
 window.addEventListener("load", function () {
   const canvas = document.getElementById("kanvas");
-  canvasWidth = 800 //canvas.offsetWidth;
-  canvasHeight = 600 //canvas.offsetHeight;
+  canvasWidth = canvas.offsetWidth;
+  canvasHeight = canvas.offsetHeight;
 
   stage = new Konva.Stage({
     container: "kanvas",
@@ -1156,37 +1137,34 @@ window.addEventListener("load", function () {
 });
 
 async function startRecording() {
+  // Turn recording on
   isRecording = true;
 
+  // Reset saved frames buffer
   frameImages = [];
 
-  recordingInterval = setInterval(() => {
-    if (isRecording) {
-      stageToBlob(stage, handleBlob);
-    }
-  }, 500); // 500ms interval
+  // Reset the render progress
+  var info = document.getElementById('progressBar');
+  info.innerText = ' GIF Rendering Progress: ' + Math.round(0 * 100) + '%';
 
+  stageToBlob(stage, handleBlob);
 
+  // Update state of all buttons
   document.getElementById('stop-recording-button').disabled = false;
   document.getElementById('start-recording-button').disabled = true;
+  document.getElementById('myRange').disabled = true;
+  document.getElementById('downloadBtn').disabled = true;
+  document.getElementById('download-zip-btn').disabled = true;
 }
 
 function stopRecording() {
+  // Turn recording off
   isRecording = false;
 
-  //render the final image
-  /*
-  var dataURL = stage.toDataURL({ pixelRatio: 2.3 });
-  var myImg = new Image;
-  myImg.src = dataURL;
-  myImg.width = canvasWidth * 2;
-  myImg.height = canvasHeight * 2;
+  // Render the final image
+  // Do it twice bc it looks better
 
-
-
-  //frameImages.push(imageData);
-  frameImages.push(myImg);
-  */
+  stageToBlob(stage, handleBlob);
   stageToBlob(stage, handleBlob);
 
   gif = new GIF({
@@ -1197,20 +1175,34 @@ function stopRecording() {
     height: canvasHeight * 2
   });
 
-  clearInterval(recordingInterval);
-
-  // Add each frame to the GIF without using forEach
+  // Add each frame to the GIF
   for (var i = 0; i < frameImages.length; i++) {
     gif.addFrame(frameImages[i], { delay: 1 });
   }
 
+  // Add progress bar based on how much the gif is rendered
   gif.on('progress', function (p) {
     var info = document.getElementById('progressBar');
     info.innerText = ' GIF Rendering Progress: ' + Math.round(p * 100) + '%';
   });
 
+  // Load gif into right portion of screen
+  gif.on('finished', function (blob) {
+    renderedGifBlob = blob;
+    var url = URL.createObjectURL(blob);
+    var gifDisplay = document.getElementById('gifDisplay');
+    gifDisplay.src = url;
+    gifDisplay.style.display = 'block';
+  });
+
+  gif.render();
+
+  // Update state of all buttons
   document.getElementById('stop-recording-button').disabled = true;
   document.getElementById('start-recording-button').disabled = false;
+  document.getElementById('downloadBtn').disabled = false;
+  document.getElementById('download-zip-btn').disabled = false;
+  document.getElementById('myRange').disabled = false;
 
 }
 
@@ -1223,6 +1215,18 @@ function stageToBlob(stage, callback) {
     },
     mimeType: 'image/jpg',
     quality: 0.3
+  });
+}
+
+// Function to convert Image object to Blob
+async function imageToBlob(image) {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+    canvas.toBlob(resolve, 'image/png');
   });
 }
 
@@ -1247,15 +1251,70 @@ document.getElementById('start-recording-button').addEventListener('click', star
 document.getElementById('stop-recording-button').addEventListener('click', stopRecording);
 document.getElementById('downloadBtn').addEventListener('click', function () {
   var fileName = document.getElementById('fileName').value || 'generated_gif';
-  gif.on('finished', function (blob) {
-    var url = URL.createObjectURL(blob);
+  if (renderedGifBlob) {
+    var url = URL.createObjectURL(renderedGifBlob);
     var a = document.createElement('a');
     a.href = url;
     a.download = fileName + '.gif';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  });
-  gif.render();
+  } else {
+    alert('No GIF rendered yet. Please stop the recording first.');
+  }
+});
+
+
+document.getElementById('download-zip-btn').addEventListener('click', async function () {
+  try {
+    // Prompt the user to select a folder
+    const directoryHandle = await window.showDirectoryPicker();
+
+    // Get name of output folder
+    var fileName = document.getElementById('fileName').value || 'generated_gif';
+
+    // Create a new ZIP file
+    const zip = new JSZip();
+
+    // Iterate over frames and add them to the ZIP archive
+    for (let i = 0; i < frameImages.length; i++) {
+      const image = frameImages[i];
+      const blob = await imageToBlob(image);
+      const fileName = `frame_${i + 1}.png`;
+      zip.file(fileName, blob);
+    }
+
+    // Generate the ZIP file as a Blob
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+    // Create a handle for the ZIP file in the selected directory
+    const zipFileHandle = await directoryHandle.getFileHandle(fileName + '.zip', { create: true });
+    const writableStream = await zipFileHandle.createWritable();
+
+    // Write the ZIP file Blob to the stream
+    await writableStream.write(zipBlob);
+    await writableStream.close();
+
+    alert('ZIP file created successfully!');
+  } catch (err) {
+    console.error('Error creating ZIP file:', err);
+    alert('Failed to create ZIP file.');
+  }
+});
+
+
+document.getElementById('myRange').addEventListener('input', function () {
+  let value = parseInt(this.value);
+  // Adjust the value to the nearest multiple of 8
+  value = Math.round(value / 8) * 8;
+  // Ensure the value stays within the allowed range
+  if (value < 1) value = 1;
+  if (value > 96) value = 96;
+
+  this.value = value; // Update the slider value
+  document.getElementById('current-value').textContent = value;
+
+  frameInterval = value;
+
 });
 

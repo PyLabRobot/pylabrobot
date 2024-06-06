@@ -26,13 +26,39 @@
 
   <div class="content">
     <main>
-      <div id="kanvas" style="width: 800px; height: 600px;"></div>
-      <div id="progressBar" style="font-size: 20px;"></div>
-      <input type="text" id="fileName" placeholder="Enter file name">
-      <button id="downloadBtn" class="btn btn-success mt-3">Download GIF</button>
-      <!-- Add buttons to start and stop recording -->
-      <button id="start-recording-button" class="btn btn-primary mt-3">Start Recording</button>
-      <button id="stop-recording-button" class="btn btn-danger mt-3" disabled>Stop Recording</button>
+      <div class="row">
+        <div class="column">
+          <div class="left-content">
+            <!-- Add elements of left half -->
+            <div id="kanvas" style="width: 800px; height: 600px;"></div>
+            <div id="progressBar" style="font-size: 20px;"></div>
+            <input type="text" id="fileName" placeholder="Enter file name" style="text-align: center;">
+
+            <!-- Add container for buttons -->
+            <div class="button-container">
+              <button id="downloadBtn" class="btn btn-success" disabled>Download GIF</button>
+              <button id="start-recording-button" class="btn btn-primary">Start Recording</button>
+              <button id="stop-recording-button" class="btn btn-danger" disabled>Stop Recording</button>
+              <button id="download-zip-btn" class="btn btn-success" disabled>Download as ZIP</button>
+            </div>
+
+            <!-- Add container for frame saving selector -->
+            <div class="slidecontainer">
+              <span id="lower-bound">1</span>
+              <input type="range" min="1" max="96" value="8" class="slider" id="myRange">
+              <span id="upper-bound">96</span>
+              <div id="current-value">8</div>
+            </div>
+          </div>
+        </div>
+        <div class="column">
+          <div class="right-content">
+            <!-- Add elements of right half -->
+            <img id="gifDisplay" style="display: none; width: 100%; height: auto;">
+          </div>
+        </div>
+      </div>
+
     </main>
   </div>
 
@@ -42,6 +68,8 @@
   <script src="./gif.js"></script>
   <script src="./gif.worker.js"></script>
 
+  <!-- Load JavaScript libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
 
   <!-- Load custom scripts -->
   <script src="./lib.js"></script>
