@@ -938,7 +938,7 @@ class LiquidHandler(Machine):
         if not op.resource.tracker.is_disabled:
           # Update the liquid history of the tip to reflect new liquid
           if check_updatable(op.tip.tracker, op.resource.tracker):
-            op.tip.tracker.liquid_history = op.resource.tracker.liquid_history
+            op.tip.tracker.liquid_history.update(op.resource.tracker.liquid_history)
 
           for liquid, volume in op.liquids:
             op.resource.tracker.add_liquid(liquid=liquid, volume=volume)
