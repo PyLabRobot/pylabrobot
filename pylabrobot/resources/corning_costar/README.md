@@ -11,5 +11,5 @@ As of 2014, Corning had five major business sectors: display technologies, envir
 
 | Description               | Image              |
 |--------------------|--------------------|
-| 'Cos_6_MWP_16800ul_Fb'<br>Part no.: 3516<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516) | <img src="ims/costar_Cos_6_Fb.jpg" alt="Cos_6_MWP_16800ul_Fb" width="250"/> | `Cos_6_MWP_16800ul_Fb` |
-| 'Cos_96_DWP_2mL_Vb'<br>Part no.: 3516<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516) | <img src="ims/costar_Cos_6_Fb.jpg" alt="Cos_96_DWP_2mL_Vb" width="250"/> | `Cos_96_DWP_2mL_Vb` |
+| 'Cos_6_MWP_16800ul_Fb'<br>Part no.: 3516<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516) | <img src="ims/Cos_6_MWP_16800ul_Fb.jpg" alt="Cos_6_MWP_16800ul_Fb" width="250"/> | `Cos_6_MWP_16800ul_Fb` |
+| 'Cos_96_DWP_2mL_Vb'<br>Part no.: 3516<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516) | <img src="ims/Cos_96_DWP_2mL_Vb.jpg" alt="Cos_96_DWP_2mL_Vb" width="250"/> | `Cos_96_DWP_2mL_Vb` |
