@@ -10,25 +10,25 @@ from pylabrobot.resources.volume_functions import calculate_liquid_volume_contai
 from pylabrobot.resources.height_functions import calculate_liquid_height_in_container_2segments_square_ubottom
 
 
-# # # # # # # # # # ThermoScientific_96_1200ul_Rd # # # # # # # # # #
+# # # # # # # # # # ThermoScientific_96_DWP_1200ul_Rd # # # # # # # # # #
 
-def _compute_volume_from_height_ThermoScientific_96_1200ul_Rd(h: float):
+def _compute_volume_from_height_ThermoScientific_96_DWP_1200ul_Rd(h: float):
   if h > 20.5:
-    raise ValueError(f"Height {h} is too large for ThermoScientific_96_1200ul_Rd")
+    raise ValueError(f"Height {h} is too large for ThermoScientific_96_DWP_1200ul_Rd")
   return calculate_liquid_volume_container_2segments_square_ubottom(
     x=8.15,
     h_cuboid=16.45,
     liquid_height=h)
 
-def _compute_height_from_volume_ThermoScientific_96_1200ul_Rd(liquid_volume: float):
+def _compute_height_from_volume_ThermoScientific_96_DWP_1200ul_Rd(liquid_volume: float):
   if liquid_volume > 1260: # 5% tolerance
-    raise ValueError(f"Volume {liquid_volume} is too large for ThermoScientific_96_1200ul_Rd")
+    raise ValueError(f"Volume {liquid_volume} is too large for ThermoScientific_96_DWP_1200ul_Rd")
   return round(calculate_liquid_height_in_container_2segments_square_ubottom(
     x=8.15,
     h_cuboid=16.45,
     liquid_volume=liquid_volume),3)
 
-def ThermoScientific_96_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
+def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
   """ Fisher Scientific/Thermo Fisher cat. no.: 10243223/AB1127.
   - Material: Polypropylene (AB-1068, polystyrene)
   - Sterilization compatibility: Autoclaving (15 minutes at 121°C) or
@@ -49,7 +49,7 @@ def ThermoScientific_96_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
     size_y=86.0,
     size_z=24.0,
     with_lid=with_lid,
-    model="ThermoScientific_96_1200ul_Rd",
+    model="ThermoScientific_96_DWP_1200ul_Rd",
     lid_height=5,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
@@ -64,15 +64,13 @@ def ThermoScientific_96_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
       size_z=20.5,
       bottom_type=WellBottomType.U,
       cross_section_type=CrossSectionType.RECTANGLE,
-      compute_volume_from_height=_compute_volume_from_height_ThermoScientific_96_1200ul_Rd,
-      compute_height_from_volume=_compute_height_from_volume_ThermoScientific_96_1200ul_Rd
+      compute_volume_from_height=_compute_volume_from_height_ThermoScientific_96_DWP_1200ul_Rd,
+      compute_height_from_volume=_compute_height_from_volume_ThermoScientific_96_DWP_1200ul_Rd
     ),
   )
 
-#: ThermoScientific_96_1200ul_Rd_L
-def ThermoScientific_96_1200ul_Rd_L(name: str, with_lid: bool = False) -> Plate:
-  return ThermoScientific_96_1200ul_Rd(name=name, with_lid=with_lid)
+def ThermoScientific_96_DWP_1200ul_Rd_L(name: str, with_lid: bool = False) -> Plate:
+  return ThermoScientific_96_DWP_1200ul_Rd(name=name, with_lid=with_lid)
 
-#: ThermoScientific_96_1200ul_Rd_P
-def ThermoScientific_96_1200ul_Rd_P(name: str, with_lid: bool = False) -> Plate:
-  return ThermoScientific_96_1200ul_Rd(name=name, with_lid=with_lid).rotated(90)
+def ThermoScientific_96_DWP_1200ul_Rd_P(name: str, with_lid: bool = False) -> Plate:
+  return ThermoScientific_96_DWP_1200ul_Rd(name=name, with_lid=with_lid).rotated(90)

@@ -11,7 +11,7 @@ Company page: [Thermo Fisher Scientific Wikipedia](https://en.wikipedia.org/wiki
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
-| 'ThermoScientific_96_1200ul_Rd'<br>Part no.: AB-1127 or 10243223<br>[manufacturer website](https://www.fishersci.co.uk/shop/products/product/10243223) | <img src="imgs/ThermoScientific_96_1200ul_Rd.webp" alt="ThermoScientific_96_1200ul_Rd" width="250"/> | `ThermoScientific_96_1200ul_Rd` |
+| 'ThermoScientific_96_1200ul_Rd'<br>Part no.: AB-1127 or 10243223<br>[manufacturer website](https://www.fishersci.co.uk/shop/products/product/10243223) <br><br>- Material: Polypropylene (AB-1068, polystyrene) <br>- Sterilization compatibility: Autoclaving (15 minutes at 121°C) or Gamma Irradiation <br>- Chemical resistance: to DMSO (100%); Ethanol (100%); Isopropanol (100%) <br>- Round well shape designed for optimal sample recovery or square shape to maximize sample volume within ANSI footprint design <br>- Each well has an independent sealing rim to prevent cross-contamination <br>- U-bottomed wells ideally suited for sample resuspension <br>- Sealing options: Adhesive Seals, Heat Seals, Storage Plate Caps and Cap Strips, and Storage Plate Sealing Mats <br>- Cleanliness: 10243223/AB1127: Cleanroom manufactured <br>- ANSI/SLAS-format for compatibility with automated systems| <img src="imgs/ThermoScientific_96_1200ul_Rd.webp" alt="ThermoScientific_96_1200ul_Rd" width="250"/> | `ThermoScientific_96_1200ul_Rd` |
 
 
 ## Troughs
