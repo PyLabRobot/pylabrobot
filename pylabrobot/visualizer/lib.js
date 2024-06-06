@@ -29,6 +29,7 @@ let resourceImage;
 let isRecording = false;
 let recordingCounter = 0; // Counter to track the number of recorded frames
 var frameImages = [];
+let recordingInterval;
 
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
@@ -389,9 +390,11 @@ class Resource {
 
     if (isRecording) {
 
+      /*
+
       if (recordingCounter % 8 == 0) {
 
-        /*
+
         var dataURL = stage.toDataURL({ pixelRatio: 2.3 });
 
         var myImg = new Image;
@@ -402,10 +405,12 @@ class Resource {
         myImg.height = canvasHeight * 2;
 
         frameImages.push(myImg);
-        */
+
         stageToBlob(stage, handleBlob);
       }
       recordingCounter += 1;
+
+      */
 
     }
   }
@@ -1155,6 +1160,13 @@ async function startRecording() {
 
   frameImages = [];
 
+  recordingInterval = setInterval(() => {
+    if (isRecording) {
+      stageToBlob(stage, handleBlob);
+    }
+  }, 500); // 500ms interval
+
+
   document.getElementById('stop-recording-button').disabled = false;
   document.getElementById('start-recording-button').disabled = true;
 }
@@ -1185,6 +1197,8 @@ function stopRecording() {
     height: canvasHeight * 2
   });
 
+  clearInterval(recordingInterval);
+
   // Add each frame to the GIF without using forEach
   for (var i = 0; i < frameImages.length; i++) {
     gif.addFrame(frameImages[i], { delay: 1 });
@@ -1207,7 +1221,8 @@ function stageToBlob(stage, callback) {
     callback: function (blob) {
       callback(blob);
     },
-    mimeType: 'image/png'
+    mimeType: 'image/jpg',
+    quality: 0.3
   });
 }
 
