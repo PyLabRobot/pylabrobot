@@ -777,6 +777,12 @@ def Cos_96_Vb_P(name: str, with_lid: bool = False) -> Plate:
   return Cos_96_Vb(name=name, with_lid=with_lid).rotated(90)
 
 
+############ User defined PLR Cos plates ############
+
+from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_vbottom
+from pylabrobot.resources.height_functions import calculate_liquid_height_in_container_2segments_square_vbottom
+
+
 def _compute_volume_from_height_Cos_6_Fb(h: float):
   if h > 18.0:
     raise ValueError(f"Height {h} is too large for Cos_6_Fb")
@@ -819,3 +825,67 @@ def Cos_6_Fb_L(name: str, with_lid: bool = True) -> Plate:
 #: Azenta4titudeFrameStar_96_wellplate_skirted_P
 def Cos_6_Fb_P(name: str, with_lid: bool = True) -> Plate:
   return Cos_6_Fb(name=name, with_lid=with_lid).rotated(90)
+
+
+def _compute_volume_from_height_Cos_96_DWP_2mL_Vb(h: float) -> float:
+  if h > 20.5:
+    raise ValueError(f"Height {h} is too large for ThermoScientific_96_1200ul_Rd")
+  return calculate_liquid_volume_container_2segments_square_vbottom(
+    x=8.0,
+    y=8.0,
+    h_pyramid=4.0,
+    h_cube=38.0,
+    liquid_height=h)
+
+def _compute_height_from_volume_Cos_96_DWP_2mL_Vb(liquid_volume: float):
+  if liquid_volume > 2_100: # 5% tolerance
+    raise ValueError(f"Volume {liquid_volume} is too large for ThermoScientific_96_1200ul_Rd")
+  return round(calculate_liquid_height_in_container_2segments_square_vbottom(
+    x=8.0,
+    y=8.0,
+    h_pyramid=4.0,
+    h_cube=38.0,
+    liquid_volume=liquid_volume),3)
+
+
+def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
+  """ Corning 96 deep-well 2 mL PCR plate. Corning cat. no.: 3960
+  - Material: Polypropylene
+  - Resistant to many common organic solvents (e.g., DMSO, ethanol, methanol)
+  - 3960: Sterile and DNase- and RNase-free
+  - Total volume: 2 mL
+  - Features uniform skirt heights for greater robotic gripping surface
+  """
+  return Plate(
+    name=name,
+    size_x=127.0,
+    size_y=86.0,
+    size_z=43.5,
+    with_lid=with_lid,
+    model="Cos_96_DWP_2mL_Vb",
+    lid_height=10,
+    items=create_equally_spaced_2d(Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.0,
+      dy=7.5,
+      dz=1.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=8.0,
+      size_y=8.0,
+      size_z=42.0,
+      bottom_type=WellBottomType.V,
+      cross_section_type=CrossSectionType.RECTANGLE,
+      compute_volume_from_height=_compute_volume_from_height_Cos_96_DWP_2mL_Vb,
+      compute_height_from_volume=_compute_height_from_volume_Cos_96_DWP_2mL_Vb
+    ),
+  )
+
+def Cos_96_DWP_2mL_Vb_L(name: str, with_lid: bool = False) -> Plate:
+  """ Cos_96_DWP_2mL_Vb """
+  return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid)
+
+def Cos_96_DWP_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
+  """ Cos_96_DWP_2mL_Vb """
+  return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid).rotated(90)
