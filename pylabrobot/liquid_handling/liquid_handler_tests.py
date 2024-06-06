@@ -687,18 +687,18 @@ class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCa
 
 # TODO figure out why this test doesn't work
 
-#  async def test_aspirate_from_well_with_partial_overlap(self):
- #   pure_blood_well = self.plate.get_item("A1")
-  #  mix_well = self.plate.get_item("A2")
-   # await self.lh.pick_up_tips(self.tip_rack["A1"])
-   # pure_blood_well.tracker.set_liquids([(Liquid.BLOOD, 20)])
-   # mix_well.tracker.set_liquids([(Liquid.ETHANOL, 20)])
-   # await self.lh.aspirate([pure_blood_well], vols=10)
-   # await self.lh.dispense([mix_well], vols=10)
-   # self.assertEqual(mix_well.tracker.liquids, [(Liquid.ETHANOL, 20),
-   #                                                 (Liquid.BLOOD, 10)]) # order matters
-   # with self.assertRaises(CrossContaminationError):
-   #   self.lh.aspirate([pure_blood_well], vols=10)
+  async def test_aspirate_from_well_with_partial_overlap(self):
+    pure_blood_well = self.plate.get_item("A1")
+    mix_well = self.plate.get_item("A2")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    pure_blood_well.tracker.set_liquids([(Liquid.BLOOD, 20)])
+    mix_well.tracker.set_liquids([(Liquid.ETHANOL, 20)])
+    await self.lh.aspirate([pure_blood_well], vols=10)
+    await self.lh.dispense([mix_well], vols=10)
+    self.assertEqual(mix_well.tracker.liquids, [(Liquid.ETHANOL, 20),
+                                                    (Liquid.BLOOD, 10)]) # order matters
+    with self.assertRaises(CrossContaminationError):
+      await self.lh.aspirate([pure_blood_well], vols=10)
 
 
 class LiquidHandlerForTesting(LiquidHandler):

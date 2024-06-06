@@ -62,7 +62,7 @@ def check_contaminated(liquid_history_tip, liquid_history_well):
   """Helper function used to check if adding a liquid to the container
      would result in cross contamination"""
 
-  return not (liquid_history_tip.issubset(liquid_history_well)) and len(liquid_history_tip) > 0
+  return (not liquid_history_tip.issubset(liquid_history_well)) and len(liquid_history_tip) > 0
 
 def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
   """Helper function used to check if it is possible to update the
