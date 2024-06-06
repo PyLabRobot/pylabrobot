@@ -35,8 +35,7 @@ def _compute_height_from_volume_Porvair_6_reservoir_47ml_Vb(liquid_volume: float
 def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
   """ Porvair cat. no.: 390015.
   - Material: Polypropylene
-  - Sterilization compatibility: Autoclaving (15 minutes at 121°C) or
-    Gamma Irradiation
+  - Sterilization compatibility: Autoclaving (15 minutes at 121°C) or Gamma Irradiation
   - Chemical resistance: "High chemical resistance"
   - Temperature resistance: high: -196°C to + 121°C
   - Cleanliness: 390015: Free of detectable DNase, RNase
