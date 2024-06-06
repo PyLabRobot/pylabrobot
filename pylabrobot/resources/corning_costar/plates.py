@@ -784,7 +784,7 @@ def Cos_96_Vb_P(name: str, with_lid: bool = False) -> Plate:
   return Cos_96_Vb(name=name, with_lid=with_lid).rotated(90)
 
 
-############ User defined PLR Cos plates ############
+############ User-defined PLR Cos plates ############
 
 
 # # # # # # # # # # Cos_6_MWP_16800ul_Fb # # # # # # # # # #
@@ -853,8 +853,8 @@ def _compute_volume_from_height_Cos_96_DWP_2mL_Vb(h: float) -> float:
   if h > 44.1: # 5% tolerance
     raise ValueError(f"Height {h} is too large for Cos_96_DWP_2mL_Vb")
   return calculate_liquid_volume_container_2segments_square_vbottom(
-    x=8.0,
-    y=8.0,
+    x=7.8,
+    y=7.8,
     h_pyramid=4.0,
     h_cube=38.0,
     liquid_height=h)
@@ -863,8 +863,8 @@ def _compute_height_from_volume_Cos_96_DWP_2mL_Vb(liquid_volume: float):
   if liquid_volume > 2_100: # 5% tolerance
     raise ValueError(f"Volume {liquid_volume} is too large for Cos_96_DWP_2mL_Vb")
   return round(calculate_liquid_height_in_container_2segments_square_vbottom(
-    x=8.0,
-    y=8.0,
+    x=7.8,
+    y=7.8,
     h_pyramid=4.0,
     h_cube=38.0,
     liquid_volume=liquid_volume),3)
@@ -889,9 +889,9 @@ def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
-      dx=10.0,
+      dx=10.5,
       dy=7.5,
-      dz=1.0,
+      dz=1.4,
       item_dx=9.0,
       item_dy=9.0,
       size_x=8.0,
