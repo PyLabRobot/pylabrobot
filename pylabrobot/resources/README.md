@@ -9,7 +9,7 @@ PLR is not actively enforcing a specific plate naming standard but recommends th
 
 <img src="_ims/PLR_plate_naming_standards.png" alt="PLR_plate_naming_standards" width="500"/>
 
-This standard is similar to the [Opentrons API labware naming standard]([manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516)) but i.) further sub-categorizes "wellplates" to facilitate communication with day-to-day users, and ii.) adds information about the well-bottom geometry.
+This standard is similar to the [Opentrons API labware naming standard](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516) but i.) further sub-categorizes "wellplates" to facilitate communication with day-to-day users, and ii.) adds information about the well-bottom geometry.
 
 For example:
 - `Cos_96_DWP_2mL_Vb`
