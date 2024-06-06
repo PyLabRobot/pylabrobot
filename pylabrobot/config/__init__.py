@@ -88,7 +88,8 @@ def load_config(base_file_name: str, create_default: bool = False,
     if not create_default:
       return Config()
     create_dir = get_dir_to_create_config_file_in() if create_module_level else Path.cwd()
-    config_path = create_dir / f"{base_file_name}.{list(DEFAULT_CONFIG_READER.reader_map.keys())[0]}"
+    default_extension = list(DEFAULT_CONFIG_READER.reader_map.keys())[0]
+    config_path = create_dir / f"{base_file_name}.{default_extension}"
     DEFAULT_CONFIG_WRITER.write(config_path, Config())
 
   return DEFAULT_CONFIG_READER.read(config_path)

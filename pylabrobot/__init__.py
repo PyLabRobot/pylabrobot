@@ -36,9 +36,8 @@ def setup_logger(log_dir: Union[Path, str], level: int):
     logger.handlers.clear()
     # delete empty log file if it has been created
     log_file = Path(f"pylabrobot-{now}.log")
-    if log_file.exists():
-      if log_file.open().read() == "":
-        log_file.unlink()
+    if log_file.exists() and log_file.stat().st_size == 0:
+      log_file.unlink()
 
   # Add a file handler
   fh = logging.FileHandler(log_dir / f"pylabrobot-{now}.log")

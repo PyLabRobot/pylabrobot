@@ -14,7 +14,7 @@ class FileReader(ConfigReader[Union[str, Path]]):
 
   def read(self, r: Union[str, Path]) -> Config:
     """Read a Config object from a file."""
-    with open(r, self.format_reader.open_mode) as f:
+    with open(r, self.format_reader.open_mode, encoding="utf-8") as f:
       return self.format_reader.read(f)
 
 
@@ -26,7 +26,7 @@ class FileWriter(ConfigWriter[Union[str, Path]]):
 
   def write(self, w: Union[str, Path], cfg: Config):
     """Write a Config object to a file."""
-    with open(w, self.format_writer.open_mode) as f:
+    with open(w, self.format_writer.open_mode, encoding="utf-8") as f:
       return self.format_writer.write(f, cfg)
 
 
@@ -44,5 +44,5 @@ class MultiFormatFileReader(ConfigReader[Union[str, Path]]):
     reader = self.reader_map.get(file_ext)
     if reader is None:
       raise ValueError(f"Unknown file extension: {file_ext}")
-    with open(r, reader.open_mode) as f:
+    with open(r, reader.open_mode, encoding="utf-8") as f:
       return reader.read(f)
