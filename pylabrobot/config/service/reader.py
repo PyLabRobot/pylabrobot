@@ -14,4 +14,3 @@ class ConfigReader(Generic[T], ABC):
   @abstractmethod
   def read(self, r: T) -> Config:
     """Read a Config object."""
-    raise NotImplementedError

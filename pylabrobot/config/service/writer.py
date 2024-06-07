@@ -15,4 +15,3 @@ class ConfigWriter(Generic[T], ABC):
   @abstractmethod
   def write(self, w: T, cfg: Config):
     """Write a Config object."""
-    raise NotImplementedError
