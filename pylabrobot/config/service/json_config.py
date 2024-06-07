@@ -3,14 +3,14 @@ from io import BytesIO
 from typing import TextIO
 
 from pylabrobot.config.config import Config
-from pylabrobot.config.service.reader import ConfigReader
-from pylabrobot.config.service.writer import ConfigWriter
+from pylabrobot.config.service import ConfigReader, ConfigWriter
 
 
 class JsonReader(ConfigReader):
   """A ConfigReader that reads from an IO stream that is JSON formatted."""
 
   open_mode = "rb"
+  extension = "json"
 
   def read(self, r: BytesIO) -> Config:
     """Read a Config object from an opened IO stream that is JSON formatted."""
@@ -22,6 +22,8 @@ class JsonWriter(ConfigWriter):
   """A ConfigWriter that writes to an IO stream in JSON format."""
 
   open_mode = "w"
+  extension = "json"
+  encoding = "utf-8"
 
   def write(self, w: TextIO, cfg: Config):
     """Write a Config object to an IO stream in JSON format."""

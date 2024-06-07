@@ -10,24 +10,24 @@ from pathlib import Path
 from typing import Optional, Union
 
 from pylabrobot.config.config import Config
-from pylabrobot.config.service.file import MultiFormatFileReader, FileWriter
+from pylabrobot.config.service import MultiReader
+from pylabrobot.config.service.file import FileSaver, FileLoader
 from pylabrobot.config.service.ini_file import IniReader, IniWriter
 from pylabrobot.config.service.json_config import JsonReader
 
-DEFAULT_CONFIG_READER = MultiFormatFileReader(
-  reader_map={
-    "ini": IniReader(),
-    "json": JsonReader()
-  }
+DEFAULT_READERS = (IniReader(), JsonReader())
+
+DEFAULT_CONFIG_LOADER = FileLoader(
+  format_reader=MultiReader(*DEFAULT_READERS),
 )
 
-DEFAULT_CONFIG_WRITER = FileWriter(
+DEFAULT_CONFIG_SAVER = FileSaver(
   format_writer=IniWriter(),
 )
 
 
 def get_file(base_name: str, _dir: Path) -> Optional[Path]:
-  for ext in DEFAULT_CONFIG_READER.reader_map.keys():
+  for ext in (rdr.extension for rdr in DEFAULT_READERS):
     cfg = _dir / f"{base_name}.{ext}"
     if cfg.exists():
       return cfg
@@ -88,8 +88,8 @@ def load_config(base_file_name: str, create_default: bool = False,
     if not create_default:
       return Config()
     create_dir = get_dir_to_create_config_file_in() if create_module_level else Path.cwd()
-    default_extension = list(DEFAULT_CONFIG_READER.reader_map.keys())[0]
+    default_extension = list(rdr.extension for rdr in DEFAULT_READERS)[0]
     config_path = create_dir / f"{base_file_name}.{default_extension}"
-    DEFAULT_CONFIG_WRITER.write(config_path, Config())
+    DEFAULT_CONFIG_SAVER.save(config_path, Config())
 
-  return DEFAULT_CONFIG_READER.read(config_path)
+  return DEFAULT_CONFIG_LOADER.load(config_path)
