@@ -1,6 +1,6 @@
 """Services for loading and saving configuration files."""
 from abc import ABC, abstractmethod
-from typing import IO, Union
+from typing import IO, Union, Tuple
 
 from pylabrobot.config.config import Config
 
@@ -57,16 +57,18 @@ class ConfigSaver(ABC):
 class MultiReader(ConfigReader):
   """A ConfigReader that reads from multiple ConfigReaders."""
 
-  readers: tuple[ConfigReader, ...]
+  readers: Tuple[ConfigReader, ...]
 
   def __init__(self, *readers: ConfigReader):
     self.readers = readers
 
+  # Unknown what the Exception will be when trying to read the stream so catch
+  # all and ignore.
   # noinspection PyBroadException
   def read(self, r: IO) -> Config:
     for reader in self.readers:
       try:
         return reader.read(r)
-      except Exception as e:
+      except Exception:
         pass
     raise ValueError("No reader could read the file.")
