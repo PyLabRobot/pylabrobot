@@ -296,7 +296,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       prefix = "├── "
       spacing = 3
       result = ""
-      if site.resource is None:
+      if len(site.children) == 0:
         result += f"{rail_str}{' ' * spacing}{prefix}<empty>\n"
       else:
         subresource = site.children[0]
@@ -341,6 +341,12 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
             site,
             max_name_length=max_name_length,
             max_type_length=max_type_length
+          )
+      else:
+        r_summary += parse_site(
+          resource,
+          max_name_length=max_name_length,
+          max_type_length=max_type_length
           )
 
       return r_summary
