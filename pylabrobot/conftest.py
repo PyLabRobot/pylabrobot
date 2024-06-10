@@ -6,7 +6,7 @@ from pylabrobot import Config, configure
 
 TEST_CONFIG = Config(
   logging=Config.Logging(
-    log_dir=Path("test_logs")
+    log_dir=Path(__file__).parent.parent / Path("test_logs")
   )
 )
 
