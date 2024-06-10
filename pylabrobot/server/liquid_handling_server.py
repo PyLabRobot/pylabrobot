@@ -11,8 +11,8 @@ from flask import Blueprint, Flask, request, jsonify, current_app, Request
 import werkzeug
 
 from pylabrobot import configure, Config
-from pylabrobot.config.service import ConfigLoader
-from pylabrobot.config.service.json_config import JsonReader
+from pylabrobot.config.io import ConfigReader
+from pylabrobot.config.formats.json_config import JsonLoader
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import Pickup, Aspiration, Dispense, \
@@ -268,17 +268,17 @@ async def dispense():
   )))
 
 
-class HttpLoader(ConfigLoader):
-  def load(self, r: Request) -> Config:
-    return self.format_reader.read(r.stream)
+class HttpReader(ConfigReader):
+  def read(self, r: Request) -> Config:
+    return self.format_loader.load(r.stream)
 
 
-CONFIG_LOADER = HttpLoader(format_reader=JsonReader())
+CONFIG_READER = HttpReader(format_loader=JsonLoader())
 
 
 @lh_api.route("/config", methods=["POST"])
 async def config():
-  cfg = CONFIG_LOADER.load(request)
+  cfg = CONFIG_READER.read(request)
   configure(cfg)
   return jsonify(cfg.as_dict)
 

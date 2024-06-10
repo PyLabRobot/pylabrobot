@@ -4,29 +4,29 @@ import unittest
 
 from pylabrobot import load_config
 from pylabrobot.config.config import Config
-from pylabrobot.config.service.file import FileLoader, FileSaver
-from pylabrobot.config.service.ini_file import IniReader, IniWriter
-from pylabrobot.config.service.json_config import JsonReader, JsonWriter
-from pylabrobot.config.service import ConfigReader, ConfigWriter
+from pylabrobot.config.io.file import FileReader, FileWriter
+from pylabrobot.config.formats import ConfigLoader, ConfigSaver
+from pylabrobot.config.formats.ini_file import IniLoader, IniSaver
+from pylabrobot.config.formats.json_config import JsonLoader, JsonSaver
 
 
 class ConfigTests(unittest.TestCase):
   """ Tests for pylabrobot.config """
   def run_file_reader_writer_test(
     self,
-    format_reader: ConfigReader,
-    format_writer: ConfigWriter,
+    format_loader: ConfigLoader,
+    format_saver: ConfigSaver,
     write_to: Path,
     should_be: Config,
   ):
-    saver = FileSaver(
-      format_writer=format_writer,
+    writer = FileWriter(
+      format_saver=format_saver
     )
-    saver.save(write_to, should_be)
-    loader = FileLoader(
-      format_reader=format_reader,
+    writer.write(write_to, should_be)
+    reader = FileReader(
+      format_loader=format_loader
     )
-    cfg = loader.load(write_to)
+    cfg = reader.read(write_to)
     assert cfg == should_be
 
   def test_file_reader_writer(self):
@@ -37,8 +37,8 @@ class ConfigTests(unittest.TestCase):
       )
     )
     cases = (
-      (IniReader(), IniWriter(), "fake_config.ini"),
-      (JsonReader(), JsonWriter(), "fake_config.json"),
+      (IniLoader(), IniSaver(), "fake_config.ini"),
+      (JsonLoader(), JsonSaver(), "fake_config.json"),
     )
     for rdr, wr, fp in cases:
       self.run_file_reader_writer_test(
