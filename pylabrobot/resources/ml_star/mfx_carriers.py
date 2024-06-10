@@ -45,6 +45,8 @@ def PLT_CAR_L4_SHAKER(name: str) -> MFXCarrier:
     size_y=497.0,
     size_z=8.0,
     sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
+        Coordinate(6.0, 2, 8.0), # not tested, interpolated Coordinate
+        Coordinate(6.0, 123, 8.0), # not tested, interpolated Coordinate
         Coordinate(6.0, 244.0, 8.0), # tested using Hamilton_HC
         Coordinate(6.0, 365.0, 8.0), # tested using Hamilton_HS
       ],
