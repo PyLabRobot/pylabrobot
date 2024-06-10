@@ -11,7 +11,7 @@ from typing import Optional, Union
 
 from pylabrobot.config.config import Config
 from pylabrobot.config.formats import MultiLoader
-from pylabrobot.config.formats.ini_file import IniLoader, IniSaver
+from pylabrobot.config.formats.ini_config import IniLoader, IniSaver
 from pylabrobot.config.formats.json_config import JsonLoader
 from pylabrobot.config.io.file import FileReader, FileWriter
 
