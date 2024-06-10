@@ -252,10 +252,10 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     """
 
     if len(self.get_all_resources()) == 0:
-        raise ValueError(
-            "This liquid editor does not have any resources yet. "
-            "Build a layout first by calling `assign_child_resource()`. "
-        )
+      raise ValueError(
+        "This liquid editor does not have any resources yet. "
+        "Build a layout first by calling `assign_child_resource()`. "
+      )
 
     def depth_first_search(resource) -> str:
       """
@@ -274,23 +274,24 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
           child_path = f"{new_indent}├── {child.name}"
           helper(child, child_path, new_indent)
 
-        helper(resource, resource.name)
-        result_str = "\n".join(line.replace("-spot-", "") for line in result)
-        return result_str
+      helper(resource, resource.name)
+      result_str = "\n".join(line.replace("-spot-", "") for line in result)
+      return result_str
 
     # Calculate the maximum lengths of the resource name and type for proper alignment
     complete_resource_column = depth_first_search(self)
 
-    max_name_length = max([len(x) for x in complete_resource_column.splitlines()])-12
+    max_name_length = max(len(x) for x in complete_resource_column.splitlines())-12
     max_type_length = max(len(resource.__class__.__name__) for resource in self.children)
 
     # Print header.
     summary_ = (
-        f"{'Rail':<5} {'Resource':<{max_name_length+6}} {'Type':<{max_type_length+3}} Coordinates (mm)\n"
-        f"{'=' * (7 + max_name_length + max_type_length + 40)}\n"
+      f"{'Rail':<5} {'Resource':<{max_name_length+6}} {'Type':<{max_type_length+3}}" + \
+         " Coordinates (mm)\n"
+      f"{'=' * (7 + max_name_length + max_type_length + 40)}\n"
     )
 
-    def parse_site(site, max_name_length: int = 30, max_type_length: int = 15) -> str:    
+    def parse_site(site, max_name_length: int = 30, max_type_length: int = 15) -> str:
       rail_str = "      │"
       prefix = "├── "
       spacing = 3
@@ -326,23 +327,23 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       return result
 
     def parse_resource(resource):
-        rails = _rails_for_x_coordinate(resource.location.x)
-        rail_label = f"({rails})" if rails is not None else "      "
-        r_summary = (
-            f"{rail_label:<5} ├── {resource.name:<{max_name_length+4}}" +
-            f"{resource.__class__.__name__:<{max_type_length+3}}" +
-            f"{resource.get_absolute_location()}\n"
-        )
+      rails = _rails_for_x_coordinate(resource.location.x)
+      rail_label = f"({rails})" if rails is not None else "      "
+      r_summary = (
+        f"{rail_label:<5} ├── {resource.name:<{max_name_length+4}}" +
+        f"{resource.__class__.__name__:<{max_type_length+3}}" +
+        f"{resource.get_absolute_location()}\n"
+      )
 
-        if isinstance(resource, Carrier):
-            for site in resource.get_sites():
-                r_summary += parse_site(
-                    site,
-                    max_name_length=max_name_length,
-                    max_type_length=max_type_length
-                )
+      if isinstance(resource, Carrier):
+        for site in resource.get_sites():
+          r_summary += parse_site(
+            site,
+            max_name_length=max_name_length,
+            max_type_length=max_type_length
+          )
 
-        return r_summary
+      return r_summary
 
 
     # Sort resources by rails, left to right in reality.
