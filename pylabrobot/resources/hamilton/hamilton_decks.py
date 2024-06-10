@@ -8,9 +8,7 @@ from typing import Optional, cast
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.carrier import Carrier
 from pylabrobot.resources.deck import Deck
-from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
-from pylabrobot.resources.tip_rack import TipRack
 from pylabrobot.resources.trash import Trash
 import pylabrobot.utils.file_parsing as file_parser
 
@@ -268,24 +266,24 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       result = []
 
       def helper(resource, path: str, indent: str = ""):
-          if resource.category in {"container", "well", "tube", "tip_spot"}:
-              return
-          result.append(path)
-          new_indent = indent + ' '*4
-          for child in resource.children:
-              child_path = f"{new_indent}├── {child.name}"
-              helper(child, child_path, new_indent)
+        if resource.category in {"container", "well", "tube", "tip_spot"}:
+          return
+        result.append(path)
+        new_indent = indent + " "*4
+        for child in resource.children:
+          child_path = f"{new_indent}├── {child.name}"
+          helper(child, child_path, new_indent)
 
-      helper(resource, resource.name)
-      result_str = "\n".join(line.replace("-spot-", "") for line in result)
-      return result_str
+        helper(resource, resource.name)
+        result_str = "\n".join(line.replace("-spot-", "") for line in result)
+        return result_str
 
     # Calculate the maximum lengths of the resource name and type for proper alignment
     complete_resource_column = depth_first_search(self)
 
     max_name_length = max([len(x) for x in complete_resource_column.splitlines()])-12
     max_type_length = max(len(resource.__class__.__name__) for resource in self.children)
-    
+
     # Print header.
     summary_ = (
         f"{'Rail':<5} {'Resource':<{max_name_length+6}} {'Type':<{max_type_length+3}} Coordinates (mm)\n"
@@ -298,33 +296,33 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       spacing = 3
       result = ""
       if site.resource is None:
-          result += f"{rail_str}{' ' * spacing}{prefix}<empty>\n"
+        result += f"{rail_str}{' ' * spacing}{prefix}<empty>\n"
       else:
-          subresource = site.children[0]
-          level = 1
-          while True:
-              if subresource.category in {"well", "tube", "tip_spot"}:
-                  break
-              elif not subresource.children:
-                  result += (
-                      f"{rail_str}{' ' * spacing * level}{prefix}"
-                      f"{subresource.name:<{max_name_length - spacing * (level - 1)}}"
-                      f"{subresource.__class__.__name__:<{max_type_length + spacing}}"
-                      f"{subresource.get_absolute_location()}\n"
-                  )
-                  level += 1
-                  result += f"{rail_str}{' ' * spacing * level}{prefix}<empty>\n"
-                  break
-              else:
-                  result += (
-                      f"{rail_str}{' ' * spacing * level}{prefix}"
-                      f"{subresource.name:<{max_name_length - spacing * (level - 1)}}"
-                      f"{subresource.__class__.__name__:<{max_type_length + spacing}}"
-                      f"{subresource.get_absolute_location()}\n"
-                  )
-                  subresource = subresource.children[0]
-                  level += 1
-      
+        subresource = site.children[0]
+        level = 1
+        while True:
+          if subresource.category in {"well", "tube", "tip_spot"}:
+            break
+          elif not subresource.children:
+            result += (
+              f"{rail_str}{' ' * spacing * level}{prefix}"
+              f"{subresource.name:<{max_name_length - spacing * (level - 1)}}"
+              f"{subresource.__class__.__name__:<{max_type_length + spacing}}"
+              f"{subresource.get_absolute_location()}\n"
+            )
+            level += 1
+            result += f"{rail_str}{' ' * spacing * level}{prefix}<empty>\n"
+            break
+          else:
+            result += (
+              f"{rail_str}{' ' * spacing * level}{prefix}"
+              f"{subresource.name:<{max_name_length - spacing * (level - 1)}}"
+              f"{subresource.__class__.__name__:<{max_type_length + spacing}}"
+              f"{subresource.get_absolute_location()}\n"
+            )
+            subresource = subresource.children[0]
+            level += 1
+
       return result
 
     def parse_resource(resource):
@@ -346,17 +344,6 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
         return r_summary
 
-
-    # Sort resources by rails, left to right in reality.
-    sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
-
-    # Print table body.
-    summary_ += parse_resource(sorted_resources[0])
-    for resource in sorted_resources[1:]:
-      summary_ += "      │\n"
-      summary_ += parse_resource(resource)
-
-    return summary_
 
     # Sort resources by rails, left to right in reality.
     sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
