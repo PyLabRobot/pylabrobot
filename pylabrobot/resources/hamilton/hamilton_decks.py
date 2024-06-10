@@ -10,6 +10,7 @@ from pylabrobot.resources.carrier import Carrier
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
+from pylabrobot.resources.container import Container
 import pylabrobot.utils.file_parsing as file_parser
 
 
@@ -342,7 +343,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
             max_name_length=max_name_length,
             max_type_length=max_type_length
           )
-      else:
+      elif not isinstance(resource, (Trash, Container)):
         r_summary += parse_site(
           resource,
           max_name_length=max_name_length,
