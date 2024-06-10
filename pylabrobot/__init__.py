@@ -13,6 +13,15 @@ CONFIG = load_config(CONFIG_FILE_NAME, create_default=True)
 """The loaded configuration for pylabrobot."""
 
 
+def project_root() -> Path:
+  """
+  Get the root directory of the project.
+  From https://stackoverflow.com/a/53465812
+  Returns:
+    The root directory of the project.
+  """
+  return Path(__file__).parent.parent
+
 def setup_logger(log_dir: Union[Path, str], level: int):
   """
   Set up the logger for pylabrobot. If the log_dir does not exist, it will be created.

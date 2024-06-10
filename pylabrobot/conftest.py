@@ -2,11 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from pylabrobot import Config, configure
+from pylabrobot import Config, configure, project_root
 
 TEST_CONFIG = Config(
   logging=Config.Logging(
-    log_dir=Path(__file__).parent.parent / Path("test_logs")
+    log_dir=project_root() / Path("test_logs")
   )
 )
 
