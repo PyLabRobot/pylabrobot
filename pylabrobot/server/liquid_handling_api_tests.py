@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 import time
 from typing import cast
 import unittest
@@ -197,7 +198,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
   def test_config(self):
     cfg = Config(
       logging=Config.Logging(
-        log_dir="logs",
+        log_dir=Path("logs"),
         level=logging.CRITICAL
       )
     )

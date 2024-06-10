@@ -1,6 +1,7 @@
 """Services for loading and saving configuration files."""
+
 from abc import ABC, abstractmethod
-from typing import IO, Union, Tuple
+from typing import IO, Union
 
 from pylabrobot.config.config import Config
 
@@ -32,32 +33,28 @@ class ConfigWriter(ABC):
 
 class ConfigLoader(ABC):
   """ConfigLoader is an abstract class for loading a Config object"""
-  format_reader: ConfigReader
 
   def __init__(self, format_reader: ConfigReader):
     self.format_reader = format_reader
 
   @abstractmethod
-  def load(self, r: object) -> Config:
+  def load(self, r) -> Config:
     """Load a Config object."""
 
 
 class ConfigSaver(ABC):
   """ConfigSaver is an abstract class for saving a Config object"""
-  format_writer: ConfigWriter
 
   def __init__(self, format_writer: ConfigWriter):
     self.format_writer = format_writer
 
   @abstractmethod
-  def save(self, w: object, cfg: Config):
+  def save(self, w, cfg: Config):
     """Save a Config object."""
 
 
 class MultiReader(ConfigReader):
   """A ConfigReader that reads from multiple ConfigReaders."""
-
-  readers: Tuple[ConfigReader, ...]
 
   def __init__(self, *readers: ConfigReader):
     self.readers = readers
@@ -69,6 +66,6 @@ class MultiReader(ConfigReader):
     for reader in self.readers:
       try:
         return reader.read(r)
-      except Exception:
+      except Exception: # pylint: disable=broad-except
         pass
     raise ValueError("No reader could read the file.")

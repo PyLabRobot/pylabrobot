@@ -41,10 +41,10 @@ def get_config_file(
   """Get the path to the config file.
 
   Args:
-  base_name: The base name of the config file.
+    base_name: The base name of the config file.
 
   Returns:
-  The path to the config file.
+    The path to the config file.
   """
   cdir = Path(cur_dir) if cur_dir is not None else Path.cwd()
 
@@ -74,14 +74,11 @@ def load_config(base_file_name: str, create_default: bool = False,
   """Load a Config object from a file.
 
   Args:
-  base_file_name: The base file name to load.
-  create_default: Whether to create a default Config object if the file does
-  not exist. It will be created with file extension that is first in
-  DEFAULT_READER.
-  create_module_level: Whether to create the default file in the module level
-
-  Returns:
-  The Config object.
+    base_file_name: The base file name to load.
+    create_default: Whether to create a default Config object if the file does
+    not exist. It will be created with file extension that is first in
+    DEFAULT_READER.
+    create_module_level: Whether to create the default file in the module level
   """
   config_path = get_config_file(base_file_name)
   if config_path is None:

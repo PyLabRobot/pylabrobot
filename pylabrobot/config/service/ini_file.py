@@ -1,6 +1,6 @@
 import configparser
 from pathlib import Path
-from typing import TextIO
+from typing import IO
 
 from pylabrobot.config.config import Config
 from pylabrobot.config.service import ConfigReader
@@ -12,7 +12,7 @@ class IniReader(ConfigReader):
 
   extension = "ini"
 
-  def read(self, r: TextIO) -> Config:
+  def read(self, r: IO) -> Config:
     """Read a Config object from an opened IO stream that is INI formatted."""
     config = configparser.ConfigParser()
     config.read_file(r)
@@ -25,7 +25,7 @@ class IniWriter(ConfigWriter):
 
   extension = "ini"
 
-  def write(self, w: TextIO, cfg: Config):
+  def write(self, w: IO, cfg: Config):
     """Write a Config object to an IO stream in INI format."""
     config = configparser.ConfigParser()
     for k, v in cfg.as_dict.items():
