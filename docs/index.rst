@@ -23,6 +23,7 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 
    installation.md
    contributing.md
+   configuration.md
 
 .. toctree::
    :maxdepth: 1
