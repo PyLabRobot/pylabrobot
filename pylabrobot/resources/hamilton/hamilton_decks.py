@@ -258,32 +258,31 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         "Build a layout first by calling `assign_child_resource()`. "
       )
 
-    def depth_first_search(resource) -> str:
-      """
-      Perform a depth-first search on the deck tree, recording all
-      subresource paths excluding specified categories, and return
-      a formatted string representation of the tree.
-      """
-      result = []
+    exclude_categories = {"container", "well", "tube", "tip_spot"}
 
-      def helper(resource, path: str, indent: str = ""):
-        if resource.category in {"container", "well", "tube", "tip_spot"}:
-          return
-        result.append(path)
-        new_indent = indent + " "*4
-        for child in resource.children:
-          child_path = f"{new_indent}├── {child.name}"
-          helper(child, child_path, new_indent)
+    def longest_child_name(resource: Resource, depth=0):
+      """ DFS to find the longest child name, and depth of that child, excluding excluded categories
+      """
+      qualified_children = [c for c in resource.children if c.category not in exclude_categories]
+      if len(qualified_children) == 0:
+        return len(resource.name), depth
+      return max(
+        (len(resource.name), depth),
+        max(longest_child_name(child, depth+1) for child in qualified_children))
 
-      helper(resource, resource.name)
-      result_str = "\n".join(line.replace("-spot-", "") for line in result)
-      return result_str
+    def longest_type_name(resource: Resource):
+      """ DFS to find the longest type name """
+      qualified_children = [c for c in resource.children if c.category not in exclude_categories]
+      if len(qualified_children) == 0:
+        return len(resource.__class__.__name__)
+      return max(
+        len(resource.__class__.__name__),
+        max(longest_type_name(child) for child in qualified_children))
 
     # Calculate the maximum lengths of the resource name and type for proper alignment
-    complete_resource_column = depth_first_search(self)
-
-    max_name_length = max(len(x) for x in complete_resource_column.splitlines())-12
-    max_type_length = max(len(resource.__class__.__name__) for resource in self.children)
+    max_name_length, depth = longest_child_name(self)
+    max_name_length = max_name_length + 4 * depth + len("├── ") - 12 # TODO: fix -12
+    max_type_length = longest_type_name(self)
 
     # Print header.
     summary_ = (
