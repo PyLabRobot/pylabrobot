@@ -15,6 +15,7 @@ from .itemized_resource import ItemizedResource
 from .liquid import Liquid
 from .petri_dish import PetriDish, PetriDishHolder
 from .plate import Plate, Lid, Well
+from .plate_adapter import PlateAdapter
 from .powder import Powder
 from .resource import Resource
 from .tip_rack import TipRack, TipSpot
