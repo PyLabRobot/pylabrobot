@@ -9,6 +9,7 @@ Subpackages
 .. toctree::
     :maxdepth: 1
 
+    pylabrobot.config
     pylabrobot.machine
     pylabrobot.heating_shaking
     pylabrobot.liquid_handling
