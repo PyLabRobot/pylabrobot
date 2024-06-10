@@ -5,17 +5,20 @@ import asyncio
 import json
 import os
 import threading
-from typing import Any, Coroutine, List, Tuple, Type, Optional, cast
+from typing import Any, Coroutine, List, Tuple, Optional, cast
 
-from flask import Blueprint, Flask, request, jsonify, current_app
+from flask import Blueprint, Flask, request, jsonify, current_app, Request
 import werkzeug
 
+from pylabrobot import configure, Config
+from pylabrobot.config.io import ConfigReader
+from pylabrobot.config.formats.json_config import JsonLoader
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
-from pylabrobot.liquid_handling.standard import Pickup, Aspiration, Dispense, Drop
+from pylabrobot.liquid_handling.standard import Pickup, Aspiration, Dispense, \
+  Drop
 from pylabrobot.resources import Coordinate, Deck, Tip, Liquid
 from pylabrobot.serializer import deserialize
-
 
 lh_api = Blueprint("liquid handling", __name__)
 
@@ -31,13 +34,14 @@ class Task:
 
   def run_in_thread(self) -> None:
     """ Run the coroutine in a new thread. """
+
     def runner():
       self.status = "running"
       loop = asyncio.new_event_loop()
       asyncio.set_event_loop(loop)
       try:
         loop.run_until_complete(self.co)
-      except Exception as e: # pylint: disable=broad-except
+      except Exception as e:  # pylint: disable=broad-except
         self.error = str(e)
         self.status = "error"
       else:
@@ -52,7 +56,9 @@ class Task:
       d["error"] = self.error
     return d
 
+
 tasks: List[Task] = []
+
 
 def add_and_run_task(task: Task):
   id_ = len(tasks)
@@ -70,6 +76,7 @@ def index():
 def get_tasks():
   return jsonify([{"id": i, "status": t.status} for i, t in enumerate(tasks)])
 
+
 @lh_api.route("/tasks/<int:id_>", methods=["GET"])
 def get_task(id_: int):
   if id_ >= len(tasks):
@@ -81,9 +88,11 @@ def get_task(id_: int):
 async def setup():
   return add_and_run_task(Task(current_app.lh.setup()))
 
+
 @lh_api.route("/stop", methods=["POST"])
 async def stop():
   return add_and_run_task(Task(current_app.lh.stop()))
+
 
 @lh_api.route("/status", methods=["GET"])
 def get_status():
@@ -108,6 +117,7 @@ def define_labware():
 
   return jsonify({"status": "ok"})
 
+
 class ErrorResponse(Exception):
   def __init__(self, data: dict, status_code: int):
     self.data = data
@@ -123,8 +133,9 @@ async def pick_up_tips():
       try:
         resource = current_app.lh.deck.get_resource(sc["resource_name"])
       except ValueError as exc:
-        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"},
-                            404) from exc
+        raise ErrorResponse(
+          {"error": f"resource with name '{sc['resource_name']}' not found"},
+          404) from exc
       if not "tip" in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
       tip = cast(Tip, deserialize(sc["tip"]))
@@ -142,6 +153,7 @@ async def pick_up_tips():
     use_channels=use_channels
   )))
 
+
 @lh_api.route("/drop-tips", methods=["POST"])
 async def drop_tips():
   try:
@@ -151,8 +163,9 @@ async def drop_tips():
       try:
         resource = current_app.lh.deck.get_resource(sc["resource_name"])
       except ValueError as exc:
-        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"},
-                            404) from exc
+        raise ErrorResponse(
+          {"error": f"resource with name '{sc['resource_name']}' not found"},
+          404) from exc
       if not "tip" in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
       tip = cast(Tip, deserialize(sc["tip"]))
@@ -170,6 +183,7 @@ async def drop_tips():
     use_channels=use_channels
   )))
 
+
 @lh_api.route("/aspirate", methods=["POST"])
 async def aspirate():
   try:
@@ -179,8 +193,9 @@ async def aspirate():
       try:
         resource = current_app.lh.deck.get_resource(sc["resource_name"])
       except ValueError as exc:
-        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"},
-                            404) from exc
+        raise ErrorResponse(
+          {"error": f"resource with name '{sc['resource_name']}' not found"},
+          404) from exc
       if not "tip" in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
       tip = cast(Tip, deserialize(sc["tip"]))
@@ -191,10 +206,13 @@ async def aspirate():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquids = cast(List[Tuple[Optional[Liquid], float]], deserialize(sc["liquids"]))
-      aspirations.append(Aspiration(resource=resource, tip=tip, offset=offset, volume=volume,
-        flow_rate=flow_rate, liquid_height=liquid_height, blow_out_air_volume=blow_out_air_volume,
-        liquids=liquids))
+      liquids = cast(List[Tuple[Optional[Liquid], float]],
+                     deserialize(sc["liquids"]))
+      aspirations.append(
+        Aspiration(resource=resource, tip=tip, offset=offset, volume=volume,
+                   flow_rate=flow_rate, liquid_height=liquid_height,
+                   blow_out_air_volume=blow_out_air_volume,
+                   liquids=liquids))
     use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
@@ -207,6 +225,7 @@ async def aspirate():
     use_channels=use_channels
   )))
 
+
 @lh_api.route("/dispense", methods=["POST"])
 async def dispense():
   try:
@@ -216,8 +235,9 @@ async def dispense():
       try:
         resource = current_app.lh.deck.get_resource(sc["resource_name"])
       except ValueError as exc:
-        raise ErrorResponse({"error": f"resource with name '{sc['resource_name']}' not found"},
-                            404) from exc
+        raise ErrorResponse(
+          {"error": f"resource with name '{sc['resource_name']}' not found"},
+          404) from exc
       if not "tip" in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
       tip = cast(Tip, deserialize(sc["tip"]))
@@ -228,10 +248,13 @@ async def dispense():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquids = cast(List[Tuple[Optional[Liquid], float]], deserialize(sc["liquids"]))
-      dispenses.append(Dispense(resource=resource, tip=tip, offset=offset, volume=volume,
-        flow_rate=flow_rate, liquid_height=liquid_height, blow_out_air_volume=blow_out_air_volume,
-        liquids=liquids))
+      liquids = cast(List[Tuple[Optional[Liquid], float]],
+                     deserialize(sc["liquids"]))
+      dispenses.append(
+        Dispense(resource=resource, tip=tip, offset=offset, volume=volume,
+                 flow_rate=flow_rate, liquid_height=liquid_height,
+                 blow_out_air_volume=blow_out_air_volume,
+                 liquids=liquids))
     use_channels = data["use_channels"]
   except ErrorResponse as e:
     return jsonify(e.data), e.status_code
@@ -243,6 +266,21 @@ async def dispense():
     flow_rates=[d.flow_rate for d in dispenses],
     use_channels=use_channels
   )))
+
+
+class HttpReader(ConfigReader):
+  def read(self, r: Request) -> Config:
+    return self.format_loader.load(r.stream)
+
+
+CONFIG_READER = HttpReader(format_loader=JsonLoader())
+
+
+@lh_api.route("/config", methods=["POST"])
+async def config():
+  cfg = CONFIG_READER.read(request)
+  configure(cfg)
+  return jsonify(cfg.as_dict)
 
 
 def create_app(lh: LiquidHandler):
