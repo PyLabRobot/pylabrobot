@@ -641,6 +641,7 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     await self.lh.dispense([well], vols=10)
     self.assertEqual(well.tracker.liquids, [(None, 10)])
 
+
 class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.backend = backends.SaverBackend(num_channels=8)
@@ -654,11 +655,9 @@ class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCa
     set_volume_tracking(enabled=True)
     set_cross_contamination_tracking(enabled=True)
 
-
   async def asyncTearDown(self):
     set_volume_tracking(enabled=False)
     set_cross_contamination_tracking(enabled=False)
-
 
   async def test_aspirate_with_contaminated_tip(self):
     blood_well = self.plate.get_item("A1")
@@ -669,9 +668,6 @@ class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCa
     etoh_well.tracker.set_liquids([(Liquid.ETHANOL, 10)])
     await self.lh.aspirate([blood_well], vols=10)
     await self.lh.dispense([dest_well], vols=10)
-
-
-
     with self.assertRaises(CrossContaminationError):
       await self.lh.aspirate([etoh_well], vols=10)
 

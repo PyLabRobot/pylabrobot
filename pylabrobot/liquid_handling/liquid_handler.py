@@ -69,8 +69,8 @@ def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
   """Helper function used to check if it is possible to update the
      liquid_history of src based on contents of dst"""
 
-  return (not src_tracker.is_cross_contamination_tracking_disabled) and \
-      bool(not dest_tracker.is_cross_contamination_tracking_disabled)
+  return not src_tracker.is_cross_contamination_tracking_disabled and \
+          not dest_tracker.is_cross_contamination_tracking_disabled
 
 class LiquidHandler(Machine):
   """
