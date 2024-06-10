@@ -98,23 +98,23 @@ class HamiltonDeckTests(unittest.TestCase):
     self.maxDiff = None
     deck = self.build_layout()
     self.assertEqual(deck.summary(), textwrap.dedent("""
-    Rail     Resource                   Type                Coordinates (mm)
-    ==============================================================================================
-    (-13) ├── trash_core96               Trash               (-232.100, 110.300, 189.000)
+    Rail  Resource                     Type            Coordinates (mm)
+    =================================================================================
+    (-13) ├── trash_core96              Trash          (-232.100, 110.300, 189.000)
           │
-    (1)   ├── tip_carrier                TipCarrier          (100.000, 063.000, 100.000)
-          │   ├── tip_rack_01            TipRack             (117.900, 145.800, 164.450)
-          │   ├── tip_rack_02            TipRack             (117.900, 241.800, 164.450)
+    (1)   ├── tip_carrier               TipCarrier     (100.000, 063.000, 100.000)
+          │   ├── tip_rack_01           TipRack        (106.200, 073.000, 214.950)
+          │   ├── tip_rack_02           TipRack        (106.200, 169.000, 214.950)
           │   ├── <empty>
-          │   ├── tip_rack_04            TipRack             (117.900, 433.800, 131.450)
-          │   ├── <empty>
-          │
-    (21)  ├── plate carrier              PlateCarrier        (550.000, 063.000, 100.000)
-          │   ├── aspiration plate       Plate               (568.000, 146.000, 187.150)
-          │   ├── <empty>
-          │   ├── dispense plate         Plate               (568.000, 338.000, 188.150)
-          │   ├── <empty>
+          │   ├── tip_rack_04           TipRack        (106.200, 361.000, 214.950)
           │   ├── <empty>
           │
-    (32)  ├── trash                      Trash               (800.000, 190.600, 137.100)
+    (21)  ├── plate carrier             PlateCarrier   (550.000, 063.000, 100.000)
+          │   ├── aspiration plate      Plate          (554.000, 071.500, 186.150)
+          │   ├── <empty>
+          │   ├── dispense plate        Plate          (554.000, 263.500, 186.150)
+          │   ├── <empty>
+          │   ├── <empty>
+          │
+    (32)  ├── trash                     Trash          (800.000, 190.600, 137.100)
     """[1:]))
