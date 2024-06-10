@@ -254,39 +254,109 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     """
 
     if len(self.get_all_resources()) == 0:
-      raise ValueError(
-          "This liquid editor does not have any resources yet. "
-          "Build a layout first by calling `assign_child_resource()`. "
-      )
+        raise ValueError(
+            "This liquid editor does not have any resources yet. "
+            "Build a layout first by calling `assign_child_resource()`. "
+        )
 
+    def depth_first_search(resource) -> str:
+      """
+      Perform a depth-first search on the deck tree, recording all
+      subresource paths excluding specified categories, and return
+      a formatted string representation of the tree.
+      """
+      result = []
+
+      def helper(resource, path: str, indent: str = ""):
+          if resource.category in {"container", "well", "tube", "tip_spot"}:
+              return
+          result.append(path)
+          new_indent = indent + ' '*4
+          for child in resource.children:
+              child_path = f"{new_indent}├── {child.name}"
+              helper(child, child_path, new_indent)
+
+      helper(resource, resource.name)
+      result_str = "\n".join(line.replace("-spot-", "") for line in result)
+      return result_str
+
+    # Calculate the maximum lengths of the resource name and type for proper alignment
+    complete_resource_column = depth_first_search(self)
+
+    max_name_length = max([len(x) for x in complete_resource_column.splitlines()])-12
+    max_type_length = max(len(resource.__class__.__name__) for resource in self.children)
+    
     # Print header.
-    summary_ = "Rail" + " " * 5 + "Resource" + " " * 19 +  "Type" + " " * 16 + "Coordinates (mm)\n"
-    summary_ += "=" * 94 + "\n"
+    summary_ = (
+        f"{'Rail':<5} {'Resource':<{max_name_length+6}} {'Type':<{max_type_length+3}} Coordinates (mm)\n"
+        f"{'=' * (7 + max_name_length + max_type_length + 40)}\n"
+    )
+
+    def parse_site(site, max_name_length: int = 30, max_type_length: int = 15) -> str:    
+      rail_str = "      │"
+      prefix = "├── "
+      spacing = 3
+      result = ""
+      if site.resource is None:
+          result += f"{rail_str}{' ' * spacing}{prefix}<empty>\n"
+      else:
+          subresource = site.children[0]
+          level = 1
+          while True:
+              if subresource.category in {"well", "tube", "tip_spot"}:
+                  break
+              elif not subresource.children:
+                  result += (
+                      f"{rail_str}{' ' * spacing * level}{prefix}"
+                      f"{subresource.name:<{max_name_length - spacing * (level - 1)}}"
+                      f"{subresource.__class__.__name__:<{max_type_length + spacing}}"
+                      f"{subresource.get_absolute_location()}\n"
+                  )
+                  level += 1
+                  result += f"{rail_str}{' ' * spacing * level}{prefix}<empty>\n"
+                  break
+              else:
+                  result += (
+                      f"{rail_str}{' ' * spacing * level}{prefix}"
+                      f"{subresource.name:<{max_name_length - spacing * (level - 1)}}"
+                      f"{subresource.__class__.__name__:<{max_type_length + spacing}}"
+                      f"{subresource.get_absolute_location()}\n"
+                  )
+                  subresource = subresource.children[0]
+                  level += 1
+      
+      return result
 
     def parse_resource(resource):
-      # TODO: print something else if resource is not assigned to a rails.
-      rails = _rails_for_x_coordinate(resource.location.x)
-      rail_label = f"({rails})" if rails is not None else "      "
-      r_summary = f"{rail_label:5} ├── {resource.name:27}" + \
-            f"{resource.__class__.__name__:20}" + \
+        rails = _rails_for_x_coordinate(resource.location.x)
+        rail_label = f"({rails})" if rails is not None else "      "
+        r_summary = (
+            f"{rail_label:<5} ├── {resource.name:<{max_name_length+4}}" +
+            f"{resource.__class__.__name__:<{max_type_length+3}}" +
             f"{resource.get_absolute_location()}\n"
+        )
 
-      if isinstance(resource, Carrier):
-        for site in resource.get_sites():
-          if site.resource is None:
-            r_summary += "      │   ├── <empty>\n"
-          else:
-            subresource = site.resource
-            if isinstance(subresource, (TipRack, Plate)):
-              location = subresource.get_item("A1").get_absolute_location() + \
-                subresource.get_item("A1").center()
-            else:
-              location = subresource.get_absolute_location()
-            r_summary += f"      │   ├── {subresource.name:23}" + \
-                  f"{subresource.__class__.__name__:20}" + \
-                  f"{location}\n"
+        if isinstance(resource, Carrier):
+            for site in resource.get_sites():
+                r_summary += parse_site(
+                    site,
+                    max_name_length=max_name_length,
+                    max_type_length=max_type_length
+                )
 
-      return r_summary
+        return r_summary
+
+
+    # Sort resources by rails, left to right in reality.
+    sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
+
+    # Print table body.
+    summary_ += parse_resource(sorted_resources[0])
+    for resource in sorted_resources[1:]:
+      summary_ += "      │\n"
+      summary_ += parse_resource(resource)
+
+    return summary_
 
     # Sort resources by rails, left to right in reality.
     sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
