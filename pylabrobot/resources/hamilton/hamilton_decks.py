@@ -6,10 +6,11 @@ import logging
 from typing import Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.carrier import CarrierSite
+from pylabrobot.resources.carrier import MFXCarrier, CarrierSite
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
+from pylabrobot.resources.ml_star.mfx_modules import MFXModule
 import pylabrobot.utils.file_parsing as file_parser
 
 
@@ -283,9 +284,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     # Find column lengths
     rail_column_length = 6
-    print(max_name_length)
     name_column_length = max(max_name_length + 4 * depth + 4, 30) # 4 per depth, 4 extra
-    print(name_column_length)
     type_column_length = max_type_length + 3 - 4
     location_column_length = 30
 
@@ -307,34 +306,13 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         tree_part = "│   " + tree_part
       return tree_part
 
-    def parse_carrier_site(resource: CarrierSite, depth=0) -> str:
-      child = resource.resource
-      r_summary = ""
-
-      # Print rail
-      r_summary += " " * rail_column_length
-
-      # Print resource name
+    def print_empty_spot_line(depth=0) -> str:
+      r_summary = " " * rail_column_length
       tree_part = make_tree_part(depth)
-      name_part = "<empty>" if child is None else child.name
-      r_summary += (tree_part + name_part).ljust(name_column_length)
-
-      # Print resource type
-      if child is None:
-        r_summary += " " * type_column_length
-      else:
-        r_summary += child.__class__.__name__.ljust(type_column_length)
-
-      # Print resource location
-      if child is None:
-        r_summary += " " * location_column_length
-      else:
-        location = resource.get_absolute_location()
-        r_summary += str(location).ljust(location_column_length)
-
+      r_summary += (tree_part + "<empty>").ljust(name_column_length)
       return r_summary
 
-    def parse_resource(resource: Resource, depth=0) -> str:
+    def print_resource_line(resource: Resource, depth=0) -> str:
       r_summary = ""
 
       # Print rail
@@ -355,14 +333,25 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       location = resource.get_absolute_location()
       r_summary += str(location).ljust(location_column_length)
 
-      # Print children
+      return r_summary
+
+    def print_tree(resource: Resource, depth=0):
+      r_summary = print_resource_line(resource, depth=depth)
+
+      if isinstance(resource, MFXModule) and len(resource.children) == 0:
+        r_summary += "\n"
+        r_summary += print_empty_spot_line(depth=depth+1)
+
       for child in resource.children:
         if isinstance(child, CarrierSite):
           r_summary += "\n"
-          r_summary += parse_carrier_site(resource=child, depth=depth+1)
-        else:
+          if child.resource is not None:
+            r_summary += print_tree(child.resource, depth=depth+1)
+          else:
+            r_summary += print_empty_spot_line(depth=depth+1)
+        elif child.category not in exclude_categories:
           r_summary += "\n"
-          r_summary += parse_resource(child, depth=depth+1)
+          r_summary += print_tree(child, depth=depth+1)
 
       return r_summary
 
@@ -370,10 +359,10 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
 
     # Print table body.
-    summary_ += parse_resource(sorted_resources[0]) + "\n"
+    summary_ += print_tree(sorted_resources[0]) + "\n"
     for resource in sorted_resources[1:]:
       summary_ += "      │\n"
-      summary_ += parse_resource(resource)
+      summary_ += print_tree(resource)
       summary_ += "\n"
 
     # Truncate trailing whitespace from each line
