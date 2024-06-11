@@ -6,11 +6,10 @@ import logging
 from typing import Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.carrier import Carrier, CarrierSite
+from pylabrobot.resources.carrier import CarrierSite
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
-from pylabrobot.resources.container import Container
 import pylabrobot.utils.file_parsing as file_parser
 
 
@@ -29,7 +28,7 @@ STAR_SIZE_X=1900
 STAR_SIZE_Y=653.5
 STAR_SIZE_Z=900
 
-def _rails_for_x_coordinate(x: int):
+def _rails_for_x_coordinate(x: float) -> int:
   """ Convert an x coordinate to a rail identifier. """
   return int((x - 100.0) / _RAILS_WIDTH) + 1
 
@@ -298,7 +297,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     )
     total_length = rail_column_length + name_column_length + type_column_length + \
       location_column_length
-    summary_ += f"{'=' * total_length}\n"
+    summary_ += "=" * total_length + "\n"
 
     def make_tree_part(depth: int) -> str:
       tree_part = "├── "
@@ -315,7 +314,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       # Print resource name
       tree_part = make_tree_part(depth)
-      name_part = "<empty>" if child is None else resource.resource.name
+      name_part = "<empty>" if child is None else child.name
       r_summary += (tree_part + name_part).ljust(name_column_length)
 
       # Print resource type
@@ -333,7 +332,6 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       return r_summary
 
-    # Go through all resources and print them
     def parse_resource(resource: Resource, depth=0) -> str:
       r_summary = ""
 
