@@ -98,7 +98,7 @@ class HamiltonDeckTests(unittest.TestCase):
     self.maxDiff = None
     deck = self.build_layout()
     self.assertEqual(deck.summary(), textwrap.dedent("""
-    Rail  Resource                     Type            Coordinates (mm)
+    Rail  Resource                      Type           Coordinates (mm)
     =================================================================================
     (-13) ├── trash_core96              Trash          (-232.100, 110.300, 189.000)
           │

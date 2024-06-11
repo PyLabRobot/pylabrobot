@@ -6,7 +6,7 @@ import logging
 from typing import Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.carrier import Carrier
+from pylabrobot.resources.carrier import Carrier, CarrierSite
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
@@ -258,108 +258,126 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         "Build a layout first by calling `assign_child_resource()`. "
       )
 
-    exclude_categories = {"container", "well", "tube", "tip_spot"}
+    exclude_categories = {"well", "tube", "tip_spot"} # don't print these
 
-    def longest_child_name(resource: Resource, depth=0):
-      """ DFS to find the longest child name, and depth of that child, excluding excluded categories
-      """
+    def find_longest_child_name(resource: Resource, depth=0):
+      """ DFS to find longest child name, and depth of that child, excluding excluded categories """
       qualified_children = [c for c in resource.children if c.category not in exclude_categories]
       if len(qualified_children) == 0:
         return len(resource.name), depth
       return max(
         (len(resource.name), depth),
-        max(longest_child_name(child, depth+1) for child in qualified_children))
+        max(find_longest_child_name(child, depth+1) for child in qualified_children))
 
-    def longest_type_name(resource: Resource):
+    def find_longest_type_name(resource: Resource):
       """ DFS to find the longest type name """
       qualified_children = [c for c in resource.children if c.category not in exclude_categories]
       if len(qualified_children) == 0:
         return len(resource.__class__.__name__)
       return max(
         len(resource.__class__.__name__),
-        max(longest_type_name(child) for child in qualified_children))
+        max(find_longest_type_name(child) for child in qualified_children))
 
     # Calculate the maximum lengths of the resource name and type for proper alignment
-    max_name_length, depth = longest_child_name(self)
-    max_name_length = max_name_length + 4 * depth + len("├── ") - 12 # TODO: fix -12
-    max_type_length = longest_type_name(self)
+    max_name_length, depth = find_longest_child_name(self)
+    max_type_length = find_longest_type_name(self)
 
-    # Print header.
+    # Find column lengths
+    rail_column_length = 6
+    name_column_length = max(max_name_length + 4 * depth - 6, 30)
+    type_column_length = max_type_length + 3 - 4
+    location_column_length = 30
+
+    # Print header
     summary_ = (
-      f"{'Rail':<5} {'Resource':<{max_name_length+6}} {'Type':<{max_type_length+3}}" + \
-         " Coordinates (mm)\n"
-      f"{'=' * (7 + max_name_length + max_type_length + 40)}\n"
+      "Rail".ljust(rail_column_length) +
+      "Resource".ljust(name_column_length) +
+      "Type".ljust(type_column_length) +
+      "Coordinates (mm)".ljust(location_column_length) +
+      "\n"
     )
+    total_length = rail_column_length + name_column_length + type_column_length + \
+      location_column_length
+    summary_ += f"{'=' * total_length}\n"
 
-    def parse_site(site, max_name_length: int = 30, max_type_length: int = 15) -> str:
-      rail_str = "      │"
-      prefix = "├── "
-      spacing = 3
-      result = ""
-      if len(site.children) == 0:
-        result += f"{rail_str}{' ' * spacing}{prefix}<empty>\n"
+    def make_tree_part(depth: int) -> str:
+      tree_part = "├── "
+      for _ in range(depth):
+        tree_part = "│   " + tree_part
+      return tree_part
+
+    def parse_carrier_site(resource: CarrierSite, depth=0) -> str:
+      child = resource.resource
+      r_summary = ""
+
+      # Print rail
+      r_summary += " " * rail_column_length
+
+      # Print resource name
+      tree_part = make_tree_part(depth)
+      name_part = "<empty>" if child is None else resource.resource.name
+      r_summary += (tree_part + name_part).ljust(name_column_length)
+
+      # Print resource type
+      if child is None:
+        r_summary += " " * type_column_length
       else:
-        subresource = site.children[0]
-        level = 1
-        while True:
-          if subresource.category in {"well", "tube", "tip_spot"}:
-            break
-          elif not subresource.children:
-            result += (
-              f"{rail_str}{' ' * spacing * level}{prefix}"
-              f"{subresource.name:<{max_name_length - spacing * (level - 1)}}"
-              f"{subresource.__class__.__name__:<{max_type_length + spacing}}"
-              f"{subresource.get_absolute_location()}\n"
-            )
-            level += 1
-            result += f"{rail_str}{' ' * spacing * level}{prefix}<empty>\n"
-            break
-          else:
-            result += (
-              f"{rail_str}{' ' * spacing * level}{prefix}"
-              f"{subresource.name:<{max_name_length - spacing * (level - 1)}}"
-              f"{subresource.__class__.__name__:<{max_type_length + spacing}}"
-              f"{subresource.get_absolute_location()}\n"
-            )
-            subresource = subresource.children[0]
-            level += 1
+        r_summary += child.__class__.__name__.ljust(type_column_length)
 
-      return result
-
-    def parse_resource(resource):
-      rails = _rails_for_x_coordinate(resource.location.x)
-      rail_label = f"({rails})" if rails is not None else "      "
-      r_summary = (
-        f"{rail_label:<5} ├── {resource.name:<{max_name_length+4}}" +
-        f"{resource.__class__.__name__:<{max_type_length+3}}" +
-        f"{resource.get_absolute_location()}\n"
-      )
-
-      if isinstance(resource, Carrier):
-        for site in resource.get_sites():
-          r_summary += parse_site(
-            site,
-            max_name_length=max_name_length,
-            max_type_length=max_type_length
-          )
-      elif not isinstance(resource, (Trash, Container)):
-        r_summary += parse_site(
-          resource,
-          max_name_length=max_name_length,
-          max_type_length=max_type_length
-          )
+      # Print resource location
+      if child is None:
+        r_summary += " " * location_column_length
+      else:
+        location = resource.get_absolute_location()
+        r_summary += str(location).ljust(location_column_length)
 
       return r_summary
 
+    # Go through all resources and print them
+    def parse_resource(resource: Resource, depth=0) -> str:
+      r_summary = ""
+
+      # Print rail
+      if depth == 0:
+        rails = _rails_for_x_coordinate(resource.get_absolute_location().x)
+        r_summary += f"({rails})".ljust(rail_column_length)
+      else:
+        r_summary += " " * rail_column_length
+
+      # Print resource name
+      tree_part = make_tree_part(depth)
+      r_summary += (tree_part + resource.name).ljust(name_column_length)
+
+      # Print resource type
+      r_summary += resource.__class__.__name__.ljust(type_column_length)
+
+      # Print resource location
+      location = resource.get_absolute_location()
+      r_summary += str(location).ljust(location_column_length)
+
+      # Print children
+      for child in resource.children:
+        if isinstance(child, CarrierSite):
+          r_summary += "\n"
+          r_summary += parse_carrier_site(resource=child, depth=depth+1)
+        else:
+          r_summary += "\n"
+          r_summary += parse_resource(child, depth=depth+1)
+
+      return r_summary
 
     # Sort resources by rails, left to right in reality.
     sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
 
     # Print table body.
-    summary_ += parse_resource(sorted_resources[0])
+    summary_ += parse_resource(sorted_resources[0]) + "\n"
     for resource in sorted_resources[1:]:
       summary_ += "      │\n"
       summary_ += parse_resource(resource)
+      summary_ += "\n"
+
+    # Truncate trailing whitespace from each line
+    summary_ = "\n".join([line.rstrip() for line in summary_.split("\n")])
 
     return summary_
 
