@@ -6,7 +6,7 @@ import logging
 from typing import Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.carrier import MFXCarrier, CarrierSite
+from pylabrobot.resources.carrier import CarrierSite
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
