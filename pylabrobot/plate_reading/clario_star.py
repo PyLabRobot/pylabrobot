@@ -102,6 +102,9 @@ class CLARIOStar(PlateReaderBackend):
     if self.dev is None:
       raise RuntimeError("device not initialized")
 
+    checksum = (sum(cmd) & 0xffff).to_bytes(2, byteorder="big")
+    cmd = cmd + checksum + b"\x0d"
+
     logger.debug("sending %s", cmd.hex())
 
     w = self.dev.write(cmd)
@@ -112,10 +115,6 @@ class CLARIOStar(PlateReaderBackend):
 
     resp = await self.read_resp(timeout=read_timeout)
     return resp
-
-  async def read_command_status(self):
-    status = await self.send(b"\x02\x00\x09\x0c\x80\x00\x00\x97\x0d")
-    return status
 
   async def _wait_for_ready_and_return(self, ret, timeout=150):
     """ Wait for the plate reader to be ready and return the response. """
@@ -148,27 +147,31 @@ class CLARIOStar(PlateReaderBackend):
         logger.debug("status is ready")
         return ret
 
+  async def read_command_status(self):
+    status = await self.send(b"\x02\x00\x09\x0c\x80\x00")
+    return status
+
   async def initialize(self):
     command_response = await self.send(
-      b"\x02\x00\x0D\x0C\x01\x00\x00\x10\x02\x00\x00\x2E\x0D")
+      b"\x02\x00\x0D\x0C\x01\x00\x00\x10\x02\x00")
     return await self._wait_for_ready_and_return(command_response)
 
   async def request_eeprom_data(self):
     eeprom_response = await self.send(
-      b"\x02\x00\x0F\x0C\x05\x07\x00\x00\x00\x00\x00\x00\x00\x29\x0d")
+      b"\x02\x00\x0F\x0C\x05\x07\x00\x00\x00\x00\x00\x00")
     return await self._wait_for_ready_and_return(eeprom_response)
 
   async def open(self):
-    open_response = await self.send(b"\x02\x00\x0E\x0C\x03\x01\x00\x00\x00\x00\x00\x00\x20\x0D")
+    open_response = await self.send(b"\x02\x00\x0E\x0C\x03\x01\x00\x00\x00\x00\x00")
     return await self._wait_for_ready_and_return(open_response)
 
   async def close(self):
-    close_response = await self.send(b"\x02\x00\x0E\x0C\x03\x00\x00\x00\x00\x00\x00\x00\x1F\x0D")
+    close_response = await self.send(b"\x02\x00\x0E\x0C\x03\x00\x00\x00\x00\x00\x00")
     return await self._wait_for_ready_and_return(close_response)
 
   async def _mp_and_focus_height_value(self):
     mp_and_focus_height_value_response = await self.send(b"\x02\x00\x0F\x0C\x05\17\x00\x00\x00\x00"+
-                                                         b"\x00\x00\x00\x39\x0D")
+                                                         b"\x00\x00")
     return await self._wait_for_ready_and_return(mp_and_focus_height_value_response)
 
   async def _run_luminescence(self, focal_height: float):
@@ -178,15 +181,13 @@ class CLARIOStar(PlateReaderBackend):
 
     focal_height_data = int(focal_height * 100).to_bytes(2, byteorder="big")
 
-    #  $11 $65 -> $12 $00, some kind of check sum????
-
     run_response = await self.send(b"\x02\x00\x86\x0c\x04\x31\xec\x21\x66\x05\x96\x04\x60\x2c\x56"
       b"\x1d\x06\x0c\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00\x00\x00\x00"
       b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
       b"\x00\x00\x00\x00\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x00\x00\x00\x20\x04\x00\x1e\x27"
       b"\x0f\x27\x0f\x01" + focal_height_data + b"\x00\x00\x01\x00\x00\x0e\x10\x00\x01\x00\x01\x00"
       b"\x01\x00\x01\x00\x01\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x01"
-      b"\x00\x00\x00\x01\x00\x64\x00\x20\x00\x00\x11\x65\x0d")
+      b"\x00\x00\x00\x01\x00\x64\x00\x20\x00\x00")
 
     # TODO: find a prettier way to do this. It's essentially copied from _wait_for_ready_and_return.
     last_status = None
@@ -213,8 +214,7 @@ class CLARIOStar(PlateReaderBackend):
       b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
       b"\x00\x00\x00\x00\x00\x00\x82\x02\x00\x00\x00\x00\x00\x00\x00\x20\x04\x00\x1E\x27\x0F\x27"
       b"\x0F\x19\x01" + wavelength_data + b"\x00\x00\x00\x64\x00\x00\x00\x00\x00\x00\x00\x64\x00"
-      b"\x00\x00\x00\x00\x02\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x16\x00\x01\x00\x00\x12\xcb"
-      b"\x0D")
+      b"\x00\x00\x00\x00\x02\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x16\x00\x01\x00\x00")
     run_response = await self.send(absorbance_command)
 
     # TODO: find a prettier way to do this. It's essentially copied from _wait_for_ready_and_return.
@@ -234,14 +234,14 @@ class CLARIOStar(PlateReaderBackend):
         return run_response
 
   async def _read_order_values(self):
-    return await self.send(b"\x02\x00\x0F\x0C\x05\x1D\x00\x00\x00\x00\x00\x00\x00\x3F\x0D")
+    return await self.send(b"\x02\x00\x0F\x0C\x05\x1D\x00\x00\x00\x00\x00\x00")
 
   async def _status_hw(self):
-    status_hw_response = await self.send(b"\x02\x00\x09\x0C\x81\x00\x00\x98\x0D")
+    status_hw_response = await self.send(b"\x02\x00\x09\x0C\x81\x00")
     return await self._wait_for_ready_and_return(status_hw_response)
 
   async def _get_measurement_values(self):
-    return await self.send(b"\x02\x00\x0F\x0C\x05\x02\x00\x00\x00\x00\x00\x00\x00\x24\x0D")
+    return await self.send(b"\x02\x00\x0F\x0C\x05\x02\x00\x00\x00\x00\x00\x00")
 
   async def read_luminescence(self, focal_height: float = 13) -> List[List[float]]:
     """ Read luminescence values from the plate reader. """

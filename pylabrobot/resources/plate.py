@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple, Union, cast
+from typing import List, Optional, Sequence, Tuple, Union, cast, Literal
 
 
 from .liquid import Liquid
@@ -51,7 +51,8 @@ class Plate(ItemizedResource[Well]):
     category: str = "plate",
     lid_height: float = 0,
     with_lid: bool = False,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted"
   ):
     """ Initialize a Plate resource.
 
@@ -72,12 +73,15 @@ class Plate(ItemizedResource[Well]):
       well_size_y: Size of the wells in the y direction.
       lid_height: Height of the lid in mm, only used if `with_lid` is True.
       with_lid: Whether the plate has a lid.
+      plate_type: Type of the plate. One of "skirted", "semi-skirted", or "non-skirted". A
+        WIP: https://github.com/PyLabRobot/pylabrobot/pull/152#discussion_r1625831517
     """
 
     super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
       num_items_y=num_items_y, category=category, model=model)
     self.lid: Optional[Lid] = None
     self.lid_height = lid_height
+    self.plate_type = plate_type
 
     if with_lid:
       assert lid_height > 0, "Lid height must be greater than 0 if with_lid == True."

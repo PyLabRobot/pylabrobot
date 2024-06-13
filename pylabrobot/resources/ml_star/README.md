@@ -48,4 +48,3 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 | 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | <img src="ims/Hamilton_96_adapter_188182.png" alt="Hamilton_96_adapter_188182" width="250"/> | `Hamilton_96_adapter_188182` |
 
 
-

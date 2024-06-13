@@ -27,6 +27,7 @@ from pylabrobot.resources import (
   Lid,
   MFXModule,
   Plate,
+  PlateAdapter,
   Tip,
   TipRack,
   TipSpot,
@@ -182,6 +183,7 @@ class LiquidHandler(Machine):
       loop = asyncio.new_event_loop()
       asyncio.set_event_loop(loop)
       loop.run_until_complete(func(*args, **kwargs))
+      loop.close()
 
     t = threading.Thread(target=callback, args=args, kwargs=kwargs)
     t.start()
@@ -196,24 +198,6 @@ class LiquidHandler(Machine):
     """ This method is called when a resource is unassigned from the deck, and passes this
     information to the backend. """
     self._run_async_in_thread(self.backend.unassigned_resource_callback, resource.name)
-
-  def unassign_resource(self, resource: Union[str, Resource]): # TODO: remove this.
-    """ Unassign an assigned resource.
-
-    Args:
-      resource: The resource to unassign.
-
-    Raises:
-      KeyError: If the resource is not currently assigned to this liquid handler.
-    """
-
-    if isinstance(resource, Resource):
-      resource = resource.name
-
-    r = self.deck.get_resource(resource)
-    if r is None:
-      raise KeyError(f"Resource '{resource}' is not assigned to this liquid handler.")
-    r.unassign()
 
   def summary(self):
     """ Prints a string summary of the deck layout.  """
@@ -1776,6 +1760,10 @@ class LiquidHandler(Machine):
       to_location = to
     elif isinstance(to, MFXModule):
       to_location = to.get_absolute_location() + to.child_resource_location
+    elif isinstance(to, PlateAdapter):
+      # Calculate location adjustment of Plate based on PlateAdapter geometry
+      adjusted_plate_anchor = to.compute_plate_location(plate)
+      to_location = to.get_absolute_location() + adjusted_plate_anchor
     else:
       to_location = to.get_absolute_location()
 
@@ -1802,6 +1790,8 @@ class LiquidHandler(Machine):
       to.assign_child_resource(plate)
     elif isinstance(to, MFXModule):
       to.assign_child_resource(plate, location=to.child_resource_location)
+    elif isinstance(to, PlateAdapter):
+      to.assign_child_resource(plate, location=to.compute_plate_location(plate))
     else:
       to.assign_child_resource(plate, location=to_location)
 

@@ -1,7 +1,10 @@
+import logging
+from pathlib import Path
 import time
 from typing import cast
 import unittest
 
+from pylabrobot import Config
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import SerializingSavingBackend
 from pylabrobot.resources import (
@@ -191,3 +194,22 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
         }], "use_channels": [0]})
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
+
+  def test_config(self):
+    cfg = Config(
+      logging=Config.Logging(
+        log_dir=Path("logs"),
+        level=logging.CRITICAL
+      )
+    )
+    with self.app.test_client() as client:
+      logger = logging.getLogger("pylabrobot")
+      cur_level = logger.level
+      response = client.post(
+        self.base_url + "/config",
+        json=cfg.as_dict)
+      new_level = logging.getLogger("pylabrobot").level
+      self.assertEqual(response.json, cfg.as_dict)
+      self.assertEqual(response.status_code, 200)
+      self.assertEqual(new_level, logging.CRITICAL)
+      self.assertNotEqual(cur_level, new_level)
