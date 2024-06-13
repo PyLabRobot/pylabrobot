@@ -571,43 +571,23 @@ class Resource:
 
   def register_will_assign_resource_callback(self, callback: WillAssignResourceCallback):
     """ Add a callback that will be called before a resource is assigned to this resource. These
-    callbacks can raise errors in case the proposed assignment is invalid.
-
-    Args:
-      callback: The callback to add.
-    """
+    callbacks can raise errors in case the proposed assignment is invalid. """
     self._will_assign_resource_callbacks.append(callback)
 
   def register_did_assign_resource_callback(self, callback: DidAssignResourceCallback):
-    """ Add a callback that will be called after a resource is assigned to this resource.
-
-    Args:
-      callback: The callback to add.
-    """
+    """ Add a callback that will be called after a resource is assigned to this resource. """
     self._did_assign_resource_callbacks.append(callback)
 
   def register_will_unassign_resource_callback(self, callback: WillUnassignResourceCallback):
-    """ Add a callback that will be called before a resource is unassigned from this resource.
-
-    Args:
-      callback: The callback to add.
-    """
+    """ Add a callback that will be called before a resource is unassigned from this resource. """
     self._will_unassign_resource_callbacks.append(callback)
 
   def register_did_unassign_resource_callback(self, callback: DidUnassignResourceCallback):
-    """ Add a callback that will be called after a resource is unassigned from this resource.
-
-    Args:
-      callback: The callback to add.
-    """
+    """ Add a callback that will be called after a resource is unassigned from this resource. """
     self._did_unassign_resource_callbacks.append(callback)
 
   def deregister_will_assign_resource_callback(self, callback: WillAssignResourceCallback):
-    """ Remove a callback that will be called before a resource is assigned to this resource.
-
-    Args:
-      callback: The callback to remove.
-    """
+    """ Remove a callback that will be called before a resource is assigned to this resource. """
     self._will_assign_resource_callbacks.remove(callback)
 
   def deregister_did_assign_resource_callback(self, callback: DidAssignResourceCallback):
