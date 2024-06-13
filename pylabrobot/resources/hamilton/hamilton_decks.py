@@ -261,7 +261,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     exclude_categories = {"well", "tube", "tip_spot"} # don't print these
 
     def find_longest_child_name(resource: Resource, depth=0):
-      """ DFS to find longest child name, and depth of that child, excluding excluded categories """
+      """ DFS to find longest child name, and depth of that child,
+      excluding excluded categories
+      """
       qualified_children = [c for c in resource.children if c.category not in exclude_categories]
       if len(qualified_children) == 0:
         return len(resource.name), depth
@@ -355,7 +357,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       return r_summary
 
-    # Sort resources by rails, left to right in reality.
+    # Sort resources by x-coordinate, left to right in reality.
     sorted_resources = sorted(self.children, key=lambda r: r.get_absolute_location().x)
 
     # Print table body.
