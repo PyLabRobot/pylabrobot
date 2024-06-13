@@ -8,6 +8,7 @@ from pylabrobot.resources import (
   MFXCarrier,
   Plate,
   PlateCarrier,
+  PlateCarrierSite,
   TipCarrier,
   TipRack,
   TipSpot,
@@ -312,7 +313,7 @@ def create_plate_carrier_for_writing(filepath: str) -> Tuple[PlateCarrier, Optio
     size_x=size_x,
     size_y=size_y,
     size_z=size_z,
-    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=sites,
+    sites=create_homogeneous_carrier_sites(klass=PlateCarrierSite, locations=sites,
                                            site_size_x=site_width, site_size_y=site_height),
     model=cname
   )
