@@ -22,3 +22,4 @@ def Alpaqua_96_magnum_flx(name: str) -> PlateAdapter:
     site_pedestal_z=6.2,
     model="Alpaqua_96_magnum_flx",
     )
+

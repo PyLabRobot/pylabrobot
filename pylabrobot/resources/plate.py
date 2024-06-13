@@ -190,6 +190,8 @@ class Plate(ItemizedResource[Well]):
     for well in self.get_all_items():
       well.tracker.enable()
 
+# TODO: add quadrant definition for 96-well plates & specify current
+# quadrant definition is only for 384-well plates
   def get_quadrant(self, quadrant: int) -> List[Well]:
     """ Return the wells in the specified quadrant. Quadrants are overlapping and refer to
     alternating rows and columns of the plate. Quadrant 1 contains A1, A3, C1, etc. Quadrant 2

@@ -19,23 +19,25 @@ class MFXModule(Resource):
 
   Examples:
     1. Creating MFX module for tips:
-      Creating a `MFXCarrier`,
-      Creating a `MFXModule` for tips,
-      Assigning the `MFXModule` for tips to a carrier_site on the `MFXCarrier`,
-      Creating and assigning a tip_rack to the MFXsite on the MFXModule:
-
+      Create a `MFXCarrier`,
+      Create `MFXModule` for tips,
+      Assign the `MFXModule` for tips to a carrier_site on the `MFXCarrier`,
+      Create and assign a tip_rack to the MFXModule:
+      
       >>> mfx_carrier_1 = MFX_CAR_L5_base(name='mfx_carrier_1')
       >>> mfx_carrier_1[0] = mfx_tip_module_1 = MFX_TIP_module(name="mfx_tip_module_1")
-      >>> mfx_tip_module_1[0] = tip_50ul_rack = TIP_50ul_L(name="tip_50ul_rack")
+      >>> tip_50ul_rack = TIP_50ul_L(name="tip_50ul_rack")
+      >>> mfx_tip_module_1.assign_child_resource(tip_50ul_rack)
 
     2. Creating MFX module for plates:
       Use the same `MFXCarrier` instance,
-      Creating a `MFXModule` for plates,
-      Assigning the `MFXModule` for plates to a carrier_site on the `MFXCarrier`,
-      Creating and assigning a plate to the MFXsite on the MFXModule:
+      Create a `MFXModule` for plates,
+      Assign the `MFXModule` for plates to a carrier_site on the `MFXCarrier`,
+      Create and assign a plate directly to the MFXModule:
 
-      >>> mfx_carrier_1[1] = mfx_dwp_module_1 = MFX_DWP_module(name="mfx_dwp_module_1")
-      >>> mfx_dwp_module_1[0] = Cos96_plate_1 = Cos_96_Rd(name='Cos96_plate_1')
+      >>> mfx_carrier_1[1] = mfx_dwp_module_1 = MFX_DWP_rackbased_module(name="mfx_dwp_module_1")
+      >>> Cos96_plate_1 = Cos_96_Rd(name='cos96_plate_1')
+      >>> mfx_dwp_module_1.assign_child_resource(Cos96_plate_1)
   """
 
   def __init__(
@@ -43,15 +45,16 @@ class MFXModule(Resource):
     name: str,
     size_x: float, size_y: float, size_z: float,
     child_resource_location: Coordinate,
-    skirt_height: float = 0,
     category: Optional[str] = "mfx_module",
+    pedestal_size_z: Optional[float] = None,
     model: Optional[str] = None):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
     # site where resources will be placed on this module
     self._child_resource_location = child_resource_location
     self._child_resource: Optional[Resource] = None
-    self.skirt_height = skirt_height
+    self.pedestal_size_z: Optional[float] = pedestal_size_z
+    # TODO: add self.pedestal_2D_offset if necessary in the future
 
   @property
   def child_resource_location(self) -> Coordinate:
@@ -65,6 +68,10 @@ class MFXModule(Resource):
   ):
     """ Assign a resource to a site on this module. If `location` is not provided, the resource
     will be placed at `self._child_resource_location` (wrt this module's left front bottom). """
+
+    # TODO: add conditional logic to modify Plate position based on whether
+    # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
+
     if self._child_resource is not None and not reassign:
       raise ValueError(f"{self.name} already has a child resource assigned")
     super().assign_child_resource(
