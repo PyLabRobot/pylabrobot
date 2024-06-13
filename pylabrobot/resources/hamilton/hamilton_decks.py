@@ -264,7 +264,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       """ DFS to find longest child name, and depth of that child, excluding excluded categories """
       l, d = (len(resource.name), depth) if resource.category not in exclude_categories else (0, 0)
       new_depth = depth + 1 if resource.category not in exclude_categories else depth
-      return max( [(l, d)] + [find_longest_child_name(c, new_depth) for c in resource.children])
+      return max([(l, d)] + [find_longest_child_name(c, new_depth) for c in resource.children])
 
     def find_longest_type_name(resource: Resource):
       """ DFS to find the longest type name """
