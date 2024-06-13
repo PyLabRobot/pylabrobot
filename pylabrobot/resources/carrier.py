@@ -189,8 +189,13 @@ class TipCarrier(Carrier):
 class PlateCarrierSite(CarrierSite):
   """ A single site within a plate carrier. """
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
-               pedestal_size_z: float, category="plate_carrier_site", model: Optional[str] = None):
+               pedestal_size_z: float = None,  # type: ignore
+               category="plate_carrier_site", model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z, category=category, model=model)
+    if pedestal_size_z is None:
+      raise ValueError("pedestal_size_z must be provided. See "
+                       "https://docs.pylabrobot.org/pedestal_size_z for more information.")
+
     self.pedestal_size_z = pedestal_size_z
     self.resource: Optional[Plate] = None  # fix type
     # TODO: add self.pedestal_2D_offset if necessary in the future
