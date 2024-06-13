@@ -258,7 +258,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         "Build a layout first by calling `assign_child_resource()`. "
       )
 
-    exclude_categories = {"well", "tube", "tip_spot"} # don't print these
+    exclude_categories = {"well", "tube", "tip_spot", "carrier_site"} # don't print these
 
     def find_longest_child_name(resource: Resource, depth=0):
       """ DFS to find longest child name, and depth of that child,
