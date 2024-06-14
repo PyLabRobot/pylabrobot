@@ -537,9 +537,10 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     lid = Lid("lid",
               size_x=self.plate.get_size_x(),
               size_y=self.plate.get_size_y(),
-              size_z=self.plate.lid_height)
+              size_z=self.plate.lid_height,
+              nesting_z_height=self.plate.get_size_z())
     self.plate.assign_child_resource(lid, location=Coordinate(0, 0,
-                                     self.plate.get_size_z() - self.plate.lid_height))
+                                     self.plate.get_size_z() - self.plate.lid_nesting_z_height))
     well = self.plate.get_item("A1")
     well.tracker.set_liquids([(None, 10)])
     t = self.tip_rack.get_item("A1").get_tip()
