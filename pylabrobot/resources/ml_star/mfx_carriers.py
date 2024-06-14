@@ -4,8 +4,8 @@
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
 
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.carrier import (
+  Coordinate,
   CarrierSite,
   MFXCarrier,
   create_homogeneous_carrier_sites
