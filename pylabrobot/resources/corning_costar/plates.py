@@ -787,25 +787,25 @@ def Cos_96_Vb_P(name: str, with_lid: bool = False) -> Plate:
 ############ User-defined PLR Cos plates ############
 
 
-# # # # # # # # # # Cos_6_MWP_16800ul_Fb # # # # # # # # # #
+# # # # # # # # # # Cos_6_wellplate_16800ul_Fb # # # # # # # # # #
 
-def _compute_volume_from_height_Cos_6_MWP_16800ul_Fb(h: float):
+def _compute_volume_from_height_Cos_6_wellplate_16800ul_Fb(h: float):
   if h > 18.0:
-    raise ValueError(f"Height {h} is too large for Cos_6_MWP_16800ul_Fb")
+    raise ValueError(f"Height {h} is too large for Cos_6_wellplate_16800ul_Fb")
   return calculate_liquid_volume_container_1segment_round_fbottom(
     d=35.0,
     h_cylinder=18.2,
     liquid_height=h)
 
-def _compute_height_from_volume_Cos_6_MWP_16800ul_Fb(liquid_volume: float):
+def _compute_height_from_volume_Cos_6_wellplate_16800ul_Fb(liquid_volume: float):
   if liquid_volume > 17_640: # 5% tolerance
-    raise ValueError(f"Volume {liquid_volume} is too large for Cos_6_MWP_16800ul_Fb")
+    raise ValueError(f"Volume {liquid_volume} is too large for Cos_6_wellplate_16800ul_Fb")
   return calculate_liquid_height_container_1segment_round_fbottom(
     d=35.0,
     h_cylinder=18.2,
     liquid_volume=liquid_volume)
 
-def Cos_6_MWP_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
+def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
   """Corning-Costar 6-well multi-well plate (MWP); product no.: 3516.
   - Material: ?
   - Cleanliness: 3516: sterilized by gamma irradiation
@@ -820,7 +820,8 @@ def Cos_6_MWP_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
     size_y=86.0,
     size_z=19.85,
     with_lid=with_lid,
-    model="Cos_6_MWP_16800ul_Fb",
+    lid_nesting_z_height=1.9,
+    model="Cos_6_wellplate_16800ul_Fb",
     lid_height=2,
     items=create_equally_spaced_2d(Well,
       num_items_x=3,
@@ -835,16 +836,16 @@ def Cos_6_MWP_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
       size_z=17.5,
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
-      compute_volume_from_height=_compute_volume_from_height_Cos_6_MWP_16800ul_Fb,
-      compute_height_from_volume=_compute_height_from_volume_Cos_6_MWP_16800ul_Fb,
+      compute_volume_from_height=_compute_volume_from_height_Cos_6_wellplate_16800ul_Fb,
+      compute_height_from_volume=_compute_height_from_volume_Cos_6_wellplate_16800ul_Fb,
     ),
   )
 
-def Cos_6_MWP_16800ul_Fb_L(name: str, with_lid: bool = True) -> Plate:
-  return Cos_6_MWP_16800ul_Fb(name=name, with_lid=with_lid)
+def Cos_6_wellplate_16800ul_Fb_L(name: str, with_lid: bool = True) -> Plate:
+  return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid)
 
-def Cos_6_MWP_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
-  return Cos_6_MWP_16800ul_Fb(name=name, with_lid=with_lid).rotated(90)
+def Cos_6_wellplate_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
+  return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid).rotated(90)
 
 
 # # # # # # # # # # Cos_96_DWP_2mL_Vb # # # # # # # # # #
