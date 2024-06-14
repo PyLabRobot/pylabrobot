@@ -1552,10 +1552,10 @@ class STAR(HamiltonLiquidHandler):
                               for wb, op in zip(well_bottoms, ops)]
     aspiration_volumes = [int(op.volume * 10) for op in ops]
     if lld_search_height is None:
-        lld_search_height = [
-            wb + op.resource.get_size_z() + (2.7 if isinstance(op.resource, Well) else 5)
-            for wb, op in zip(well_bottoms, ops)
-        ]
+      lld_search_height = [
+        int((wb + op.resource.get_size_z() + (2.7 if isinstance(op.resource, Well) else 5)) * 10)
+        for wb, op in zip(well_bottoms, ops)
+      ]
     else:
       lld_search_height = [int((wb + sh) * 10) for wb, sh in zip(well_bottoms, lld_search_height)]
     clot_detection_height = _fill_in_defaults(clot_detection_height,
