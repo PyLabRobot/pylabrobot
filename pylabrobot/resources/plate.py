@@ -114,7 +114,7 @@ class Plate(ItemizedResource[Well]):
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self.lid = resource
       assert self.lid_height > 0, "Lid height must be greater than 0."
-      location = Coordinate(0, 0, self.get_size_z() - self.lid_height)
+      location = Coordinate(0, 0, self.get_size_z() - self.lid_nesting_z_height)
       print(f"location={location}")
     else:
       assert location is not None, "Location must be specified for if resource is not a lid."
