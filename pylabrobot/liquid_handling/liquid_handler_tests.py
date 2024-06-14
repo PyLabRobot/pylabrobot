@@ -198,7 +198,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     plate = Plate("plate", size_x=100, size_y=100, size_z=15, lid_height=10, items=[])
     plate.location = Coordinate(0, 0, 100)
     lid = Lid(name="lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
-      size_z=plate.lid_height, nesting_z_height=plate.lid_height())
+      size_z=plate.lid_height, nesting_z_height=plate.lid_height)
     lid.location = Coordinate(100, 100, 200)
 
     assert plate.get_absolute_location().x != lid.get_absolute_location().x

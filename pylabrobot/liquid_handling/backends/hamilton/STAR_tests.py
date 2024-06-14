@@ -213,8 +213,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=True)
-    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
+    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=True,
+                                                 lid_nesting_z_height=10)
+    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True,
+                                                       lid_nesting_z_height=10)
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     class BlueBucket(Container):
