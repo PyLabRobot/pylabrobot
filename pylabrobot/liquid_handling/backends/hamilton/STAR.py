@@ -1404,7 +1404,6 @@ class STAR(HamiltonLiquidHandler):
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,
-
     lld_search_height: Optional[List[int]] = None,
     clot_detection_height: Optional[List[int]] = None,
     pull_out_distance_transport_air: Optional[List[int]] = None,
@@ -1551,12 +1550,15 @@ class STAR(HamiltonLiquidHandler):
                     (op.offset.z if op.offset is not None else 0) for op in ops]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 1)
                               for wb, op in zip(well_bottoms, ops)]
-    lld_search_heights = [wb + op.resource.get_size_z() + \
-                            (2.7 if isinstance(op.resource, Well) else 5) #?
-                          for wb, op in zip(well_bottoms, ops)]
-
     aspiration_volumes = [int(op.volume * 10) for op in ops]
-    lld_search_height = [int(sh * 10) for sh in lld_search_heights]
+    if lld_search_height is None:
+        lld_search_height = [
+            wb + op.resource.get_size_z() + (2.7 if isinstance(op.resource, Well) else 5)
+            for wb, op in zip(well_bottoms, ops)
+        ]
+    else:
+      lld_search_height = [int((wb + sh) * 10) for wb, sh in zip(well_bottoms, lld_search_height)]
+    print(lld_search_height)
     clot_detection_height = _fill_in_defaults(clot_detection_height,
       default=[int(hlc.aspiration_clot_retract_height*10) if hlc is not None else 0
               for hlc in hamilton_liquid_classes])
