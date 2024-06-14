@@ -1697,7 +1697,7 @@ class LiquidHandler(Machine):
       to_location = Coordinate(
         x=to_location.x,
         y=to_location.y,
-        z=to_location.z  + to.get_size_z() - lid.nesting_z_height())
+        z=to_location.z  + to.get_size_z() - lid.nesting_z_height)
     elif isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
       to_location = to.get_absolute_location()

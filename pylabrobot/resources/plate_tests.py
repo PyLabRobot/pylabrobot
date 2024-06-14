@@ -11,7 +11,7 @@ from .well import Well
 class TestLid(unittest.TestCase):
   def test_initialize_with_lid(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=15, lid_height=10, items=[],
-      with_lid=True, nesting_z_height=10)
+      with_lid=True, lid_nesting_z_height=10)
     plate.location = Coordinate.zero()
 
     assert plate.lid is not None
@@ -29,7 +29,7 @@ class TestLid(unittest.TestCase):
   def test_add_lid_with_existing_lid(self):
     plate = self.test_add_lid()
     another_lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
-    size_z=plate.get_size_z())
+    size_z=plate.get_size_z(), nesting_z_height=plate.get_size_z())
     with self.assertRaises(ValueError):
       plate.assign_child_resource(another_lid, location=Coordinate(0, 0, 0))
 
