@@ -1558,7 +1558,6 @@ class STAR(HamiltonLiquidHandler):
         ]
     else:
       lld_search_height = [int((wb + sh) * 10) for wb, sh in zip(well_bottoms, lld_search_height)]
-    print(lld_search_height)
     clot_detection_height = _fill_in_defaults(clot_detection_height,
       default=[int(hlc.aspiration_clot_retract_height*10) if hlc is not None else 0
               for hlc in hamilton_liquid_classes])
