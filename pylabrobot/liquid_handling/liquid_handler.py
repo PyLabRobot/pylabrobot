@@ -1804,13 +1804,19 @@ class LiquidHandler(Machine):
       put_direction=put_direction,
       **backend_kwargs)
 
-    # Some of the code below should probably be moved to `move_resource` so that is can be shared
+    # Some of the code below should probably be moved to `move_resource` so that it can be shared
     # with the `move_lid` convenience method.
     plate.unassign()
     if isinstance(to, Coordinate):
       to_location -= self.deck.location # passed as an absolute location, but stored as relative
       self.deck.assign_child_resource(plate, location=to_location)
     elif isinstance(to, CarrierSite): # .zero() resources
+      to.assign_child_resource(plate, location=Coordinate.zero())
+    elif isinstance(to, Plate):
+      print(f"Plate stack gen:\n - z={plate.get_size_z()}")
+      to_location -= to.get_absolute_location() + plate.get_size_z()
+      if to.has_lid():
+        to_location += 0
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       to.assign_child_resource(plate)
