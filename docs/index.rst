@@ -51,7 +51,7 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
    resources/introduction
    resources/custom-resources
    resources/hamilton_parse
-   resources/pedestal_size_z
+   resources/plate_carriers
 
 
 .. toctree::

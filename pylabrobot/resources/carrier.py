@@ -194,7 +194,8 @@ class PlateCarrierSite(CarrierSite):
     super().__init__(name, size_x, size_y, size_z, category=category, model=model)
     if pedestal_size_z is None:
       raise ValueError("pedestal_size_z must be provided. See "
-                       "https://docs.pylabrobot.org/pedestal_size_z for more information.")
+                       "https://docs.pylabrobot.org/plate_carriers.html#pedestal_size_z for more "
+                       "information.")
 
     self.pedestal_size_z = pedestal_size_z
     self.resource: Optional[Plate] = None  # fix type
