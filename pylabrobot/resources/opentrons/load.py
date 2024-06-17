@@ -15,7 +15,6 @@ from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.tube import Tube
 from pylabrobot.resources.tube_rack import TubeRack
 from pylabrobot.resources.well import Well, CrossSectionType
-from pylabrobot.resources.well import Well, CrossSectionType
 
 
 if TYPE_CHECKING:

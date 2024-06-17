@@ -1171,8 +1171,8 @@ function stopRecording() {
     workers: 10,
     workerScript: 'gif.worker.js',
     background: '#FFFFFF',
-    width: canvasWidth * 2,
-    height: canvasHeight * 2
+    width: stage.width(),
+    height: stage.height()
   });
 
   // Add each frame to the GIF
@@ -1209,7 +1209,6 @@ function stopRecording() {
 // Function to convert stage to a Blob and handle the Blob
 function stageToBlob(stage, callback) {
   stage.toBlob({
-    pixelRatio: 2,
     callback: function (blob) {
       callback(blob);
     },
@@ -1236,8 +1235,8 @@ function handleBlob(blob) {
   const myImg = new Image();
 
   myImg.src = url;
-  myImg.width = canvasWidth * 2;
-  myImg.height = canvasHeight * 2;
+  myImg.width = stage.width();
+  myImg.height = stage.height();
 
   frameImages.push(myImg);
 
@@ -1312,7 +1311,7 @@ document.getElementById('myRange').addEventListener('input', function () {
   if (value > 96) value = 96;
 
   this.value = value; // Update the slider value
-  document.getElementById('current-value').textContent = value;
+  document.getElementById('current-value').textContent = "Frame Save Interval: " + value;
 
   frameInterval = value;
 

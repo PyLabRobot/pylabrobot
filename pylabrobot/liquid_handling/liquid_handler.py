@@ -1378,19 +1378,19 @@ class LiquidHandler(Machine):
           liquids = well.tracker.remove_liquid(volume=volume) # type: ignore
           all_liquids.append(liquids)
 
-      for liquid, vol in reversed(liquids):
-        channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
+        for liquid, vol in reversed(liquids):
+          channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      aspiration = AspirationPlate(
-        wells=wells,
-        volume=volume,
-        offset=offset,
-        flow_rate=flow_rate,
-        tips=tips,
-        liquid_height=None,
-        blow_out_air_volume=blow_out_air_volume,
-        liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
-      )
+        aspiration = AspirationPlate(
+          wells=wells,
+          volume=volume,
+          offset=offset,
+          flow_rate=flow_rate,
+          tips=tips,
+          liquid_height=None,
+          blow_out_air_volume=blow_out_air_volume,
+          liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
+        )
 
     try:
       await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
