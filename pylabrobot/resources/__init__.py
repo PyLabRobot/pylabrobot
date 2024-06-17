@@ -15,6 +15,7 @@ from .itemized_resource import ItemizedResource
 from .liquid import Liquid
 from .petri_dish import PetriDish, PetriDishHolder
 from .plate import Plate, Lid, Well
+from .plate_adapter import PlateAdapter
 from .powder import Powder
 from .resource import Resource
 from .tip_rack import TipRack, TipSpot
@@ -25,7 +26,7 @@ from .tube_rack import TubeRack
 from .utils import create_equally_spaced_x, create_equally_spaced_y, create_equally_spaced_2d
 
 from .tip_tracker import TipTracker, does_tip_tracking, no_tip_tracking, set_tip_tracking
-from .volume_tracker import VolumeTracker, does_volume_tracking, no_volume_tracking, set_volume_tracking
+from .volume_tracker import VolumeTracker, does_volume_tracking, no_volume_tracking, set_volume_tracking, does_cross_contamination_tracking, no_cross_contamination_tracking, set_cross_contamination_tracking
 
 from .resource_stack import ResourceStack
 

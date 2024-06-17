@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Type, TypeVar, Union
+from typing import Generic, List, Optional, Type, TypeVar, Union
 
 from .coordinate import Coordinate
+from .plate import Plate
 from .resource import Resource
-
+from .plate_adapter import PlateAdapter
 
 logger = logging.getLogger("pylabrobot")
 
@@ -36,7 +37,10 @@ class CarrierSite(Resource):
     return super().__eq__(other) and self.resource == other.resource
 
 
-class Carrier(Resource):
+S = TypeVar("S", bound=Resource)
+
+
+class Carrier(Resource, Generic[S]):
   """ Abstract base resource for carriers.
 
   It is recommended to always use a resource carrier to store resources, because this ensures the
@@ -74,7 +78,7 @@ class Carrier(Resource):
     self,
     name: str,
     size_x: float, size_y: float, size_z: float,
-    sites: Optional[List[CarrierSite]] = None,
+    sites: Optional[List[S]] = None,
     category: Optional[str] = "carrier",
     model: Optional[str] = None):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
@@ -168,7 +172,9 @@ class Carrier(Resource):
 
 
 class TipCarrier(Carrier):
-  """ Base class for tip carriers. """
+  """ Base class for tip carriers.
+  Name prefix: 'TIP_'
+  """
   def __init__(
     self,
     name: str,
@@ -182,15 +188,46 @@ class TipCarrier(Carrier):
       sites,category=category, model=model)
 
 
+class PlateCarrierSite(CarrierSite):
+  """ A single site within a plate carrier. """
+  def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
+               pedestal_size_z: float = None,  # type: ignore
+               category="plate_carrier_site", model: Optional[str] = None):
+    super().__init__(name, size_x, size_y, size_z, category=category, model=model)
+    if pedestal_size_z is None:
+      raise ValueError("pedestal_size_z must be provided. See "
+                       "https://docs.pylabrobot.org/plate_carriers.html#pedestal_size_z for more "
+                       "information.")
+
+    self.pedestal_size_z = pedestal_size_z
+    self.resource: Optional[Plate] = None  # fix type
+    # TODO: add self.pedestal_2D_offset if necessary in the future
+
+  def assign_child_resource(self, resource: Resource, location: Coordinate = Coordinate.zero(),
+                            reassign: bool = True):
+    if not isinstance(resource, (Plate, PlateAdapter)):
+      raise TypeError("PlateCarrierSite can only store Plate or PlateAdapter resources," + \
+                      f" not {type(resource)}")
+
+    # TODO: add conditional logic to modify Plate position based on whether
+    # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
+    return super().assign_child_resource(resource, location, reassign)
+
+  def serialize(self) -> dict:
+    return { **super().serialize(), "pedestal_size_z": self.pedestal_size_z, }
+
+
 class PlateCarrier(Carrier):
-  """ Base class for plate carriers. """
+  """ Base class for plate carriers.
+  Name prefix: 'PLT_'
+  """
   def __init__(
     self,
     name: str,
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Optional[List[CarrierSite]] = None,
+    sites: Optional[List[PlateCarrierSite]] = None,
     category="plate_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
@@ -198,7 +235,9 @@ class PlateCarrier(Carrier):
 
 
 class MFXCarrier(Carrier):
-  """ Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites). """
+  """ Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites).
+  Name prefix: 'MFX_'
+  """
   def __init__(
     self,
     name: str,
@@ -212,24 +251,10 @@ class MFXCarrier(Carrier):
       sites,category=category, model=model)
 
 
-class ShakerCarrier(Carrier):
-  """ Base class for shaker carriers (i.e. 7-track carriers with mixed-use and/or specialized
-  sites). """
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    sites: Optional[List[CarrierSite]] = None,
-    category="shaker_carrier",
-    model: Optional[str] = None):
-    super().__init__(name, size_x, size_y, size_z,
-      sites,category=category, model=model)
-
-
 class TubeCarrier(Carrier):
-  """ Base class for tube/sample carriers. """
+  """ Base class for tube/sample carriers.
+  Name prefix: 'SMP_'
+  """
   def __init__(
     self,
     name: str,
@@ -238,6 +263,23 @@ class TubeCarrier(Carrier):
     size_z: float,
     sites: Optional[List[CarrierSite]] = None,
     category="tube_carrier",
+    model: Optional[str] = None):
+    super().__init__(name, size_x, size_y, size_z,
+      sites,category=category, model=model)
+
+
+class ReagentCarrier(Carrier):
+  """ Base class for reagent/trough carriers.
+  Name prefix: 'RGT_'
+  """
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sites: Optional[List[CarrierSite]] = None,
+    category="reagent_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
       sites,category=category, model=model)
@@ -272,7 +314,7 @@ def create_homogeneous_carrier_sites(
   site_size_x: float,
   site_size_y: float,
   **kwargs
-  ) -> List[T]:
+) -> List[T]:
   """ Create a list of carrier sites with the same size. """
 
   n = len(locations)

@@ -23,6 +23,7 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 
    installation.md
    contributing.md
+   configuration.md
 
 .. toctree::
    :maxdepth: 1
@@ -50,6 +51,7 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
    resources/introduction
    resources/custom-resources
    resources/hamilton_parse
+   resources/plate_carriers
 
 
 .. toctree::

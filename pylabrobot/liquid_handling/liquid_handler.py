@@ -17,6 +17,7 @@ from pylabrobot.liquid_handling.strictness import Strictness, get_strictness
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.resources.errors import HasTipError
 from pylabrobot.plate_reading import PlateReader
+from pylabrobot.resources.errors import CrossContaminationError
 from pylabrobot.resources import (
   Container,
   Deck,
@@ -27,14 +28,17 @@ from pylabrobot.resources import (
   Lid,
   MFXModule,
   Plate,
+  PlateAdapter,
   Tip,
   TipRack,
   TipSpot,
   Trash,
   Well,
   TipTracker,
+  VolumeTracker,
   does_tip_tracking,
-  does_volume_tracking
+  does_volume_tracking,
+  does_cross_contamination_tracking
 )
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.utils.list import expand
@@ -57,6 +61,21 @@ from .standard import (
 
 
 logger = logging.getLogger("pylabrobot")
+
+def check_contaminated(liquid_history_tip, liquid_history_well):
+  """Helper function used to check if adding a liquid to the container
+     would result in cross contamination"""
+  return not liquid_history_tip.issubset(liquid_history_well) and len(liquid_history_tip) > 0
+
+def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
+  """Helper function used to check if it is possible to update the
+     liquid_history of src based on contents of dst"""
+  return not src_tracker.is_cross_contamination_tracking_disabled and \
+          not dest_tracker.is_cross_contamination_tracking_disabled
+
+
+class BlowOutVolumeError(Exception):
+  ...
 
 
 class BlowOutVolumeError(Exception):
@@ -182,6 +201,7 @@ class LiquidHandler(Machine):
       loop = asyncio.new_event_loop()
       asyncio.set_event_loop(loop)
       loop.run_until_complete(func(*args, **kwargs))
+      loop.close()
 
     t = threading.Thread(target=callback, args=args, kwargs=kwargs)
     t.start()
@@ -197,26 +217,8 @@ class LiquidHandler(Machine):
     information to the backend. """
     self._run_async_in_thread(self.backend.unassigned_resource_callback, resource.name)
 
-  def unassign_resource(self, resource: Union[str, Resource]): # TODO: remove this.
-    """ Unassign an assigned resource.
-
-    Args:
-      resource: The resource to unassign.
-
-    Raises:
-      KeyError: If the resource is not currently assigned to this liquid handler.
-    """
-
-    if isinstance(resource, Resource):
-      resource = resource.name
-
-    r = self.deck.get_resource(resource)
-    if r is None:
-      raise KeyError(f"Resource '{resource}' is not assigned to this liquid handler.")
-    r.unassign()
-
   def summary(self):
-    """ Prints a string summary of the deck layout.  """
+    """ Prints a string summary of the deck layout. """
 
     print(self.deck.summary())
 
@@ -749,6 +751,14 @@ class LiquidHandler(Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           op.resource.tracker.remove_liquid(op.volume)
+
+        # Cross contamination check
+        if does_cross_contamination_tracking():
+          if check_contaminated(op.tip.tracker.liquid_history, op.resource.tracker.liquid_history):
+            raise CrossContaminationError(
+              f"Attempting to aspirate {next(reversed(op.liquids))[0]} with a tip contaminated "
+              f"with {op.tip.tracker.liquid_history}.")
+
         for liquid, volume in reversed(op.liquids):
           op.tip.tracker.add_liquid(liquid=liquid, volume=volume)
 
@@ -930,6 +940,10 @@ class LiquidHandler(Machine):
     for op in dispenses:
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
+          # Update the liquid history of the tip to reflect new liquid
+          if check_updatable(op.tip.tracker, op.resource.tracker):
+            op.tip.tracker.liquid_history.update(op.resource.tracker.liquid_history)
+
           for liquid, volume in op.liquids:
             op.resource.tracker.add_liquid(liquid=liquid, volume=volume)
         op.tip.tracker.remove_liquid(op.volume)
@@ -1381,16 +1395,16 @@ class LiquidHandler(Machine):
         for liquid, vol in reversed(liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-        aspiration = AspirationPlate(
-          wells=wells,
-          volume=volume,
-          offset=offset,
-          flow_rate=flow_rate,
-          tips=tips,
-          liquid_height=None,
-          blow_out_air_volume=blow_out_air_volume,
-          liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
-        )
+      aspiration = AspirationPlate(
+        wells=wells,
+        volume=volume,
+        offset=offset,
+        flow_rate=flow_rate,
+        tips=tips,
+        liquid_height=None,
+        blow_out_air_volume=blow_out_air_volume,
+        liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids) # stupid
+      )
 
     try:
       await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
@@ -1776,6 +1790,10 @@ class LiquidHandler(Machine):
       to_location = to
     elif isinstance(to, MFXModule):
       to_location = to.get_absolute_location() + to.child_resource_location
+    elif isinstance(to, PlateAdapter):
+      # Calculate location adjustment of Plate based on PlateAdapter geometry
+      adjusted_plate_anchor = to.compute_plate_location(plate)
+      to_location = to.get_absolute_location() + adjusted_plate_anchor
     else:
       to_location = to.get_absolute_location()
 
@@ -1802,6 +1820,8 @@ class LiquidHandler(Machine):
       to.assign_child_resource(plate)
     elif isinstance(to, MFXModule):
       to.assign_child_resource(plate, location=to.child_resource_location)
+    elif isinstance(to, PlateAdapter):
+      to.assign_child_resource(plate, location=to.compute_plate_location(plate))
     else:
       to.assign_child_resource(plate, location=to_location)
 

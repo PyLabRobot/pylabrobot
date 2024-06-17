@@ -8,6 +8,7 @@ from pylabrobot.resources import (
   Deck,
   Plate,
   PlateCarrier,
+  PlateCarrierSite,
   Resource,
   TipCarrier,
   TipRack,
@@ -64,8 +65,9 @@ class DeckTests(unittest.TestCase):
         item_dx=1, item_dy=1,
         size_x=1, size_y=1,
         make_tip=standard_volume_tip_with_filter))
-    pc = PlateCarrier("pc", 100, 100, 100, sites=create_homogeneous_carrier_sites(klass=CarrierSite,
-      locations=[Coordinate(10, 20, 30)], site_size_x=10, site_size_y=10))
+    pc = PlateCarrier("pc", 100, 100, 100, sites=create_homogeneous_carrier_sites(
+      klass=PlateCarrierSite, locations=[Coordinate(10, 20, 30)], site_size_x=10, site_size_y=10,
+      pedestal_size_z=0))
     pc[0] = Plate("plate", 10, 20, 30,
       items=create_equally_spaced_2d(Well,
         num_items_x=1, num_items_y=1,

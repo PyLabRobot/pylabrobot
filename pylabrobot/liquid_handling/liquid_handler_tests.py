@@ -8,9 +8,9 @@ import unittest
 import unittest.mock
 
 from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
-from pylabrobot.resources import no_tip_tracking, set_tip_tracking
-from pylabrobot.resources.errors import HasTipError, NoTipError
-from pylabrobot.resources.volume_tracker import set_volume_tracking
+from pylabrobot.resources import no_tip_tracking, set_tip_tracking, Liquid
+from pylabrobot.resources.errors import HasTipError, NoTipError, CrossContaminationError
+from pylabrobot.resources.volume_tracker import set_volume_tracking, set_cross_contamination_tracking
 
 from . import backends
 from .liquid_handler import LiquidHandler, OperationCallback
@@ -80,23 +80,6 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(ValueError):
       dbl_plt_car_3 = PLT_CAR_L5AC_A00(name="double placed carrier 3")
       self.deck.assign_child_resource(dbl_plt_car_3, rails=20)
-
-    # Test carrier with same name.
-    with self.assertRaises(ValueError):
-      same_name_carrier = PLT_CAR_L5AC_A00(name="plate carrier")
-      self.deck.assign_child_resource(same_name_carrier, rails=10)
-    # Should not raise when replacing.
-    self.deck.assign_child_resource(same_name_carrier, rails=10, replace=True)
-    # Should not raise when unassinged.
-    self.lh.unassign_resource("plate carrier")
-    self.deck.assign_child_resource(same_name_carrier, rails=10, replace=True)
-
-    # Test unassigning unassigned resource
-    self.lh.unassign_resource("plate carrier")
-    with self.assertRaises(ResourceNotFoundError):
-      self.lh.unassign_resource("plate carrier")
-    with self.assertRaises(ResourceNotFoundError):
-      self.lh.unassign_resource("this resource is completely new.")
 
     # Test invalid rails.
     with self.assertRaises(ValueError):
@@ -657,6 +640,73 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     await self.lh.aspirate([well], vols=10)
     await self.lh.dispense([well], vols=10)
     self.assertEqual(well.tracker.liquids, [(None, 10)])
+
+  async def test_mix_volume_tracking(self):
+    for i in range(8):
+      self.plate.get_item(i).set_liquids([(Liquid.SERUM, 55)])
+
+    await self.lh.pick_up_tips(self.tip_rack[0:8])
+    initial_liquids = [self.plate.get_item(i).tracker.liquids for i in range(8)]
+    for _ in range(10):
+      await self.lh.aspirate(self.plate[0:8], vols=45)
+      await self.lh.dispense(self.plate[0:8], vols=45)
+    liquids_now = [self.plate.get_item(i).tracker.liquids for i in range(8)]
+    self.assertEqual(liquids_now, initial_liquids)
+
+
+class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    self.backend = backends.SaverBackend(num_channels=8)
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
+    self.tip_rack = STF_L(name="tip_rack")
+    self.plate = Cos_96_DW_1mL(name="plate")
+    self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
+    self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
+    await self.lh.setup()
+    set_volume_tracking(enabled=True)
+    set_cross_contamination_tracking(enabled=True)
+
+  async def asyncTearDown(self):
+    set_volume_tracking(enabled=False)
+    set_cross_contamination_tracking(enabled=False)
+
+  async def test_aspirate_with_contaminated_tip(self):
+    blood_well = self.plate.get_item("A1")
+    etoh_well = self.plate.get_item("A2")
+    dest_well = self.plate.get_item("A3")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    blood_well.tracker.set_liquids([(Liquid.BLOOD, 10)])
+    etoh_well.tracker.set_liquids([(Liquid.ETHANOL, 10)])
+    await self.lh.aspirate([blood_well], vols=10)
+    await self.lh.dispense([dest_well], vols=10)
+    with self.assertRaises(CrossContaminationError):
+      await self.lh.aspirate([etoh_well], vols=10)
+
+  async def test_aspirate_from_same_well_twice(self):
+    src_well = self.plate.get_item("A1")
+    dst_well = self.plate.get_item("A2")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    src_well.tracker.set_liquids([(Liquid.BLOOD, 20)])
+    await self.lh.aspirate([src_well], vols=10)
+    await self.lh.dispense([dst_well], vols=10)
+    self.assertEqual(dst_well.tracker.liquids, [(Liquid.BLOOD, 10)])
+    await self.lh.aspirate([src_well], vols=10)
+    await self.lh.dispense([dst_well], vols=10)
+    self.assertEqual(dst_well.tracker.liquids, [(Liquid.BLOOD, 20)])
+
+  async def test_aspirate_from_well_with_partial_overlap(self):
+    pure_blood_well = self.plate.get_item("A1")
+    mix_well = self.plate.get_item("A2")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+    pure_blood_well.tracker.set_liquids([(Liquid.BLOOD, 20)])
+    mix_well.tracker.set_liquids([(Liquid.ETHANOL, 20)])
+    await self.lh.aspirate([pure_blood_well], vols=10)
+    await self.lh.dispense([mix_well], vols=10)
+    self.assertEqual(mix_well.tracker.liquids, [(Liquid.ETHANOL, 20),
+                                                    (Liquid.BLOOD, 10)]) # order matters
+    with self.assertRaises(CrossContaminationError):
+      await self.lh.aspirate([pure_blood_well], vols=10)
 
 
 class LiquidHandlerForTesting(LiquidHandler):

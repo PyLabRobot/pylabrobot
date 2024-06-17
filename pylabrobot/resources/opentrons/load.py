@@ -123,23 +123,6 @@ def ot_definition_to_resource(
           tube.location = location
           wells[i].append(tube)
         elif display_category == "reservoir":
-
-          if well_data["shape"] == "rectangular":
-            cross_section_type = CrossSectionType.RECTANGLE
-          else:
-            cross_section_type = CrossSectionType.CIRCLE
-
-          well = Well(
-            name=item,
-            size_x=well_size_x,
-            size_y=well_size_y,
-            size_z=well_size_z,
-            max_volume=well_data["totalLiquidVolume"],
-            cross_section_type=cross_section_type
-          )
-          well.location = location
-          wells[i].append(well)
-        elif display_category == "reservoir":
           if well_data["shape"] == "rectangular":
             cross_section_type = CrossSectionType.RECTANGLE
           else:
@@ -183,15 +166,6 @@ def ot_definition_to_resource(
         size_y=size_y,
         size_z=size_z,
         items=cast(List[List[Tube]], wells),
-        model=data["metadata"]["displayName"]
-      )
-    if display_category == "reservoir":
-      return Plate(
-        name=name,
-        size_x=size_x,
-        size_y=size_y,
-        size_z=size_z,
-        items=cast(List[List[Well]], wells),
         model=data["metadata"]["displayName"]
       )
     if display_category == "reservoir":
