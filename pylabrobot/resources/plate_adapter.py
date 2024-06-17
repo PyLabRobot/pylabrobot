@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Optional, List
 
-from pylabrobot.resources.carrier import Coordinate
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.plate import Plate
 
