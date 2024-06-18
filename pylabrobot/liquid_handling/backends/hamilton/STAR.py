@@ -1101,6 +1101,7 @@ class STAR(HamiltonLiquidHandler):
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
     self._traversal_height: float = 245.0
+    self._core_adjustment: tuple[int,int] = (0,0)
     self._unsafe = UnSafe(self)
 
   @property
@@ -4083,19 +4084,19 @@ class STAR(HamiltonLiquidHandler):
     # a resource on the robot deck and use deck.get_resource().get_absolute_location().
     deck_size = self.deck.get_size_x()
     if deck_size == STARLET_SIZE_X:
-      xs = "07975" # 1360-797.5 = 562.5
+      xs = 7975 # 1360-797.5 = 562.5
     elif deck_size == STAR_SIZE_X:
-      xs = "13385" # 1900-1337.5 = 562.5, plus a manual adjustment of + 10
+      xs = 13385 # 1900-1337.5 = 562.5, plus a manual adjustment of + 10
     else:
       raise ValueError(f"Deck size {deck_size} not supported")
 
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs=xs,
+      xs=f"{xs + self._core_adjustment[0]:05}",
       xd="0",
-      ya="1240",
-      yb="1065",
+      ya=f"{1240+self._core_adjustment[1]:04}",
+      yb=f"{1065+self._core_adjustment[1]:04}",
       pa=f"{p1:02}",
       pb=f"{p2:02}",
       tp="2350",
@@ -4112,18 +4113,18 @@ class STAR(HamiltonLiquidHandler):
     assert self.deck is not None, "must have deck defined to access CoRe grippers"
     deck_size = self.deck.get_size_x()
     if deck_size == STARLET_SIZE_X:
-      xs = "07975"
+      xs = 7975
     elif deck_size == STAR_SIZE_X:
-      xs = "13385"
+      xs = 13385
     else:
       raise ValueError(f"Deck size {deck_size} not supported")
     command_output = await self.send_command(
       module="C0",
       command="ZS",
-      xs=xs,
+      xs=f"{xs + self._core_adjustment[0]:05}",
       xd="0",
-      ya="1240",
-      yb="1065",
+      ya=f"{1240+self._core_adjustment[1]:04}",
+      yb=f"{1065+self._core_adjustment[1]:04}",
       tp="2150",
       tz="2050",
       th=int(self._traversal_height * 10),
