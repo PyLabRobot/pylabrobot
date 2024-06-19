@@ -1101,7 +1101,7 @@ class STAR(HamiltonLiquidHandler):
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
     self._traversal_height: float = 245.0
-    self._core_adjustment: tuple[int,int] = (0,0)
+    self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
   @property
@@ -4093,14 +4093,14 @@ class STAR(HamiltonLiquidHandler):
     command_output = await self.send_command(
       module="C0",
       command="ZT",
-      xs=f"{xs + self._core_adjustment[0]:05}",
+      xs=f"{xs + self.core_adjustment.x:05}",
       xd="0",
-      ya=f"{1240+self._core_adjustment[1]:04}",
-      yb=f"{1065+self._core_adjustment[1]:04}",
+      ya=f"{1240+self.core_adjustment.y:04}",
+      yb=f"{1065+self.core_adjustment.y:04}",
       pa=f"{p1:02}",
       pb=f"{p2:02}",
-      tp="2350",
-      tz="2250",
+      tp=f"{2350+self.core_adjustment.z}:04",
+      tz=f"{2250+self.core_adjustment.z}:04",
       th=int(self._traversal_height * 10),
       tt="14"
     )
@@ -4121,11 +4121,11 @@ class STAR(HamiltonLiquidHandler):
     command_output = await self.send_command(
       module="C0",
       command="ZS",
-      xs=f"{xs + self._core_adjustment[0]:05}",
+      xs=f"{xs + self.core_adjustment.x:05}",
       xd="0",
-      ya=f"{1240+self._core_adjustment[1]:04}",
-      yb=f"{1065+self._core_adjustment[1]:04}",
-      tp="2150",
+      ya=f"{1240+self.core_adjustment.y:04}",
+      yb=f"{1065+self.core_adjustment.y:04}",
+      tp=f"{2150+self.core_adjustment.z:04}",
       tz="2050",
       th=int(self._traversal_height * 10),
       te=int(self._traversal_height * 10),
