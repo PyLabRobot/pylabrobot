@@ -4095,12 +4095,12 @@ class STAR(HamiltonLiquidHandler):
       command="ZT",
       xs=f"{xs + self.core_adjustment.x:05}",
       xd="0",
-      ya=f"{1240+self.core_adjustment.y:04}",
-      yb=f"{1065+self.core_adjustment.y:04}",
+      ya=f"{1240 + self.core_adjustment.y:04}",
+      yb=f"{1065 + self.core_adjustment.y:04}",
       pa=f"{p1:02}",
       pb=f"{p2:02}",
-      tp=f"{2350+self.core_adjustment.z}:04",
-      tz=f"{2250+self.core_adjustment.z}:04",
+      tp=f"{2350 + self.core_adjustment.z}:04",
+      tz=f"{2250 + self.core_adjustment.z}:04",
       th=int(self._traversal_height * 10),
       tt="14"
     )
@@ -4123,10 +4123,10 @@ class STAR(HamiltonLiquidHandler):
       command="ZS",
       xs=f"{xs + self.core_adjustment.x:05}",
       xd="0",
-      ya=f"{1240+self.core_adjustment.y:04}",
-      yb=f"{1065+self.core_adjustment.y:04}",
-      tp=f"{2150+self.core_adjustment.z:04}",
-      tz="2050",
+      ya=f"{1240 + self.core_adjustment.y:04}",
+      yb=f"{1065 + self.core_adjustment.y:04}",
+      tp=f"{2150 + self.core_adjustment.z:04}",
+      tz=f"{2050 + self.core_adjustment.z:04}"
       th=int(self._traversal_height * 10),
       te=int(self._traversal_height * 10),
     )
