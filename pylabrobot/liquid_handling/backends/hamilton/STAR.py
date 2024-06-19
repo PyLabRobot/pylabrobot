@@ -4099,8 +4099,8 @@ class STAR(HamiltonLiquidHandler):
       yb=f"{1065 + self.core_adjustment.y:04}",
       pa=f"{p1:02}",
       pb=f"{p2:02}",
-      tp=f"{2350 + self.core_adjustment.z}:04",
-      tz=f"{2250 + self.core_adjustment.z}:04",
+      tp=f"{2350 + self.core_adjustment.z:04}",
+      tz=f"{2250 + self.core_adjustment.z:04}",
       th=int(self._traversal_height * 10),
       tt="14"
     )
