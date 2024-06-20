@@ -21,15 +21,15 @@ class Trough(Container):
     size_y: float,
     size_z: float,
     max_volume: float,
-    material_z_thickness: float,
-    true_dz: float,
+    material_z_thickness: float = 0,
+    true_dz: float = 0,
     category: Optional[str] = "trough",
     model: Optional[str] = None,
     bottom_type: Union[TroughBottomType, str] = TroughBottomType.UNKNOWN,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
   ):
-    
+
     if isinstance(bottom_type, str):
       bottom_type = TroughBottomType(bottom_type)
 

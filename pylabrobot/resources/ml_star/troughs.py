@@ -13,22 +13,22 @@ from pylabrobot.resources.trough import (
 
 
 def _compute_volume_from_height_Hamilton_1_trough_200ml_Vb(h: float):
-    """ Function to compute volume of liquid in trough,
-    based on poylonmial fit of z-probed, empirical data.
-    """
-    if h > 89: # Maximal measured height possible
-      raise ValueError(f"Height {h} is too large for Hamilton_1_trough_200ml_Vb")
-    a, b, c, d = 5.50216554e-02, -5.30245236, 3.61064575e+03, -1.56155485e+04
-    polynomial_fit_of_empirical_data = a * h**3 + b * h**2 + c * h + d
-    return polynomial_fit_of_empirical_data
+  """ Function to compute volume of liquid in trough,
+  based on poylonmial fit of z-probed, empirical data.
+  """
+  if h > 89: # Maximal measured height possible
+    raise ValueError(f"Height {h} is too large for Hamilton_1_trough_200ml_Vb")
+  a, b, c, d = 5.50216554e-02, -5.30245236, 3.61064575e+03, -1.56155485e+04
+  polynomial_fit_of_empirical_data = a * h**3 + b * h**2 + c * h + d
+  return polynomial_fit_of_empirical_data
 
 def _compute_height_from_volume_Hamilton_1_trough_200ml_Vb(liquid_volume: float):
-    """ Function to compute height of liquid in trough,
-    based on poylonmial fit of z-probed, empirical data.
-    """
-    a, b, c, d = -3.22112575e-16, 9.25015048e-11, 0.000281288611, 4.34137097
-    polynomial_fit_of_empirical_data = a * liquid_volume**3 + b * liquid_volume**2 + c * liquid_volume + d
-    return round(polynomial_fit_of_empirical_data, 3)
+  """ Function to compute height of liquid in trough,
+  based on poylonmial fit of z-probed, empirical data.
+  """
+  a, b, c, d = -3.22112575e-16, 9.25015048e-11, 0.000281288611, 4.34137097
+  polynomial_fit_of_empirical_data = a * liquid_volume**3 + b * liquid_volume**2 + c * liquid_volume + d
+  return round(polynomial_fit_of_empirical_data, 3)
 
 # Calculation accuracy data:
 # input_volumes = [6_000,  10_000, 20_000, 50_000, 100_000, 150_000, 200_000,
