@@ -4,7 +4,7 @@ from typing import Callable, Optional, Union
 from .container import Container
 
 class TroughBottomType(enum.Enum):
-  """ Enum for the type of bottom of a well. """
+  """ Enum for the type of bottom of a trough. """
 
   FLAT = "flat"
   U = "U"
@@ -49,9 +49,8 @@ class Trough(Container):
     self._compute_height_from_volume = compute_height_from_volume
 
   def compute_volume_from_height(self, height: float) -> float:
-    """ Compute the volume of liquid in a well from the height of the liquid relative to the bottom
-    of the well.
-    """
+    """ Compute the volume of liquid in a trough from the height of the liquid relative to the
+    bottom of the trough. """
 
     if self._compute_volume_from_height is None:
       raise NotImplementedError("compute_volume_from_height not implemented.")
@@ -59,7 +58,7 @@ class Trough(Container):
     return self._compute_volume_from_height(height)
 
   def compute_height_from_volume(self, liquid_volume: float) -> float:
-    """ Compute the height of liquid in a well relative to the well's bottom
+    """ Compute the height of liquid in a trough relative to the trough's bottom
     from the volume of the liquid.
     """
 
