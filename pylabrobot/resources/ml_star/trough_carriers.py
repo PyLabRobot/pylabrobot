@@ -1,5 +1,3 @@
-""" ML Star MultiFleX (MFX) carriers """
-
 # pylint: disable=empty-docstring
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
@@ -42,4 +40,3 @@ def Trough_CAR_4R200_A00(name: str) -> TroughCarrier:
     ),
     model="Trough_CAR_4R200_A00"
   )
-
