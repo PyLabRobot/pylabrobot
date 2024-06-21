@@ -29,8 +29,8 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=True)
-    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
+    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01")
+    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02")
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.backend.clear()
@@ -72,8 +72,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     well.tracker.set_liquids([(None, 10)])
     tip = self.tip_rack.get_tip(0)
     self.lh.update_head_state({0: tip})
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
     self.backend.clear()
     await self.lh.aspirate([well], vols=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
@@ -94,8 +92,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     wells = self.plate["A1"]
     tip = self.tip_rack.get_tip(0)
     self.lh.update_head_state({0: tip})
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
     self.backend.clear()
     with no_volume_tracking():
       await self.lh.dispense(wells, vols=10)
@@ -137,8 +133,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.backend.clear()
 
     tips = [channel.get_tip() for channel in self.lh.head96.values()]
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
     self.backend.clear()
     await self.lh.aspirate96(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)

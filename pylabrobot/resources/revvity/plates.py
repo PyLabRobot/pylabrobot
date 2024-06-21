@@ -2,7 +2,7 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType
 from pylabrobot.resources.utils import create_equally_spaced_2d
 
@@ -23,6 +23,19 @@ def _compute_volume_from_height_Revvity_ProxiPlate_384Plus(h: float):
   )
 
 
+def Revvity_ProxiPlate_384Plus_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Revvity_ProxiPlate_384Plus_Lid",
+  # )
+
+
 #: Revvity_ProxiPlate_384Plus
 def Revvity_ProxiPlate_384Plus(name: str, with_lid: bool = False) -> Plate:
   # https://www.perkinelmer.com/uk/Product/proxiplate-384-plus-50w-6008280
@@ -31,9 +44,8 @@ def Revvity_ProxiPlate_384Plus(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.35,
-    with_lid=with_lid,
+    lid=Revvity_ProxiPlate_384Plus_Lid(name + "_lid") if with_lid else None,
     model="Revvity_ProxiPlate_384Plus",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=24,
       num_items_y=16,

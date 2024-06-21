@@ -206,7 +206,6 @@ def create_plate_for_writing(
       bottom_type=well_bottom_type,
       cross_section_type=cross_section_type
     ),
-    lid_height=10,
     model=cname
   )
 

@@ -2,7 +2,7 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType
 from pylabrobot.resources.utils import create_equally_spaced_2d
 
@@ -14,6 +14,19 @@ def _compute_volume_from_height_Gre_384_Sq(h: float) -> float:
   return volume
 
 
+def Gre_384_Sq_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Gre_384_Sq_Lid",
+  # )
+
+
 def Gre_384_Sq(name: str, with_lid: bool = False) -> Plate:
   """ Gre_384_Sq """
   return Plate(
@@ -21,7 +34,7 @@ def Gre_384_Sq(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    with_lid=with_lid,
+    lid=Gre_384_Sq_Lid(name + "_lid") if with_lid else None,
     model="Gre_384_Sq",
     items=create_equally_spaced_2d(Well,
       num_items_x=24,
@@ -48,6 +61,19 @@ def _compute_volume_from_height_Gre_1536_Sq(h: float) -> float:
   return volume
 
 
+def Gre_1536_Sq_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Gre_1536_Sq_Lid",
+  # )
+
+
 def Gre_1536_Sq(name: str, with_lid: bool = False) -> Plate:
   """ Gre_1536_Sq """
   return Plate(
@@ -55,7 +81,7 @@ def Gre_1536_Sq(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=10.4,
-    with_lid=with_lid,
+    lid=Gre_1536_Sq_Lid(name + "_lid") if with_lid else None,
     model="Gre_1536_Sq",
     items=create_equally_spaced_2d(Well,
       num_items_x=48,
@@ -90,6 +116,19 @@ def _compute_volume_from_height_Greiner96Well_655_101(h: float) -> float:
   return volume
 
 
+def Greiner96Well_655_101_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Greiner96Well_655_101_Lid",
+  # )
+
+
 # done with python
 # plate, description, eqn = create_plate_for_writing(path, ctr_filepath=ctr_path)
 # ctr_path = 'Well655_101.ctr'
@@ -101,7 +140,7 @@ def Greiner96Well_655_101(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.4,
-    with_lid=with_lid,
+    lid=Greiner96Well_655_101_Lid(name + "_lid") if with_lid else None,
     model="Greiner96Well_655_101",
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
@@ -129,6 +168,19 @@ def _compute_volume_from_height_Greiner96Well_650_201_RB(h: float) -> float:
   return volume
 
 
+def Greiner96Well_650_201_RB_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Greiner96Well_650_201_RB_Lid",
+  # )
+
+
 def Greiner96Well_650_201_RB(name: str, with_lid: bool = False) -> Plate:
   """ Greiner96Well_650_201_RB """
   return Plate(
@@ -136,7 +188,7 @@ def Greiner96Well_650_201_RB(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.6,
-    with_lid=with_lid,
+    lid=Greiner96Well_650_201_RB_Lid(name + "_lid") if with_lid else None,
     model="Greiner96Well_650_201_RB",
     items=create_equally_spaced_2d(Well,
       num_items_x=12,

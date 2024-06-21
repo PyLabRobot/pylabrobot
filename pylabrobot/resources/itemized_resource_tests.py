@@ -19,7 +19,7 @@ class TestItemizedResource(unittest.TestCase):
   """ Tests for ItemizedResource """
 
   def setUp(self) -> None:
-    self.plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
+    self.plate = Plate("plate", size_x=1, size_y=1, size_z=1,
       items=create_equally_spaced_2d(Well,
       num_items_x=12, num_items_y=8,
       dx=0, dy=0, dz=0,
