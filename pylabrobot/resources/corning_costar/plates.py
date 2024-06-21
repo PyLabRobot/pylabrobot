@@ -1109,7 +1109,6 @@ def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
     size_z=43.5,
     with_lid=with_lid,
     model="Cos_96_DWP_2mL_Vb",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,

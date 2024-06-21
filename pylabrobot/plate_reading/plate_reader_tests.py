@@ -37,21 +37,19 @@ class TestPlateReaderResource(unittest.TestCase):
     self.pr = PlateReader(name="pr", backend=MockPlateReaderBackend(), size_x=1, size_y=1, size_z=1)
 
   def test_add_plate(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1,
-      items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, items=[])
     self.pr.assign_child_resource(plate)
 
   def test_add_plate_full(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1,
-      items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, items=[])
     self.pr.assign_child_resource(plate)
 
-    another_plate = Plate("another_plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
+    another_plate = Plate("another_plate", size_x=1, size_y=1, size_z=1, items=[])
     with self.assertRaises(ValueError):
       self.pr.assign_child_resource(another_plate)
 
   def test_get_plate(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, items=[])
     self.pr.assign_child_resource(plate)
 
     self.assertEqual(self.pr.get_plate(), plate)

@@ -33,7 +33,6 @@ def Revvity_ProxiPlate_384Plus(name: str, with_lid: bool = False) -> Plate:
     size_z=14.35,
     with_lid=with_lid,
     model="Revvity_ProxiPlate_384Plus",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=24,
       num_items_y=16,

@@ -40,6 +40,9 @@ class Lid(Resource):
     if nesting_z_height == 0:
       print(f"{self.name}: Are you certain that the lid nests 0 mm with its parent plate?")
 
+  def serialize(self) -> dict:
+    return {**super().serialize(), "nesting_z_height": self.nesting_z_height}
+
 
 class Plate(ItemizedResource[Well]):
   """ Base class for Plate resources. """
@@ -98,7 +101,7 @@ class Plate(ItemizedResource[Well]):
       if self.has_lid():
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self.lid = resource
-      location = Coordinate(0, 0, self.get_size_z() - self.lid.nesting_z_height)
+      location = location or Coordinate(0, 0, self.get_size_z() - self.lid.nesting_z_height)
     else:
       assert location is not None, "Location must be specified for if resource is not a lid."
     return super().assign_child_resource(resource, location=location, reassign=reassign)
