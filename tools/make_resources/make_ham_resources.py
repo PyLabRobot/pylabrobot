@@ -71,7 +71,7 @@ def write_plate_definition(out_file, plate: Plate, description: str = None, eqn:
   out_file.write(f"    size_x={plate._size_x},\n")
   out_file.write(f"    size_y={plate._size_y},\n")
   out_file.write(f"    size_z={plate._size_z},\n")
-  out_file.write( "    lid=" + lid_name + "(name=name + \"_lid\") if with_lid else None,\n")
+  out_file.write(f"    lid={lid_name}(name=name + \"_lid\") if with_lid else None,\n")
   out_file.write(f"    model=\"{plate.model}\",\n")
   out_file.write( "    items=create_equally_spaced_2d(Well,\n")
   out_file.write(f"      num_items_x={plate.num_items_x},\n")
