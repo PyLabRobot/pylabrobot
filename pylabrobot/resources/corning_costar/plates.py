@@ -1012,6 +1012,16 @@ def Cos_96_Vb_P(name: str, with_lid: bool = False) -> Plate:
 
 # # # # # # # # # # Cos_6_wellplate_16800ul_Fb # # # # # # # # # #
 
+def Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
+  return Lid(
+    name=name,
+    size_x=127.0,
+    size_y=86.0,
+    size_z=2,             # measure the total z height
+    nesting_z_height=1.9, # measure overlap between lid and plate
+    model="Cos_6_wellplate_16800ul_Fb_Lid",
+  )
+
 def _compute_volume_from_height_Cos_6_wellplate_16800ul_Fb(h: float):
   if h > 18.0:
     raise ValueError(f"Height {h} is too large for Cos_6_wellplate_16800ul_Fb")
@@ -1042,10 +1052,8 @@ def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=19.85,
-    with_lid=with_lid,
-    lid_nesting_z_height=1.9,
+    lid=Cos_6_wellplate_16800ul_Fb_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_6_wellplate_16800ul_Fb",
-    lid_height=2,
     items=create_equally_spaced_2d(Well,
       num_items_x=3,
       num_items_y=2,
@@ -1093,6 +1101,17 @@ def _compute_height_from_volume_Cos_96_DWP_2mL_Vb(liquid_volume: float):
     h_cube=38.0,
     liquid_volume=liquid_volume),3)
 
+def Cos_96_DWP_2mL_Vb_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_DWP_2mL_VbLid",
+  # )
 
 def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
   """ Corning 96 deep-well 2 mL PCR plate. Corning cat. no.: 3960
@@ -1107,7 +1126,7 @@ def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=43.5,
-    with_lid=with_lid,
+    lid=Cos_96_DWP_2mL_Vb_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_DWP_2mL_Vb",
     items=create_equally_spaced_2d(Well,
       num_items_x=12,

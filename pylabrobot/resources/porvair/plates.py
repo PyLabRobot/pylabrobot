@@ -2,7 +2,7 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.utils import create_equally_spaced_2d
 
@@ -21,6 +21,7 @@ def _compute_volume_from_height_Porvair_6_reservoir_47ml_Vb(h: float):
     h_cube=37.5,
     liquid_height=h)
 
+
 def _compute_height_from_volume_Porvair_6_reservoir_47ml_Vb(liquid_volume: float):
   if liquid_volume > 49_350.0: # 5% tolerance
     raise ValueError(f"Volume {liquid_volume} is too large for Porvair_6_reservoir_47ml_Vb")
@@ -30,6 +31,20 @@ def _compute_height_from_volume_Porvair_6_reservoir_47ml_Vb(liquid_volume: float
     h_pyramid=5,
     h_cube=37.5,
     liquid_volume=liquid_volume),3)
+
+
+def Porvair_6_reservoir_47ml_Vb_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=5,
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Porvair_6_reservoir_47ml_Vb_Lid",
+  # )
+
 
 #: Porvair_6_reservoir_47ml_Vb
 def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
@@ -47,9 +62,8 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=44,
-    with_lid=with_lid,
+    lid=Porvair_6_reservoir_47ml_Vb_Lid(name + "_lid") if with_lid else None,
     model="Porvair_6_reservoir_47ml_Vb",
-    lid_height=5,
     items=create_equally_spaced_2d(Well,
       num_items_x=6,
       num_items_y=1,

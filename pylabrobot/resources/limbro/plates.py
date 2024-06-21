@@ -2,7 +2,7 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.utils import create_equally_spaced_2d
 
@@ -14,6 +14,19 @@ def _compute_volume_from_height_Limbro_24_Large(h: float) -> float:
   return volume
 
 
+def Limbro_24_Large_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Limbro_24_Large_Lid",
+  # )
+
+
 def Limbro_24_Large(name: str, with_lid: bool = False) -> Plate:
   """ Limbro_24_Large """
   return Plate(
@@ -21,7 +34,7 @@ def Limbro_24_Large(name: str, with_lid: bool = False) -> Plate:
     size_x=109.0,
     size_y=152.0,
     size_z=25.0,
-    with_lid=with_lid,
+    lid=Limbro_24_Large_Lid(name + "_lid") if with_lid else None,
     model="Limbro_24_Large",
     items=create_equally_spaced_2d(Well,
       num_items_x=4,
@@ -47,6 +60,19 @@ def _compute_volume_from_height_Limbro_24_Small(h: float) -> float:
   return volume
 
 
+def Limbro_24_Small_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Limbro_24_Small_Lid",
+  # )
+
+
 def Limbro_24_Small(name: str, with_lid: bool = False) -> Plate:
   """ Limbro_24_Small """
   return Plate(
@@ -54,7 +80,7 @@ def Limbro_24_Small(name: str, with_lid: bool = False) -> Plate:
     size_x=109.0,
     size_y=152.0,
     size_z=25.0,
-    with_lid=with_lid,
+    lid=Limbro_24_Small_Lid(name + "_lid") if with_lid else None,
     model="Limbro_24_Small",
     items=create_equally_spaced_2d(Well,
       num_items_x=4,
@@ -80,6 +106,19 @@ def _compute_volume_from_height_Limbro_48_Large(h: float) -> float:
   return volume
 
 
+def Limbro_48_Large_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Limbro_48_Large_Lid",
+  # )
+
+
 def Limbro_48_Large(name: str, with_lid: bool = False) -> Plate:
   """ Limbro_48_Large """
   return Plate(
@@ -87,7 +126,7 @@ def Limbro_48_Large(name: str, with_lid: bool = False) -> Plate:
     size_x=109.0,
     size_y=152.0,
     size_z=25.0,
-    with_lid=with_lid,
+    lid=Limbro_48_Large_Lid(name + "_lid") if with_lid else None,
     model="Limbro_48_Large",
     items=create_equally_spaced_2d(Well,
       num_items_x=4,
@@ -113,6 +152,19 @@ def _compute_volume_from_height_Limbro_96_Large(h: float) -> float:
   return volume
 
 
+def Limbro_96_Large_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Limbro_96_Large_Lid",
+  # )
+
+
 def Limbro_96_Large(name: str, with_lid: bool = False) -> Plate:
   """ Limbro_96_Large """
   return Plate(
@@ -120,7 +172,7 @@ def Limbro_96_Large(name: str, with_lid: bool = False) -> Plate:
     size_x=109.0,
     size_y=152.0,
     size_z=25.0,
-    with_lid=with_lid,
+    lid=Limbro_96_Large_Lid(name + "_lid") if with_lid else None,
     model="Limbro_96_Large",
     items=create_equally_spaced_2d(Well,
       num_items_x=8,
