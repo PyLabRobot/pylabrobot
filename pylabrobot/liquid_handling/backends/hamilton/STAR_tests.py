@@ -1,5 +1,3 @@
-""" Tests for the Hamilton STAR backend. """
-
 from typing import cast
 import unittest
 import unittest.mock
@@ -213,8 +211,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=True)
-    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
+    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01")
+    lid = Lid(name="plate_01_lid", size_x=self.plate.get_size_x(), size_y=self.plate.get_size_y(),
+              size_z=10, nesting_z_height=10)
+    self.plate.assign_child_resource(lid)
+    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02")
+    lid = Lid(name="plate_02_lid", size_x=self.other_plate.get_size_x(),
+              size_y=self.other_plate.get_size_y(), size_z=10, nesting_z_height=10)
+    self.other_plate.assign_child_resource(lid)
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     class BlueBucket(Container):

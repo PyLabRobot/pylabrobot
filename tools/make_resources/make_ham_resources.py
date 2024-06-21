@@ -47,6 +47,22 @@ def write_plate_definition(out_file, plate: Plate, description: str = None, eqn:
   item_dx = round(plate.get_item("A2").location.x - well_a1.location.x, 4)
   item_dy = round(well_a1.location.y - plate.get_item("B1").location.y, 4)
 
+  # write lid definition: currently we don't import those from anywhere, so just raise an error
+  # https://github.com/PyLabRobot/pylabrobot/pull/161
+
+  lid_name = f"{plate.model}_Lid"
+  out_file.write(f"def {lid_name}(name: str) -> Lid:\n")
+  out_file.write( "  raise NotImplementedError(\"This lid is not currently defined.\")\n")
+  out_file.write( "  # See https://github.com/PyLabRobot/pylabrobot/pull/161.\n") #TODO: rpl with docs
+  out_file.write( "  # return Lid(\n")
+  out_file.write( "  #   name=name,\n")
+  out_file.write(f"  #   size_x={plate._size_x},\n")
+  out_file.write(f"  #   size_y={plate._size_y},\n")
+  out_file.write( "  #   size_z=None,           # measure the total z height\n")
+  out_file.write( "  #   nesting_z_height=None, # measure overlap between lid and plate\n")
+  out_file.write(f"  #   model=\"{plate.model}_Lid\",\n")
+  out_file.write( "  # )\n\n\n")
+
   out_file.write(f"def {plate.model}(name: str, with_lid: bool = False) -> Plate:\n")
   if description is not None:
     out_file.write(f"  \"\"\" {description} \"\"\"\n")
@@ -55,9 +71,8 @@ def write_plate_definition(out_file, plate: Plate, description: str = None, eqn:
   out_file.write(f"    size_x={plate._size_x},\n")
   out_file.write(f"    size_y={plate._size_y},\n")
   out_file.write(f"    size_z={plate._size_z},\n")
-  out_file.write( "    with_lid=with_lid,\n")
+  out_file.write(f"    lid={lid_name}(name=name + \"_lid\") if with_lid else None,\n")
   out_file.write(f"    model=\"{plate.model}\",\n")
-  out_file.write(f"    lid_height={plate.lid_height},\n")
   out_file.write( "    items=create_equally_spaced_2d(Well,\n")
   out_file.write(f"      num_items_x={plate.num_items_x},\n")
   out_file.write(f"      num_items_y={plate.num_items_y},\n")

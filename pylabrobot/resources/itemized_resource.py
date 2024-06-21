@@ -59,7 +59,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       :func:`pylabrobot.resources.create_equally_spaced_2d`:
 
         >>> from pylabrobot.resources import Plate
-        >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
+        >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1,
         ...   items=create_equally_spaced_2d(Well
         ...     dx=0, dy=0, dz=0, item_size_x=1, item_size_y=1,
         ...     num_items_x=1, num_items_y=1))
@@ -67,7 +67,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       Creating a plate with 1 well with a list:
 
         >>> from pylabrobot.resources import Plate
-        >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=10,
+        >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1,
         ...   items=[[Well("well", size_x=1, size_y=1, size_z=1)]])
     """
 
