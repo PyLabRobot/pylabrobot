@@ -66,4 +66,4 @@ class Trough(Container):
       raise NotImplementedError("compute_height_from_volume not implemented.")
 
     return self._compute_height_from_volume(liquid_volume)
-  
+

@@ -18,25 +18,25 @@ def _compute_volume_from_height_Hamilton_1_trough_200ml_Vb(h: float):
   """
   if h > 89: # Maximal measured height possible
     raise ValueError(f"Height {h} is too large for Hamilton_1_trough_200ml_Vb")
-  a, b, c, d = 5.50216554e-02, -5.30245236, 3.61064575e+03, -1.56155485e+04
+  a, b, c, d = -9.31148824e-2, 17.4143864, 2639.07733, -6103.77862
   polynomial_fit_of_empirical_data = a * h**3 + b * h**2 + c * h + d
-  return polynomial_fit_of_empirical_data
+  return round(polynomial_fit_of_empirical_data, 3)
 
 def _compute_height_from_volume_Hamilton_1_trough_200ml_Vb(liquid_volume: float):
   """ Function to compute height of liquid in trough,
   based on poylonmial fit of z-probed, empirical data.
   """
-  a, b, c, d = -3.22112575e-16, 9.25015048e-11, 0.000281288611, 4.34137097
+  a, b, c, d = 3.59536348e-16, -2.59979679e-10, 0.000331809032, 2.70090777
   polynomial_fit_of_empirical_data = a * liquid_volume**3 + b * liquid_volume**2 + c * liquid_volume + d
   return round(polynomial_fit_of_empirical_data, 3)
 
 # Calculation accuracy data:
-# input_volumes = [6_000,  10_000, 20_000, 50_000, 100_000, 150_000, 200_000,
-# 240_000, 300_000] in ul
-# target_heights = [5.8, 7.4, 10.1, 18.5, 32.9, 47.8, 61.7,
-# 72.6, 88.4] in mm
-# calculated_heights = [6.032, 7.163, 10.002, 18.597, 33.073, 47.529, 61.722,
-# 72.726, 88.356] in mm
+# input_volumes = [0, 6000, 10000, 20000, 50000, 100000, 150000,
+# 200000, 240000, 300000]
+# target_heights = [0, 5.8, 7.4, 10.1, 18.5, 32.9, 47.8,
+# 61.7, 72.6, 88.4]
+# calculated_heights = [2.7, 4.68, 5.99, 9.24, 18.69, 33.64, 47.84,
+# 61.54, 72.33, 88.55]
 
 def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:
   """ Hamilton cat. no.: 56695-02
