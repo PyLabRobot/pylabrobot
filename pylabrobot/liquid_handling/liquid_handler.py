@@ -1827,7 +1827,7 @@ class LiquidHandler(Machine):
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, Plate):
       to.assign_child_resource(plate)
-      stack_top_absolute_z = plate.get_absolute_location(z='top').z
+      stack_top_absolute_z = plate.get_absolute_location(z="top").z
       print(f"Plate stack gen:\n - z_top={stack_top_absolute_z}")
       if stack_top_absolute_z > 245:
         print("WARNING: Top of the plate stack is above minimum safety height / 245 mm.")

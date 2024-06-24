@@ -1101,7 +1101,7 @@ def _compute_height_from_volume_Cos_96_wellplate_2mL_Vb(liquid_volume: float):
     h_cube=38.0,
     liquid_volume=liquid_volume),3)
 
-def Cos_96_DWP_2mL_Vb_Lid(name: str) -> Lid:
+def Cos_96_wellplate_2mL_Vb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -1114,7 +1114,7 @@ def Cos_96_DWP_2mL_Vb_Lid(name: str) -> Lid:
   # )
 
 def Cos_96_DWP_2mL_Vb(name: str):
-  raise  Exception("deprecated - use Cos_96_wellplate_2mL_Vb instead.")
+  raise ValueError("deprecated - use Cos_96_wellplate_2mL_Vb instead.")
 
 def Cos_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
   """ Corning 96 deep-well 2 mL PCR plate. Corning cat. no.: 3960
