@@ -251,21 +251,6 @@ class MFXCarrier(Carrier):
       sites,category=category, model=model)
 
 
-class ShakerCarrier(Carrier):
-  """ Base class for shaker carriers (i.e. 7-track carriers with mixed-use and/or specialized
-  sites). """
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    sites: Optional[List[CarrierSite]] = None,
-    category="shaker_carrier",
-    model: Optional[str] = None):
-    super().__init__(name, size_x, size_y, size_z,
-      sites,category=category, model=model)
-
 
 class TubeCarrier(Carrier):
   """ Base class for tube/sample carriers.
@@ -284,7 +269,7 @@ class TubeCarrier(Carrier):
       sites,category=category, model=model)
 
 
-class ReagentCarrier(Carrier):
+class TroughCarrier(Carrier):
   """ Base class for reagent/trough carriers.
   Name prefix: 'RGT_'
   """
@@ -295,7 +280,7 @@ class ReagentCarrier(Carrier):
     size_y: float,
     size_z: float,
     sites: Optional[List[CarrierSite]] = None,
-    category="reagent_carrier",
+    category="trough_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
       sites,category=category, model=model)

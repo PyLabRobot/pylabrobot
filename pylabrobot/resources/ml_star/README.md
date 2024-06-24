@@ -41,7 +41,25 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Currently defined MFX carriers:
+### Currently defined Trough carriers:
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Trough_CAR_4R200_A00'<br>Part no.: 185436 (same as 96890-01?)<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/96890-01) <br>Trough carrier for 4x 200ml troughs. 2 tracks(T) wide. | <img src="ims/Trough_CAR_4R200_A00.jpg" alt="Trough_CAR_4R200_A00" width="250"/> | `Trough_CAR_4R200_A00` |
+
+
+
+#### Currently defined Troughs:
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Hamilton_1_trough_200ml_Vb'<br>Part no.: 56695-02<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/56695-02) <br>Trough 200ml, w lid, self standing, Black. <br>Compatible with Trough_CAR_4R200_A00 (185436). | <img src="ims/Hamilton_1_trough_200ml_Vb.jpg" alt="Hamilton_1_trough_200ml_Vb" width="250"/> | `Hamilton_1_trough_200ml_Vb` |
+
+
+
+---
+
+### Currently defined Adapters:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
