@@ -2,7 +2,7 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.utils import create_equally_spaced_2d
 
@@ -25,6 +25,19 @@ def _compute_volume_from_height_Cos_1536_10ul(h: float) -> float:
   return volume
 
 
+def Cos_1536_10ul_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_1536_10ul_Lid",
+  # )
+
+
 def Cos_1536_10ul(name: str, with_lid: bool = False) -> Plate:
   """ Cos_1536_10ul """
   return Plate(
@@ -32,9 +45,8 @@ def Cos_1536_10ul(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=10.25,
-    with_lid=with_lid,
+    lid=Cos_1536_10ul_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_1536_10ul",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=48,
       num_items_y=32,
@@ -69,6 +81,19 @@ def _compute_volume_from_height_Cos_384_DW(h: float) -> float:
   return volume
 
 
+def Cos_384_DW_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_384_DW_Lid",
+  # )
+
+
 def Cos_384_DW(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_DW """
   return Plate(
@@ -76,9 +101,8 @@ def Cos_384_DW(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=28.0,
-    with_lid=with_lid,
+    lid=Cos_384_DW_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_384_DW",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=24,
       num_items_y=16,
@@ -111,6 +135,19 @@ def _compute_volume_from_height_Cos_384_PCR(h: float) -> float:
   return volume
 
 
+def Cos_384_PCR_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_384_PCR_Lid",
+  # )
+
+
 def Cos_384_PCR(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_PCR """
   return Plate(
@@ -118,9 +155,8 @@ def Cos_384_PCR(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=16.0,
-    with_lid=with_lid,
+    lid=Cos_384_PCR_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_384_PCR",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=24,
       num_items_y=16,
@@ -153,6 +189,19 @@ def _compute_volume_from_height_Cos_384_Sq(h: float) -> float:
   return volume
 
 
+def Cos_384_Sq_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_384_Sq_Lid",
+  # )
+
+
 def Cos_384_Sq(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_Sq """
   return Plate(
@@ -160,9 +209,8 @@ def Cos_384_Sq(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.24,
-    with_lid=with_lid,
+    lid=Cos_384_Sq_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_384_Sq",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=24,
       num_items_y=16,
@@ -197,6 +245,19 @@ def _compute_volume_from_height_Cos_384_Sq_Rd(h: float) -> float:
   return volume
 
 
+def Cos_384_Sq_Rd_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_384_Sq_Rd_Lid",
+  # )
+
+
 def Cos_384_Sq_Rd(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_Sq_Rd """
   return Plate(
@@ -204,9 +265,8 @@ def Cos_384_Sq_Rd(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    with_lid=with_lid,
+    lid=Cos_384_Sq_Rd_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_384_Sq_Rd",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=24,
       num_items_y=16,
@@ -241,6 +301,19 @@ def _compute_volume_from_height_Cos_96_DW_1mL(h: float) -> float:
   return volume
 
 
+def Cos_96_DW_1mL_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_DW_1mL_Lid",
+  # )
+
+
 def Cos_96_DW_1mL(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DW_1mL """
   return Plate(
@@ -248,9 +321,8 @@ def Cos_96_DW_1mL(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=42.0,
-    with_lid=with_lid,
+    lid=Cos_96_DW_1mL_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_DW_1mL",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -285,6 +357,19 @@ def _compute_volume_from_height_Cos_96_DW_2mL(h: float) -> float:
   return volume
 
 
+def Cos_96_DW_2mL_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_DW_2mL_Lid",
+  # )
+
+
 def Cos_96_DW_2mL(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DW_2mL """
   return Plate(
@@ -292,9 +377,8 @@ def Cos_96_DW_2mL(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=43.5,
-    with_lid=with_lid,
+    lid=Cos_96_DW_2mL_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_DW_2mL",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -329,6 +413,19 @@ def _compute_volume_from_height_Cos_96_DW_500ul(h: float) -> float:
   return volume
 
 
+def Cos_96_DW_500ul_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_DW_500ul_Lid",
+  # )
+
+
 def Cos_96_DW_500ul(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DW_500ul """
   return Plate(
@@ -336,9 +433,8 @@ def Cos_96_DW_500ul(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=27.5,
-    with_lid=with_lid,
+    lid=Cos_96_DW_500ul_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_DW_500ul",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -371,6 +467,19 @@ def _compute_volume_from_height_Cos_96_EZWash(h: float) -> float:
   return volume
 
 
+def Cos_96_EZWash_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_EZWash_Lid",
+  # )
+
+
 def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_EZWash """
   return Plate(
@@ -378,9 +487,8 @@ def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    with_lid=with_lid,
+    lid=Cos_96_EZWash_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_EZWash",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -413,6 +521,19 @@ def _compute_volume_from_height_Cos_96_FL(h: float) -> float:
   return volume
 
 
+def Cos_96_FL_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_FL_Lid",
+  # )
+
+
 def Cos_96_FL(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_FL """
   return Plate(
@@ -420,9 +541,8 @@ def Cos_96_FL(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.24,
-    with_lid=with_lid,
+    lid=Cos_96_FL_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_FL",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -447,6 +567,19 @@ def _compute_volume_from_height_Cos_96_Filter(h: float) -> float:
   return volume
 
 
+def Cos_96_Filter_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_Filter_Lid",
+  # )
+
+
 def Cos_96_Filter(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Filter """
   return Plate(
@@ -454,9 +587,8 @@ def Cos_96_Filter(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    with_lid=with_lid,
+    lid=Cos_96_Filter_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_Filter",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -482,12 +614,32 @@ def Cos_96_Filter_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Filter """
   return Cos_96_Filter(name=name, with_lid=with_lid).rotated(90)
 
+def Cos_96_Fl_L(name: str, with_lid: bool = False) -> Plate:
+  """ Cos_96_Fl """
+  return Cos_96_FL(name=name, with_lid=with_lid)
+
+def Cos_96_Fl_P(name: str, with_lid: bool = False) -> Plate:
+  """ Cos_96_Fl """
+  return Cos_96_FL(name=name, with_lid=with_lid).rotated(90)
 
 def _compute_volume_from_height_Cos_96_HalfArea(h: float) -> float:
   volume = min(h, 10.7)*17.7369
   if h > 10.7:
     raise ValueError(f"Height {h} is too large for Cos_96_HalfArea")
   return volume
+
+
+def Cos_96_HalfArea_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_HalfArea_Lid",
+  # )
 
 
 def Cos_96_HalfArea(name: str, with_lid: bool = False) -> Plate:
@@ -497,9 +649,8 @@ def Cos_96_HalfArea(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    with_lid=with_lid,
+    lid=Cos_96_HalfArea_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_HalfArea",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -534,6 +685,19 @@ def _compute_volume_from_height_Cos_96_PCR(h: float) -> float:
   return volume
 
 
+def Cos_96_PCR_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_PCR_Lid",
+  # )
+
+
 def Cos_96_PCR(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_PCR """
   return Plate(
@@ -541,9 +705,8 @@ def Cos_96_PCR(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=22.5,
-    with_lid=with_lid,
+    lid=Cos_96_PCR_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_PCR",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -576,6 +739,19 @@ def _compute_volume_from_height_Cos_96_ProtCryst(h: float) -> float:
   return volume
 
 
+def Cos_96_ProtCryst_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_ProtCryst_Lid",
+  # )
+
+
 def Cos_96_ProtCryst(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_ProtCryst """
   return Plate(
@@ -583,9 +759,8 @@ def Cos_96_ProtCryst(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=20.0,
-    with_lid=with_lid,
+    lid=Cos_96_ProtCryst_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_ProtCryst",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=24,
       num_items_y=8,
@@ -620,6 +795,19 @@ def _compute_volume_from_height_Cos_96_Rd(h: float) -> float:
   return volume
 
 
+def Cos_96_Rd_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_Rd_Lid",
+  # )
+
+
 def Cos_96_Rd(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Rd """
   return Plate(
@@ -627,9 +815,8 @@ def Cos_96_Rd(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    with_lid=with_lid,
+    lid=Cos_96_Rd_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_Rd",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -662,6 +849,19 @@ def _compute_volume_from_height_Cos_96_SpecOps(h: float) -> float:
   return volume
 
 
+def Cos_96_SpecOps_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_SpecOps_Lid",
+  # )
+
+
 def Cos_96_SpecOps(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_SpecOps """
   return Plate(
@@ -669,9 +869,8 @@ def Cos_96_SpecOps(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.3,
-    with_lid=with_lid,
+    lid=Cos_96_SpecOps_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_SpecOps",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -704,6 +903,19 @@ def _compute_volume_from_height_Cos_96_UV(h: float) -> float:
   return volume
 
 
+def Cos_96_UV_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_UV_Lid",
+  # )
+
+
 def Cos_96_UV(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_UV """
   return Plate(
@@ -711,9 +923,8 @@ def Cos_96_UV(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.3,
-    with_lid=with_lid,
+    lid=Cos_96_UV_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_UV",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -748,6 +959,19 @@ def _compute_volume_from_height_Cos_96_Vb(h: float) -> float:
   return volume
 
 
+def Cos_96_Vb_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_Vb_Lid",
+  # )
+
+
 def Cos_96_Vb(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Vb """
   return Plate(
@@ -755,9 +979,8 @@ def Cos_96_Vb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.24,
-    with_lid=with_lid,
+    lid=Cos_96_Vb_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_Vb",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -787,31 +1010,41 @@ def Cos_96_Vb_P(name: str, with_lid: bool = False) -> Plate:
 ############ User-defined PLR Cos plates ############
 
 
-# # # # # # # # # # Cos_6_MWP_16800ul_Fb # # # # # # # # # #
+# # # # # # # # # # Cos_6_wellplate_16800ul_Fb # # # # # # # # # #
 
-def _compute_volume_from_height_Cos_6_MWP_16800ul_Fb(h: float):
+def Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
+  return Lid(
+    name=name,
+    size_x=127.0,
+    size_y=86.0,
+    size_z=2,             # measure the total z height
+    nesting_z_height=1.9, # measure overlap between lid and plate
+    model="Cos_6_wellplate_16800ul_Fb_Lid",
+  )
+
+def _compute_volume_from_height_Cos_6_wellplate_16800ul_Fb(h: float):
   if h > 18.0:
-    raise ValueError(f"Height {h} is too large for Cos_6_MWP_16800ul_Fb")
+    raise ValueError(f"Height {h} is too large for Cos_6_wellplate_16800ul_Fb")
   return calculate_liquid_volume_container_1segment_round_fbottom(
     d=35.0,
     h_cylinder=18.2,
     liquid_height=h)
 
-def _compute_height_from_volume_Cos_6_MWP_16800ul_Fb(liquid_volume: float):
+def _compute_height_from_volume_Cos_6_wellplate_16800ul_Fb(liquid_volume: float):
   if liquid_volume > 17_640: # 5% tolerance
-    raise ValueError(f"Volume {liquid_volume} is too large for Cos_6_MWP_16800ul_Fb")
+    raise ValueError(f"Volume {liquid_volume} is too large for Cos_6_wellplate_16800ul_Fb")
   return calculate_liquid_height_container_1segment_round_fbottom(
     d=35.0,
     h_cylinder=18.2,
     liquid_volume=liquid_volume)
 
-def Cos_6_MWP_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
+def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
   """Corning-Costar 6-well multi-well plate (MWP); product no.: 3516.
   - Material: ?
   - Cleanliness: 3516: sterilized by gamma irradiation
   - Nonreversible lids with condensation rings to reduce contamination
   - Treated for optimal cell attachment
-  - Cell growth area: 9.5 cm² (approx.)  
+  - Cell growth area: 9.5 cm² (approx.)
   - Total volume: 16.8 mL
   """
   return Plate(
@@ -819,9 +1052,8 @@ def Cos_6_MWP_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=19.85,
-    with_lid=with_lid,
-    model="Cos_6_MWP_16800ul_Fb",
-    lid_height=2,
+    lid=Cos_6_wellplate_16800ul_Fb_Lid(name=name + "_lid") if with_lid else None,
+    model="Cos_6_wellplate_16800ul_Fb",
     items=create_equally_spaced_2d(Well,
       num_items_x=3,
       num_items_y=2,
@@ -835,16 +1067,16 @@ def Cos_6_MWP_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
       size_z=17.5,
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
-      compute_volume_from_height=_compute_volume_from_height_Cos_6_MWP_16800ul_Fb,
-      compute_height_from_volume=_compute_height_from_volume_Cos_6_MWP_16800ul_Fb,
+      compute_volume_from_height=_compute_volume_from_height_Cos_6_wellplate_16800ul_Fb,
+      compute_height_from_volume=_compute_height_from_volume_Cos_6_wellplate_16800ul_Fb,
     ),
   )
 
-def Cos_6_MWP_16800ul_Fb_L(name: str, with_lid: bool = True) -> Plate:
-  return Cos_6_MWP_16800ul_Fb(name=name, with_lid=with_lid)
+def Cos_6_wellplate_16800ul_Fb_L(name: str, with_lid: bool = True) -> Plate:
+  return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid)
 
-def Cos_6_MWP_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
-  return Cos_6_MWP_16800ul_Fb(name=name, with_lid=with_lid).rotated(90)
+def Cos_6_wellplate_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
+  return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid).rotated(90)
 
 
 # # # # # # # # # # Cos_96_DWP_2mL_Vb # # # # # # # # # #
@@ -869,6 +1101,17 @@ def _compute_height_from_volume_Cos_96_DWP_2mL_Vb(liquid_volume: float):
     h_cube=38.0,
     liquid_volume=liquid_volume),3)
 
+def Cos_96_DWP_2mL_Vb_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Cos_96_DWP_2mL_VbLid",
+  # )
 
 def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
   """ Corning 96 deep-well 2 mL PCR plate. Corning cat. no.: 3960
@@ -883,9 +1126,8 @@ def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=43.5,
-    with_lid=with_lid,
+    lid=Cos_96_DWP_2mL_Vb_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_96_DWP_2mL_Vb",
-    lid_height=10,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,

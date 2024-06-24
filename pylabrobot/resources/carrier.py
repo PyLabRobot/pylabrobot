@@ -6,7 +6,7 @@ from typing import Generic, List, Optional, Type, TypeVar, Union
 from .coordinate import Coordinate
 from .plate import Plate
 from .resource import Resource
-
+from .plate_adapter import PlateAdapter
 
 logger = logging.getLogger("pylabrobot")
 
@@ -172,7 +172,9 @@ class Carrier(Resource, Generic[S]):
 
 
 class TipCarrier(Carrier):
-  """ Base class for tip carriers. """
+  """ Base class for tip carriers.
+  Name prefix: 'TIP_'
+  """
   def __init__(
     self,
     name: str,
@@ -194,7 +196,8 @@ class PlateCarrierSite(CarrierSite):
     super().__init__(name, size_x, size_y, size_z, category=category, model=model)
     if pedestal_size_z is None:
       raise ValueError("pedestal_size_z must be provided. See "
-                       "https://docs.pylabrobot.org/pedestal_size_z for more information.")
+                       "https://docs.pylabrobot.org/plate_carriers.html#pedestal_size_z for more "
+                       "information.")
 
     self.pedestal_size_z = pedestal_size_z
     self.resource: Optional[Plate] = None  # fix type
@@ -202,8 +205,9 @@ class PlateCarrierSite(CarrierSite):
 
   def assign_child_resource(self, resource: Resource, location: Coordinate = Coordinate.zero(),
                             reassign: bool = True):
-    if not isinstance(resource, Plate):
-      raise TypeError(f"PlateCarrierSite can only store Plate resources, not {type(resource)}")
+    if not isinstance(resource, (Plate, PlateAdapter)):
+      raise TypeError("PlateCarrierSite can only store Plate or PlateAdapter resources," + \
+                      f" not {type(resource)}")
 
     # TODO: add conditional logic to modify Plate position based on whether
     # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
@@ -214,7 +218,9 @@ class PlateCarrierSite(CarrierSite):
 
 
 class PlateCarrier(Carrier):
-  """ Base class for plate carriers. """
+  """ Base class for plate carriers.
+  Name prefix: 'PLT_'
+  """
   def __init__(
     self,
     name: str,
@@ -229,7 +235,9 @@ class PlateCarrier(Carrier):
 
 
 class MFXCarrier(Carrier):
-  """ Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites). """
+  """ Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites).
+  Name prefix: 'MFX_'
+  """
   def __init__(
     self,
     name: str,
@@ -243,24 +251,11 @@ class MFXCarrier(Carrier):
       sites,category=category, model=model)
 
 
-class ShakerCarrier(Carrier):
-  """ Base class for shaker carriers (i.e. 7-track carriers with mixed-use and/or specialized
-  sites). """
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    sites: Optional[List[CarrierSite]] = None,
-    category="shaker_carrier",
-    model: Optional[str] = None):
-    super().__init__(name, size_x, size_y, size_z,
-      sites,category=category, model=model)
-
 
 class TubeCarrier(Carrier):
-  """ Base class for tube/sample carriers. """
+  """ Base class for tube/sample carriers.
+  Name prefix: 'SMP_'
+  """
   def __init__(
     self,
     name: str,
@@ -269,6 +264,23 @@ class TubeCarrier(Carrier):
     size_z: float,
     sites: Optional[List[CarrierSite]] = None,
     category="tube_carrier",
+    model: Optional[str] = None):
+    super().__init__(name, size_x, size_y, size_z,
+      sites,category=category, model=model)
+
+
+class TroughCarrier(Carrier):
+  """ Base class for reagent/trough carriers.
+  Name prefix: 'RGT_'
+  """
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    sites: Optional[List[CarrierSite]] = None,
+    category="trough_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
       sites,category=category, model=model)

@@ -195,22 +195,23 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       Coordinate(1000, 1000, 1000))
 
   async def test_move_lid(self):
-    plate = Plate("plate", size_x=100, size_y=100, size_z=15, lid_height=10, items=[])
+    plate = Plate("plate", size_x=100, size_y=100, size_z=15, items=[])
     plate.location = Coordinate(0, 0, 100)
+    lid_height = 10
     lid = Lid(name="lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
-      size_z=plate.lid_height)
+      size_z=lid_height, nesting_z_height=lid_height)
     lid.location = Coordinate(100, 100, 200)
 
     assert plate.get_absolute_location().x != lid.get_absolute_location().x
     assert plate.get_absolute_location().y != lid.get_absolute_location().y
-    assert plate.get_absolute_location().z + plate.get_size_z() - plate.lid_height \
+    assert plate.get_absolute_location().z + plate.get_size_z() - lid_height \
       != lid.get_absolute_location().z
 
     await self.lh.move_lid(lid, plate)
 
     assert plate.get_absolute_location().x == lid.get_absolute_location().x
     assert plate.get_absolute_location().y == lid.get_absolute_location().y
-    assert plate.get_absolute_location().z + plate.get_size_z() - plate.lid_height \
+    assert plate.get_absolute_location().z + plate.get_size_z() - lid_height \
       == lid.get_absolute_location().z
 
   def test_serialize(self):
@@ -534,12 +535,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.discard_tips()
 
   async def test_aspirate_with_lid(self):
-    lid = Lid("lid",
-              size_x=self.plate.get_size_x(),
-              size_y=self.plate.get_size_y(),
-              size_z=self.plate.lid_height)
-    self.plate.assign_child_resource(lid, location=Coordinate(0, 0,
-                                     self.plate.get_size_z() - self.plate.lid_height))
+    lid = Lid("lid", size_x=self.plate.get_size_x(), size_y=self.plate.get_size_y(),
+              size_z=10, nesting_z_height=self.plate.get_size_z())
+    self.plate.assign_child_resource(lid)
     well = self.plate.get_item("A1")
     well.tracker.set_liquids([(None, 10)])
     t = self.tip_rack.get_item("A1").get_tip()

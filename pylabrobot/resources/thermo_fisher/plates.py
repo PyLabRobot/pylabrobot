@@ -4,7 +4,7 @@
 
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.utils import create_equally_spaced_2d
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.plate import Lid, Plate
 
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_ubottom
 from pylabrobot.resources.height_functions import calculate_liquid_height_in_container_2segments_square_ubottom
@@ -20,6 +20,7 @@ def _compute_volume_from_height_ThermoScientific_96_DWP_1200ul_Rd(h: float):
     h_cuboid=16.45,
     liquid_height=h)
 
+
 def _compute_height_from_volume_ThermoScientific_96_DWP_1200ul_Rd(liquid_volume: float):
   if liquid_volume > 1260: # 5% tolerance
     raise ValueError(f"Volume {liquid_volume} is too large for ThermoScientific_96_DWP_1200ul_Rd")
@@ -27,6 +28,20 @@ def _compute_height_from_volume_ThermoScientific_96_DWP_1200ul_Rd(liquid_volume:
     x=8.15,
     h_cuboid=16.45,
     liquid_volume=liquid_volume),3)
+
+
+def ThermoScientific_96_DWP_1200ul_Rd_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=5,
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="ThermoScientific_96_DWP_1200ul_Rd_Lid",
+  # )
+
 
 def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
   """ Fisher Scientific/Thermo Fisher cat. no.: 10243223/AB1127.
@@ -48,9 +63,8 @@ def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plat
     size_x=127.0,
     size_y=86.0,
     size_z=24.0,
-    with_lid=with_lid,
+    lid=ThermoScientific_96_DWP_1200ul_Rd_Lid(name + "_lid") if with_lid else None,
     model="ThermoScientific_96_DWP_1200ul_Rd",
-    lid_height=5,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
