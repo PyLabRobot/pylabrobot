@@ -43,6 +43,20 @@ class Lid(Resource):
   def serialize(self) -> dict:
     return {**super().serialize(), "nesting_z_height": self.nesting_z_height}
 
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True
+  ):
+    if isinstance(resource, Lid):
+      location = location or Coordinate(0, 0, self.get_size_z())
+    elif isinstance(resource, Plate):
+      location = Coordinate(x=0, y=0, z=self.get_size_z())
+    else:
+      assert location is not None, "Location must be specified for if resource is not a lid."
+    return super().assign_child_resource(resource, location=location, reassign=reassign)
+
 
 class Plate(ItemizedResource[Well]):
   """ Base class for Plate resources. """
@@ -102,6 +116,12 @@ class Plate(ItemizedResource[Well]):
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self.lid = resource
       location = location or Coordinate(0, 0, self.get_size_z() - self.lid.nesting_z_height)
+    elif isinstance(resource, Plate):
+      if self.lid is not None:
+        self.lid.assign_child_resource(resource)
+        return f"Plate {resource} assigned to Lid {self.lid}"
+      else:
+        location = Coordinate(x=0, y=0, z=self.get_size_z())
     else:
       assert location is not None, "Location must be specified for if resource is not a lid."
     return super().assign_child_resource(resource, location=location, reassign=reassign)
