@@ -8,10 +8,10 @@ from pylabrobot.resources import Coordinate
 # path = "Carrier_Coley.cfg"
 path = "Carrier.cfg"
 
-RES = re.compile("(\d{2});(.*?);(\S*)")
-SITE = re.compile("998;0;(\S{2,});")
-DESC = re.compile("998;(Tecan part no\. .*);")
-DESC2 = re.compile("998;(.* pn \d{8}.*);")
+RES = re.compile(r"(\d{2});(.*?);(\S*)")
+SITE = re.compile(r"998;0;(\S{2,});")
+DESC = re.compile(r"998;(Tecan part no\. .*);")
+DESC2 = re.compile(r"998;(.* pn \d{8}.*);")
 
 
 def main(pc, tc, p, tr, tcr):
@@ -160,6 +160,21 @@ def main(pc, tc, p, tr, tcr):
 
       if o is not None:
         o.write(f'\n\n')
+
+        if bc == 'TecanPlate':
+          lid_name = f"{name}_Lid"
+          o.write(f"def {lid_name}(name: str) -> Lid:\n")
+          o.write( "  raise NotImplementedError(\"This lid is not currently defined.\")\n")
+          o.write( "  # See https://github.com/PyLabRobot/pylabrobot/pull/161.\n") #TODO: rpl with docs
+          o.write( "  # return Lid(\n")
+          o.write( "  #   name=name,\n")
+          o.write(f"  #   size_x={size_x},\n")
+          o.write(f"  #   size_y={size_y},\n")
+          o.write( "  #   size_z=None,           # measure the total z height\n")
+          o.write( "  #   nesting_z_height=None, # measure overlap between lid and plate\n")
+          o.write(f"  #   model=\"{lid_name}\",\n")
+          o.write( "  # )\n\n\n")
+
         o.write(f'def {name}(name: str')
         if bc == 'TecanPlate':
           o.write(f', with_lid: bool = False')
@@ -172,8 +187,7 @@ def main(pc, tc, p, tr, tcr):
         o.write(f'    size_y={size_y},\n')
         o.write(f'    size_z={size_z},\n')
         if bc == 'TecanPlate':
-          o.write(f'    with_lid=with_lid,\n')
-          o.write(f'    lid_height=8,\n')
+          o.write(f"    lid={lid_name}(name=name + \"_lid\") if with_lid else None,\n")
         o.write(f'    model="{name}",\n')
         o.write(f'    z_travel={z_travel},\n')
         o.write(f'    z_start={z_start},\n')
