@@ -119,7 +119,7 @@ class Plate(ItemizedResource[Well]):
     elif isinstance(resource, Plate):
       if self.lid is not None:
         self.lid.assign_child_resource(resource)
-        return f"Plate {resource} assigned to Lid {self.lid}"
+        return f"Plate {resource.name} assigned to Lid {self.lid.name}"
       else:
         location = Coordinate(x=0, y=0, z=self.get_size_z())
     else:
