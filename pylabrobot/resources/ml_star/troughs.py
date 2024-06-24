@@ -53,7 +53,7 @@ def Hamilton_1_trough_200ml_Vb(name: str) -> Trough:
     size_y=118.0,
     size_z=95.0,
     material_z_thickness=1.5,
-    true_dz = 1.2,
+    through_base_to_container_base = 1.2,
     max_volume=200_000, # units: ul
     model="Hamilton_1_trough_200ml_Vb",
     bottom_type=TroughBottomType.V,

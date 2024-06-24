@@ -22,7 +22,7 @@ class Trough(Container):
     size_z: float,
     max_volume: float,
     material_z_thickness: float = 0,
-    true_dz: float = 0,
+    through_base_to_container_base: float = 0,
     category: Optional[str] = "trough",
     model: Optional[str] = None,
     bottom_type: Union[TroughBottomType, str] = TroughBottomType.UNKNOWN,
@@ -43,7 +43,7 @@ class Trough(Container):
       model=model
     )
     self.material_z_thickness = material_z_thickness
-    self.true_dz = true_dz
+    self.through_base_to_container_base = through_base_to_container_base
     self.bottom_type = bottom_type
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
