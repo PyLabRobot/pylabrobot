@@ -172,8 +172,8 @@ class Carrier(Resource, Generic[S]):
 
 
 class TipCarrier(Carrier):
-  """ Base class for tip carriers.
-  Name prefix: 'TIP_'
+  r""" Base class for tip carriers.
+  Name prefix: 'TIP\_'
   """
   def __init__(
     self,
@@ -218,8 +218,8 @@ class PlateCarrierSite(CarrierSite):
 
 
 class PlateCarrier(Carrier):
-  """ Base class for plate carriers.
-  Name prefix: 'PLT_'
+  r""" Base class for plate carriers.
+  Name prefix: 'PLT\_'
   """
   def __init__(
     self,
@@ -235,8 +235,8 @@ class PlateCarrier(Carrier):
 
 
 class MFXCarrier(Carrier):
-  """ Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites).
-  Name prefix: 'MFX_'
+  r""" Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites).
+  Name prefix: 'MFX\_'
   """
   def __init__(
     self,
@@ -253,8 +253,8 @@ class MFXCarrier(Carrier):
 
 
 class TubeCarrier(Carrier):
-  """ Base class for tube/sample carriers.
-  Name prefix: 'SMP_'
+  r""" Base class for tube/sample carriers.
+  Name prefix: 'SMP\_'
   """
   def __init__(
     self,
@@ -270,8 +270,8 @@ class TubeCarrier(Carrier):
 
 
 class TroughCarrier(Carrier):
-  """ Base class for reagent/trough carriers.
-  Name prefix: 'RGT_'
+  r""" Base class for reagent/trough carriers.
+  Name prefix: 'RGT\_'
   """
   def __init__(
     self,
