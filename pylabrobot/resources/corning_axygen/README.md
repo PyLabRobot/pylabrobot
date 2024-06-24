@@ -1,11 +1,10 @@
-
 ## Resource defintions: Corning - Axygen
 
 Company page: [Corning - Axygen® Brand Products](https://www.corning.com/emea/en/products/life-sciences/resources/brands/axygen-brand-products.html)
 
 > Corning acquired Axygen BioScience, Inc. and its subsidiaries in 2009. This acquisition included Axygen's broad portfolio of high-quality plastic consumables, liquid handling products, and bench-top laboratory equipment, which complemented and expanded Corning's offerings in the life sciences segment​.
 
-### Currently defined labware:
+### Labware:
 
 | Description               | Image              |
 |--------------------|--------------------|

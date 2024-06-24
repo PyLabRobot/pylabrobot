@@ -1,4 +1,3 @@
-
 ## Resource defintions: Corning - Costar
 
 Wikipedia page: [Corning](https://en.wikipedia.org/wiki/Corning_Inc.)
@@ -7,7 +6,7 @@ Wikipedia page: [Corning](https://en.wikipedia.org/wiki/Corning_Inc.)
 
 As of 2014, Corning had five major business sectors: display technologies, environmental technologies, life sciences, optical communications, and specialty materials.
 
-### Currently defined labware:
+### Labware:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
