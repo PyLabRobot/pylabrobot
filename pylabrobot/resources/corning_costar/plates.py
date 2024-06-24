@@ -1017,8 +1017,8 @@ def Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
     name=name,
     size_x=127.0,
     size_y=86.0,
-    size_z=2,             # measure the total z height
-    nesting_z_height=1.9, # measure overlap between lid and plate
+    size_z=7.8,           # measure the total z height - lid.elevation
+    nesting_z_height=7.0, # measure overlap between lid and plate
     model="Cos_6_wellplate_16800ul_Fb_Lid",
   )
 
@@ -1081,9 +1081,9 @@ def Cos_6_wellplate_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
 
 # # # # # # # # # # Cos_96_DWP_2mL_Vb # # # # # # # # # #
 
-def _compute_volume_from_height_Cos_96_DWP_2mL_Vb(h: float) -> float:
+def _compute_volume_from_height_Cos_96_wellplate_2mL_Vb(h: float) -> float:
   if h > 44.1: # 5% tolerance
-    raise ValueError(f"Height {h} is too large for Cos_96_DWP_2mL_Vb")
+    raise ValueError(f"Height {h} is too large for Cos_96_wellplate_2mL_Vb")
   return calculate_liquid_volume_container_2segments_square_vbottom(
     x=7.8,
     y=7.8,
@@ -1091,9 +1091,9 @@ def _compute_volume_from_height_Cos_96_DWP_2mL_Vb(h: float) -> float:
     h_cube=38.0,
     liquid_height=h)
 
-def _compute_height_from_volume_Cos_96_DWP_2mL_Vb(liquid_volume: float):
+def _compute_height_from_volume_Cos_96_wellplate_2mL_Vb(liquid_volume: float):
   if liquid_volume > 2_100: # 5% tolerance
-    raise ValueError(f"Volume {liquid_volume} is too large for Cos_96_DWP_2mL_Vb")
+    raise ValueError(f"Volume {liquid_volume} is too large for Cos_96_wellplate_2mL_Vb")
   return round(calculate_liquid_height_in_container_2segments_square_vbottom(
     x=7.8,
     y=7.8,
@@ -1110,10 +1110,13 @@ def Cos_96_DWP_2mL_Vb_Lid(name: str) -> Lid:
   #   size_y=86.0,
   #   size_z=None,           # measure the total z height
   #   nesting_z_height=None, # measure overlap between lid and plate
-  #   model="Cos_96_DWP_2mL_VbLid",
+  #   model="Cos_96_wellplate_2mL_Vb_Lid",
   # )
 
-def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
+def Cos_96_DWP_2mL_Vb(name: str):
+  raise  Exception("deprecated - use Cos_96_wellplate_2mL_Vb instead.")
+
+def Cos_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
   """ Corning 96 deep-well 2 mL PCR plate. Corning cat. no.: 3960
   - Material: Polypropylene
   - Resistant to many common organic solvents (e.g., DMSO, ethanol, methanol)
@@ -1126,8 +1129,8 @@ def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=43.5,
-    lid=Cos_96_DWP_2mL_Vb_Lid(name=name + "_lid") if with_lid else None,
-    model="Cos_96_DWP_2mL_Vb",
+    lid=Cos_96_wellplate_2mL_Vb_Lid(name=name + "_lid") if with_lid else None,
+    model="Cos_96_wellplate_2mL_Vb",
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -1141,15 +1144,15 @@ def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
       size_z=42.0,
       bottom_type=WellBottomType.V,
       cross_section_type=CrossSectionType.RECTANGLE,
-      compute_volume_from_height=_compute_volume_from_height_Cos_96_DWP_2mL_Vb,
-      compute_height_from_volume=_compute_height_from_volume_Cos_96_DWP_2mL_Vb
+      compute_volume_from_height=_compute_volume_from_height_Cos_96_wellplate_2mL_Vb,
+      compute_height_from_volume=_compute_height_from_volume_Cos_96_wellplate_2mL_Vb
     ),
   )
 
-def Cos_96_DWP_2mL_Vb_L(name: str, with_lid: bool = False) -> Plate:
-  """ Cos_96_DWP_2mL_Vb """
-  return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid)
+def Cos_96_wellplate_2mL_Vb_L(name: str, with_lid: bool = False) -> Plate:
+  """ Cos_96_wellplate_2mL_Vb Landscape"""
+  return Cos_96_wellplate_2mL_Vb(name=name, with_lid=with_lid)
 
-def Cos_96_DWP_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  """ Cos_96_DWP_2mL_Vb """
-  return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid).rotated(90)
+def Cos_96_wellplate_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
+  """ Cos_96_wellplate_2mL_Vb Portrait """
+  return Cos_96_wellplate_2mL_Vb(name=name, with_lid=with_lid).rotated(90)

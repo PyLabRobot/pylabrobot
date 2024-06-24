@@ -1782,6 +1782,20 @@ class LiquidHandler(Machine):
         x=to_location.x,
         y=to_location.y,
         z=to_location.z  + to.get_size_z())
+    elif isinstance(to, Plate):
+      assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
+      if to.lid is not None:
+        to_location = to.lid.get_absolute_location()
+        to_location = Coordinate(
+          x=to_location.x,
+          y=to_location.y,
+          z=to_location.z  + to.lid.get_size_z())
+      else:
+        to_location = to.get_absolute_location()
+        to_location = Coordinate(
+          x=to_location.x,
+          y=to_location.y,
+          z=to_location.z  + to.get_size_z())
     elif isinstance(to, Coordinate):
       to_location = to
     elif isinstance(to, MFXModule):
