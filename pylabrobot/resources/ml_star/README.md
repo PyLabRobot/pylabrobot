@@ -1,4 +1,3 @@
-
 ## Resource defintions: "ML_STAR"
 
 Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/history)
@@ -7,7 +6,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Currently defined tip carriers:
+### Tip carriers:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -15,7 +14,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Currently defined plate carriers:
+### Plate carriers:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -23,7 +22,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Currently defined MFX carriers:
+### MFX carriers:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -31,7 +30,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 
 
-#### Currently defined MFX modules:
+#### MFX modules:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -41,7 +40,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Currently defined Trough carriers:
+### Trough carriers:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -49,20 +48,17 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 
 
-#### Currently defined Troughs:
+#### Troughs:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
 | 'Hamilton_1_trough_200ml_Vb'<br>Part no.: 56695-02<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/56695-02) <br>Trough 200ml, w lid, self standing, Black. <br>Compatible with Trough_CAR_4R200_A00 (185436). | <img src="ims/Hamilton_1_trough_200ml_Vb.jpg" alt="Hamilton_1_trough_200ml_Vb" width="250"/> | `Hamilton_1_trough_200ml_Vb` |
 
 
-
 ---
 
-### Currently defined Adapters:
+### Adapters:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
 | 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | <img src="ims/Hamilton_96_adapter_188182.png" alt="Hamilton_96_adapter_188182" width="250"/> | `Hamilton_96_adapter_188182` |
-
-

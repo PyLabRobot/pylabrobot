@@ -1,4 +1,3 @@
-
 ## Resource defintions: Azenta
 
 Company wikipedia: [Azenta](https://en.wikipedia.org/wiki/Azenta)
@@ -7,7 +6,7 @@ Company wikipedia: [Azenta](https://en.wikipedia.org/wiki/Azenta)
 > In 2017, Brooks acquired 4titude, a maker of scientific tools and consumables, while in 2018, Brooks acquired GENEWIZ, a genomics services provider as part of their life sciences division's expansion.
 > In November 2021, Brooks Automation Inc. split into two entities, Brooks Automation and Azenta Life Sciences. The latter will focus exclusively on their life science division.
 
-### Currently defined labware:
+### Labware:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
