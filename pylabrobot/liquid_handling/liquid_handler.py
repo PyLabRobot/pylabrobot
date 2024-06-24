@@ -1783,7 +1783,6 @@ class LiquidHandler(Machine):
         y=to_location.y,
         z=to_location.z  + to.get_size_z())
     elif isinstance(to, Plate):
-      assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
       if to.lid is not None:
         to_location = to.lid.get_absolute_location()
         to_location = Coordinate(
@@ -1827,11 +1826,12 @@ class LiquidHandler(Machine):
     elif isinstance(to, CarrierSite): # .zero() resources
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, Plate):
-      print(f"Plate stack gen:\n - z={plate.get_size_z()}")
-      to_location -= to.get_absolute_location() + plate.get_size_z()
-      if to.has_lid():
-        to_location += 0
-      to.assign_child_resource(plate, location=Coordinate.zero())
+      to.assign_child_resource(plate)
+      stack_top_absolute_z = plate.get_absolute_location(z='top').z
+      print(f"Plate stack gen:\n - z_top={stack_top_absolute_z}")
+      if stack_top_absolute_z > 245:
+        print("WARNING: Top of the plate stack is above minimum safety height / 245 mm.")
+        print("Danger of collision with tips and moving labware exists.")
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       to.assign_child_resource(plate)
     elif isinstance(to, MFXModule):
