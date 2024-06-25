@@ -40,11 +40,20 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
+### Tube carriers:
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Tube_CAR_24_A00'<br>Part no.: 173400<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/173400) <br>Carries 24 "sample" tubes with 14.5–18 mm outer diameter, 60–120 mm high. Occupies one track. | <img src="ims/Tube_CAR_24_A00.png" alt="Tube_CAR_24_A00" width="250"/> | `Tube_CAR_24_A00` |
+
+
+---
+
 ### Trough carriers:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
-| 'Trough_CAR_4R200_A00'<br>Part no.: 185436 (same as 96890-01?)<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/96890-01) <br>Trough carrier for 4x 200ml troughs. 2 tracks(T) wide. | <img src="ims/Trough_CAR_4R200_A00.jpg" alt="Trough_CAR_4R200_A00" width="250"/> | `Trough_CAR_4R200_A00` |
+| 'Trough_CAR_4R200_A00'<br>Part no.: 185436 (same as 96890-01?)<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/96890-01) <br>Trough carrier for 4x 200ml troughs. 2 tracks(T) wide. | <img src="ims/Trough_CAR_4R200_A00.png" alt="Trough_CAR_4R200_A00" width="250"/> | `Trough_CAR_4R200_A00` |
 
 
 
