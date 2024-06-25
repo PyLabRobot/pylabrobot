@@ -22,10 +22,10 @@ def Tube_CAR_24_A00(name: str) -> TubeCarrier:
     size_y=497.0,
     size_z=71.5,
     sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[
-        Coordinate(4.0, 2.0+x*22, 5.0) for x in range(24)
-      ],
-      site_size_x=22.0,
-      site_size_y=22.0,
+        Coordinate(3.0, 9.0+x*20, 10.0 +1.2) for x in range(24)
+      ], # TODO: +1.2 to account for the Tube.material_z_thickness, fix container
+      site_size_x=18.0,
+      site_size_y=18.0,
     ),
     model="Tube_CAR_24_A00"
   )
