@@ -10,3 +10,5 @@ from .tip_racks import *
 
 from .trough_carriers import *
 from .troughs import *
+
+from .tube_carriers import *

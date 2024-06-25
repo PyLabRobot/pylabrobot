@@ -40,6 +40,15 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
+### Tube carriers:
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Tube_CAR_24_A00'<br>Part no.: 173400<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/173400) <br>Carries 24 "sample" tubes with 14.5–18 mm outer diameter, 60–120 mm high. Occupies one track. | <img src="ims/Tube_CAR_24_A00.jpg" alt="Tube_CAR_24_A00" width="250"/> | `Tube_CAR_24_A00` |
+
+
+---
+
 ### Trough carriers:
 
 | Description               | Image              | PLR definition |
