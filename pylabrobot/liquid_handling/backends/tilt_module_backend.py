@@ -13,13 +13,13 @@ class TiltModuleBackend(metaclass=ABCMeta):
     self.setup_finished = False
 
   @abstractmethod
-  def setup(self):
+  async def setup(self):
     self.setup_finished = True
 
   @abstractmethod
-  def stop(self):
+  async def stop(self):
     self.setup_finished = False
 
   @abstractmethod
-  def set_angle(self, angle: int):
+  async def set_angle(self, angle: int):
     """ Set the tilt module to rotate by a given angle. """

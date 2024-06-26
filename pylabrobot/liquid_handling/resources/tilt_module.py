@@ -13,7 +13,6 @@ class TiltModule(Resource):
     name: str,
     backend: TiltModuleBackend,
   ):
-    # TODO: Measure size of tilt module.
     super().__init__(name=name, size_x=0, size_y=0, size_z=0, category="tilt_module")
     self._backend = backend
     self._angle: int = 0
@@ -38,13 +37,13 @@ class TiltModule(Resource):
   def angle(self) -> int:
     return self._angle
 
-  def setup(self):
-    self._backend.setup()
+  async def setup(self):
+    await self._backend.setup()
 
-  def stop(self):
-    self._backend.stop()
+  async def stop(self):
+    await self._backend.stop()
 
-  def set_angle(self, angle: int):
+  async def set_angle(self, angle: int):
     """ Set the tilt module to rotate by a given angle.
 
     We assume the rotation anchor is the right side of the module. This may change in the future
@@ -54,7 +53,7 @@ class TiltModule(Resource):
       angle: The angle to rotate by, in degrees. Clockwise. 0 is horizontal.
     """
 
-    self._backend.set_angle(angle=angle)
+    await self._backend.set_angle(angle=angle)
 
     for well in self.get_plate().children:
       assert well.location is not None
@@ -78,11 +77,11 @@ class TiltModule(Resource):
 
     self._angle = angle
 
-  def tilt(self, angle: int):
+  async def tilt(self, angle: int):
     """ Tilt the plate contained in the tilt module by a given angle.
 
     Args:
       angle: The angle to rotate by, in degrees. Clockwise. 0 is horizontal.
     """
 
-    self.set_angle(self.angle + angle)
+    await self.set_angle(self.angle + angle)
