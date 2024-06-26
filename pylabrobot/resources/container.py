@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from .resource import Resource
 from .volume_tracker import VolumeTracker
@@ -15,7 +15,9 @@ class Container(Resource):
     size_z: float,
     max_volume: Optional[float] = None,
     category: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    compute_volume_from_height: Optional[Callable[[float], float]] = None,
+    compute_height_from_volume: Optional[Callable[[float], float]] = None,
   ):
     """ Create a new container.
 
@@ -27,6 +29,8 @@ class Container(Resource):
       model=model)
     self.max_volume = max_volume or (size_x * size_y * size_z)
     self.tracker = VolumeTracker(max_volume=self.max_volume)
+    self._compute_volume_from_height = compute_volume_from_height
+    self._compute_height_from_volume = compute_height_from_volume
 
   def serialize(self) -> dict:
     return {
@@ -39,3 +43,21 @@ class Container(Resource):
 
   def load_state(self, state: Dict[str, Any]):
     self.tracker.load_state(state)
+
+  def compute_volume_from_height(self, height: float) -> float:
+    """ Compute the volume of liquid in a container from the height of the liquid relative to the
+    bottom of the container. """
+
+    if self._compute_volume_from_height is None:
+      raise NotImplementedError(f"compute_volume_from_height not implemented for {self.name}.")
+
+    return self._compute_volume_from_height(height)
+
+  def compute_height_from_volume(self, liquid_volume: float) -> float:
+    """ Compute the height of liquid in a container relative to the container's bottom
+    from the volume of the liquid.  """
+
+    if self._compute_height_from_volume is None:
+      raise NotImplementedError(f"compute_height_from_volume not implemented for {self.name}.")
+
+    return self._compute_height_from_volume(liquid_volume)
