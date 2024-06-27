@@ -19,14 +19,6 @@ else:
 logger = logging.getLogger("pylabrobot")
 
 
-class Rotation:
-  def __init__(self, xy: int = 0, xz: int = 0, yz: int = 0):
-    self.xy = xy # yaw
-    self.xz = xz # pitch
-    self.yz = yz # roll
-
-
-
 WillAssignResourceCallback = Callable[["Resource"], None]
 DidAssignResourceCallback = Callable[["Resource"], None]
 WillUnassignResourceCallback = Callable[["Resource"], None]
