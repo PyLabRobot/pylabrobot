@@ -1,7 +1,7 @@
 .. currentmodule:: pylabrobot.tilting
 
 pylabrobot.tilting package
-========================
+==========================
 
 This package contains APIs for working with tilt modules.
 
@@ -22,4 +22,4 @@ Backends
   :recursive:
 
     pylabrobot.tilting.tiler_backend.TilterBackend
-    pylabrobot.tilting.hamilton.HamiltonTiltModuleBackend
+    pylabrobot.tilting.hamilton_backend.HamiltonTiltModuleBackend
