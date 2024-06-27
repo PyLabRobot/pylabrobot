@@ -23,7 +23,7 @@ class MFXModule(Resource):
       Create `MFXModule` for tips,
       Assign the `MFXModule` for tips to a carrier_site on the `MFXCarrier`,
       Create and assign a tip_rack to the MFXModule:
-      
+
       >>> mfx_carrier_1 = MFX_CAR_L5_base(name='mfx_carrier_1')
       >>> mfx_carrier_1[0] = mfx_tip_module_1 = MFX_TIP_module(name="mfx_tip_module_1")
       >>> tip_50ul_rack = TIP_50ul_L(name="tip_50ul_rack")
@@ -114,8 +114,8 @@ def MFX_DWP_rackbased_module(name: str) -> MFXModule:
   Module to position a Deep Well Plate / tube racks (MATRIX or MICRONICS) / NUNC reagent trough.
   """
 
-  # site_size_x=127.0,
-  # site_size_y=86.0,
+  # site_size_x=127.76,
+  # site_size_y=85.48,
 
   return MFXModule(
     name=name,
