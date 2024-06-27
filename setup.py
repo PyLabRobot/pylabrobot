@@ -7,6 +7,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 
 extras_fw = [
+  "pyserial",
   "pyusb",
   "libusb_package<=1.0.26.2"
 ]
