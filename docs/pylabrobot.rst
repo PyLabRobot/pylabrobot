@@ -16,8 +16,9 @@ Subpackages
     pylabrobot.plate_reading
     pylabrobot.pumps
     pylabrobot.only_fans
+    pylabrobot.resources
     pylabrobot.scales
     pylabrobot.shaking
-    pylabrobot.resources
     pylabrobot.temperature_controlling
+    pylabrobot.tilting
     pylabrobot.utils

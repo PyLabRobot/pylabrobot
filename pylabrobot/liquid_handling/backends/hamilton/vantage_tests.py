@@ -349,11 +349,11 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # pickup
     self._assert_command_sent_once(
-      "A1RMDGid0240xp6175yp1145zp1954yw81yo1302yg1237pt20zc0hd0te2840",
+      "A1RMDGid0240xp6178yp1142zp1954yw81yo1309yg1244pt20zc0hd0te2840",
       {"xp": "int", "yp": "int", "zp": "int", "yw": "int", "yo": "int", "yg": "int", "pt": "int",
        "zc": "int", "hd": "int", "te": "int"})
 
     # release
     self._assert_command_sent_once(
-      "A1RMDRid0242xp6175yp2105zp1954yo1302zc0hd0te2840",
+      "A1RMDRid0242xp6178yp2102zp1954yo1309zc0hd0te2840",
       {"xp": "int", "yp": "int", "zp": "int", "yo": "int", "zc": "int", "hd": "int", "te": "int"})

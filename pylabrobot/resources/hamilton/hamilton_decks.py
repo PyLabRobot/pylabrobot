@@ -261,11 +261,13 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     # don't print these
     exclude_categories = {"well", "tube", "tip_spot", "carrier_site", "plate_carrier_site"}
 
-    def find_longest_child_name(resource: Resource, depth=0):
+    def find_longest_child_name(resource: Resource, depth=0, depth_weight=4):
       """ DFS to find longest child name, and depth of that child, excluding excluded categories """
       l, d = (len(resource.name), depth) if resource.category not in exclude_categories else (0, 0)
       new_depth = depth + 1 if resource.category not in exclude_categories else depth
-      return max([(l, d)] + [find_longest_child_name(c, new_depth) for c in resource.children])
+      return max([(l + d*depth_weight)] +
+                 [find_longest_child_name(c, new_depth) for c in resource.children])
+
 
     def find_longest_type_name(resource: Resource):
       """ DFS to find the longest type name """
@@ -273,12 +275,12 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       return max([l] + [find_longest_type_name(child) for child in resource.children])
 
     # Calculate the maximum lengths of the resource name and type for proper alignment
-    max_name_length, depth = find_longest_child_name(self)
+    max_name_length = find_longest_child_name(self)
     max_type_length = find_longest_type_name(self)
 
     # Find column lengths
     rail_column_length = 6
-    name_column_length = max(max_name_length + 4 * depth + 4, 30) # 4 per depth, 4 extra
+    name_column_length = max(max_name_length + 4, 30) # 4 per depth (by find_longest_child), 4 extra
     type_column_length = max_type_length + 3 - 4
     location_column_length = 30
 

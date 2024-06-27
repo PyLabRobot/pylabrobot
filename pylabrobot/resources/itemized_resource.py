@@ -92,7 +92,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   def __getitem__(
     self,
     identifier: Union[str, int, Sequence[int], Sequence[str], slice, range]
-    ) -> List[T]:
+  ) -> List[T]:
     """ Get the items with the given identifier.
 
     This is a convenience method for getting the items with the given identifier. It is equivalent

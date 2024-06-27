@@ -38,8 +38,8 @@ def Porvair_6_reservoir_47ml_Vb_Lid(name: str) -> Lid:
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
   #   name=name,
-  #   size_x=127.0,
-  #   size_y=86.0,
+  #   size_x=127.76,
+  #   size_y=85.48,
   #   size_z=5,
   #   nesting_z_height=None, # measure overlap between lid and plate
   #   model="Porvair_6_reservoir_47ml_Vb_Lid",
@@ -59,8 +59,8 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
   """
   return Plate(
     name=name,
-    size_x=127.0,
-    size_y=86.0,
+    size_x=127.76,
+    size_y=85.48,
     size_z=44,
     lid=Porvair_6_reservoir_47ml_Vb_Lid(name + "_lid") if with_lid else None,
     model="Porvair_6_reservoir_47ml_Vb",

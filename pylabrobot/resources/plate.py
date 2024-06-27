@@ -156,7 +156,7 @@ class Plate(ItemizedResource[Well]):
     Example:
       Set the volume of each well in a 96-well plate to 10 uL.
 
-      >>> plate = Plate("plate", 127.0, 86.0, 14.5, num_items_x=12, num_items_y=8)
+      >>> plate = Plate("plate", 127.76, 85.48, 14.5, num_items_x=12, num_items_y=8)
       >>> plate.set_well_liquids((Liquid.WATER, 10))
     """
 

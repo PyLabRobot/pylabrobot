@@ -1680,6 +1680,7 @@ class STAR(HamiltonLiquidHandler):
     use_channels: List[int],
 
     lld_search_height: Optional[List[int]] = None,
+    liquid_surface_no_lld: Optional[List[float]] = None,
     dispensing_mode: Optional[List[int]] = None,
     pull_out_distance_transport_air: Optional[List[int]] = None,
     second_section_height: Optional[List[int]] = None,
@@ -1729,6 +1730,7 @@ class STAR(HamiltonLiquidHandler):
       use_channels: The channels to use for the dispense operations.
       dispensing_mode: The dispensing mode to use for each operation.
       lld_search_height: The height to start searching for the liquid level when using LLD.
+      liquid_surface_no_lld: Liquid surface at function without LLD.
       pull_out_distance_transport_air: The distance to pull out the tip for aspirating transport air
         if LLD is disabled.
       second_section_height: Unknown.
@@ -1809,7 +1811,8 @@ class STAR(HamiltonLiquidHandler):
 
     well_bottoms = [op.resource.get_absolute_location().z + \
                     (op.offset.z if op.offset is not None else 0) for op in ops]
-    liquid_surfaces_no_lld = [ls + (op.liquid_height or 1) for ls, op in zip(well_bottoms, ops)]
+    liquid_surfaces_no_lld = liquid_surface_no_lld or \
+      [ls + (op.liquid_height or 1) for ls, op in zip(well_bottoms, ops)]
     if lld_search_height is None:
       lld_search_height = [
         int((wb + op.resource.get_size_z() + (2.7 if isinstance(op.resource, Well) else 5)) * 10) #?
