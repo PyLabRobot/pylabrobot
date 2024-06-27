@@ -3,15 +3,11 @@ from typing import Optional, cast
 
 import serial
 
-from pylabrobot.liquid_handling.backends.tilt_module_backend import (
-  TiltModuleBackend,
-  TiltModuleError
-)
-from  pylabrobot import utils
+from pylabrobot.tilting.tilter_backend import TilterBackend, TiltModuleError
 
 
-class HamiltonTiltModuleBackend(TiltModuleBackend):
-  """ Backend for the Hamilton tilt. """
+class HamiltonTiltModuleBackend(TilterBackend):
+  """ Backend for the Hamilton tilt module. """
 
   def __init__(self, com_port: str, write_timeout: float = 10, timeout: float = 10):
     self.setup_finished = False
@@ -88,7 +84,7 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
       position: absolute position (-10...120)
     """
 
-    utils.assert_clamp(position, -10, 120, "position")
+    assert -10 <= position <= 120, "Position must be between -10 and 120."
 
     return await self.send_command(
       command="SA",
@@ -104,7 +100,7 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
       steps: the number of steps (±10000)
     """
 
-    utils.assert_clamp(steps, -10000, 10000, "steps")
+    assert -10000 <= steps <= 10000, "Steps must be between -10000 and 10000."
 
     return await self.send_command(command="SR", parameter=str(steps))
 
@@ -115,7 +111,7 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
       position: 0 = horizontal, 10 = degrees
     """
 
-    utils.assert_clamp(position, 0, 10, "position")
+    assert 0 <= position <= 10, "Position must be between 0 and 10."
 
     return await self.send_command(command="GP", parameter=str(position))
 
@@ -126,7 +122,7 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
       speed: 1 is slow, 9 = fast. Default speed is 1.
     """
 
-    utils.assert_clamp(speed, 1, 9, "speed")
+    assert 1 <= speed <= 9, "Speed must be between 1 and 9."
 
     return await self.send_command(command="SV", parameter=str(speed))
 
@@ -141,7 +137,8 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
     Returns: the error, if it exists, else `None`
     """
 
-    return await self.send_command("RE") # send_command will automatically raise an error, if one exists
+    # send_command will automatically raise an error, if one exists
+    return await self.send_command("RE")
 
   async def tilt_request_sensor(self) -> Optional[str]:
     """ It is unclear what this method does. The documentation lists the following map:
@@ -191,7 +188,7 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
       open_collector: 1...8 # TODO: what?
     """
 
-    utils.assert_clamp(open_collector, 1, 8, "open_collector")
+    assert 1 <= open_collector <= 8, "open_collector must be between 1 and 8"
 
     return await self.send_command(command="PS", parameter=str(open_collector))
 
@@ -202,7 +199,7 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
       open_collector: 1...8 # TODO: what?
     """
 
-    utils.assert_clamp(open_collector, 1, 8, "open_collector")
+    assert 1 <= open_collector <= 8, "open_collector must be between 1 and 8"
 
     return await self.send_command(command="PC", parameter=str(open_collector))
 
@@ -215,7 +212,7 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
       temperature: temperature in Celcius, between 10 and 50
     """
 
-    utils.assert_clamp(temperature, 10, 50, "temperature")
+    assert 10 <= temperature <= 50, "Temperature must be between 10 and 50."
 
     return await self.send_command(command="ST", parameter=str(int(temperature*10)))
 
@@ -235,7 +232,7 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
       drain_time: drain time in seconds, between 5 and 250
     """
 
-    utils.assert_clamp(drain_time, 5, 250, "drain_time")
+    assert 5 <= drain_time <= 250, "Drain time must be between 5 and 250."
 
     return await self.send_command(command="DT", parameter=str(int(drain_time*10)))
 
@@ -285,6 +282,6 @@ class HamiltonTiltModuleBackend(TiltModuleBackend):
       offset: the initial offset steps, steps between -100 and 100
     """
 
-    utils.assert_clamp(offset, -100, 100, "offset")
+    assert -100 <= offset <= 100, "Offset must be between -100 and 100."
 
     return await self.send_command(command="SO", parameter=str(offset))
