@@ -23,8 +23,8 @@ def Azenta4titudeFrameStar_96_wellplate_skirted_Lid(name: str) -> Lid:
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
   #   name=name,
-  #   size_x=127.0,
-  #   size_y=86.0,
+  #   size_x=127.76,
+  #   size_y=85.48,
   #   size_z=5,           # measure the total z height
   #   nesting_z_height=None, # measure overlap between lid and plate
   #   model="Azenta4titudeFrameStar_96_wellplate_skirted_Lid",
@@ -35,8 +35,8 @@ def Azenta4titudeFrameStar_96_wellplate_skirted(name: str, with_lid: bool = Fals
   # https://www.azenta.com/products/framestar-96-well-skirted-pcr-plate#specifications
   return Plate(
     name=name,
-    size_x=127.0,
-    size_y=86.0,
+    size_x=127.76,
+    size_y=85.48,
     size_z=16,
     lid=Azenta4titudeFrameStar_96_wellplate_skirted_Lid(name + "_lid") if with_lid else None,
     model="Azenta4titudeFrameStar_96_wellplate_skirted",

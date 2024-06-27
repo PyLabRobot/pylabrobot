@@ -35,8 +35,8 @@ def ThermoScientific_96_DWP_1200ul_Rd_Lid(name: str) -> Lid:
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
   #   name=name,
-  #   size_x=127.0,
-  #   size_y=86.0,
+  #   size_x=127.76,
+  #   size_y=85.48,
   #   size_z=5,
   #   nesting_z_height=None, # measure overlap between lid and plate
   #   model="ThermoScientific_96_DWP_1200ul_Rd_Lid",
@@ -60,8 +60,8 @@ def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plat
   """
   return Plate(
     name=name,
-    size_x=127.0,
-    size_y=86.0,
+    size_x=127.76,
+    size_y=85.48,
     size_z=24.0,
     lid=ThermoScientific_96_DWP_1200ul_Rd_Lid(name + "_lid") if with_lid else None,
     model="ThermoScientific_96_DWP_1200ul_Rd",
