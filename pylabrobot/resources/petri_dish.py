@@ -45,8 +45,8 @@ class PetriDishHolder(Resource):
   def __init__(
     self,
     name: str,
-    size_x: float = 127.0,
-    size_y: float = 86.0,
+    size_x: float = 127.76,
+    size_y: float = 85.48,
     size_z: float = 14.5,
     category: str = "petri_dish_holder",
     model: Optional[str] = None
