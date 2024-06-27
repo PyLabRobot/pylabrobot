@@ -30,8 +30,8 @@ class TestPetriDish(unittest.TestCase):
     self.assertEqual(serialized, {
       "name": "petri_dish_holder",
       "category": "petri_dish_holder",
-      "size_x": 127.0,
-      "size_y": 86.0,
+      "size_x": 127.76,
+      "size_y": 85.48,
       "size_z": 14.5,
       "parent_name": None,
       "type": "PetriDishHolder",
@@ -45,8 +45,8 @@ class TestPetriDish(unittest.TestCase):
     petri_dish_holder = PetriDishHolder.deserialize({
       "name": "petri_dish_holder",
       "category": "petri_dish_holder",
-      "size_x": 127.0,
-      "size_y": 86.0,
+      "size_x": 127.76,
+      "size_y": 85.48,
       "size_z": 14.5,
       "children": [],
       "location": None,
@@ -57,15 +57,15 @@ class TestPetriDish(unittest.TestCase):
     })
 
     self.assertEqual(petri_dish_holder.name, "petri_dish_holder")
-    self.assertEqual(petri_dish_holder.get_size_x(), 127.0)
-    self.assertEqual(petri_dish_holder.get_size_y(), 86.0)
+    self.assertEqual(petri_dish_holder.get_size_x(), 127.76)
+    self.assertEqual(petri_dish_holder.get_size_y(), 85.48)
 
   def test_petri_dish_holder_deserialization_with_dish(self):
     petri_dish_holder = PetriDishHolder.deserialize({
       "name": "petri_dish_holder",
       "category": "petri_dish_holder",
-      "size_x": 127.0,
-      "size_y": 86.0,
+      "size_x": 127.76,
+      "size_y": 85.48,
       "size_z": 14.5,
       "children": [
         {
@@ -93,8 +93,8 @@ class TestPetriDish(unittest.TestCase):
     })
 
     self.assertEqual(petri_dish_holder.name, "petri_dish_holder")
-    self.assertEqual(petri_dish_holder.get_size_x(), 127.0)
-    self.assertEqual(petri_dish_holder.get_size_y(), 86.0)
+    self.assertEqual(petri_dish_holder.get_size_x(), 127.76)
+    self.assertEqual(petri_dish_holder.get_size_y(), 85.48)
     self.assertEqual(petri_dish_holder.get_size_z(), 14.5)
 
     self.assertEqual(len(petri_dish_holder.children), 1)

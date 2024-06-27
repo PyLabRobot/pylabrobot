@@ -92,7 +92,7 @@ class TubeRack(ItemizedResource[Tube]):
     Example:
       Set the volume of each tube in a 4x6 rack to 1000 uL.
 
-      >>> rack = TubeRack("rack", 127.0, 86.0, 14.5, num_items_x=6, num_items_y=4)
+      >>> rack = TubeRack("rack", 127.76, 85.48, 14.5, num_items_x=6, num_items_y=4)
       >>> rack.set_tube_liquids((Liquid.WATER, 1000))
     """
 

@@ -25,7 +25,7 @@ def Axy_24_DW_10ML_Lid(name: str) -> Lid:
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
   #   name=name,
-  #   size_x=127.0,
+  #   size_x=127.76,
   #   size_y=86.0,
   #   size_z=5,
   #   nesting_z_height=None, # measure overlap between lid and plate
@@ -37,8 +37,8 @@ def Axy_24_DW_10ML_Lid(name: str) -> Lid:
 def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
   return Plate(
     name=name,
-    size_x=127.0,
-    size_y=86.0,
+    size_x=127.76,
+    size_y=85.48,
     size_z=44.24,
     lid=Axy_24_DW_10ML_Lid(name + "_lid") if with_lid else None,
     model="Axy_24_DW_10ML",
