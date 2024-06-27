@@ -21,5 +21,5 @@ Backends
   :nosignatures:
   :recursive:
 
-    pylabrobot.tilting.tiler_backend.TilterBackend
+    pylabrobot.tilting.tilter_backend.TilterBackend
     pylabrobot.tilting.hamilton_backend.HamiltonTiltModuleBackend
