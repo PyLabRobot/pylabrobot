@@ -1,3 +1,3 @@
 from .tilter import Tilter
 
-from .hamilton import HamiltonTiltModuleBackend
+from .hamilton_backend import HamiltonTiltModuleBackend
