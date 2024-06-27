@@ -1,57 +1,91 @@
+import sys
 import unittest
 from unittest.mock import patch
 
-from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsBackend
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.resources.opentrons import (
+from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsBackend
+from pylabrobot.resources import no_volume_tracking
+from pylabrobot.resources.opentrons import (
   OTDeck,
   opentrons_96_filtertiprack_20ul,
-  usascientific_96_wellplate_2point4ml_deep
+  usascientific_96_wellplate_2point4ml_deep,
 )
 
 
-class OpentronsBackendSetupTests(unittest.TestCase):
+def _is_python_3_10():
+  return sys.version_info[:2] == (3, 10)
+
+
+def _mock_define(lw):
+  return {
+    "data": {
+      "definitionUri": f"lw['namespace']/{lw['metadata']['displayName']}/1"
+    }
+  }
+
+def _mock_add(load_name, namespace, ot_location, version, labware_id, display_name):
+  # pylint: disable=unused-argument
+  return labware_id
+
+
+def _mock_health_get():
+  return {
+    "api_version": "7.0.1",
+  }
+
+
+@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
+class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
   """ Tests for setup and stop """
   @patch("ot_api.runs.create")
   @patch("ot_api.lh.add_mounted_pipettes")
   @patch("ot_api.labware.add")
   @patch("ot_api.labware.define")
-  def test_setup(self, mock_define, mock_add, mock_add_mounted_pipettes, mock_create):
+  @patch("ot_api.health.get")
+  async def test_setup(self, mock_health_get, mock_define, mock_add, mock_add_mounted_pipettes,
+                       mock_create):
     mock_create.return_value = "run-id"
-    mock_add_mounted_pipettes.return_value = ("left-pipette-id", "right-pipette-id")
+    mock_add_mounted_pipettes.return_value = (
+      {"pipetteId": "left-pipette-id", "name": "p20_single_gen2"},
+      {"pipetteId": "right-pipette-id", "name": "p20_single_gen2"})
     mock_add.side_effect = _mock_add
     mock_define.side_effect = _mock_define
+    mock_health_get.side_effect = _mock_health_get
 
     self.backend = OpentronsBackend(host="localhost", port=1338)
     self.lh = LiquidHandler(backend=self.backend, deck=OTDeck())
-    self.lh.setup()
+    await self.lh.setup()
+
+  def test_serialize(self):
+    serialized = OpentronsBackend(host="localhost", port=1337).serialize()
+    self.assertEqual(serialized, {"type": "OpentronsBackend", "host": "localhost", "port": 1337})
+    self.assertEqual(OpentronsBackend.deserialize(serialized).__class__.__name__,
+      "OpentronsBackend")
 
 
-def _mock_define(lw):
-  return dict(data=dict(definitionUri=f"lw['namespace']/{lw['metadata']['displayName']}/1"))
-
-def _mock_add(load_name, namespace, slot, version, labware_id, display_name):
-  # pylint: disable=unused-argument
-  return labware_id
-
-
-class OpentronsBackendDefinitionTests(unittest.TestCase):
+@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
+class OpentronsBackendDefinitionTests(unittest.IsolatedAsyncioTestCase):
   """ Test for the callback when assigning labware to the deck. """
 
   @patch("ot_api.runs.create")
   @patch("ot_api.lh.add_mounted_pipettes")
   @patch("ot_api.labware.add")
   @patch("ot_api.labware.define")
-  def setUp(self, mock_define, mock_add, mock_add_mounted_pipettes, mock_create):
+  @patch("ot_api.health.get")
+  async def asyncSetUp(self, mock_health_get, mock_define, mock_add, mock_add_mounted_pipettes,
+                       mock_create):
     mock_create.return_value = "run-id"
-    mock_add_mounted_pipettes.return_value = ("left-pipette-id", "right-pipette-id")
+    mock_add_mounted_pipettes.return_value = (
+      {"pipetteId": "left-pipette-id", "name": "p20_single_gen2"},
+      {"pipetteId": "right-pipette-id", "name": "p20_single_gen2"})
     mock_add.side_effect = _mock_add
     mock_define.side_effect = _mock_define
+    mock_health_get.side_effect = _mock_health_get
 
     self.backend = OpentronsBackend(host="localhost", port=1338)
     self.deck = OTDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    self.lh.setup()
+    await self.lh.setup()
 
   @patch("ot_api.labware.define")
   @patch("ot_api.labware.add")
@@ -66,25 +100,29 @@ class OpentronsBackendDefinitionTests(unittest.TestCase):
     self.deck.assign_child_at_slot(self.plate, slot=11)
 
 
-class OpentronsBackendCommandTests(unittest.TestCase):
+@unittest.skipIf(not _is_python_3_10(), "requires Python 3.10")
+class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   """ Tests Opentrons commands """
 
   @patch("ot_api.runs.create")
   @patch("ot_api.lh.add_mounted_pipettes")
-  @patch("ot_api.labware.define")
   @patch("ot_api.labware.add")
-  def setUp(self, mock_add, mock_define, mock_add_mounted_pipettes, mock_create):
+  @patch("ot_api.labware.define")
+  @patch("ot_api.health.get")
+  async def asyncSetUp(self, mock_health_get, mock_define, mock_add, mock_add_mounted_pipettes,
+                       mock_create):
     mock_add.side_effect = _mock_add
     mock_define.side_effect = _mock_define
     mock_add_mounted_pipettes.return_value = (
-      dict(pipetteId="left-pipette-id", name="p20_single_gen2"),
-      dict(pipetteId="right-pipette-id", name="p20_single_gen2"))
+      {"pipetteId": "left-pipette-id", "name": "p20_single_gen2"},
+      {"pipetteId": "right-pipette-id", "name": "p20_single_gen2"})
     mock_create.return_value = "run-id"
+    mock_health_get.side_effect = _mock_health_get
 
     self.backend = OpentronsBackend(host="localhost", port=1338)
     self.deck = OTDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    self.lh.setup()
+    await self.lh.setup()
 
     self.tip_rack = opentrons_96_filtertiprack_20ul(name="tip_rack")
     self.deck.assign_child_at_slot(self.tip_rack, slot=1)
@@ -92,7 +130,7 @@ class OpentronsBackendCommandTests(unittest.TestCase):
     self.deck.assign_child_at_slot(self.plate, slot=11)
 
   @patch("ot_api.lh.pick_up_tip")
-  def test_tip_pick_up(self, mock_pick_up_tip=None):
+  async def test_tip_pick_up(self, mock_pick_up_tip=None):
     assert mock_pick_up_tip is not None # just the default for pylint, provided by @patch
     def assert_parameters(labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
       self.assertEqual(labware_id, "tip_rack")
@@ -103,10 +141,10 @@ class OpentronsBackendCommandTests(unittest.TestCase):
       self.assertEqual(offset_z, offset_z)
     mock_pick_up_tip.side_effect = assert_parameters
 
-    self.lh.pick_up_tips(self.tip_rack["A1"])
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
 
   @patch("ot_api.lh.drop_tip")
-  def test_tip_drop(self, mock_drop_tip):
+  async def test_tip_drop(self, mock_drop_tip):
     def assert_parameters(labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
       self.assertEqual(labware_id, "tip_rack")
       self.assertEqual(well_name, "tip_rack_A1")
@@ -116,15 +154,16 @@ class OpentronsBackendCommandTests(unittest.TestCase):
       self.assertEqual(offset_z, offset_z)
     mock_drop_tip.side_effect = assert_parameters
 
-    self.test_tip_pick_up()
-    self.lh.drop_tips(self.tip_rack["A1"])
+    await self.test_tip_pick_up()
+    await self.lh.drop_tips(self.tip_rack["A1"])
 
   @patch("ot_api.lh.aspirate")
-  def test_aspirate(self, mock_aspirate):
+  async def test_aspirate(self, mock_aspirate=None):
+    assert mock_aspirate is not None # just the default for pylint, provided by @patch
     def assert_parameters(labware_id, well_name, pipette_id, volume, flow_rate,
       offset_x, offset_y, offset_z):
-      self.assertEqual(labware_id, "tip_rack")
-      self.assertEqual(well_name, "tip_rack_A1")
+      self.assertEqual(labware_id, "plate")
+      self.assertEqual(well_name, "plate_A1")
       self.assertEqual(pipette_id, "left-pipette-id")
       self.assertEqual(volume, 10)
       self.assertEqual(flow_rate, 3.78)
@@ -133,15 +172,16 @@ class OpentronsBackendCommandTests(unittest.TestCase):
       self.assertEqual(offset_z, 0)
     mock_aspirate.side_effect = assert_parameters
 
-    self.test_tip_pick_up()
-    self.lh.aspirate(self.tip_rack["A1"], vols=[10])
+    await self.test_tip_pick_up()
+    self.plate.get_well("A1").tracker.set_liquids([(None, 10)])
+    await self.lh.aspirate(self.plate["A1"], vols=[10])
 
   @patch("ot_api.lh.dispense")
-  def test_dispense(self, mock_dispense):
+  async def test_dispense(self, mock_dispense):
     def assert_parameters(labware_id, well_name, pipette_id, volume, flow_rate,
       offset_x, offset_y, offset_z):
-      self.assertEqual(labware_id, "tip_rack")
-      self.assertEqual(well_name, "tip_rack_A1")
+      self.assertEqual(labware_id, "plate")
+      self.assertEqual(well_name, "plate_A1")
       self.assertEqual(pipette_id, "left-pipette-id")
       self.assertEqual(volume, 10)
       self.assertEqual(flow_rate, 7.56)
@@ -150,25 +190,10 @@ class OpentronsBackendCommandTests(unittest.TestCase):
       self.assertEqual(offset_z, 0)
     mock_dispense.side_effect = assert_parameters
 
-    self.test_tip_pick_up()
-    self.lh.dispense(self.tip_rack["A1"], vols=[10])
+    await self.test_aspirate() # aspirate first
+    with no_volume_tracking():
+      await self.lh.dispense(self.plate["A1"], vols=[10])
 
-  def test_pick_up_tips96(self):
+  async def test_pick_up_tips96(self):
     with self.assertRaises(NotImplementedError):
-      self.lh.pick_up_tips96(self.tip_rack)
-
-  def test_drop_tips96(self):
-    with self.assertRaises(NotImplementedError):
-      self.lh.drop_tips96(self.tip_rack)
-
-  def test_aspirate96(self):
-    with self.assertRaises(NotImplementedError):
-      self.lh.aspirate_plate(self.plate, volume=100)
-
-  def test_dispense96(self):
-    with self.assertRaises(NotImplementedError):
-      self.lh.dispense_plate(self.plate, volume=100)
-
-
-if __name__ == "__main__":
-  unittest.main()
+      await self.lh.pick_up_tips96(self.tip_rack)

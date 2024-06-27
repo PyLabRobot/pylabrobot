@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PyLabRobot Graphical Labware Editor</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.3/font/bootstrap-icons.css"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM"
+      crossorigin="anonymous"
+    />
+
+    <script src="https://unpkg.com/konva@8/konva.min.js"></script>
+
+    <link rel="stylesheet" href="/sidebars.css" />
+
+    <link href="/main.css" rel="stylesheet" />
+    <link href="/gui.css" rel="stylesheet" />
+  </head>
+  <body>
+    <nav class="navbar bg-light navbar-expand-sm">
+      <div class="container-fluid">
+        <div class="title">
+          PyLabRobot Graphical Labware Editor
+          <span class="fs-6 text-muted">(v0.1)</span>
+        </div>
+
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                File
+              </a>
+              <ul class="dropdown-menu">
+                <li>
+                  <button class="dropdown-item enabled" id="save-button">
+                    Save
+                  </button>
+                </li>
+                <li>
+                  <button class="dropdown-item enabled" id="save-as-button">
+                    Save as ...
+                  </button>
+                </li>
+              </ul>
+            </li>
+
+            <li class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                Editor
+              </a>
+              <ul class="dropdown-menu">
+                <li>
+                  <button class="dropdown-item enabled" id="enable-snapping">
+                    <i class="bi bi-check"></i>
+                    <i class="bi bi-x"></i>
+                    Snapping
+                  </button>
+                </li>
+                <li>
+                  <button class="dropdown-item enabled" id="enable-auto-save">
+                    <i class="bi bi-check"></i>
+                    <i class="bi bi-x"></i>
+                    Auto saving
+                  </button>
+                </li>
+                <!-- <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a class="dropdown-item" href="#">Something else here</a>
+                </li> -->
+              </ul>
+            </li>
+
+            <li class="nav-item">
+              <p id="save-label" style="display: none">
+                <i class="bi bi-hourglass-split"></i> Saving
+              </p>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <noscript>
+      <div class="container">
+        <div class="row">
+          <div class="col-md-6 offset-md-3">
+            <div class="alert alert-danger mt-4" role="alert">
+              <i class="bi bi-exclamation-triangle-fill"></i>
+              <strong>JavaScript is disabled!</strong> This application requires
+              JavaScript to be enabled. Please enable JavaScript in your browser
+              settings and reload the page.
+            </div>
+          </div>
+        </div>
+      </div>
+    </noscript>
+
+    <div class="row content" id="editor">
+      <div class="col-2 border-end sidebar" id="left-sidebar">
+        <div class="flex-shrink-0 p-3">
+          <div class="pb-3 mb-3 link-body-emphasis border-bottom">
+            <span class="fs-5 fw-semibold">Labware Library</span>
+            <p class="text-muted mb-0 ms-auto">Use cmd/ctrl + k to search</p>
+          </div>
+          <ul class="list-unstyled ps-0" id="labware-list"></ul>
+          <button
+            class="btn btn-secondary w-100 mt-3"
+            id="open-custom-resource-modal"
+          >
+            Add custom resource
+          </button>
+        </div>
+      </div>
+
+      <div
+        id="custom-resource-modal"
+        class="modal-background"
+        style="display: none"
+      >
+        <div class="modal-content">
+          <h2>Add custom resource</h2>
+
+          <div class="form-floating mb-3">
+            <input
+              type="text"
+              class="form-control"
+              id="custom-resource-name"
+              placeholder="Resource Name"
+            />
+            <label for="custom-resource-name">Resource Name</label>
+          </div>
+
+          <!-- size -->
+          <div class="row">
+            <div class="col">
+              <div class="mb-3">
+                <label for="custom-resource-size_x" class="mb-1"
+                  >size_x (mm)</label
+                >
+                <input
+                  type="number"
+                  class="form-control"
+                  id="custom-resource-size_x"
+                  placeholder="size_x"
+                  value="10"
+                />
+              </div>
+            </div>
+            <div class="col">
+              <div class="mb-3">
+                <label for="custom-resource-size_y" class="mb-1"
+                  >size_y (mm)</label
+                >
+                <input
+                  type="number"
+                  class="form-control"
+                  id="custom-resource-size_y"
+                  placeholder="size_y"
+                  value="10"
+                />
+              </div>
+            </div>
+            <div class="col">
+              <div class="mb-3">
+                <label for="custom-resource-size_z" class="mb-1"
+                  >size_z (mm)</label
+                >
+                <input
+                  type="number"
+                  class="form-control"
+                  id="custom-resource-size_z"
+                  placeholder="size_z"
+                  value="10"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <div>
+              <input
+                type="checkbox"
+                class="form-check-input"
+                id="custom-resource-aspiratable"
+                placeholder="aspiratable"
+                value="true"
+              />
+              <label for="custom-resource-aspiratable" class="mb-1">
+                Aspiratable
+              </label>
+            </div>
+
+            <div id="custom-resource-max-volume-div" style="display: none">
+              <label for="custom-resource-max-volume" class="mb-1">
+                max_volume (mL)
+              </label>
+              <input
+                type="number"
+                class="form-control"
+                id="custom-resource-max-volume"
+                placeholder="max_volume"
+                value="1000"
+              />
+            </div>
+          </div>
+
+          <button class="btn btn-primary w-100" id="add-custom-resource">
+            Add custom resource
+          </button>
+
+          <div class="footer">Press ESC to close</div>
+        </div>
+      </div>
+
+      <main class="col-8" id="editor-column">
+        <div id="context-menu">
+          <button id="context-menu-delete">
+            <i class="bi bi-trash"></i>
+            Delete
+          </button>
+          <button id="context-menu-copy">
+            <i class="bi bi-files"></i>
+            Copy
+          </button>
+          <button id="context-menu-cut">
+            <i class="bi bi-scissors"></i>
+            Cut
+          </button>
+          <button id="context-menu-paste">
+            <i class="bi bi-clipboard"></i>
+            Paste
+          </button>
+        </div>
+
+        <style>
+          #context-menu {
+            display: none;
+            position: absolute;
+            width: 120px;
+            background-color: white;
+            box-shadow: 0 0 5px grey;
+            border-radius: 5px;
+            overflow: hidden;
+            z-index: 100000;
+          }
+
+          #context-menu button {
+            width: 100%;
+            background-color: white;
+            border: none;
+            margin: 0;
+            padding: 10px;
+            text-align: left;
+            box-sizing: border-box;
+          }
+
+          #context-menu button:not(:last-child) {
+            border-bottom: 1px solid lightgray;
+          }
+
+          #context-menu button:hover {
+            background-color: #f1f1f1;
+          }
+        </style>
+
+        <div id="kanvas"></div>
+      </main>
+
+      <div class="col-2 border-start sidebar" id="right-sidebar">
+        <div class="flex-shrink-0 p-3">
+          <div class="pb-3 mb-3 link-body-emphasis border-bottom">
+            <div
+              class="d-flex flex-row justify-content-between align-items-center"
+            >
+              <span class="fs-5 fw-semibold">Resource Properties</span>
+
+              <button
+                class="btn btn-light"
+                id="close-detail-editor"
+                style="width: 50px; height: 50px"
+                onclick="unselectResource()"
+              >
+                <i class="bi bi-x" style="font-size: 1.3rem"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-floating mb-3">
+            <input
+              type="text"
+              class="form-control"
+              id="resource-name"
+              placeholder="Resource Name"
+            />
+            <label for="resource-name">Resource Name</label>
+          </div>
+
+          <div class="mb-3">
+            <p class="fw-semibold">Location</p>
+            <div class="row g-3">
+              <div class="col">
+                <label for="resource-x" class="form-label">X</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="resource-x"
+                  placeholder="X"
+                />
+              </div>
+              <div class="col">
+                <label for="resource-y" class="form-label">Y</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="resource-y"
+                  placeholder="Y"
+                />
+              </div>
+              <div class="col">
+                <label for="resource-y" class="form-label">Z</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="resource-z"
+                  placeholder="Z"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div id="tip-rack-detail-editor">
+            <div class="mt-5 pb-3 mb-3 link-body-emphasis border-bottom">
+              <span class="fs-5 fw-semibold">TipRack Properties</span>
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">State</p>
+              <button class="btn btn-secondary w-100 mb-2" id="fill-tip-rack">
+                Fill with tips
+              </button>
+              <button class="btn btn-secondary w-100 mb-2" id="empty-tip-rack">
+                Empty tips
+              </button>
+            </div>
+          </div>
+
+          <div id="tip-spot-detail-editor">
+            <div class="mt-5 pb-3 mb-3 link-body-emphasis border-bottom">
+              <span class="fs-5 fw-semibold">TipSpot Properties</span>
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">State</p>
+              <button class="btn btn-secondary w-100 mb-2" id="fill-tip-spot">
+                Add tip
+              </button>
+              <button class="btn btn-secondary w-100 mb-2" id="empty-tip-spot">
+                Remove tip
+              </button>
+            </div>
+          </div>
+
+          <div id="container-detail-editor">
+            <div class="mt-5 pb-3 mb-3 link-body-emphasis border-bottom">
+              <span class="fs-5 fw-semibold">Well Properties</span>
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">Max Volume</p>
+              <input
+                type="number"
+                class="form-control"
+                id="container-max-volume"
+                placeholder="Max Volume"
+              />
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">State</p>
+
+              <div class="liquids" id="container-liquids"></div>
+
+              <button
+                class="btn btn-secondary w-100 mb-2"
+                id="add-container-liquid"
+              >
+                Add liquid
+              </button>
+            </div>
+          </div>
+
+          <div id="plate-detail-editor">
+            <div class="mt-5 pb-3 mb-3 link-body-emphasis border-bottom">
+              <span class="fs-5 fw-semibold">Plate Properties</span>
+              <p>
+                Warning: the well properties here apply to all wells in the
+                plate and override existing data.
+              </p>
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">Max Volume</p>
+              <input
+                type="number"
+                class="form-control"
+                id="plate-max-volume"
+                placeholder="Max Volume"
+              />
+            </div>
+
+            <div class="mb-3">
+              <p class="fw-semibold">State</p>
+
+              <div class="liquids" id="plate-liquids"></div>
+
+              <button
+                class="btn btn-secondary w-100 mb-2"
+                id="add-plate-liquid"
+              >
+                Add liquid
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="file-not-found" style="display: none">
+      <div class="container">
+        <div class="row">
+          <div class="col-md-6 offset-md-3">
+            <i class="bi bi-exclamation-triangle-fill triangle"></i>
+            <h1>File Not Found</h1>
+            <p>
+              The file <code>{{ filename }}</code> was not found. Please check
+              the URL and try again.
+            </p>
+
+            <a href="/" class="btn btn-outline-secondary"
+              >Create a new deck <i class="bi bi-arrow-right"></i
+            ></a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="search-bar-background"
+      class="modal-background"
+      style="display: none"
+    >
+      <div id="search-bar" class="modal-content">
+        <input type="text" placeholder="Search Labware Library" />
+
+        <div class="results"></div>
+
+        <div class="footer">Press ESC to close</div>
+      </div>
+    </div>
+
+    <script>
+      const filename = "{{ filename }}"; // jinja template variable
+    </script>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz"
+      crossorigin="anonymous"
+    ></script>
+
+    <script src="/lib.js"></script>
+    <script src="/gui.js"></script>
+  </body>
+</html>

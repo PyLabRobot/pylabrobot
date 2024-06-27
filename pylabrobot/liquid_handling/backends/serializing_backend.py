@@ -1,16 +1,23 @@
 from abc import ABCMeta, abstractmethod
 import sys
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional, List, Union
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.resources import Resource, TipRack
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,
+  PickupTipRack,
   Drop,
+  DropTipRack,
   Aspiration,
+  AspirationPlate,
+  AspirationContainer,
   Dispense,
+  DispensePlate,
+  DispenseContainer,
   Move,
 )
+from pylabrobot.serializer import serialize
 
 if sys.version_info >= (3, 8):
   from typing import TypedDict
@@ -23,7 +30,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
   processing. The implementation of `send_command` is left to the subclasses. """
 
   def __init__(self, num_channels: int):
-    super().__init__()
+    LiquidHandlerBackend.__init__(self)
     self._num_channels = num_channels
 
   @property
@@ -31,60 +38,143 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
     return self._num_channels
 
   @abstractmethod
-  def send_command(self, command: str, data: Optional[Dict[str, Any]] = None) -> Optional[dict]:
+  async def send_command(
+    self,
+    command: str,
+    data: Optional[Dict[str, Any]] = None
+  ) -> Optional[dict]:
     raise NotImplementedError
 
-  def setup(self):
-    self.send_command(command="setup")
+  async def setup(self):
+    await super().setup()
+    await self.send_command(command="setup")
 
-  def stop(self):
-    self.send_command(command="stop")
+  async def stop(self):
+    await self.send_command(command="stop")
 
-  def assigned_resource_callback(self, resource: Resource):
-    self.send_command(command="resource_assigned", data=dict(resource=resource.serialize(),
-      parent_name=(resource.parent.name if resource.parent else None)))
+  def serialize(self) -> dict:
+    return {**super().serialize(), "num_channels": self.num_channels}
 
-  def unassigned_resource_callback(self, name: str):
-    self.send_command(command="resource_unassigned", data=dict(resource_name=name))
+  async def assigned_resource_callback(self, resource: Resource):
+    await self.send_command(command="resource_assigned", data={"resource": resource.serialize(),
+      "parent_name": (resource.parent.name if resource.parent else None)})
 
-  def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
-    serialized = [op.serialize() for op in ops]
-    self.send_command(
+  async def unassigned_resource_callback(self, name: str):
+    await self.send_command(command="resource_unassigned", data={"resource_name": name})
+
+  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
+    serialized = [{
+      "resource_name": op.resource.name,
+      "offset": serialize(op.offset),
+      "tip": op.tip.serialize(),
+    } for op in ops]
+    await self.send_command(
       command="pick_up_tips",
-      data=dict(channels=serialized, use_channels=use_channels))
+      data={"channels": serialized, "use_channels": use_channels})
 
-  def drop_tips(self, ops: List[Drop], use_channels: List[int]):
-    serialized = [op.serialize() for op in ops]
-    self.send_command(
+  async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
+    serialized = [{
+      "resource_name": op.resource.name,
+      "offset": serialize(op.offset),
+      "tip": op.tip.serialize(),
+    } for op in ops]
+    await self.send_command(
       command="drop_tips",
-      data=dict(channels=serialized, use_channels=use_channels))
+      data={"channels": serialized, "use_channels": use_channels})
 
-  def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
-    serialized = [op.serialize() for op in ops]
-    self.send_command(
+  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
+    serialized = [{
+      "resource_name": op.resource.name,
+      "offset": serialize(op.offset),
+      "tip": serialize(op.tip),
+      "volume": op.volume,
+      "flow_rate": serialize(op.flow_rate),
+      "liquid_height": serialize(op.liquid_height),
+      "blow_out_air_volume": serialize(op.blow_out_air_volume),
+      "liquids": serialize(op.liquids),
+    } for op in ops]
+    await self.send_command(
       command="aspirate",
-      data=dict(channels=serialized, use_channels=use_channels))
+      data={"channels": serialized, "use_channels": use_channels})
 
-  def dispense(self, ops: List[Dispense], use_channels: List[int]):
-    serialized = [op.serialize() for op in ops]
-    self.send_command(
+  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
+    serialized = [{
+      "resource_name": op.resource.name,
+      "offset": serialize(op.offset),
+      "tip": serialize(op.tip),
+      "volume": op.volume,
+      "flow_rate": serialize(op.flow_rate),
+      "liquid_height": serialize(op.liquid_height),
+      "blow_out_air_volume": serialize(op.blow_out_air_volume),
+      "liquids": serialize(op.liquids),
+    } for op in ops]
+    await self.send_command(
       command="dispense",
-      data=dict(channels=serialized, use_channels=use_channels))
+      data={"channels": serialized, "use_channels": use_channels})
 
-  def pick_up_tips96(self, tip_rack: TipRack):
-    self.send_command(command="pick_up_tips96", data=dict(resource_name=tip_rack.name))
+  async def pick_up_tips96(self, pickup: PickupTipRack):
+    await self.send_command(command="pick_up_tips96", data={
+      "resource_name": pickup.resource.name, "offset": serialize(pickup.offset)})
 
-  def drop_tips96(self, tip_rack: TipRack):
-    self.send_command(command="drop_tips96", data=dict(resource_name=tip_rack.name))
+  async def drop_tips96(self, drop: DropTipRack):
+    await self.send_command(command="drop_tips96", data={
+      "resource_name": drop.resource.name, "offset": serialize(drop.offset)})
 
-  def aspirate96(self, aspiration: Aspiration):
-    self.send_command(command="aspirate96", data=dict(aspiration=aspiration.serialize()))
+  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+    data = {"aspiration": {
+      "offset": serialize(aspiration.offset),
+      "volume": aspiration.volume,
+      "flow_rate": serialize(aspiration.flow_rate),
+      "liquid_height": serialize(aspiration.liquid_height),
+      "blow_out_air_volume": serialize(aspiration.blow_out_air_volume),
+      "liquids": serialize(aspiration.liquids),
+      "tips": [serialize(tip) for tip in aspiration.tips],
+    }}
+    if isinstance(aspiration, AspirationPlate):
+      data["aspiration"]["well_names"] = [well.name for well in aspiration.wells]
+    else:
+      data["aspiration"]["trough"] = aspiration.container.name
+    await self.send_command(command="aspirate96", data=data)
 
-  def dispense96(self, dispense: Dispense):
-    self.send_command(command="dispense96", data=dict(dispense=dispense.serialize()))
+  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+    data = {"dispense": {
+      "offset": serialize(dispense.offset),
+      "volume": dispense.volume,
+      "flow_rate": serialize(dispense.flow_rate),
+      "liquid_height": serialize(dispense.liquid_height),
+      "blow_out_air_volume": serialize(dispense.blow_out_air_volume),
+      "liquids": serialize(dispense.liquids),
+      "tips": [serialize(tip) for tip in dispense.tips],
+    }}
+    if isinstance(dispense, DispensePlate):
+      data["dispense"]["well_names"] = [well.name for well in dispense.wells]
+    else:
+      data["dispense"]["trough"] = dispense.container.name
+    await self.send_command(command="dispense96", data=data)
 
-  def move_resource(self, move: Move, **backend_kwargs):
-    self.send_command(command="move", data=dict(move=move.serialize()), **backend_kwargs)
+  async def move_resource(self, move: Move, **backend_kwargs):
+    await self.send_command(command="move", data={"move": {
+      "resource_name": move.resource.name,
+      "to": serialize(move.destination),
+      "intermediate_locations": [serialize(loc) for loc in move.intermediate_locations],
+      "resource_offset": serialize(move.resource_offset),
+      "destination_offset": serialize(move.destination_offset),
+      "pickup_distance_from_top": move.pickup_distance_from_top,
+      "get_direction": serialize(move.get_direction),
+      "put_direction": serialize(move.put_direction),
+    }}, **backend_kwargs)
+
+  async def prepare_for_manual_channel_operation(self):
+    await self.send_command(command="prepare_for_manual_channel_operation")
+
+  async def move_channel_x(self, channel: int, x: float):
+    await self.send_command(command="move_channel_x", data={"channel": channel, "x": x})
+
+  async def move_channel_y(self, channel: int, y: float):
+    await self.send_command(command="move_channel_y", data={"channel": channel, "y": y})
+
+  async def move_channel_z(self, channel: int, z: float):
+    await self.send_command(command="move_channel_z", data={"channel": channel, "z": z})
 
 
 class SerializingSavingBackend(SerializingBackend):
@@ -94,15 +184,12 @@ class SerializingSavingBackend(SerializingBackend):
     command: str
     data: Optional[Dict[str, Any]]
 
-  def setup(self):
+  async def setup(self):
     self.sent_commands: List[SerializingSavingBackend.Command] = []
-    self.setup_finished = True
+    await super().setup()
 
-  def stop(self):
-    self.setup_finished = False
-
-  def send_command(self, command: str, data: Optional[Dict[str, Any]] = None):
-    self.sent_commands.append(dict(command=command, data=data))
+  async def send_command(self, command: str, data: Optional[Dict[str, Any]] = None):
+    self.sent_commands.append({"command": command, "data": data})
 
   def clear(self):
     self.sent_commands = []

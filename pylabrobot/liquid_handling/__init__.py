@@ -1,7 +1,14 @@
-""" Liquid handling module for PyLabRobot """
-
-from .backends import STAR, SerializingSavingBackend
+from .backends import *
 from .liquid_handler import LiquidHandler
-from .resources import Resource, Coordinate, Plate, TipRack, PlateCarrier, TipCarrier
-
-from .tip_tracker import does_tip_tracking, no_tip_tracking, set_tip_tracking
+from .standard import (
+  Pickup,
+  Drop,
+  PickupTipRack,
+  DropTipRack,
+  Aspiration,
+  Dispense,
+  AspirationPlate,
+  DispensePlate,
+  Move
+)
+from .strictness import Strictness, set_strictness, get_strictness

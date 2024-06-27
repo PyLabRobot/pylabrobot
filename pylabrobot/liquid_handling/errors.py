@@ -1,4 +1,4 @@
-""" Various errors that can be raised by a liquid handling system. """
+from typing import Dict
 
 
 class NoChannelError(Exception):
@@ -6,43 +6,21 @@ class NoChannelError(Exception):
   This error is only raised when the channel is automatically selected by the system.
 
   Examples:
-  - when trying to pick up a tip with no empty channels
-  """
-
-class ChannelHasTipError(Exception):
-  """ Raised when a channel has a tip, e.g. when trying to pick up a tip with a channel that already
-  has a tip. """
-
-
-class ChannelHasNoTipError(Exception):
-  """ Raised when a channel has no tip, e.g. when trying to drop a tip with a channel that does
-  not have a tip. """
-
-
-class TipSpotHasTipError(Exception):
-  """ Raised when a tip spot has a tip, e.g. when trying to drop a tip with a tip spot that has a
-  tip. """
-
-
-class TipSpotHasNoTipError(Exception):
-  """ Raised when a tip spot has no tip, e.g. when trying to pick up a tip with a tip spot that does
-  not have a tip. """
-
-
-class TooLittleVolumeError(Exception):
-  """ Raised when the volume of a container (tip/well/...) the liquid is moving into is too small.
-
-  Examples:
-  - when trying to aspirate more liquid than the pipette tip can hold
-  - when trying to dispense more liquid than the container can hold
+  - when trying to pick up a tip with no empty channels available on a robot
   """
 
 
-class TooLittleLiquidError(Exception):
-  """ Raised when not enough liquid is present in a container (tip/well/...) to perform an
-  operation.
+class ChannelizedError(Exception):
+  """ Raised by operations that work on multiple channels: pick_up_tips, drop_tips, aspirate, and
+  dispense. Contains a key for each channel that had an error, and the error that occurred. """
 
-  Examples:
-  - when trying to aspirate more liquid than the well contains
-  - when trying to dispense more liquid than the pipette tip contains
-  """
+  def __init__(self, errors: Dict[int, Exception], **kwargs):
+    self.errors = errors
+    self.kwargs = kwargs
+
+  def __str__(self) -> str:
+    kwarg_string = ", ".join([f"{k}={v}" for k, v in self.kwargs.items()])
+    return f"ChannelizedError(errors={self.errors}, {kwarg_string})"
+
+  def __len__(self) -> int:
+    return len(self.errors)

@@ -1,14 +1,20 @@
 # pylint: disable=unused-argument
 
-from typing import List
+from typing import List, Union
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
-from pylabrobot.liquid_handling.resources import Resource, TipRack
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  Dispense,
   Pickup,
+  PickupTipRack,
   Drop,
+  DropTipRack,
+  Aspiration,
+  AspirationPlate,
+  AspirationContainer,
+  Dispense,
+  DispensePlate,
+  DispenseContainer,
   Move
 )
 
@@ -16,49 +22,62 @@ from pylabrobot.liquid_handling.standard import (
 class ChatterBoxBackend(LiquidHandlerBackend):
   """ Chatter box backend for 'How to Open Source' """
 
-  def setup(self):
+  def __init__(self, num_channels: int = 8):
+    """ Initialize a chatter box backend. """
+    super().__init__()
+    self._num_channels = num_channels
+
+  async def setup(self):
+    await super().setup()
     print("Setting up the robot.")
 
-  def stop(self):
+  async def stop(self):
     print("Stopping the robot.")
 
-  def __enter__(self):
-    self.setup()
-    return self
+  def serialize(self) -> dict:
+    return {**super().serialize(), "num_channels": self.num_channels}
 
-  def __exit__(self, *exc):
-    self.stop()
-    return False
+  @property
+  def num_channels(self) -> int:
+    return self._num_channels
 
-  def assigned_resource_callback(self, resource: Resource):
+  async def assigned_resource_callback(self, resource: Resource):
     print(f"Resource {resource.name} was assigned to the robot.")
 
-  def unassigned_resource_callback(self, name: str):
+  async def unassigned_resource_callback(self, name: str):
     print(f"Resource {name} was unassigned from the robot.")
 
-  def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
+  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
     print(f"Picking up tips {ops}.")
 
-  def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
+  async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
     print(f"Dropping tips {ops}.")
 
-  def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
+  async def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
     print(f"Aspirating {ops}.")
 
-  def dispense(self, ops: List[Dispense], use_channels: List[int], **backend_kwargs):
+  async def dispense(self, ops: List[Dispense], use_channels: List[int], **backend_kwargs):
     print(f"Dispensing {ops}.")
 
-  def pick_up_tips96(self, tip_rack: TipRack, **backend_kwargs):
-    print(f"Picking up tips from {tip_rack}.")
+  async def pick_up_tips96(self, pickup: PickupTipRack, **backend_kwargs):
+    print(f"Picking up tips from {pickup.resource.name}.")
 
-  def drop_tips96(self, tip_rack: TipRack, **backend_kwargs):
-    print(f"Dropping tips to {tip_rack}.")
+  async def drop_tips96(self, drop: DropTipRack, **backend_kwargs):
+    print(f"Dropping tips to {drop.resource.name}.")
 
-  def aspirate96(self, aspiration: Aspiration):
-    print(f"Aspirating {aspiration.volume} from {aspiration.resource}.")
+  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+    if isinstance(aspiration, AspirationPlate):
+      resource = aspiration.wells[0].parent
+    else:
+      resource = aspiration.container
+    print(f"Aspirating {aspiration.volume} from {resource}.")
 
-  def dispense96(self, dispense: Dispense):
-    print(f"Dispensing {dispense.volume} to {dispense.resource}.")
+  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+    if isinstance(dispense, DispensePlate):
+      resource = dispense.wells[0].parent
+    else:
+      resource = dispense.container
+    print(f"Dispensing {dispense.volume} to {resource}.")
 
-  def move_resource(self, move: Move, **backend_kwargs):
+  async def move_resource(self, move: Move, **backend_kwargs):
     print(f"Moving {move}.")

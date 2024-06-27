@@ -12,6 +12,4 @@ Various utilities for the pylabrobot package.
 
     file_parsing
     list
-    numbers
     positions
-    string

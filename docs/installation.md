@@ -2,59 +2,19 @@
 
 These instructions describe how to install PyLabRobot.
 
-Note that there are additional installation steps for using the firmware (universal) interface to Hamiltons, see {ref}`below <using-the-firmware-interface-with-hamilton-robots>`.
+Note that there are additional installation steps for using the firmware (universal) interface to Hamiltons and Tecans, see {ref}`below <using-the-firmware-interface>`.
 
 ## Installing PyLabRobot
 
-It is recommended that you use a virtual environment to install PyLabRobot. See the [virtualenvironment](https://virtualenv.pypa.io/en/latest/) documentation for more information on virtual environments.
+It is highly recommended that you install PyLabRobot in a virtual environment. [virtualenv](https://virtualenv.pypa.io/en/latest/) is a popular tool for doing that, but you can use any tool you like. Note that virtualenv needs to be installed separately first.
 
-Here's how to create a virtual environment in a nutshell:
+Here's how to create a virtual environment using virtualenv:
 
 ```bash
 mkdir your_project
 cd your_project
 python -m virtualenv env
 source env/bin/activate
-```
-
-### Using pip
-
-Installing from PyPI is the easiest and recommended way to install PyLabRobot.
-
-The following will install PyLabRobot and the essential dependencies:
-
-```bash
-pip install pylabrobot
-```
-
-If you want to build documentation or run tests, you need install the additional
-dependencies. Also using pip:
-
-```bash
-pip install pylabrobot[docs]
-pip install pylabrobot[testing]
-```
-
-There's a multitude of other optional dependencies that you can install. Replace `[docs]` with one of the following items to install the desired dependencies.
-
-- `fw`: Needed for firmware control over Hamilton robots.
-- `http`: Needed for the HTTP backend.
-- `websockets`: Needed for the WebSocket backend.
-- `simulation`: Needed for the simulation backend.
-- `venus`: Needed for the VENUS backend. This is
-  [PyHamilton](https://github.com/dgretton/pyhamilton).
-- `server`: Needed for LH server, an HTTP front end to LH.
-
-To install multiple dependencies, separate them with a comma:
-
-```bash
-pip install pylabrobot[fw,server]
-```
-
-Or install all dependencies at once:
-
-```bash
-pip install pylabrobot[all]
 ```
 
 ### From source
@@ -69,11 +29,55 @@ pip install -e '.[dev]'
 
 See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
 
-(using-the-firmware-interface-with-hamilton-robots)=
+### Using pip (often outdated NOT recommended)
 
-## Using the firmware interface with Hamilton robots
+> The PyPI package is often out of date. Please install from source (see above).
 
-If you want to use the firmware version of the Hamilton driver, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions [here](https://github.com/pyusb/pyusb#requirements-and-platform-support). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
+The following will install PyLabRobot and the essential dependencies:
+
+```bash
+pip install pylabrobot
+```
+
+If you want to build documentation or run tests, you need install the additional
+dependencies. Also using pip:
+
+```bash
+pip install 'pylabrobot[docs]'
+pip install 'pylabrobot[testing]'
+```
+
+There's a multitude of other optional dependencies that you can install. Replace `[docs]` with one of the following items to install the desired dependencies.
+
+- `fw`: Needed for firmware control over Hamilton robots.
+- `http`: Needed for the HTTP backend.
+- `websockets`: Needed for the WebSocket backend.
+- `simulation`: Needed for the simulation backend.
+- `opentrons`: Needed for the Opentrons backend.
+- `server`: Needed for LH server, an HTTP front end to LH.
+- `agrow`: Needed for the AgrowPumpArray backend.
+- `plate_reading`: Needed to interact with the CLARIO Star plate reader.
+- `inheco`: Needed for the Inheco backend.
+- `dev`: Everything you need for development.
+- `all`: Everything. May not be available on all platforms.
+
+To install multiple dependencies, separate them with a comma:
+
+```bash
+pip install 'pylabrobot[fw,server]'
+```
+
+Or install all dependencies at once:
+
+```bash
+pip install 'pylabrobot[all]'
+```
+
+(using-the-firmware-interface)=
+
+## Using the firmware interface with Hamilton or Tecan robots
+
+If you want to use the firmware version of the Hamilton or Tecan interfaces, you need to install a backend for [PyUSB](https://github.com/pyusb/pyusb/). You can find the official installation instructions [here](https://github.com/pyusb/pyusb#requirements-and-platform-support). The following is a complete (and probably easier) guide for macOS, Linux and Windows.
 
 Reminder: when you are using the firmware version, make sure to install the firmware dependencies as follows:
 
@@ -99,13 +103,13 @@ brew install libusb
 
 1. Download and install [Zadig](https://zadig.akeo.ie).
 
-2. Make sure the Hamilton is connected using the USB cable and that no other software is running.
+2. Make sure the Hamilton is connected using the USB cable and that no other Hamilton/VENUS software is running.
 
 3. Open Zadig and select "Options" -> "List All Devices".
 
 ![](./img/installation/install-1.png)
 
-4. Select "ML Star" from the list.
+4. Select "ML Star" from the list if you're using a Hamilton STAR or STARlet. If you're using a Tecan robot, select "TECU".
 
 ![](./img/installation/install-2.png)
 
@@ -125,13 +129,13 @@ brew install libusb
 
 _These instructions only apply if you are using VENUS on your computer!_
 
-If you ever wish to switch back from firmware command to use `pyhamilton`, the `VENUS` backend or plain VENUS, you have to replace the updated driver with the original Hamilton one.
+If you ever wish to switch back from firmware command to use `pyhamilton` or plain VENUS, you have to replace the updated driver with the original Hamilton or Tecan one.
 
 1. This guide is only relevant if ML Star is listed under libusbK USB Devices in the Device Manager program.
 
 ![](./img/installation/uninstall-1.png)
 
-2. If that"s the case, double click "ML Star" to open this dialog, then click "Driver".
+2. If that"s the case, double click "ML Star" (or similar) to open this dialog, then click "Driver".
 
 ![](./img/installation/uninstall-2.png)
 

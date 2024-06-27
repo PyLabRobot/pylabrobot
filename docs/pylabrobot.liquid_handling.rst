@@ -1,4 +1,4 @@
-﻿.. currentmodule:: pylabrobot.liquid_handling
+.. currentmodule:: pylabrobot.liquid_handling
 
 pylabrobot.liquid_handling package
 ==================================
@@ -28,34 +28,6 @@ Backends
   pylabrobot.liquid_handling.backends
 
 
-Resources
----------
-
-The subpackage :code:`resources` contains all resources used by the liquid handling package. You can use these to define deck layouts. Many of VENUS' and Opentrons' resources are already implemented. If the resource is not implemented, you can implement it yourself by implementing or subclassing the appropriate class in :ref:`pylabrobot.liquid_handling.resources:abstract`.
-
-.. toctree::
-  :maxdepth: 2
-
-  pylabrobot.liquid_handling.resources
-
-
-Tip trackers
-------------
-
-See :doc:`Using tip trackers <using-tip-trackers>` for a tutorial.
-
-.. autosummary::
-  :toctree: _autosummary
-  :nosignatures:
-  :recursive:
-
-  pylabrobot.liquid_handling.no_tip_tracking
-  pylabrobot.liquid_handling.set_tip_tracking
-  pylabrobot.liquid_handling.tip_tracker.TipTracker
-  pylabrobot.liquid_handling.tip_tracker.ChannelTipTracker
-  pylabrobot.liquid_handling.tip_tracker.SpotTipTracker
-
-
 Operations
 ----------
 
@@ -68,3 +40,13 @@ Operations are the main data holders used to transmit information from the liqui
   :recursive:
 
   pylabrobot.liquid_handling.standard
+
+
+Strictness
+----------
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Strictness
+
+   pylabrobot.liquid_handling.strictness

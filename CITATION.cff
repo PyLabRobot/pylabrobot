@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "PyLabRobot contributors"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Wierenga
+      given-names: Rick
+    - family-names: Golas
+      given-names: Stefan
+    - family-names: Ho
+      given-names: Wilson
+    - family-names: Coley
+      given-names: Connor
+    - family-names: Esvelt
+      given-names: Kevin
+  title: "PyLabRobot: An Open-Source, Hardware Agnostic Interface for Liquid-Handling Robots and Accessories"
+  date-released: "2023-10-20"
+  year: 2023
+  doi: 10.1016/j.device.2023.100111
+  publisher: "Elsevier"
+  url: "https://www.cell.com/device/fulltext/S2666-9986(23)00170-9"
+  journal: Device
+  repository: "https://github.com/PyLabRobot/pylabrobot"
+repository-code: "https://github.com/PyLabRobot/pylabrobot"
+url: "https://docs.pylabrobot.org"
+type: software
+license: MIT

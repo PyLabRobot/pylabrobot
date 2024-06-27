@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 
 
 class SaverBackend(LiquidHandlerBackend):
@@ -15,47 +15,53 @@ class SaverBackend(LiquidHandlerBackend):
   def num_channels(self) -> int:
     return self._num_channels
 
-  def setup(self):
-    super().setup()
+  async def setup(self):
+    await super().setup()
     self.commands_received = []
 
-  def send_command(self, command: str, data: Dict[str, Any]):
-    self.commands_received.append(dict(command=command, data=data))
+  async def stop(self):
+    pass
 
-  def assigned_resource_callback(self, *args, **kwargs):
+  def serialize(self) -> dict:
+    return {**super().serialize(), "num_channels": self.num_channels}
+
+  async def send_command(self, command: str, data: Dict[str, Any]):
+    self.commands_received.append({"command": command, "data": data})
+
+  async def assigned_resource_callback(self, *args, **kwargs):
     self.commands_received.append(
-      dict(command="assigned_resource_callback", args=args, kwargs=kwargs))
+      {"command": "assigned_resource_callback", "args": args, "kwargs": kwargs})
 
-  def unassigned_resource_callback(self, *args, **kwargs):
+  async def unassigned_resource_callback(self, *args, **kwargs):
     self.commands_received.append(
-      dict(command="unassigned_resource_callback", args=args, kwargs=kwargs))
+      {"command": "unassigned_resource_callback", "args": args, "kwargs": kwargs})
 
-  def pick_up_tips(self, *args, **kwargs):
-    self.commands_received.append(dict(command="pick_up_tips", args=args, kwargs=kwargs))
+  async def pick_up_tips(self, *args, **kwargs):
+    self.commands_received.append({"command": "pick_up_tips", "args": args, "kwargs": kwargs})
 
-  def drop_tips(self, *args, **kwargs):
-    self.commands_received.append(dict(command="drop_tips", args=args, kwargs=kwargs))
+  async def drop_tips(self, *args, **kwargs):
+    self.commands_received.append({"command": "drop_tips", "args": args, "kwargs": kwargs})
 
-  def aspirate(self, *args, **kwargs):
-    self.commands_received.append(dict(command="aspirate", args=args, kwargs=kwargs))
+  async def aspirate(self, *args, **kwargs):
+    self.commands_received.append({"command": "aspirate", "args": args, "kwargs": kwargs})
 
-  def dispense(self, *args, **kwargs):
-    self.commands_received.append(dict(command="dispense", args=args, kwargs=kwargs))
+  async def dispense(self, *args, **kwargs):
+    self.commands_received.append({"command": "dispense", "args": args, "kwargs": kwargs})
 
-  def pick_up_tips96(self, *args, **kwargs):
-    self.commands_received.append(dict(command="pick_up_tips96", args=args, kwargs=kwargs))
+  async def pick_up_tips96(self, *args, **kwargs):
+    self.commands_received.append({"command": "pick_up_tips96", "args": args, "kwargs": kwargs})
 
-  def drop_tips96(self, *args, **kwargs):
-    self.commands_received.append(dict(command="drop_tips96", args=args, kwargs=kwargs))
+  async def drop_tips96(self, *args, **kwargs):
+    self.commands_received.append({"command": "drop_tips96", "args": args, "kwargs": kwargs})
 
-  def aspirate96(self, *args, **kwargs):
-    self.commands_received.append(dict(command="aspirate96", args=args, kwargs=kwargs))
+  async def aspirate96(self, *args, **kwargs):
+    self.commands_received.append({"command": "aspirate96", "args": args, "kwargs": kwargs})
 
-  def dispense96(self, *args, **kwargs):
-    self.commands_received.append(dict(command="dispense96", args=args, kwargs=kwargs))
+  async def dispense96(self, *args, **kwargs):
+    self.commands_received.append({"command": "dispense96", "args": args, "kwargs": kwargs})
 
-  def move_resource(self, *args, **kwargs):
-    self.commands_received.append(dict(command="move_resource", args=args, kwargs=kwargs))
+  async def move_resource(self, *args, **kwargs):
+    self.commands_received.append({"command": "move_resource", "args": args, "kwargs": kwargs})
 
   # Saver specific methods
 

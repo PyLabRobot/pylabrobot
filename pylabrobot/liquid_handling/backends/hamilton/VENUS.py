@@ -35,7 +35,7 @@
 #   USE_VENUS = False
 
 # from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
-# from pylabrobot.liquid_handling.resources.abstract import Resource, TipRack
+# from pylabrobot.resources import Resource, TipRack
 # import pylabrobot.utils.file_parsing as file_parser
 # from pylabrobot.liquid_handling.standard import (
 #   Pickup,
@@ -44,7 +44,7 @@
 #   Dispense,
 # )
 
-# logger = logging.getLogger(__name__)
+# logger = logging.getLogger("pylabrobot")
 # logging.basicConfig()
 # logger.setLevel(logging.INFO)
 
@@ -70,7 +70,7 @@
 
 #     self._venus_resources: dict[str, ResourceType] = {}
 
-#   def setup(self):
+#   async def setup(self):
 #     if not USE_VENUS:
 #       raise RuntimeError("Venus backend requires the pyhamilton library.")
 
@@ -125,14 +125,14 @@
 
 #     self._venus_resources[name] = self.lmgr.assign_unused_resource(resource_type)
 
-#   def stop(self):
+#   async def stop(self):
 #     self.ham_int.stop()
 #     super().stop()
 
-#   def assigned_resource_callback(self, resource: Resource):
+#   async def assigned_resource_callback(self, resource: Resource):
 #     raise RuntimeError("VENUS backend does not support assigning resources.")
 
-#   def unassigned_resource_callback(self, name: str):
+#   async def unassigned_resource_callback(self, name: str):
 #     raise RuntimeError("VENUS backend does not support assigning resources.")
 
 #   def _get_venus_resource(self, resource: Resource) -> DeckResource:
@@ -232,13 +232,13 @@
 #     venus_resource = self._get_venus_resource(tip_rack)
 #     venus_utils.tip_eject_96(self.ham_int, venus_resource, **backend_kwargs)
 
-#   def aspirate96(self, aspiration: Aspiration, **backend_kwargs):
+#   def aspirate96(self, aspiration: AspirationPlate, **backend_kwargs):
 #     """ Aspirate liquid from the specified resource using CoRe 96. """
 #     venus_resource = self._get_venus_resource(aspiration.resource)
 #     venus_utils.aspirate_96(self.ham_int, venus_resource, aspiration.volume,
 #       aspiration_speed=aspiration.flow_rate, **backend_kwargs)
 
-#   def dispense96(self, dispense: Dispense, **backend_kwargs):
+#   def dispense96(self, dispense: DispensePlate, **backend_kwargs):
 #     """ Dispense liquid to the specified resource using CoRe 96. """
 #     venus_resource = self._get_venus_resource(dispense.resource)
 #     venus_utils.dispense_96(self.ham_int, venus_resource, dispense.volume,

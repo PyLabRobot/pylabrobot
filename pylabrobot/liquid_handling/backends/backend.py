@@ -1,17 +1,26 @@
-from abc import ABCMeta, abstractmethod
-from typing import List
+from __future__ import annotations
 
-from pylabrobot.liquid_handling.resources import Resource, TipRack
+from abc import ABCMeta, abstractmethod
+from typing import List, Optional, Union
+
+from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.resources import Deck, Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,
+  PickupTipRack,
   Drop,
+  DropTipRack,
   Aspiration,
+  AspirationPlate,
+  AspirationContainer,
   Dispense,
+  DispensePlate,
+  DispenseContainer,
   Move,
 )
 
 
-class LiquidHandlerBackend(object, metaclass=ABCMeta):
+class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   """
   Abstract base class for liquid handling robot backends.
 
@@ -24,32 +33,34 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
 
   def __init__(self):
     self.setup_finished = False
+    self._deck: Optional[Deck] = None
 
-  def setup(self):
-    self.setup_finished = True
+  def set_deck(self, deck: Deck):
+    """ Set the deck for the robot. Called automatically by `LiquidHandler.setup` or can be called
+    manually if interacting with the backend directly. A deck must be set before setup. """
+    self._deck = deck
 
-  def stop(self):
-    self.setup_finished = False
+  @property
+  def deck(self) -> Deck:
+    assert self._deck is not None, "Deck not set"
+    return self._deck
 
-  def __enter__(self):
-    self.setup()
-    return self
+  async def setup(self):
+    """ Set up the robot. This method should be called before any other method is called. """
+    assert self._deck is not None, "Deck not set"
 
-  def __exit__(self, *exc):
-    self.stop()
-    return False
-
-  def assigned_resource_callback(self, resource: Resource):
+  async def assigned_resource_callback(self, resource: Resource):
     """ Called when a new resource was assigned to the robot.
 
     This callback will also be called immediately after the setup method has been called for any
-    resources that were assigned to the robot before it was set up.
+    resources that were assigned to the robot before it was set up. The first resource will always
+    be the deck itself.
 
     Args:
       resource: The resource that was assigned to the robot.
     """
 
-  def unassigned_resource_callback(self, name: str):
+  async def unassigned_resource_callback(self, name: str):
     """ Called when a resource is unassigned from the robot.
 
     Args:
@@ -62,37 +73,57 @@ class LiquidHandlerBackend(object, metaclass=ABCMeta):
     """ The number of channels that the robot has. """
 
   @abstractmethod
-  def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
+  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int]):
     """ Pick up tips from the specified resource. """
 
   @abstractmethod
-  def drop_tips(self, ops: List[Drop], use_channels: List[int]):
+  async def drop_tips(self, ops: List[Drop], use_channels: List[int]):
     """ Drop tips from the specified resource. """
 
   @abstractmethod
-  def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
+  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
     """ Aspirate liquid from the specified resource using pip. """
 
   @abstractmethod
-  def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
     """ Dispense liquid from the specified resource using pip. """
 
   @abstractmethod
-  def pick_up_tips96(self, tip_rack: TipRack):
+  async def pick_up_tips96(self, pickup: PickupTipRack):
     """ Pick up tips from the specified resource using CoRe 96. """
 
   @abstractmethod
-  def drop_tips96(self, tip_rack: TipRack):
+  async def drop_tips96(self, drop: DropTipRack):
     """ Drop tips to the specified resource using CoRe 96. """
 
   @abstractmethod
-  def aspirate96(self, aspiration: Aspiration):
+  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
     """ Aspirate from all wells in 96 well plate. """
 
   @abstractmethod
-  def dispense96(self, dispense: Dispense):
+  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
     """ Dispense to all wells in 96 well plate. """
 
   @abstractmethod
-  def move_resource(self, move: Move):
+  async def move_resource(self, move: Move):
     """ Move a resource to a new location. """
+
+  async def prepare_for_manual_channel_operation(self, channel: int):
+    """ Prepare the robot for manual operation. """
+
+    raise NotImplementedError()
+
+  async def move_channel_x(self, channel: int, x: float):
+    """ Move the specified channel to the specified x coordinate. """
+
+    raise NotImplementedError()
+
+  async def move_channel_y(self, channel: int, y: float):
+    """ Move the specified channel to the specified y coordinate. """
+
+    raise NotImplementedError()
+
+  async def move_channel_z(self, channel: int, z: float):
+    """ Move the specified channel to the specified z coordinate. """
+
+    raise NotImplementedError()

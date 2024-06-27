@@ -6,3 +6,5 @@ build/pdf-intermediate.md
 pyhamilton/LAY-BACKUP
 .ipynb_checkpoints
 *.egg-info
+*.log
+build/lib
