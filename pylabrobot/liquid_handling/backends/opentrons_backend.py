@@ -192,8 +192,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     well_definitions = {
       child.name: {
         "depth": child.get_size_z(),
-        "x": cast(Coordinate, child.location).x,
-        "y": cast(Coordinate, child.location).y,
+        "x": cast(Coordinate, child.location).x + child.get_size_x() / 2,
+        "y": cast(Coordinate, child.location).y + child.get_size_y() / 2,
         "z": cast(Coordinate, child.location).z,
         "shape": "circular",
 
