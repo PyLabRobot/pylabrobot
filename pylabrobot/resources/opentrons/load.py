@@ -72,10 +72,13 @@ def ot_definition_to_resource(
 
         well_size_z = well_data["depth"]
 
-        location=Coordinate(x=well_data["x"], y=well_data["y"], z=well_data["z"])
+        location=Coordinate(
+          x=well_data["x"] - well_size_x/2,
+          y=well_data["y"] - well_size_y/2,
+          z=well_data["z"]
+        )
 
         if display_category == "wellPlate":
-
           if well_data["shape"] == "rectangular":
             cross_section_type = CrossSectionType.RECTANGLE
           else:
