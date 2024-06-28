@@ -173,7 +173,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01")
-    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=False)
+    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02")
     self.deck.assign_child_resource(self.plt_car, rails=24)
 
     self.maxDiff = None

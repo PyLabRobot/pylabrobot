@@ -57,7 +57,7 @@ def Cos_96_EZWash(name: str) -> Plate:
     size_x=127.76,
     size_y=85.48,
     size_z=14.5,
-    lid=None, #Cos_96_EZWash_Lid(name=name + "_lid") if with_lid else None,
+    lid=None,
     model="Cos_96_EZWash",
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
