@@ -2,8 +2,9 @@ import unittest
 from unittest.mock import AsyncMock
 from pylabrobot.powder_dispensing.powder_dispenser import PowderDispenser
 from pylabrobot.powder_dispensing.backend import PowderDispenserBackend, PowderDispense, DispenseResults
-from pylabrobot.resources import Powder, Cos_96_DW_1mL
+from pylabrobot.resources import Powder, Cor_96_wellplate_360ul_Fb
 from typing import List
+
 
 class MockPowderDispenserBackend(PowderDispenserBackend):
   """ A mock backend for testing. """
@@ -37,13 +38,13 @@ class TestPowderDispenser(unittest.IsolatedAsyncioTestCase):
     await self.dispenser.setup()
 
   async def test_dispense_single_resource(self):
-    plate = Cos_96_DW_1mL(name="test_resource")
+    plate = Cor_96_wellplate_360ul_Fb(name="test_resource")
     powder = Powder("salt")
     await self.dispenser.dispense(plate["A1"], powder, 0.005)
     self.backend.dispense.assert_called_once()
 
   async def test_dispense_multiple_resources(self):
-    plate = Cos_96_DW_1mL(name="test_resource")
+    plate = Cor_96_wellplate_360ul_Fb(name="test_resource")
     resources = [plate["A1"], plate["A2"]]
     powders = [Powder("salt"), Powder("salt")]
     amounts = [0.005, 0.010]
@@ -51,7 +52,7 @@ class TestPowderDispenser(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.backend.dispense.call_count, 1)
 
   async def test_dispense_parameters_handling(self):
-    plate = Cos_96_DW_1mL(name="test_resource")
+    plate = Cor_96_wellplate_360ul_Fb(name="test_resource")
     powder = Powder("salt")
     dispense_parameters = {"param1": "value1"}
     await self.dispenser.dispense(
@@ -61,12 +62,12 @@ class TestPowderDispenser(unittest.IsolatedAsyncioTestCase):
 
   async def test_assertion_for_mismatched_lengths(self):
     with self.assertRaises(AssertionError):
-      plate = Cos_96_DW_1mL(name="test_resource")
+      plate = Cor_96_wellplate_360ul_Fb(name="test_resource")
       list_of_powders = [Powder("salt"), Powder("salt")]
       await self.dispenser.dispense(plate["A1"], list_of_powders, [0.005])
 
     with self.assertRaises(AssertionError):
-      plate = Cos_96_DW_1mL(name="test_resource")
+      plate = Cor_96_wellplate_360ul_Fb(name="test_resource")
       await self.dispenser.dispense(
         plate["A1"],
         Powder("salt"),

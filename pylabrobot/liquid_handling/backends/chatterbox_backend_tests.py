@@ -2,7 +2,7 @@ import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.chatterbox_backend import ChatterBoxBackend
-from pylabrobot.resources import Cos_96_EZWash, HTF_L, Coordinate
+from pylabrobot.resources import Cor_96_wellplate_360ul_Fb, HTF_L, Coordinate
 from pylabrobot.resources.hamilton import STARLetDeck
 
 
@@ -14,7 +14,7 @@ class ChatterBoxBackendTests(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(self.backend, deck=self.deck)
     self.tip_rack = HTF_L(name="tip_rack")
     self.deck.assign_child_resource(self.tip_rack, rails=3)
-    self.plate = Cos_96_EZWash(name="plate")
+    self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.plate, rails=9)
 
   async def asyncSetUp(self) -> None:

@@ -1,7 +1,9 @@
 """ Corning Costar plates """
 
 # pylint: disable=invalid-name
+# pylint: disable=unreachable
 
+from pylabrobot.resources.errors import ResourceDefinitionIncompleteError
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.utils import create_equally_spaced_2d
@@ -40,6 +42,9 @@ def Cos_1536_10ul_Lid(name: str) -> Lid:
 
 def Cos_1536_10ul(name: str, with_lid: bool = False) -> Plate:
   """ Cos_1536_10ul """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_1536_10ul")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -96,6 +101,9 @@ def Cos_384_DW_Lid(name: str) -> Lid:
 
 def Cos_384_DW(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_DW """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_384_DW")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -150,6 +158,9 @@ def Cos_384_PCR_Lid(name: str) -> Lid:
 
 def Cos_384_PCR(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_PCR """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_384_PCR")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -204,6 +215,9 @@ def Cos_384_Sq_Lid(name: str) -> Lid:
 
 def Cos_384_Sq(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_Sq """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_384_Sq")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -260,6 +274,9 @@ def Cos_384_Sq_Rd_Lid(name: str) -> Lid:
 
 def Cos_384_Sq_Rd(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_Sq_Rd """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_384_Sq_Rd")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -316,6 +333,9 @@ def Cos_96_DW_1mL_Lid(name: str) -> Lid:
 
 def Cos_96_DW_1mL(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DW_1mL """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_DW_1mL")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -372,6 +392,9 @@ def Cos_96_DW_2mL_Lid(name: str) -> Lid:
 
 def Cos_96_DW_2mL(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DW_2mL """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_DW_2mL")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -428,6 +451,9 @@ def Cos_96_DW_500ul_Lid(name: str) -> Lid:
 
 def Cos_96_DW_500ul(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DW_500ul """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_DW_500ul")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -481,30 +507,7 @@ def Cos_96_EZWash_Lid(name: str) -> Lid:
 
 
 def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
-  """ Cos_96_EZWash """
-  return Plate(
-    name=name,
-    size_x=127.76,
-    size_y=85.48,
-    size_z=14.5,
-    lid=Cos_96_EZWash_Lid(name=name + "_lid") if with_lid else None,
-    model="Cos_96_EZWash",
-    items=create_equally_spaced_2d(Well,
-      num_items_x=12,
-      num_items_y=8,
-      dx=10.55,
-      dy=8.05,
-      dz=1.0,
-      item_dx=9.0,
-      item_dy=9.0,
-      size_x=6.9,
-      size_y=6.9,
-      size_z=11.3,
-      bottom_type=WellBottomType.FLAT,
-      cross_section_type=CrossSectionType.CIRCLE,
-      compute_volume_from_height=_compute_volume_from_height_Cos_96_EZWash,
-    ),
-  )
+  raise ValueError("Deprecated. You probably want to use Cor_96_wellplate_360ul_Fb instead.")
 
 def Cos_96_EZWash_L(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_EZWash """
@@ -513,6 +516,7 @@ def Cos_96_EZWash_L(name: str, with_lid: bool = False) -> Plate:
 def Cos_96_EZWash_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_EZWash """
   return Cos_96_EZWash(name=name, with_lid=with_lid).rotated(90)
+
 
 def _compute_volume_from_height_Cos_96_FL(h: float) -> float:
   volume = min(h, 10.67)*34.2808
@@ -536,6 +540,9 @@ def Cos_96_FL_Lid(name: str) -> Lid:
 
 def Cos_96_FL(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_FL """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_FL")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -582,6 +589,9 @@ def Cos_96_Filter_Lid(name: str) -> Lid:
 
 def Cos_96_Filter(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Filter """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_Filter")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -644,6 +654,9 @@ def Cos_96_HalfArea_Lid(name: str) -> Lid:
 
 def Cos_96_HalfArea(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_HalfArea """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_HalfArea")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -700,6 +713,9 @@ def Cos_96_PCR_Lid(name: str) -> Lid:
 
 def Cos_96_PCR(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_PCR """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_PCR")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -754,6 +770,9 @@ def Cos_96_ProtCryst_Lid(name: str) -> Lid:
 
 def Cos_96_ProtCryst(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_ProtCryst """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_ProtCryst")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -810,6 +829,9 @@ def Cos_96_Rd_Lid(name: str) -> Lid:
 
 def Cos_96_Rd(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Rd """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_Rd")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -864,6 +886,9 @@ def Cos_96_SpecOps_Lid(name: str) -> Lid:
 
 def Cos_96_SpecOps(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_SpecOps """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_SpecOps")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -918,6 +943,9 @@ def Cos_96_UV_Lid(name: str) -> Lid:
 
 def Cos_96_UV(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_UV """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_UV")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -974,6 +1002,9 @@ def Cos_96_Vb_Lid(name: str) -> Lid:
 
 def Cos_96_Vb(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Vb """
+
+  raise ResourceDefinitionIncompleteError(resource_name="Cos_96_Vb")
+
   return Plate(
     name=name,
     size_x=127.0,
@@ -1153,3 +1184,80 @@ def Cos_96_DWP_2mL_Vb_L(name: str, with_lid: bool = False) -> Plate:
 def Cos_96_DWP_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DWP_2mL_Vb """
   return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid).rotated(90)
+
+
+def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+
+  return Lid(
+    name=name,
+    size_x=127.76,
+    size_y=85.48,
+    size_z=None,             # measure the total z height
+    nesting_z_height=None,   # measure overlap between lid and plate
+    model="Cor_96_wellplate_360ul_Fb_Lid",
+  )
+
+
+def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
+  """ Cor_96_wellplate_360ul_Fb
+
+  Catalog number 3603
+
+  https://ecatalog.corning.com/life-sciences/b2b/NL/en/Microplates/Assay-Microplates/96-Well-
+  Microplates/Corning®-96-well-Black-Clear-and-White-Clear-Bottom-Polystyrene-Microplates/p/3603
+
+  Measurements found here:
+  https://www.corning.com/catalog/cls/documents/drawings/MicroplateDimensions96-384-1536.pdf
+  https://archive.vn/CnRgl
+  """
+
+  # This used to be Cos_96_EZWash in the Esvelt lab
+  #
+  # return Plate(
+  #   name=name,
+  #   size_x=127,
+  #   size_y=86,
+  #   size_z=14.5,
+  #   lid=Cos_96_EZWash_Lid(name=name + "_lid") if with_lid else None,
+  #   model="Cos_96_EZWash",
+  #   items=create_equally_spaced_2d(Well,
+  #     num_items_x=12,
+  #     num_items_y=8,
+  #     dx=10.55,
+  #     dy=8.05,
+  #     dz=1.0,
+  #     item_dx=9.0,
+  #     item_dy=9.0,
+  #     size_x=6.9,
+  #     size_y=6.9,
+  #     size_z=11.3,
+  #     bottom_type=WellBottomType.FLAT,
+  #     cross_section_type=CrossSectionType.CIRCLE,
+  #   ),
+  # )
+
+  return Plate(
+    name=name,
+    size_x=127.76,
+    size_y=85.48,
+    size_z=14.2,
+    lid=Cor_96_wellplate_360ul_Fb_Lid(name=name + "_lid") if with_lid else None,
+    model="Cor_96_wellplate_360ul_Fb",
+    items=create_equally_spaced_2d(Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.87, # 14.3-6.86/2
+      dy=7.77, # 11.2-6.86/2
+      dz=3.03,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=6.86, # top
+      size_y=6.86, # top
+      size_z=10.67,
+      bottom_type=WellBottomType.FLAT,
+      cross_section_type=CrossSectionType.CIRCLE,
+      max_volume=360,
+    ),
+  )
