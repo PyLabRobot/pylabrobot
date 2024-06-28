@@ -2,12 +2,8 @@ import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.resources import (
-  TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00,
-  Cos_96_EZWash,
-  HT_L,
-  LT_L,
-  Coordinate,
+  Plate, Well, WellBottomType, CrossSectionType, Coordinate, create_equally_spaced_2d,
+  TIP_CAR_480_A00, PLT_CAR_L5AC_A00, HT_L, LT_L,
 )
 from pylabrobot.resources.hamilton import VantageDeck
 from pylabrobot.liquid_handling.standard import Pickup
@@ -44,6 +40,33 @@ DISPENSE_FORMAT = {
   "zo": "[int]", "ll": "[int]", "lv": "[int]", "de": "[int]", "mv": "[int]", "mc": "[int]",
   "mp": "[int]", "ms": "[int]", "wt": "[int]", "gi": "[int]", "gj": "[int]", "gk": "[int]",
   "zu": "[int]", "zr": "[int]", "dj": "[int]", "mh": "[int]", "po": "[int]", "la": "[int]"}
+
+
+def Cos_96_EZWash(name: str) -> Plate:
+  # Esvelt lab proprietary plate definition that was used for making these tests.
+  # Not a real plate, probably, but a slightly-faulty venus definition.
+  return Plate(
+    name=name,
+    size_x=127.76,
+    size_y=85.54,
+    size_z=14.5,
+    lid=None,
+    model="Cos_96_EZWash",
+    items=create_equally_spaced_2d(Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.55,
+      dy=8.05,
+      dz=1.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=6.9,
+      size_y=6.9,
+      size_z=11.3,
+      bottom_type=WellBottomType.FLAT,
+      cross_section_type=CrossSectionType.CIRCLE,
+    ),
+  )
 
 
 class TestVantageResponseParsing(unittest.TestCase):
@@ -149,8 +172,8 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=18)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=False)
-    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=False)
+    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01")
+    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02")
     self.deck.assign_child_resource(self.plt_car, rails=24)
 
     self.maxDiff = None
