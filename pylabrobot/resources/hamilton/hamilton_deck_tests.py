@@ -1,7 +1,7 @@
 import textwrap
 import unittest
 
-from pylabrobot.resources.corning_costar import Cos_96_wellplate_360ul_Fb
+from pylabrobot.resources.corning_costar import Cor_96_wellplate_360ul_Fb
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L, HTF_L, TIP_CAR_480_A00, PLT_CAR_L5AC_A00
 
@@ -81,8 +81,8 @@ class HamiltonDeckTests(unittest.TestCase):
     tip_car[3] = HTF_L(name="tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    plt_car[0] = Cos_96_wellplate_360ul_Fb(name="aspiration plate")
-    plt_car[2] = Cos_96_wellplate_360ul_Fb(name="dispense plate")
+    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
+    plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
 
     deck.assign_child_resource(tip_car, rails=1)
     deck.assign_child_resource(plt_car, rails=21)

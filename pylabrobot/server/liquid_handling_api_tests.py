@@ -11,7 +11,7 @@ from pylabrobot.resources import (
   Plate,
   TipRack,
   HTF_L,
-  Cos_96_wellplate_360ul_Fb,
+  Cor_96_wellplate_360ul_Fb,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
   no_tip_tracking,
@@ -27,7 +27,7 @@ def build_layout() -> HamiltonDeck:
   tip_car[0] = HTF_L(name="tip_rack_01")
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
-  plt_car[0] = plate = Cos_96_wellplate_360ul_Fb(name="aspiration plate")
+  plt_car[0] = plate = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
   plate.get_item("A1").tracker.set_liquids([(None, 400)])
 
   deck = STARLetDeck()

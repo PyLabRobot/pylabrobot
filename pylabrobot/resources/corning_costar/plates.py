@@ -507,7 +507,7 @@ def Cos_96_EZWash_Lid(name: str) -> Lid:
 
 
 def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
-  raise ValueError("Deprecated. You probably want to use Cos_96_wellplate_360ul_Fb instead.")
+  raise ValueError("Deprecated. You probably want to use Cor_96_wellplate_360ul_Fb instead.")
 
 def Cos_96_EZWash_L(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_EZWash """
@@ -1186,7 +1186,7 @@ def Cos_96_DWP_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
   return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid).rotated(90)
 
 
-def Cos_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
+def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
 
@@ -1196,12 +1196,12 @@ def Cos_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
     size_y=85.48,
     size_z=None,             # measure the total z height
     nesting_z_height=None,   # measure overlap between lid and plate
-    model="Cos_96_wellplate_360ul_Fb_Lid",
+    model="Cor_96_wellplate_360ul_Fb_Lid",
   )
 
 
-def Cos_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
-  """ Cos_96_wellplate_360ul_Fb
+def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
+  """ Cor_96_wellplate_360ul_Fb
 
   Catalog number 3603
 
@@ -1243,8 +1243,8 @@ def Cos_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.76,
     size_y=85.48,
     size_z=14.2,
-    lid=Cos_96_wellplate_360ul_Fb_Lid(name=name + "_lid") if with_lid else None,
-    model="Cos_96_wellplate_360ul_Fb",
+    lid=Cor_96_wellplate_360ul_Fb_Lid(name=name + "_lid") if with_lid else None,
+    model="Cor_96_wellplate_360ul_Fb",
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
