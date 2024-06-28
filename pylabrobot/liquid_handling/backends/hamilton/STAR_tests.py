@@ -3,25 +3,17 @@ import unittest
 import unittest.mock
 
 from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.liquid_handling.standard import Pickup, GripDirection
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
 from pylabrobot.resources import (
-  Container,
-  TIP_CAR_480_A00,
-  TIP_CAR_288_C00,
-  PLT_CAR_L5AC_A00,
-  Cos_96_EZWash,
-  HT_P,
-  HTF_L,
-  Coordinate,
-  ResourceStack,
-  Lid,
+  Plate, Well, WellBottomType, CrossSectionType, Coordinate, Container, create_equally_spaced_2d,
+  ResourceStack, Lid,
+  TIP_CAR_480_A00, TIP_CAR_288_C00, PLT_CAR_L5AC_A00, HT_P, HTF_L,
   no_volume_tracking
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L
-from pylabrobot.liquid_handling.standard import Pickup, GripDirection
-from pylabrobot.resources.plate import Plate
 
 from tests.usb import MockDev, MockEndpoint
 
@@ -55,6 +47,33 @@ DISPENSE_RESPONSE_FORMAT = (
 GET_PLATE_FMT = "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#"
 PUT_PLATE_FMT = "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#"
 INTERMEDIATE_FMT = "xs#####xd#yj####yd#zj####zd#gr#th####ga#xe# #"
+
+
+def Cos_96_EZWash(name: str) -> Plate:
+  # Esvelt lab proprietary plate definition that was used for making these tests.
+  # Not a real plate, probably, but a slightly-faulty venus definition.
+  return Plate(
+    name=name,
+    size_x=127.76,
+    size_y=85.48,
+    size_z=14.5,
+    lid=None,
+    model="Cos_96_EZWash",
+    items=create_equally_spaced_2d(Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.55,
+      dy=8.05,
+      dz=1.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=6.9,
+      size_y=6.9,
+      size_z=11.3,
+      bottom_type=WellBottomType.FLAT,
+      cross_section_type=CrossSectionType.CIRCLE,
+    ),
+  )
 
 
 class TestSTARResponseParsing(unittest.TestCase):
