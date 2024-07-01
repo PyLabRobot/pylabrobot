@@ -686,10 +686,10 @@ class LiquidHandler(Machine):
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
 
     # expand default arguments
-    offsets = offsets or [None] * len(resources)
-    flow_rates = flow_rates or [None] * len(resources)
-    liquid_height = liquid_height or [None] * len(resources)
-    blow_out_air_volume = blow_out_air_volume or [None] * len(resources)
+    offsets = offsets or [None] * len(use_channels)
+    flow_rates = flow_rates or [None] * len(use_channels)
+    liquid_height = liquid_height or [None] * len(use_channels)
+    blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
 
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
@@ -864,10 +864,10 @@ class LiquidHandler(Machine):
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
 
     # expand default arguments
-    offsets = offsets or [None] * len(resources)
-    flow_rates = flow_rates or [None] * len(resources)
-    liquid_height = liquid_height or [None] * len(resources)
-    blow_out_air_volume = blow_out_air_volume or [None] * len(resources)
+    offsets = offsets or [None] * len(use_channels)
+    flow_rates = flow_rates or [None] * len(use_channels)
+    liquid_height = liquid_height or [None] * len(use_channels)
+    blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
 
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
