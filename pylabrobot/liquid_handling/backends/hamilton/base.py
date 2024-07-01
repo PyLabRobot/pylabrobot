@@ -330,16 +330,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         x_positions.append(0)
         y_positions.append(0)
       channels_involved.append(True)
-      offset = ops[i].offset
 
-      x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x
-      if offset is not None:
-        x_pos += offset.x
+      x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
       x_positions.append(int(x_pos*10))
 
-      y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y
-      if offset is not None:
-        y_pos += offset.y
+      y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
       y_positions.append(int(y_pos*10))
 
     # check that the minimum d between any two y positions is >9mm

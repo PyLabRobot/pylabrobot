@@ -1302,8 +1302,7 @@ class STAR(HamiltonLiquidHandler):
       raise ValueError("Cannot mix tips with different tip types.")
     ttti = (await self.get_ttti(list(tips)))[0]
 
-    max_z = max(op.resource.get_absolute_location().z + \
-                 (op.offset.z if op.offset is not None else 0) for op in ops)
+    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
     max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
 
@@ -1355,8 +1354,7 @@ class STAR(HamiltonLiquidHandler):
       self._ops_to_fw_positions(ops, use_channels)
 
     # get highest z position
-    max_z = max(op.resource.get_absolute_location().z + \
-                (op.offset.z if op.offset is not None else 0) for op in ops)
+    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
     if drop_method == TipDropMethod.PLACE_SHIFT:
       # magic values empirically found in https://github.com/PyLabRobot/pylabrobot/pull/63
       begin_tip_deposit_process  = int((max_z+59.9)*10)
@@ -1547,8 +1545,7 @@ class STAR(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hamilton_liquid_classes):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.resource.get_absolute_location().z + \
-                    (op.offset.z if op.offset is not None else 0) for op in ops]
+    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z for op in ops]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 1)
                               for wb, op in zip(well_bottoms, ops)]
     aspiration_volumes = [int(op.volume * 10) for op in ops]
@@ -1809,8 +1806,7 @@ class STAR(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hamilton_liquid_classes):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.resource.get_absolute_location().z + \
-                    (op.offset.z if op.offset is not None else 0) for op in ops]
+    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z for op in ops]
     liquid_surfaces_no_lld = liquid_surface_no_lld or \
       [ls + (op.liquid_height or 1) for ls, op in zip(well_bottoms, ops)]
     if lld_search_height is None:
@@ -1931,7 +1927,7 @@ class STAR(HamiltonLiquidHandler):
     assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
-    z_deposit_position += int(pickup.offset.z*10) if pickup.offset is not None else 0
+    z_deposit_position += int(pickup.offset.z*10)
 
     x_direction = 0 if position.x > 0 else 1
     return await self.pick_up_tips_core96(
