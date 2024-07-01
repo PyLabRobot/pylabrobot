@@ -53,6 +53,7 @@ class Plate(ItemizedResource[Well]):
     size_x: float,
     size_y: float,
     size_z: float,
+    skirt_base_to_well_base: float = 0.0,
     items: Optional[List[List[Well]]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
@@ -87,6 +88,7 @@ class Plate(ItemizedResource[Well]):
       num_items_y=num_items_y, category=category, model=model)
     self.lid: Optional[Lid] = None
     self.plate_type = plate_type
+    self.skirt_base_to_well_base = skirt_base_to_well_base
 
     if lid is not None:
       self.assign_child_resource(lid)

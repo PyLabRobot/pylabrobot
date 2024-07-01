@@ -13,6 +13,7 @@ class Container(Resource):
     size_x: float,
     size_y: float,
     size_z: float,
+    material_z_thickness: float = 0,
     max_volume: Optional[float] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
@@ -27,6 +28,7 @@ class Container(Resource):
 
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
+    self.material_z_thickness = material_z_thickness
     self.max_volume = max_volume or (size_x * size_y * size_z)
     self.tracker = VolumeTracker(max_volume=self.max_volume)
     self._compute_volume_from_height = compute_volume_from_height
