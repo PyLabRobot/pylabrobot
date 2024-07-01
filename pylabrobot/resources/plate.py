@@ -53,14 +53,14 @@ class Plate(ItemizedResource[Well]):
     size_x: float,
     size_y: float,
     size_z: float,
-    skirt_base_to_well_base: float = 0.0,
     items: Optional[List[List[Well]]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
     category: str = "plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
-    plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted"
+    plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
+    skirt_base_to_well_base: float = 0.0,
   ):
     """ Initialize a Plate resource.
 

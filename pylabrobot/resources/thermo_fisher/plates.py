@@ -53,7 +53,7 @@ def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plat
         stacklevel=2
     )
   return ThermoScientific_96_wellplate_1200ul_Rd(name=name, with_lid=with_lid)
- 
+
 
 def ThermoScientific_96_wellplate_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
   """ Fisher Scientific/Thermo Fisher cat. no.: 10243223/AB1127.
