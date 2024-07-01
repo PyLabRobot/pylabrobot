@@ -39,12 +39,12 @@ from .standard import (
 )
 
 def _make_asp(
-  r: Container, vol: float, tip: Any, offset: Optional[Coordinate]=Coordinate.zero()) -> Aspiration:
+  r: Container, vol: float, tip: Any, offset: Coordinate=Coordinate.zero()) -> Aspiration:
   return Aspiration(resource=r, volume=vol, tip=tip, offset=offset,
                    flow_rate=None, liquid_height=None, blow_out_air_volume=None,
                    liquids=[(None, vol)])
 def _make_disp(
-  r: Container, vol: float, tip: Any, offset: Optional[Coordinate]=Coordinate.zero()) -> Dispense:
+  r: Container, vol: float, tip: Any, offset: Coordinate=Coordinate.zero()) -> Dispense:
   return Dispense(resource=r, volume=vol, tip=tip, offset=offset,
                   flow_rate=None, liquid_height=None, blow_out_air_volume=None,
                   liquids=[(None, vol)])
@@ -277,13 +277,13 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "kwargs": {
         "use_channels": [2],
         "ops": [
-          Pickup(tip_spot, tip=tip, offset=None)]}})
+          Pickup(tip_spot, tip=tip, offset=Coordinate.zero())]}})
     self.assertEqual(self.get_first_command("drop_tips"), {
       "command": "drop_tips",
       "args": (),
       "kwargs": {
         "use_channels": [2], "ops": [
-          Drop(tip_spot, tip=tip, offset=None)]}})
+          Drop(tip_spot, tip=tip, offset=Coordinate.zero())]}})
 
   async def test_offsets_asp_disp(self):
     well = self.plate.get_item("A1")
@@ -317,7 +317,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "args": (),
       "kwargs": {
         "use_channels": [0],
-        "ops": [Drop(tip_spot, tip=tip, offset=None)]}})
+        "ops": [Drop(tip_spot, tip=tip, offset=Coordinate.zero())]}})
 
     with self.assertRaises(RuntimeError):
       await self.lh.return_tips()

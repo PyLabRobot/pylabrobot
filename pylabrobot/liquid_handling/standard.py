@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class Pickup:
   """ A pickup operation. """
   resource: TipSpot
-  offset: Optional[Coordinate]
+  offset: Coordinate
   tip: Tip # TODO: perhaps we can remove this, because the tip spot has the tip?
 
 
@@ -26,7 +26,7 @@ class Pickup:
 class Drop:
   """ A drop operation. """
   resource: Resource
-  offset: Optional[Coordinate]
+  offset: Coordinate
   tip: Tip
 
 
@@ -35,7 +35,7 @@ class PickupTipRack:
   """ A pickup operation for an entire tip rack. """
 
   resource: TipRack
-  offset: Optional[Coordinate]
+  offset: Coordinate
 
 
 @dataclass
@@ -43,7 +43,7 @@ class DropTipRack:
   """ A drop operation for an entire tip rack. """
 
   resource: Union[TipRack, Trash]
-  offset: Optional[Coordinate]
+  offset: Coordinate
 
 
 @dataclass
@@ -51,7 +51,7 @@ class Aspiration:
   """ Aspiration contains information about an aspiration. """
 
   resource: Container
-  offset: Optional[Coordinate]
+  offset: Coordinate
   tip: Tip
   volume: float
   flow_rate: Optional[float]
@@ -65,7 +65,7 @@ class Dispense:
   """ Dispense contains information about an dispense. """
 
   resource: Container
-  offset: Optional[Coordinate]
+  offset: Coordinate
   tip: Tip
   volume: float
   flow_rate: Optional[float]
@@ -79,7 +79,7 @@ class AspirationPlate:
   """ Contains information about an aspiration from a plate (in a single movement). """
 
   wells: List[Well]
-  offset: Optional[Coordinate]
+  offset: Coordinate
   tips: List[Tip]
   volume: float
   flow_rate: Optional[float]
@@ -93,7 +93,7 @@ class DispensePlate:
   """ Contains information about an aspiration from a plate (in a single movement). """
 
   wells: List[Well]
-  offset: Optional[Coordinate]
+  offset: Coordinate
   tips: List[Tip]
   volume: float
   flow_rate: Optional[float]
@@ -106,7 +106,7 @@ class AspirationContainer:
   """ Contains information about an aspiration from a plate (in a single movement). """
 
   container: Container
-  offset: Optional[Coordinate]
+  offset: Coordinate
   tips: List[Tip]
   volume: float
   flow_rate: Optional[float]
@@ -120,7 +120,7 @@ class DispenseContainer:
   """ Contains information about an aspiration from a plate (in a single movement). """
 
   container: Container
-  offset: Optional[Coordinate]
+  offset: Coordinate
   tips: List[Tip]
   volume: float
   flow_rate: Optional[float]

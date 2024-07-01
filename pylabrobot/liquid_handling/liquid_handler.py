@@ -306,7 +306,7 @@ class LiquidHandler(Machine):
     self,
     tip_spots: List[TipSpot],
     use_channels: Optional[List[int]] = None,
-    offsets: Optional[List[Optional[Coordinate]]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     **backend_kwargs
   ):
     """ Pick up tips from a resource.
@@ -340,7 +340,7 @@ class LiquidHandler(Machine):
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
       offsets: List of offsets, one for each channel: a translation that will be applied to the tip
-        drop location. If `None`, no offset will be applied.
+        drop location.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -364,7 +364,7 @@ class LiquidHandler(Machine):
     tips = [tip_spot.get_tip() for tip_spot in tip_spots]
 
     # expand default arguments
-    offsets = offsets or [None] * len(tip_spots)
+    offsets = offsets or [Coordinate.zero()] * len(tip_spots)
 
     # checks
     self._assert_resources_exist(tip_spots)
@@ -423,7 +423,7 @@ class LiquidHandler(Machine):
     self,
     tip_spots: List[Union[TipSpot, Resource]],
     use_channels: Optional[List[int]] = None,
-    offsets: Optional[List[Optional[Coordinate]]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     allow_nonzero_volume: bool = False,
     **backend_kwargs
   ):
@@ -485,7 +485,7 @@ class LiquidHandler(Machine):
       tips.append(tip)
 
     # expand default arguments
-    offsets = offsets or [None] * len(tip_spots)
+    offsets = offsets or [Coordinate.zero()] * len(tip_spots)
 
     # checks
     self._assert_resources_exist(tip_spots)
@@ -622,7 +622,7 @@ class LiquidHandler(Machine):
     vols: List[float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[List[Optional[float]]] = None,
-    offsets: Optional[List[Optional[Coordinate]]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     **backend_kwargs
@@ -665,7 +665,7 @@ class LiquidHandler(Machine):
         `len(wells)` channels will be used.
       flow_rates: the aspiration speed. In ul/s. If `None`, the backend default will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the
-        aspiration location. If `None`, no offset will be applied.
+        aspiration location.
       liquid_height: The height of the liquid in the well wrt the bottom, in mm.
       blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
         backend default will be used.
@@ -685,7 +685,7 @@ class LiquidHandler(Machine):
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
 
     # expand default arguments
-    offsets = offsets or [None] * len(use_channels)
+    offsets = offsets or [Coordinate.zero()] * len(use_channels)
     flow_rates = flow_rates or [None] * len(use_channels)
     liquid_height = liquid_height or [None] * len(use_channels)
     blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
@@ -699,7 +699,7 @@ class LiquidHandler(Machine):
       resources = [resource] * len(use_channels)
       centers = list(reversed(resource.centers(yn=n, zn=0)))
       centers = [c - resource.center() for c in centers] # offset is wrt center
-      offsets = [(c + o) if o is not None else c for c, o in zip(centers, offsets)] # user-defined
+      offsets = [c + o for c, o in zip(centers, offsets)] # user-defined
 
     # Deprecation check for single values
     if isinstance(vols, numbers.Number):
@@ -794,7 +794,7 @@ class LiquidHandler(Machine):
     vols: List[float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[List[Optional[float]]] = None,
-    offsets: Optional[List[Optional[Coordinate]]] = None,
+    offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     **backend_kwargs
@@ -837,7 +837,7 @@ class LiquidHandler(Machine):
         `len(channels)` channels will be used.
       flow_rates: the flow rates, in ul/s. If `None`, the backend default will be used.
       offsets: List of offsets for each channel, a translation that will be applied to the
-        dispense location. If `None`, no offset will be applied.
+        dispense location.
       liquid_height: The height of the liquid in the well wrt the bottom, in mm.
       blow_out_air_volume: The volume of air to dispense after the liquid, in ul. If `None`, the
         backend default will be used.
@@ -863,7 +863,7 @@ class LiquidHandler(Machine):
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
 
     # expand default arguments
-    offsets = offsets or [None] * len(use_channels)
+    offsets = offsets or [Coordinate.zero()] * len(use_channels)
     flow_rates = flow_rates or [None] * len(use_channels)
     liquid_height = liquid_height or [None] * len(use_channels)
     blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
@@ -877,7 +877,7 @@ class LiquidHandler(Machine):
       resources = [resource] * len(use_channels)
       centers = list(reversed(resource.centers(yn=n, zn=0)))
       centers = [c - resource.center() for c in centers] # offset is wrt center
-      offsets = [(c + o) if o is not None else c for c, o in zip(centers, offsets)] # user-defined
+      offsets = [c + o for c, o in zip(centers, offsets)] # user-defined
 
     # Deprecation check for single values
     if isinstance(vols, numbers.Number):

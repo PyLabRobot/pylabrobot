@@ -462,8 +462,7 @@ class Vantage(HamiltonLiquidHandler):
     tips = [cast(HamiltonTip, op.resource.get_tip()) for op in ops]
     ttti = await self.get_ttti(tips)
 
-    max_z = max(op.resource.get_absolute_location().z + \
-                 (op.offset.z if op.offset is not None else 0) for op in ops)
+    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
     max_total_tip_length = max(op.tip.total_tip_length for op in ops)
     max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
 
@@ -504,8 +503,7 @@ class Vantage(HamiltonLiquidHandler):
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
 
-    max_z = max(op.resource.get_absolute_location().z + \
-                (op.offset.z if op.offset is not None else 0) for op in ops)
+    max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
 
     try:
       return await self.pip_tip_discard(
@@ -621,8 +619,7 @@ class Vantage(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hlcs):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.resource.get_absolute_location().z + \
-                    (op.offset.z if op.offset is not None else 0) for op in ops]
+    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z for op in ops]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
                               for wb, op in zip(well_bottoms, ops)]
     # -1 compared to STAR?
@@ -782,8 +779,7 @@ class Vantage(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hlcs):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.resource.get_absolute_location().z + \
-                    (op.offset.z if op.offset is not None else 0) for op in ops]
+    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z for op in ops]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
                               for wb, op in zip(well_bottoms, ops)]
     # -1 compared to STAR?
@@ -864,7 +860,7 @@ class Vantage(HamiltonLiquidHandler):
     assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
-    offset_z = pickup.offset.z if pickup.offset is not None else 0
+    offset_z = pickup.offset.z
     z_deposit_position = int((z_deposit_position + offset_z) * 10)
 
     return await self.core96_tip_pick_up(
@@ -893,7 +889,7 @@ class Vantage(HamiltonLiquidHandler):
     else:
       raise NotImplementedError("Only TipRacks are supported for dropping tips on Vantage",
                                f"got {drop.resource}")
-    offset_z = drop.offset.z if drop.offset is not None else 0
+    offset_z = drop.offset.z
     z_deposit_position = int((z_deposit_position + offset_z) * 10)
 
     return await self.core96_tip_discard(

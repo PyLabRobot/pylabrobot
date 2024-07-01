@@ -46,7 +46,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.backend.sent_commands[0]["data"], {
       "channels": [{
         "resource_name": tip_spot.name,
-        "offset": None,
+        "offset": serialize(Coordinate.zero()),
         "tip": serialize(tip),
       }], "use_channels": [0]})
 
@@ -63,7 +63,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.backend.sent_commands[0]["data"], {
       "channels": [{
         "resource_name": tip_spot.name,
-        "offset": None,
+        "offset": serialize(Coordinate.zero()),
         "tip": serialize(tip),
       }], "use_channels": [0]})
 
