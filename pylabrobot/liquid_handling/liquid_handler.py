@@ -41,7 +41,6 @@ from pylabrobot.resources import (
   does_cross_contamination_tracking
 )
 from pylabrobot.resources.liquid import Liquid
-from pylabrobot.utils.list import expand
 
 from .backends import LiquidHandlerBackend
 from .standard import (
@@ -307,7 +306,7 @@ class LiquidHandler(Machine):
     self,
     tip_spots: List[TipSpot],
     use_channels: Optional[List[int]] = None,
-    offsets: Optional[Union[Coordinate, List[Optional[Coordinate]]]] = None,
+    offsets: Optional[List[Optional[Coordinate]]] = None,
     **backend_kwargs
   ):
     """ Pick up tips from a resource.
@@ -340,7 +339,7 @@ class LiquidHandler(Machine):
       tip_spots: List of tip spots to pick up tips from.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
-      offsets: List of offsets for each channel, a translation that will be applied to the tip
+      offsets: List of offsets, one for each channel: a translation that will be applied to the tip
         drop location. If `None`, no offset will be applied.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
@@ -355,13 +354,17 @@ class LiquidHandler(Machine):
     """
 
     # fix arguments
-    offsets = expand(offsets, len(tip_spots))
+    if isinstance(offsets, Coordinate):
+      raise NotImplementedError("Single offset is deprecated, use a list of offsets.")
     if use_channels is None:
       if self._default_use_channels is None:
         use_channels = list(range(len(tip_spots)))
       else:
         use_channels = self._default_use_channels
     tips = [tip_spot.get_tip() for tip_spot in tip_spots]
+
+    # expand default arguments
+    offsets = offsets or [None] * len(tip_spots)
 
     # checks
     self._assert_resources_exist(tip_spots)
@@ -420,7 +423,7 @@ class LiquidHandler(Machine):
     self,
     tip_spots: List[Union[TipSpot, Resource]],
     use_channels: Optional[List[int]] = None,
-    offsets: Optional[Union[Coordinate, List[Optional[Coordinate]]]] = None,
+    offsets: Optional[List[Optional[Coordinate]]] = None,
     allow_nonzero_volume: bool = False,
     **backend_kwargs
   ):
@@ -446,8 +449,8 @@ class LiquidHandler(Machine):
       tips: Tip resource locations to drop to.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
-      offsets: List of offsets for each channel, a translation that will be applied to the tip
-        pickup location. If `None`, no offset will be applied.
+      offsets: List of offsets, one for each channel, a translation that will be applied to the tip
+        drop location. If `None`, no offset will be applied.
       allow_nonzero_volume: If `True`, the tip will be dropped even if its volume is not zero (there
         is liquid in the tip). If `False`, a RuntimeError will be raised if the tip has nonzero
         volume.
@@ -466,9 +469,9 @@ class LiquidHandler(Machine):
       HasTipError: If a spot already has a tip.
     """
 
-
     # fix arguments
-    offsets = expand(offsets, len(tip_spots))
+    if isinstance(offsets, Coordinate):
+      raise NotImplementedError("Single offset is deprecated, use a list of offsets.")
     if use_channels is None:
       if self._default_use_channels is None:
         use_channels = list(range(len(tip_spots)))
@@ -480,6 +483,9 @@ class LiquidHandler(Machine):
       if tip.tracker.get_used_volume() > 0 and not allow_nonzero_volume:
         raise RuntimeError(f"Cannot drop tip with volume {tip.tracker.get_used_volume()}")
       tips.append(tip)
+
+    # expand default arguments
+    offsets = offsets or [None] * len(tip_spots)
 
     # checks
     self._assert_resources_exist(tip_spots)
@@ -600,7 +606,7 @@ class LiquidHandler(Machine):
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
     trash = self.deck.get_trash_area()
-    offsets = list(reversed(trash.centers(yn=n)))
+    offsets = [c - trash.center() for c in reversed(trash.centers(yn=n))] # offset is wrt center
 
     return await self.drop_tips(
         tip_spots=[trash]*n,
@@ -613,12 +619,12 @@ class LiquidHandler(Machine):
   async def aspirate(
     self,
     resources: Union[Container, Sequence[Container]],
-    vols: Union[List[float], float],
+    vols: List[float],
     use_channels: Optional[List[int]] = None,
-    flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
-    offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
-    liquid_height: Union[Optional[float], List[Optional[float]]] = None,
-    blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Optional[Coordinate]]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified wells.
@@ -671,60 +677,49 @@ class LiquidHandler(Machine):
       ValueError: If all channels are `None`.
     """
 
-    # Start with computing the locations of the aspirations. Can either be a single resource, in
-    # which case all channels will aspirate from there, or a list of resources.
-    if isinstance(resources, Resource): # if single resource, space channels evenly
-      if use_channels is None:
-        if self._default_use_channels is None:
-          if isinstance(vols, list):
-            use_channels = list(range(len(vols)))
-          else:
-            use_channels = [0]
-        else:
-          use_channels = self._default_use_channels
+    if isinstance(resources, Resource):
+      raise NotImplementedError("Single resource is deprecated, use a list of resources. If you "
+                                "want to aspirate from a single resource, use a list with that "
+                                "resource and specify the channels to use.")
 
-      self._make_sure_channels_exist(use_channels)
+    use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
 
+    # expand default arguments
+    offsets = offsets or [None] * len(use_channels)
+    flow_rates = flow_rates or [None] * len(use_channels)
+    liquid_height = liquid_height or [None] * len(use_channels)
+    blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
+
+    # If the user specified a single resource, but multiple channels to use, we will assume they
+    # want to space the channels evenly across the resource. Note that offsets are relative to the
+    # center of the resource.
+    if len(resources) == 1:
+      resource = resources[0]
       n = len(use_channels)
+      resources = [resource] * len(use_channels)
+      centers = list(reversed(resource.centers(yn=n, zn=0)))
+      centers = [c - resource.center() for c in centers] # offset is wrt center
+      offsets = [(c + o) if o is not None else c for c, o in zip(centers, offsets)] # user-defined
 
-      # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
-      # format, raise an error. If it is not supplied, make it a list of the correct length by
-      # spreading channels across the resource evenly.
-      center_offsets = list(reversed(resources.centers(yn=n, zn=0)))
-      if offsets is not None:
-        if not isinstance(offsets, list) or len(offsets) != n:
-          raise ValueError("Number of offsets must match number of channels used when aspirating "
-                           "from a resource.")
-        offsets = [o + co for o, co in zip(offsets, center_offsets)]
-      else:
-        offsets = center_offsets
+    # Deprecation check for single values
+    if isinstance(vols, numbers.Number):
+      raise NotImplementedError("Single volume is deprecated, use a list of volumes.")
+    if isinstance(flow_rates, numbers.Number):
+      raise NotImplementedError("Single flow rate is deprecated, use a list of flow rates.")
+    if isinstance(liquid_height, numbers.Number):
+      raise NotImplementedError("Single liquid height is deprecated, use a list of liquid heights.")
+    if isinstance(blow_out_air_volume, numbers.Number):
+      raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
-      resources = [resources] * n
-    else:
-      if len(resources) == 0:
-        raise ValueError("No channels specified")
-      self._assert_resources_exist(resources)
-      n = len(resources)
-
-      for resource in resources:
-        if isinstance(resource.parent, Plate) and resource.parent.has_lid():
-          raise ValueError("Aspirating from plate with lid")
-
-      if use_channels is None:
-        use_channels = list(range(len(resources)))
-
-      self._make_sure_channels_exist(use_channels)
-
-      offsets = expand(offsets, n)
-
-    # expand the rest of the arguments
-    vols = expand(vols, n)
-    flow_rates = expand(flow_rates, n)
-    liquid_height = expand(liquid_height, n)
-    blow_out_air_volume = expand(blow_out_air_volume, n)
     self._blow_out_air_volume = blow_out_air_volume
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
+    # Checks
+    for resource in resources:
+      if isinstance(resource.parent, Plate) and resource.parent.has_lid():
+        raise ValueError("Aspirating from a well with a lid is not supported.")
+
+    self._make_sure_channels_exist(use_channels)
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
@@ -796,12 +791,12 @@ class LiquidHandler(Machine):
   async def dispense(
     self,
     resources: Union[Container, Sequence[Container]],
-    vols: Union[List[float], float],
+    vols: List[float],
     use_channels: Optional[List[int]] = None,
-    flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
-    offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
-    liquid_height: Union[Optional[float], List[Optional[float]]] = None,
-    blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Optional[Coordinate]]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
@@ -856,65 +851,58 @@ class LiquidHandler(Machine):
       ValueError: If all channels are `None`.
     """
 
-    # Start with computing the locations of the dispenses. Can either be a single resource, in
-    # which case all channels will dispense to there, or a list of resources.
-    if isinstance(resources, Resource): # if single resource, space channels evenly
-      if use_channels is None:
-        if self._default_use_channels is None:
-          if isinstance(vols, list):
-            use_channels = list(range(len(vols)))
-          else:
-            use_channels = [0]
-        else:
-          use_channels = self._default_use_channels
+    # If the user specified a single resource, but multiple channels to use, we will assume they
+    # want to space the channels evenly across the resource. Note that offsets are relative to the
+    # center of the resource.
 
-      self._make_sure_channels_exist(use_channels)
+    if isinstance(resources, Resource):
+      raise NotImplementedError("Single resource is deprecated, use a list of resources. If you "
+                                "want to dispense to a single resource, use a list with that "
+                                "resource and specify the channels to use.")
 
+    use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
+
+    # expand default arguments
+    offsets = offsets or [None] * len(use_channels)
+    flow_rates = flow_rates or [None] * len(use_channels)
+    liquid_height = liquid_height or [None] * len(use_channels)
+    blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
+
+    # If the user specified a single resource, but multiple channels to use, we will assume they
+    # want to space the channels evenly across the resource. Note that offsets are relative to the
+    # center of the resource.
+    if len(resources) == 1:
+      resource = resources[0]
       n = len(use_channels)
+      resources = [resource] * len(use_channels)
+      centers = list(reversed(resource.centers(yn=n, zn=0)))
+      centers = [c - resource.center() for c in centers] # offset is wrt center
+      offsets = [(c + o) if o is not None else c for c, o in zip(centers, offsets)] # user-defined
 
-      # If offsets is supplied, make sure it is a list of the correct length. If it is not in this
-      # format, raise an error. If it is not supplied, make it a list of the correct length by
-      # spreading channels across the resource evenly.
-      center_offsets = list(reversed(resources.centers(yn=n, zn=0)))
-      if offsets is not None:
-        if not isinstance(offsets, list) or len(offsets) != n:
-          raise ValueError("Number of offsets must match number of channels used when dispensing "
-                          "to a resource.")
-        offsets = [o + co for o, co in zip(offsets, center_offsets)]
-      else:
-        offsets = center_offsets
+    # Deprecation check for single values
+    if isinstance(vols, numbers.Number):
+      raise NotImplementedError("Single volume is deprecated, use a list of volumes.")
+    if isinstance(flow_rates, numbers.Number):
+      raise NotImplementedError("Single flow rate is deprecated, use a list of flow rates.")
+    if isinstance(liquid_height, numbers.Number):
+      raise NotImplementedError("Single liquid height is deprecated, use a list of liquid heights.")
+    if isinstance(blow_out_air_volume, numbers.Number):
+      raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
-      resources = [resources] * n
-    else:
-      if len(resources) == 0:
-        raise ValueError("No channels specified")
-      self._assert_resources_exist(resources)
-      n = len(resources)
+    self._blow_out_air_volume = None
+    tips = [self.head[channel].get_tip() for channel in use_channels]
 
-      for resource in resources:
-        if isinstance(resource.parent, Plate) and resource.parent.has_lid():
-          raise ValueError("Dispensing to plate with lid")
-
-      if use_channels is None:
-        use_channels = list(range(len(resources)))
-
-      self._make_sure_channels_exist(use_channels)
-
-      offsets = expand(offsets, n)
-
-    # expand the rest of the arguments
-    vols = expand(vols, n)
-    flow_rates = expand(flow_rates, n)
-    liquid_height = expand(liquid_height, n)
-    blow_out_air_volume = expand(blow_out_air_volume, n)
+    # Check the blow out air volume with what was aspirated
     if any(bav is not None for bav in blow_out_air_volume):
       if self._blow_out_air_volume is None:
         raise BlowOutVolumeError("No blowout volume was aspirated.")
       for requested_bav, done_bav in zip(blow_out_air_volume, self._blow_out_air_volume):
         if requested_bav is not None and done_bav is not None and requested_bav > done_bav:
           raise BlowOutVolumeError("Blowout volume is larger than aspirated volume")
-    self._blow_out_air_volume = None
-    tips = [self.head[channel].get_tip() for channel in use_channels]
+
+    for resource in resources:
+      if isinstance(resource.parent, Plate) and resource.parent.has_lid():
+        raise ValueError("Dispensing to plate with lid")
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
@@ -982,7 +970,7 @@ class LiquidHandler(Machine):
   async def transfer(
     self,
     source: Well,
-    targets: Union[Well, List[Well]],
+    targets: List[Well],
     source_vol: Optional[float] = None,
     ratios: Optional[List[float]] = None,
     target_vols: Optional[List[float]] = None,
@@ -1028,11 +1016,11 @@ class LiquidHandler(Machine):
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
     """
 
+    # Deprecation check for single values
     if isinstance(targets, Well):
-      targets = [targets]
-
+      raise NotImplementedError("Single target is deprecated, use a list of targets.")
     if isinstance(dispense_flow_rates, numbers.Rational):
-      dispense_flow_rates = [dispense_flow_rates] * len(targets)
+      raise NotImplementedError("Single dispense flow rate is deprecated, use a list of flow rates")
 
     if target_vols is not None:
       if ratios is not None:
@@ -1056,7 +1044,7 @@ class LiquidHandler(Machine):
     for target, vol in zip(targets, target_vols):
       await self.dispense(
         resources=[target],
-        vols=vol,
+        vols=[vol],
         flow_rates=dispense_flow_rates,
         use_channels=[0],
         **backend_kwargs)
@@ -1094,7 +1082,8 @@ class LiquidHandler(Machine):
     self,
     tip_rack: TipRack,
     offset: Coordinate = Coordinate.zero(),
-    **backend_kwargs):
+    **backend_kwargs
+  ):
     """ Pick up tips using the 96 head. This will pick up 96 tips.
 
     Examples:
