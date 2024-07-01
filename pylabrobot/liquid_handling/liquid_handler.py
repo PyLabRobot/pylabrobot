@@ -620,12 +620,12 @@ class LiquidHandler(Machine):
   async def aspirate(
     self,
     resources: Union[Container, Sequence[Container]],
-    vols: Union[List[float], float],
+    vols: List[float],
     use_channels: Optional[List[int]] = None,
-    flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
-    offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
-    liquid_height: Union[Optional[float], List[Optional[float]]] = None,
-    blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Optional[Coordinate]]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
     **backend_kwargs
   ):
     """ Aspirate liquid from the specified wells.
@@ -792,12 +792,12 @@ class LiquidHandler(Machine):
   async def dispense(
     self,
     resources: Union[Container, Sequence[Container]],
-    vols: Union[List[float], float],
+    vols: List[float],
     use_channels: Optional[List[int]] = None,
-    flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
-    offsets: Union[Optional[Coordinate], Sequence[Optional[Coordinate]]] = None,
-    liquid_height: Union[Optional[float], List[Optional[float]]] = None,
-    blow_out_air_volume: Union[Optional[float], List[Optional[float]]] = None,
+    flow_rates: Optional[List[Optional[float]]] = None,
+    offsets: Optional[List[Optional[Coordinate]]] = None,
+    liquid_height: Optional[List[Optional[float]]] = None,
+    blow_out_air_volume: Optional[List[Optional[float]]] = None,
     **backend_kwargs
   ):
     """ Dispense liquid to the specified channels.
