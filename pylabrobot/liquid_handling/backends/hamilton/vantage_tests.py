@@ -294,7 +294,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=100)
+    await self.lh.aspirate(self.plate["A1"], vols=[100])
 
     self._assert_command_sent_once(
       "A1PMDAid0248at0&tm1 0&xp05680 0&yp1460 0 &th2450&te2450&lp2001&"
@@ -305,8 +305,8 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=100)
-    await self.lh.dispense(self.plate["A2"], vols=100, liquid_height=[5], jet=[False],
+    await self.lh.aspirate(self.plate["A1"], vols=[100])
+    await self.lh.dispense(self.plate["A2"], vols=[100], liquid_height=[5], jet=[False],
                            blow_out=[True])
 
     self._assert_command_sent_once(
@@ -318,8 +318,8 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_zero_volume_liquid_handling(self):
      # just test that this does not throw an error
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=0)
-    await self.lh.dispense(self.plate["A2"], vols=0)
+    await self.lh.aspirate(self.plate["A1"], vols=[0])
+    await self.lh.dispense(self.plate["A2"], vols=[0])
 
   async def test_tip_pickup96(self):
     await self.lh.pick_up_tips96(self.tip_rack)

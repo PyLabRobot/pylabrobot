@@ -73,13 +73,13 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     tip = self.tip_rack.get_tip(0)
     self.lh.update_head_state({0: tip})
     self.backend.clear()
-    await self.lh.aspirate([well], vols=10)
+    await self.lh.aspirate([well], vols=[10])
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
       "channels": [{
         "resource_name": well.name,
-        "offset": None,
+        "offset": serialize(Coordinate.zero()),
         "tip": tip.serialize(),
         "volume": 10,
         "flow_rate": None,
@@ -94,13 +94,13 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.lh.update_head_state({0: tip})
     self.backend.clear()
     with no_volume_tracking():
-      await self.lh.dispense(wells, vols=10)
+      await self.lh.dispense(wells, vols=[10])
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
       "channels": [{
         "resource_name": wells[0].name,
-        "offset": None,
+        "offset": serialize(Coordinate.zero()),
         "tip": tip.serialize(),
         "volume": 10,
         "flow_rate": None,
