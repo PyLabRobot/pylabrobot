@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - All VENUS-imported Corning-Costar plates, because they don't have unique and usable identifiers, and are probably wrong.
 - HamiltonDeck.load_from_lay_file
 - Passing single values to LiquidHandler `pick_up_tips`, `drop_tips`, `aspirate`, and `dispense` methods. These methods now require a list of values.
+- `hamilton_parse` module and the VENUS labware database parser.
 
 ### Fixed
 

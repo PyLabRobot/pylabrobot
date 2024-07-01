@@ -50,7 +50,6 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
 
    resources/introduction
    resources/custom-resources
-   resources/hamilton_parse
    resources/plates
    resources/plate_carriers
 
