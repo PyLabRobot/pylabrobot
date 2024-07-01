@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
 from pylabrobot.machines.backends import USBBackend
-from pylabrobot.resources import TipSpot, Well
+from pylabrobot.resources import TipSpot
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 T = TypeVar("T")
@@ -332,16 +332,12 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       channels_involved.append(True)
       offset = ops[i].offset
 
-      x_pos = ops[i].resource.get_absolute_location().x
-      if isinstance(ops[i].resource, (TipSpot, Well)):
-        x_pos += ops[i].resource.center().x
+      x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x
       if offset is not None:
         x_pos += offset.x
       x_positions.append(int(x_pos*10))
 
-      y_pos = ops[i].resource.get_absolute_location().y
-      if isinstance(ops[i].resource, (TipSpot, Well)):
-        y_pos += ops[i].resource.center().y
+      y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y
       if offset is not None:
         y_pos += offset.y
       y_positions.append(int(y_pos*10))
