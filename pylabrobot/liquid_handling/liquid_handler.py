@@ -41,7 +41,6 @@ from pylabrobot.resources import (
   does_cross_contamination_tracking
 )
 from pylabrobot.resources.liquid import Liquid
-from pylabrobot.utils.list import expand
 
 from .backends import LiquidHandlerBackend
 from .standard import (
