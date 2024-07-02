@@ -690,17 +690,6 @@ class LiquidHandler(Machine):
     liquid_height = liquid_height or [None] * len(use_channels)
     blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
 
-    # If the user specified a single resource, but multiple channels to use, we will assume they
-    # want to space the channels evenly across the resource. Note that offsets are relative to the
-    # center of the resource.
-    if len(resources) == 1:
-      resource = resources[0]
-      n = len(use_channels)
-      resources = [resource] * len(use_channels)
-      centers = list(reversed(resource.centers(yn=n, zn=0)))
-      centers = [c - resource.center() for c in centers] # offset is wrt center
-      offsets = [c + o for c, o in zip(centers, offsets)] # user-defined
-
     # Deprecation check for single values
     if isinstance(vols, numbers.Number):
       raise NotImplementedError("Single volume is deprecated, use a list of volumes.")
@@ -720,7 +709,18 @@ class LiquidHandler(Machine):
         raise ValueError("Aspirating from a well with a lid is not supported.")
 
     self._make_sure_channels_exist(use_channels)
-    assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
+    assert len(resources) == len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
+
+    # If the user specified a single resource, but multiple channels to use, we will assume they
+    # want to space the channels evenly across the resource. Note that offsets are relative to the
+    # center of the resource.
+    if len(set(resources)) == 1:
+      resource = resources[0]
+      n = len(use_channels)
+      resources = [resource] * len(use_channels)
+      centers = list(reversed(resource.centers(yn=n, zn=0)))
+      centers = [c - resource.center() for c in centers] # offset is wrt center
+      offsets = [c + o for c, o in zip(centers, offsets)] # user-defined
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     liquids: List[List[Tuple[Optional[Liquid], float]]] = []
@@ -871,7 +871,7 @@ class LiquidHandler(Machine):
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
     # center of the resource.
-    if len(resources) == 1:
+    if len(set(resources)) == 1:
       resource = resources[0]
       n = len(use_channels)
       resources = [resource] * len(use_channels)
