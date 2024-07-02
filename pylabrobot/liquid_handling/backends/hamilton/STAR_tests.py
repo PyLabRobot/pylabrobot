@@ -477,7 +477,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_aspirate_single_resource(self):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
     with no_volume_tracking():
-      await self.lh.aspirate([self.bb], vols=[10]*5, use_channels=[0,1,2,3,4], liquid_height=[1]*5)
+      await self.lh.aspirate([self.bb]*5,vols=[10]*5, use_channels=[0,1,2,3,4], liquid_height=[1]*5)
     self._assert_command_sent_once(
       "C0ASid0002at0 0 0 0 0 0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 "
       "1825 1688 1551 0000&th2450te2450lp2000 2000 2000 2000 2000 2000&ch000 000 000 000 000 000&"
@@ -497,8 +497,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_dispense_single_resource(self):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
     with no_volume_tracking():
-      await self.lh.dispense([self.bb], vols=[10]*5, use_channels=[0,1,2,3,4], liquid_height=[1]*5,
-                             blow_out=[True]*5, jet=[True]*5)
+      await self.lh.dispense([self.bb]*5, vols=[10]*5, use_channels=[0,1,2,3,4],
+                             liquid_height=[1]*5, blow_out=[True]*5, jet=[True]*5)
     self._assert_command_sent_once(
       "C0DSid0002dm1 1 1 1 1 1&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 "
       "1825 1688 1551 0000&zx1260 1260 1260 1260 1260 1260&lp2000 2000 2000 2000 2000 2000&zl1210 "
