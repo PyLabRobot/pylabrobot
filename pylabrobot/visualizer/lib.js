@@ -20,6 +20,16 @@ var resources = {}; // name -> Resource object
 
 let trash;
 
+let gif;
+
+let resourceImage;
+
+// Used in gif generation
+let isRecording = false;
+let recordingCounter = 0; // Counter to track the number of recorded frames
+var frameImages = [];
+let frameInterval = 8;
+
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
   // A snapping resource is a spot within a plate/tip carrier or the OT deck.
@@ -376,9 +386,17 @@ class Resource {
 
   update() {
     this.draw(resourceLayer);
+
+    if (isRecording) {
+      // If we want to save this frame, save it
+      if (recordingCounter % frameInterval == 0) {
+        stageToBlob(stage, handleBlob);
+      }
+      recordingCounter += 1;
+    }
   }
 
-  setState() {}
+  setState() { }
 }
 
 class Deck extends Resource {
@@ -601,8 +619,7 @@ class Container extends Resource {
   aspirate(volume) {
     if (volume > this.getVolume()) {
       throw new Error(
-        `Aspirating ${volume}uL from well ${
-          this.name
+        `Aspirating ${volume}uL from well ${this.name
         } with ${this.getVolume()}uL`
       );
     }
@@ -698,6 +715,48 @@ class Trough extends Container {
     mainShape.add(background);
     mainShape.add(liquidLayer);
     return mainShape;
+  }
+}
+
+class Reservoir extends Resource {
+  constructor(resourceData, parent = undefined) {
+    super(resourceData, parent);
+    const { num_items_x, num_items_y } = resourceData;
+    this.num_items_x = num_items_x;
+    this.num_items_y = num_items_y;
+  }
+
+  drawMainShape() {
+    return new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: "#2B2D42",
+      stroke: "black",
+      strokeWidth: 1,
+    });
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        num_items_x: this.num_items_x,
+        num_items_y: this.num_items_y,
+      },
+    };
+  }
+
+  update() {
+    super.update();
+
+    // Rename the children
+    for (let i = 0; i < this.num_items_x; i++) {
+      for (let j = 0; j < this.num_items_y; j++) {
+        const child = this.children[i * this.num_items_y + j];
+        child.name = `${this.name}_well_${i}_${j}`;
+      }
+    }
+
   }
 }
 
@@ -844,7 +903,7 @@ class TipSpot extends Resource {
 
 // Nothing special.
 class Trash extends Resource {
-  dropTip(layer) {} // just ignore
+  dropTip(layer) { } // just ignore
 
   drawMainShape() {
     if (resources["deck"].constructor.name) {
@@ -855,9 +914,9 @@ class Trash extends Resource {
 }
 
 // Nothing special.
-class Carrier extends Resource {}
-class PlateCarrier extends Carrier {}
-class TipCarrier extends Carrier {}
+class Carrier extends Resource { }
+class PlateCarrier extends Carrier { }
+class TipCarrier extends Carrier { }
 
 class CarrierSite extends Resource {
   constructor(resourceData, parent) {
@@ -976,6 +1035,8 @@ function classForResourceType(type) {
       return Container;
     case "Trough":
       return Trough;
+    case "Reservoir":
+      return Reservoir;
     case "VantageDeck":
       alert(
         "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"
@@ -1042,12 +1103,215 @@ window.addEventListener("load", function () {
     };
   });
 
+  // make white background
+
+  var background = new Konva.Rect({
+    x: 0,
+    y: 0,
+    width: stage.width(),
+    height: stage.height(),
+    fill: "white",
+    listening: false
+  })
+
   // add the layer to the stage
   stage.add(layer);
   stage.add(resourceLayer);
+
+  layer.add(background);
+
+  // the stage is draggable
+  // that means absolute position of background may change
+  // so we need to reset it back to {0, 0}
+
+  stage.on('dragmove', () => {
+    background.absolutePosition({ x: 0, y: 0 });
+  });
 
   // Check if there is an after stage setup callback, and if so, call it.
   if (typeof afterStageSetup === "function") {
     afterStageSetup();
   }
 });
+
+async function startRecording() {
+  // Turn recording on
+  isRecording = true;
+
+  // Reset saved frames buffer
+  frameImages = [];
+
+  // Reset the render progress
+  var info = document.getElementById('progressBar');
+  info.innerText = ' GIF Rendering Progress: ' + Math.round(0 * 100) + '%';
+
+  stageToBlob(stage, handleBlob);
+
+  // Update state of all buttons
+  document.getElementById('stop-recording-button').disabled = false;
+  document.getElementById('start-recording-button').disabled = true;
+  document.getElementById('myRange').disabled = true;
+  document.getElementById('downloadBtn').disabled = true;
+  document.getElementById('download-zip-btn').disabled = true;
+}
+
+function stopRecording() {
+  // Turn recording off
+  isRecording = false;
+
+  // Render the final image
+  // Do it twice bc it looks better
+
+  stageToBlob(stage, handleBlob);
+  stageToBlob(stage, handleBlob);
+
+  gif = new GIF({
+    workers: 10,
+    workerScript: 'gif.worker.js',
+    background: '#FFFFFF',
+    width: stage.width(),
+    height: stage.height()
+  });
+
+  // Add each frame to the GIF
+  for (var i = 0; i < frameImages.length; i++) {
+    gif.addFrame(frameImages[i], { delay: 1 });
+  }
+
+  // Add progress bar based on how much the gif is rendered
+  gif.on('progress', function (p) {
+    var info = document.getElementById('progressBar');
+    info.innerText = ' GIF Rendering Progress: ' + Math.round(p * 100) + '%';
+  });
+
+  // Load gif into right portion of screen
+  gif.on('finished', function (blob) {
+    renderedGifBlob = blob;
+    var url = URL.createObjectURL(blob);
+    var gifDisplay = document.getElementById('gifDisplay');
+    gifDisplay.src = url;
+    gifDisplay.style.display = 'block';
+  });
+
+  gif.render();
+
+  // Update state of all buttons
+  document.getElementById('stop-recording-button').disabled = true;
+  document.getElementById('start-recording-button').disabled = false;
+  document.getElementById('downloadBtn').disabled = false;
+  document.getElementById('download-zip-btn').disabled = false;
+  document.getElementById('myRange').disabled = false;
+
+}
+
+// Function to convert stage to a Blob and handle the Blob
+function stageToBlob(stage, callback) {
+  stage.toBlob({
+    callback: function (blob) {
+      callback(blob);
+    },
+    mimeType: 'image/jpg',
+    quality: 0.3
+  });
+}
+
+// Function to convert Image object to Blob
+async function imageToBlob(image) {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+    canvas.toBlob(resolve, 'image/png');
+  });
+}
+
+// Function to handle the Blob (e.g., create an Image element and add it to frameImages)
+function handleBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  const myImg = new Image();
+
+  myImg.src = url;
+  myImg.width = stage.width();
+  myImg.height = stage.height();
+
+  frameImages.push(myImg);
+
+  myImg.onload = function () {
+    URL.revokeObjectURL(url); // Free up memory
+  };
+}
+
+// Set up event listeners for the buttons
+document.getElementById('start-recording-button').addEventListener('click', startRecording);
+document.getElementById('stop-recording-button').addEventListener('click', stopRecording);
+document.getElementById('downloadBtn').addEventListener('click', function () {
+  var fileName = document.getElementById('fileName').value || 'generated_gif';
+  if (renderedGifBlob) {
+    var url = URL.createObjectURL(renderedGifBlob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fileName + '.gif';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } else {
+    alert('No GIF rendered yet. Please stop the recording first.');
+  }
+});
+
+
+document.getElementById('download-zip-btn').addEventListener('click', async function () {
+  try {
+    // Prompt the user to select a folder
+    const directoryHandle = await window.showDirectoryPicker();
+
+    // Get name of output folder
+    var fileName = document.getElementById('fileName').value || 'generated_gif';
+
+    // Create a new ZIP file
+    const zip = new JSZip();
+
+    // Iterate over frames and add them to the ZIP archive
+    for (let i = 0; i < frameImages.length; i++) {
+      const image = frameImages[i];
+      const blob = await imageToBlob(image);
+      const fileName = `frame_${i + 1}.png`;
+      zip.file(fileName, blob);
+    }
+
+    // Generate the ZIP file as a Blob
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+
+    // Create a handle for the ZIP file in the selected directory
+    const zipFileHandle = await directoryHandle.getFileHandle(fileName + '.zip', { create: true });
+    const writableStream = await zipFileHandle.createWritable();
+
+    // Write the ZIP file Blob to the stream
+    await writableStream.write(zipBlob);
+    await writableStream.close();
+
+    alert('ZIP file created successfully!');
+  } catch (err) {
+    console.error('Error creating ZIP file:', err);
+    alert('Failed to create ZIP file.');
+  }
+});
+
+
+document.getElementById('myRange').addEventListener('input', function () {
+  let value = parseInt(this.value);
+  // Adjust the value to the nearest multiple of 8
+  value = Math.round(value / 8) * 8;
+  // Ensure the value stays within the allowed range
+  if (value < 1) value = 1;
+  if (value > 96) value = 96;
+
+  this.value = value; // Update the slider value
+  document.getElementById('current-value').textContent = "Frame Save Interval: " + value;
+
+  frameInterval = value;
+
+});
+
