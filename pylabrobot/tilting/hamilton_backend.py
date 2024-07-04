@@ -17,7 +17,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     self.write_timeout = write_timeout
     self.ser: Optional[serial.Serial] = None
 
-  async def setup(self):
+  async def setup(self, initial_offset: int=0):
     self.ser = serial.Serial(
       port=self.com_port,
       baudrate=1200,
@@ -27,6 +27,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
       write_timeout=self.write_timeout,
       timeout=self.timeout)
 
+    await self.tilt_initial_offset(initial_offset)
     await self.send_command("SI")
 
     self.setup_finished = True
