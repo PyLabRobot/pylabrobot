@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - HamiltonDeck.load_from_lay_file
 - Passing single values to LiquidHandler `pick_up_tips`, `drop_tips`, `aspirate`, and `dispense` methods. These methods now require a list of values.
 - `hamilton_parse` module and the VENUS labware database parser.
+- `PLT_CAR_L4_SHAKER` was deprecated in favor of `MFX_CAR_L5_base` (https://github.com/PyLabRobot/pylabrobot/pull/188/).
 
 ### Fixed
 
