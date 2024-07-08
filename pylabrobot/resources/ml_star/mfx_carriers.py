@@ -10,7 +10,6 @@ from pylabrobot.resources.carrier import (
   MFXCarrier,
   create_homogeneous_carrier_sites
 )
-import warnings
 
 
 def MFX_CAR_L5_base(name: str) -> MFXCarrier:
@@ -37,13 +36,10 @@ def MFX_CAR_L5_base(name: str) -> MFXCarrier:
 
 
 def PLT_CAR_L4_SHAKER(name: str):
-  warnings.warn(
+  raise NotImplementedError(
     "PLT_CAR_L4_SHAKER is deprecated and will be removed in a future version."
-    "Please use MFX_CAR_L4_SHAKER instead.",
-    DeprecationWarning,
-    stacklevel=2
+    "Please use MFX_CAR_L4_SHAKER instead."
   )
-  return MFX_CAR_L4_SHAKER(name=name)
 
 
 def MFX_CAR_L4_SHAKER(name: str) -> MFXCarrier:
