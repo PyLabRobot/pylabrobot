@@ -2,6 +2,7 @@ from typing import List, Optional
 
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.plate import Lid, Plate
 
 
 class ResourceStack(Resource):
@@ -90,7 +91,25 @@ class ResourceStack(Resource):
     elif self.direction == "y":
       resource_location = Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
-      resource_location = Coordinate(0, 0, self.get_size_z())
+      if isinstance(resource, Lid):
+        resource_location = Coordinate(0, 0, self.get_size_z() - resource.nesting_z_height)
+      else:
+        resource_location = Coordinate(0, 0, self.get_size_z())
+      if isinstance(resource, Plate):
+        if resource.lid is not None:
+          to_location = resource.lid.get_absolute_location()
+          to_location = Coordinate(
+            x=to_location.x,
+            y=to_location.y,
+            z=to_location.z  + resource.lid.get_size_z())
+        else:
+          to_location = resource.get_absolute_location()
+          to_location = Coordinate(
+            x=to_location.x,
+            y=to_location.y,
+            z=to_location.z  + resource.get_size_z())
+      else:
+        resource_location = Coordinate(0, 0, self.get_size_z())
     else:
       raise ValueError("self.direction must be one of 'x', 'y', or 'z'")
 
