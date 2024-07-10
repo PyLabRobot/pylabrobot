@@ -1082,7 +1082,7 @@ def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
     name=name,
     size_x=127.0,
     size_y=86.0,
-    size_z=19.85,
+    size_z=20.0,
     lid=Cos_6_wellplate_16800ul_Fb_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_6_wellplate_16800ul_Fb",
     items=create_equally_spaced_2d(Well,

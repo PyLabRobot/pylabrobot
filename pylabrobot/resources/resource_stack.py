@@ -93,21 +93,15 @@ class ResourceStack(Resource):
     elif self.direction == "z":
       if isinstance(resource, Lid):
         resource_location = Coordinate(0, 0, self.get_size_z() - resource.nesting_z_height)
-      else:
-        resource_location = Coordinate(0, 0, self.get_size_z())
-      if isinstance(resource, Plate):
-        if resource.lid is not None:
-          to_location = resource.lid.get_absolute_location()
-          to_location = Coordinate(
-            x=to_location.x,
-            y=to_location.y,
-            z=to_location.z  + resource.lid.get_size_z())
+      elif isinstance(resource, Plate):
+        if len(self.children) != 0:
+          top_plate = self.get_top_item()
+          if top_plate.lid is not None:
+            resource_location = Coordinate(0, 0, self.get_size_z() - top_plate.lid.nesting_z_height + top_plate.lid.get_size_z())
+          else:
+            resource_location = Coordinate(0, 0, self.get_size_z())
         else:
-          to_location = resource.get_absolute_location()
-          to_location = Coordinate(
-            x=to_location.x,
-            y=to_location.y,
-            z=to_location.z  + resource.get_size_z())
+            resource_location = Coordinate(0, 0, self.get_size_z())
       else:
         resource_location = Coordinate(0, 0, self.get_size_z())
     else:
