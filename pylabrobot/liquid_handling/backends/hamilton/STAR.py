@@ -1290,6 +1290,10 @@ class STAR(HamiltonLiquidHandler):
     self,
     ops: List[Pickup],
     use_channels: List[int],
+    begin_tip_pick_up_process: Optional[float] = None,
+    end_tip_pick_up_process: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    pickup_method: Optional[TipPickupMethod] = None,
   ):
     """ Pick up tips from a resource. """
 
@@ -1312,18 +1316,30 @@ class STAR(HamiltonLiquidHandler):
     elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
       max_tip_length -= 2
 
+    tip = ops[0].tip
+    if not isinstance(tip, HamiltonTip):
+      raise TypeError("Tip type must be HamiltonTip.")
+
+    begin_tip_pick_up_process = round((max_z + max_total_tip_length)*10) \
+      if begin_tip_pick_up_process is None else int(begin_tip_pick_up_process*10)
+    end_tip_pick_up_process = round((max_z + max_tip_length)*10) \
+      if end_tip_pick_up_process is None else round(end_tip_pick_up_process*10)
+    minimum_traverse_height_at_beginning_of_a_command = round(self._traversal_height * 10) \
+      if minimum_traverse_height_at_beginning_of_a_command is None \
+      else round(minimum_traverse_height_at_beginning_of_a_command * 10)
+    pickup_method = pickup_method or tip.pickup_method
+
     try:
-      tip = ops[0].tip
-      assert isinstance(tip, HamiltonTip), "Tip type must be HamiltonTip."
       return await self.pick_up_tip(
         x_positions=x_positions,
         y_positions=y_positions,
         tip_pattern=channels_involved,
         tip_type_idx=ttti,
-        begin_tip_pick_up_process=int((max_z + max_total_tip_length)*10),
-        end_tip_pick_up_process=int((max_z + max_tip_length)*10),
-        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
-        pickup_method=tip.pickup_method,
+        begin_tip_pick_up_process=begin_tip_pick_up_process,
+        end_tip_pick_up_process=end_tip_pick_up_process,
+        minimum_traverse_height_at_beginning_of_a_command=\
+          minimum_traverse_height_at_beginning_of_a_command,
+        pickup_method=pickup_method,
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
@@ -1335,6 +1351,10 @@ class STAR(HamiltonLiquidHandler):
     ops: List[Drop],
     use_channels: List[int],
     drop_method: Optional[TipDropMethod] = None,
+    begin_tip_deposit_process: Optional[float] = None,
+    end_tip_deposit_process: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    z_position_at_end_of_a_command: Optional[float] = None,
   ):
     """ Drop tips to a resource.
 
@@ -1357,23 +1377,34 @@ class STAR(HamiltonLiquidHandler):
     max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
     if drop_method == TipDropMethod.PLACE_SHIFT:
       # magic values empirically found in https://github.com/PyLabRobot/pylabrobot/pull/63
-      begin_tip_deposit_process  = int((max_z+59.9)*10)
-      end_tip_deposit_process  = int((max_z+49.9)*10)
+      begin_tip_deposit_process = round((max_z+59.9)*10) \
+        if begin_tip_deposit_process is None else round(begin_tip_deposit_process*10)
+      end_tip_deposit_process = round((max_z+49.9)*10) \
+        if end_tip_deposit_process is None else round(end_tip_deposit_process*10)
     else:
       max_total_tip_length = max(op.tip.total_tip_length for op in ops)
       max_tip_length = max((op.tip.total_tip_length-op.tip.fitting_depth) for op in ops)
-      begin_tip_deposit_process=int((max_z + max_total_tip_length)*10)
-      end_tip_deposit_process=int((max_z + max_tip_length)*10)
+      begin_tip_deposit_process=round((max_z + max_total_tip_length)*10) \
+        if begin_tip_deposit_process is None else round(begin_tip_deposit_process*10)
+      end_tip_deposit_process=round((max_z + max_tip_length)*10) \
+        if end_tip_deposit_process is None else round(end_tip_deposit_process*10)
+
+    minimum_traverse_height_at_beginning_of_a_command = round(self._traversal_height * 10) \
+      if minimum_traverse_height_at_beginning_of_a_command is None \
+      else round(minimum_traverse_height_at_beginning_of_a_command * 10)
+    z_position_at_end_of_a_command = round(self._traversal_height * 10) \
+      if z_position_at_end_of_a_command is None else round(z_position_at_end_of_a_command * 10)
 
     try:
       return await self.discard_tip(
         x_positions=x_positions,
         y_positions=y_positions,
         tip_pattern=channels_involved,
-        begin_tip_deposit_process= begin_tip_deposit_process,
-        end_tip_deposit_process= end_tip_deposit_process,
-        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10),
-        z_position_at_end_of_a_command=int(self._traversal_height * 10),
+        begin_tip_deposit_process=begin_tip_deposit_process,
+        end_tip_deposit_process=end_tip_deposit_process,
+        minimum_traverse_height_at_beginning_of_a_command=\
+          minimum_traverse_height_at_beginning_of_a_command,
+        z_position_at_end_of_a_command=z_position_at_end_of_a_command,
         discarding_method=drop_method
       )
     except STARFirmwareError as e:
@@ -1548,22 +1579,21 @@ class STAR(HamiltonLiquidHandler):
     well_bottoms = [op.resource.get_absolute_location().z + op.offset.z for op in ops]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 1)
                               for wb, op in zip(well_bottoms, ops)]
-    aspiration_volumes = [int(op.volume * 10) for op in ops]
     if lld_search_height is None:
       lld_search_height = [
-        int((wb + op.resource.get_size_z() + (2.7 if isinstance(op.resource, Well) else 5)) * 10) #?
+        (wb + op.resource.get_size_z() + (2.7 if isinstance(op.resource, Well) else 5)) # ?
         for wb, op in zip(well_bottoms, ops)
       ]
     else:
-      lld_search_height = [int((wb + sh) * 10) for wb, sh in zip(well_bottoms, lld_search_height)]
+      lld_search_height = [(wb + sh) for wb, sh in zip(well_bottoms, lld_search_height)]
     clot_detection_height = _fill_in_defaults(clot_detection_height,
-      default=[int(hlc.aspiration_clot_retract_height*10) if hlc is not None else 0
+      default=[hlc.aspiration_clot_retract_height if hlc is not None else 0
               for hlc in hamilton_liquid_classes])
-    pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [100]*n)
-    second_section_height = _fill_in_defaults(second_section_height, [32]*n)
-    second_section_ratio = _fill_in_defaults(second_section_ratio, [6180]*n)
+    pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10]*n)
+    second_section_height = _fill_in_defaults(second_section_height, [3.2]*n)
+    second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0]*n)
     minimum_height = \
-      _fill_in_defaults(minimum_height, [int((ls-5) * 10) for ls in liquid_surfaces_no_lld])
+      _fill_in_defaults(minimum_height, [ls-5 for ls in liquid_surfaces_no_lld])
     # TODO: I think minimum height should be the minimum height of the well
     immersion_depth = _fill_in_defaults(immersion_depth, [0]*n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
@@ -1571,13 +1601,12 @@ class STAR(HamiltonLiquidHandler):
     flow_rates = [
       op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
         for op, hlc in zip(ops, hamilton_liquid_classes)]
-    aspiration_speed = [int(fr * 10) for fr in flow_rates]
     transport_air_volume = _fill_in_defaults(transport_air_volume,
-      default=[int(hlc.aspiration_air_transport_volume*10) if hlc is not None else 0
+      default=[hlc.aspiration_air_transport_volume if hlc is not None else 0
                for hlc in hamilton_liquid_classes])
-    blow_out_air_volumes = [int((op.blow_out_air_volume or
+    blow_out_air_volumes = [(op.blow_out_air_volume or
                                 (hlc.aspiration_blow_out_volume
-                                  if hlc is not None else 0)*10))
+                                  if hlc is not None else 0))
                             for op, hlc in zip(ops, hamilton_liquid_classes)]
     pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0]*n)
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF]*n)
@@ -1588,17 +1617,17 @@ class STAR(HamiltonLiquidHandler):
     detection_height_difference_for_dual_lld = \
       _fill_in_defaults(detection_height_difference_for_dual_lld, [0]*n)
     swap_speed = _fill_in_defaults(swap_speed,
-      default=[int(hlc.aspiration_swap_speed*10) if hlc is not None else 100
+      default=[hlc.aspiration_swap_speed if hlc is not None else 100
                for hlc in hamilton_liquid_classes])
     settling_time = _fill_in_defaults(settling_time,
-      default=[int(hlc.aspiration_settling_time*10) if hlc is not None else 0
+      default=[hlc.aspiration_settling_time if hlc is not None else 0
                for hlc in hamilton_liquid_classes])
     homogenization_volume = _fill_in_defaults(homogenization_volume, [0]*n)
     homogenization_cycles = _fill_in_defaults(homogenization_cycles, [0]*n)
     homogenization_position_from_liquid_surface = \
       _fill_in_defaults(homogenization_position_from_liquid_surface, [0]*n)
     homogenization_speed = _fill_in_defaults(homogenization_speed,
-        default=[int(hlc.aspiration_mix_flow_rate*10) if hlc is not None else 500
+        default=[hlc.aspiration_mix_flow_rate if hlc is not None else 50.0
                for hlc in hamilton_liquid_classes])
     homogenization_surface_following_distance = \
       _fill_in_defaults(homogenization_surface_following_distance, [0]*n)
@@ -1608,11 +1637,11 @@ class STAR(HamiltonLiquidHandler):
     retract_height_over_2nd_section_to_empty_tip = \
       _fill_in_defaults(retract_height_over_2nd_section_to_empty_tip, [0]*n)
     dispensation_speed_during_emptying_tip = \
-      _fill_in_defaults(dispensation_speed_during_emptying_tip, [500]*n)
+      _fill_in_defaults(dispensation_speed_during_emptying_tip, [50.0]*n)
     dosing_drive_speed_during_2nd_section_search = \
-      _fill_in_defaults(dosing_drive_speed_during_2nd_section_search, [500]*n)
+      _fill_in_defaults(dosing_drive_speed_during_2nd_section_search, [50.0]*n)
     z_drive_speed_during_2nd_section_search = \
-      _fill_in_defaults(z_drive_speed_during_2nd_section_search, [300]*n)
+      _fill_in_defaults(z_drive_speed_during_2nd_section_search, [30.0]*n)
     cup_upper_edge = _fill_in_defaults(cup_upper_edge, [0]*n)
     ratio_liquid_rise_to_tip_deep_in = _fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0]*n)
     immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0]*n)
@@ -1624,47 +1653,55 @@ class STAR(HamiltonLiquidHandler):
         x_positions=x_positions,
         y_positions=y_positions,
 
-        aspiration_volumes=aspiration_volumes,
-        lld_search_height=lld_search_height,
-        clot_detection_height=clot_detection_height,
-        liquid_surface_no_lld=[int(ls * 10) for ls in liquid_surfaces_no_lld],
-        pull_out_distance_transport_air=pull_out_distance_transport_air,
-        second_section_height=second_section_height,
-        second_section_ratio=second_section_ratio,
-        minimum_height=minimum_height,
-        immersion_depth=immersion_depth,
+        aspiration_volumes=[round(op.volume * 10) for op in ops],
+        lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
+        clot_detection_height=[round(cd * 10) for cd in clot_detection_height],
+        liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
+        pull_out_distance_transport_air=[round(po * 10) for po in pull_out_distance_transport_air],
+        second_section_height=[round(sh * 10) for sh in second_section_height],
+        second_section_ratio=[round(sr * 10) for sr in second_section_ratio],
+        minimum_height=[round(mh * 10) for mh in minimum_height],
+        immersion_depth=[round(id_ * 10) for id_ in immersion_depth],
         immersion_depth_direction=immersion_depth_direction,
-        surface_following_distance=surface_following_distance,
-        aspiration_speed=aspiration_speed,
-        transport_air_volume=transport_air_volume,
-        blow_out_air_volume=blow_out_air_volumes,
-        pre_wetting_volume=pre_wetting_volume,
+        surface_following_distance=[round(sfd * 10) for sfd in surface_following_distance],
+        aspiration_speed=[round(fr * 10) for fr in flow_rates],
+        transport_air_volume=[round(tav * 10) for tav in transport_air_volume],
+        blow_out_air_volume=[round(boa * 10) for boa in blow_out_air_volumes],
+        pre_wetting_volume=[round(pwv * 10) for pwv in pre_wetting_volume],
         lld_mode=[mode.value for mode in lld_mode],
         gamma_lld_sensitivity=gamma_lld_sensitivity,
         dp_lld_sensitivity=dp_lld_sensitivity,
-        aspirate_position_above_z_touch_off=aspirate_position_above_z_touch_off,
-        detection_height_difference_for_dual_lld=detection_height_difference_for_dual_lld,
-        swap_speed=swap_speed,
-        settling_time=settling_time,
-        homogenization_volume=homogenization_volume,
+        aspirate_position_above_z_touch_off=[round(ap * 10)
+                                             for ap in aspirate_position_above_z_touch_off],
+        detection_height_difference_for_dual_lld=[round(dh * 10)
+                                                for dh in detection_height_difference_for_dual_lld],
+        swap_speed=[round(ss * 10) for ss in swap_speed],
+        settling_time=[round(st * 10) for st in settling_time],
+        homogenization_volume=[round(hv * 10) for hv in homogenization_volume],
         homogenization_cycles=homogenization_cycles,
-        homogenization_position_from_liquid_surface=homogenization_position_from_liquid_surface,
-        homogenization_speed=homogenization_speed,
-        homogenization_surface_following_distance=homogenization_surface_following_distance,
+        homogenization_position_from_liquid_surface=[round(hp * 10)
+                                            for hp in homogenization_position_from_liquid_surface],
+        homogenization_speed=[round(hs * 10) for hs in homogenization_speed],
+        homogenization_surface_following_distance=[round(hsfd * 10)
+                                            for hsfd in homogenization_surface_following_distance],
         limit_curve_index=limit_curve_index,
 
         use_2nd_section_aspiration=use_2nd_section_aspiration,
-        retract_height_over_2nd_section_to_empty_tip=retract_height_over_2nd_section_to_empty_tip,
-        dispensation_speed_during_emptying_tip=dispensation_speed_during_emptying_tip,
-        dosing_drive_speed_during_2nd_section_search=dosing_drive_speed_during_2nd_section_search,
-        z_drive_speed_during_2nd_section_search=z_drive_speed_during_2nd_section_search,
-        cup_upper_edge=cup_upper_edge,
+        retract_height_over_2nd_section_to_empty_tip=[round(rh * 10)
+                                            for rh in retract_height_over_2nd_section_to_empty_tip],
+        dispensation_speed_during_emptying_tip=[round(ds * 10)
+                                                for ds in dispensation_speed_during_emptying_tip],
+        dosing_drive_speed_during_2nd_section_search=[round(ds * 10)
+                                            for ds in dosing_drive_speed_during_2nd_section_search],
+        z_drive_speed_during_2nd_section_search=[round(zs * 10)
+                                                 for zs in z_drive_speed_during_2nd_section_search],
+        cup_upper_edge=[round(cue * 10) for cue in cup_upper_edge],
         ratio_liquid_rise_to_tip_deep_in=ratio_liquid_rise_to_tip_deep_in,
-        immersion_depth_2nd_section=immersion_depth_2nd_section,
+        immersion_depth_2nd_section=[id_ for id_ in immersion_depth_2nd_section],
 
         minimum_traverse_height_at_beginning_of_a_command=\
-          minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height * 10),
-        min_z_endpos=min_z_endpos or int(self._traversal_height * 10),
+          minimum_traverse_height_at_beginning_of_a_command or round(self._traversal_height * 10),
+        min_z_endpos=min_z_endpos or round(self._traversal_height * 10),
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
