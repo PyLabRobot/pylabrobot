@@ -78,36 +78,43 @@ class ResourceStack(Resource):
     return max(resource.get_size_y() for resource in self.children)
 
   def get_size_z(self) -> float:
-    if len(self.children) == 0:
-      return 0
+    if not self.children:
+        return 0
     if self.direction == "z":
-      return sum(child.get_size_z() for child in self.children)
-    return max(child.get_size_z() for child in self.children)
+      return sum(
+          child.get_size_z() + (
+              (child.lid.get_size_z() - child.lid.nesting_z_height) if child.lid else 0
+          ) for child in self.children
+      )
+    else:
+      raise NotImplementedError("Only self.direction == 'z' is currently supported")
 
-  def assign_child_resource(self, resource):
+  def assign_child_resource(self, resource: Resource):
+    # Determine child origin (front-left-bottom) location coordinates
     # update child location (relative to self): we place the child after the last child in the stack
+    x, y, z = 0, 0, 0
+    
     if self.direction == "x":
-      resource_location = Coordinate(self.get_size_x(), 0, 0)
+      x = self.get_size_x()
     elif self.direction == "y":
-      resource_location = Coordinate(0, self.get_size_y(), 0)
+      y = self.get_size_y()
     elif self.direction == "z":
+      z = self.get_size_z()
       if isinstance(resource, Lid):
-        resource_location = Coordinate(0, 0, self.get_size_z() - resource.nesting_z_height)
+        z -= resource.nesting_z_height
+        # TODO: building lid stack, currently assumes self.get_top_item() is a compatible plate
+        # have to add a check of what self.get_top_item() is to modify for lid stacking
       elif isinstance(resource, Plate):
-        if len(self.children) != 0:
+        if self.children:
           top_plate = self.get_top_item()
-          if top_plate.lid is not None:
-            resource_location = Coordinate(0, 0, self.get_size_z() - top_plate.lid.nesting_z_height + top_plate.lid.get_size_z())
-          else:
-            resource_location = Coordinate(0, 0, self.get_size_z())
-        else:
-            resource_location = Coordinate(0, 0, self.get_size_z())
-      else:
-        resource_location = Coordinate(0, 0, self.get_size_z())
+          if top_plate.lid:
+            z = self.get_size_z() - top_plate.lid.nesting_z_height + top_plate.lid.get_size_z()
     else:
       raise ValueError("self.direction must be one of 'x', 'y', or 'z'")
 
+    resource_location = Coordinate(x, y, z)
     super().assign_child_resource(resource, location=resource_location)
+
 
   def unassign_child_resource(self, resource: Resource):
     if self.direction == "z" and resource != self.children[-1]: # no floating resources
