@@ -1963,7 +1963,7 @@ class STAR(HamiltonLiquidHandler):
       y_position=round(position.y * 10),
       tip_type_idx=ttti,
       tip_pickup_method=tip_pickup_method,
-      z_deposit_position=z_deposit_position,
+      z_deposit_position=round(z_deposit_position*10),
       minimum_traverse_height_at_beginning_of_a_command=
         round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10),
       minimum_height_command_end=round((minimum_height_command_end or self._traversal_height) * 10),
