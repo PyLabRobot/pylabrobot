@@ -1766,28 +1766,26 @@ class LiquidHandler(Machine):
 
     if isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      if len(to.children) != 0:
+      if not to.children:
         print(F"First plate added to ResourceStack '{to.name}'")
+        to_location = to.get_absolute_location()  # if ResourceStack is empty
         # TODO: add pedestal handling here once Plate is fixed
-      
-      if len(self.children) != 0:
-        top_plate = to.get_top_item()
-        if top_plate.lid is not None:
-          to_location = top_plate.get_absolute_location()
-          to_location = Coordinate(
-            x=to_location.x,
-            y=to_location.y,
-            z=to_location.z + top_plate.get_size_z() - top_plate.lid.nesting_z_height + top_plate.lid.get_size_z())
-        else:
-          to_location = to.get_absolute_location()
-          to_location = Coordinate(
-            x=to_location.x,
-            y=to_location.y,
-            z=to_location.z  + to.get_size_z())
       else:
-        to_location = to # if ResourceStack is empty
-    elif isinstance(to, Coordinate):
-      to_location = to
+        top_plate = to.get_top_item()
+        to_location = (top_plate.get_absolute_location() 
+                      if top_plate.lid 
+                      else to.get_absolute_location())
+        if top_plate.lid:
+          top_plate_lid_offset = top_plate.lid.get_size_z() - top_plate.lid.nesting_z_height
+          to_location = Coordinate(
+            x=to_location.x,
+            y=to_location.y,
+            z=to_location.z + top_plate.get_size_z() + top_plate_lid_offset)
+        else:
+          to_location = Coordinate(
+            x=to_location.x,
+            y=to_location.y,
+            z=to_location.z + to.get_size_z())
     elif isinstance(to, MFXModule):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateAdapter):

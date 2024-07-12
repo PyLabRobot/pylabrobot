@@ -1049,7 +1049,7 @@ def Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
     size_x=127.0,
     size_y=86.0,
     size_z=7.8,
-    nesting_z_height=6.6, # measure overlap between lid and plate
+    nesting_z_height=6.7, # measure overlap between lid and plate
     model="Cos_6_wellplate_16800ul_Fb_Lid",
   )
 
