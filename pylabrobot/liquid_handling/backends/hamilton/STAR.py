@@ -1692,7 +1692,7 @@ class STAR(HamiltonLiquidHandler):
                                                  for zs in z_drive_speed_during_2nd_section_search],
         cup_upper_edge=[round(cue * 10) for cue in cup_upper_edge],
         ratio_liquid_rise_to_tip_deep_in=ratio_liquid_rise_to_tip_deep_in,
-        immersion_depth_2nd_section=[id_ for id_ in immersion_depth_2nd_section],
+        immersion_depth_2nd_section=[round(id_*10) for id_ in immersion_depth_2nd_section],
 
         minimum_traverse_height_at_beginning_of_a_command=\
           minimum_traverse_height_at_beginning_of_a_command or round(self._traversal_height * 10),
@@ -1708,35 +1708,35 @@ class STAR(HamiltonLiquidHandler):
     ops: List[Dispense],
     use_channels: List[int],
 
-    lld_search_height: Optional[List[int]] = None,
+    lld_search_height: Optional[List[float]] = None,
     liquid_surface_no_lld: Optional[List[float]] = None,
     dispensing_mode: Optional[List[int]] = None,
-    pull_out_distance_transport_air: Optional[List[int]] = None,
-    second_section_height: Optional[List[int]] = None,
-    second_section_ratio: Optional[List[int]] = None,
-    minimum_height: Optional[List[int]] = None,
-    immersion_depth: Optional[List[int]] = None,
+    pull_out_distance_transport_air: Optional[List[float]] = None,
+    second_section_height: Optional[List[float]] = None,
+    second_section_ratio: Optional[List[float]] = None,
+    minimum_height: Optional[List[float]] = None,
+    immersion_depth: Optional[List[float]] = None,
     immersion_depth_direction: Optional[List[int]] = None,
-    surface_following_distance: Optional[List[int]] = None,
-    cut_off_speed: Optional[List[int]] = None,
-    stop_back_volume: Optional[List[int]] = None,
-    transport_air_volume: Optional[List[int]] = None,
+    surface_following_distance: Optional[List[float]] = None,
+    cut_off_speed: Optional[List[float]] = None,
+    stop_back_volume: Optional[List[float]] = None,
+    transport_air_volume: Optional[List[float]] = None,
     lld_mode: Optional[List[LLDMode]] = None,
-    dispense_position_above_z_touch_off: Optional[List[int]] = None,
+    dispense_position_above_z_touch_off: Optional[List[float]] = None,
     gamma_lld_sensitivity: Optional[List[int]] = None,
     dp_lld_sensitivity: Optional[List[int]] = None,
-    swap_speed: Optional[List[int]] = None,
-    settling_time: Optional[List[int]] = None,
-    mix_volume: Optional[List[int]] = None,
+    swap_speed: Optional[List[float]] = None,
+    settling_time: Optional[List[float]] = None,
+    mix_volume: Optional[List[float]] = None,
     mix_cycles: Optional[List[int]] = None,
-    mix_position_from_liquid_surface: Optional[List[int]] = None,
-    mix_speed: Optional[List[int]] = None,
-    mix_surface_following_distance: Optional[List[int]] = None,
+    mix_position_from_liquid_surface: Optional[List[float]] = None,
+    mix_speed: Optional[List[float]] = None,
+    mix_surface_following_distance: Optional[List[float]] = None,
     limit_curve_index: Optional[List[int]] = None,
 
     minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
-    min_z_endpos: Optional[int] = None,
-    side_touch_off_distance: int = 0,
+    min_z_endpos: Optional[float] = None,
+    side_touch_off_distance: float = 0,
 
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     jet: Optional[List[bool]] = None,
@@ -1943,9 +1943,9 @@ class STAR(HamiltonLiquidHandler):
     self,
     pickup: PickupTipRack,
     tip_pickup_method: int = 0,
-    z_deposit_position: int = 2164,
-    minimum_height_command_end: Optional[int] = None,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
+    z_deposit_position: float = 216.4,
+    minimum_height_command_end: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
     """ Pick up tips using the 96 head. """
     assert self.core96_head_installed, "96 head must be installed"
@@ -1954,7 +1954,7 @@ class STAR(HamiltonLiquidHandler):
     assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
-    z_deposit_position += int(pickup.offset.z*10)
+    z_deposit_position += round(pickup.offset.z*10)
 
     x_direction = 0 if position.x > 0 else 1
     return await self.pick_up_tips_core96(
@@ -1965,16 +1965,16 @@ class STAR(HamiltonLiquidHandler):
       tip_pickup_method=tip_pickup_method,
       z_deposit_position=z_deposit_position,
       minimum_traverse_height_at_beginning_of_a_command=
-        minimum_traverse_height_at_beginning_of_a_command or round(self._traversal_height * 10),
-      minimum_height_command_end=minimum_height_command_end or round(self._traversal_height * 10),
+        round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10),
+      minimum_height_command_end=round((minimum_height_command_end or self._traversal_height) * 10),
     )
 
   async def drop_tips96(
     self,
     drop: DropTipRack,
-    z_deposit_position: int = 2164,
-    minimum_height_command_end: Optional[int] = None,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
+    z_deposit_position: float = 216.4,
+    minimum_height_command_end: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
   ):
     """ Drop tips from the 96 head. """
     assert self.core96_head_installed, "96 head must be installed"
@@ -1989,10 +1989,10 @@ class STAR(HamiltonLiquidHandler):
       x_position=abs(round(position.x * 10)),
       x_direction=x_direction,
       y_position=round(position.y * 10),
-      z_deposit_position=z_deposit_position,
+      z_deposit_position=round(z_deposit_position*10),
       minimum_traverse_height_at_beginning_of_a_command=
-        minimum_traverse_height_at_beginning_of_a_command or round(self._traversal_height * 10),
-      minimum_height_command_end=minimum_height_command_end or round(self._traversal_height * 10),
+        round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10),
+      minimum_height_command_end=round((minimum_height_command_end or self._traversal_height) * 10),
     )
 
   async def aspirate96(
@@ -2007,25 +2007,25 @@ class STAR(HamiltonLiquidHandler):
     hlc: Optional[HamiltonLiquidClass] = None,
 
     aspiration_type: int = 0,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
-    minimal_end_height: Optional[int] = None,
-    lld_search_height: int = 199.9,
-    maximum_immersion_depth: Optional[int] = None,
-    tube_2nd_section_height_measured_from_zm: int = 3.2,
-    tube_2nd_section_ratio: int = 618.0,
-    immersion_depth: int = 0,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    minimal_end_height: Optional[float] = None,
+    lld_search_height: float = 199.9,
+    maximum_immersion_depth: Optional[float] = None,
+    tube_2nd_section_height_measured_from_zm: float = 3.2,
+    tube_2nd_section_ratio: float = 618.0,
+    immersion_depth: float = 0,
     immersion_depth_direction: int = 0,
-    liquid_surface_sink_distance_at_the_end_of_aspiration: int = 0,
-    transport_air_volume: int = 5.0,
-    pre_wetting_volume: int = 5.0,
+    liquid_surface_sink_distance_at_the_end_of_aspiration: float = 0,
+    transport_air_volume: float = 5.0,
+    pre_wetting_volume: float = 5.0,
     gamma_lld_sensitivity: int = 1,
-    swap_speed: int = 2.0,
-    settling_time: int = 1.0,
-    homogenization_volume: int = 0,
+    swap_speed: float = 2.0,
+    settling_time: float = 1.0,
+    homogenization_volume: float = 0,
     homogenization_cycles: int = 0,
-    homogenization_position_from_liquid_surface: int = 0,
-    surface_following_distance_during_homogenization: int = 0,
-    speed_of_homogenization: int = 120.0,
+    homogenization_position_from_liquid_surface: float = 0,
+    surface_following_distance_during_homogenization: float = 0,
+    speed_of_homogenization: float = 120.0,
     limit_curve_index: int = 0,
   ):
     """ Aspirate using the Core96 head.
@@ -2190,7 +2190,7 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     minimal_end_height: Optional[float] = None,
     lld_search_height: float = 199.9,
-    maximum_immersion_depth: Optional[int] = None,
+    maximum_immersion_depth: Optional[float] = None,
     tube_2nd_section_height_measured_from_zm: float = 3.2,
     tube_2nd_section_ratio: float = 618.0,
     immersion_depth: float = 0,
@@ -2293,13 +2293,13 @@ class STAR(HamiltonLiquidHandler):
 
     ret = await self.dispense_core_96(
       dispensing_mode=dispense_mode,
-      x_position=int(position.x * 10),
+      x_position=round(position.x * 10),
       x_direction=0,
-      y_position=int(position.y * 10),
+      y_position=round(position.y * 10),
 
       minimum_traverse_height_at_beginning_of_a_command=
-        minimum_traverse_height_at_beginning_of_a_command or int(self._traversal_height*10),
-      minimal_end_height=minimal_end_height or int(self._traversal_height*10),
+        round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)*10),
+      minimal_end_height=round((minimal_end_height or self._traversal_height)*10),
       lld_search_height=round(lld_search_height*10),
       liquid_surface_at_function_without_lld=round(liquid_height*10),
       pull_out_distance_to_take_transport_air_in_function_without_lld=
@@ -2353,10 +2353,10 @@ class STAR(HamiltonLiquidHandler):
     grip_direction: GripDirection,
     pickup_distance_from_top: float,
     offset: Coordinate = Coordinate.zero(),
-    minimum_traverse_height_at_beginning_of_a_command: int = 284.0,
-    z_position_at_the_command_end: int = 284.0,
+    minimum_traverse_height_at_beginning_of_a_command: float = 284.0,
+    z_position_at_the_command_end: float = 284.0,
     grip_strength: int = 4,
-    plate_width_tolerance: int = 2.0,
+    plate_width_tolerance: float = 2.0,
     collision_control_level: int = 0,
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1,
@@ -2409,7 +2409,7 @@ class STAR(HamiltonLiquidHandler):
     location: Coordinate,
     resource: Resource,
     grip_direction: GripDirection,
-    minimum_traverse_height_at_beginning_of_a_command: int = 284.0,
+    minimum_traverse_height_at_beginning_of_a_command: float = 284.0,
     collision_control_level: int = 1,
     acceleration_index_high_acc: int = 4,
     acceleration_index_low_acc: int = 1
@@ -2450,8 +2450,8 @@ class STAR(HamiltonLiquidHandler):
     offset: Coordinate,
     grip_direction: GripDirection,
     pickup_distance_from_top: float,
-    minimum_traverse_height_at_beginning_of_a_command: int = 284.0,
-    z_position_at_the_command_end: int = 284.0,
+    minimum_traverse_height_at_beginning_of_a_command: float = 284.0,
+    z_position_at_the_command_end: float = 284.0,
     collision_control_level: int = 0,
   ):
     """ After a resource is picked up, release it at the specified location.
@@ -2506,8 +2506,8 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     minimum_z_position_at_the_command_end: Optional[float] = None,
     grip_strength: int = 15,
-    z_speed: int = 50.0,
-    y_gripping_speed: int = 5.0,
+    z_speed: float = 50.0,
+    y_gripping_speed: float = 5.0,
     channel_1: int = 7,
     channel_2: int = 8,
   ):
@@ -2629,7 +2629,7 @@ class STAR(HamiltonLiquidHandler):
       minimum_traverse_height_at_beginning_of_a_command=
         round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10),
       z_position_at_the_command_end=
-        round((self._traversal_height or z_position_at_the_command_end)*10),
+        round((z_position_at_the_command_end or self._traversal_height)*10),
       return_tool=return_tool
     )
 
@@ -2735,17 +2735,17 @@ class STAR(HamiltonLiquidHandler):
 
   async def move_channel_x(self, channel: int, x: float): # pylint: disable=unused-argument
     """ Move a channel in the x direction. """
-    await self.position_left_x_arm_(int(x * 10))
+    await self.position_left_x_arm_(round(x * 10))
 
   async def move_channel_y(self, channel: int, y: float):
     """ Move a channel in the y direction. """
     await self.position_single_pipetting_channel_in_y_direction(
-      pipetting_channel_index=channel + 1, y_position=int(y * 10))
+      pipetting_channel_index=channel + 1, y_position=round(y * 10))
 
   async def move_channel_z(self, channel: int, z: float):
     """ Move a channel in the z direction. """
     await self.position_single_pipetting_channel_in_z_direction(
-      pipetting_channel_index=channel + 1, z_position=int(z*10))
+      pipetting_channel_index=channel + 1, z_position=round(z*10))
 
   # ============== Firmware Commands ==============
 
@@ -4236,7 +4236,7 @@ class STAR(HamiltonLiquidHandler):
       pb=f"{p2:02}",
       tp=f"{2350 + self.core_adjustment.z:04}",
       tz=f"{2250 + self.core_adjustment.z:04}",
-      th=int(self._traversal_height * 10),
+      th=round(self._traversal_height * 10),
       tt="14"
     )
     self._core_parked = False
@@ -4262,8 +4262,8 @@ class STAR(HamiltonLiquidHandler):
       yb=f"{1065 + self.core_adjustment.y:04}",
       tp=f"{2150 + self.core_adjustment.z:04}",
       tz=f"{2050 + self.core_adjustment.z:04}",
-      th=int(self._traversal_height * 10),
-      te=int(self._traversal_height * 10),
+      th=round(self._traversal_height * 10),
+      te=round(self._traversal_height * 10),
     )
     self._core_parked = True
     return command_output
@@ -4433,7 +4433,7 @@ class STAR(HamiltonLiquidHandler):
 
     center = location + resource.centers()[0] + offset
     y_width_to_gripper_bump = resource.get_size_y() - gripper_y_margin*2
-    assert 9 <= y_width_to_gripper_bump <= int(resource.get_size_y()), \
+    assert 9 <= y_width_to_gripper_bump <= round(resource.get_size_y()), \
       f"width between channels must be between 9 and {resource.get_size_y()} mm" \
       " (i.e. the minimal distance between channels and the max y size of the resource"
 
@@ -4448,11 +4448,11 @@ class STAR(HamiltonLiquidHandler):
     while not resource_found:
       try:
         await self.core_get_plate(
-          x_position=int(center.x * 10),
-          y_position=int(center.y * 10),
-          z_position=int(center.z * 10),
-          open_gripper_position=int(y_width_to_gripper_bump * 10),
-          plate_width=int(y_width_to_gripper_bump * 10),
+          x_position=round(center.x * 10),
+          y_position=round(center.y * 10),
+          z_position=round(center.z * 10),
+          open_gripper_position=round(y_width_to_gripper_bump * 10),
+          plate_width=round(y_width_to_gripper_bump * 10),
           # Set default values based on VENUS check_plate commands
           y_gripping_speed=50,
           x_direction=0,
@@ -6853,7 +6853,7 @@ class STAR(HamiltonLiquidHandler):
 
     # Ensure proper temperature input handling
     if isinstance(temp, (float, int)):
-      safe_temp_str = f"{int(temp * 10):04d}"
+      safe_temp_str = f"{round(temp * 10):04d}"
     else:
       safe_temp_str = str(temp)
 
