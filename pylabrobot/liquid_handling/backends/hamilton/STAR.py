@@ -2753,8 +2753,8 @@ class STAR(HamiltonLiquidHandler):
     resource: Resource,
     gripper_y_margin: float = 0.5,
     offset: Coordinate = Coordinate.zero(),
-    minimum_traverse_height_at_beginning_of_a_command: int = 275.0,
-    z_position_at_the_command_end: int = 275.0,
+    minimum_traverse_height_at_beginning_of_a_command: float = 275.0,
+    z_position_at_the_command_end: float = 275.0,
     enable_recovery: bool = True,
     audio_feedback: bool = True
   ) -> bool:
