@@ -2751,10 +2751,10 @@ class STAR(HamiltonLiquidHandler):
     self,
     location: Coordinate,
     resource: Resource,
-    gripper_y_margin: float = 5,
+    gripper_y_margin: float = 0.5,
     offset: Coordinate = Coordinate.zero(),
-    minimum_traverse_height_at_beginning_of_a_command: int = 2750,
-    z_position_at_the_command_end: int = 2750,
+    minimum_traverse_height_at_beginning_of_a_command: int = 275.0,
+    z_position_at_the_command_end: int = 275.0,
     enable_recovery: bool = True,
     audio_feedback: bool = True
   ) -> bool:
@@ -2770,17 +2770,16 @@ class STAR(HamiltonLiquidHandler):
           and the grippers during "bumping" / checking
         offset: Offset from resource position in mm.
         minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of
-          a command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm').
-          Must be between 0 and 3600. Default 3600.
-        z_position_at_the_command_end: Minimum z-Position at end of a command [0.1 mm] (refers to
-          all channels independent of tip pattern parameter 'tm'). Must be between 0 and 3600.
-          Default 3600.
+          a command [mm] (refers to all channels independent of tip pattern parameter 'tm').
+          Must be between 0 and 360.0.
+        z_position_at_the_command_end: Minimum z-Position at end of a command [mm] (refers to
+          all channels independent of tip pattern parameter 'tm'). Must be between 0 and 360.0.
         enable_recovery: if True will ask for user input if resource was not found
         audio_feedback: enable controlling computer to emit different sounds when
           finding/not finding the resource
 
       Returns:
-        bool: True if resource was found, False if resource was not found
+        True if resource was found, False if resource was not found
       """
 
     center = location + resource.centers()[0] + offset
@@ -2811,9 +2810,9 @@ class STAR(HamiltonLiquidHandler):
           z_speed=600,
           grip_strength = 20,
           # Enable mods of channel z position for check acceleration
-          minimum_traverse_height_at_beginning_of_a_command = \
-            minimum_traverse_height_at_beginning_of_a_command,
-          minimum_z_position_at_the_command_end = z_position_at_the_command_end,
+          minimum_traverse_height_at_beginning_of_a_command=
+            round(minimum_traverse_height_at_beginning_of_a_command*10),
+          minimum_z_position_at_the_command_end=round(z_position_at_the_command_end*10),
         )
       except STARFirmwareError as exc:
         for module_error in exc.errors.values():
