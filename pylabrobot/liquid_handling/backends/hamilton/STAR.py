@@ -2498,6 +2498,141 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=collision_control_level,
     )
 
+  async def core_pick_up_resource(
+    self,
+    resource: Resource,
+    pickup_distance_from_top: float,
+    offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    minimum_z_position_at_the_command_end: Optional[float] = None,
+    grip_strength: int = 15,
+    z_speed: int = 50.0,
+    y_gripping_speed: int = 5.0,
+    channel_1: int = 7,
+    channel_2: int = 8,
+  ):
+    """ Pick up resource with CoRe gripper tool
+    Low level component of :meth:`move_resource`
+
+    Args:
+      resource: Resource to pick up.
+      offset: Offset from resource position in mm.
+      pickup_distance_from_top: Distance from top of resource to pick up.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
+        command [mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
+        between 0 and 360.
+      grip_strength: Grip strength (0 = weak, 99 = strong). Must be between 0 and 99. Default 15.
+      z_speed: Z speed [mm/s]. Must be between 0.4 and 128.7. Default 50.0.
+      y_gripping_speed: Y gripping speed [mm/s]. Must be between 0 and 370.0. Default 5.0.
+      channel_1: Channel 1. Must be between 0 and self._num_channels - 1. Default 7.
+      channel_2: Channel 2. Must be between 1 and self._num_channels. Default 8.
+    """
+
+    # Get center of source plate. Also gripping height and plate width.
+    center = resource.get_absolute_location() + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    grip_width = resource.get_size_y() #grip width is y size of resource
+
+    if self.core_parked:
+      await self.get_core(p1=channel_1, p2=channel_2)
+
+    await self.core_get_plate(
+      x_position=round(center.x * 10),
+      x_direction=0,
+      y_position=round(center.y * 10),
+      y_gripping_speed=round(y_gripping_speed*10),
+      z_position=round(grip_height * 10),
+      z_speed=round(z_speed*10),
+      open_gripper_position=round(grip_width*10) + 30,
+      plate_width=round(grip_width*10) - 30,
+      grip_strength=grip_strength,
+      minimum_traverse_height_at_beginning_of_a_command=
+        round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)*10),
+      minimum_z_position_at_the_command_end=
+        round((minimum_z_position_at_the_command_end or self._traversal_height)*10),
+    )
+
+  async def core_move_picked_up_resource(
+    self,
+    location: Coordinate,
+    resource: Resource,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    acceleration_index: int = 4,
+    z_speed: float = 50.0,
+  ):
+    """ After a ressource is picked up, move it to a new location but don't release it yet.
+    Low level component of :meth:`move_resource`
+
+    Args:
+      location: Location to move to.
+      resource: Resource to move.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
+        command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
+        between 0 and 3600. Default 3600.
+      acceleration_index: Acceleration index (0 = 0.1 mm/s2, 1 = 0.2 mm/s2, 2 = 0.5 mm/s2,
+        3 = 1.0 mm/s2, 4 = 2.0 mm/s2, 5 = 5.0 mm/s2, 6 = 10.0 mm/s2, 7 = 20.0 mm/s2). Must be
+        between 0 and 7. Default 4.
+      z_speed: Z speed [0.1mm/s]. Must be between 3 and 1600. Default 500.
+    """
+
+    center = location + resource.center()
+
+    await self.core_move_plate_to_position(
+      x_position=round(center.x * 10),
+      x_direction=0,
+      x_acceleration_index=acceleration_index,
+      y_position=round(center.y * 10),
+      z_position=round(center.z * 10),
+      z_speed=round(z_speed*10),
+      minimum_traverse_height_at_beginning_of_a_command=
+        round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)*10),
+    )
+
+  async def core_release_picked_up_resource(
+    self,
+    location: Coordinate,
+    resource: Resource,
+    pickup_distance_from_top: float,
+    offset: Coordinate = Coordinate.zero(),
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    z_position_at_the_command_end: Optional[float] = None,
+    return_tool: bool = True
+  ):
+    """ Place resource with CoRe gripper tool
+    Low level component of :meth:`move_resource`
+
+    Args:
+      resource: Location to place.
+      pickup_distance_from_top: Distance from top of resource to place.
+      offset: Offset from resource position in mm.
+      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
+        command [mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
+        between 0 and 360.0.
+      z_position_at_the_command_end: Minimum z-Position at end of a command [mm] (refers to all
+        channels independent of tip pattern parameter 'tm'). Must be between 0 and 360.0
+      return_tool: Return tool to wasteblock mount after placing. Default True.
+    """
+
+    # Get center of destination location. Also gripping height and plate width.
+    center = location + resource.center() + offset
+    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    grip_width = resource.get_size_y()
+
+    await self.core_put_plate(
+      x_position=round(center.x * 10),
+      x_direction=0,
+      y_position=round(center.y * 10),
+      z_position=round(grip_height * 10),
+      z_press_on_distance=0,
+      z_speed=500,
+      open_gripper_position=round(grip_width*10) + 30,
+      minimum_traverse_height_at_beginning_of_a_command=
+        round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10),
+      z_position_at_the_command_end=
+        round((self._traversal_height or z_position_at_the_command_end)*10),
+      return_tool=return_tool
+    )
+
   async def move_resource(
     self,
     move: Move,
@@ -4133,147 +4268,9 @@ class STAR(HamiltonLiquidHandler):
     self._core_parked = True
     return command_output
 
-  async def core_pick_up_resource(
-    self,
-    resource: Resource,
-    pickup_distance_from_top: float,
-    offset: Coordinate = Coordinate.zero(),
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    minimum_z_position_at_the_command_end: Optional[float] = None,
-    grip_strength: int = 15,
-    z_speed: int = 50.0,
-    y_gripping_speed: int = 5.0,
-    channel_1: int = 7,
-    channel_2: int = 8,
-  ):
-    """ Pick up resource with CoRe gripper tool
-    Low level component of :meth:`move_resource`
-
-    Args:
-      resource: Resource to pick up.
-      offset: Offset from resource position in mm.
-      pickup_distance_from_top: Distance from top of resource to pick up.
-      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
-        command [mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
-        between 0 and 360.
-      grip_strength: Grip strength (0 = weak, 99 = strong). Must be between 0 and 99. Default 15.
-      z_speed: Z speed [mm/s]. Must be between 0.4 and 128.7. Default 50.0.
-      y_gripping_speed: Y gripping speed [mm/s]. Must be between 0 and 370.0. Default 5.0.
-      channel_1: Channel 1. Must be between 0 and self._num_channels - 1. Default 7.
-      channel_2: Channel 2. Must be between 1 and self._num_channels. Default 8.
-    """
-
-    # Get center of source plate. Also gripping height and plate width.
-    center = resource.get_absolute_location() + resource.center() + offset
-    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    grip_width = resource.get_size_y() #grip width is y size of resource
-
-    if self.core_parked:
-      await self.get_core(p1=channel_1, p2=channel_2)
-
-    await self.core_get_plate(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      y_position=round(center.y * 10),
-      y_gripping_speed=round(y_gripping_speed*10),
-      z_position=round(grip_height * 10),
-      z_speed=round(z_speed*10),
-      open_gripper_position=round(grip_width*10) + 30,
-      plate_width=round(grip_width*10) - 30,
-      grip_strength=grip_strength,
-      minimum_traverse_height_at_beginning_of_a_command=
-        round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)*10),
-      minimum_z_position_at_the_command_end=
-        round((minimum_z_position_at_the_command_end or self._traversal_height)*10),
-    )
-
-  async def core_move_picked_up_resource(
-    self,
-    location: Coordinate,
-    resource: Resource,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    acceleration_index: int = 4,
-    z_speed: float = 50.0,
-  ):
-    """ After a ressource is picked up, move it to a new location but don't release it yet.
-    Low level component of :meth:`move_resource`
-
-    Args:
-      location: Location to move to.
-      resource: Resource to move.
-      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
-        command [0.1mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
-        between 0 and 3600. Default 3600.
-      acceleration_index: Acceleration index (0 = 0.1 mm/s2, 1 = 0.2 mm/s2, 2 = 0.5 mm/s2,
-        3 = 1.0 mm/s2, 4 = 2.0 mm/s2, 5 = 5.0 mm/s2, 6 = 10.0 mm/s2, 7 = 20.0 mm/s2). Must be
-        between 0 and 7. Default 4.
-      z_speed: Z speed [0.1mm/s]. Must be between 3 and 1600. Default 500.
-    """
-
-    center = location + resource.center()
-
-    await self.core_move_plate_to_position(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      x_acceleration_index=acceleration_index,
-      y_position=round(center.y * 10),
-      z_position=round(center.z * 10),
-      z_speed=round(z_speed*10),
-      minimum_traverse_height_at_beginning_of_a_command=
-        round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)*10),
-    )
-
-  async def core_release_picked_up_resource(
-    self,
-    location: Coordinate,
-    resource: Resource,
-    pickup_distance_from_top: float,
-    offset: Coordinate = Coordinate.zero(),
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    z_position_at_the_command_end: Optional[float] = None,
-    return_tool: bool = True
-  ):
-    """ Place resource with CoRe gripper tool
-    Low level component of :meth:`move_resource`
-
-    Args:
-      resource: Location to place.
-      pickup_distance_from_top: Distance from top of resource to place.
-      offset: Offset from resource position in mm.
-      minimum_traverse_height_at_beginning_of_a_command: Minimum traverse height at beginning of a
-        command [mm] (refers to all channels independent of tip pattern parameter 'tm'). Must be
-        between 0 and 360.0.
-      z_position_at_the_command_end: Minimum z-Position at end of a command [mm] (refers to all
-        channels independent of tip pattern parameter 'tm'). Must be between 0 and 360.0
-      return_tool: Return tool to wasteblock mount after placing. Default True.
-    """
-
-    # Get center of destination location. Also gripping height and plate width.
-    center = location + resource.center() + offset
-    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    grip_width = resource.get_size_y()
-
-    await self.core_put_plate(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      y_position=round(center.y * 10),
-      z_position=round(grip_height * 10),
-      z_press_on_distance=0,
-      z_speed=500,
-      open_gripper_position=round(grip_width*10) + 30,
-      minimum_traverse_height_at_beginning_of_a_command=
-        round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10),
-      z_position_at_the_command_end=
-        round((self._traversal_height or z_position_at_the_command_end)*10),
-      return_tool=return_tool
-    )
-
   async def core_open_gripper(self):
     """ Open CoRe gripper tool. """
-    command_output = await self.send_command(
-      module="C0",
-      command="ZO")
-    return command_output
+    return await self.send_command(module="C0", command="ZO")
 
   @need_iswap_parked
   async def core_get_plate(
