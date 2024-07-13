@@ -1772,8 +1772,8 @@ class LiquidHandler(Machine):
         # TODO: add pedestal handling here once Plate is fixed
       else:
         top_plate = to.get_top_item()
-        to_location = (top_plate.get_absolute_location() 
-                      if top_plate.lid 
+        to_location = (top_plate.get_absolute_location()
+                      if top_plate.lid
                       else to.get_absolute_location())
         if top_plate.lid:
           top_plate_lid_offset = top_plate.lid.get_size_z() - top_plate.lid.nesting_z_height

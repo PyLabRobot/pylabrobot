@@ -79,13 +79,16 @@ class ResourceStack(Resource):
 
   def get_size_z(self) -> float:
     if not self.children:
-        return 0
+      return 0
     if self.direction == "z":
-      return sum(
+      if isinstance(self.children[0], Plate): # Assumption: all Resources will be plates
+        return sum(
           child.get_size_z() + (
-              (child.lid.get_size_z() - child.lid.nesting_z_height) if child.lid else 0
+            (child.lid.get_size_z() - child.lid.nesting_z_height) if child.lid else 0
           ) for child in self.children
-      )
+        )
+      else:
+        return sum(child.get_size_z() for child in self.children)
     else:
       raise NotImplementedError("Only self.direction == 'z' is currently supported")
 
@@ -93,7 +96,7 @@ class ResourceStack(Resource):
     # Determine child origin (front-left-bottom) location coordinates
     # update child location (relative to self): we place the child after the last child in the stack
     x, y, z = 0, 0, 0
-    
+
     if self.direction == "x":
       x = self.get_size_x()
     elif self.direction == "y":
