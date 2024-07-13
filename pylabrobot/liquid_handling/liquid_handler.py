@@ -1766,22 +1766,23 @@ class LiquidHandler(Machine):
 
     if isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      if not to.children:
-        print(F"First plate added to ResourceStack '{to.name}'")
-        to_location = to.get_absolute_location()  # if ResourceStack is empty
+      if len(to.children) == 0: # if ResourceStack is empty
+        to_location = to.get_absolute_location()
         # TODO: add pedestal handling here once Plate is fixed
       else:
         top_plate = to.get_top_item()
-        to_location = (top_plate.get_absolute_location()
-                      if top_plate.lid
-                      else to.get_absolute_location())
-        if top_plate.lid:
+        if not isinstance(top_plate, Plate):
+          raise ValueError("Cannot move a plate to a ResourceStack with a non-plate top item")
+
+        if top_plate.has_lid:
+          to_location = top_plate.get_absolute_location()
           top_plate_lid_offset = top_plate.lid.get_size_z() - top_plate.lid.nesting_z_height
           to_location = Coordinate(
             x=to_location.x,
             y=to_location.y,
             z=to_location.z + top_plate.get_size_z() + top_plate_lid_offset)
         else:
+          to_location = to.get_absolute_location()
           to_location = Coordinate(
             x=to_location.x,
             y=to_location.y,
