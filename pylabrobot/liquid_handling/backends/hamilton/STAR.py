@@ -1453,11 +1453,11 @@ class STAR(HamiltonLiquidHandler):
     swap_speed: Optional[List[float]] = None,
     settling_time: Optional[List[float]] = None,
     homogenization_volume: Optional[List[float]] = None,
-    homogenization_cycles: Optional[List[float]] = None,
+    homogenization_cycles: Optional[List[int]] = None,
     homogenization_position_from_liquid_surface: Optional[List[float]] = None,
     homogenization_speed: Optional[List[float]] = None,
     homogenization_surface_following_distance: Optional[List[float]] = None,
-    limit_curve_index: Optional[List[float]] = None,
+    limit_curve_index: Optional[List[int]] = None,
 
     use_2nd_section_aspiration: Optional[List[bool]] = None,
     retract_height_over_2nd_section_to_empty_tip: Optional[List[float]] = None,

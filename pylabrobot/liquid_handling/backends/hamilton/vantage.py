@@ -863,8 +863,8 @@ class Vantage(HamiltonLiquidHandler):
     pickup: PickupTipRack,
     tip_handling_method: int = 0,
     z_deposit_position: float = 216.4,
-    minimal_traverse_height_at_begin_of_command: Optional[int] = None,
-    minimal_height_at_command_end: Optional[int] = None
+    minimal_traverse_height_at_begin_of_command: Optional[float] = None,
+    minimal_height_at_command_end: Optional[float] = None
   ):
     # assert self.core96_head_installed, "96 head must be installed"
     tip_spot_a1 = pickup.resource.get_item("A1")
@@ -873,18 +873,17 @@ class Vantage(HamiltonLiquidHandler):
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
     position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
     offset_z = pickup.offset.z
-    z_deposit_position = round((z_deposit_position + offset_z) * 10)
 
     return await self.core96_tip_pick_up(
       x_position=round(position.x * 10),
       y_position=round(position.y * 10),
       tip_type=ttti,
       tip_handling_method=tip_handling_method,
-      z_deposit_position=z_deposit_position,
-      minimal_traverse_height_at_begin_of_command=minimal_traverse_height_at_begin_of_command or
-        round(self._traversal_height*10),
-      minimal_height_at_command_end=minimal_height_at_command_end or
-        round(self._traversal_height*10),
+      z_deposit_position=round((z_deposit_position + offset_z) * 10),
+      minimal_traverse_height_at_begin_of_command=
+        round((minimal_traverse_height_at_begin_of_command or self._traversal_height) * 10),
+      minimal_height_at_command_end=
+        round((minimal_height_at_command_end or self._traversal_height)*10)
     )
 
   async def drop_tips96(
