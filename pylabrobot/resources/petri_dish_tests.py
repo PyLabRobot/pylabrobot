@@ -8,13 +8,14 @@ class TestPetriDish(unittest.TestCase):
   """ Test the PetriDish and PetriDishHolder classes """
 
   def test_petri_dish_serialization(self):
-    petri_dish = PetriDish("petri_dish", 90.0, 15.0)
+    petri_dish = PetriDish("petri_dish", diameter=90.0, height=15.0)
     serialized = petri_dish.serialize()
     self.assertEqual(serialized, {
       "name": "petri_dish",
       "category": "petri_dish",
       "diameter": 90.0,
       "height": 15.0,
+      "material_z_thickness": None,
       "parent_name": None,
       "type": "PetriDish",
       "children": [],

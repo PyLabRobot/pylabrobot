@@ -9,7 +9,6 @@ from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_ubottom
 from pylabrobot.resources.height_functions import calculate_liquid_height_in_container_2segments_square_ubottom
 
-import warnings
 
 # # # # # # # # # # ThermoScientific_96_wellplate_1200ul_Rd # # # # # # # # # #
 
@@ -46,13 +45,8 @@ def ThermoScientific_96_wellplate_1200ul_Rd_Lid(name: str) -> Lid:
   # )
 
 def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
-  warnings.warn(
-        "This function is deprecated and will be removed in a future version." + \
-          " Use 'ThermoScientific_96_wellplate_1200ul_Rd' instead.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-  return ThermoScientific_96_wellplate_1200ul_Rd(name=name, with_lid=with_lid)
+  raise NotImplementedError("This function is deprecated and will be removed in a future version."
+          " Use 'ThermoScientific_96_wellplate_1200ul_Rd' instead.")
 
 
 def ThermoScientific_96_wellplate_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
@@ -77,14 +71,13 @@ def ThermoScientific_96_wellplate_1200ul_Rd(name: str, with_lid: bool = False) -
     size_z=24.0,
     lid=ThermoScientific_96_wellplate_1200ul_Rd_Lid(name + "_lid") if with_lid else None,
     model="ThermoScientific_96_wellplate_1200ul_Rd",
-    skirt_base_to_well_base=2.5,
     items=create_equally_spaced_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=10.0,
       dy=7.3,
-      dz=1.0, # TODO: after Plate update, dz should be skirt_base_to_well_base +
-      item_dx=9, # material_z_thickness
+      dz=2.5,
+      item_dx=9,
       item_dy=9,
       size_x=8.3,
       size_y=8.3,
