@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
 from pylabrobot.machines.backends import USBBackend
-from pylabrobot.resources import TipSpot, Well
+from pylabrobot.resources import TipSpot
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 T = TypeVar("T")
@@ -330,20 +330,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         x_positions.append(0)
         y_positions.append(0)
       channels_involved.append(True)
-      offset = ops[i].offset
 
-      x_pos = ops[i].resource.get_absolute_location().x
-      if isinstance(ops[i].resource, (TipSpot, Well)):
-        x_pos += ops[i].resource.center().x
-      if offset is not None:
-        x_pos += offset.x
+      x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
       x_positions.append(int(x_pos*10))
 
-      y_pos = ops[i].resource.get_absolute_location().y
-      if isinstance(ops[i].resource, (TipSpot, Well)):
-        y_pos += ops[i].resource.center().y
-      if offset is not None:
-        y_pos += offset.y
+      y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
       y_positions.append(int(y_pos*10))
 
     # check that the minimum d between any two y positions is >9mm
