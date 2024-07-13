@@ -78,9 +78,6 @@ class ResourceStack(Resource):
     return max(resource.get_size_y() for resource in self.children)
 
   def get_size_z(self) -> float:
-    if self.direction != "z":
-      raise NotImplementedError("Only self.direction == 'z' is currently supported")
-
     def get_actual_resource_height(resource: Resource) -> float:
       """ Helper function to get the actual height of a resource, accounting for the lid nesting
       height if the resource is a plate with a lid. """
@@ -88,6 +85,8 @@ class ResourceStack(Resource):
         return resource.get_size_z() + resource.lid.get_size_z() - resource.lid.nesting_z_height
       return resource.get_size_z()
 
+    if self.direction != "z":
+      return max(get_actual_resource_height(child) for child in self.children)
     return sum(get_actual_resource_height(child) for child in self.children)
 
   def assign_child_resource(self, resource: Resource):
