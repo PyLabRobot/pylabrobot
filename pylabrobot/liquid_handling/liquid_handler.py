@@ -1774,7 +1774,7 @@ class LiquidHandler(Machine):
         if not isinstance(top_plate, Plate):
           raise ValueError("Cannot move a plate to a ResourceStack with a non-plate top item")
 
-        if top_plate.has_lid:
+        if top_plate.lid is not None:
           to_location = top_plate.get_absolute_location()
           top_plate_lid_offset = top_plate.lid.get_size_z() - top_plate.lid.nesting_z_height
           to_location = Coordinate(
@@ -1793,6 +1793,8 @@ class LiquidHandler(Machine):
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = to.compute_plate_location(plate)
       to_location = to.get_absolute_location() + adjusted_plate_anchor
+    elif isinstance(to, Coordinate):
+      to_location = to
     else:
       to_location = to.get_absolute_location()
 

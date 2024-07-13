@@ -81,7 +81,7 @@ class ResourceStack(Resource):
     def get_actual_resource_height(resource: Resource) -> float:
       """ Helper function to get the actual height of a resource, accounting for the lid nesting
       height if the resource is a plate with a lid. """
-      if isinstance(resource, Plate) and resource.has_lid:
+      if isinstance(resource, Plate) and resource.lid is not None:
         return resource.get_size_z() + resource.lid.get_size_z() - resource.lid.nesting_z_height
       return resource.get_size_z()
 
@@ -89,7 +89,11 @@ class ResourceStack(Resource):
       return max(get_actual_resource_height(child) for child in self.children)
     return sum(get_actual_resource_height(child) for child in self.children)
 
-  def assign_child_resource(self, resource: Resource):
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = False):
     # Determine child origin (front-left-bottom) location coordinates
     # update child location (relative to self): we place the child after the last child in the stack
 
@@ -99,12 +103,13 @@ class ResourceStack(Resource):
       resource_location = Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
       z = self.get_size_z()
-      if isinstance(resource, Lid):
-        z -= resource.nesting_z_height
-        # TODO: building lid stack, currently assumes self.get_top_item() is a compatible plate
-        # have to add a check of what self.get_top_item() is to modify for lid stacking
-      elif isinstance(resource, Plate):
-        if self.children:
+      if len(self.children) > 0:
+        top_item = self.get_top_item()
+        if isinstance(resource, Lid) and isinstance(top_item, Plate):
+          z -= resource.nesting_z_height
+          # TODO: building lid stack, currently assumes self.get_top_item() is a compatible plate
+          # have to add a check of what self.get_top_item() is to modify for lid stacking
+        elif isinstance(resource, Plate):
           top_plate = self.get_top_item()
           if top_plate.lid:
             z = self.get_size_z() - top_plate.lid.nesting_z_height + top_plate.lid.get_size_z()
