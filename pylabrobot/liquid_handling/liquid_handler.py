@@ -1689,11 +1689,7 @@ class LiquidHandler(Machine):
         z=to_location.z  + to.get_size_z() - lid.nesting_z_height)
     elif isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      to_location = to.get_absolute_location()
-      to_location = Coordinate(
-        x=to_location.x,
-        y=to_location.y,
-        z=to_location.z  + to.get_size_z())
+      to_location = to.get_absolute_location(z="top")
     elif isinstance(to, Coordinate):
       to_location = to
     else:
@@ -1766,27 +1762,7 @@ class LiquidHandler(Machine):
 
     if isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      if len(to.children) == 0: # if ResourceStack is empty
-        to_location = to.get_absolute_location()
-        # TODO: add pedestal handling here once Plate is fixed
-      else:
-        top_plate = to.get_top_item()
-        if not isinstance(top_plate, Plate):
-          raise ValueError("Cannot move a plate to a ResourceStack with a non-plate top item")
-
-        if top_plate.lid is not None:
-          to_location = top_plate.get_absolute_location()
-          top_plate_lid_offset = top_plate.lid.get_size_z() - top_plate.lid.nesting_z_height
-          to_location = Coordinate(
-            x=to_location.x,
-            y=to_location.y,
-            z=to_location.z + top_plate.get_size_z() + top_plate_lid_offset)
-        else:
-          to_location = to.get_absolute_location()
-          to_location = Coordinate(
-            x=to_location.x,
-            y=to_location.y,
-            z=to_location.z + to.get_size_z())
+      to_location = to.get_absolute_location(z="top")
     elif isinstance(to, MFXModule):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateAdapter):
@@ -1818,6 +1794,8 @@ class LiquidHandler(Machine):
     elif isinstance(to, CarrierSite): # .zero() resources
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
+      if isinstance(to, ResourceStack) and to.direction != "z":
+        raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       to.assign_child_resource(plate)
     elif isinstance(to, MFXModule):
       to.assign_child_resource(plate, location=to.child_resource_location)

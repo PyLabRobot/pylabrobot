@@ -20,6 +20,7 @@ from pylabrobot.resources import (
   Deck,
   Lid,
   Plate,
+  ResourceStack,
   TipRack,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
@@ -214,6 +215,36 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     assert plate.get_absolute_location().y == lid.get_absolute_location().y
     assert plate.get_absolute_location().z + plate.get_size_z() - lid_height \
       == lid.get_absolute_location().z
+
+  async def test_move_plate_onto_resource_stack_with_lid(self):
+    plate = Plate("plate", size_x=100, size_y=100, size_z=15, items=[])
+    lid = Lid(name="lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
+      size_z=10, nesting_z_height=4)
+
+    stack = ResourceStack("stack", direction="z")
+    self.deck.assign_child_resource(stack, location=Coordinate(100, 100, 0))
+
+    await self.lh.move_plate(plate, stack)
+    await self.lh.move_lid(lid, plate)
+
+    self.assertEqual(plate.location.z, 0)
+    self.assertEqual(lid.location.z, 11)
+    self.assertEqual(plate.lid, lid)
+    self.assertEqual(stack.get_size_z(), 21)
+
+  async def test_move_plate_onto_resource_stack_with_plate(self):
+    plate1 = Plate("plate1", size_x=100, size_y=100, size_z=15, items=[])
+    plate2 = Plate("plate2", size_x=100, size_y=100, size_z=15, items=[])
+
+    stack = ResourceStack("stack", direction="z")
+
+    self.deck.assign_child_resource(stack, location=Coordinate(100, 100, 0))
+    await self.lh.move_plate(plate1, stack)
+    await self.lh.move_plate(plate2, stack)
+
+    self.assertEqual(plate1.location.z, 0)
+    self.assertEqual(plate2.location.z, 15)
+    self.assertEqual(stack.get_size_z(), 30)
 
   def test_serialize(self):
     serialized = self.lh.serialize()
