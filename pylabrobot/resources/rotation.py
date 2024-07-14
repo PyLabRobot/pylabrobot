@@ -35,9 +35,9 @@ class Rotation:
   def __str__(self) -> str:
     return f"Rotation(xy={self.xy}, xz={self.xz}, yz={self.yz})"
 
-  def __add__(self, other) -> 'Rotation':
+  def __add__(self, other) -> "Rotation":
     return Rotation(self.xy + other.xy, self.xz + other.xz, self.yz + other.yz)
 
   @staticmethod
-  def deserialize(data) -> 'Rotation':
+  def deserialize(data) -> "Rotation":
     return Rotation(data["xy"], data["xz"], data["yz"])

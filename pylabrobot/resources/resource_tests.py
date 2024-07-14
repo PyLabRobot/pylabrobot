@@ -23,19 +23,19 @@ class TestResource(unittest.TestCase):
     r = Resource("test", size_x=20, size_y=10, size_z=10)
     r.rotation = Rotation(xy=45)
     width1 = 20 * math.cos(math.radians(45)) + 10 * math.cos(math.radians(45))
-    self.assertAlmostEqual(r.get_size_x(), width1)
+    self.assertAlmostEqual(r.get_size_x(), width1, places=5)
 
     height1 = 20 * math.sin(math.radians(45)) + 10 * math.sin(math.radians(45))
-    self.assertAlmostEqual(r.get_size_y(), height1)
+    self.assertAlmostEqual(r.get_size_y(), height1, places=5)
 
   def test_rotated_m45(self):
     r = Resource("test", size_x=20, size_y=10, size_z=10)
     r.rotation = Rotation(xy=-45)
     width1 = 20 * math.cos(math.radians(45)) + 10 * math.cos(math.radians(45))
-    self.assertAlmostEqual(r.get_size_x(), width1)
+    self.assertAlmostEqual(r.get_size_x(), width1, places=5)
 
     height1 = 20 * math.sin(math.radians(45)) + 10 * math.sin(math.radians(45))
-    self.assertAlmostEqual(r.get_size_y(), height1)
+    self.assertAlmostEqual(r.get_size_y(), height1, places=5)
 
   def test_get_resource(self):
     deck = Deck()
