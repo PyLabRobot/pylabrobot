@@ -641,8 +641,9 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "C0PRid0004xs10427xd0yj3285yd0zj2063zd0th2450te2450go1307gr4ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####go####gr#ga#")
 
-    assert self.plate.rotation == 90
-    assert self.plate.get_size_x() == 85.48 and self.plate.get_size_y() == 127.76
+    assert self.plate.rotation.z == 90
+    self.assertAlmostEqual(self.plate.get_size_x(), 85.48, places=2)
+    self.assertAlmostEqual(self.plate.get_size_y(), 127.76, places=2)
 
     await self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0],
       pickup_distance_from_top=8.2, get_direction=GripDirection.LEFT,
@@ -761,6 +762,9 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     lh = LiquidHandler(self.mockSTAR, deck=deck)
     tip_car = TIP_CAR_288_C00(name="tip carrier")
     tip_car[0] = tr = HT_P(name="tips_01")
+    assert tr.rotation.z == 90
+    assert tr.location == Coordinate(82.6, 0, 0)
+    print(tr.get_item("A1").location)
     deck.assign_child_resource(tip_car, rails=2)
     await lh.setup()
 

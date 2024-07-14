@@ -1633,7 +1633,7 @@ class LiquidHandler(Machine):
     # rotate the resource if the move operation has a rotation.
     # this code should be expanded to also update the resource's location
     if move_operation.rotation != 0:
-      move_operation.resource.rotate(move_operation.rotation)
+      move_operation.resource.rotate(z=move_operation.rotation)
 
     self._trigger_callback(
       "move_resource",
