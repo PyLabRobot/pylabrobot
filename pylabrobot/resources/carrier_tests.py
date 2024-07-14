@@ -171,7 +171,7 @@ class CarrierTests(unittest.TestCase):
       "location": None,
       "rotation": {
         "type": "Rotation",
-        "y": 0, "z": 0, "x": 0
+        "x": 0, "y": 0, "z": 0
       },
       "category": "tip_carrier",
       "model": None,
@@ -191,7 +191,7 @@ class CarrierTests(unittest.TestCase):
           },
           "rotation": {
             "type": "Rotation",
-            "y": 0, "z": 0, "x": 0
+            "x": 0, "y": 0, "z": 0
           },
           "category": "carrier_site",
           "children": [],
@@ -212,7 +212,7 @@ class CarrierTests(unittest.TestCase):
           },
           "rotation": {
             "type": "Rotation",
-            "y": 0, "z": 0, "x": 0
+            "x": 0, "y": 0, "z": 0
           },
           "category": "carrier_site",
           "children": [],
@@ -233,7 +233,7 @@ class CarrierTests(unittest.TestCase):
           },
           "rotation": {
             "type": "Rotation",
-            "y": 0, "z": 0, "x": 0
+            "x": 0, "y": 0, "z": 0
           },
           "category": "carrier_site",
           "children": [],
@@ -254,7 +254,7 @@ class CarrierTests(unittest.TestCase):
           },
           "rotation": {
             "type": "Rotation",
-            "y": 0, "z": 0, "x": 0
+            "x": 0, "y": 0, "z": 0
           },
           "category": "carrier_site",
           "children": [],
@@ -275,7 +275,7 @@ class CarrierTests(unittest.TestCase):
           },
           "rotation": {
             "type": "Rotation",
-            "y": 0, "z": 0, "x": 0
+            "x": 0, "y": 0, "z": 0
           },
           "category": "carrier_site",
           "children": [],
