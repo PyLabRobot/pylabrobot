@@ -24,7 +24,10 @@ class TestWell(unittest.TestCase):
       "type": "Well",
       "parent_name": None,
       "location": None,
-      "rotation": 0,
+      "rotation": {
+        "type": "Rotation",
+        "xz": 0, "xy": 0, "yz": 0
+      },
     })
 
     self.assertEqual(Well.deserialize(well.serialize()), well)

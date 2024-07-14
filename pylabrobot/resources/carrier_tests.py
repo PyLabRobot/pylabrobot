@@ -169,7 +169,10 @@ class CarrierTests(unittest.TestCase):
       "size_y": 497.0,
       "size_z": 13.0,
       "location": None,
-      "rotation": 0,
+      "rotation": {
+        "type": "Rotation",
+        "xz": 0, "xy": 0, "yz": 0
+      },
       "category": "tip_carrier",
       "model": None,
       "parent_name": None,
@@ -186,7 +189,10 @@ class CarrierTests(unittest.TestCase):
             "y": 20,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "xz": 0, "xy": 0, "yz": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",
@@ -204,7 +210,10 @@ class CarrierTests(unittest.TestCase):
             "y": 50,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "xz": 0, "xy": 0, "yz": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",
@@ -222,7 +231,10 @@ class CarrierTests(unittest.TestCase):
             "y": 80,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "xz": 0, "xy": 0, "yz": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",
@@ -240,7 +252,10 @@ class CarrierTests(unittest.TestCase):
             "y": 130,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "xz": 0, "xy": 0, "yz": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",
@@ -258,7 +273,10 @@ class CarrierTests(unittest.TestCase):
             "y": 160,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "xz": 0, "xy": 0, "yz": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",
