@@ -90,4 +90,4 @@ def Porvair_6_reservoir_47ml_Vb_L(name: str, with_lid: bool = False) -> Plate:
 
 #: Porvair_6_reservoir_47ml_Vb_P
 def Porvair_6_reservoir_47ml_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  return Porvair_6_reservoir_47ml_Vb(name=name, with_lid=with_lid).rotated(90)
+  return Porvair_6_reservoir_47ml_Vb(name=name, with_lid=with_lid).rotated(z=90)
