@@ -21,7 +21,7 @@ class TestResource(unittest.TestCase):
 
   def test_rotated_45(self):
     r = Resource("test", size_x=20, size_y=10, size_z=10)
-    r.rotation = Rotation(xy=45)
+    r.rotation = Rotation(z=45)
     width1 = 20 * math.cos(math.radians(45)) + 10 * math.cos(math.radians(45))
     self.assertAlmostEqual(r.get_size_x(), width1, places=5)
 
@@ -30,7 +30,7 @@ class TestResource(unittest.TestCase):
 
   def test_rotated_m45(self):
     r = Resource("test", size_x=20, size_y=10, size_z=10)
-    r.rotation = Rotation(xy=-45)
+    r.rotation = Rotation(z=-45)
     width1 = 20 * math.cos(math.radians(45)) + 10 * math.cos(math.radians(45))
     self.assertAlmostEqual(r.get_size_x(), width1, places=5)
 
@@ -163,7 +163,7 @@ class TestResource(unittest.TestCase):
       "location": None,
       "rotation": {
         "type": "Rotation",
-        "xy": 0, "xz": 0, "yz": 0,
+        "x": 0, "y": 0, "z": 0,
       },
       "size_x": 10,
       "size_y": 10,
@@ -185,7 +185,7 @@ class TestResource(unittest.TestCase):
       "location": None,
       "rotation": {
         "type": "Rotation",
-        "xy": 0, "xz": 0, "yz": 0,
+        "x": 0, "y": 0, "z": 0,
       },
       "size_x": 10,
       "size_y": 10,
@@ -200,7 +200,7 @@ class TestResource(unittest.TestCase):
           },
           "rotation": {
             "type": "Rotation",
-            "xy": 0, "xz": 0, "yz": 0,
+            "x": 0, "y": 0, "z": 0,
           },
           "size_x": 1,
           "size_y": 1,
@@ -242,7 +242,7 @@ class TestResource(unittest.TestCase):
     c = Resource("child", size_x=10, size_y=20, size_z=10)
     r.assign_child_resource(c, location=Coordinate(20, 10, 10))
 
-    r.rotate(90)
+    r.rotate(z=90)
     self.assertAlmostEqual(r.get_size_x(), 100)
     self.assertAlmostEqual(r.get_size_y(), 200)
     self.assertEqual(c.get_absolute_location(), Coordinate(-10, 20, 10))
@@ -255,7 +255,7 @@ class TestResource(unittest.TestCase):
     c = Resource("child", size_x=10, size_y=20, size_z=10)
     r.assign_child_resource(c, location=Coordinate(20, 10, 10))
 
-    r.rotate(180)
+    r.rotate(z=180)
     self.assertAlmostEqual(r.get_size_x(), 200)
     self.assertAlmostEqual(r.get_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(x=-20, y=-10, z=10))
@@ -268,7 +268,7 @@ class TestResource(unittest.TestCase):
     c = Resource("child", size_x=10, size_y=20, size_z=10)
     r.assign_child_resource(c, location=Coordinate(20, 10, 10))
 
-    r.rotate(270)
+    r.rotate(z=270)
     self.assertAlmostEqual(r.get_size_x(), 100)
     self.assertAlmostEqual(r.get_size_y(), 200)
     self.assertEqual(c.get_absolute_location(), Coordinate(x=10, y=-20, z=10))
@@ -281,18 +281,18 @@ class TestResource(unittest.TestCase):
     c = Resource("child", size_x=10, size_y=20, size_z=10)
     r.assign_child_resource(c, location=Coordinate(20, 10, 10))
 
-    r.rotate(90)
-    r.rotate(90) # 180
+    r.rotate(z=90)
+    r.rotate(z=90) # 180
     self.assertAlmostEqual(r.get_size_x(), 200)
     self.assertAlmostEqual(r.get_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(x=-20, y=-10, z=10))
 
-    r.rotate(90) # 270
+    r.rotate(z=90) # 270
     self.assertAlmostEqual(r.get_size_x(), 100)
     self.assertAlmostEqual(r.get_size_y(), 200)
     self.assertEqual(c.get_absolute_location(), Coordinate(x=10, y=-20, z=10))
 
-    r.rotate(90) # 0
+    r.rotate(z=90) # 0
     self.assertAlmostEqual(r.get_size_x(), 200)
     self.assertAlmostEqual(r.get_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(20, 10, 10))

@@ -87,4 +87,4 @@ def ThermoScientific_96_DWP_1200ul_Rd_L(name: str, with_lid: bool = False) -> Pl
   return ThermoScientific_96_DWP_1200ul_Rd(name=name, with_lid=with_lid)
 
 def ThermoScientific_96_DWP_1200ul_Rd_P(name: str, with_lid: bool = False) -> Plate:
-  return ThermoScientific_96_DWP_1200ul_Rd(name=name, with_lid=with_lid).rotated(90)
+  return ThermoScientific_96_DWP_1200ul_Rd(name=name, with_lid=with_lid).rotated(z=90)

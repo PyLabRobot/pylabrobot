@@ -108,7 +108,7 @@ def Gre_1536_Sq_L(name: str, with_lid: bool = False) -> Plate:
 
 def Gre_1536_Sq_P(name: str, with_lid: bool = False) -> Plate:
   """ Gre_1536_Sq """
-  return Gre_1536_Sq(name=name, with_lid=with_lid).rotated(90)
+  return Gre_1536_Sq(name=name, with_lid=with_lid).rotated(z=90)
 def _compute_volume_from_height_Greiner96Well_655_101(h: float) -> float:
   volume = min(h, 10.9)*35.0152
   if h > 10.9:

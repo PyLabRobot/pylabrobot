@@ -26,7 +26,7 @@ class TestWell(unittest.TestCase):
       "location": None,
       "rotation": {
         "type": "Rotation",
-        "xz": 0, "xy": 0, "yz": 0
+        "y": 0, "z": 0, "x": 0
       },
     })
 

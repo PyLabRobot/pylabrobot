@@ -124,16 +124,16 @@ class Carrier(Resource, Generic[S]):
     if self.sites[spot].resource is not None:
       raise ValueError(f"spot {spot} already has a resource")
 
-    if not resource.rotation.xz == resource.rotation.yz == 0:
-      raise ValueError("Resource rotation must be 0 on the xz and yz planes")
-    if not resource.rotation.xy % 90 == 0:
-      raise ValueError("Resource rotation must be a multiple of 90 degrees on the xy plane")
+    if not resource.rotation.y == resource.rotation.x == 0:
+      raise ValueError("Resource rotation must be 0 around the x and y axis")
+    if not resource.rotation.z % 90 == 0:
+      raise ValueError("Resource rotation must be a multiple of 90 degrees on the z axis")
     location = {
       0.0: Coordinate(x=0, y=0, z=0),
       90.0: Coordinate(x=resource.get_size_x(), y=0, z=0),
       180.0: Coordinate(x=resource.get_size_x(), y=resource.get_size_y(), z=0),
       270.0: Coordinate(x=0, y=resource.get_size_y(), z=0),
-    }[resource.rotation.xy % 360]
+    }[resource.rotation.z % 360]
     self.sites[spot].assign_child_resource(resource, location=location)
 
   def unassign_child_resource(self, resource):

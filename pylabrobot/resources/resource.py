@@ -387,27 +387,23 @@ class Resource:
 
     raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
 
-  def rotate(self, xy: float = 0, xz: float = 0, yz: float = 0):
+  def rotate(self, x: float = 0, y: float = 0, z: float = 0):
     """ Rotate counter-clockwise by the given number of degrees. """
 
-    self.rotation.xy = (self.rotation.xy + xy) % 360
-    self.rotation.xz = (self.rotation.xz + xz) % 360
-    self.rotation.yz = (self.rotation.yz + yz) % 360
+    self.rotation.x = (self.rotation.x + x) % 360
+    self.rotation.y = (self.rotation.y + y) % 360
+    self.rotation.z = (self.rotation.z + z) % 360
 
   def copy(self) -> Self:
     resource_copy = self.__class__.deserialize(self.serialize())
     resource_copy.load_all_state(self.serialize_all_state())
     return resource_copy
 
-  def rotated(self, degrees: int) -> Self:
-    """ Return a copy of this resource rotated by the given number of degrees.
-
-    Args:
-      degrees: must be a multiple of 90, but not also 360.
-    """
+  def rotated(self, x: float = 0, y: float = 0, z: float = 0) -> Self:
+    """ Return a copy of this resource rotated by the given number of degrees. """
 
     new_resource = self.copy()
-    new_resource.rotate(degrees)
+    new_resource.rotate(x=x, y=y, z=z)
     return new_resource
 
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:
