@@ -105,5 +105,6 @@ class ResourceStackTests(unittest.TestCase):
     self.assertEqual(stacking_area.get_top_item(), plate)
     self.assertEqual(plate.lid, lid)
     self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
+    assert plate.lid is not None and plate.lid.location is not None
     self.assertEqual(plate.lid.location, Coordinate(0, 0, 8))
     self.assertEqual(stacking_area.get_size_z(), 13)
