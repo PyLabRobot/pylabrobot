@@ -10,7 +10,7 @@ This package contains APIs for working with shakers.
   :nosignatures:
   :recursive:
 
-    pylabrobot.shaking.shaker.Shaker
+    shaker.Shaker
 
 
 Backends
@@ -21,4 +21,4 @@ Backends
   :nosignatures:
   :recursive:
 
-    pylabrobot.shaking.backend.ShakerBackend
+    backend.ShakerBackend

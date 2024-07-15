@@ -10,12 +10,12 @@ This package contains APIs for configuring PLR. More information in :doc:`config
   :nosignatures:
   :recursive:
 
-    pylabrobot.config.config.Config
-    pylabrobot.config.io.ConfigReader
-    pylabrobot.config.io.ConfigWriter
-    pylabrobot.config.io.file.FileReader
-    pylabrobot.config.io.file.FileWriter
-    pylabrobot.config.formats.json_config.JsonLoader
-    pylabrobot.config.formats.json_config.JsonSaver
-    pylabrobot.config.formats.ini_config.IniLoader
-    pylabrobot.config.formats.ini_config.IniSaver
+    config.Config
+    io.ConfigReader
+    io.ConfigWriter
+    io.file.FileReader
+    io.file.FileWriter
+    formats.json_config.JsonLoader
+    formats.json_config.JsonSaver
+    formats.ini_config.IniLoader
+    formats.ini_config.IniSaver

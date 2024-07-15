@@ -106,5 +106,3 @@ napoleon_use_ivar = True
 
 nb_execution_mode = 'off'
 myst_enable_extensions = ['dollarmath']
-
-source_suffix = ['.rst', '.md']

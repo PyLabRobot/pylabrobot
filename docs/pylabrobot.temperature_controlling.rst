@@ -10,8 +10,8 @@ This package contains APIs for working with temperature controllers (heaters and
   :nosignatures:
   :recursive:
 
-    pylabrobot.temperature_controlling.temperature_controller.TemperatureController
-    pylabrobot.temperature_controlling.opentrons.OpentronsTemperatureModuleV2
+    temperature_controller.TemperatureController
+    opentrons.OpentronsTemperatureModuleV2
 
 
 Backends
@@ -22,4 +22,4 @@ Backends
   :nosignatures:
   :recursive:
 
-    pylabrobot.temperature_controlling.opentrons_backend.OpentronsTemperatureModuleBackend
+    opentrons_backend.OpentronsTemperatureModuleBackend

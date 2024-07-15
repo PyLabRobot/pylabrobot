@@ -10,7 +10,7 @@ This package contains APIs for working with heater shakers.
   :nosignatures:
   :recursive:
 
-    pylabrobot.heating_shaking.heater_shaker.HeaterShaker
+    heater_shaker.HeaterShaker
 
 
 Backends
@@ -21,4 +21,4 @@ Backends
   :nosignatures:
   :recursive:
 
-    pylabrobot.heating_shaking.inheco.InhecoThermoShake
+    inheco.InhecoThermoShake
