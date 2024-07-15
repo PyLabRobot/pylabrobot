@@ -15,7 +15,8 @@ class PetriDish(Container):
     height: float,
     material_z_thickness: Optional[float] = None,
     category: str = "petri_dish",
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    max_volume: Optional[float] = None
   ):
     super().__init__(
       name=name,
@@ -25,6 +26,7 @@ class PetriDish(Container):
       material_z_thickness=material_z_thickness,
       category=category,
       model=model,
+      max_volume=max_volume
     )
     self.diameter = diameter
     self.height = height
@@ -62,11 +64,7 @@ class PetriDishHolder(Resource):
       model=model,
     )
 
-  def assign_child_resource(
-      self,
-      resource: Resource,
-      location: Coordinate,
-      reassign: bool = True):
+  def assign_child_resource(self, resource: Resource, location: Coordinate, reassign: bool = True):
     """ Can only assign a single PetriDish """
     if not isinstance(resource, PetriDish):
       raise TypeError("Can only assign PetriDish to PetriDishHolder")
