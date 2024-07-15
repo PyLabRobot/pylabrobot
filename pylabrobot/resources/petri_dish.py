@@ -13,6 +13,7 @@ class PetriDish(Container):
     name: str,
     diameter: float,
     height: float,
+    material_z_thickness: Optional[float] = None,
     category: str = "petri_dish",
     model: Optional[str] = None,
     max_volume: Optional[float] = None
@@ -22,6 +23,7 @@ class PetriDish(Container):
       size_x=diameter,
       size_y=diameter,
       size_z=height,
+      material_z_thickness=material_z_thickness,
       category=category,
       model=model,
       max_volume=max_volume
