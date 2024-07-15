@@ -227,7 +227,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     await self.lh.move_plate(plate, stack)
     await self.lh.move_lid(lid, plate)
 
+    assert plate.location is not None
     self.assertEqual(plate.location.z, 0)
+    assert lid.location is not None
     self.assertEqual(lid.location.z, 11)
     self.assertEqual(plate.lid, lid)
     self.assertEqual(stack.get_size_z(), 21)
@@ -242,6 +244,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     await self.lh.move_plate(plate1, stack)
     await self.lh.move_plate(plate2, stack)
 
+    assert plate1.location is not None and plate2.location is not None
     self.assertEqual(plate1.location.z, 0)
     self.assertEqual(plate2.location.z, 15)
     self.assertEqual(stack.get_size_z(), 30)
