@@ -21,7 +21,7 @@ class Trough(Container):
     size_y: float,
     size_z: float,
     max_volume: float,
-    material_z_thickness: float = 0,
+    material_z_thickness: Optional[float] = None,
     through_base_to_container_base: float = 0,
     category: Optional[str] = "trough",
     model: Optional[str] = None,
@@ -38,12 +38,12 @@ class Trough(Container):
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
+      material_z_thickness=material_z_thickness,
       max_volume=max_volume,
       category=category,
       model=model,
       compute_volume_from_height=compute_volume_from_height,
       compute_height_from_volume=compute_height_from_volume
     )
-    self.material_z_thickness = material_z_thickness
     self.through_base_to_container_base = through_base_to_container_base
     self.bottom_type = bottom_type

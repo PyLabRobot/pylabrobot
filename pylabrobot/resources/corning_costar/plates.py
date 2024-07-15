@@ -1256,6 +1256,7 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
       size_x=6.86, # top
       size_y=6.86, # top
       size_z=10.67,
+      material_z_thickness=0.5,
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
       max_volume=360,

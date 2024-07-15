@@ -14,6 +14,7 @@ class TestWell(unittest.TestCase):
       "size_x": 1,
       "size_y": 2,
       "size_z": 3,
+      "material_z_thickness": None,
       "bottom_type": "flat",
       "cross_section_type": "circle",
       "max_volume": 10,
