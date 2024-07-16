@@ -40,3 +40,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fix Opentrons resource loading (well locations are now lfb instead of ccc)
 - Fix Opentrons backend resource definitions: Opentrons takes well locations as ccc instead of lfb
 - Fix ThermoScientific_96_DWP_1200ul_Rd to ThermoScientific_96_wellplate_1200ul_Rd (https://github.com/PyLabRobot/pylabrobot/pull/183).
+- `libusb_package` is now an optional dependency.
