@@ -700,6 +700,12 @@ class LiquidHandler(Machine):
     if isinstance(blow_out_air_volume, numbers.Number):
       raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
+    # Convert everything to floats to handle exotic number types
+    vols = [float(v) for v in vols]
+    flow_rates = [float(fr) if fr is not None else None for fr in flow_rates]
+    liquid_height = [float(lh) if lh is not None else None for lh in liquid_height]
+    blow_out_air_volume = [float(bav) if bav is not None else None for bav in blow_out_air_volume]
+
     self._blow_out_air_volume = blow_out_air_volume
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
@@ -867,6 +873,12 @@ class LiquidHandler(Machine):
     flow_rates = flow_rates or [None] * len(use_channels)
     liquid_height = liquid_height or [None] * len(use_channels)
     blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
+
+    # Convert everything to floats to handle exotic number types
+    vols = [float(v) for v in vols]
+    flow_rates = [float(fr) if fr is not None else None for fr in flow_rates]
+    liquid_height = [float(lh) if lh is not None else None for lh in liquid_height]
+    blow_out_air_volume = [float(bav) if bav is not None else None for bav in blow_out_air_volume]
 
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
@@ -1322,6 +1334,11 @@ class LiquidHandler(Machine):
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     aspiration: Union[AspirationPlate, AspirationContainer]
 
+    # Convert everything to floats to handle exotic number types
+    volume = float(volume)
+    flow_rate = float(flow_rate) if flow_rate is not None else None
+    blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
+
     if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
@@ -1453,6 +1470,11 @@ class LiquidHandler(Machine):
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     dispense: Union[DispensePlate, DispenseContainer]
+
+    # Convert everything to floats to handle exotic number types
+    volume = float(volume)
+    flow_rate = float(flow_rate) if flow_rate is not None else None
+    blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
     if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
