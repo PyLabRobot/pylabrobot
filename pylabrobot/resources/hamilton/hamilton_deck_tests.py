@@ -2,6 +2,7 @@ import textwrap
 import unittest
 
 from pylabrobot.resources.corning_costar import Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources.stanley.cups import StanleyCup_QUENCHER_FLOWSTATE_TUMBLER
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L, HTF_L, TIP_CAR_480_A00, PLT_CAR_L5AC_A00
 
@@ -113,3 +114,14 @@ class HamiltonDeckTests(unittest.TestCase):
           │
     (32)  ├── trash                     Trash          (800.000, 190.600, 137.100)
     """[1:]))
+
+  def test_assign_gigantic_resource(self):
+    stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
+    deck = STARLetDeck()
+    with self.assertLogs() as log:
+      deck.assign_child_resource(stanley_cup, rails=1)
+    self.assertEqual(log.output,
+      ["WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+       "careful when traversing the deck.",
+       "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+       "careful when grabbing this resource."])

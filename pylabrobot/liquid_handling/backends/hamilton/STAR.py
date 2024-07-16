@@ -2469,12 +2469,14 @@ class STAR(HamiltonLiquidHandler):
     assert self.iswap_installed, "iswap must be installed"
 
     # Get center of source plate. Also gripping height and plate width.
-    center = location + resource.rotated(rotation).center() + offset
+    center = location + resource.rotated(z=rotation).center() + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    # grip_direction here is the put_direction. We use `rotation` to cancel it out and get the
+    # original grip direction. Hack.
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.rotated(rotation).get_size_x()
+      plate_width = resource.rotated(z=rotation).get_size_x()
     elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.rotated(rotation).get_size_y()
+      plate_width = resource.rotated(z=rotation).get_size_y()
     else:
       raise ValueError("Invalid grip direction")
 

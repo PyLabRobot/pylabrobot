@@ -89,6 +89,7 @@ def ot_definition_to_resource(
             size_x=well_size_x,
             size_y=well_size_y,
             size_z=well_size_z,
+            material_z_thickness=None,  # not known for OT labware
             max_volume=well_data["totalLiquidVolume"],
             cross_section_type=cross_section_type
           )

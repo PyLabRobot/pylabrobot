@@ -10,7 +10,7 @@ This package contains APIs for working with pumps.
   :nosignatures:
   :recursive:
 
-    pylabrobot.pumps.pump.Pump
+    pump.Pump
 
 
 Backends
@@ -21,4 +21,4 @@ Backends
   :nosignatures:
   :recursive:
 
-    pylabrobot.pumps.cole_parmer.masterflex.Masterflex
+    cole_parmer.masterflex.Masterflex

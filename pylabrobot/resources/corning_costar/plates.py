@@ -75,7 +75,7 @@ def Cos_1536_10ul_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_1536_10ul_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_1536_10ul """
-  return Cos_1536_10ul(name=name, with_lid=with_lid).rotated(90)
+  return Cos_1536_10ul(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_384_DW(h: float) -> float:
   volume = min(h, 1.0)*min(h, 1.0)*(4.3982 - 1.0472*min(h, 1.0))
@@ -134,7 +134,7 @@ def Cos_384_DW_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_384_DW_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_DW """
-  return Cos_384_DW(name=name, with_lid=with_lid).rotated(90)
+  return Cos_384_DW(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_384_PCR(h: float) -> float:
   volume = min(h, 9.5)*2.8510
@@ -191,7 +191,7 @@ def Cos_384_PCR_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_384_PCR_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_PCR """
-  return Cos_384_PCR(name=name, with_lid=with_lid).rotated(90)
+  return Cos_384_PCR(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_384_Sq(h: float) -> float:
   volume = min(h, 11.56)*12.2500
@@ -248,7 +248,7 @@ def Cos_384_Sq_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_384_Sq_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_Sq """
-  return Cos_384_Sq(name=name, with_lid=with_lid).rotated(90)
+  return Cos_384_Sq(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_384_Sq_Rd(h: float) -> float:
   volume = min(h, 1.0)*min(h, 1.0)*(4.3982 - 1.0472*min(h, 1.0))
@@ -307,7 +307,7 @@ def Cos_384_Sq_Rd_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_384_Sq_Rd_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_384_Sq_Rd """
-  return Cos_384_Sq_Rd(name=name, with_lid=with_lid).rotated(90)
+  return Cos_384_Sq_Rd(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_DW_1mL(h: float) -> float:
   volume = min(h, 2.5)*min(h, 2.5)*(10.2102 - 1.0472*min(h, 2.5))
@@ -366,7 +366,7 @@ def Cos_96_DW_1mL_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_DW_1mL_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DW_1mL """
-  return Cos_96_DW_1mL(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_DW_1mL(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_DW_2mL(h: float) -> float:
   volume = min(h, 4.0)*min(h, 4.0)*(12.5664 - 1.0472*min(h, 4.0))
@@ -425,7 +425,7 @@ def Cos_96_DW_2mL_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_DW_2mL_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DW_2mL """
-  return Cos_96_DW_2mL(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_DW_2mL(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_DW_500ul(h: float) -> float:
   volume = min(h, 1.5)*10.7233
@@ -484,7 +484,7 @@ def Cos_96_DW_500ul_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_DW_500ul_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DW_500ul """
-  return Cos_96_DW_500ul(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_DW_500ul(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_EZWash(h: float) -> float:
   volume = min(h, 11.3)*37.3928
@@ -515,7 +515,7 @@ def Cos_96_EZWash_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_EZWash_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_EZWash """
-  return Cos_96_EZWash(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_EZWash(name=name, with_lid=with_lid).rotated(z=90)
 
 
 def _compute_volume_from_height_Cos_96_FL(h: float) -> float:
@@ -622,7 +622,7 @@ def Cos_96_Filter_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_Filter_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Filter """
-  return Cos_96_Filter(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_Filter(name=name, with_lid=with_lid).rotated(z=90)
 
 def Cos_96_Fl_L(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Fl """
@@ -630,7 +630,7 @@ def Cos_96_Fl_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_Fl_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Fl """
-  return Cos_96_FL(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_FL(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_HalfArea(h: float) -> float:
   volume = min(h, 10.7)*17.7369
@@ -687,7 +687,7 @@ def Cos_96_HalfArea_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_HalfArea_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_HalfArea """
-  return Cos_96_HalfArea(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_HalfArea(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_PCR(h: float) -> float:
   volume = min(h, 11.5)*6.5450
@@ -746,7 +746,7 @@ def Cos_96_PCR_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_PCR_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_PCR """
-  return Cos_96_PCR(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_PCR(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_ProtCryst(h: float) -> float:
   volume = min(h, 1.6)*7.5477
@@ -803,7 +803,7 @@ def Cos_96_ProtCryst_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_ProtCryst_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_ProtCryst """
-  return Cos_96_ProtCryst(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_ProtCryst(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_Rd(h: float) -> float:
   volume = min(h, 0.6)*min(h, 0.6)*(10.0531 - 1.0472*min(h, 0.6))
@@ -862,7 +862,7 @@ def Cos_96_Rd_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_Rd_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Rd """
-  return Cos_96_Rd(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_Rd(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_SpecOps(h: float) -> float:
   volume = min(h, 11.0)*34.7486
@@ -919,7 +919,7 @@ def Cos_96_SpecOps_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_SpecOps_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_SpecOps """
-  return Cos_96_SpecOps(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_SpecOps(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_UV(h: float) -> float:
   volume = min(h, 11.0)*34.7486
@@ -976,7 +976,7 @@ def Cos_96_UV_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_UV_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_UV """
-  return Cos_96_UV(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_UV(name=name, with_lid=with_lid).rotated(z=90)
 
 def _compute_volume_from_height_Cos_96_Vb(h: float) -> float:
   volume = min(h, 1.4)*10.5564
@@ -1035,7 +1035,7 @@ def Cos_96_Vb_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_Vb_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_Vb """
-  return Cos_96_Vb(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_Vb(name=name, with_lid=with_lid).rotated(z=90)
 
 
 ############ User-defined PLR Cos plates ############
@@ -1048,8 +1048,8 @@ def Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
     name=name,
     size_x=127.0,
     size_y=86.0,
-    size_z=2,             # measure the total z height
-    nesting_z_height=1.9, # measure overlap between lid and plate
+    size_z=7.8,
+    nesting_z_height=6.7, # measure overlap between lid and plate
     model="Cos_6_wellplate_16800ul_Fb_Lid",
   )
 
@@ -1082,7 +1082,7 @@ def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
     name=name,
     size_x=127.0,
     size_y=86.0,
-    size_z=19.85,
+    size_z=20.0,
     lid=Cos_6_wellplate_16800ul_Fb_Lid(name=name + "_lid") if with_lid else None,
     model="Cos_6_wellplate_16800ul_Fb",
     items=create_equally_spaced_2d(Well,
@@ -1107,7 +1107,7 @@ def Cos_6_wellplate_16800ul_Fb_L(name: str, with_lid: bool = True) -> Plate:
   return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid)
 
 def Cos_6_wellplate_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
-  return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid).rotated(90)
+  return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid).rotated(z=90)
 
 
 # # # # # # # # # # Cos_96_DWP_2mL_Vb # # # # # # # # # #
@@ -1183,7 +1183,7 @@ def Cos_96_DWP_2mL_Vb_L(name: str, with_lid: bool = False) -> Plate:
 
 def Cos_96_DWP_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
   """ Cos_96_DWP_2mL_Vb """
-  return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid).rotated(90)
+  return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid).rotated(z=90)
 
 
 def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
@@ -1256,6 +1256,7 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
       size_x=6.86, # top
       size_y=6.86, # top
       size_z=10.67,
+      material_z_thickness=0.5,
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
       max_volume=360,

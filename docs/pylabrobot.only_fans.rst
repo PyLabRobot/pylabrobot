@@ -10,7 +10,7 @@ This package contains APIs just for fans.
   :nosignatures:
   :recursive:
 
-    pylabrobot.only_fans.fan.Fan
+    fan.Fan
 
 
 Backends
@@ -21,5 +21,5 @@ Backends
   :nosignatures:
   :recursive:
 
-    pylabrobot.only_fans.backend.FanBackend
-    pylabrobot.only_fans.hamilton_hepa_fan.HamiltonHepaFan
+    backend.FanBackend
+    hamilton_hepa_fan.HamiltonHepaFan
