@@ -1694,9 +1694,9 @@ class STAR(HamiltonLiquidHandler):
         ratio_liquid_rise_to_tip_deep_in=ratio_liquid_rise_to_tip_deep_in,
         immersion_depth_2nd_section=[round(id_*10) for id_ in immersion_depth_2nd_section],
 
-        minimum_traverse_height_at_beginning_of_a_command=\
-          minimum_traverse_height_at_beginning_of_a_command or round(self._traversal_height * 10),
-        min_z_endpos=min_z_endpos or round(self._traversal_height * 10),
+        minimum_traverse_height_at_beginning_of_a_command=
+          round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10),
+        min_z_endpos=round((min_z_endpos or self._traversal_height) * 10),
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
@@ -1928,8 +1928,8 @@ class STAR(HamiltonLiquidHandler):
         limit_curve_index=limit_curve_index,
 
         minimum_traverse_height_at_beginning_of_a_command=
-          minimum_traverse_height_at_beginning_of_a_command or round(self._traversal_height * 10),
-        min_z_endpos=min_z_endpos or round(self._traversal_height * 10),
+          round((minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10),
+        min_z_endpos=round((min_z_endpos or self._traversal_height) * 10),
         side_touch_off_distance=side_touch_off_distance,
       )
     except STARFirmwareError as e:
