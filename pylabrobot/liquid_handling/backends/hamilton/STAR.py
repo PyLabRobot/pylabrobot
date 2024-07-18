@@ -78,6 +78,9 @@ def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
   if len(val) != len(default):
     raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
   # if the val is a list of the correct length, the values must be of the right type.
+  # automatically handle int and float.
+  if t in [int, float]:
+    return [t(v) for v in val] # type: ignore
   if not all(isinstance(v, t) for v in val):
     raise ValueError(f"Value must be a list of {t}, but is {val}")
   # the value is ready to be used.
