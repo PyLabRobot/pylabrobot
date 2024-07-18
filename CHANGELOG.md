@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Coordinate.vector()` to return a 3-item list of floats.
 - `Rotation` class to represent a rotation in 3D space (https://github.com/PyLabRobot/pylabrobot/pull/195)
 - `Resource.get_absolute_rotation()` to get the absolute rotation of a resource (https://github.com/PyLabRobot/pylabrobot/pull/195)
+- `pedestal_size_z` to `PLT_CAR_L5MD` and `PLT_CAR_L5MD_A00` (https://github.com/PyLabRobot/pylabrobot/pull/198/).
 
 ### Deprecated
 
