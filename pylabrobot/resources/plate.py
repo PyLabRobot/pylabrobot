@@ -59,7 +59,7 @@ class Plate(ItemizedResource[Well]):
     category: str = "plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
-    plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted"
+    plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
   ):
     """ Initialize a Plate resource.
 

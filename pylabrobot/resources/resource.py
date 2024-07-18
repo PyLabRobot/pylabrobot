@@ -8,7 +8,9 @@ from typing import Any, Callable, Dict, List, Optional, cast
 
 from .coordinate import Coordinate
 from .errors import ResourceNotFoundError
+from .rotation import Rotation
 from pylabrobot.serializer import serialize, deserialize
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
 
 if sys.version_info >= (3, 11):
@@ -45,6 +47,7 @@ class Resource:
     size_x: float,
     size_y: float,
     size_z: float,
+    rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
@@ -52,14 +55,13 @@ class Resource:
     self._size_x = size_x
     self._size_y = size_y
     self._size_z = size_z
+    self.rotation = rotation or Rotation()
     self.category = category
     self.model = model
 
     self.location: Optional[Coordinate] = None
     self.parent: Optional[Resource] = None
     self.children: List[Resource] = []
-
-    self.rotation = 0 # TODO: like location, this should be wrt parent
 
     self._will_assign_resource_callbacks: List[WillAssignResourceCallback] = []
     self._did_assign_resource_callbacks: List[DidAssignResourceCallback] = []
@@ -76,7 +78,7 @@ class Resource:
       "size_y": self._size_y,
       "size_z": self._size_z,
       "location": serialize(self.location),
-      "rotation": self.rotation,
+      "rotation": serialize(self.rotation),
       "category": self.category,
       "model": self.model,
       "children": [child.serialize() for child in self.children],
@@ -177,6 +179,12 @@ class Resource:
 
     return Coordinate(x_, y_, z_)
 
+  def get_absolute_rotation(self) -> Rotation:
+    """ Get the absolute rotation of this resource. """
+    if self.parent is None:
+      return self.rotation
+    return self.parent.get_absolute_rotation() + self.rotation
+
   def get_absolute_location(self, x: str = "l", y: str = "f", z: str = "b") -> Coordinate:
     """ Get the absolute location of this resource, probably within the
     :class:`pylabrobot.resources.Deck`. The `x`, `y`, and `z` arguments specify the anchor point
@@ -191,21 +199,40 @@ class Resource:
     assert self.location is not None, "Resource has no location."
     if self.parent is None:
       return self.location
-    return self.parent.get_absolute_location() + self.location + self.get_anchor(x=x, y=y, z=z)
+    parent_pos = self.parent.get_absolute_location()
+    parent_rotation_matrix = self.parent.get_absolute_rotation().get_rotation_matrix()
+    local_vector = (self.location + self.get_anchor(x=x, y=y, z=z)).vector()
+    rotated_position = Coordinate(*matrix_vector_multiply_3x3(parent_rotation_matrix, local_vector))
+    return parent_pos + rotated_position
+
+  def _get_rotated_corners(self) -> List[Coordinate]:
+    absolute_rotation = self.get_absolute_rotation()
+    rot_mat = absolute_rotation.get_rotation_matrix()
+    return [
+      Coordinate(*matrix_vector_multiply_3x3(rot_mat, corner.vector()))
+      for corner in [
+        Coordinate(0, 0, 0),
+        Coordinate(self._size_x, 0, 0),
+        Coordinate(0, self._size_y, 0),
+        Coordinate(self._size_x, self._size_y, 0),
+        Coordinate(0, 0, self._size_z),
+        Coordinate(self._size_x, 0, self._size_z),
+        Coordinate(0, self._size_y, self._size_z),
+        Coordinate(self._size_x, self._size_y, self._size_z)
+      ]
+    ]
 
   def get_size_x(self) -> float:
-    if self.rotation in {90, 270}:
-      return self._size_y
-    return self._size_x
+    rotated_corners = self._get_rotated_corners()
+    return max(c.x for c in rotated_corners) - min(c.x for c in rotated_corners)
 
   def get_size_y(self) -> float:
-    if self.rotation in {90, 270}:
-      return self._size_x
-    return self._size_y
+    rotated_corners = self._get_rotated_corners()
+    return max(c.y for c in rotated_corners) - min(c.y for c in rotated_corners)
 
   def get_size_z(self) -> float:
-    """ Get the size of this resource in the z-direction. """
-    return self._size_z
+    rotated_corners = self._get_rotated_corners()
+    return max(c.z for c in rotated_corners) - min(c.z for c in rotated_corners)
 
   def assign_child_resource(
     self,
@@ -360,50 +387,23 @@ class Resource:
 
     raise ResourceNotFoundError(f"Resource with name '{name}' does not exist.")
 
-  def rotate(self, degrees: int):
-    """ Rotate counter clockwise by the given number of degrees.
+  def rotate(self, x: float = 0, y: float = 0, z: float = 0):
+    """ Rotate counter-clockwise by the given number of degrees. """
 
-    Args:
-      degrees: must be a multiple of 90, but not also 360.
-    """
-
-    effective_degrees = degrees % 360
-
-    if effective_degrees % 90 != 0:
-      raise ValueError(f"Invalid rotation: {degrees}")
-
-    for child in self.children:
-      assert child.location is not None, "child must have a location when it's assigned."
-
-      old_x = child.location.x
-
-      if effective_degrees == 90:
-        child.location.x = self.get_size_y() - child.location.y - child.get_size_y()
-        child.location.y = old_x
-      elif effective_degrees == 180:
-        child.location.x = self.get_size_x() - child.location.x - child.get_size_x()
-        child.location.y = self.get_size_y() - child.location.y - child.get_size_y()
-      elif effective_degrees == 270:
-        child.location.x = child.location.y
-        child.location.y = self.get_size_x() - old_x - child.get_size_x()
-      child.rotate(effective_degrees)
-
-    self.rotation = (self.rotation + degrees) % 360
+    self.rotation.x = (self.rotation.x + x) % 360
+    self.rotation.y = (self.rotation.y + y) % 360
+    self.rotation.z = (self.rotation.z + z) % 360
 
   def copy(self) -> Self:
     resource_copy = self.__class__.deserialize(self.serialize())
     resource_copy.load_all_state(self.serialize_all_state())
     return resource_copy
 
-  def rotated(self, degrees: int) -> Self:
-    """ Return a copy of this resource rotated by the given number of degrees.
-
-    Args:
-      degrees: must be a multiple of 90, but not also 360.
-    """
+  def rotated(self, x: float = 0, y: float = 0, z: float = 0) -> Self:
+    """ Return a copy of this resource rotated by the given number of degrees. """
 
     new_resource = self.copy()
-    new_resource.rotate(degrees)
+    new_resource.rotate(x=x, y=y, z=z)
     return new_resource
 
   def center(self, x: bool = True, y: bool = True, z: bool = False) -> Coordinate:
@@ -534,7 +534,7 @@ class Resource:
     children_data = data_copy.pop("children")
     rotation = data_copy.pop("rotation")
     resource = subclass(**data_copy)
-    resource.rotation = rotation
+    resource.rotation = Rotation.deserialize(rotation)
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)

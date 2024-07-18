@@ -67,4 +67,4 @@ def Axy_24_DW_10ML_L(name: str, with_lid: bool = False) -> Plate:
 
 #: Axy_24_DW_10ML_P
 def Axy_24_DW_10ML_P(name: str, with_lid: bool = False) -> Plate:
-  return Axy_24_DW_10ML(name=name, with_lid=with_lid).rotated(90)
+  return Axy_24_DW_10ML(name=name, with_lid=with_lid).rotated(z=90)

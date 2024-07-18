@@ -65,4 +65,4 @@ def Azenta4titudeFrameStar_96_wellplate_skirted_L(name: str, with_lid: bool = Fa
 
 #: Azenta4titudeFrameStar_96_wellplate_skirted_P
 def Azenta4titudeFrameStar_96_wellplate_skirted_P(name: str, with_lid: bool = False) -> Plate:
-  return Azenta4titudeFrameStar_96_wellplate_skirted(name=name, with_lid=with_lid).rotated(90)
+  return Azenta4titudeFrameStar_96_wellplate_skirted(name=name, with_lid=with_lid).rotated(z=90)

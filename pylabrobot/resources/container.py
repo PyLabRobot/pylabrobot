@@ -13,6 +13,7 @@ class Container(Resource):
     size_x: float,
     size_y: float,
     size_z: float,
+    material_z_thickness: Optional[float] = None,
     max_volume: Optional[float] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
@@ -22,20 +23,32 @@ class Container(Resource):
     """ Create a new container.
 
     Args:
+      material_z_thickness: Container cavity base to the (outer) base of the container object. If
+        `None`, certain operations may not be supported.
       max_volume: Maximum volume of the container. If `None`, will be inferred from resource size.
     """
 
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
       model=model)
+    self._material_z_thickness = material_z_thickness
     self.max_volume = max_volume or (size_x * size_y * size_z)
     self.tracker = VolumeTracker(max_volume=self.max_volume)
     self._compute_volume_from_height = compute_volume_from_height
     self._compute_height_from_volume = compute_height_from_volume
 
+  @property
+  def material_z_thickness(self) -> float:
+    if self._material_z_thickness is None:
+      raise NotImplementedError(
+        f"The current operation is not supported for resource named '{self.name}' of type "
+        f"'{self.__class__.__name__}' because material_z_thickness is not defined.")
+    return self._material_z_thickness
+
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "max_volume": self.max_volume
+      "max_volume": self.max_volume,
+      "material_z_thickness": self._material_z_thickness,
     }
 
   def serialize_state(self) -> Dict[str, Any]:
