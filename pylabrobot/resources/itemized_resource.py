@@ -425,14 +425,14 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     return self.get_items(range(self.num_items))
 
-  def _get_grid_size(self, identifiers):
+  def _get_grid_size(self, identifiers) -> Tuple[int, int]:
     """ Get the size of the grid from the identifiers, or raise an error if not a full grid. """
-    rows, columns = set(), set()
+    rows_set, columns_set = set(), set()
     for identifier in identifiers:
-      rows.add(identifier[0])
-      columns.add(identifier[1:])
+      rows_set.add(identifier[0])
+      columns_set.add(identifier[1:])
 
-    rows, columns = sorted(list(rows)), sorted(list(columns), key=int)
+    rows, columns = sorted(list(rows_set)), sorted(list(columns_set), key=int)
 
     expected_identifiers = sorted([c + r for c in rows for r in columns])
     if sorted(identifiers) != expected_identifiers:

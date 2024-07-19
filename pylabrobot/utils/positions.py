@@ -1,4 +1,3 @@
-import itertools
 from string import ascii_uppercase as LETTERS
 import typing
 

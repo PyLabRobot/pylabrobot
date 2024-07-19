@@ -1,6 +1,6 @@
 import math
 import json
-from typing import Union, List, TYPE_CHECKING, cast
+from typing import Dict, List, Union, TYPE_CHECKING, cast
 
 try:
   import opentrons_shared_data.labware
@@ -55,7 +55,7 @@ def ot_definition_to_resource(
         volume *= 1000
       return float(volume)
 
-    for i, column in enumerate(items):
+    for column in items:
       for item in column:
         well_data = data["wells"][item]
 
@@ -143,8 +143,8 @@ def ot_definition_to_resource(
           wells.append(well)
 
     ordering = data["ordering"]
-    ordering = [item for sublist in ordering for item in sublist]
-    ordered_items = dict(zip(ordering, wells))
+    flattened_ordering = [item for sublist in ordering for item in sublist]
+    ordered_items = dict(zip(flattened_ordering, wells))
 
     if display_category == "wellPlate":
       return Plate(
@@ -152,7 +152,7 @@ def ot_definition_to_resource(
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        ordered_items=cast(List[List[Well]], ordered_items),
+        ordered_items=cast(Dict[str, Well], ordered_items),
         model=data["metadata"]["displayName"]
       )
     if display_category == "tipRack":
@@ -161,7 +161,7 @@ def ot_definition_to_resource(
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        ordered_items=cast(List[List[TipSpot]], ordered_items),
+        ordered_items=cast(Dict[str, TipSpot], ordered_items),
         model=data["metadata"]["displayName"]
       )
     if display_category in tube_rack_display_cats:
@@ -172,7 +172,7 @@ def ot_definition_to_resource(
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        ordered_items=cast(List[List[Tube]], ordered_items),
+        ordered_items=cast(Dict[str, Tube], ordered_items),
         model=data["metadata"]["displayName"]
       )
     if display_category == "reservoir":
@@ -181,7 +181,7 @@ def ot_definition_to_resource(
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        ordered_items=cast(List[List[Well]], ordered_items),
+        ordered_items=cast(Dict[str, Well], ordered_items),
         model=data["metadata"]["displayName"]
       )
 

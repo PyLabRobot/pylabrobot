@@ -149,20 +149,17 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       >>> tip_rack.set_tip_state([[True] * 6 + [False] * 6] * 8)
     """
 
-    # for i in range(self.num_items_y):
-    #   for j in range(self.num_items_x):
-    #     # If the tip state is different from the current state, update it by either creating or
-    #     # removing the tip.
-    #     if tips[i][j] and not self.get_item((i, j)).has_tip():
-    #       self.get_item((i, j)).tracker.add_tip(self.get_item((i, j)).make_tip(), commit=True)
-    #     elif not tips[i][j] and self.get_item((i, j)).has_tip():
-    #       self.get_item((i, j)).tracker.remove_tip(commit=True)
+    should_have: Dict[Union[int, str], bool] = {}
+    if isinstance(tips, list):
+      for i, tip in enumerate(tips):
+        should_have[i] = tip
+    else:
+      should_have = cast(Dict[Union[int, str], bool], tips) # type?
 
-    identifiers = range(len(tips)) if isinstance(tips, list) else tips.keys()
-    for identifier in identifiers:
-      if tips[identifier] and not self.get_item(identifier).has_tip():
+    for identifier, should_have_tip in should_have.items():
+      if should_have_tip and not self.get_item(identifier).has_tip():
         self.get_item(identifier).tracker.add_tip(self.get_item(identifier).make_tip(), commit=True)
-      elif not tips[identifier] and self.get_item(identifier).has_tip():
+      elif not should_have_tip and self.get_item(identifier).has_tip():
         self.get_item(identifier).tracker.remove_tip(commit=True)
 
   def disable_tip_trackers(self) -> None:

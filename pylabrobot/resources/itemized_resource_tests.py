@@ -6,6 +6,7 @@ from pylabrobot.resources import (
   Coordinate,
   Plate,
   Well,
+  create_equally_spaced_2d,
   create_ordered_items_2d
 )
 
