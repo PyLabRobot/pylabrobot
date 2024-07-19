@@ -164,7 +164,7 @@ class TestSTARResponseParsing(unittest.TestCase):
 class STARUSBCommsMocker(STAR):
   """ Mocks PyUSB """
 
-  async def setup(self, send_response):
+  async def setup(self, send_response: str):  # type: ignore
     self.dev = MockDev(send_response)
     self.read_endpoint = MockEndpoint()
     self.write_endpoint = MockEndpoint()
@@ -206,8 +206,8 @@ class STARCommandCatcher(STAR):
     self.core96_head_installed = True
     self._core_parked = True
 
-  async def send_command(self, module, command, tip_pattern=None, fmt="", read_timeout=0,
-    write_timeout=0, **kwargs):
+  async def send_command(self, module, command, tip_pattern=None, fmt="", # type: ignore
+    read_timeout=0, write_timeout=0, **kwargs):
     cmd, _ = self._assemble_command(module, command, tip_pattern, **kwargs)
     self.commands.append(cmd)
 

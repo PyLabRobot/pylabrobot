@@ -1,5 +1,4 @@
-""" Tests for plate reader """
-
+from typing import Literal
 import unittest
 
 from pylabrobot.plate_reading import PlateReader
@@ -22,10 +21,10 @@ class MockPlateReaderBackend(PlateReaderBackend):
   async def close(self):
     pass
 
-  async def read_luminescence(self):
+  async def read_luminescence(self, focal_height: float):
     return [[1, 2, 3], [4, 5, 6]]
 
-  async def read_absorbance(self):
+  async def read_absorbance(self, wavelength: int, report: Literal["OD", "transmittance"]):
     return [[1, 2, 3], [4, 5, 6]]
 
 
