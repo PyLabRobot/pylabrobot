@@ -3,7 +3,7 @@ import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.resources import (
-  Plate, Well, WellBottomType, CrossSectionType, Coordinate, create_equally_spaced_2d,
+  Plate, Well, WellBottomType, CrossSectionType, Coordinate, create_ordered_items_2d,
   TIP_CAR_480_A00, PLT_CAR_L5AC_A00, HT_L, LT_L,
 )
 from pylabrobot.resources.hamilton import VantageDeck
@@ -53,7 +53,7 @@ def Cos_96_EZWash(name: str) -> Plate:
     size_z=14.5,
     lid=None,
     model="Cos_96_EZWash",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=10.55,

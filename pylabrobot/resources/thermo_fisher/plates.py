@@ -3,7 +3,7 @@
 # pylint: disable=invalid-name
 
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
-from pylabrobot.resources.utils import create_equally_spaced_2d
+from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.plate import Lid, Plate
 
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_ubottom
@@ -71,7 +71,7 @@ def ThermoScientific_96_wellplate_1200ul_Rd(name: str, with_lid: bool = False) -
     size_z=24.0,
     lid=ThermoScientific_96_wellplate_1200ul_Rd_Lid(name + "_lid") if with_lid else None,
     model="ThermoScientific_96_wellplate_1200ul_Rd",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=10.0,

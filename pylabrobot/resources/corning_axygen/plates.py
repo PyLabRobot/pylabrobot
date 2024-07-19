@@ -4,7 +4,7 @@
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
-from pylabrobot.resources.utils import create_equally_spaced_2d
+from pylabrobot.resources.utils import create_ordered_items_2d
 
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_vbottom
 
@@ -42,7 +42,7 @@ def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
     size_z=44.24,
     lid=Axy_24_DW_10ML_Lid(name + "_lid") if with_lid else None,
     model="Axy_24_DW_10ML",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=6,
       num_items_y=4,
       dx=9.8,

@@ -1,5 +1,3 @@
-""" Abstract base class for tip rack resources. """
-
 from __future__ import annotations
 
 from abc import ABCMeta
@@ -87,7 +85,7 @@ class TipSpot(Resource):
 
 
 class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
-  """ Abstract base class for Tips resources. """
+  """ Tip rack for disposable tips. """
 
   def __init__(
     self,
@@ -95,6 +93,8 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     size_x: float,
     size_y: float,
     size_z: float,
+    ordered_items: Optional[Dict[str, TipSpot]] = None,
+    ordering: Optional[List[str]] = None,
     items: Optional[List[List[TipSpot]]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
@@ -103,9 +103,10 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     with_tips: bool = True,
   ):
     super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
-      num_items_y=num_items_y, category=category, model=model)
+      num_items_y=num_items_y, ordered_items=ordered_items, ordering=ordering, category=category,
+      model=model)
 
-    if items is not None and len(items) > 0:
+    if ordered_items is not None and len(ordered_items) > 0:
       if with_tips:
         self.fill()
       else:
@@ -135,8 +136,12 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
     return [ts.get_tip() for ts in super().get_items(identifier)]
 
-  def set_tip_state(self, tips: List[List[bool]]) -> None:
+  def set_tip_state(self, tips: Union[List[bool], Dict[str, bool]]) -> None:
     """ Set the initial tip tracking state of all tips in this tip rack.
+
+    Args:
+      tips: either a list of booleans (using integer indexing) or a dictionary of booleans (using
+        string indexing) for whether each tip should be filled or empty.
 
     Examples:
       Filling the right half of a 96-well tip rack:
@@ -144,14 +149,18 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
       >>> tip_rack.set_tip_state([[True] * 6 + [False] * 6] * 8)
     """
 
-    for i in range(self.num_items_y):
-      for j in range(self.num_items_x):
-        # If the tip state is different from the current state, update it by either creating or
-        # removing the tip.
-        if tips[i][j] and not self.get_item((i, j)).has_tip():
-          self.get_item((i, j)).tracker.add_tip(self.get_item((i, j)).make_tip(), commit=True)
-        elif not tips[i][j] and self.get_item((i, j)).has_tip():
-          self.get_item((i, j)).tracker.remove_tip(commit=True)
+    should_have: Dict[Union[int, str], bool] = {}
+    if isinstance(tips, list):
+      for i, tip in enumerate(tips):
+        should_have[i] = tip
+    else:
+      should_have = cast(Dict[Union[int, str], bool], tips) # type?
+
+    for identifier, should_have_tip in should_have.items():
+      if should_have_tip and not self.get_item(identifier).has_tip():
+        self.get_item(identifier).tracker.add_tip(self.get_item(identifier).make_tip(), commit=True)
+      elif not should_have_tip and self.get_item(identifier).has_tip():
+        self.get_item(identifier).tracker.remove_tip(commit=True)
 
   def disable_tip_trackers(self) -> None:
     """ Disable tip tracking for all tips in this tip rack. """
@@ -166,12 +175,12 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
   def empty(self):
     """ Empty the tip rack. This is useful when tip tracking is enabled and you are modifying
     the state manually (without the robot). """
-    self.set_tip_state([[False] * self.num_items_x] * self.num_items_y)
+    self.set_tip_state([False] * self.num_items)
 
   def fill(self):
     """ Fill the tip rack. This is useful when tip tracking is enabled and you are modifying
     the state manually (without the robot). """
-    self.set_tip_state([[True] * self.num_items_x] * self.num_items_y)
+    self.set_tip_state([True] * self.num_items)
 
   def get_all_tips(self) -> List[Tip]:
     """ Get all tips in the tip rack. """
