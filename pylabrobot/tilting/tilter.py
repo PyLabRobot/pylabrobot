@@ -49,15 +49,15 @@ class HamiltonTiltModule(MFXModule):
             category=category,
         )
 
-        self._backend = HamiltonTiltModuleBackend(com_port=com_port, write_timeout=write_timeout, timeout=timeout)
+        self.backend = HamiltonTiltModuleBackend(com_port=com_port, write_timeout=write_timeout, timeout=timeout)
         self._hinge_coordinate = hinge_coordinate
         self._absolute_angle = 0
         self._initial_offset = initial_offset
-        self._setup_finished = False
+        self.setup_finished = False
 
     async def setup(self):
-        await self._backend.setup(initial_offset=self._initial_offset)
-        self._setup_finished = True
+        await self.backend.setup(initial_offset=self._initial_offset)
+        self.setup_finished = True
 
     @property
     def absolute_angle(self) -> int:
@@ -74,7 +74,7 @@ class HamiltonTiltModule(MFXModule):
         # else, the angle is converted to negative. this follows Euler angle conventions.
 
         angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
-        await self._backend.set_angle(angle=abs(angle))
+        await self.backend.set_angle(angle=abs(angle))
         self._absolute_angle = absolute_angle
 
     def rotate_coordinate_around_hinge(self, absolute_coordinate: Coordinate, angle: int) -> Coordinate:
