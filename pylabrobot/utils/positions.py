@@ -22,7 +22,7 @@ def expand_string_range(range_str: str) -> list:
     range_str: A string showing a range, like "A1:C3".
 
   Returns:
-    A list of position strings.
+    A list of position identifier strings.
   """
   if ":" not in range_str:
     raise ValueError(f"Invalid range: {range_str}")
