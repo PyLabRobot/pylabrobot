@@ -1,5 +1,3 @@
-""" Abstract base class for tip rack resources. """
-
 from __future__ import annotations
 
 from abc import ABCMeta
@@ -87,7 +85,7 @@ class TipSpot(Resource):
 
 
 class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
-  """ Abstract base class for Tips resources. """
+  """ Tip rack for disposable tips. """
 
   def __init__(
     self,
@@ -95,6 +93,8 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     size_x: float,
     size_y: float,
     size_z: float,
+    ordered_items: Optional[Dict[str, TipSpot]] = None,
+    ordering: Optional[List[str]] = None,
     items: Optional[List[List[TipSpot]]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
@@ -103,9 +103,10 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     with_tips: bool = True,
   ):
     super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
-      num_items_y=num_items_y, category=category, model=model)
+      num_items_y=num_items_y, ordered_items=ordered_items, ordering=ordering, category=category,
+      model=model)
 
-    if items is not None and len(items) > 0:
+    if ordered_items is not None and len(ordered_items) > 0:
       if with_tips:
         self.fill()
       else:

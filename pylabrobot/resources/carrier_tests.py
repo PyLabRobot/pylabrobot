@@ -14,9 +14,9 @@ from .tip_rack import TipRack
 class CarrierTests(unittest.TestCase):
   def setUp(self):
     # pylint: disable=invalid-name
-    self.A = TipRack(name="A", size_x=5, size_y=5, size_z=5, items=[])
-    self.B = TipRack(name="B", size_x=5, size_y=5, size_z=5, items=[])
-    self.alsoB = TipRack(name="B", size_x=100, size_y=100, size_z=100, items=[])
+    self.A = TipRack(name="A", size_x=5, size_y=5, size_z=5, ordered_items={})
+    self.B = TipRack(name="B", size_x=5, size_y=5, size_z=5, ordered_items={})
+    self.alsoB = TipRack(name="B", size_x=100, size_y=100, size_z=100, ordered_items={})
 
     self.tip_car = TipCarrier(
       "tip_car",

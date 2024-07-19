@@ -1,4 +1,5 @@
-from typing import List, Type, TypeVar
+from string import ascii_uppercase as LETTERS
+from typing import Dict, List, Type, TypeVar
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -115,3 +116,41 @@ def create_equally_spaced_y(
     **kwargs
   )
   return items[0]
+
+
+def create_ordered_items_2d(
+  klass: Type[T],
+  num_items_x: int, num_items_y: int,
+  dx: float, dy: float, dz: float,
+  item_dx: float, item_dy: float,
+  **kwargs
+) -> Dict[str, T]:
+  """ Make ordered resources in a 2D grid, with the keys being the identifiers in transposed
+  MS-Excel style. This is useful for initializing `ItemizedResource`.
+
+  Args:
+    klass: The class of the resource to create
+    num_items_x: The number of items in the x direction
+    num_items_y: The number of items in the y direction
+    dx: The bottom left corner for items in the left column
+    dy: The bottom left corner for items in the top row
+    dz: The z coordinate for all items
+    item_dx: The size of the items in the x direction
+    item_dy: The size of the items in the y direction
+    **kwargs: Additional keyword arguments to pass to the resource constructor
+
+  Returns:
+    A dict of resources. The keys are the identifiers in transposed MS-Excel format, so the top
+    left item is "A1", the item to the bottom is "B1", the item to the right is "A2", and so on.
+  """
+
+  items = create_equally_spaced_2d(
+    klass=klass,
+    num_items_x=num_items_x,
+    num_items_y=num_items_y,
+    dx=dx, dy=dy, dz=dz,
+    item_dx=item_dx, item_dy=item_dy,
+    **kwargs
+  )
+  keys = [f"{LETTERS[i]}{j+1}" for i in range(num_items_x) for j in range(num_items_y)]
+  return dict(zip(keys, [item for sublist in items for item in sublist]))

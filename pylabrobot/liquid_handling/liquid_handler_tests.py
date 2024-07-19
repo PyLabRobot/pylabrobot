@@ -197,7 +197,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       Coordinate(1000, 1000, 1000))
 
   async def test_move_lid(self):
-    plate = Plate("plate", size_x=100, size_y=100, size_z=15, items=[])
+    plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
     plate.location = Coordinate(0, 0, 100)
     lid_height = 10
     lid = Lid(name="lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
@@ -217,7 +217,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       == lid.get_absolute_location().z
 
   async def test_move_plate_onto_resource_stack_with_lid(self):
-    plate = Plate("plate", size_x=100, size_y=100, size_z=15, items=[])
+    plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items={})
     lid = Lid(name="lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
       size_z=10, nesting_z_height=4)
 
@@ -235,8 +235,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(stack.get_size_z(), 21)
 
   async def test_move_plate_onto_resource_stack_with_plate(self):
-    plate1 = Plate("plate1", size_x=100, size_y=100, size_z=15, items=[])
-    plate2 = Plate("plate2", size_x=100, size_y=100, size_z=15, items=[])
+    plate1 = Plate("plate1", size_x=100, size_y=100, size_z=15, ordered_items={})
+    plate2 = Plate("plate2", size_x=100, size_y=100, size_z=15, ordered_items={})
 
     stack = ResourceStack("stack", direction="z")
 
