@@ -97,6 +97,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         raise ValueError("Must specify either `ordered_items` or `ordering`.")
       self._ordering = ordering
 
+    # validate that ordering is in the transposed Excel style notation
+    for identifier in self._ordering:
+      if not identifier[0] in LETTERS or not identifier[1:].isdigit():
+        raise ValueError("Ordering must be in the transposed Excel style notation, e.g. 'A1'.")
+
   def __getitem__(
     self,
     identifier: Union[str, int, Sequence[int], Sequence[str], slice, range]
@@ -174,7 +179,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       row, column = identifier
       identifier = LETTERS[row] + str(column+1) # standard transposed-Excel style notation
     if isinstance(identifier, str):
-      identifier = self._ordering.index(identifier)
+      try:
+        identifier = self._ordering.index(identifier)
+      except ValueError as e:
+        raise IndexError(f"Item with identifier '{identifier}' does not exist on "
+                         f"resource '{self.name}'.") from e
 
     if not 0 <= identifier < self.num_items:
       raise IndexError(f"Item with identifier '{identifier}' does not exist on "
@@ -416,13 +425,33 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     return self.get_items(range(self.num_items))
 
+  def _get_grid_size(self, identifiers):
+    """ Get the size of the grid from the identifiers, or raise an error if not a full grid. """
+    rows, columns = set(), set()
+    for identifier in identifiers:
+      rows.add(identifier[0])
+      columns.add(identifier[1:])
+
+    rows, columns = sorted(list(rows)), sorted(list(columns), key=int)
+
+    expected_identifiers = sorted([c + r for c in rows for r in columns])
+    if sorted(identifiers) != expected_identifiers:
+      raise ValueError(f"Not a full grid: {identifiers}")
+    return len(rows), len(columns)
+
   @property
   def num_items_x(self) -> int:
-    raise NotImplementedError("Deprecated.")
+    """ The number of items in the x direction, if the resource is a full grid. If the resource is
+    not a full grid, an error will be raised. """
+    _, num_items_x = self._get_grid_size(self._ordering)
+    return num_items_x
 
   @property
   def num_items_y(self) -> int:
-    raise NotImplementedError("Deprecated.")
+    """ The number of items in the y direction, if the resource is a full grid. If the resource is
+    not a full grid, an error will be raised. """
+    num_items_y, _ = self._get_grid_size(self._ordering)
+    return num_items_y
 
   @property
   def items(self) -> List[str]:
