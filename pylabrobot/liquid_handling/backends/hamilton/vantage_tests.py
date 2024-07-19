@@ -1,3 +1,4 @@
+from typing import Any, List, Optional
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
@@ -148,8 +149,17 @@ class VantageCommandCatcher(Vantage):
     self.iswap_installed = True
     self.core96_head_installed = True
 
-  async def send_command(self, module, command, tip_pattern=None, read_timeout=0,
-    write_timeout=0, **kwargs):
+  async def send_command(
+    self,
+    module: str,
+    command: str,
+    tip_pattern: Optional[List[bool]] = None,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait = True,
+    fmt: Optional[Any] = None,
+    **kwargs
+  ):
     cmd, _ = self._assemble_command(module, command, tip_pattern, **kwargs)
     self.commands.append(cmd)
 

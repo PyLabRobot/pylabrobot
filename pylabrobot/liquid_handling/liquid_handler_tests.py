@@ -586,7 +586,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_strictness(self):
     class TestBackend(backends.SaverBackend):
       """ Override pick_up_tips for testing. """
-      async def pick_up_tips(self, ops, use_channels, non_default, default=True):
+      async def pick_up_tips(self, ops, use_channels, non_default, default=True): # type: ignore
         # pylint: disable=unused-argument
         assert non_default == default
 
