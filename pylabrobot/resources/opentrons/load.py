@@ -143,13 +143,16 @@ def ot_definition_to_resource(
           well.location = location
           wells[i].append(well)
 
+    ordering = data["ordering"]
+    ordered_items = {key: value for key, value in zip(ordering, wells)}
+
     if display_category == "wellPlate":
       return Plate(
         name=name,
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        items=cast(List[List[Well]], wells),
+        ordered_items=cast(List[List[Well]], ordered_items),
         model=data["metadata"]["displayName"]
       )
     if display_category == "tipRack":
@@ -158,7 +161,7 @@ def ot_definition_to_resource(
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        items=cast(List[List[TipSpot]], wells),
+        ordered_items=cast(List[List[TipSpot]], ordered_items),
         model=data["metadata"]["displayName"]
       )
     if display_category in tube_rack_display_cats:
@@ -169,7 +172,7 @@ def ot_definition_to_resource(
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        items=cast(List[List[Tube]], wells),
+        ordered_items=cast(List[List[Tube]], ordered_items),
         model=data["metadata"]["displayName"]
       )
     if display_category == "reservoir":
@@ -178,7 +181,7 @@ def ot_definition_to_resource(
         size_x=size_x,
         size_y=size_y,
         size_z=size_z,
-        items=cast(List[List[Well]], wells),
+        ordered_items=cast(List[List[Well]], ordered_items),
         model=data["metadata"]["displayName"]
       )
 
