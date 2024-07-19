@@ -2,7 +2,7 @@ import sys
 from typing import List, Optional, cast
 
 from pylabrobot.machines.machine import Machine, need_setup_finished
-from pylabrobot.resources import Coordinate, Plate
+from pylabrobot.resources import Coordinate, Plate, Resource
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 
 if sys.version_info >= (3, 8):
@@ -45,7 +45,8 @@ class PlateReader(Machine):
                       category=category, model=model)
     self.backend: PlateReaderBackend = backend # fix type
 
-  def assign_child_resource(self, resource):
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]=None,
+                            reassign: bool = True):
     if len(self.children) >= 1:
       raise ValueError("There already is a plate in the plate reader.")
     if not isinstance(resource, Plate):

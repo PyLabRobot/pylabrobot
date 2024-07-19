@@ -164,8 +164,9 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       "put_direction": serialize(move.put_direction),
     }}, **backend_kwargs)
 
-  async def prepare_for_manual_channel_operation(self):
-    await self.send_command(command="prepare_for_manual_channel_operation")
+  async def prepare_for_manual_channel_operation(self, channel: int):
+    await self.send_command(command="prepare_for_manual_channel_operation",
+                            data={"channel": channel})
 
   async def move_channel_x(self, channel: int, x: float):
     await self.send_command(command="move_channel_x", data={"channel": channel, "x": x})
