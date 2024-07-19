@@ -7,7 +7,7 @@ from pylabrobot.liquid_handling.standard import Pickup, GripDirection
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
 from pylabrobot.resources import (
-  Plate, Well, WellBottomType, CrossSectionType, Coordinate, Container, create_equally_spaced_2d,
+  Plate, Well, WellBottomType, CrossSectionType, Coordinate, Container, create_ordered_items_2d,
   ResourceStack, Lid,
   TIP_CAR_480_A00, TIP_CAR_288_C00, PLT_CAR_L5AC_A00, HT_P, HTF_L,
   no_volume_tracking
@@ -59,7 +59,7 @@ def Cos_96_EZWash(name: str) -> Plate:
     size_z=14.5,
     lid=None,
     model="Cos_96_EZWash",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=10.55,
@@ -804,7 +804,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_iswap_pick_up_resource_grip_direction_changes_plate_width(self):
     size_x = 100
     size_y = 200
-    plate = Plate("dummy", size_x=size_x, size_y=size_y, size_z=100, items=[])
+    plate = Plate("dummy", size_x=size_x, size_y=size_y, size_z=100, ordered_items={})
     plate.location = Coordinate.zero()
 
     with unittest.mock.patch.object(self.lh.backend, "iswap_get_plate") as mocked_iswap_get_plate:
@@ -818,7 +818,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_iswap_release_picked_up_resource_grip_direction_changes_plate_width(self):
     size_x = 100
     size_y = 200
-    plate = Plate("dummy", size_x=size_x, size_y=size_y, size_z=100, items=[])
+    plate = Plate("dummy", size_x=size_x, size_y=size_y, size_z=100, ordered_items={})
     plate.location = Coordinate.zero()
 
     with unittest.mock.patch.object(self.lh.backend, "iswap_put_plate") as mocked_iswap_get_plate:

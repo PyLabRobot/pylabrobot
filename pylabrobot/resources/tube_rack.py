@@ -1,4 +1,4 @@
-from typing import List, Optional, Sequence, Tuple, Union, cast
+from typing import Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.tube import Tube
@@ -16,7 +16,8 @@ class TubeRack(ItemizedResource[Tube]):
     size_x: float,
     size_y: float,
     size_z: float,
-    items: List[List[Tube]],
+    items: Optional[List[List[Tube]]] = None,
+    ordered_items: Optional[Dict[str, Tube]] = None,
     model: Optional[str] = None,
   ):
     """ Initialize a TubeRack resource.
@@ -35,11 +36,8 @@ class TubeRack(ItemizedResource[Tube]):
       size_y=size_y,
       size_z=size_z,
       items=items,
+      ordered_items=ordered_items,
       model=model)
-
-
-  def serialize(self) -> dict:
-    return {**super().serialize()}
 
   def assign_child_resource(
     self,

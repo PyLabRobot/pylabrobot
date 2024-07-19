@@ -4,14 +4,14 @@ import unittest
 
 from .coordinate import Coordinate
 from .plate import Plate, Lid
-from .utils import create_equally_spaced_2d
+from .utils import create_ordered_items_2d
 from .well import Well
 
 
 class TestLid(unittest.TestCase):
   def test_initialize_with_lid(self):
     lid = Lid("plate_lid", size_x=1, size_y=1, size_z=10, nesting_z_height=10)
-    plate = Plate("plate", size_x=1, size_y=1, size_z=15, items=[], lid=lid)
+    plate = Plate("plate", size_x=1, size_y=1, size_z=15, ordered_items={}, lid=lid)
     plate.location = Coordinate.zero()
 
     assert plate.lid is not None
@@ -20,7 +20,7 @@ class TestLid(unittest.TestCase):
     self.assertEqual(plate.lid.get_absolute_location(), Coordinate(0, 0, 5))
 
   def test_add_lid(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     lid = Lid(name="another_lid", size_x=plate.get_size_x(), size_y=plate.get_size_y(),
       size_z=plate.get_size_z(), nesting_z_height=plate.get_size_z())
     plate.assign_child_resource(lid, location=Coordinate(0, 0, 0))
@@ -38,7 +38,7 @@ class TestLid(unittest.TestCase):
     self.assertIsNone(plate.lid)
 
   def test_quadrant(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, items=create_equally_spaced_2d(Well,
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items=create_ordered_items_2d(Well,
       num_items_x=24, num_items_y=16,
       dx=1, dy=1, dz=1,
       item_dx=1, item_dy=1,

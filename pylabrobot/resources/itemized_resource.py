@@ -1,6 +1,6 @@
 from abc import ABCMeta
 import sys
-from typing import Union, Tuple, TypeVar, Generic, List, Optional, Generator, Sequence, cast
+from typing import Dict, Union, Tuple, TypeVar, Generic, List, Optional, Generator, Sequence, cast
 from string import ascii_uppercase as LETTERS
 
 import pylabrobot.utils
@@ -26,11 +26,12 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
   .. note::
     This class is not meant to be used directly, but rather to be subclassed, most commonly by
-    :class:`pylabrobot.resources.Plate` and
-    :class:`pylabrobot.resources.TipRack`.
+    :class:`pylabrobot.resources.Plate` and :class:`pylabrobot.resources.TipRack`.
   """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
+                ordered_items: Optional[Dict[str, T]] = None,
+                ordering: Optional[List[str]] = None,
                 items: Optional[List[List[T]]] = None,
                 num_items_x: Optional[int] = None,
                 num_items_y: Optional[int] = None,
@@ -43,51 +44,63 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       size_x: The size of the resource in the x direction.
       size_y: The size of the resource in the y direction.
       size_z: The size of the resource in the z direction.
-      items: The items on the resource. See
-        :func:`pylabrobot.resources.create_equally_spaced_2d`. Note that items
-        names will be prefixed with the resource name. Defaults to `[]`.
-      num_items_x: The number of items in the x direction. This method can only and must be used if
-        `items` is not specified.
-      num_items_y: The number of items in the y direction. This method can only and must be used if
-        `items` is not specified.
-      location: The location of the resource.
+      ordered_items: The items on the resource, along with their identifier (as keys). See
+        :func:`pylabrobot.resources.create_ordered_items_2d`. If this is specified, `ordering` must
+        be `None`. Keys must be in transposed MS Excel style notation, e.g. "A1" for the first item,
+        "B1" for the item below that, "A2" for the item to the right, etc.
+      ordering: The order of the items on the resource. This is a list of identifiers. If this is
+        specified, `ordered_items` must be `None`. See `ordered_items` for the format of the
+        identifiers.
+      items: Deprecated.
+      num_items_x: Deprecated.
+      num_items_y: Deprecated.
       category: The category of the resource.
 
     Examples:
 
       Creating a plate with 96 wells with
-      :func:`pylabrobot.resources.create_equally_spaced_2d`:
+      :func:`pylabrobot.resources.create_ordered_items_2d`:
 
         >>> from pylabrobot.resources import Plate
         >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1,
-        ...   items=create_equally_spaced_2d(Well
+        ...   ordered_items=create_ordered_items_2d(Well
         ...     dx=0, dy=0, dz=0, item_size_x=1, item_size_y=1,
         ...     num_items_x=1, num_items_y=1))
 
-      Creating a plate with 1 well with a list:
+      Creating a plate with 1 Well in a dict:
 
         >>> from pylabrobot.resources import Plate
         >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1,
-        ...   items=[[Well("well", size_x=1, size_y=1, size_z=1)]])
+        ...   ordered_items={"A1": Well("well", size_x=1, size_y=1, size_z=1)})
     """
+
+    if items is not None:
+      raise NotImplementedError("items is deprecated, use ordered_items instead")
+    if num_items_x is not None:
+      raise NotImplementedError("num_items_x is deprecated, use ordered_items instead")
+    if num_items_y is not None:
+      raise NotImplementedError("num_items_y is deprecated, use ordered_items instead")
 
     super().__init__(name, size_x, size_y, size_z, category=category, model=model)
 
-    if items is None:
-      if num_items_x is None or num_items_y is None:
-        raise ValueError("Either items or (num_items_x and num_items_y) must be specified.")
-      self.num_items_x = num_items_x
-      self.num_items_y = num_items_y
-    else:
-      self.num_items_x = len(items)
-      self.num_items_y = len(items[0]) if self.num_items_x > 0 else 0
-
-    for row in (items or []):
-      for item in row:
-        item.name = f"{self.name}_{item.name}"
-        assert item.location is not None, \
-          "Item location must be specified if supplied at initialization."
+    if ordered_items is not None:
+      if ordering is not None:
+        raise ValueError("Cannot specify both `ordered_items` and `ordering`.")
+      for item in ordered_items.values():
+        if item.location is None:
+          raise ValueError("Item location must be specified if supplied at initialization.")
+        item.name = f"{self.name}_{item.name}" # prefix item name with resource name
         self.assign_child_resource(item, location=item.location)
+      self._ordering = list(ordered_items.keys())
+    else:
+      if ordering is None:
+        raise ValueError("Must specify either `ordered_items` or `ordering`.")
+      self._ordering = ordering
+
+    # validate that ordering is in the transposed Excel style notation
+    for identifier in self._ordering:
+      if not identifier[0] in LETTERS or not identifier[1:].isdigit():
+        raise ValueError("Ordering must be in the transposed Excel style notation, e.g. 'A1'.")
 
   def __getitem__(
     self,
@@ -138,11 +151,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     if isinstance(identifier, (slice, range)):
       start, stop = identifier.start, identifier.stop
       if isinstance(identifier.start, str):
-        start = pylabrobot.utils.string_to_index(identifier.start, num_rows=self.num_items_y,
-          num_columns=self.num_items_x)
+        start = self._ordering.index(identifier.start)
       if isinstance(identifier.stop, str):
-        stop = pylabrobot.utils.string_to_index(identifier.stop, num_rows=self.num_items_y,
-          num_columns=self.num_items_x)
+        stop = self._ordering.index(identifier.stop)
       identifier = list(range(start, stop))
       return self.get_items(identifier)
 
@@ -160,24 +171,19 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       to right).  If a string, it uses transposed MS Excel style notation, e.g. "A1" for the first
       item, "B1" for the item below that, etc. If a tuple, it is (row, column).
 
-    Returns:
-      The item with the given identifier.
-
     Raises:
-      IndexError: If the identifier is out of range. The range is 0 to (num_items_x * num_items_y -
-        1). Strings are converted to integer indices first.
+      IndexError: If the identifier is out of range. The range is 0 to self.num_items-1 (inclusive).
     """
 
-    if isinstance(identifier, str):
-      row, column = pylabrobot.utils.string_to_position(identifier)
-      if not 0 <= row < self.num_items_y or not 0 <= column < self.num_items_x:
-        raise IndexError(f"Identifier '{identifier}' out of range.")
-      identifier = row + column * self.num_items_y
-    elif isinstance(identifier, tuple):
+    if isinstance(identifier, tuple):
       row, column = identifier
-      if not 0 <= row < self.num_items_y or not 0 <= column < self.num_items_x:
-        raise IndexError(f"Identifier '{identifier}' out of range.")
-      identifier = row + column * self.num_items_y
+      identifier = LETTERS[row] + str(column+1) # standard transposed-Excel style notation
+    if isinstance(identifier, str):
+      try:
+        identifier = self._ordering.index(identifier)
+      except ValueError as e:
+        raise IndexError(f"Item with identifier '{identifier}' does not exist on "
+                         f"resource '{self.name}'.") from e
 
     if not 0 <= identifier < self.num_items:
       raise IndexError(f"Item with identifier '{identifier}' does not exist on "
@@ -186,18 +192,15 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     # Cast child to item type. Children will always be `T`, but the type checker doesn't know that.
     return cast(T, self.children[identifier])
 
-  def get_items(self, identifier: Union[str, Sequence[int], Sequence[str]]) -> List[T]:
+  def get_items(self, identifiers: Union[str, Sequence[int], Sequence[str]]) -> List[T]:
     """ Get the items with the given identifier.
 
     Args:
-      identifier: The identifier of the items. Either a string or a list of integers. If a string,
-        it uses transposed MS Excel style notation, e.g. "A1" for the first item, "B1" for the item
-        below that, etc. Regions of items can be specified using a colon, e.g. "A1:H1" for the first
-        column. If a list of integers, it is the indices of the items in the list of items (counted
-        from 0, top to bottom, left to right).
-
-    Returns:
-      The items with the given identifier.
+      identifier: Deprecated. Use `identifiers` instead. # TODO(deprecate-ordered-items)
+      identifiers: The identifiers of the items. Either a string range or a list of integers. If a
+        string, it uses transposed MS Excel style notation. Regions of items can be specified using
+        a colon, e.g. "A1:H1" for the first column. If a list of integers, it is the indices of the
+        items in the list of items (counted from 0, top to bottom, left to right).
 
     Examples:
       Getting the items with identifiers "A1" through "E1":
@@ -213,20 +216,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         [<Item A1>, <Item B1>, <Item C1>, <Item D1>, <Item E1>]
     """
 
-    if isinstance(identifier, str):
-      assert ":" in identifier, \
-        "If identifier is a string, it must be a range of items, e.g. 'A1:E1'."
-      identifier = list(pylabrobot.utils.string_to_indices(identifier, num_rows=self.num_items_y))
-    elif identifier is None:
-      return [None]
-
-    return [self.get_item(i) for i in identifier]
+    if isinstance(identifiers, str):
+      identifiers = pylabrobot.utils.expand_string_range(identifiers)
+    return [self.get_item(i) for i in identifiers]
 
   @property
   def num_items(self) -> int:
-    """ The number of items on this resource. """
-
-    return self.num_items_x * self.num_items_y
+    return len(self.children)
 
   def traverse(
     self,
@@ -412,8 +408,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "num_items_x": self.num_items_x,
-      "num_items_y": self.num_items_y,
+      "ordering": self._ordering,
     }
 
   def index_of_item(self, item: T) -> Optional[int]:
@@ -429,3 +424,35 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     down, then right. """
 
     return self.get_items(range(self.num_items))
+
+  def _get_grid_size(self, identifiers) -> Tuple[int, int]:
+    """ Get the size of the grid from the identifiers, or raise an error if not a full grid. """
+    rows_set, columns_set = set(), set()
+    for identifier in identifiers:
+      rows_set.add(identifier[0])
+      columns_set.add(identifier[1:])
+
+    rows, columns = sorted(list(rows_set)), sorted(list(columns_set), key=int)
+
+    expected_identifiers = sorted([c + r for c in rows for r in columns])
+    if sorted(identifiers) != expected_identifiers:
+      raise ValueError(f"Not a full grid: {identifiers}")
+    return len(rows), len(columns)
+
+  @property
+  def num_items_x(self) -> int:
+    """ The number of items in the x direction, if the resource is a full grid. If the resource is
+    not a full grid, an error will be raised. """
+    _, num_items_x = self._get_grid_size(self._ordering)
+    return num_items_x
+
+  @property
+  def num_items_y(self) -> int:
+    """ The number of items in the y direction, if the resource is a full grid. If the resource is
+    not a full grid, an error will be raised. """
+    num_items_y, _ = self._get_grid_size(self._ordering)
+    return num_items_y
+
+  @property
+  def items(self) -> List[str]:
+    raise NotImplementedError("Deprecated.")

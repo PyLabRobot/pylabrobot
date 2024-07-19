@@ -20,6 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Resource children will not be relocated when the parent resource is rotated (https://github.com/PyLabRobot/pylabrobot/pull/195)
 - `Resource.rotation` attribute is now a `Rotation` object (https://github.com/PyLabRobot/pylabrobot/pull/195)
 - Parameters to higher-level STAR commands may be ints or floats, and will be converted to int when passed to the firmware-level commands.
+- `ItemizedResource` now supports arbitrary patterns, not just full grids (https://github.com/PyLabRobot/pylabrobot/pull/201/):
+  - Parameter `items` of `ItemizedResource.__init__` is deprecated in favor of `ordered_items`.
+  - Rename parameter `identifier` of `ItemizedResource.get_items` to `identifiers`.
+  - Attributes `ItemizedResource.num_items_x` and `ItemizedResource.num_items_y` are now computed, and raise an error when the grid is not rectangular/full.
+  - `ItemizedResource` now serializes `"ordering"`, and not `"num_items_x"` and `"num_items_y"`.
 
 ### Added
 
@@ -29,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Rotation` class to represent a rotation in 3D space (https://github.com/PyLabRobot/pylabrobot/pull/195)
 - `Resource.get_absolute_rotation()` to get the absolute rotation of a resource (https://github.com/PyLabRobot/pylabrobot/pull/195)
 - `pedestal_size_z` to `PLT_CAR_L5MD` and `PLT_CAR_L5MD_A00` (https://github.com/PyLabRobot/pylabrobot/pull/198/).
+- `create_ordered_items_2d`, similar to `create_equally_spaced_2d`, but a dictionary keyed by the item's position identifier in the grid (https://github.com/PyLabRobot/pylabrobot/pull/201/)
 
 ### Deprecated
 
@@ -37,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Passing single values to LiquidHandler `pick_up_tips`, `drop_tips`, `aspirate`, and `dispense` methods. These methods now require a list of values.
 - `hamilton_parse` module and the VENUS labware database parser.
 - `PLT_CAR_L4_SHAKER` was deprecated in favor of `MFX_CAR_L5_base` (https://github.com/PyLabRobot/pylabrobot/pull/188/).
+- `utils.positions`: `string_to_position`, `string_to_index`, `string_to_indices`, `string_to_pattern`.
 
 ### Fixed
 
