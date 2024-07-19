@@ -89,6 +89,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       for item in ordered_items.values():
         if item.location is None:
           raise ValueError("Item location must be specified if supplied at initialization.")
+        item.name = f"{self.name}_{item.name}" # prefix item name with resource name
         self.assign_child_resource(item, location=item.location)
       self._ordering = list(ordered_items.keys())
     else:
