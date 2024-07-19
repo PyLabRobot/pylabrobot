@@ -45,7 +45,7 @@ def ot_definition_to_resource(
   if display_category in ["wellPlate", "tipRack", "tubeRack", "adapter", "aluminumBlock",
                           "reservoir"]:
     items = data["ordering"]
-    wells: List[List[Union[TipSpot, Well, Tube]]] = [] # TODO: can we use TypeGuard?
+    wells: List[Union[TipSpot, Well, Tube]] = [] # TODO: can we use TypeGuard?
 
     def volume_from_name(name: str) -> float:
       # like "Opentrons 96 Filter Tip Rack 200 µL"
@@ -56,7 +56,6 @@ def ot_definition_to_resource(
       return float(volume)
 
     for i, column in enumerate(items):
-      wells.append([])
       for item in column:
         well_data = data["wells"][item]
 
@@ -94,7 +93,7 @@ def ot_definition_to_resource(
             cross_section_type=cross_section_type
           )
           well.location = location
-          wells[i].append(well)
+          wells.append(well)
         elif display_category == "tipRack":
           # closure
           def make_make_tip(well_data) -> TipCreator:
@@ -115,7 +114,7 @@ def ot_definition_to_resource(
             make_tip=make_make_tip(well_data)
           )
           tip_spot.location = location
-          wells[i].append(tip_spot)
+          wells.append(tip_spot)
         elif display_category in tube_rack_display_cats:
           tube = Tube(
             name=item,
@@ -125,7 +124,7 @@ def ot_definition_to_resource(
             max_volume=well_data["totalLiquidVolume"]
           )
           tube.location = location
-          wells[i].append(tube)
+          wells.append(tube)
         elif display_category == "reservoir":
           if well_data["shape"] == "rectangular":
             cross_section_type = CrossSectionType.RECTANGLE
@@ -141,10 +140,11 @@ def ot_definition_to_resource(
             cross_section_type=cross_section_type
           )
           well.location = location
-          wells[i].append(well)
+          wells.append(well)
 
     ordering = data["ordering"]
-    ordered_items = {key: value for key, value in zip(ordering, wells)}
+    ordering = [item for sublist in ordering for item in sublist]
+    ordered_items = dict(zip(ordering, wells))
 
     if display_category == "wellPlate":
       return Plate(
