@@ -41,6 +41,7 @@ from pylabrobot.resources import (
   does_cross_contamination_tracking
 )
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
 from .standard import (
@@ -1773,7 +1774,7 @@ class LiquidHandler(Machine):
         z=to_location.z  + to.get_size_z())
     elif isinstance(to, Coordinate):
       to_location = to
-    elif isinstance(to, MFXModule):
+    elif isinstance(to, (MFXModule, Tilter)):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateAdapter):
       # Calculate location adjustment of Plate based on PlateAdapter geometry
@@ -1803,7 +1804,7 @@ class LiquidHandler(Machine):
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       to.assign_child_resource(plate)
-    elif isinstance(to, MFXModule):
+    elif isinstance(to, (MFXModule, Tilter)):
       to.assign_child_resource(plate, location=to.child_resource_location)
     elif isinstance(to, PlateAdapter):
       to.assign_child_resource(plate, location=to.compute_plate_location(plate))
