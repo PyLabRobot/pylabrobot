@@ -280,9 +280,6 @@ def calculate_liquid_height_container_1segment_round_fbottom(
 #         ),
 #     )
 
-def compute_volume_from_height_cylinder(liquid_height: float, well_radius: float) -> float:
-  return math.pi * (well_radius**2) * liquid_height
-
 
 def compute_height_from_volume_cylinder(liquid_volume: float, well_radius: float) -> float:
   return liquid_volume / (math.pi * (well_radius**2))
@@ -300,17 +297,8 @@ def compute_height_from_volume_conical_frustum(liquid_volume: float, bottom_radi
                                            top_radius**2))
 
 
-def compute_volume_from_height_square(liquid_height: float, well_side_length: float) -> float:
-  return liquid_height * (well_side_length**2)
-
-
 def compute_height_from_volume_square(liquid_volume: float, well_side_length: float) -> float:
   return liquid_volume / (well_side_length**2)
-
-
-def compute_volume_from_height_rectangle(liquid_height: float, well_length: float,
-                                         well_width: float) -> float:
-  return liquid_height * (well_length * well_width)
 
 
 def compute_height_from_volume_rectangle(liquid_volume: float, well_length: float,
