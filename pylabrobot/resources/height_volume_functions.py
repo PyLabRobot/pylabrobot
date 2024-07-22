@@ -491,41 +491,41 @@ def calculate_liquid_volume_container_1segment_round_fbottom(
 #         ),
 #     )
 
-def _compute_volume_from_height_cylinder(liquid_height: float, well_radius: float) -> float:
+def compute_volume_from_height_cylinder(liquid_height: float, well_radius: float) -> float:
     """Compute volume (uL) from height (mm) for a cylinder."""
     return math.pi * (well_radius**2) * liquid_height
 
 
-def _compute_height_from_volume_cylinder(liquid_volume: float, well_radius: float) -> float:
+def compute_height_from_volume_cylinder(liquid_volume: float, well_radius: float) -> float:
     """Compute height (mm) from volume (uL) for a cylinder."""
     return liquid_volume / (math.pi * (well_radius**2))
 
 
-def _compute_volume_from_height_conicalfrustum(liquid_height: float, bottom_radius: float, top_radius: float) -> float:
+def compute_volume_from_height_conicalfrustum(liquid_height: float, bottom_radius: float, top_radius: float) -> float:
     """Compute volume (uL) from height (mm) for a conical frustum."""
     return (1 / 3) * math.pi * liquid_height * (bottom_radius**2 + bottom_radius * top_radius + top_radius**2)
 
 
-def _compute_height_from_volume_conicalfrustum(liquid_volume: float, bottom_radius: float, top_radius: float) -> float:
+def compute_height_from_volume_conicalfrustum(liquid_volume: float, bottom_radius: float, top_radius: float) -> float:
     """Compute height (mm) from volume (uL) for a conical frustum."""
     return (3 * liquid_volume) / (math.pi * (bottom_radius**2 + bottom_radius * top_radius + top_radius**2))
 
 
-def _compute_volume_from_height_square(liquid_height: float, well_side_length: float) -> float:
+def compute_volume_from_height_square(liquid_height: float, well_side_length: float) -> float:
     """Compute volume (uL) from height (mm) for a square well."""
     return liquid_height * (well_side_length**2)
 
 
-def _compute_height_from_volume_square(liquid_volume: float, well_side_length: float) -> float:
+def compute_height_from_volume_square(liquid_volume: float, well_side_length: float) -> float:
     """Compute height (mm) from volume (uL) for a square well."""
     return liquid_volume / (well_side_length**2)
 
 
-def _compute_volume_from_height_rectangle(liquid_height: float, well_length: float, well_width: float) -> float:
+def compute_volume_from_height_rectangle(liquid_height: float, well_length: float, well_width: float) -> float:
     """Compute volume (uL) from height (mm) for a rectangular well."""
     return liquid_height * (well_length * well_width)
 
 
-def _compute_height_from_volume_rectangle(liquid_volume: float, well_length: float, well_width: float) -> float:
+def compute_height_from_volume_rectangle(liquid_volume: float, well_length: float, well_width: float) -> float:
     """Compute height (mm) from volume (uL) for a rectangular well."""
     return liquid_volume / (well_length * well_width)
