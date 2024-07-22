@@ -45,8 +45,7 @@ class Tilter(Machine):
     # if the hinge is on the left side of the tilter, the angle is kept positive
     # else, the angle is converted to negative. this follows Euler angle conventions.
 
-    angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
-    await self.backend.set_angle(angle=abs(angle))
+    await self.backend.set_angle(angle=absolute_angle)
     self._absolute_angle = absolute_angle
 
   def rotate_coordinate_around_hinge(self, absolute_coordinate: Coordinate, angle: int) \

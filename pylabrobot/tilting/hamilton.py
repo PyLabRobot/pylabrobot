@@ -37,12 +37,6 @@ class HamiltonTiltModule(Tilter):
         timeout=timeout),
       hinge_coordinate=Coordinate(6.18, 0, 72.85),
       child_resource_location=child_resource_location,
-      # sites=create_homogeneous_carrier_sites(
-      #   klass=CarrierSite,
-      #   locations=[Coordinate(1.0, 3.0, 83.55)],
-      #   site_size_x=127.0,
-      #   site_size_y=86.0,
-      # ),
       category="tilter",
       model=HamiltonTiltModule.__name__,
     )
