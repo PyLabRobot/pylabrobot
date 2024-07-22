@@ -42,8 +42,6 @@ class Tilter(Machine):
       absolute_angle: The absolute (unsigned) angle to set rotation to, in degrees, measured from
         horizontal as zero.
     """
-    # if the hinge is on the left side of the tilter, the angle is kept positive
-    # else, the angle is converted to negative. this follows Euler angle conventions.
 
     await self.backend.set_angle(angle=absolute_angle)
     self._absolute_angle = absolute_angle
