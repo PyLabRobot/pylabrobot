@@ -10,7 +10,7 @@ import websockets.client
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.visualizer import Visualizer
-from pylabrobot.resources import Coordinate, Resource, Cos_96_EZWash
+from pylabrobot.resources import Coordinate, Resource, Cor_96_wellplate_360ul_Fb
 
 
 class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
@@ -130,7 +130,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
 
   async def test_state_updated(self):
     """ Test that the state_updated method sends the correct event. """
-    plate = Cos_96_EZWash(name="plate_01", with_lid=True)
+    plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
     self.r.assign_child_resource(plate, location=Coordinate(0, 0, 0))
     plate.set_well_liquids((None, 500))
     time.sleep(0.1)

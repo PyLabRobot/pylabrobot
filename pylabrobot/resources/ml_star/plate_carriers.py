@@ -215,6 +215,7 @@ def PLT_CAR_L5MD(name: str) -> PlateCarrier:
       ],
       site_size_x=127.0,
       site_size_y=86.0,
+      pedestal_size_z=6.55,
     ),
     model="PLT_CAR_L5MD"
   )
@@ -236,6 +237,7 @@ def PLT_CAR_L5MD_A00(name: str) -> PlateCarrier:
       ],
       site_size_x=127.0,
       site_size_y=86.0,
+      pedestal_size_z=6.55,
     ),
     model="PLT_CAR_L5MD_A00"
   )

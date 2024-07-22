@@ -6,7 +6,6 @@ from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.tecan.EVO import EVO, LiHa, RoMa
 from pylabrobot.liquid_handling.standard import (
   Pickup,
-  # Drop,
   Aspiration,
   Dispense,
   Move,
@@ -70,7 +69,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
   async def test_pick_up_tip(self):
     op = Pickup(
       resource=self.tr.get_item("A1"),
-      offset=None,
+      offset=Coordinate.zero(),
       tip=self.tr.get_tip("A1")
     )
     await self.evo.pick_up_tips([op], use_channels=[0])
@@ -99,7 +98,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
   async def test_aspirate(self):
     op = Aspiration(
       resource=self.plate.get_item("A1"),
-      offset=None,
+      offset=Coordinate.zero(),
       tip=self.tr.get_tip("A1"),
       volume=100,
       flow_rate=100,
@@ -139,7 +138,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
   async def test_dispense(self):
     op = Dispense(
       resource=self.plate.get_item("A1"),
-      offset=None,
+      offset=Coordinate.zero(),
       tip=self.tr.get_tip("A1"),
       volume=100,
       flow_rate=100,

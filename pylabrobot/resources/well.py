@@ -34,9 +34,14 @@ class Well(Container):
   :class:`pylabrobot.resources.Plate` class.
   """
 
-  def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
-    bottom_type: Union[WellBottomType, str] = WellBottomType.UNKNOWN, category: str = "well",
-    max_volume: Optional[float] = None, model: Optional[str] = None,
+  def __init__(
+    self,
+    name: str,
+    size_x: float, size_y: float, size_z: float,
+    material_z_thickness: Optional[float] = None,
+    bottom_type: Union[WellBottomType, str] = WellBottomType.UNKNOWN,
+    category: str = "well", model: Optional[str] = None,
+    max_volume: Optional[float] = None,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     cross_section_type: Union[CrossSectionType, str] = CrossSectionType.CIRCLE):
@@ -75,10 +80,10 @@ class Well(Container):
         max_volume = compute_volume_from_height(size_z)
 
     super().__init__(name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
-      max_volume=max_volume, model=model)
+      max_volume=max_volume, model=model, compute_volume_from_height=compute_volume_from_height,
+      compute_height_from_volume=compute_height_from_volume,
+      material_z_thickness=material_z_thickness)
     self.bottom_type = bottom_type
-    self._compute_volume_from_height = compute_volume_from_height
-    self._compute_height_from_volume = compute_height_from_volume
     self.cross_section_type = cross_section_type
 
     self.tracker.register_callback(self._state_updated)
@@ -89,44 +94,6 @@ class Well(Container):
       "bottom_type": self.bottom_type.value,
       "cross_section_type": self.cross_section_type.value,
     }
-
-  def compute_volume_from_height(self, height: float) -> float:
-    """ Compute the volume of liquid in a well from the height of the liquid relative to the bottom
-    of the well.
-
-    Args:
-      height: Height of the liquid in the well relative to the bottom.
-
-    Returns:
-      The volume of liquid in the well.
-
-    Raises:
-      NotImplementedError: If the plate does not have a volume computation function.
-    """
-
-    if self._compute_volume_from_height is None:
-      raise NotImplementedError("compute_volume_from_height not implemented.")
-
-    return self._compute_volume_from_height(height)
-
-  def compute_height_from_volume(self, liquid_volume: float) -> float:
-    """ Compute the height of liquid in a well relative to the well's bottom
-      from the volume of the liquid.
-
-    Args:
-      liquid_volume: Volume of the liquid in the well.
-
-    Returns:
-      Height of the liquid in the well relative to the bottom.
-
-    Raises:
-      NotImplementedError: If the plate does not have a volume computation function.
-    """
-
-    if self._compute_height_from_volume is None:
-      raise NotImplementedError("compute_height_from_volume not implemented.")
-
-    return self._compute_height_from_volume(liquid_volume)
 
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]):
     """ Set the liquids in the well.

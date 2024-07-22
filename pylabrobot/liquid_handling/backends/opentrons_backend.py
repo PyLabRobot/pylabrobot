@@ -192,8 +192,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     well_definitions = {
       child.name: {
         "depth": child.get_size_z(),
-        "x": cast(Coordinate, child.location).x,
-        "y": cast(Coordinate, child.location).y,
+        "x": cast(Coordinate, child.location).x + child.get_size_x() / 2,
+        "y": cast(Coordinate, child.location).y + child.get_size_y() / 2,
         "z": cast(Coordinate, child.location).z,
         "shape": "circular",
 
@@ -331,10 +331,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
 
-    if op.offset is not None:
-      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
-    else:
-      offset_x = offset_y = offset_z = 0
+    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
 
     # ad-hoc offset adjustment that makes it smoother.
     offset_z += 50
@@ -370,10 +367,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
 
-    if op.offset is not None:
-      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
-    else:
-      offset_x = offset_y = offset_z = 0
+    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
 
     # ad-hoc offset adjustment that makes it smoother.
     offset_z += 10
@@ -472,10 +466,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
-    if op.offset is not None:
-      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
-    else:
-      offset_x = offset_y = offset_z = 0
+    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
 
     ot_api.lh.aspirate(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=flow_rate, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
@@ -525,10 +516,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
-    if op.offset is not None:
-      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
-    else:
-      offset_x = offset_y = offset_z = 0
+    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
 
     ot_api.lh.dispense(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=flow_rate, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)

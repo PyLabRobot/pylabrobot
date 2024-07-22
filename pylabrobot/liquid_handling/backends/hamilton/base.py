@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
 from pylabrobot.machines.backends import USBBackend
-from pylabrobot.resources import TipSpot, Well
+from pylabrobot.resources import TipSpot
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 T = TypeVar("T")
@@ -330,21 +330,12 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         x_positions.append(0)
         y_positions.append(0)
       channels_involved.append(True)
-      offset = ops[i].offset
 
-      x_pos = ops[i].resource.get_absolute_location().x
-      if isinstance(ops[i].resource, (TipSpot, Well)):
-        x_pos += ops[i].resource.center().x
-      if offset is not None:
-        x_pos += offset.x
-      x_positions.append(int(x_pos*10))
+      x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
+      x_positions.append(round(x_pos*10))
 
-      y_pos = ops[i].resource.get_absolute_location().y
-      if isinstance(ops[i].resource, (TipSpot, Well)):
-        y_pos += ops[i].resource.center().y
-      if offset is not None:
-        y_pos += offset.y
-      y_positions.append(int(y_pos*10))
+      y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
+      y_positions.append(round(y_pos*10))
 
     # check that the minimum d between any two y positions is >9mm
     # O(n^2) search is not great but this is most readable, and the max size is 16, so it's fine.
@@ -400,8 +391,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       await self.define_tip_needle(
         tip_type_table_index=ttti,
         has_filter=tip.has_filter,
-        tip_length=int((tip.total_tip_length - tip.fitting_depth) * 10), # in 0.1mm
-        maximum_tip_volume=int(tip.maximal_volume * 10), # in 0.1ul
+        tip_length=round((tip.total_tip_length - tip.fitting_depth) * 10), # in 0.1mm
+        maximum_tip_volume=round(tip.maximal_volume * 10), # in 0.1ul
         tip_size=tip.tip_size,
         pickup_method=tip.pickup_method
       )

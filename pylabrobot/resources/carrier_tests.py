@@ -14,9 +14,9 @@ from .tip_rack import TipRack
 class CarrierTests(unittest.TestCase):
   def setUp(self):
     # pylint: disable=invalid-name
-    self.A = TipRack(name="A", size_x=5, size_y=5, size_z=5, items=[])
-    self.B = TipRack(name="B", size_x=5, size_y=5, size_z=5, items=[])
-    self.alsoB = TipRack(name="B", size_x=100, size_y=100, size_z=100, items=[])
+    self.A = TipRack(name="A", size_x=5, size_y=5, size_z=5, ordered_items={})
+    self.B = TipRack(name="B", size_x=5, size_y=5, size_z=5, ordered_items={})
+    self.alsoB = TipRack(name="B", size_x=100, size_y=100, size_z=100, ordered_items={})
 
     self.tip_car = TipCarrier(
       "tip_car",
@@ -169,7 +169,10 @@ class CarrierTests(unittest.TestCase):
       "size_y": 497.0,
       "size_z": 13.0,
       "location": None,
-      "rotation": 0,
+      "rotation": {
+        "type": "Rotation",
+        "x": 0, "y": 0, "z": 0
+      },
       "category": "tip_carrier",
       "model": None,
       "parent_name": None,
@@ -186,7 +189,10 @@ class CarrierTests(unittest.TestCase):
             "y": 20,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "x": 0, "y": 0, "z": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",
@@ -204,7 +210,10 @@ class CarrierTests(unittest.TestCase):
             "y": 50,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "x": 0, "y": 0, "z": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",
@@ -222,7 +231,10 @@ class CarrierTests(unittest.TestCase):
             "y": 80,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "x": 0, "y": 0, "z": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",
@@ -240,7 +252,10 @@ class CarrierTests(unittest.TestCase):
             "y": 130,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "x": 0, "y": 0, "z": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",
@@ -258,7 +273,10 @@ class CarrierTests(unittest.TestCase):
             "y": 160,
             "z": 30
           },
-          "rotation": 0,
+          "rotation": {
+            "type": "Rotation",
+            "x": 0, "y": 0, "z": 0
+          },
           "category": "carrier_site",
           "children": [],
           "parent_name": "tip_car",

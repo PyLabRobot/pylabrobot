@@ -1,13 +1,10 @@
+from typing import Any, List, Optional
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.resources import (
-  TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00,
-  Cos_96_EZWash,
-  HT_L,
-  LT_L,
-  Coordinate,
+  Plate, Well, WellBottomType, CrossSectionType, Coordinate, create_ordered_items_2d,
+  TIP_CAR_480_A00, PLT_CAR_L5AC_A00, HT_L, LT_L,
 )
 from pylabrobot.resources.hamilton import VantageDeck
 from pylabrobot.liquid_handling.standard import Pickup
@@ -44,6 +41,33 @@ DISPENSE_FORMAT = {
   "zo": "[int]", "ll": "[int]", "lv": "[int]", "de": "[int]", "mv": "[int]", "mc": "[int]",
   "mp": "[int]", "ms": "[int]", "wt": "[int]", "gi": "[int]", "gj": "[int]", "gk": "[int]",
   "zu": "[int]", "zr": "[int]", "dj": "[int]", "mh": "[int]", "po": "[int]", "la": "[int]"}
+
+
+def Cos_96_EZWash(name: str) -> Plate:
+  # Esvelt lab proprietary plate definition that was used for making these tests.
+  # Not a real plate, probably, but a slightly-faulty venus definition.
+  return Plate(
+    name=name,
+    size_x=127.76,
+    size_y=85.54,
+    size_z=14.5,
+    lid=None,
+    model="Cos_96_EZWash",
+    ordered_items=create_ordered_items_2d(Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=10.55,
+      dy=8.05,
+      dz=1.0,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=6.9,
+      size_y=6.9,
+      size_z=11.3,
+      bottom_type=WellBottomType.FLAT,
+      cross_section_type=CrossSectionType.CIRCLE,
+    ),
+  )
 
 
 class TestVantageResponseParsing(unittest.TestCase):
@@ -125,8 +149,17 @@ class VantageCommandCatcher(Vantage):
     self.iswap_installed = True
     self.core96_head_installed = True
 
-  async def send_command(self, module, command, tip_pattern=None, read_timeout=0,
-    write_timeout=0, **kwargs):
+  async def send_command(
+    self,
+    module: str,
+    command: str,
+    tip_pattern: Optional[List[bool]] = None,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait = True,
+    fmt: Optional[Any] = None,
+    **kwargs
+  ):
     cmd, _ = self._assemble_command(module, command, tip_pattern, **kwargs)
     self.commands.append(cmd)
 
@@ -149,8 +182,8 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=18)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=False)
-    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=False)
+    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01")
+    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02")
     self.deck.assign_child_resource(self.plt_car, rails=24)
 
     self.maxDiff = None
@@ -244,7 +277,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_tip_pickup_01(self):
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
-      "A1PMTPid0012xp4329 4329 0&yp1458 1368 0&tm1 1 0&tt1 1&tp2265 2265&tz2165 2165&th2450 2450&"
+      "A1PMTPid0012xp4329 4329 0&yp1458 1368 0&tm1 1 0&tt1 1&tp2266 2266&tz2166 2166&th2450 2450&"
       "te2450 2450&ba0 0&td1 1&",
       PICKUP_TIP_FORMAT)
 
@@ -259,7 +292,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_small_tip_pickup(self):
     await self.lh.pick_up_tips(self.small_tip_rack["A1"])
     self._assert_command_sent_once(
-      "A1PMTPid0010xp4329 0&yp2418 0&tm1 0&tt1&tp2223&tz2163&th2450&te2450&ba0&td1&",
+      "A1PMTPid0010xp4329 0&yp2418 0&tm1 0&tt1&tp2224&tz2164&th2450&te2450&ba0&td1&",
       PICKUP_TIP_FORMAT)
 
   async def test_small_tip_drop(self):
@@ -271,23 +304,23 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=100)
+    await self.lh.aspirate(self.plate["A1"], vols=[100])
 
     self._assert_command_sent_once(
-      "A1PMDAid0248at0&tm1 0&xp05680 0&yp1460 0 &th2450&te2450&lp2001&"
-      "ch000&zl1871&zx1871&ip0000&fp0000&av010830&as2500&ta000&ba00000&oa000&lm0&ll4&lv4&de0020&"
+      "A1PMDAid0248at0&tm1 0&xp05680 0&yp1460 0 &th2450&te2450&lp2002&"
+      "ch000&zl1872&zx1872&ip0000&fp0000&av010830&as2500&ta000&ba00000&oa000&lm0&ll4&lv4&de0020&"
       "wt10&mv00000&mc00&mp000&ms2500&gi000&gj0gk0zu0000&zr00000&mh0000&zo005&po0109&dj0la0&lb0&"
       "lc0&",
       ASPIRATE_FORMAT)
 
   async def test_dispense(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=100)
-    await self.lh.dispense(self.plate["A2"], vols=100, liquid_height=[5], jet=[False],
+    await self.lh.aspirate(self.plate["A1"], vols=[100])
+    await self.lh.dispense(self.plate["A2"], vols=[100], liquid_height=[5], jet=[False],
                            blow_out=[True])
 
     self._assert_command_sent_once(
-      "A1PMDDid0253dm3&tm1 0&xp05770 0&yp1460 0&zx1871&lp2001&zl1921&"
+      "A1PMDDid0253dm3&tm1 0&xp05770 0&yp1460 0&zx1872&lp2002&zl1922&"
       "ip0000&fp0021&th2450&te2450&dv010830&ds1200&ss2500&rv000&ta050&ba00000&lm0&zo005&ll1&lv1&"
       "de0010&mv00000&mc00&mp000&ms0010&wt00&gi000&gj0gk0zu0000&dj00zr00000&mh0000&po0050&la0&",
       DISPENSE_FORMAT)
@@ -295,8 +328,8 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_zero_volume_liquid_handling(self):
      # just test that this does not throw an error
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=0)
-    await self.lh.dispense(self.plate["A2"], vols=0)
+    await self.lh.aspirate(self.plate["A1"], vols=[0])
+    await self.lh.dispense(self.plate["A2"], vols=[0])
 
   async def test_tip_pickup96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
@@ -315,7 +348,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.aspirate96(self.plate, volume=100, jet=True, blow_out=True)
     self._assert_command_sent_once(
-      "A1HMDAid0236at0xp05680yp1460th2450te2450lp2001zl1871zx1871ip000fp000av010720as2500ta050"
+      "A1HMDAid0236at0xp05680yp1460th2450te2450lp2002zl1872zx1872ip000fp000av010720as2500ta050"
       "ba004000oa00000lm0ll4de0020wt10mv00000mc00mp000ms2500zu0000zr00000mh000gj0gk0gi000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpo0050",
       {"xp": "int", "yp": "int", "th": "int", "te": "int", "lp": "int", "zl": "int", "zx": "int",
@@ -329,7 +362,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.aspirate96(self.plate, volume=100, jet=True, blow_out=True)
     await self.lh.dispense96(self.plate, volume=100, jet=True, blow_out=True)
     self._assert_command_sent_once(
-      "A1HMDDid0238dm1xp05680yp1460th2450te2450lp2001zl1971zx1871ip000fp029dv010720ds4000ta050"
+      "A1HMDDid0238dm1xp05680yp1460th2450te2450lp2002zl1972zx1872ip000fp029dv010720ds4000ta050"
       "ba004000lm0ll4de0010wt00mv00000mc00mp000ms0010ss2500rv000zu0000dj00zr00000mh000gj0gk0gi000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpo0050",
       {"xp": "int", "yp": "int", "th": "int", "te": "int", "lp": "int", "zl": "int", "zx": "int",
@@ -349,11 +382,11 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # pickup
     self._assert_command_sent_once(
-      "A1RMDGid0240xp6175yp1145zp1954yw81yo1302yg1237pt20zc0hd0te2840",
+      "A1RMDGid0240xp6179yp1143zp1955yw81yo1310yg1245pt20zc0hd0te2840",
       {"xp": "int", "yp": "int", "zp": "int", "yw": "int", "yo": "int", "yg": "int", "pt": "int",
        "zc": "int", "hd": "int", "te": "int"})
 
     # release
     self._assert_command_sent_once(
-      "A1RMDRid0242xp6175yp2105zp1954yo1302zc0hd0te2840",
+      "A1RMDRid0242xp6179yp2103zp1955yo1310zc0hd0te2840",
       {"xp": "int", "yp": "int", "zp": "int", "yo": "int", "zc": "int", "hd": "int", "te": "int"})

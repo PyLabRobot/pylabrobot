@@ -1,5 +1,4 @@
-""" Tests for plate reader """
-
+from typing import Literal
 import unittest
 
 from pylabrobot.plate_reading import PlateReader
@@ -22,10 +21,10 @@ class MockPlateReaderBackend(PlateReaderBackend):
   async def close(self):
     pass
 
-  async def read_luminescence(self):
+  async def read_luminescence(self, focal_height: float):
     return [[1, 2, 3], [4, 5, 6]]
 
-  async def read_absorbance(self):
+  async def read_absorbance(self, wavelength: int, report: Literal["OD", "transmittance"]):
     return [[1, 2, 3], [4, 5, 6]]
 
 
@@ -37,21 +36,19 @@ class TestPlateReaderResource(unittest.TestCase):
     self.pr = PlateReader(name="pr", backend=MockPlateReaderBackend(), size_x=1, size_y=1, size_z=1)
 
   def test_add_plate(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1,
-      items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     self.pr.assign_child_resource(plate)
 
   def test_add_plate_full(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1,
-      items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     self.pr.assign_child_resource(plate)
 
-    another_plate = Plate("another_plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
+    another_plate = Plate("another_plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     with self.assertRaises(ValueError):
       self.pr.assign_child_resource(another_plate)
 
   def test_get_plate(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     self.pr.assign_child_resource(plate)
 
     self.assertEqual(self.pr.get_plate(), plate)

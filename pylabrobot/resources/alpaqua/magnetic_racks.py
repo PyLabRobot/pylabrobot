@@ -11,8 +11,8 @@ def Alpaqua_96_magnum_flx(name: str) -> PlateAdapter:
   """
   return PlateAdapter(
     name=name,
-    size_x=127.0,
-    size_y=86.0,
+    size_x=127.76,
+    size_y=85.48,
     size_z=35.0,
     dx=9.8,
     dy=6.8,
@@ -21,5 +21,4 @@ def Alpaqua_96_magnum_flx(name: str) -> PlateAdapter:
     adapter_hole_size_y=8.0,
     site_pedestal_z=6.2,
     model="Alpaqua_96_magnum_flx",
-    )
-
+  )

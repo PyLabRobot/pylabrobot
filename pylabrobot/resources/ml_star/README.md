@@ -1,4 +1,3 @@
-
 ## Resource defintions: "ML_STAR"
 
 Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/history)
@@ -7,7 +6,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Currently defined tip carriers:
+### Tip carriers:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -15,7 +14,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Currently defined plate carriers:
+### Plate carriers:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -23,15 +22,15 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Currently defined MFX carriers:
+### MFX carriers:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
-| 'MFX_CAR_L5_base'<br>Part no.: 188039<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188039) <br>Labware carrier base for up to 5 Multiflex Modules | <img src="ims/MFX_CAR_L5_base_188039.jpg" alt="MFX_CAR_L5_base" width="250"/> | `MFX_CAR_L5_base` |
+| 'MFX_CAR_L5_base'<br>Part no.: 188039<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188039) <br>Labware carrier base for up to 5 Multiflex Modules <br>Occupies 6 tracks (6T). | <img src="ims/MFX_CAR_L5_base_188039.jpg" alt="MFX_CAR_L5_base" width="250"/> | `MFX_CAR_L5_base` |
+| 'MFX_CAR_L4_SHAKER'<br>Part no.: 187001<br>[secondary supplier website](https://www.testmart.com/estore/unit.cfm/PIPPET/HAMROB/187001/automated_pippetting_devices_and_systems/8.html) (cannot find information on Hamilton website)<br>Sometimes referred to as "PLT_CAR_L4_SHAKER" by Hamilton. <br>Template carrier with 4 positions for Hamilton Heater Shaker. <br>Occupies 7 tracks (7T). Can be screwed onto the deck. | <img src="ims/MFX_CAR_L4_SHAKER_187001.png" alt="MFX_CAR_L4_SHAKER" width="250"/> | `MFX_CAR_L4_SHAKER_187001` |
 
 
-
-#### Currently defined MFX modules:
+#### MFX modules:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -41,10 +40,34 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Currently defined MFX carriers:
+### Tube carriers:
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Tube_CAR_24_A00'<br>Part no.: 173400<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/173400) <br>Carries 24 "sample" tubes with 14.5–18 mm outer diameter, 60–120 mm high. Occupies one track. | <img src="ims/Tube_CAR_24_A00.png" alt="Tube_CAR_24_A00" width="250"/> | `Tube_CAR_24_A00` |
+
+
+---
+
+### Trough carriers:
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Trough_CAR_4R200_A00'<br>Part no.: 185436 (same as 96890-01?)<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/96890-01) <br>Trough carrier for 4x 200ml troughs. 2 tracks(T) wide. | <img src="ims/Trough_CAR_4R200_A00.png" alt="Trough_CAR_4R200_A00" width="250"/> | `Trough_CAR_4R200_A00` |
+
+
+
+#### Troughs:
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Hamilton_1_trough_200ml_Vb'<br>Part no.: 56695-02<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/56695-02) <br>Trough 200ml, w lid, self standing, Black. <br>Compatible with Trough_CAR_4R200_A00 (185436). | <img src="ims/Hamilton_1_trough_200ml_Vb.jpg" alt="Hamilton_1_trough_200ml_Vb" width="250"/> | `Hamilton_1_trough_200ml_Vb` |
+
+
+---
+
+### Adapters:
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
 | 'Hamilton_96_adapter_188182'<br>Part no.: 188182<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/188182) (<-non-functional link?) <br>Adapter for 96 well PCR plate, plunged. Does not have an ANSI/SLAS footprint -> requires assignment with specified location. | <img src="ims/Hamilton_96_adapter_188182.png" alt="Hamilton_96_adapter_188182" width="250"/> | `Hamilton_96_adapter_188182` |
-
-

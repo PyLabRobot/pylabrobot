@@ -124,7 +124,17 @@ class Carrier(Resource, Generic[S]):
     if self.sites[spot].resource is not None:
       raise ValueError(f"spot {spot} already has a resource")
 
-    self.sites[spot].assign_child_resource(resource, location=Coordinate.zero())
+    if not resource.rotation.y == resource.rotation.x == 0:
+      raise ValueError("Resource rotation must be 0 around the x and y axis")
+    if not resource.rotation.z % 90 == 0:
+      raise ValueError("Resource rotation must be a multiple of 90 degrees on the z axis")
+    location = {
+      0.0: Coordinate(x=0, y=0, z=0),
+      90.0: Coordinate(x=resource.get_size_x(), y=0, z=0),
+      180.0: Coordinate(x=resource.get_size_x(), y=resource.get_size_y(), z=0),
+      270.0: Coordinate(x=0, y=resource.get_size_y(), z=0),
+    }[resource.rotation.z % 360]
+    self.sites[spot].assign_child_resource(resource, location=location)
 
   def unassign_child_resource(self, resource):
     """ Unassign a resource from this carrier, checked by name.
@@ -172,8 +182,8 @@ class Carrier(Resource, Generic[S]):
 
 
 class TipCarrier(Carrier):
-  """ Base class for tip carriers.
-  Name prefix: 'TIP_'
+  r""" Base class for tip carriers.
+  Name prefix: 'TIP\_'
   """
   def __init__(
     self,
@@ -218,8 +228,8 @@ class PlateCarrierSite(CarrierSite):
 
 
 class PlateCarrier(Carrier):
-  """ Base class for plate carriers.
-  Name prefix: 'PLT_'
+  r""" Base class for plate carriers.
+  Name prefix: 'PLT\_'
   """
   def __init__(
     self,
@@ -235,8 +245,8 @@ class PlateCarrier(Carrier):
 
 
 class MFXCarrier(Carrier):
-  """ Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites).
-  Name prefix: 'MFX_'
+  r""" Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites).
+  Name prefix: 'MFX\_'
   """
   def __init__(
     self,
@@ -251,9 +261,10 @@ class MFXCarrier(Carrier):
       sites,category=category, model=model)
 
 
+
 class TubeCarrier(Carrier):
-  """ Base class for tube/sample carriers.
-  Name prefix: 'SMP_'
+  r""" Base class for tube/sample carriers.
+  Name prefix: 'SMP\_'
   """
   def __init__(
     self,
@@ -268,9 +279,9 @@ class TubeCarrier(Carrier):
       sites,category=category, model=model)
 
 
-class ReagentCarrier(Carrier):
-  """ Base class for reagent/trough carriers.
-  Name prefix: 'RGT_'
+class TroughCarrier(Carrier):
+  r""" Base class for reagent/trough carriers.
+  Name prefix: 'RGT\_'
   """
   def __init__(
     self,
@@ -279,7 +290,7 @@ class ReagentCarrier(Carrier):
     size_y: float,
     size_z: float,
     sites: Optional[List[CarrierSite]] = None,
-    category="reagent_carrier",
+    category="trough_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
       sites,category=category, model=model)

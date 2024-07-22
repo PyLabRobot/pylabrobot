@@ -15,7 +15,7 @@ from pylabrobot.resources import (
   TipSpot,
   Well,
   ResourceNotFoundError,
-  create_equally_spaced_2d,
+  create_ordered_items_2d,
   standard_volume_tip_with_filter,
   create_homogeneous_carrier_sites
 )
@@ -59,7 +59,7 @@ class DeckTests(unittest.TestCase):
       locations=[Coordinate(10, 20, 30)], site_size_x=10, site_size_y=10))
 
     tc[0] = TipRack("tips", 10, 20, 30,
-      items=create_equally_spaced_2d(TipSpot,
+      ordered_items=create_ordered_items_2d(TipSpot,
         num_items_x=1, num_items_y=1,
         dx=-1, dy=-1, dz=-1,
         item_dx=1, item_dy=1,
@@ -69,7 +69,7 @@ class DeckTests(unittest.TestCase):
       klass=PlateCarrierSite, locations=[Coordinate(10, 20, 30)], site_size_x=10, site_size_y=10,
       pedestal_size_z=0))
     pc[0] = Plate("plate", 10, 20, 30,
-      items=create_equally_spaced_2d(Well,
+      ordered_items=create_ordered_items_2d(Well,
         num_items_x=1, num_items_y=1,
         dx=-1, dy=-1, dz=-1,
         item_dx=1, item_dy=1,

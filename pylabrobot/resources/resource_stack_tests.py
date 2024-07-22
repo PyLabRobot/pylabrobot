@@ -3,7 +3,7 @@
 
 import unittest
 
-from pylabrobot.resources import Coordinate, Plate, Resource
+from pylabrobot.resources import Coordinate, Lid, Plate, Resource
 from .resource_stack import ResourceStack
 
 
@@ -60,40 +60,51 @@ class ResourceStackTests(unittest.TestCase):
   # Tests for using ResourceStack as a stacking area, like the one near the washer on the STARs.
 
   def test_add_item(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.assign_child_resource(plate)
     self.assertEqual(stacking_area.get_top_item(), plate)
 
   def test_get_absolute_location_plate(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[])
+    plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.location = Coordinate.zero()
     stacking_area.assign_child_resource(plate)
     self.assertEqual(plate.get_absolute_location(), Coordinate(0, 0, 0))
 
   def test_get_absolute_location_lid(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[],
-      with_lid=True)
+    lid = Lid(name="lid", size_x=1, size_y=1, size_z=1, nesting_z_height=0)
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.location = Coordinate.zero()
-    stacking_area.assign_child_resource(plate.lid)
+    stacking_area.assign_child_resource(lid)
     self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
 
   def test_get_absolute_location_stack_height(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=1, lid_height=1, items=[],
-      with_lid=True)
-    plate2 = Plate("plate2", size_x=1, size_y=1, size_z=1, lid_height=1, items=[],
-      with_lid=True)
+    lid = Lid(name="lid", size_x=1, size_y=1, size_z=1, nesting_z_height=0)
+    lid2 = Lid(name="lid2", size_x=1, size_y=1, size_z=1, nesting_z_height=0)
 
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.location = Coordinate.zero()
-    stacking_area.assign_child_resource(plate.lid)
+    stacking_area.assign_child_resource(lid)
     top_item = stacking_area.get_top_item()
     assert top_item is not None
     self.assertEqual(top_item.get_absolute_location(), Coordinate(0, 0, 0))
 
-    stacking_area.assign_child_resource(plate2.lid)
+    stacking_area.assign_child_resource(lid2)
     top_item = stacking_area.get_top_item()
     assert top_item is not None
     self.assertEqual(top_item.get_absolute_location(), Coordinate(0, 0, 1))
+
+  def test_move_lid_onto_plate(self):
+    plate = Plate("plate", size_x=1, size_y=1, size_z=10, ordered_items={})
+    lid = Lid(name="lid", size_x=1, size_y=1, size_z=5, nesting_z_height=2)
+    stacking_area = ResourceStack("stacking_area", "z")
+    stacking_area.location = Coordinate.zero()
+    stacking_area.assign_child_resource(plate)
+    stacking_area.assign_child_resource(lid)
+    self.assertEqual(stacking_area.get_top_item(), plate)
+    self.assertEqual(plate.lid, lid)
+    self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
+    assert plate.lid is not None and plate.lid.location is not None
+    self.assertEqual(plate.lid.location, Coordinate(0, 0, 8))
+    self.assertEqual(stacking_area.get_size_z(), 13)

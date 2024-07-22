@@ -2,9 +2,9 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
-from pylabrobot.resources.utils import create_equally_spaced_2d
+from pylabrobot.resources.utils import create_ordered_items_2d
 
 from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_round_vbottom
 
@@ -18,19 +18,29 @@ def _compute_volume_from_height_FrameStar_96_wellplate_skirted(h: float):
     h_cylinder=5.2,
     liquid_height=h)
 
+def Azenta4titudeFrameStar_96_wellplate_skirted_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.76,
+  #   size_y=85.48,
+  #   size_z=5,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Azenta4titudeFrameStar_96_wellplate_skirted_Lid",
+  # )
 
 #: Azenta4titudeFrameStar_96_wellplate_skirted
 def Azenta4titudeFrameStar_96_wellplate_skirted(name: str, with_lid: bool = False) -> Plate:
   # https://www.azenta.com/products/framestar-96-well-skirted-pcr-plate#specifications
   return Plate(
     name=name,
-    size_x=127.0,
-    size_y=86.0,
+    size_x=127.76,
+    size_y=85.48,
     size_z=16,
-    with_lid=with_lid,
+    lid=Azenta4titudeFrameStar_96_wellplate_skirted_Lid(name + "_lid") if with_lid else None,
     model="Azenta4titudeFrameStar_96_wellplate_skirted",
-    lid_height=5,
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=11.5,
@@ -55,4 +65,4 @@ def Azenta4titudeFrameStar_96_wellplate_skirted_L(name: str, with_lid: bool = Fa
 
 #: Azenta4titudeFrameStar_96_wellplate_skirted_P
 def Azenta4titudeFrameStar_96_wellplate_skirted_P(name: str, with_lid: bool = False) -> Plate:
-  return Azenta4titudeFrameStar_96_wellplate_skirted(name=name, with_lid=with_lid).rotated(90)
+  return Azenta4titudeFrameStar_96_wellplate_skirted(name=name, with_lid=with_lid).rotated(z=90)
