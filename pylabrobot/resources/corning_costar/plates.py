@@ -12,7 +12,7 @@ from pylabrobot.resources.volume_functions import (
   calculate_liquid_volume_container_1segment_round_fbottom,
   calculate_liquid_volume_container_2segments_square_vbottom
 )
-from pylabrobot.resources.height_functions import (
+from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_container_1segment_round_fbottom,
   calculate_liquid_height_in_container_2segments_square_vbottom,
 )

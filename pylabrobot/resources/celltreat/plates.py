@@ -1,5 +1,5 @@
 from typing import Optional
-from pylabrobot.resources.height_functions import (
+from pylabrobot.resources.height_volume_functions import (
   compute_height_from_volume_cylinder, compute_volume_from_height_cylinder)
 
 from pylabrobot.resources.plate import Lid, Plate
