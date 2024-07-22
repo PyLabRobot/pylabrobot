@@ -1,6 +1,6 @@
 from typing import Optional
-from pylabrobot.resources.height_volume_functions import (compute_height_from_volume_cylinder,
-                                                          compute_volume_from_height_cylinder)
+from pylabrobot.resources.height_volume_functions import (compute_height_from_volume_conicalfrustum,
+                                                          compute_volume_from_height_conicalfrustum)
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_equally_spaced_2d
@@ -9,12 +9,19 @@ from pylabrobot.resources.well import Well, WellBottomType
 
 def CellTreat_96_WP_U(name: str, lid: Optional[Lid] = None) -> Plate:
   """
-  CellTreat cat. no.: 229590
+  CellTreat cat. no.: 229591
   - Material: Polystyrene
   - Tissue culture treated: No
   """
   WELL_UBOTTOM_HEIGHT = 2.81 # absolute height of cylindrical segment, measured
   WELL_DIAMETER = 6.69 # measured
+
+  well_kwargs = {
+      "size_x": 6.35,
+      "size_y": 6.35,
+      "size_z": 10.04,
+      "bottom_type": WellBottomType.U,
+  }
 
   return Plate(
     name=name,
@@ -32,17 +39,14 @@ def CellTreat_96_WP_U(name: str, lid: Optional[Lid] = None) -> Plate:
       dz=1.92,  # calibrated manually
       item_dx=8.99,
       item_dy=8.99,
-      size_x=6.35,
-      size_y=6.35,
-      size_z=10.04,
-      bottom_type=WellBottomType.U,
+      **well_kwargs,
     ),
   )
 
 
 def CellTreat_96_WP_U_Lid(name: str) -> Lid:
   """
-  CellTreat cat. no.: 229590
+  CellTreat cat. no.: 229591
   - Material: Polystyrene
   - Tissue culture treated: No
   """
@@ -57,34 +61,44 @@ def CellTreat_96_WP_U_Lid(name: str) -> Lid:
 
 
 def CellTreat_6_WP_Flat(name: str, lid: Optional[Lid] = None) -> Plate:
-  WELL_RADIUS = 17.5
+  """
+  CellTreat cat. no.: 229105
+  - Material: Polystyrene
+  - Tissue culture treated: No
+  """
+  UPPER_WELL_RADIUS = 17.75 # from plate specs/drawing
+  LOWER_WELL_RADIUS = 17.35 # from plate specs/drawing
+
+  well_kwargs = {
+      "size_x": 34.7, # from plate specs/drawing
+      "size_y": 34.7, # from plate specs/drawing
+      "size_z": 17.2, # from plate specs/drawing
+      "bottom_type": WellBottomType.FLAT,
+      "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conicalfrustum(
+        liquid_height, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
+      ),
+      "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conicalfrustum(
+        liquid_volume, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
+      ),
+  }
 
   return Plate(
     name=name,
-    size_x=127.0,
-    size_y=86.0,
-    size_z=20.5,
+    size_x=127.8, # from plate specs/drawing  
+    size_y=85.38, # from plate specs/drawing
+    size_z=20.2, # from plate specs/drawing
     lid=lid,
     model=CellTreat_6_WP_Flat.__name__,
     items=create_equally_spaced_2d(
       Well,
       num_items_x=3,
       num_items_y=2,
-      dx=6,
-      dy=5,
-      dz=3,
-      item_dx=38.5,
-      item_dy=38.5,
-      size_x=38.5,
-      size_y=38.5,
-      size_z=18.5,
-      bottom_type=WellBottomType.FLAT,
-      compute_volume_from_height=lambda liquid_height: compute_volume_from_height_cylinder(
-        liquid_height, WELL_RADIUS
-      ),
-      compute_height_from_volume=lambda liquid_volume: compute_height_from_volume_cylinder(
-        liquid_volume, WELL_RADIUS
-      ),
+      dx=6.19, # from plate specs/drawing
+      dy=3.65, # from plate specs/drawing
+      dz=3, # manually calibrated
+      item_dx=39.04, # from plate specs/drawing
+      item_dy=39.04, # from plate specs/drawing
+      **well_kwargs,
     ),
   )
 
@@ -92,9 +106,9 @@ def CellTreat_6_WP_Flat(name: str, lid: Optional[Lid] = None) -> Plate:
 def CellTreat_6_WP_Flat_Lid(name: str) -> Lid:
   return Lid(
     name=name,
-    size_x=127.0,
-    size_y=86.0,
-    size_z=9,
-    nesting_z_height=7.9,
-    model="CellTreat_6_WP_Rd_Lid",
+    size_x=127.0, # from plate specs/drawing
+    size_y=84.8, # from plate specs/drawing
+    size_z=10.20, # measured
+    nesting_z_height=9.0, # measured as difference between 2-stack and single
+    model=CellTreat_6_WP_Flat_Lid.__name__,
   )
