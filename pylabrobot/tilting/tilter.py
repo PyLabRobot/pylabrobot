@@ -13,9 +13,9 @@ class Tilter(Machine):
   def __init__(
     self,
     name: str,
-    size_x: int,
-    size_y: int,
-    size_z: int,
+    size_x: float,
+    size_y: float,
+    size_z: float,
     backend: TilterBackend,
     hinge_coordinate: Coordinate,
     child_resource_location: Coordinate,
