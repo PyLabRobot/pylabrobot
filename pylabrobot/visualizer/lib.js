@@ -1149,10 +1149,21 @@ async function startRecording() {
 
   // Update state of all buttons
   document.getElementById('stop-recording-button').disabled = false;
+  document.getElementById('stop-recording-button').hidden = false;
+
   document.getElementById('start-recording-button').disabled = true;
-  document.getElementById('myRange').disabled = true;
+  document.getElementById('start-recording-button').hidden = true;
+
   document.getElementById('downloadBtn').disabled = true;
-  document.getElementById('download-zip-btn').disabled = true;
+  document.getElementById('downloadBtn').hidden = true;
+
+  document.getElementById('slidecontainer').disabled = true;
+  document.getElementById('slidecontainer').hidden = true;
+
+  document.getElementById('progressBar').disabled = false;
+  document.getElementById('progressBar').hidden = false;
+
+  //document.getElementById('download-zip-btn').disabled = true;
 }
 
 function stopRecording() {
@@ -1184,23 +1195,40 @@ function stopRecording() {
     info.innerText = ' GIF Rendering Progress: ' + Math.round(p * 100) + '%';
   });
 
+
   // Load gif into right portion of screen
   gif.on('finished', function (blob) {
     renderedGifBlob = blob;
+    /*
     var url = URL.createObjectURL(blob);
     var gifDisplay = document.getElementById('gifDisplay');
     gifDisplay.src = url;
     gifDisplay.style.display = 'block';
+    */
+
+    document.getElementById('progressBar').disabled = true;
+    document.getElementById('progressBar').hidden = true;
   });
+
 
   gif.render();
 
   // Update state of all buttons
   document.getElementById('stop-recording-button').disabled = true;
+  document.getElementById('stop-recording-button').hidden = true;
+
   document.getElementById('start-recording-button').disabled = false;
+  document.getElementById('start-recording-button').hidden = false;
+
   document.getElementById('downloadBtn').disabled = false;
-  document.getElementById('download-zip-btn').disabled = false;
-  document.getElementById('myRange').disabled = false;
+  document.getElementById('downloadBtn').hidden = false;
+
+  //document.getElementById('download-zip-btn').disabled = false;
+  document.getElementById('slidecontainer').disabled = false;
+  document.getElementById('slidecontainer').hidden = false;
+
+  document.getElementById('progressBar').disabled = false;
+  document.getElementById('progressBar').hidden = false;
 
 }
 
@@ -1262,6 +1290,8 @@ document.getElementById('downloadBtn').addEventListener('click', function () {
 });
 
 
+/* REMOVING DOWNLOAD ZIP BUTTON
+
 document.getElementById('download-zip-btn').addEventListener('click', async function () {
   try {
     // Prompt the user to select a folder
@@ -1299,6 +1329,7 @@ document.getElementById('download-zip-btn').addEventListener('click', async func
   }
 });
 
+*/
 
 document.getElementById('myRange').addEventListener('input', function () {
   let value = parseInt(this.value);

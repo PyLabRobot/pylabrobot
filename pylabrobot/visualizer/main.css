@@ -10,52 +10,145 @@ button {
 }
 
 nav.navbar {
-  height: 60px;
+  height: 120px;
 }
 
-.column {
-  float: left;
-  width: 50%;
+recording-stuff {
+  position: relative;
+  justify-content: space-between;
+
+
+  .button-container {
+    display: relative;
+    gap: 1em;
+    margin-top: 2em;
+    margin-left: 5em;
+  }
+
+
+  .slidecontainer {
+    width: 50%;
+    margin: auto;
+    margin-top: 11em;
+    margin-left: 35em;
+    position: relative;
+
+
+    /* The slider itself */
+    .slider {
+      -webkit-appearance: none;
+      /* Override default CSS styles */
+      appearance: none;
+      width: 100%;
+      /* Full-width */
+      height: 25px;
+      /* Specified height */
+      background: #d3d3d3;
+      /* Grey background */
+      outline: none;
+      /* Remove outline */
+      opacity: 0.7;
+      /* Set transparency (for mouse-over effects on hover) */
+      -webkit-transition: .2s;
+      /* 0.2 seconds transition on hover */
+      transition: opacity .2s;
+
+      margin: auto;
+    }
+
+    /* Mouse-over effects */
+    .slider:hover {
+      opacity: 1;
+      /* Fully shown on mouse-over */
+    }
+
+    /* The slider handle (use -webkit- (Chrome, Opera, Safari, Edge) and -moz- (Firefox) to override default look) */
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      /* Override default look */
+      appearance: none;
+      width: 25px;
+      /* Set a specific slider handle width */
+      height: 25px;
+      /* Slider handle height */
+      background: #04AA6D;
+      /* Green background */
+      cursor: pointer;
+      /* Cursor on hover */
+    }
+
+    .slider::-moz-range-thumb {
+      width: 25px;
+      /* Set a specific slider handle width */
+      height: 25px;
+      /* Slider handle height */
+      background: #04AA6D;
+      /* Green background */
+      cursor: pointer;
+      /* Cursor on hover */
+    }
+
+    /* Positioning for lower and upper bounds */
+    #lower-bound {
+      position: absolute;
+      left: 0;
+      top: 30px;
+      /* Adjust based on your design */
+      background: white;
+      padding: 2px 5px;
+      border: 1px solid #d3d3d3;
+      border-radius: 3px;
+      font-size: 14px;
+    }
+
+    #upper-bound {
+      position: absolute;
+      right: 0;
+      top: 30px;
+      /* Adjust based on your design */
+      background: white;
+      padding: 2px 5px;
+      border: 1px solid #d3d3d3;
+      border-radius: 3px;
+      font-size: 14px;
+    }
+
+    /* Styling for current value display */
+    #current-value {
+      position: absolute;
+      top: 40px;
+      /* Adjust to move it down */
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      padding: 2px 5px;
+      border: 1px solid #d3d3d3;
+      border-radius: 3px;
+      font-size: 14px;
+    }
+
+
+  }
+
 }
 
-/* Clear floats after the columns */
-.row:after {
-  content: "";
-  display: table;
-  clear: both;
-}
-
-.container {
+.content {
   display: flex;
+  justify-content: center;
+  align-items: center;
   width: 100%;
   height: 100%;
 }
-
-.left-content,
-.right-content {
-  flex: 1;
-  padding: 20px;
-  box-sizing: border-box;
-}
-
-.button-container {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-
 
 #kanvas {
-  width: 100%;
-  height: 100%;
-  overflow: scroll;
+  margin-top: 5em;
+  width: 800px;
+  height: 600px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-#gifDisplay {
-  width: 100%;
-  height: 100%;
-  overflow: scroll;
-}
 
 #status-indicator {
   height: 10px;
@@ -89,101 +182,4 @@ h3.form-row-header {
   font-size: 16px;
   font-weight: bold;
   margin-bottom: 8px;
-}
-
-.slidecontainer {
-  width: 100%;
-  margin-top: 20px;
-  position: relative;
-}
-
-/* The slider itself */
-.slider {
-  -webkit-appearance: none;
-  /* Override default CSS styles */
-  appearance: none;
-  width: 100%;
-  /* Full-width */
-  height: 25px;
-  /* Specified height */
-  background: #d3d3d3;
-  /* Grey background */
-  outline: none;
-  /* Remove outline */
-  opacity: 0.7;
-  /* Set transparency (for mouse-over effects on hover) */
-  -webkit-transition: .2s;
-  /* 0.2 seconds transition on hover */
-  transition: opacity .2s;
-}
-
-/* Mouse-over effects */
-.slider:hover {
-  opacity: 1;
-  /* Fully shown on mouse-over */
-}
-
-/* The slider handle (use -webkit- (Chrome, Opera, Safari, Edge) and -moz- (Firefox) to override default look) */
-.slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  /* Override default look */
-  appearance: none;
-  width: 25px;
-  /* Set a specific slider handle width */
-  height: 25px;
-  /* Slider handle height */
-  background: #04AA6D;
-  /* Green background */
-  cursor: pointer;
-  /* Cursor on hover */
-}
-
-.slider::-moz-range-thumb {
-  width: 25px;
-  /* Set a specific slider handle width */
-  height: 25px;
-  /* Slider handle height */
-  background: #04AA6D;
-  /* Green background */
-  cursor: pointer;
-  /* Cursor on hover */
-}
-
-/* Positioning for lower and upper bounds */
-#lower-bound {
-  position: absolute;
-  left: 0;
-  top: 30px;
-  /* Adjust based on your design */
-  background: white;
-  padding: 2px 5px;
-  border: 1px solid #d3d3d3;
-  border-radius: 3px;
-  font-size: 14px;
-}
-
-#upper-bound {
-  position: absolute;
-  right: 0;
-  top: 30px;
-  /* Adjust based on your design */
-  background: white;
-  padding: 2px 5px;
-  border: 1px solid #d3d3d3;
-  border-radius: 3px;
-  font-size: 14px;
-}
-
-/* Styling for current value display */
-#current-value {
-  position: absolute;
-  top: 40px;
-  /* Adjust to move it down */
-  left: 50%;
-  transform: translateX(-50%);
-  background: white;
-  padding: 2px 5px;
-  border: 1px solid #d3d3d3;
-  border-radius: 3px;
-  font-size: 14px;
 }

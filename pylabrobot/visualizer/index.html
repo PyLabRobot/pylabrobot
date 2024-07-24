@@ -17,50 +17,39 @@
     <div class="container-fluid">
       <a class="navbar-brand" href="#">
         PyLabRobot Visualizer <span class="fs-6 text-muted">(v0.1)</span></a>
+      <!-- Add container for buttons -->
+      <div class="button-container">
+        <button id="start-recording-button" class="btn btn-primary">Start Recording</button>
+        <button id="stop-recording-button" class="btn btn-danger" disabled hidden>Stop Recording</button>
+        <button id="downloadBtn" class="btn btn-success" disabled hidden>Download GIF</button>
+      </div>
+
+      <div class="recording-stuff">
+        <div id="progressBar" style="font-size: 18px;"></div>
+        <input type="text" id="fileName" placeholder="Enter file name" style="text-align: center;">
+        <!-- Add container for frame saving selector -->
+        <div id="slidecontainer">
+          <span id="lower-bound">1</span>
+          <input type="range" min="1" max="96" value="8" class="slider" id="myRange">
+          <span id="upper-bound">96</span>
+          <div id="current-value">Frame Save Interval: 8</div>
+        </div>
+      </div>
+
       <div class="ml-auto">
         <span onclick="openSocket();" id="status-indicator"></span>
         <span id="status-label">Loading...</span>
       </div>
+
     </div>
   </nav>
 
   <div class="content">
     <main>
-      <div class="row">
-        <div class="column">
-          <div class="left-content">
-            <!-- Add elements of left half -->
-            <div id="kanvas" style="width: 800px; height: 600px;"></div>
-            <div id="progressBar" style="font-size: 20px;"></div>
-            <input type="text" id="fileName" placeholder="Enter file name" style="text-align: center;">
-
-            <!-- Add container for buttons -->
-            <div class="button-container">
-              <button id="downloadBtn" class="btn btn-success" disabled>Download GIF</button>
-              <button id="start-recording-button" class="btn btn-primary">Start Recording</button>
-              <button id="stop-recording-button" class="btn btn-danger" disabled>Stop Recording</button>
-              <button id="download-zip-btn" class="btn btn-success" disabled>Download as ZIP</button>
-            </div>
-
-            <!-- Add container for frame saving selector -->
-            <div class="slidecontainer">
-              <span id="lower-bound">1</span>
-              <input type="range" min="1" max="96" value="8" class="slider" id="myRange">
-              <span id="upper-bound">96</span>
-              <div id="current-value">Frame Save Interval: 8</div>
-            </div>
-          </div>
-        </div>
-        <div class="column">
-          <div class="right-content">
-            <!-- Add elements of right half -->
-            <img id="gifDisplay" style="display: none; width: 800px; height: 600px;">
-          </div>
-        </div>
-      </div>
-
+      <div id="kanvas" style="width: 800px; height: 600px;"></div>
     </main>
   </div>
+
 
   <!-- Load JavaScript libraries -->
   <script src="https://unpkg.com/konva@8/konva.min.js"></script>
@@ -79,6 +68,7 @@
   <input type="text" id="fs_port" value="{{ fs_port }}" hidden />
   <input type="text" id="ws_host" value="{{ ws_host }}" hidden />
   <input type="text" id="ws_port" value="{{ ws_port }}" hidden />
+  </div>
 </body>
 
 </html>
