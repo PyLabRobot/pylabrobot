@@ -718,7 +718,7 @@ class Trough extends Container {
   }
 }
 
-class Reservoir extends Resource {
+class Reservoir extends Plate {
   constructor(resourceData, parent = undefined) {
     super(resourceData, parent);
     const { num_items_x, num_items_y } = resourceData;
@@ -727,35 +727,19 @@ class Reservoir extends Resource {
   }
 
   drawMainShape() {
-    return new Konva.Rect({
-      width: this.size_x,
-      height: this.size_y,
-      fill: "#2B2D42",
-      stroke: "black",
-      strokeWidth: 1,
-    });
+
+    return super.drawMainShape();
+
   }
 
   serialize() {
-    return {
-      ...super.serialize(),
-      ...{
-        num_items_x: this.num_items_x,
-        num_items_y: this.num_items_y,
-      },
-    };
+
+    return super.serialize();
   }
 
   update() {
-    super.update();
 
-    // Rename the children
-    for (let i = 0; i < this.num_items_x; i++) {
-      for (let j = 0; j < this.num_items_y; j++) {
-        const child = this.children[i * this.num_items_y + j];
-        child.name = `${this.name}_well_${i}_${j}`;
-      }
-    }
+    super.update();
 
   }
 }
