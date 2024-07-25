@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from pylabrobot.machines import Machine
 from pylabrobot.resources import Coordinate, Plate
+from pylabrobot.resources.well import Well
 
 from .tilter_backend import TilterBackend
 
@@ -92,6 +93,34 @@ class Tilter(Machine):
 
     well_drain_offsets = []
     for well in plate.children:
+      level_absolute_well_drain_coordinate = well.get_absolute_location(_hinge_side, "c", "b")
+      rotated_absolute_well_drain_coordinate = self.rotate_coordinate_around_hinge(
+        level_absolute_well_drain_coordinate, angle
+      )
+      well_drain_offset = (rotated_absolute_well_drain_coordinate -
+                           well.get_absolute_location("c", "c", "b"))
+      well_drain_offsets.append(well_drain_offset)
+
+    return well_drain_offsets
+
+  def get_well_drain_offsets(self, wells: List[Well], absolute_angle: Optional[int] = None) \
+    -> List[Coordinate]:
+    """ Get the drain edge offsets for the given wells, tilted around the hinge at a
+    given absolute angle.
+
+    Args:
+      wells: The wells to calculate the offsets for.
+      absolute_angle: The absolute angle to rotate the wells. If `None`, the current tilt angle.
+    """
+
+    if absolute_angle is None:
+      absolute_angle = self._absolute_angle
+    angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
+
+    _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
+
+    well_drain_offsets = []
+    for well in wells:
       level_absolute_well_drain_coordinate = well.get_absolute_location(_hinge_side, "c", "b")
       rotated_absolute_well_drain_coordinate = self.rotate_coordinate_around_hinge(
         level_absolute_well_drain_coordinate, angle
