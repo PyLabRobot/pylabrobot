@@ -1,6 +1,6 @@
 from typing import Optional
-from pylabrobot.resources.height_volume_functions import (compute_height_from_volume_conicalfrustum,
-                                                          compute_volume_from_height_conicalfrustum)
+from pylabrobot.resources.height_volume_functions import (
+  compute_height_from_volume_conical_frustum, compute_volume_from_height_conical_frustum)
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_equally_spaced_2d
@@ -13,14 +13,14 @@ def CellTreat_96_WP_U(name: str, lid: Optional[Lid] = None) -> Plate:
   - Material: Polystyrene
   - Tissue culture treated: No
   """
-  WELL_UBOTTOM_HEIGHT = 2.81 # absolute height of cylindrical segment, measured
-  WELL_DIAMETER = 6.69 # measured
+  # WELL_UBOTTOM_HEIGHT = 2.81 # absolute height of cylindrical segment, measured
+  # WELL_DIAMETER = 6.69 # measured
 
   well_kwargs = {
-      "size_x": 6.35,
-      "size_y": 6.35,
-      "size_z": 10.04,
-      "bottom_type": WellBottomType.U,
+    "size_x": 6.35,
+    "size_y": 6.35,
+    "size_z": 10.04,
+    "bottom_type": WellBottomType.U,
   }
 
   return Plate(
@@ -35,8 +35,8 @@ def CellTreat_96_WP_U(name: str, lid: Optional[Lid] = None) -> Plate:
       num_items_x=12,
       num_items_y=8,
       dx=11.05,  # measured
-      dy=7.75,  # measured
-      dz=1.92,  # calibrated manually
+      dy=7.75,   # measured
+      dz=1.92,   # calibrated manually
       item_dx=8.99,
       item_dy=8.99,
       **well_kwargs,
@@ -70,21 +70,21 @@ def CellTreat_6_WP_Flat(name: str, lid: Optional[Lid] = None) -> Plate:
   LOWER_WELL_RADIUS = 17.35 # from plate specs/drawing
 
   well_kwargs = {
-      "size_x": 34.7, # from plate specs/drawing
-      "size_y": 34.7, # from plate specs/drawing
-      "size_z": 17.2, # from plate specs/drawing
-      "bottom_type": WellBottomType.FLAT,
-      "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conicalfrustum(
-        liquid_height, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
-      ),
-      "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conicalfrustum(
-        liquid_volume, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
-      ),
+    "size_x": 34.7, # from plate specs/drawing
+    "size_y": 34.7, # from plate specs/drawing
+    "size_z": 17.2, # from plate specs/drawing
+    "bottom_type": WellBottomType.FLAT,
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
+      liquid_height, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
+    ),
+    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
+      liquid_volume, LOWER_WELL_RADIUS, UPPER_WELL_RADIUS
+    ),
   }
 
   return Plate(
     name=name,
-    size_x=127.8, # from plate specs/drawing  
+    size_x=127.8, # from plate specs/drawing
     size_y=85.38, # from plate specs/drawing
     size_z=20.2, # from plate specs/drawing
     lid=lid,
