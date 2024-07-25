@@ -6,8 +6,9 @@ from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.utils import create_equally_spaced_2d
 from pylabrobot.resources.plate import Lid, Plate
 
-from pylabrobot.resources.height_volume_functions import (calculate_liquid_height_in_container_2segments_square_ubottom,
-                                                          calculate_liquid_volume_container_2segments_square_ubottom)
+from pylabrobot.resources.height_volume_functions import (
+  calculate_liquid_height_in_container_2segments_square_ubottom,
+  calculate_liquid_volume_container_2segments_square_ubottom)
 
 
 # # # # # # # # # # ThermoScientific_96_DWP_1200ul_Rd # # # # # # # # # #

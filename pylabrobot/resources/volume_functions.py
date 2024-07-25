@@ -1,8 +1,3 @@
-# General use functions for calculating the volume of different container geometries
-
-import math
-
-
 def calculate_liquid_volume_container_2segments_square_vbottom(
   x: float,
   y: float,
@@ -14,7 +9,8 @@ def calculate_liquid_volume_container_2segments_square_vbottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
+  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in "
+                           "src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
 
 
 def calculate_liquid_volume_container_2segments_square_ubottom(
@@ -26,7 +22,8 @@ def calculate_liquid_volume_container_2segments_square_ubottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
+  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in "
+                           "src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
 
 
 def calculate_liquid_volume_container_2segments_round_vbottom(
@@ -39,7 +36,8 @@ def calculate_liquid_volume_container_2segments_round_vbottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
+  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in "
+                           "src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
 
 
 def calculate_liquid_volume_container_2segments_round_ubottom(
@@ -51,7 +49,8 @@ def calculate_liquid_volume_container_2segments_round_ubottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
+  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in "
+                           "src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
 
 
 def calculate_liquid_volume_container_1segment_round_fbottom(
@@ -63,4 +62,5 @@ def calculate_liquid_volume_container_1segment_round_fbottom(
   This function is deprecated. Please use the equivalent function in
   src/pylabrobot/pylabrobot/resources/height_volume_functions.py
   """
-  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
+  raise DeprecationWarning("This function is deprecated. Please use the equivalent function in "
+                           "src/pylabrobot/pylabrobot/resources/height_volume_functions.py")
