@@ -10,7 +10,7 @@ button {
 }
 
 nav.navbar {
-  height: 120px;
+  height: 60px;
 }
 
 .content {
@@ -65,23 +65,23 @@ h3.form-row-header {
 /* gif recording */
 
 .recording-stuff {
-  position: relative;
-  justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .button-container {
-  display: relative;
-  gap: 1em;
-  margin-top: 2em;
-  margin-left: 5em;
+  margin-right: 10px;
 }
 
-.slide-container {
-  width: 50%;
-  margin: auto;
-  margin-top: 11em;
-  margin-left: 35em;
-  position: relative;
+#fileName {
+  margin-right: 10px;
+}
+
+#slider-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 /* The slider itself */
@@ -90,17 +90,11 @@ h3.form-row-header {
   /* Override default CSS styles */
   appearance: none;
   width: 100%;
-  /* Full-width */
   height: 25px;
-  /* Specified height */
   background: #d3d3d3;
-  /* Grey background */
   outline: none;
-  /* Remove outline */
   opacity: 0.7;
-  /* Set transparency (for mouse-over effects on hover) */
   -webkit-transition: 0.2s;
-  /* 0.2 seconds transition on hover */
   transition: opacity 0.2s;
 
   margin: auto;
@@ -109,7 +103,6 @@ h3.form-row-header {
 /* Mouse-over effects */
 .slider:hover {
   opacity: 1;
-  /* Fully shown on mouse-over */
 }
 
 /* The slider handle (use -webkit- (Chrome, Opera, Safari, Edge) and -moz- (Firefox) to override default look) */
@@ -118,44 +111,20 @@ h3.form-row-header {
   /* Override default look */
   appearance: none;
   width: 25px;
-  /* Set a specific slider handle width */
   height: 25px;
-  /* Slider handle height */
   background: #04aa6d;
-  /* Green background */
   cursor: pointer;
-  /* Cursor on hover */
 }
 
 .slider::-moz-range-thumb {
   width: 25px;
-  /* Set a specific slider handle width */
   height: 25px;
-  /* Slider handle height */
   background: #04aa6d;
-  /* Green background */
   cursor: pointer;
-  /* Cursor on hover */
 }
 
 /* Positioning for lower and upper bounds */
-#lower-bound {
-  position: absolute;
-  left: 0;
-  top: 30px;
-  /* Adjust based on your design */
-  background: white;
-  padding: 2px 5px;
-  border: 1px solid #d3d3d3;
-  border-radius: 3px;
-  font-size: 14px;
-}
-
-#upper-bound {
-  position: absolute;
-  right: 0;
-  top: 30px;
-  /* Adjust based on your design */
+.fr-bound {
   background: white;
   padding: 2px 5px;
   border: 1px solid #d3d3d3;
@@ -165,14 +134,10 @@ h3.form-row-header {
 
 /* Styling for current value display */
 #current-value {
-  position: absolute;
-  top: 40px;
-  /* Adjust to move it down */
-  left: 50%;
-  transform: translateX(-50%);
-  background: white;
-  padding: 2px 5px;
+  /* background: white;
+  padding: 2px;
   border: 1px solid #d3d3d3;
   border-radius: 3px;
-  font-size: 14px;
+  font-size: 14px; */
+  margin-bottom: 0;
 }

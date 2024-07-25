@@ -24,45 +24,48 @@
         <a class="navbar-brand" href="#">
           PyLabRobot Visualizer <span class="fs-6 text-muted">(v0.1)</span></a
         >
-        <!-- Add container for buttons -->
-        <div class="button-container">
-          <button id="start-recording-button" class="btn btn-primary">
-            Start Recording
-          </button>
-          <button
-            id="stop-recording-button"
-            class="btn btn-danger"
-            disabled
-            hidden
-          >
-            Stop Recording
-          </button>
-          <button id="downloadBtn" class="btn btn-success" disabled hidden>
-            Download GIF
-          </button>
-        </div>
 
         <div class="recording-stuff">
+          <div class="button-container">
+            <button id="start-recording-button" class="btn btn-primary">
+              Start Recording
+            </button>
+            <button
+              id="stop-recording-button"
+              class="btn btn-danger"
+              disabled
+              hidden
+            >
+              Stop Recording
+            </button>
+            <button id="downloadBtn" class="btn btn-success" disabled hidden>
+              Download GIF
+            </button>
+          </div>
+
           <div id="progressBar" style="font-size: 18px"></div>
+
           <input
             type="text"
             id="fileName"
-            placeholder="Enter file name"
+            placeholder="plr-visualizer.gif"
             style="text-align: center"
           />
-          <!-- Add container for frame saving selector -->
-          <div id="slide-container">
-            <span id="lower-bound">1</span>
-            <input
-              type="range"
-              min="1"
-              max="96"
-              value="8"
-              class="slider"
-              id="myRange"
-            />
-            <span id="upper-bound">96</span>
-            <div id="current-value">Frame Save Interval: 8</div>
+
+          <div class="frame-rate">
+            <p id="current-value">Frame Save Interval: 8</p>
+            <div id="slider-container">
+              <span class="fr-bound">1</span>
+              <input
+                type="range"
+                min="1"
+                max="96"
+                value="8"
+                class="slider"
+                id="myRange"
+              />
+              <span class="fr-bound">96</span>
+            </div>
           </div>
         </div>
 

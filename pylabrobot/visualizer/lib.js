@@ -1148,8 +1148,8 @@ async function startRecording() {
   document.getElementById("downloadBtn").disabled = true;
   document.getElementById("downloadBtn").hidden = true;
 
-  document.getElementById("slide-container").disabled = true;
-  document.getElementById("slide-container").hidden = true;
+  document.getElementById("slider-container").disabled = true;
+  document.getElementById("slider-container").hidden = true;
 
   document.getElementById("progressBar").disabled = false;
   document.getElementById("progressBar").hidden = false;
@@ -1203,8 +1203,8 @@ function stopRecording() {
   document.getElementById("downloadBtn").disabled = false;
   document.getElementById("downloadBtn").hidden = false;
 
-  document.getElementById("slide-container").disabled = false;
-  document.getElementById("slide-container").hidden = false;
+  document.getElementById("slider-container").disabled = false;
+  document.getElementById("slider-container").hidden = false;
 
   document.getElementById("progressBar").disabled = false;
   document.getElementById("progressBar").hidden = false;
@@ -1239,22 +1239,28 @@ function handleBlob(blob) {
 document
   .getElementById("start-recording-button")
   .addEventListener("click", startRecording);
+
 document
   .getElementById("stop-recording-button")
   .addEventListener("click", stopRecording);
+
 document.getElementById("downloadBtn").addEventListener("click", function () {
-  var fileName = document.getElementById("fileName").value || "generated_gif";
-  if (renderedGifBlob) {
-    var url = URL.createObjectURL(renderedGifBlob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = fileName + ".gif";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  } else {
+  if (!renderedGifBlob) {
     alert("No GIF rendered yet. Please stop the recording first.");
+    return;
   }
+
+  var fileName = document.getElementById("fileName").value || "plr-visualizer";
+  var url = URL.createObjectURL(renderedGifBlob);
+  var a = document.createElement("a");
+  a.href = url;
+  if (!fileName.endsWith(".gif")) {
+    fileName += ".gif";
+  }
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 });
 
 document.getElementById("myRange").addEventListener("input", function () {
