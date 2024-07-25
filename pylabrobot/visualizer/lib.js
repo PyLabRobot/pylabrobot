@@ -1086,14 +1086,14 @@ window.addEventListener("load", function () {
   stage.scaleY(-1);
   stage.offsetY(canvasHeight);
 
+  let minX = -(1 / 2) * canvasWidth;
+  let minY = -(1 / 2) * canvasHeight;
+  let maxX = (1 / 2) * canvasWidth;
+  let maxY = (1 / 2) * canvasHeight;
+
   // limit draggable area to size of canvas
   stage.dragBoundFunc(function (pos) {
     // Set the bounds of the draggable area to 1/2 off the canvas.
-    let minX = -(1 / 2) * canvasWidth;
-    let minY = -(1 / 2) * canvasHeight;
-    let maxX = (1 / 2) * canvasWidth;
-    let maxY = (1 / 2) * canvasHeight;
-
     let newX = Math.max(minX, Math.min(maxX, pos.x));
     let newY = Math.max(minY, Math.min(maxY, pos.y));
 
@@ -1103,12 +1103,12 @@ window.addEventListener("load", function () {
     };
   });
 
-  // make white background
+  // add white background
   var background = new Konva.Rect({
-    x: 0,
-    y: 0,
-    width: stage.width(),
-    height: stage.height(),
+    x: minX,
+    y: minY,
+    width: canvasWidth - minX + maxX,
+    height: canvasHeight - minY + maxY,
     fill: "white",
     listening: false,
   });
@@ -1118,14 +1118,6 @@ window.addEventListener("load", function () {
   stage.add(resourceLayer);
 
   layer.add(background);
-
-  // the stage is draggable
-  // that means absolute position of background may change
-  // so we need to reset it back to {0, 0}
-
-  stage.on("dragmove", () => {
-    background.absolutePosition({ x: 0, y: 0 });
-  });
 
   // Check if there is an after stage setup callback, and if so, call it.
   if (typeof afterStageSetup === "function") {
@@ -1156,8 +1148,8 @@ async function startRecording() {
   document.getElementById("downloadBtn").disabled = true;
   document.getElementById("downloadBtn").hidden = true;
 
-  document.getElementById("slidecontainer").disabled = true;
-  document.getElementById("slidecontainer").hidden = true;
+  document.getElementById("slide-container").disabled = true;
+  document.getElementById("slide-container").hidden = true;
 
   document.getElementById("progressBar").disabled = false;
   document.getElementById("progressBar").hidden = false;
@@ -1211,37 +1203,23 @@ function stopRecording() {
   document.getElementById("downloadBtn").disabled = false;
   document.getElementById("downloadBtn").hidden = false;
 
-  document.getElementById("slidecontainer").disabled = false;
-  document.getElementById("slidecontainer").hidden = false;
+  document.getElementById("slide-container").disabled = false;
+  document.getElementById("slide-container").hidden = false;
 
   document.getElementById("progressBar").disabled = false;
   document.getElementById("progressBar").hidden = false;
 }
 
-// Function to convert stage to a Blob and handle the Blob
+// convert stage to a blob and handle the blob
 function stageToBlob(stage, callback) {
   stage.toBlob({
-    callback: function (blob) {
-      callback(blob);
-    },
+    callback: callback,
     mimeType: "image/jpg",
     quality: 0.3,
   });
 }
 
-// Function to convert Image object to Blob
-async function imageToBlob(image) {
-  return new Promise((resolve) => {
-    const canvas = document.createElement("canvas");
-    canvas.width = image.width;
-    canvas.height = image.height;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(image, 0, 0);
-    canvas.toBlob(resolve, "image/png");
-  });
-}
-
-// Function to handle the Blob (e.g., create an Image element and add it to frameImages)
+// handle the blob (e.g., create an Image element and add it to frameImages)
 function handleBlob(blob) {
   const url = URL.createObjectURL(blob);
   const myImg = new Image();
