@@ -35,7 +35,10 @@ class TestMachine(unittest.TestCase):
       "size_y": 10,
       "size_z": 10,
       "location": None,
-      "rotation": 0,
+      "rotation": {
+        "type": "Rotation",
+        "x": 0, "y": 0, "z": 0
+      },
       "type": "MockMachine",
       "children": [],
       "category": None,

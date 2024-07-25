@@ -34,8 +34,17 @@ def MFX_CAR_L5_base(name: str) -> MFXCarrier:
     model="MFX_CAR_L5_base"
   )
 
-def PLT_CAR_L4_SHAKER(name: str) -> MFXCarrier:
+
+def PLT_CAR_L4_SHAKER(name: str):
+  raise NotImplementedError(
+    "PLT_CAR_L4_SHAKER is deprecated and will be removed in a future version."
+    "Please use MFX_CAR_L4_SHAKER instead."
+  )
+
+
+def MFX_CAR_L4_SHAKER(name: str) -> MFXCarrier:
   """ Hamilton cat. no.: 187001
+  Sometimes referred to as "PLT_CAR_L4_SHAKER" by Hamilton.
   Template carrier with 4 positions for Hamilton Heater Shaker.
   Occupies 7 tracks (7T). Can be screwed onto the deck.
   """

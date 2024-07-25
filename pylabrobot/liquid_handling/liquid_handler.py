@@ -700,6 +700,12 @@ class LiquidHandler(Machine):
     if isinstance(blow_out_air_volume, numbers.Number):
       raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
+    # Convert everything to floats to handle exotic number types
+    vols = [float(v) for v in vols]
+    flow_rates = [float(fr) if fr is not None else None for fr in flow_rates]
+    liquid_height = [float(lh) if lh is not None else None for lh in liquid_height]
+    blow_out_air_volume = [float(bav) if bav is not None else None for bav in blow_out_air_volume]
+
     self._blow_out_air_volume = blow_out_air_volume
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
@@ -867,6 +873,12 @@ class LiquidHandler(Machine):
     flow_rates = flow_rates or [None] * len(use_channels)
     liquid_height = liquid_height or [None] * len(use_channels)
     blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
+
+    # Convert everything to floats to handle exotic number types
+    vols = [float(v) for v in vols]
+    flow_rates = [float(fr) if fr is not None else None for fr in flow_rates]
+    liquid_height = [float(lh) if lh is not None else None for lh in liquid_height]
+    blow_out_air_volume = [float(bav) if bav is not None else None for bav in blow_out_air_volume]
 
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
@@ -1322,6 +1334,11 @@ class LiquidHandler(Machine):
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     aspiration: Union[AspirationPlate, AspirationContainer]
 
+    # Convert everything to floats to handle exotic number types
+    volume = float(volume)
+    flow_rate = float(flow_rate) if flow_rate is not None else None
+    blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
+
     if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
@@ -1453,6 +1470,11 @@ class LiquidHandler(Machine):
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     dispense: Union[DispensePlate, DispenseContainer]
+
+    # Convert everything to floats to handle exotic number types
+    volume = float(volume)
+    flow_rate = float(flow_rate) if flow_rate is not None else None
+    blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
     if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
@@ -1633,7 +1655,7 @@ class LiquidHandler(Machine):
     # rotate the resource if the move operation has a rotation.
     # this code should be expanded to also update the resource's location
     if move_operation.rotation != 0:
-      move_operation.resource.rotate(move_operation.rotation)
+      move_operation.resource.rotate(z=move_operation.rotation)
 
     self._trigger_callback(
       "move_resource",
@@ -1689,11 +1711,7 @@ class LiquidHandler(Machine):
         z=to_location.z  + to.get_size_z() - lid.nesting_z_height)
     elif isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      to_location = to.get_absolute_location()
-      to_location = Coordinate(
-        x=to_location.x,
-        y=to_location.y,
-        z=to_location.z  + to.get_size_z())
+      to_location = to.get_absolute_location(z="top")
     elif isinstance(to, Coordinate):
       to_location = to
     else:
@@ -1766,19 +1784,15 @@ class LiquidHandler(Machine):
 
     if isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      to_location = to.get_absolute_location()
-      to_location = Coordinate(
-        x=to_location.x,
-        y=to_location.y,
-        z=to_location.z  + to.get_size_z())
-    elif isinstance(to, Coordinate):
-      to_location = to
+      to_location = to.get_absolute_location(z="top")
     elif isinstance(to, MFXModule):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateAdapter):
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = to.compute_plate_location(plate)
       to_location = to.get_absolute_location() + adjusted_plate_anchor
+    elif isinstance(to, Coordinate):
+      to_location = to
     else:
       to_location = to.get_absolute_location()
 
@@ -1802,6 +1816,8 @@ class LiquidHandler(Machine):
     elif isinstance(to, CarrierSite): # .zero() resources
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
+      if isinstance(to, ResourceStack) and to.direction != "z":
+        raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       to.assign_child_resource(plate)
     elif isinstance(to, MFXModule):
       to.assign_child_resource(plate, location=to.child_resource_location)

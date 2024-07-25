@@ -4,7 +4,7 @@
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
-from pylabrobot.resources.utils import create_equally_spaced_2d
+from pylabrobot.resources.utils import create_ordered_items_2d
 
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_in_container_2segments_square_vbottom,
@@ -65,7 +65,7 @@ def Porvair_6_reservoir_47ml_Vb(name: str, with_lid: bool = False) -> Plate:
     size_z=44,
     lid=Porvair_6_reservoir_47ml_Vb_Lid(name + "_lid") if with_lid else None,
     model="Porvair_6_reservoir_47ml_Vb",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=6,
       num_items_y=1,
       dx=9.3,
@@ -91,4 +91,4 @@ def Porvair_6_reservoir_47ml_Vb_L(name: str, with_lid: bool = False) -> Plate:
 
 #: Porvair_6_reservoir_47ml_Vb_P
 def Porvair_6_reservoir_47ml_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  return Porvair_6_reservoir_47ml_Vb(name=name, with_lid=with_lid).rotated(90)
+  return Porvair_6_reservoir_47ml_Vb(name=name, with_lid=with_lid).rotated(z=90)

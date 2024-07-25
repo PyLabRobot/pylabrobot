@@ -10,8 +10,9 @@ class Tube(Container):
   :class:`pylabrobot.resources.TubeRack` class.
       """
 
-  def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
-    max_volume: float, category: str = "tube", model: Optional[str] = None):
+  def __init__(self, name: str, size_x: float, size_y: float, size_z: float, max_volume: float,
+               material_z_thickness: Optional[float] = None, category: str = "tube",
+               model: Optional[str] = None):
     """ Create a new tube.
 
     Args:
@@ -19,6 +20,7 @@ class Tube(Container):
       size_x: Size of the tube in the x direction.
       size_y: Size of the tube in the y direction.
       size_z: Size of the tube in the z direction.
+      material_z_thickness: Tube base to cavity base.
       max_volume: Maximum volume of the tube.
       category: Category of the tube.
     """
@@ -28,6 +30,7 @@ class Tube(Container):
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
+      material_z_thickness=material_z_thickness,
       category=category,
       max_volume=max_volume,
       model=model
