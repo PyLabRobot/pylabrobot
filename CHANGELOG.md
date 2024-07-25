@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Rename parameter `identifier` of `ItemizedResource.get_items` to `identifiers`.
   - Attributes `ItemizedResource.num_items_x` and `ItemizedResource.num_items_y` are now computed, and raise an error when the grid is not rectangular/full.
   - `ItemizedResource` now serializes `"ordering"`, and not `"num_items_x"` and `"num_items_y"`.
+- Merge `height_functions.py` and `volume_functions.py` into `height_volume_functions.py` (https://github.com/PyLabRobot/pylabrobot/pull/200)
 
 ### Added
 
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Resource.get_absolute_rotation()` to get the absolute rotation of a resource (https://github.com/PyLabRobot/pylabrobot/pull/195)
 - `pedestal_size_z` to `PLT_CAR_L5MD` and `PLT_CAR_L5MD_A00` (https://github.com/PyLabRobot/pylabrobot/pull/198/).
 - `create_ordered_items_2d`, similar to `create_equally_spaced_2d`, but a dictionary keyed by the item's position identifier in the grid (https://github.com/PyLabRobot/pylabrobot/pull/201/)
+- `CellTreat_96_DWP_350ul_Ub` and `CellTreat_6_DWP_16300ul_Fb` (https://github.com/PyLabRobot/pylabrobot/pull/200)
 
 ### Deprecated
 
