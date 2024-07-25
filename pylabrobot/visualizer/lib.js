@@ -396,7 +396,7 @@ class Resource {
     }
   }
 
-  setState() { }
+  setState() {}
 }
 
 class Deck extends Resource {
@@ -619,7 +619,8 @@ class Container extends Resource {
   aspirate(volume) {
     if (volume > this.getVolume()) {
       throw new Error(
-        `Aspirating ${volume}uL from well ${this.name
+        `Aspirating ${volume}uL from well ${
+          this.name
         } with ${this.getVolume()}uL`
       );
     }
@@ -887,7 +888,7 @@ class TipSpot extends Resource {
 
 // Nothing special.
 class Trash extends Resource {
-  dropTip(layer) { } // just ignore
+  dropTip(layer) {} // just ignore
 
   drawMainShape() {
     if (resources["deck"].constructor.name) {
@@ -898,9 +899,9 @@ class Trash extends Resource {
 }
 
 // Nothing special.
-class Carrier extends Resource { }
-class PlateCarrier extends Carrier { }
-class TipCarrier extends Carrier { }
+class Carrier extends Resource {}
+class PlateCarrier extends Carrier {}
+class TipCarrier extends Carrier {}
 
 class CarrierSite extends Resource {
   constructor(resourceData, parent) {
@@ -1070,14 +1071,14 @@ window.addEventListener("load", function () {
   stage.scaleY(-1);
   stage.offsetY(canvasHeight);
 
+  let minX = -(1 / 2) * canvasWidth;
+  let minY = -(1 / 2) * canvasHeight;
+  let maxX = (1 / 2) * canvasWidth;
+  let maxY = (1 / 2) * canvasHeight;
+
   // limit draggable area to size of canvas
   stage.dragBoundFunc(function (pos) {
     // Set the bounds of the draggable area to 1/2 off the canvas.
-    let minX = -(1 / 2) * canvasWidth;
-    let minY = -(1 / 2) * canvasHeight;
-    let maxX = (1 / 2) * canvasWidth;
-    let maxY = (1 / 2) * canvasHeight;
-
     let newX = Math.max(minX, Math.min(maxX, pos.x));
     let newY = Math.max(minY, Math.min(maxY, pos.y));
 
@@ -1087,30 +1088,21 @@ window.addEventListener("load", function () {
     };
   });
 
-  // make white background
-
+  // add white background
   var background = new Konva.Rect({
-    x: 0,
-    y: 0,
-    width: stage.width(),
-    height: stage.height(),
+    x: minX,
+    y: minY,
+    width: canvasWidth - minX + maxX,
+    height: canvasHeight - minY + maxY,
     fill: "white",
-    listening: false
-  })
+    listening: false,
+  });
 
   // add the layer to the stage
   stage.add(layer);
   stage.add(resourceLayer);
 
   layer.add(background);
-
-  // the stage is draggable
-  // that means absolute position of background may change
-  // so we need to reset it back to {0, 0}
-
-  stage.on('dragmove', () => {
-    background.absolutePosition({ x: 0, y: 0 });
-  });
 
   // Check if there is an after stage setup callback, and if so, call it.
   if (typeof afterStageSetup === "function") {
@@ -1126,28 +1118,26 @@ async function startRecording() {
   frameImages = [];
 
   // Reset the render progress
-  var info = document.getElementById('progressBar');
-  info.innerText = ' GIF Rendering Progress: ' + Math.round(0 * 100) + '%';
+  var info = document.getElementById("progressBar");
+  info.innerText = " GIF Rendering Progress: " + Math.round(0 * 100) + "%";
 
   stageToBlob(stage, handleBlob);
 
   // Update state of all buttons
-  document.getElementById('stop-recording-button').disabled = false;
-  document.getElementById('stop-recording-button').hidden = false;
+  document.getElementById("stop-recording-button").disabled = false;
+  document.getElementById("stop-recording-button").hidden = false;
 
-  document.getElementById('start-recording-button').disabled = true;
-  document.getElementById('start-recording-button').hidden = true;
+  document.getElementById("start-recording-button").disabled = true;
+  document.getElementById("start-recording-button").hidden = true;
 
-  document.getElementById('downloadBtn').disabled = true;
-  document.getElementById('downloadBtn').hidden = true;
+  document.getElementById("downloadBtn").disabled = true;
+  document.getElementById("downloadBtn").hidden = true;
 
-  document.getElementById('slidecontainer').disabled = true;
-  document.getElementById('slidecontainer').hidden = true;
+  document.getElementById("slider-container").disabled = true;
+  document.getElementById("slider-container").hidden = true;
 
-  document.getElementById('progressBar').disabled = false;
-  document.getElementById('progressBar').hidden = false;
-
-  //document.getElementById('download-zip-btn').disabled = true;
+  document.getElementById("progressBar").disabled = false;
+  document.getElementById("progressBar").hidden = false;
 }
 
 function stopRecording() {
@@ -1162,10 +1152,10 @@ function stopRecording() {
 
   gif = new GIF({
     workers: 10,
-    workerScript: 'gif.worker.js',
-    background: '#FFFFFF',
+    workerScript: "gif.worker.js",
+    background: "#FFFFFF",
     width: stage.width(),
-    height: stage.height()
+    height: stage.height(),
   });
 
   // Add each frame to the GIF
@@ -1174,72 +1164,47 @@ function stopRecording() {
   }
 
   // Add progress bar based on how much the gif is rendered
-  gif.on('progress', function (p) {
-    var info = document.getElementById('progressBar');
-    info.innerText = ' GIF Rendering Progress: ' + Math.round(p * 100) + '%';
+  gif.on("progress", function (p) {
+    var info = document.getElementById("progressBar");
+    info.innerText = " GIF Rendering Progress: " + Math.round(p * 100) + "%";
   });
-
 
   // Load gif into right portion of screen
-  gif.on('finished', function (blob) {
+  gif.on("finished", function (blob) {
     renderedGifBlob = blob;
-    /*
-    var url = URL.createObjectURL(blob);
-    var gifDisplay = document.getElementById('gifDisplay');
-    gifDisplay.src = url;
-    gifDisplay.style.display = 'block';
-    */
-
-    document.getElementById('progressBar').disabled = true;
-    document.getElementById('progressBar').hidden = true;
+    document.getElementById("progressBar").disabled = true;
+    document.getElementById("progressBar").hidden = true;
   });
-
 
   gif.render();
 
   // Update state of all buttons
-  document.getElementById('stop-recording-button').disabled = true;
-  document.getElementById('stop-recording-button').hidden = true;
+  document.getElementById("stop-recording-button").disabled = true;
+  document.getElementById("stop-recording-button").hidden = true;
 
-  document.getElementById('start-recording-button').disabled = false;
-  document.getElementById('start-recording-button').hidden = false;
+  document.getElementById("start-recording-button").disabled = false;
+  document.getElementById("start-recording-button").hidden = false;
 
-  document.getElementById('downloadBtn').disabled = false;
-  document.getElementById('downloadBtn').hidden = false;
+  document.getElementById("downloadBtn").disabled = false;
+  document.getElementById("downloadBtn").hidden = false;
 
-  //document.getElementById('download-zip-btn').disabled = false;
-  document.getElementById('slidecontainer').disabled = false;
-  document.getElementById('slidecontainer').hidden = false;
+  document.getElementById("slider-container").disabled = false;
+  document.getElementById("slider-container").hidden = false;
 
-  document.getElementById('progressBar').disabled = false;
-  document.getElementById('progressBar').hidden = false;
-
+  document.getElementById("progressBar").disabled = false;
+  document.getElementById("progressBar").hidden = false;
 }
 
-// Function to convert stage to a Blob and handle the Blob
+// convert stage to a blob and handle the blob
 function stageToBlob(stage, callback) {
   stage.toBlob({
-    callback: function (blob) {
-      callback(blob);
-    },
-    mimeType: 'image/jpg',
-    quality: 0.3
+    callback: callback,
+    mimeType: "image/jpg",
+    quality: 0.3,
   });
 }
 
-// Function to convert Image object to Blob
-async function imageToBlob(image) {
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = image.width;
-    canvas.height = image.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(image, 0, 0);
-    canvas.toBlob(resolve, 'image/png');
-  });
-}
-
-// Function to handle the Blob (e.g., create an Image element and add it to frameImages)
+// handle the blob (e.g., create an Image element and add it to frameImages)
 function handleBlob(blob) {
   const url = URL.createObjectURL(blob);
   const myImg = new Image();
@@ -1256,66 +1221,34 @@ function handleBlob(blob) {
 }
 
 // Set up event listeners for the buttons
-document.getElementById('start-recording-button').addEventListener('click', startRecording);
-document.getElementById('stop-recording-button').addEventListener('click', stopRecording);
-document.getElementById('downloadBtn').addEventListener('click', function () {
-  var fileName = document.getElementById('fileName').value || 'generated_gif';
-  if (renderedGifBlob) {
-    var url = URL.createObjectURL(renderedGifBlob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = fileName + '.gif';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  } else {
-    alert('No GIF rendered yet. Please stop the recording first.');
+document
+  .getElementById("start-recording-button")
+  .addEventListener("click", startRecording);
+
+document
+  .getElementById("stop-recording-button")
+  .addEventListener("click", stopRecording);
+
+document.getElementById("downloadBtn").addEventListener("click", function () {
+  if (!renderedGifBlob) {
+    alert("No GIF rendered yet. Please stop the recording first.");
+    return;
   }
+
+  var fileName = document.getElementById("fileName").value || "plr-visualizer";
+  var url = URL.createObjectURL(renderedGifBlob);
+  var a = document.createElement("a");
+  a.href = url;
+  if (!fileName.endsWith(".gif")) {
+    fileName += ".gif";
+  }
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 });
 
-
-/* REMOVING DOWNLOAD ZIP BUTTON
-
-document.getElementById('download-zip-btn').addEventListener('click', async function () {
-  try {
-    // Prompt the user to select a folder
-    const directoryHandle = await window.showDirectoryPicker();
-
-    // Get name of output folder
-    var fileName = document.getElementById('fileName').value || 'generated_gif';
-
-    // Create a new ZIP file
-    const zip = new JSZip();
-
-    // Iterate over frames and add them to the ZIP archive
-    for (let i = 0; i < frameImages.length; i++) {
-      const image = frameImages[i];
-      const blob = await imageToBlob(image);
-      const fileName = `frame_${i + 1}.png`;
-      zip.file(fileName, blob);
-    }
-
-    // Generate the ZIP file as a Blob
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-
-    // Create a handle for the ZIP file in the selected directory
-    const zipFileHandle = await directoryHandle.getFileHandle(fileName + '.zip', { create: true });
-    const writableStream = await zipFileHandle.createWritable();
-
-    // Write the ZIP file Blob to the stream
-    await writableStream.write(zipBlob);
-    await writableStream.close();
-
-    alert('ZIP file created successfully!');
-  } catch (err) {
-    console.error('Error creating ZIP file:', err);
-    alert('Failed to create ZIP file.');
-  }
-});
-
-*/
-
-document.getElementById('myRange').addEventListener('input', function () {
+document.getElementById("myRange").addEventListener("input", function () {
   let value = parseInt(this.value);
   // Adjust the value to the nearest multiple of 8
   value = Math.round(value / 8) * 8;
@@ -1324,9 +1257,8 @@ document.getElementById('myRange').addEventListener('input', function () {
   if (value > 96) value = 96;
 
   this.value = value; // Update the slider value
-  document.getElementById('current-value').textContent = "Frame Save Interval: " + value;
+  document.getElementById("current-value").textContent =
+    "Frame Save Interval: " + value;
 
   frameInterval = value;
-
 });
-
