@@ -6,7 +6,7 @@ from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.utils import create_ordered_items_2d
 
-from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_square_vbottom
+from pylabrobot.resources.height_volume_functions import calculate_liquid_volume_container_2segments_square_vbottom
 
 
 def _compute_volume_from_height_Axy_24_DW_10ML(h: float):
