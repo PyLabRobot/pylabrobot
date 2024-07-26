@@ -103,7 +103,7 @@ class Tilter(Machine):
 
     return well_drain_offsets
 
-  def get_well_drain_offsets(self, wells: List[Well], absolute_angle: Optional[int] = None) \
+  def get_well_drain_offsets(self, wells: List[Well], absolute_angle: Optional[int] = None, additional_z: Optional[int] = 0) \
     -> List[Coordinate]:
     """ Get the drain edge offsets for the given wells, tilted around the hinge at a
     given absolute angle.
@@ -127,6 +127,7 @@ class Tilter(Machine):
       )
       well_drain_offset = (rotated_absolute_well_drain_coordinate -
                            well.get_absolute_location("c", "c", "b"))
+      well_drain_offset.z += additional_z
       well_drain_offsets.append(well_drain_offset)
 
     return well_drain_offsets
