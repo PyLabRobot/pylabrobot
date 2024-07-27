@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Generic, List, Optional, Type, TypeVar, Union
 
+from pylabrobot.resources.tube import Tube
+
 from .coordinate import Coordinate
 from .plate import Plate
 from .resource import Resource
@@ -27,14 +29,22 @@ class CarrierSite(Resource):
     reassign: bool = True
   ):
     self.resource = resource
-    return super().assign_child_resource(resource, location=location)
+    return super().assign_child_resource(resource, location, reassign)
 
   def unassign_child_resource(self, resource):
     self.resource = None
     return super().unassign_child_resource(resource)
+  
+  def serialize(self) -> dict:
+      return { **super().serialize(), "name": self.name}
+  
+  def __hash__(self):
+        return hash((self.name))
 
   def __eq__(self, other):
     return super().__eq__(other) and self.resource == other.resource
+  
+
 
 
 S = TypeVar("S", bound=Resource)
@@ -114,6 +124,7 @@ class Carrier(Resource, Generic[S]):
     """
 
     if not isinstance(resource, CarrierSite):
+      print(type(resource))
       raise TypeError(f"Invalid resource {resource}")
     self.sites.append(resource)
     super().assign_child_resource(resource, location=location)
@@ -276,7 +287,31 @@ class TubeCarrier(Carrier):
     category="tube_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
-      sites,category=category, model=model)
+      sites,category=category, model=model)\
+    
+    def assign_child_resource(self, resource, location, reassign=False):
+      if not isinstance(resource, CarrierSite):
+          print(f"Type of resource: {type(resource)}")
+          print(f"Resource details: {resource}")
+          raise TypeError(f"Invalid resource {resource}")
+      self.sites.append(resource)
+      super().assign_child_resource(resource, location=location)
+
+
+# class TubeCarrier(Carrier):
+#     def __init__(self, name: str, size_x: float, size_y: float, size_z: float, sites: Optional[List[CarrierSite]] = None, category="tube_carrier", model: Optional[str] = None):
+#         super().__init__(name, size_x, size_y, size_z, sites, category=category, model=model)
+        
+#     def assign_child_resource(self, resource, location, reassign=False):
+#         if not isinstance(resource, CarrierSite):
+#             print(f"Type of resource: {type(resource)}")
+#             print(f"Resource details: {resource}")
+#             raise TypeError(f"Invalid resource {resource}")
+#         self.sites.append(resource)
+#         super().assign_child_resource(resource, location=location)
+
+    
+
 
 
 class TroughCarrier(Carrier):
