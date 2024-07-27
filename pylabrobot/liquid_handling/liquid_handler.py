@@ -353,6 +353,10 @@ class LiquidHandler(Machine):
       NoTipError: If a spot does not have a tip.
     """
 
+    not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, TipSpot)]
+    if len(not_tip_spots) > 0:
+      raise TypeError(f"Resources must be `TipSpot`s, got {not_tip_spots}")
+
     # fix arguments
     if isinstance(offsets, Coordinate):
       raise NotImplementedError("Single offset is deprecated, use a list of offsets.")
@@ -421,7 +425,7 @@ class LiquidHandler(Machine):
   @need_setup_finished
   async def drop_tips(
     self,
-    tip_spots: List[Union[TipSpot, Resource]],
+    tip_spots: List[Union[TipSpot, Trash]],
     use_channels: Optional[List[int]] = None,
     offsets: Optional[List[Coordinate]] = None,
     allow_nonzero_volume: bool = False,
@@ -446,7 +450,7 @@ class LiquidHandler(Machine):
       ... )
 
     Args:
-      tips: Tip resource locations to drop to.
+      tip_spots: Tip resource locations to drop to.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
       offsets: List of offsets, one for each channel, a translation that will be applied to the tip
@@ -468,6 +472,10 @@ class LiquidHandler(Machine):
 
       HasTipError: If a spot already has a tip.
     """
+
+    not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, (TipSpot, Trash))]
+    if len(not_tip_spots) > 0:
+      raise TypeError(f"Resources must be `TipSpot`s or Trash, got {not_tip_spots}")
 
     # fix arguments
     if isinstance(offsets, Coordinate):
@@ -615,6 +623,12 @@ class LiquidHandler(Machine):
         allow_nonzero_volume=allow_nonzero_volume,
         **backend_kwargs)
 
+  def _check_containers(self, resources: Sequence[Resource]):
+    """ Checks that all resources are containers. """
+    not_containers = [r for r in resources if not isinstance(r, Container)]
+    if len(not_containers) > 0:
+      raise TypeError(f"Resources must be `Container`s, got {not_containers}")
+
   @need_setup_finished
   async def aspirate(
     self,
@@ -681,6 +695,8 @@ class LiquidHandler(Machine):
       raise NotImplementedError("Single resource is deprecated, use a list of resources. If you "
                                 "want to aspirate from a single resource, use a list with that "
                                 "resource and specify the channels to use.")
+
+    self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
 
@@ -865,6 +881,8 @@ class LiquidHandler(Machine):
       raise NotImplementedError("Single resource is deprecated, use a list of resources. If you "
                                 "want to dispense to a single resource, use a list with that "
                                 "resource and specify the channels to use.")
+
+    self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
 
@@ -1109,6 +1127,11 @@ class LiquidHandler(Machine):
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
+    if not isinstance(tip_rack, TipRack):
+      raise TypeError(f"Resource must be a TipRack, got {tip_rack}")
+    if not tip_rack.num_items == 96:
+      raise ValueError("Tip rack must have 96 tips")
+
     extras = self._check_args(self.backend.pick_up_tips96, backend_kwargs, default={"pickup"})
     for extra in extras:
       del backend_kwargs[extra]
@@ -1178,6 +1201,11 @@ class LiquidHandler(Machine):
         volume.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    if not isinstance(resource, (TipRack, Trash)):
+      raise TypeError(f"Resource must be a TipRack or Trash, got {resource}")
+    if isinstance(resource, TipRack) and not resource.num_items == 96:
+      raise ValueError("Tip rack must have 96 tips")
 
     extras = self._check_args(self.backend.drop_tips96, backend_kwargs, default={"drop"})
     for extra in extras:
@@ -1326,6 +1354,10 @@ class LiquidHandler(Machine):
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
+    if not isinstance(resource, (Plate, Container)) or \
+      (isinstance(resource, list) and all(isinstance(w, Well) for w in resource)):
+      raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
+
     extras = self._check_args(self.backend.aspirate96, backend_kwargs, default={"aspiration"})
     for extra in extras:
       del backend_kwargs[extra]
@@ -1462,6 +1494,10 @@ class LiquidHandler(Machine):
         ul. If `None`, the backend default will be used.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    if not isinstance(resource, (Plate, Container)) or \
+      (isinstance(resource, list) and all(isinstance(w, Well) for w in resource)):
+      raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
 
     extras = self._check_args(self.backend.dispense96, backend_kwargs, default={"dispense"})
     for extra in extras:
