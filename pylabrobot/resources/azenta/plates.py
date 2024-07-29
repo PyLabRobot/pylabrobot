@@ -10,12 +10,12 @@ from pylabrobot.resources.height_volume_functions import calculate_liquid_volume
 
 
 def _compute_volume_from_height_Azenta4titudeFrameStar_96_wellplate_200ul_Vb(h: float):
-  if h > 42.5:
+  if h > 15.1:
     raise ValueError(f"Height {h} is too large for Azenta4titudeFrameStar_96_wellplate_200ul_Vb")
   return calculate_liquid_volume_container_2segments_round_vbottom(
     d=5.5,
     h_cone=9.8,
-    h_cylinder=5.2,
+    h_cylinder=5.3,
     liquid_height=h)
 
 def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_Lid(name: str) -> Lid:
@@ -59,15 +59,16 @@ def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name: str, with_lid: bool = Fal
     ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
-      dx=11.64,
+      dx=11.0,
       dy=8.49,
-      dz=1.54,
+      dz=0.8,
       item_dx=9,
       item_dy=9,
       size_x=5.5,
       size_y=5.5,
       size_z=15.1,
       bottom_type=WellBottomType.V,
+      material_z_thickness=0.73,
       compute_volume_from_height=(
         _compute_volume_from_height_Azenta4titudeFrameStar_96_wellplate_200ul_Vb
         ),
