@@ -25,6 +25,7 @@ from pylabrobot.resources import (
   ResourceStack,
   Coordinate,
   CarrierSite,
+  PlateCarrierSite,
   Lid,
   MFXModule,
   Plate,
@@ -1821,6 +1822,20 @@ class LiquidHandler(Machine):
     if isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
       to_location = to.get_absolute_location(z="top")
+    elif isinstance(to, PlateCarrierSite):
+      to_location = to.get_absolute_location()
+      # Sanity check for equal well clearances / dz
+      well_dz = {well.location.z for well in plate.get_all_children()}
+      assert len(well_dz) == 1, "All wells must have the same dz"
+      well_dz = well_dz.pop()
+      # Plate "sinking" logic based on well dz to pedestal relationship
+      # 1. no pedestal
+      # 2. pedestal taller than plate.well.dz
+      # 3. pedestal shorter than plate.well.dz
+      pedestal_size_z = abs(to.pedestal_size_z)
+      z_sinking_depth = min(pedestal_size_z, well_dz)
+      correction_anchor = Coordinate(0, 0, -z_sinking_depth)
+      to_location += correction_anchor
     elif isinstance(to, MFXModule):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateAdapter):
@@ -1849,6 +1864,8 @@ class LiquidHandler(Machine):
     if isinstance(to, Coordinate):
       to_location -= self.deck.location # passed as an absolute location, but stored as relative
       self.deck.assign_child_resource(plate, location=to_location)
+    elif isinstance(to, PlateCarrierSite): # .zero() resources
+      to.assign_child_resource(plate)
     elif isinstance(to, CarrierSite): # .zero() resources
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
