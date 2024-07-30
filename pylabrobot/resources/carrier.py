@@ -221,8 +221,8 @@ class PlateCarrierSite(CarrierSite):
 
     if isinstance(resource, Plate):
       # Sanity check for equal well clearances / dz
-      well_dz = {round(well.location.z,2) for well in resource.get_all_children()
-                 if well.category=="well"}
+      well_dz = {round(well.location.z, 2) for well in resource.get_all_children() 
+           if all([well.category == "well", isinstance(well.location, float)])}
       assert len(well_dz) == 1, "All wells must have the same dz"
       well_dz = well_dz.pop()
       # Plate "sinking" logic based on well dz to pedestal relationship
@@ -237,7 +237,7 @@ class PlateCarrierSite(CarrierSite):
 
 
 class PlateCarrier(Carrier):
-  """ Base class for plate carriers.
+  r""" Base class for plate carriers.
   Name prefix: 'PLT\_'
   """
   def __init__(
