@@ -919,7 +919,6 @@ class LiquidHandler(Machine):
     if isinstance(blow_out_air_volume, numbers.Number):
       raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
-    self._blow_out_air_volume = None
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     # Check the blow out air volume with what was aspirated
@@ -986,6 +985,8 @@ class LiquidHandler(Machine):
         if not op.resource.tracker.is_disabled:
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
         (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
+
+    self._blow_out_air_volume = None
 
     # trigger callback
     self._trigger_callback(
