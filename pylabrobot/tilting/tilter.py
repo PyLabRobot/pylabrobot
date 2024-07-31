@@ -47,8 +47,8 @@ class Tilter(Machine):
     await self.backend.set_angle(angle=absolute_angle)
     self._absolute_angle = absolute_angle
 
-  def rotate_coordinate_around_hinge(self, absolute_coordinate: Coordinate, angle: float) \
-    -> Coordinate:
+  def experimental_rotate_coordinate_around_hinge(
+      self, absolute_coordinate: Coordinate, angle: float) -> Coordinate:
     """ Rotate an absolute coordinate around the hinge of the tilter by a given angle.
 
     Args:
@@ -75,8 +75,8 @@ class Tilter(Machine):
 
     return Coordinate(new_x, absolute_coordinate.y, new_z)
 
-  def get_plate_drain_offsets(self, plate: Plate, absolute_angle: Optional[float] = None) \
-    -> List[Coordinate]:
+  def experimental_get_plate_drain_offsets(
+      self, plate: Plate, absolute_angle: Optional[float] = None) -> List[Coordinate]:
     """ Get the drain edge offsets for all wells in the given plate, tilted around the hinge at a
     given absolute angle.
 
@@ -95,7 +95,7 @@ class Tilter(Machine):
     well_drain_offsets = []
     for well in plate.children:
       level_absolute_well_drain_coordinate = well.get_absolute_location(_hinge_side, "c", "b")
-      rotated_absolute_well_drain_coordinate = self.rotate_coordinate_around_hinge(
+      rotated_absolute_well_drain_coordinate = self.experimental_rotate_coordinate_around_hinge(
         level_absolute_well_drain_coordinate, angle
       )
       well_drain_offset = (rotated_absolute_well_drain_coordinate -
@@ -104,8 +104,8 @@ class Tilter(Machine):
 
     return well_drain_offsets
 
-  def get_well_drain_offsets(self, wells: List[Well], absolute_angle: Optional[float] = None) \
-    -> List[Coordinate]:
+  def experimental_get_well_drain_offsets(
+      self, wells: List[Well], absolute_angle: Optional[float] = None) -> List[Coordinate]:
     """ Get the drain edge offsets for the given wells, tilted around the hinge at a
     given absolute angle.
 
@@ -124,7 +124,7 @@ class Tilter(Machine):
     well_drain_offsets = []
     for well in wells:
       level_absolute_well_drain_coordinate = well.get_absolute_location(_hinge_side, "c", "b")
-      rotated_absolute_well_drain_coordinate = self.rotate_coordinate_around_hinge(
+      rotated_absolute_well_drain_coordinate = self.experimental_rotate_coordinate_around_hinge(
         level_absolute_well_drain_coordinate, angle
       )
       well_drain_offset = (rotated_absolute_well_drain_coordinate -

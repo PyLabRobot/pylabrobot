@@ -18,10 +18,9 @@ class HamiltonTiltModule(Tilter):
     """ Initialize a Hamilton tilt module.
 
     Args:
+      com_port: The communication port.
       child_resource_location: The location of the child resource.
       pedestal_size_z: The size of the pedestal in the z dimension.
-      hinge_coordinate: The coordinate of the hinge.
-      com_port: The communication port.
       write_timeout: The write timeout. Defaults to 3.
       timeout: The timeout. Defaults to 3.
     """
