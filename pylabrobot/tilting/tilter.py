@@ -36,7 +36,7 @@ class Tilter(Machine):
   def absolute_angle(self) -> float:
     return self._absolute_angle
 
-  async def set_angle(self, absolute_angle: int):
+  async def set_angle(self, absolute_angle: float):
     """ Set the tilt module to rotate to a given angle.
 
     Args:
@@ -47,7 +47,7 @@ class Tilter(Machine):
     await self.backend.set_angle(angle=absolute_angle)
     self._absolute_angle = absolute_angle
 
-  def rotate_coordinate_around_hinge(self, absolute_coordinate: Coordinate, angle: int) \
+  def rotate_coordinate_around_hinge(self, absolute_coordinate: Coordinate, angle: float) \
     -> Coordinate:
     """ Rotate an absolute coordinate around the hinge of the tilter by a given angle.
 
@@ -75,7 +75,7 @@ class Tilter(Machine):
 
     return Coordinate(new_x, absolute_coordinate.y, new_z)
 
-  def get_plate_drain_offsets(self, plate: Plate, absolute_angle: Optional[int] = None) \
+  def get_plate_drain_offsets(self, plate: Plate, absolute_angle: Optional[float] = None) \
     -> List[Coordinate]:
     """ Get the drain edge offsets for all wells in the given plate, tilted around the hinge at a
     given absolute angle.
@@ -87,6 +87,7 @@ class Tilter(Machine):
 
     if absolute_angle is None:
       absolute_angle = self._absolute_angle
+    assert absolute_angle is not None # mypy
     angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
 
     _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
@@ -115,6 +116,7 @@ class Tilter(Machine):
 
     if absolute_angle is None:
       absolute_angle = self._absolute_angle
+    assert absolute_angle is not None # mypy
     angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
 
     _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
@@ -131,7 +133,7 @@ class Tilter(Machine):
 
     return well_drain_offsets
 
-  async def tilt(self, relative_angle: int):
+  async def tilt(self, relative_angle: float):
     """ Tilt the plate contained in the tilt module by a given angle relative to the current angle.
 
     Args:

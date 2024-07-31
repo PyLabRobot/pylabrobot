@@ -33,8 +33,9 @@ class HamiltonTiltModuleBackend(TilterBackend):
     self.setup_finished = True
 
   async def stop(self):
-    self.ser.close()
-    self.ser = None
+    if self.ser is not None:
+      self.ser.close()
+      self.ser = None
     self.setup_finished = False
 
   async def send_command(self, command: str, parameter: Optional[str] = None) -> str:
@@ -67,12 +68,12 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
     return cast(str, resp) # must do stupid because mypy will not recognize that pyserial is typed..
 
-  async def set_angle(self, angle: int):
+  async def set_angle(self, angle: float):
     """ Set the tilt module to rotate by a given angle. """
 
     assert 0 <= angle <= 10, "Angle must be between 0 and 10 degrees."
 
-    await self.tilt_go_to_position(angle)
+    await self.tilt_go_to_position(round(angle))
 
   async def tilt_initialize(self):
     """ Initialize a daisy chained tilt module. """
