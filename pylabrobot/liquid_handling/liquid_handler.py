@@ -901,7 +901,6 @@ class LiquidHandler(Machine):
     if isinstance(blow_out_air_volume, numbers.Number):
       raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
-    self._blow_out_air_volume = None
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     # Check the blow out air volume with what was aspirated
