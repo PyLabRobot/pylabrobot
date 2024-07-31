@@ -54,7 +54,6 @@ class ChatterBoxBackend(LiquidHandlerBackend):
     print(f"Dropping tips {ops}.")
 
   async def aspirate(self, ops: List[Aspiration], use_channels: List[int], hamilton_liquid_classes = None, **backend_kwargs):
-    print(backend_kwargs)
     print("Aspirating:")
     header = f"{'pip#':<5} {'vol(ul)':<8} {'resource':<20} {'offset':<16} {'flowrate':<10} {'blowout':<10} {'liq_height':<10}  " #{'liquids':<20}" #TODO: add liquids
     for key in backend_kwargs.keys():
