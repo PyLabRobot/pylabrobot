@@ -134,14 +134,14 @@ class LiquidHandler(Machine):
     self.location = Coordinate.zero()
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
-  async def setup(self):
+  async def setup(self, **backend_kwargs):
     """ Prepare the robot for use. """
 
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
     self.backend.set_deck(self.deck)
-    await super().setup()
+    await super().setup(**backend_kwargs)
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
     self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
