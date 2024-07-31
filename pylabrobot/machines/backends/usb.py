@@ -4,13 +4,13 @@ from abc import ABCMeta, abstractmethod
 import logging
 import time
 from typing import List, Optional, TYPE_CHECKING
-import libusb_package
 
 from pylabrobot.machines.backends.machine import MachineBackend
 
 try:
   import usb.core
   import usb.util
+  import libusb_package
   USE_USB = True
 except ImportError:
   USE_USB = False
@@ -189,7 +189,8 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     """ Initialize the USB connection to the machine."""
 
     if not USE_USB:
-      raise RuntimeError("USB is not enabled. Please install pyusb.")
+      raise RuntimeError("USB is not enabled. Please install pyusb and libusb."
+                         "https://docs.pylabrobot.org/installation.html")
 
     if self.dev is not None:
       logging.warning("Already initialized. Please call stop() first.")

@@ -4,9 +4,9 @@
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType
-from pylabrobot.resources.utils import create_equally_spaced_2d
+from pylabrobot.resources.utils import create_ordered_items_2d
 
-from pylabrobot.resources.volume_functions import calculate_liquid_volume_container_2segments_round_vbottom
+from pylabrobot.resources.height_volume_functions import calculate_liquid_volume_container_2segments_round_vbottom
 
 
 def _compute_volume_from_height_Revvity_ProxiPlate_384Plus(h: float):
@@ -46,7 +46,7 @@ def Revvity_ProxiPlate_384Plus(name: str, with_lid: bool = False) -> Plate:
     size_z=14.35,
     lid=Revvity_ProxiPlate_384Plus_Lid(name + "_lid") if with_lid else None,
     model="Revvity_ProxiPlate_384Plus",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=24,
       num_items_y=16,
       dx=10.45,

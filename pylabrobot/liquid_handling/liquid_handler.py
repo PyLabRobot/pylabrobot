@@ -354,6 +354,10 @@ class LiquidHandler(Machine):
       NoTipError: If a spot does not have a tip.
     """
 
+    not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, TipSpot)]
+    if len(not_tip_spots) > 0:
+      raise TypeError(f"Resources must be `TipSpot`s, got {not_tip_spots}")
+
     # fix arguments
     if isinstance(offsets, Coordinate):
       raise NotImplementedError("Single offset is deprecated, use a list of offsets.")
@@ -422,7 +426,7 @@ class LiquidHandler(Machine):
   @need_setup_finished
   async def drop_tips(
     self,
-    tip_spots: List[Union[TipSpot, Resource]],
+    tip_spots: List[Union[TipSpot, Trash]],
     use_channels: Optional[List[int]] = None,
     offsets: Optional[List[Coordinate]] = None,
     allow_nonzero_volume: bool = False,
@@ -447,7 +451,7 @@ class LiquidHandler(Machine):
       ... )
 
     Args:
-      tips: Tip resource locations to drop to.
+      tip_spots: Tip resource locations to drop to.
       use_channels: List of channels to use. Index from front to back. If `None`, the first
         `len(channels)` channels will be used.
       offsets: List of offsets, one for each channel, a translation that will be applied to the tip
@@ -469,6 +473,10 @@ class LiquidHandler(Machine):
 
       HasTipError: If a spot already has a tip.
     """
+
+    not_tip_spots = [ts for ts in tip_spots if not isinstance(ts, (TipSpot, Trash))]
+    if len(not_tip_spots) > 0:
+      raise TypeError(f"Resources must be `TipSpot`s or Trash, got {not_tip_spots}")
 
     # fix arguments
     if isinstance(offsets, Coordinate):
@@ -616,6 +624,12 @@ class LiquidHandler(Machine):
         allow_nonzero_volume=allow_nonzero_volume,
         **backend_kwargs)
 
+  def _check_containers(self, resources: Sequence[Resource]):
+    """ Checks that all resources are containers. """
+    not_containers = [r for r in resources if not isinstance(r, Container)]
+    if len(not_containers) > 0:
+      raise TypeError(f"Resources must be `Container`s, got {not_containers}")
+
   @need_setup_finished
   async def aspirate(
     self,
@@ -683,6 +697,8 @@ class LiquidHandler(Machine):
                                 "want to aspirate from a single resource, use a list with that "
                                 "resource and specify the channels to use.")
 
+    self._check_containers(resources)
+
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
 
     # expand default arguments
@@ -700,6 +716,12 @@ class LiquidHandler(Machine):
       raise NotImplementedError("Single liquid height is deprecated, use a list of liquid heights.")
     if isinstance(blow_out_air_volume, numbers.Number):
       raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
+
+    # Convert everything to floats to handle exotic number types
+    vols = [float(v) for v in vols]
+    flow_rates = [float(fr) if fr is not None else None for fr in flow_rates]
+    liquid_height = [float(lh) if lh is not None else None for lh in liquid_height]
+    blow_out_air_volume = [float(bav) if bav is not None else None for bav in blow_out_air_volume]
 
     self._blow_out_air_volume = blow_out_air_volume
     tips = [self.head[channel].get_tip() for channel in use_channels]
@@ -861,6 +883,8 @@ class LiquidHandler(Machine):
                                 "want to dispense to a single resource, use a list with that "
                                 "resource and specify the channels to use.")
 
+    self._check_containers(resources)
+
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
 
     # expand default arguments
@@ -868,6 +892,12 @@ class LiquidHandler(Machine):
     flow_rates = flow_rates or [None] * len(use_channels)
     liquid_height = liquid_height or [None] * len(use_channels)
     blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
+
+    # Convert everything to floats to handle exotic number types
+    vols = [float(v) for v in vols]
+    flow_rates = [float(fr) if fr is not None else None for fr in flow_rates]
+    liquid_height = [float(lh) if lh is not None else None for lh in liquid_height]
+    blow_out_air_volume = [float(bav) if bav is not None else None for bav in blow_out_air_volume]
 
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
@@ -1098,6 +1128,11 @@ class LiquidHandler(Machine):
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
+    if not isinstance(tip_rack, TipRack):
+      raise TypeError(f"Resource must be a TipRack, got {tip_rack}")
+    if not tip_rack.num_items == 96:
+      raise ValueError("Tip rack must have 96 tips")
+
     extras = self._check_args(self.backend.pick_up_tips96, backend_kwargs, default={"pickup"})
     for extra in extras:
       del backend_kwargs[extra]
@@ -1167,6 +1202,11 @@ class LiquidHandler(Machine):
         volume.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
+
+    if not isinstance(resource, (TipRack, Trash)):
+      raise TypeError(f"Resource must be a TipRack or Trash, got {resource}")
+    if isinstance(resource, TipRack) and not resource.num_items == 96:
+      raise ValueError("Tip rack must have 96 tips")
 
     extras = self._check_args(self.backend.drop_tips96, backend_kwargs, default={"drop"})
     for extra in extras:
@@ -1315,6 +1355,10 @@ class LiquidHandler(Machine):
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
+    if not isinstance(resource, (Plate, Container)) or \
+      (isinstance(resource, list) and all(isinstance(w, Well) for w in resource)):
+      raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
+
     extras = self._check_args(self.backend.aspirate96, backend_kwargs, default={"aspiration"})
     for extra in extras:
       del backend_kwargs[extra]
@@ -1322,6 +1366,11 @@ class LiquidHandler(Machine):
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     aspiration: Union[AspirationPlate, AspirationContainer]
+
+    # Convert everything to floats to handle exotic number types
+    volume = float(volume)
+    flow_rate = float(flow_rate) if flow_rate is not None else None
+    blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
     if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
@@ -1447,6 +1496,10 @@ class LiquidHandler(Machine):
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
+    if not isinstance(resource, (Plate, Container)) or \
+      (isinstance(resource, list) and all(isinstance(w, Well) for w in resource)):
+      raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
+
     extras = self._check_args(self.backend.dispense96, backend_kwargs, default={"dispense"})
     for extra in extras:
       del backend_kwargs[extra]
@@ -1454,6 +1507,11 @@ class LiquidHandler(Machine):
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     dispense: Union[DispensePlate, DispenseContainer]
+
+    # Convert everything to floats to handle exotic number types
+    volume = float(volume)
+    flow_rate = float(flow_rate) if flow_rate is not None else None
+    blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
     if isinstance(resource, Container):
       if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
@@ -1634,7 +1692,7 @@ class LiquidHandler(Machine):
     # rotate the resource if the move operation has a rotation.
     # this code should be expanded to also update the resource's location
     if move_operation.rotation != 0:
-      move_operation.resource.rotate(move_operation.rotation)
+      move_operation.resource.rotate(z=move_operation.rotation)
 
     self._trigger_callback(
       "move_resource",
@@ -1690,11 +1748,7 @@ class LiquidHandler(Machine):
         z=to_location.z  + to.get_size_z() - lid.nesting_z_height)
     elif isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      to_location = to.get_absolute_location()
-      to_location = Coordinate(
-        x=to_location.x,
-        y=to_location.y,
-        z=to_location.z  + to.get_size_z())
+      to_location = to.get_absolute_location(z="top")
     elif isinstance(to, Coordinate):
       to_location = to
     else:
@@ -1767,11 +1821,7 @@ class LiquidHandler(Machine):
 
     if isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      to_location = to.get_absolute_location()
-      to_location = Coordinate(
-        x=to_location.x,
-        y=to_location.y,
-        z=to_location.z  + to.get_size_z())
+      to_location = to.get_absolute_location(z="top")
     elif isinstance(to, Coordinate):
       to_location = to
     elif isinstance(to, (MFXModule, Tilter)):
@@ -1780,6 +1830,8 @@ class LiquidHandler(Machine):
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = to.compute_plate_location(plate)
       to_location = to.get_absolute_location() + adjusted_plate_anchor
+    elif isinstance(to, Coordinate):
+      to_location = to
     else:
       to_location = to.get_absolute_location()
 
@@ -1803,6 +1855,8 @@ class LiquidHandler(Machine):
     elif isinstance(to, CarrierSite): # .zero() resources
       to.assign_child_resource(plate, location=Coordinate.zero())
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
+      if isinstance(to, ResourceStack) and to.direction != "z":
+        raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       to.assign_child_resource(plate)
     elif isinstance(to, (MFXModule, Tilter)):
       to.assign_child_resource(plate, location=to.child_resource_location)

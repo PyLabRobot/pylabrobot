@@ -4,7 +4,7 @@
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
-from pylabrobot.resources.utils import create_equally_spaced_2d
+from pylabrobot.resources.utils import create_ordered_items_2d
 
 
 def _compute_volume_from_height_Limbro_24_Large(h: float) -> float:
@@ -36,7 +36,7 @@ def Limbro_24_Large(name: str, with_lid: bool = False) -> Plate:
     size_z=25.0,
     lid=Limbro_24_Large_Lid(name + "_lid") if with_lid else None,
     model="Limbro_24_Large",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=4,
       num_items_y=6,
       dx=6.0,
@@ -82,7 +82,7 @@ def Limbro_24_Small(name: str, with_lid: bool = False) -> Plate:
     size_z=25.0,
     lid=Limbro_24_Small_Lid(name + "_lid") if with_lid else None,
     model="Limbro_24_Small",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=4,
       num_items_y=6,
       dx=17.5,
@@ -128,7 +128,7 @@ def Limbro_48_Large(name: str, with_lid: bool = False) -> Plate:
     size_z=25.0,
     lid=Limbro_48_Large_Lid(name + "_lid") if with_lid else None,
     model="Limbro_48_Large",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=4,
       num_items_y=12,
       dx=16.0,
@@ -174,7 +174,7 @@ def Limbro_96_Large(name: str, with_lid: bool = False) -> Plate:
     size_z=25.0,
     lid=Limbro_96_Large_Lid(name + "_lid") if with_lid else None,
     model="Limbro_96_Large",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=8,
       num_items_y=12,
       dx=9.0,

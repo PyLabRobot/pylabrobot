@@ -2,6 +2,7 @@ from typing import List, Optional
 
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.plate import Lid, Plate
 
 
 class ResourceStack(Resource):
@@ -77,20 +78,33 @@ class ResourceStack(Resource):
     return max(resource.get_size_y() for resource in self.children)
 
   def get_size_z(self) -> float:
-    if len(self.children) == 0:
-      return 0
-    if self.direction == "z":
-      return sum(child.get_size_z() for child in self.children)
-    return max(child.get_size_z() for child in self.children)
+    def get_actual_resource_height(resource: Resource) -> float:
+      """ Helper function to get the actual height of a resource, accounting for the lid nesting
+      height if the resource is a plate with a lid. """
+      if isinstance(resource, Plate) and resource.lid is not None:
+        return resource.get_size_z() + resource.lid.get_size_z() - resource.lid.nesting_z_height
+      return resource.get_size_z()
 
-  def assign_child_resource(self, resource):
-    # update child location (relative to self): we place the child after the last child in the stack
+    if self.direction != "z":
+      return max(get_actual_resource_height(child) for child in self.children)
+    return sum(get_actual_resource_height(child) for child in self.children)
+
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
+    reassign: bool = False):
     if self.direction == "x":
       resource_location = Coordinate(self.get_size_x(), 0, 0)
     elif self.direction == "y":
       resource_location = Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
       resource_location = Coordinate(0, 0, self.get_size_z())
+
+      # special handling for putting a lid on a plate
+      if len(self.children) > 0:
+        top_item = self.get_top_item()
+        if isinstance(resource, Lid) and isinstance(top_item, Plate):
+          resource_location.z -= resource.nesting_z_height
+          top_item.assign_child_resource(resource, location=resource_location)
+          return
     else:
       raise ValueError("self.direction must be one of 'x', 'y', or 'z'")
 

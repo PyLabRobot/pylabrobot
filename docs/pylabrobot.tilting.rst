@@ -10,7 +10,7 @@ This package contains APIs for working with tilt modules.
   :nosignatures:
   :recursive:
 
-    pylabrobot.tilting.tilter.Tilter
+    tilter.Tilter
 
 
 Backends
@@ -21,5 +21,5 @@ Backends
   :nosignatures:
   :recursive:
 
-    pylabrobot.tilting.tilter_backend.TilterBackend
-    pylabrobot.tilting.hamilton_backend.HamiltonTiltModuleBackend
+    tilter_backend.TilterBackend
+    hamilton_backend.HamiltonTiltModuleBackend

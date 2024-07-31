@@ -34,9 +34,14 @@ class Well(Container):
   :class:`pylabrobot.resources.Plate` class.
   """
 
-  def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
-    bottom_type: Union[WellBottomType, str] = WellBottomType.UNKNOWN, category: str = "well",
-    max_volume: Optional[float] = None, model: Optional[str] = None,
+  def __init__(
+    self,
+    name: str,
+    size_x: float, size_y: float, size_z: float,
+    material_z_thickness: Optional[float] = None,
+    bottom_type: Union[WellBottomType, str] = WellBottomType.UNKNOWN,
+    category: str = "well", model: Optional[str] = None,
+    max_volume: Optional[float] = None,
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
     cross_section_type: Union[CrossSectionType, str] = CrossSectionType.CIRCLE):
@@ -75,8 +80,9 @@ class Well(Container):
         max_volume = compute_volume_from_height(size_z)
 
     super().__init__(name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
-      max_volume=max_volume, model=model, compute_volume_from_height = compute_volume_from_height,
-      compute_height_from_volume = compute_height_from_volume)
+      max_volume=max_volume, model=model, compute_volume_from_height=compute_volume_from_height,
+      compute_height_from_volume=compute_height_from_volume,
+      material_z_thickness=material_z_thickness)
     self.bottom_type = bottom_type
     self.cross_section_type = cross_section_type
 

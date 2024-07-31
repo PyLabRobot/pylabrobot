@@ -332,10 +332,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       channels_involved.append(True)
 
       x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
-      x_positions.append(int(x_pos*10))
+      x_positions.append(round(x_pos*10))
 
       y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
-      y_positions.append(int(y_pos*10))
+      y_positions.append(round(y_pos*10))
 
     # check that the minimum d between any two y positions is >9mm
     # O(n^2) search is not great but this is most readable, and the max size is 16, so it's fine.
@@ -391,8 +391,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       await self.define_tip_needle(
         tip_type_table_index=ttti,
         has_filter=tip.has_filter,
-        tip_length=int((tip.total_tip_length - tip.fitting_depth) * 10), # in 0.1mm
-        maximum_tip_volume=int(tip.maximal_volume * 10), # in 0.1ul
+        tip_length=round((tip.total_tip_length - tip.fitting_depth) * 10), # in 0.1mm
+        maximum_tip_volume=round(tip.maximal_volume * 10), # in 0.1ul
         tip_size=tip.tip_size,
         pickup_method=tip.pickup_method
       )

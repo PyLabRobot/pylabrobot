@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple, Union, cast, Literal
+from typing import Dict, List, Optional, Sequence, Tuple, Union, cast, Literal
 
 
 from .liquid import Liquid
@@ -53,29 +53,19 @@ class Plate(ItemizedResource[Well]):
     size_x: float,
     size_y: float,
     size_z: float,
+    ordered_items: Optional[Dict[str, Well]] = None,
+    ordering: Optional[List[str]] = None,
     items: Optional[List[List[Well]]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
     category: str = "plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
-    plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted"
+    plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
   ):
     """ Initialize a Plate resource.
 
     Args:
-      name: Name of the plate.
-      size_x: Size of the plate in the x direction.
-      size_y: Size of the plate in the y direction.
-      size_z: Size of the plate in the z direction.
-      dx: The distance between the start of the plate and the center of the first well (A1) in the x
-        direction.
-      dy: The distance between the start of the plate and the center of the first well (A1) in the y
-        direction.
-      dz: The distance between the start of the plate and the center of the first well (A1) in the z
-        direction.
-      num_items_x: Number of wells in the x direction.
-      num_items_y: Number of wells in the y direction.
       well_size_x: Size of the wells in the x direction.
       well_size_y: Size of the wells in the y direction.
       lid: Immediately assign a lid to the plate.
@@ -84,7 +74,8 @@ class Plate(ItemizedResource[Well]):
     """
 
     super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
-      num_items_y=num_items_y, category=category, model=model)
+      num_items_y=num_items_y, ordered_items=ordered_items, ordering=ordering, category=category,
+      model=model)
     self.lid: Optional[Lid] = None
     self.plate_type = plate_type
 

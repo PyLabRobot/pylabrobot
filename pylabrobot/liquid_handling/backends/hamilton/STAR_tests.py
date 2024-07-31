@@ -7,7 +7,7 @@ from pylabrobot.liquid_handling.standard import Pickup, GripDirection
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
 from pylabrobot.resources import (
-  Plate, Well, WellBottomType, CrossSectionType, Coordinate, Container, create_equally_spaced_2d,
+  Plate, Well, WellBottomType, CrossSectionType, Coordinate, Container, create_ordered_items_2d,
   ResourceStack, Lid,
   TIP_CAR_480_A00, TIP_CAR_288_C00, PLT_CAR_L5AC_A00, HT_P, HTF_L,
   no_volume_tracking
@@ -59,7 +59,7 @@ def Cos_96_EZWash(name: str) -> Plate:
     size_z=14.5,
     lid=None,
     model="Cos_96_EZWash",
-    items=create_equally_spaced_2d(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=10.55,
@@ -164,7 +164,7 @@ class TestSTARResponseParsing(unittest.TestCase):
 class STARUSBCommsMocker(STAR):
   """ Mocks PyUSB """
 
-  async def setup(self, send_response):
+  async def setup(self, send_response: str):  # type: ignore
     self.dev = MockDev(send_response)
     self.read_endpoint = MockEndpoint()
     self.write_endpoint = MockEndpoint()
@@ -206,8 +206,8 @@ class STARCommandCatcher(STAR):
     self.core96_head_installed = True
     self._core_parked = True
 
-  async def send_command(self, module, command, tip_pattern=None, fmt="", read_timeout=0,
-    write_timeout=0, **kwargs):
+  async def send_command(self, module, command, tip_pattern=None, fmt="", # type: ignore
+    read_timeout=0, write_timeout=0, **kwargs):
     cmd, _ = self._assemble_command(module, command, tip_pattern, **kwargs)
     self.commands.append(cmd)
 
@@ -366,21 +366,21 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_tip_pickup_01(self):
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1"])
     self._assert_command_sent_once(
-      "C0TPid0000xp01179 01179 00000&yp2418 2328 0000tm1 1 0&tt01tp2243tz2163th2450td0",
+      "C0TPid0000xp01179 01179 00000&yp2418 2328 0000tm1 1 0&tt01tp2244tz2164th2450td0",
       PICKUP_TIP_FORMAT)
 
   async def test_tip_pickup_56(self):
     await self.lh.pick_up_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
     self._assert_command_sent_once(
       "C0TPid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
-      "0000&tm0 0 0 0 1 1 0 &tt01tp2243tz2163th2450td0",
+      "0000&tm0 0 0 0 1 1 0 &tt01tp2244tz2164th2450td0",
       PICKUP_TIP_FORMAT)
 
   async def test_tip_pickup_15(self):
     await self.lh.pick_up_tips(self.tip_rack["A1", "F1"], use_channels=[0, 4])
     self._assert_command_sent_once(
       "C0TPid0000xp01179 00000 00000 00000 01179 00000&yp2418 0000 0000 0000 1968 0000 "
-      "&tm1 0 0 0 1 0&tt01tp2243tz2163th2450td0",
+      "&tm1 0 0 0 1 0&tt01tp2244tz2164th2450td0",
       PICKUP_TIP_FORMAT)
 
   async def test_tip_drop_56(self):
@@ -388,7 +388,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.drop_tips(self.tip_rack["E1", "F1"], use_channels=[4, 5])
     self._assert_command_sent_once(
       "C0TRid0000xp00000 00000 00000 00000 01179 01179 00000&yp0000 0000 0000 0000 2058 1968 "
-      "0000&tm0 0 0 0 1 1 0&tp2243tz2163th2450ti1", DROP_TIP_FORMAT)
+      "0000&tm0 0 0 0 1 1 0&tp2244tz2164th2450ti1", DROP_TIP_FORMAT)
 
   async def test_aspirate56(self):
     self.maxDiff = None
@@ -399,10 +399,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       well.tracker.set_liquids([(None, 100 * 1.072)]) # liquid class correction
     await self.lh.aspirate(self.plate["A1", "B1"], vols=[100, 100], use_channels=[4, 5])
     self._assert_command_sent_once("C0ASid0004at0 0 0 0 0 0 0&tm0 0 0 0 1 1 0&xp00000 00000 00000 "
-      "00000 02980 02980 00000&yp0000 0000 0000 0000 1460 1370 0000&th2450te2450lp2011 2011 2011 "
-      "2011 2011 2011 2011&ch000 000 000 000 000 000 000&zl1881 1881 1881 1881 1881 1881 1881&"
+      "00000 02980 02980 00000&yp0000 0000 0000 0000 1460 1370 0000&th2450te2450lp2012 2012 2012 "
+      "2012 2012 2012 2012&ch000 000 000 000 000 000 000&zl1882 1882 1882 1882 1882 1882 1882&"
       "po0100 0100 0100 0100 0100 0100 0100&zu0032 0032 0032 0032 0032 0032 0032&zr06180 06180 "
-      "06180 06180 06180 06180 06180&zx1831 1831 1831 1831 1831 1831 1831&ip0000 0000 0000 0000 "
+      "06180 06180 06180 06180 06180&zx1832 1832 1832 1832 1832 1832 1832&ip0000 0000 0000 0000 "
       "0000 0000 0000&it0 0 0 0 0 0 0&fp0000 0000 0000 0000 0000 0000 0000&av01072 01072 01072 "
       "01072 01072 01072 01072&as1000 1000 1000 1000 1000 1000 1000&ta000 000 000 000 000 000 000&"
       "ba0000 0000 0000 0000 0000 0000 0000&oa000 000 000 000 000 000 000&lm0 0 0 0 0 0 0&ll1 1 1 "
@@ -425,8 +425,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0002at0 0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2011 2011&ch000 000&zl1881 "
-      "1881&po0100 0100&zu0032 0032&zr06180 06180&zx1831 1831&ip0000 0000&it0 0&fp0000 0000&"
+      "C0ASid0002at0 0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2012 2012&ch000 000&zl1882 "
+      "1882&po0100 0100&zu0032 0032&zr06180 06180&zx1832 1832&ip0000 0000&it0 0&fp0000 0000&"
       "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&zo000 000&"
       "ld00 00&de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&mh0000 0000&"
       "gi000 000&gj0gk0lk0 0&ik0000 0000&sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&"
@@ -444,8 +444,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0002at0 0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2011 2011&ch000 000&zl1971 "
-      "1971&po0100 0100&zu0032 0032&zr06180 06180&zx1921 1921&ip0000 0000&it0 0&fp0000 0000&"
+      "C0ASid0002at0 0&tm1 0&xp02980 00000&yp1460 0000&th2450te2450lp2012 2012&ch000 000&zl1972 "
+      "1972&po0100 0100&zu0032 0032&zr06180 06180&zx1922 1922&ip0000 0000&it0 0&fp0000 0000&"
       "av01072 01072&as1000 1000&ta000 000&ba0000 0000&oa000 000&lm0 0&ll1 1&lv1 1&zo000 000&"
       "ld00 00&de0020 0020&wt10 10&mv00000 00000&mc00 00&mp000 000&ms1000 1000&mh0000 0000&"
       "gi000 000&gj0gk0lk0 0&ik0000 0000&sd0500 0500&se0500 0500&sz0300 0300&io0000 0000&"
@@ -464,9 +464,9 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
-      "C0ASid0002at0 0 0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp2011 2011 2011&"
-      "ch000 000 000&zl1881 1881 1881&po0100 0100 0100&zu0032 0032 0032&zr06180 06180 06180&"
-      "zx1831 1831 1831&ip0000 0000 0000&it0 0 0&fp0000 0000 0000&av01072 01072 01072&as1000 1000 "
+      "C0ASid0002at0 0 0&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&th2450te2450lp2012 2012 2012&"
+      "ch000 000 000&zl1882 1882 1882&po0100 0100 0100&zu0032 0032 0032&zr06180 06180 06180&"
+      "zx1832 1832 1832&ip0000 0000 0000&it0 0 0&fp0000 0000 0000&av01072 01072 01072&as1000 1000 "
       "1000&ta000 000 000&ba0000 0000 0000&oa000 000 000&lm0 0 0&ll1 1 1&lv1 1 1&zo000 000 000&"
       "ld00 00 00&de0020 0020 0020&wt10 10 10&mv00000 00000 00000&mc00 00 00&mp000 000 000&"
       "ms1000 1000 1000&mh0000 0000 0000&gi000 000 000&gj0gk0lk0 0 0&ik0000 0000 0000&sd0500 0500 "
@@ -479,8 +479,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with no_volume_tracking():
       await self.lh.aspirate([self.bb]*5,vols=[10]*5, use_channels=[0,1,2,3,4], liquid_height=[1]*5)
     self._assert_command_sent_once(
-      "C0ASid0002at0 0 0 0 0 0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 "
-      "1825 1688 1551 0000&th2450te2450lp2000 2000 2000 2000 2000 2000&ch000 000 000 000 000 000&"
+      "C0ASid0002at0 0 0 0 0 0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1962 "
+      "1825 1688 1552 0000&th2450te2450lp2000 2000 2000 2000 2000 2000&ch000 000 000 000 000 000&"
       "zl1210 1210 1210 1210 1210 1210&po0100 0100 0100 0100 0100 0100&zu0032 0032 0032 0032 0032 "
       "0032&zr06180 06180 06180 06180 06180 06180&zx1160 1160 1160 1160 1160 1160&ip0000 0000 0000 "
       "0000 0000 0000&it0 0 0 0 0 0&fp0000 0000 0000 0000 0000 0000&av00119 00119 00119 00119 "
@@ -500,8 +500,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.dispense([self.bb]*5, vols=[10]*5, use_channels=[0,1,2,3,4],
                              liquid_height=[1]*5, blow_out=[True]*5, jet=[True]*5)
     self._assert_command_sent_once(
-      "C0DSid0002dm1 1 1 1 1 1&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1961 "
-      "1825 1688 1551 0000&zx1260 1260 1260 1260 1260 1260&lp2000 2000 2000 2000 2000 2000&zl1210 "
+      "C0DSid0002dm1 1 1 1 1 1&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1962 "
+      "1825 1688 1552 0000&zx1260 1260 1260 1260 1260 1260&lp2000 2000 2000 2000 2000 2000&zl1210 "
       "1210 1210 1210 1210 1210&po0100 0100 0100 0100 0100 0100&ip0000 0000 0000 0000 0000 0000&"
       "it0 0 0 0 0 0&fp0000 0000 0000 0000 0000 0000&zu0032 0032 0032 0032 0032 0032&zr06180 06180 "
       "06180 06180 06180 06180&th2450te2450dv00116 00116 00116 00116 00116 00116&ds1800 1800 1800 "
@@ -519,7 +519,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     with no_volume_tracking():
       await self.lh.dispense(self.plate["A1"], vols=[100], jet=[True], blow_out=[True])
     self._assert_command_sent_once(
-      "C0DSid0002dm1 1&tm1 0&xp02980 00000&yp1460 0000&zx1931 1931&lp2011 2011&zl1881 1881&"
+      "C0DSid0002dm1 1&tm1 0&xp02980 00000&yp1460 0000&zx1932 1932&lp2012 2012&zl1882 1882&"
       "po0100 0100&ip0000 0000&it0 0&fp0000 0000&zu0032 0032&zr06180 06180&th2450te2450"
       "dv01072 01072&ds1800 1800&ss0050 0050&rv000 000&ta050 050&ba0300 03000&lm0 0&"
       "dj00zo000 000&ll1 1&lv1 1&de0010 0010&wt00 00&mv00000 00000&mc00 00&mp000 000&"
@@ -535,8 +535,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       await self.lh.dispense(self.plate["A1:B1"], vols=[100]*2, jet=[True]*2, blow_out=[True]*2)
 
     self._assert_command_sent_once(
-      "C0DSid0002dm1 1 1&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&zx1931 1931 1931&lp2011 2011 "
-      "2011&zl1881 1881 1881&po0100 0100 0100&ip0000 0000 0000&it0 0 0&fp0000 0000 0000&zu0032 "
+      "C0DSid0002dm1 1 1&tm1 1 0&xp02980 02980 00000&yp1460 1370 0000&zx1932 1932 1932&lp2012 2012 "
+      "2012&zl1882 1882 1882&po0100 0100 0100&ip0000 0000 0000&it0 0 0&fp0000 0000 0000&zu0032 "
       "0032 0032&zr06180 06180 06180&th2450te2450dv01072 01072 01072&ds1800 1800 1800&"
       "ss0050 0050 0050&rv000 000 000&ta050 050 050&ba0300 0300 0300&lm0 0 0&dj00zo000 000 000&"
       "ll1 1 1&lv1 1 1&de0010 0010 0010&wt00 00 00&mv00000 00000 00000&mc00 00 00&mp000 000 000&"
@@ -584,7 +584,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
-      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1871iw000ix0fh000af01083ag2500vt050"
+      "C0EAid0001aa0xs02980xd0yh1460zh2450ze2450lz1999zt1882zm1872iw000ix0fh000af01083ag2500vt050"
       "bv00000wv00050cm0cs1bs0020wh10hv00000hc00hp000hs1200zv0032zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "xs#####xd#yh####zh####ze####lz####zt####zm####iw###ix#fh###af#####ag####vt###"
@@ -602,7 +602,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
-      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1881zm1871iw000ix0fh000df01083dg1200vt050"
+      "C0EDid0001da3xs02980xd0yh1460zh2450ze2450lz1999zt1882zm1872iw000ix0fh000df01083dg1200vt050"
       "bv00000cm0cs1bs0020wh00hv00000hc00hp000hs1200es0050ev000zv0032ej00zq06180mj000cj0cx0cr000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpp0100",
       "da#xs#####xd#yh##6#zh####ze####lz####zt####zm##6#iw###ix#fh###df#####dg####vt###"
@@ -620,10 +620,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_iswap(self):
     await self.lh.move_plate(self.plate, self.plt_car[2])
     self._assert_command_sent_once(
-      "C0PPid0011xs03478xd0yj1142yd0zj1874zd0gr1th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0011xs03479xd0yj1142yd0zj1875zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
       "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0012xs03478xd0yj3062yd0zj1874zd0th2450te2450gr1go1307ga0",
+      "C0PRid0012xs03479xd0yj3062yd0zj1875zd0th2450te2450gr1go1308ga0",
       "xs#####xd#yj####yd#zj####zd#th####te####go####ga#")
 
   async def test_iswap_plate_reader(self):
@@ -635,23 +635,24 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.move_plate(self.plate, plate_reader, pickup_distance_from_top=8.2,
       get_direction=GripDirection.FRONT, put_direction=GripDirection.LEFT)
     self._assert_command_sent_once(
-      "C0PPid0003xs03478xd0yj1142yd0zj1924zd0th2450te2450gw4gb1244go1307gt20gr1ga0gc1",
+      "C0PPid0003xs03479xd0yj1142yd0zj1925zd0th2450te2450gw4gb1245go1308gt20gr1ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#th####te####gw#gb####go####gt##gr#ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0004xs10427xd0yj3285yd0zj2063zd0th2450te2450go1307gr4ga0",
+      "C0PRid0004xs10427xd0yj3286yd0zj2063zd0th2450te2450go1308gr4ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####go####gr#ga#")
 
-    assert self.plate.rotation == 90
-    assert self.plate.get_size_x() == 85.48 and self.plate.get_size_y() == 127.76
+    assert self.plate.rotation.z == 90
+    self.assertAlmostEqual(self.plate.get_size_x(), 85.48, places=2)
+    self.assertAlmostEqual(self.plate.get_size_y(), 127.76, places=2)
 
     await self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0],
       pickup_distance_from_top=8.2, get_direction=GripDirection.LEFT,
       put_direction=GripDirection.FRONT)
     self._assert_command_sent_once(
-      "C0PPid0005xs10427xd0yj3285yd0zj2063zd0gr4th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0005xs10427xd0yj3286yd0zj2063zd0gr4th2450te2450gw4go1308gb1245gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0006xs03478xd0yj1142yd0zj1924zd0th2450te2450gr1go1307ga0",
+      "C0PRid0006xs03479xd0yj1142yd0zj1925zd0th2450te2450gr1go1308ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
   async def test_iswap_move_lid(self):
@@ -660,10 +661,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.move_lid(self.plate.lid, self.other_plate)
 
     self._assert_command_sent_once(
-      "C0PPid0002xs03478xd0yj1142yd0zj1949zd0gr1th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0002xs03479xd0yj1142yd0zj1950zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
       GET_PLATE_FMT)
     self._assert_command_sent_once( # zj sent = 1849
-      "C0PRid0003xs03478xd0yj2102yd0zj1949zd0th2450te2450gr1go1307ga0", PUT_PLATE_FMT)
+      "C0PRid0003xs03479xd0yj2102yd0zj1950zd0th2450te2450gr1go1308ga0", PUT_PLATE_FMT)
 
   async def test_iswap_stacking_area(self):
     stacking_area = ResourceStack("stacking_area", direction="z")
@@ -675,18 +676,18 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     await self.lh.move_lid(self.plate.lid, stacking_area)
     self._assert_command_sent_once(
-      "C0PPid0002xs03478xd0yj1142yd0zj1949zd0gr1th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0002xs03479xd0yj1142yd0zj1950zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
         GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0003xs00698xd0yj4567yd0zj2305zd0th2450te2450gr1go1307ga0", PUT_PLATE_FMT)
+      "C0PRid0003xs00699xd0yj4567yd0zj2305zd0th2450te2450gr1go1308ga0", PUT_PLATE_FMT)
 
     # Move lids back (reverse order)
     await self.lh.move_lid(cast(Lid, stacking_area.get_top_item()), self.plate)
     self._assert_command_sent_once(
-      "C0PPid0004xs00698xd0yj4567yd0zj2305zd0gr1th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0004xs00699xd0yj4567yd0zj2305zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
       GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0005xs03478xd0yj1142yd0zj1949zd0th2450te2450gr1go1307ga0", PUT_PLATE_FMT)
+      "C0PRid0005xs03479xd0yj1142yd0zj1950zd0th2450te2450gr1go1308ga0", PUT_PLATE_FMT)
 
   async def test_iswap_stacking_area_2lids(self):
     # for some reason it was like this at some point
@@ -698,36 +699,36 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     await self.lh.move_lid(self.plate.lid, stacking_area)
     self._assert_command_sent_once(
-      "C0PPid0002xs03478xd0yj1142yd0zj1949zd0gr1th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0002xs03479xd0yj1142yd0zj1950zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
         GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0003xs00698xd0yj4567yd0zj2305zd0th2450te2450gr1go1307ga0", PUT_PLATE_FMT)
+      "C0PRid0003xs00699xd0yj4567yd0zj2305zd0th2450te2450gr1go1308ga0", PUT_PLATE_FMT)
 
     await self.lh.move_lid(self.other_plate.lid, stacking_area)
     self._assert_command_sent_once(
-      "C0PPid0004xs03478xd0yj2102yd0zj1949zd0gr1th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0004xs03479xd0yj2102yd0zj1950zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
         GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0005xs00698xd0yj4567yd0zj2405zd0th2450te2450gr1go1307ga0", PUT_PLATE_FMT)
+      "C0PRid0005xs00699xd0yj4567yd0zj2405zd0th2450te2450gr1go1308ga0", PUT_PLATE_FMT)
 
     # Move lids back (reverse order)
     top_item = stacking_area.get_top_item()
     assert isinstance(top_item, Lid)
     await self.lh.move_lid(top_item, self.plate)
     self._assert_command_sent_once(
-      "C0PPid0004xs00698xd0yj4567yd0zj2405zd0gr1th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0004xs00699xd0yj4567yd0zj2405zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
       GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0005xs03478xd0yj1142yd0zj1949zd0th2450te2450gr1go1307ga0", PUT_PLATE_FMT)
+      "C0PRid0005xs03479xd0yj1142yd0zj1950zd0th2450te2450gr1go1308ga0", PUT_PLATE_FMT)
 
     top_item = stacking_area.get_top_item()
     assert isinstance(top_item, Lid)
     await self.lh.move_lid(top_item, self.other_plate)
     self._assert_command_sent_once(
-      "C0PPid0004xs00698xd0yj4567yd0zj2305zd0gr1th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0004xs00699xd0yj4567yd0zj2305zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
       GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0005xs03478xd0yj2102yd0zj1949zd0th2450te2450gr1go1307ga0", PUT_PLATE_FMT)
+      "C0PRid0005xs03479xd0yj2102yd0zj1950zd0th2450te2450gr1go1308ga0", PUT_PLATE_FMT)
 
   async def test_iswap_move_with_intermediate_locations(self):
     await self.lh.move_plate(self.plate, self.plt_car[1], intermediate_locations=[
@@ -736,21 +737,21 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     ])
 
     self._assert_command_sent_once(
-      "C0PPid0023xs03478xd0yj1142yd0zj1874zd0gr1th2450te2450gw4go1307gb1244gt20ga0gc1",
+      "C0PPid0023xs03479xd0yj1142yd0zj1875zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
       GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PMid0024xs02978xd0yj4022yd0zj2434zd0gr1th2450ga1xe4 1", INTERMEDIATE_FMT)
+      "C0PMid0024xs02979xd0yj4022yd0zj2434zd0gr1th2450ga1xe4 1", INTERMEDIATE_FMT)
     self._assert_command_sent_once(
-      "C0PMid0025xs03978xd0yj3062yd0zj2434zd0gr1th2450ga1xe4 1", INTERMEDIATE_FMT)
+      "C0PMid0025xs03979xd0yj3062yd0zj2434zd0gr1th2450ga1xe4 1", INTERMEDIATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0026xs03478xd0yj2102yd0zj1874zd0th2450te2450gr1go1307ga0",
+      "C0PRid0026xs03479xd0yj2102yd0zj1875zd0th2450te2450gr1go1308ga0",
       PUT_PLATE_FMT)
 
   async def test_discard_tips(self):
     await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
     await self.lh.discard_tips()
     self._assert_command_sent_once(
-     "C0TRid0206xp08000 08000 08000 08000 08000 08000 08000 08000yp4050 3782 3514 3245 2978 2710 "
+     "C0TRid0206xp08000 08000 08000 08000 08000 08000 08000 08000yp4050 3782 3514 3246 2978 2710 "
      "2442 2174tp1970tz1870th2450te2450tm1 1 1 1 1 1 1 1ti0",
      DROP_TIP_FORMAT)
 
@@ -761,6 +762,9 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     lh = LiquidHandler(self.mockSTAR, deck=deck)
     tip_car = TIP_CAR_288_C00(name="tip carrier")
     tip_car[0] = tr = HT_P(name="tips_01")
+    assert tr.rotation.z == 90
+    assert tr.location == Coordinate(82.6, 0, 0)
+    print(tr.get_item("A1").location)
     deck.assign_child_resource(tip_car, rails=2)
     await lh.setup()
 
@@ -789,10 +793,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
                              use_arm="core")
     self._assert_command_sent_once("C0ZTid0020xs07975xd0ya1240yb1065pa07pb08tp2350tz2250th2450tt14",
                                    "xs#####xd#ya####yb####pa##pb##tp####tz####th####tt##")
-    self._assert_command_sent_once("C0ZPid0021xs03478xd0yj1142yv0050zj1876zy0500yo0884yg0824yw15"
+    self._assert_command_sent_once("C0ZPid0021xs03479xd0yj1142yv0050zj1876zy0500yo0885yg0825yw15"
                                    "th2450te2450",
                                    "xs#####xd#yj####yv####zj####zy####yo####yg####yw##th####te####")
-    self._assert_command_sent_once("C0ZRid0022xs03478xd0yj2102zj1876zi000zy0500yo0884th2450te2450",
+    self._assert_command_sent_once("C0ZRid0022xs03479xd0yj2102zj1876zi000zy0500yo0885th2450te2450",
                                    "xs#####xd#yj####zj####zi###zy####yo####th####te####")
     self._assert_command_sent_once("C0ZSid0023xs07975xd0ya1240yb1065tp2150tz2050th2450te2450",
                                     "xs#####xd#ya####yb####tp####tz####th####te####")
@@ -800,7 +804,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_iswap_pick_up_resource_grip_direction_changes_plate_width(self):
     size_x = 100
     size_y = 200
-    plate = Plate("dummy", size_x=size_x, size_y=size_y, size_z=100, items=[])
+    plate = Plate("dummy", size_x=size_x, size_y=size_y, size_z=100, ordered_items={})
     plate.location = Coordinate.zero()
 
     with unittest.mock.patch.object(self.lh.backend, "iswap_get_plate") as mocked_iswap_get_plate:
@@ -814,7 +818,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_iswap_release_picked_up_resource_grip_direction_changes_plate_width(self):
     size_x = 100
     size_y = 200
-    plate = Plate("dummy", size_x=size_x, size_y=size_y, size_z=100, items=[])
+    plate = Plate("dummy", size_x=size_x, size_y=size_y, size_z=100, ordered_items={})
     plate.location = Coordinate.zero()
 
     with unittest.mock.patch.object(self.lh.backend, "iswap_put_plate") as mocked_iswap_get_plate:
