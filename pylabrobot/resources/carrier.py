@@ -219,8 +219,17 @@ class PlateCarrierSite(CarrierSite):
       raise TypeError("PlateCarrierSite can only store Plate or PlateAdapter resources," + \
                       f" not {type(resource)}")
 
-    # TODO: add conditional logic to modify Plate position based on whether
-    # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
+    if isinstance(resource, Plate):
+      # Sanity check for equal well clearances / dz
+      well_dz_set = {round(well.location.z, 2) for well in resource.get_all_children()
+               if all([well.category == "well", well.location is not None])}
+      assert len(well_dz_set) == 1, "All wells must have the same dz"
+      well_dz = well_dz_set.pop()
+      # Plate "sinking" logic based on well dz to pedestal relationship
+      pedestal_size_z = abs(self.pedestal_size_z)
+      z_sinking_depth = min(pedestal_size_z, well_dz)
+      location = Coordinate(location.x, location.y, location.z - z_sinking_depth)
+
     return super().assign_child_resource(resource, location, reassign)
 
   def serialize(self) -> dict:

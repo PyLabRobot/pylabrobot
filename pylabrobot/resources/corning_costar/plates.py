@@ -1088,13 +1088,14 @@ def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
       num_items_y=2,
       dx=7.0,
       dy=5.45,
-      dz=0.3,
+      dz=1.35,
       item_dx=38.45,
       item_dy=38.45,
       size_x=35.0,
       size_y=35.0,
       size_z=17.5,
       bottom_type=WellBottomType.FLAT,
+      material_z_thickness=1.4,
       cross_section_type=CrossSectionType.CIRCLE,
       compute_volume_from_height=_compute_volume_from_height_Cos_6_wellplate_16800ul_Fb,
       compute_height_from_volume=_compute_height_from_volume_Cos_6_wellplate_16800ul_Fb,
@@ -1108,9 +1109,9 @@ def Cos_6_wellplate_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
   return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid).rotated(z=90)
 
 
-# # # # # # # # # # Cos_96_DWP_2mL_Vb # # # # # # # # # #
+# # # # # # # # # # Cos_96_wellplate_2mL_Vb # # # # # # # # # #
 
-def _compute_volume_from_height_Cos_96_DWP_2mL_Vb(h: float) -> float:
+def _compute_volume_from_height_Cos_96_wellplate_2mL_Vb(h: float) -> float:
   if h > 44.1: # 5% tolerance
     raise ValueError(f"Height {h} is too large for Cos_96_DWP_2mL_Vb")
   return calculate_liquid_volume_container_2segments_square_vbottom(
@@ -1120,9 +1121,9 @@ def _compute_volume_from_height_Cos_96_DWP_2mL_Vb(h: float) -> float:
     h_cube=38.0,
     liquid_height=h)
 
-def _compute_height_from_volume_Cos_96_DWP_2mL_Vb(liquid_volume: float):
+def _compute_height_from_volume_Cos_96_wellplate_2mL_Vb(liquid_volume: float):
   if liquid_volume > 2_100: # 5% tolerance
-    raise ValueError(f"Volume {liquid_volume} is too large for Cos_96_DWP_2mL_Vb")
+    raise ValueError(f"Volume {liquid_volume} is too large for Cos_96_wellpate_2mL_Vb")
   return round(calculate_liquid_height_in_container_2segments_square_vbottom(
     x=7.8,
     y=7.8,
@@ -1130,7 +1131,7 @@ def _compute_height_from_volume_Cos_96_DWP_2mL_Vb(liquid_volume: float):
     h_cube=38.0,
     liquid_volume=liquid_volume),3)
 
-def Cos_96_DWP_2mL_Vb_Lid(name: str) -> Lid:
+def Cos_96_wellplate_2mL_Vb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -1139,10 +1140,14 @@ def Cos_96_DWP_2mL_Vb_Lid(name: str) -> Lid:
   #   size_y=86.0,
   #   size_z=None,           # measure the total z height
   #   nesting_z_height=None, # measure overlap between lid and plate
-  #   model="Cos_96_DWP_2mL_VbLid",
+  #   model="Cos_96_wellplate_2mL_Vb_Lid",
   # )
 
 def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
+  raise NotImplementedError("This function is deprecated and will be removed in a future version."
+          " Use 'Cos_96_wellplate_2mL_Vb' instead.")
+
+def Cos_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
   """ Corning 96 deep-well 2 mL PCR plate. Corning cat. no.: 3960
   - Material: Polypropylene
   - Resistant to many common organic solvents (e.g., DMSO, ethanol, methanol)
@@ -1155,34 +1160,37 @@ def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=43.5,
-    lid=Cos_96_DWP_2mL_Vb_Lid(name=name + "_lid") if with_lid else None,
-    model="Cos_96_DWP_2mL_Vb",
+    lid=Cos_96_wellplate_2mL_Vb_Lid(name=name + "_lid") if with_lid else None,
+    model="Cos_96_wellplate_2mL_Vb",
     ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
-      dx=10.5,
-      dy=7.5,
-      dz=1.4,
+      dx=9.6,
+      dy=7.0,
+      dz=1.2,
       item_dx=9.0,
       item_dy=9.0,
       size_x=8.0,
       size_y=8.0,
       size_z=42.0,
       bottom_type=WellBottomType.V,
+      material_z_thickness=1.25,
       cross_section_type=CrossSectionType.RECTANGLE,
-      compute_volume_from_height=_compute_volume_from_height_Cos_96_DWP_2mL_Vb,
-      compute_height_from_volume=_compute_height_from_volume_Cos_96_DWP_2mL_Vb
+      compute_volume_from_height=_compute_volume_from_height_Cos_96_wellplate_2mL_Vb,
+      compute_height_from_volume=_compute_height_from_volume_Cos_96_wellplate_2mL_Vb
     ),
   )
 
-def Cos_96_DWP_2mL_Vb_L(name: str, with_lid: bool = False) -> Plate:
-  """ Cos_96_DWP_2mL_Vb """
-  return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid)
+def Cos_96_wellplate_2mL_Vb_L(name: str, with_lid: bool = False) -> Plate:
+  """ Cos_96_wellplate_2mL_Vb """
+  return Cos_96_wellplate_2mL_Vb(name=name, with_lid=with_lid)
 
-def Cos_96_DWP_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  """ Cos_96_DWP_2mL_Vb """
-  return Cos_96_DWP_2mL_Vb(name=name, with_lid=with_lid).rotated(z=90)
+def Cos_96_wellplate_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
+  """ Cos_96_wellplate_2mL_Vb """
+  return Cos_96_wellplate_2mL_Vb(name=name, with_lid=with_lid).rotated(z=90)
 
+
+# # # # # # # # # # Cor_96_wellplate_360ul_Fb # # # # # # # # # #
 
 def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
