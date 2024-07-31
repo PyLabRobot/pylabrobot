@@ -388,7 +388,6 @@ class Resource {
     this.draw(resourceLayer);
 
     if (isRecording) {
-      // If we want to save this frame, save it
       if (recordingCounter % frameInterval == 0) {
         stageToBlob(stage, handleBlob);
       }
@@ -719,32 +718,6 @@ class Trough extends Container {
   }
 }
 
-class Reservoir extends Plate {
-  constructor(resourceData, parent = undefined) {
-    super(resourceData, parent);
-    const { num_items_x, num_items_y } = resourceData;
-    this.num_items_x = num_items_x;
-    this.num_items_y = num_items_y;
-  }
-
-  drawMainShape() {
-
-    return super.drawMainShape();
-
-  }
-
-  serialize() {
-
-    return super.serialize();
-  }
-
-  update() {
-
-    super.update();
-
-  }
-}
-
 class Well extends Container {
   draggable = false;
   canDelete = false;
@@ -1020,8 +993,6 @@ function classForResourceType(type) {
       return Container;
     case "Trough":
       return Trough;
-    case "Reservoir":
-      return Reservoir;
     case "VantageDeck":
       alert(
         "VantageDeck is not completely implemented yet: the trash and plate loader are not drawn"
@@ -1110,6 +1081,29 @@ window.addEventListener("load", function () {
   }
 });
 
+function gifResetUI() {
+  document.getElementById("gif-start").hidden = true;
+  document.getElementById("gif-recording").hidden = true;
+  document.getElementById("gif-processing").hidden = true;
+  document.getElementById("gif-download").hidden = true;
+}
+
+function gifShowStartUI() {
+  document.getElementById("gif-start").hidden = false;
+}
+
+function gifShowRecordingUI() {
+  document.getElementById("gif-recording").hidden = false;
+}
+
+function gifShowProcessingUI() {
+  document.getElementById("gif-processing").hidden = false;
+}
+
+function gifShowDownloadUI() {
+  document.getElementById("gif-download").hidden = false;
+}
+
 async function startRecording() {
   // Turn recording on
   isRecording = true;
@@ -1123,24 +1117,14 @@ async function startRecording() {
 
   stageToBlob(stage, handleBlob);
 
-  // Update state of all buttons
-  document.getElementById("stop-recording-button").disabled = false;
-  document.getElementById("stop-recording-button").hidden = false;
-
-  document.getElementById("start-recording-button").disabled = true;
-  document.getElementById("start-recording-button").hidden = true;
-
-  document.getElementById("downloadBtn").disabled = true;
-  document.getElementById("downloadBtn").hidden = true;
-
-  document.getElementById("slider-container").disabled = true;
-  document.getElementById("slider-container").hidden = true;
-
-  document.getElementById("progressBar").disabled = false;
-  document.getElementById("progressBar").hidden = false;
+  gifResetUI();
+  gifShowRecordingUI();
 }
 
 function stopRecording() {
+  gifResetUI();
+  gifShowProcessingUI();
+
   // Turn recording off
   isRecording = false;
 
@@ -1172,27 +1156,12 @@ function stopRecording() {
   // Load gif into right portion of screen
   gif.on("finished", function (blob) {
     renderedGifBlob = blob;
-    document.getElementById("progressBar").disabled = true;
-    document.getElementById("progressBar").hidden = true;
+    gifResetUI();
+    gifShowDownloadUI();
+    gifShowStartUI();
   });
 
   gif.render();
-
-  // Update state of all buttons
-  document.getElementById("stop-recording-button").disabled = true;
-  document.getElementById("stop-recording-button").hidden = true;
-
-  document.getElementById("start-recording-button").disabled = false;
-  document.getElementById("start-recording-button").hidden = false;
-
-  document.getElementById("downloadBtn").disabled = false;
-  document.getElementById("downloadBtn").hidden = false;
-
-  document.getElementById("slider-container").disabled = false;
-  document.getElementById("slider-container").hidden = false;
-
-  document.getElementById("progressBar").disabled = false;
-  document.getElementById("progressBar").hidden = false;
 }
 
 // convert stage to a blob and handle the blob
@@ -1229,36 +1198,46 @@ document
   .getElementById("stop-recording-button")
   .addEventListener("click", stopRecording);
 
-document.getElementById("downloadBtn").addEventListener("click", function () {
-  if (!renderedGifBlob) {
-    alert("No GIF rendered yet. Please stop the recording first.");
-    return;
-  }
+document
+  .getElementById("gif-download-button")
+  .addEventListener("click", function () {
+    if (!renderedGifBlob) {
+      alert("No GIF rendered yet. Please stop the recording first.");
+      return;
+    }
 
-  var fileName = document.getElementById("fileName").value || "plr-visualizer";
-  var url = URL.createObjectURL(renderedGifBlob);
-  var a = document.createElement("a");
-  a.href = url;
-  if (!fileName.endsWith(".gif")) {
-    fileName += ".gif";
-  }
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-});
+    var fileName =
+      document.getElementById("fileName").value || "plr-visualizer";
+    var url = URL.createObjectURL(renderedGifBlob);
+    var a = document.createElement("a");
+    a.href = url;
+    if (!fileName.endsWith(".gif")) {
+      fileName += ".gif";
+    }
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
 
-document.getElementById("myRange").addEventListener("input", function () {
-  let value = parseInt(this.value);
-  // Adjust the value to the nearest multiple of 8
-  value = Math.round(value / 8) * 8;
-  // Ensure the value stays within the allowed range
-  if (value < 1) value = 1;
-  if (value > 96) value = 96;
+document
+  .getElementById("gif-frame-rate")
+  .addEventListener("input", function () {
+    let value = parseInt(this.value);
+    // Adjust the value to the nearest multiple of 8
+    value = Math.round(value / 8) * 8;
+    // Ensure the value stays within the allowed range
+    if (value < 1) value = 1;
+    if (value > 96) value = 96;
 
-  this.value = value; // Update the slider value
-  document.getElementById("current-value").textContent =
-    "Frame Save Interval: " + value;
+    this.value = value; // Update the slider value
+    document.getElementById("current-value").textContent =
+      "Frame Save Interval: " + value;
 
-  frameInterval = value;
+    frameInterval = value;
+  });
+
+window.addEventListener("load", function () {
+  gifResetUI();
+  gifShowStartUI();
 });

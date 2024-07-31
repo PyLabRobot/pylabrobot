@@ -70,7 +70,14 @@ h3.form-row-header {
   justify-content: center;
 }
 
-.button-container {
+.gif-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 10px;
+}
+
+.frame-rate {
   margin-right: 10px;
 }
 

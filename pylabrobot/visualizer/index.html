@@ -26,46 +26,48 @@
         >
 
         <div class="recording-stuff">
-          <div class="button-container">
+          <div class="gif-box" id="gif-start">
+            <div class="frame-rate">
+              <p id="current-value">Frame Save Interval: 8</p>
+              <div id="slider-container">
+                <span class="fr-bound">1</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="96"
+                  value="8"
+                  class="slider"
+                  id="gif-frame-rate"
+                />
+                <span class="fr-bound">96</span>
+              </div>
+            </div>
+
             <button id="start-recording-button" class="btn btn-primary">
               Start Recording
             </button>
-            <button
-              id="stop-recording-button"
-              class="btn btn-danger"
-              disabled
-              hidden
-            >
+          </div>
+
+          <div class="gif-box" id="gif-recording">
+            <button id="stop-recording-button" class="btn btn-danger">
               Stop Recording
-            </button>
-            <button id="downloadBtn" class="btn btn-success" disabled hidden>
-              Download GIF
             </button>
           </div>
 
-          <div id="progressBar" style="font-size: 18px"></div>
+          <div class="gif-box" id="gif-processing">
+            <div id="progressBar" style="font-size: 18px"></div>
+          </div>
 
-          <input
-            type="text"
-            id="fileName"
-            placeholder="plr-visualizer.gif"
-            style="text-align: center"
-          />
-
-          <div class="frame-rate">
-            <p id="current-value">Frame Save Interval: 8</p>
-            <div id="slider-container">
-              <span class="fr-bound">1</span>
-              <input
-                type="range"
-                min="1"
-                max="96"
-                value="8"
-                class="slider"
-                id="myRange"
-              />
-              <span class="fr-bound">96</span>
-            </div>
+          <div class="gif-box" id="gif-download">
+            <input
+              type="text"
+              id="fileName"
+              placeholder="plr-visualizer.gif"
+              style="text-align: center"
+            />
+            <button id="gif-download-button" class="btn btn-success">
+              Download GIF
+            </button>
           </div>
         </div>
 
