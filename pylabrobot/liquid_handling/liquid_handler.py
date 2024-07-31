@@ -715,7 +715,7 @@ class LiquidHandler(Machine):
         raise ValueError("Aspirating from a well with a lid is not supported.")
 
     self._make_sure_channels_exist(use_channels)
-    assert len(resources) == len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
+    assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
@@ -761,8 +761,8 @@ class LiquidHandler(Machine):
 
     extras = self._check_args(self.backend.aspirate, backend_kwargs,
       default={"ops", "use_channels"})
-    for extra in extras:
-      del backend_kwargs[extra]
+    # for extra in extras:
+    #   del backend_kwargs[extra]
 
     # actually aspirate the liquid
     error: Optional[Exception] = None
@@ -901,7 +901,6 @@ class LiquidHandler(Machine):
     if isinstance(blow_out_air_volume, numbers.Number):
       raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
-    self._blow_out_air_volume = None
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     # Check the blow out air volume with what was aspirated
@@ -947,8 +946,8 @@ class LiquidHandler(Machine):
     # fix the backend kwargs
     extras = self._check_args(self.backend.dispense, backend_kwargs,
       default={"ops", "use_channels"})
-    for extra in extras:
-      del backend_kwargs[extra]
+    # for extra in extras:
+    #   del backend_kwargs[extra]
 
     # actually dispense the liquid
     error: Optional[Exception] = None
