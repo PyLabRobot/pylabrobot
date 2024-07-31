@@ -968,6 +968,8 @@ class LiquidHandler(Machine):
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
         (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
 
+    self._blow_out_air_volume = None
+
     # trigger callback
     self._trigger_callback(
       "dispense",
