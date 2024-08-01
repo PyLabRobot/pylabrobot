@@ -15,8 +15,9 @@ class HamiltonTiltModuleBackend(TilterBackend):
     self.serial: Optional[serial.Serial] = None
     self.timeout = timeout
     self.write_timeout = write_timeout
+    self.ser: Optional[serial.Serial] = None
 
-  async def setup(self):
+  async def setup(self, initial_offset: int = 0):
     self.ser = serial.Serial(
       port=self.com_port,
       baudrate=1200,
@@ -26,13 +27,15 @@ class HamiltonTiltModuleBackend(TilterBackend):
       write_timeout=self.write_timeout,
       timeout=self.timeout)
 
+    await self.tilt_initial_offset(initial_offset)
     await self.send_command("SI")
 
     self.setup_finished = True
 
   async def stop(self):
-    self.ser.close()
-    self.ser = None
+    if self.ser is not None:
+      self.ser.close()
+      self.ser = None
     self.setup_finished = False
 
   async def send_command(self, command: str, parameter: Optional[str] = None) -> str:
@@ -65,12 +68,12 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
     return cast(str, resp) # must do stupid because mypy will not recognize that pyserial is typed..
 
-  async def set_angle(self, angle: int):
+  async def set_angle(self, angle: float):
     """ Set the tilt module to rotate by a given angle. """
 
     assert 0 <= angle <= 10, "Angle must be between 0 and 10 degrees."
 
-    await self.tilt_go_to_position(angle)
+    await self.tilt_go_to_position(round(angle))
 
   async def tilt_initialize(self):
     """ Initialize a daisy chained tilt module. """
