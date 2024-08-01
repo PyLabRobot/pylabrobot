@@ -42,7 +42,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Deprecated
 
 - All VENUS-imported Corning-Costar plates, because they don't have unique and usable identifiers, and are probably wrong.
-- HamiltonDeck.load_from_lay_file
 - Passing single values to LiquidHandler `pick_up_tips`, `drop_tips`, `aspirate`, and `dispense` methods. These methods now require a list of values.
 - `hamilton_parse` module and the VENUS labware database parser.
 - `PLT_CAR_L4_SHAKER` was deprecated in favor of `MFX_CAR_L5_base` (https://github.com/PyLabRobot/pylabrobot/pull/188/).
@@ -55,3 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fix Opentrons backend resource definitions: Opentrons takes well locations as ccc instead of lfb
 - Fix ThermoScientific_96_DWP_1200ul_Rd to ThermoScientific_96_wellplate_1200ul_Rd (https://github.com/PyLabRobot/pylabrobot/pull/183).
 - `libusb_package` is now an optional dependency.
+
+### Removed
+
+- HamiltonDeck.load_from_lay_file
