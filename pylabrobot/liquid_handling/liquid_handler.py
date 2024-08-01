@@ -715,7 +715,7 @@ class LiquidHandler(Machine):
         raise ValueError("Aspirating from a well with a lid is not supported.")
 
     self._make_sure_channels_exist(use_channels)
-    assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
+    assert len(resources) == len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the

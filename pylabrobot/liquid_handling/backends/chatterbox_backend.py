@@ -53,14 +53,14 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
     print(f"Dropping tips {ops}.")
 
-  async def aspirate(self, ops: List[Aspiration], use_channels: List[int], hamilton_liquid_classes = None, **backend_kwargs):
+  async def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
     print("Aspirating:")
     header = f"{'pip#':<5} {'vol(ul)':<8} {'resource':<20} {'offset':<16} {'flowrate':<10} {'blowout':<10} {'liq_height':<10}  " #{'liquids':<20}" #TODO: add liquids
     for key in backend_kwargs.keys():
       header += f"{key:<15} "[-16:]
     print(header)
     for o, p in zip(ops, use_channels):
-      flow_rate = o.flow_rate if o.flow_rate is not None else (hamilton_liquid_classes[p].aspiration_flow_rate if hamilton_liquid_classes is not None else 'none')
+      flow_rate = o.flow_rate if o.flow_rate is not None else 'none'
       row = (
         f"  p{p}: {o.volume:<8} "
         f"{o.resource.name[-20:]:<20} "
@@ -75,14 +75,14 @@ class ChatterBoxBackend(LiquidHandlerBackend):
       print(row)
 
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int], hamilton_liquid_classes = None, **backend_kwargs):
+  async def dispense(self, ops: List[Dispense], use_channels: List[int], **backend_kwargs):
     print("Dispensing:")
     header = f"{'pip#':<5} {'vol(ul)':<8} {'resource':<20} {'offset':<16} {'flowrate':<10} {'blowout':<10} {'liq_height':<10}  " #{'liquids':<20}" #TODO: add liquids
     for key in backend_kwargs.keys():
       header += f"{key:<15} "[-16:]
     print(header)
     for o, p in zip(ops, use_channels):
-      flow_rate = o.flow_rate if o.flow_rate is not None else (hamilton_liquid_classes[p].dispense_flow_rate if hamilton_liquid_classes is not None else 'none')
+      flow_rate = o.flow_rate if o.flow_rate is not None else 'none'
       row = (
         f"  p{p}: {o.volume:<8} "
         f"{o.resource.name[-20:]:<20} "
