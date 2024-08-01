@@ -15,17 +15,62 @@
       integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3"
       crossorigin="anonymous"
     />
-
-    <script src="https://unpkg.com/konva@8/konva.min.js"></script>
-
     <link href="./main.css" rel="stylesheet" />
   </head>
+
   <body>
     <nav class="navbar bg-light">
       <div class="container-fluid">
         <a class="navbar-brand" href="#">
           PyLabRobot Visualizer <span class="fs-6 text-muted">(v0.1)</span></a
         >
+
+        <div class="recording-stuff">
+          <div class="gif-box" id="gif-start">
+            <div class="frame-rate">
+              <p id="current-value">Frame Save Interval: 8</p>
+              <div id="slider-container">
+                <span class="fr-bound">1</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="96"
+                  value="8"
+                  class="slider"
+                  id="gif-frame-rate"
+                />
+                <span class="fr-bound">96</span>
+              </div>
+            </div>
+
+            <button id="start-recording-button" class="btn btn-primary">
+              Start Recording
+            </button>
+          </div>
+
+          <div class="gif-box" id="gif-recording">
+            <button id="stop-recording-button" class="btn btn-danger">
+              Stop Recording
+            </button>
+          </div>
+
+          <div class="gif-box" id="gif-processing">
+            <div id="progressBar" style="font-size: 18px"></div>
+          </div>
+
+          <div class="gif-box" id="gif-download">
+            <input
+              type="text"
+              id="fileName"
+              placeholder="plr-visualizer.gif"
+              style="text-align: center"
+            />
+            <button id="gif-download-button" class="btn btn-success">
+              Download GIF
+            </button>
+          </div>
+        </div>
+
         <div class="ml-auto">
           <span onclick="openSocket();" id="status-indicator"></span>
           <span id="status-label">Loading...</span>
@@ -39,6 +84,16 @@
       </main>
     </div>
 
+    <!-- Load JavaScript libraries -->
+    <script src="https://unpkg.com/konva@8/konva.min.js"></script>
+    <!-- Load gif.js library -->
+    <script src="./gif.js"></script>
+    <script src="./gif.worker.js"></script>
+
+    <!-- Load JavaScript libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+
+    <!-- Load custom scripts -->
     <script src="./lib.js"></script>
     <script src="./vis.js"></script>
 
