@@ -36,6 +36,17 @@ def build_layout() -> HamiltonDeck:
   return deck
 
 
+def _wait_for_task_done(base_url, client, task_id):
+  while True:
+    response = client.get(base_url + f"/tasks/{task_id}")
+    if response.json is None:
+      raise RuntimeError("No JSON in response: " + response.text)
+    if response.json.get("status") == "running":
+      time.sleep(0.1)
+    else:
+      return response
+
+
 class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
   def setUp(self):
     self.backend = SerializingSavingBackend(num_channels=8)
@@ -52,21 +63,23 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
 
   def test_setup(self): # TODO: Figure out how we can configure LH
     with self.app.test_client() as client:
-      response = client.post(self.base_url + "/setup")
+      task = client.post(self.base_url + "/setup")
+      response = _wait_for_task_done(self.base_url, client, task.json.get("id"))
       self.assertEqual(response.status_code, 200)
-
-      print(response.json)
-      self.assertIn(response.json.get("status"), {"running", "succeeded"})
+      self.assertEqual(response.json.get("status"), "succeeded")
 
       time.sleep(0.1)
       assert self.lh.setup_finished
 
   def test_stop(self):
     with self.app.test_client() as client:
-      response = client.post(self.base_url + "/stop")
+      task = client.post(self.base_url + "/setup")
+      response = _wait_for_task_done(self.base_url, client, task.json.get("id"))
+
+      task = client.post(self.base_url + "/stop")
+      response = _wait_for_task_done(self.base_url, client, task.json.get("id"))
       self.assertEqual(response.status_code, 200)
-      print(response.json)
-      self.assertIn(response.json.get("status"), {"running", "succeeded"})
+      self.assertEqual(response.json.get("status"), "succeeded")
 
       assert not self.lh.setup_finished
 
@@ -79,8 +92,12 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
       await self.lh.setup()
       response = client.get(self.base_url + "/status")
       self.assertEqual(response.status_code, 200)
-      print(response.json)
-      self.assertIn(response.json.get("status"), {"running", "succeeded"})
+      self.assertEqual(response.json.get("status"), "running")
+
+      await self.lh.stop()
+      response = client.get(self.base_url + "/status")
+      self.assertEqual(response.status_code, 200)
+      self.assertEqual(response.json.get("status"), "stopped")
 
   def test_load_labware(self):
     with self.app.test_client() as client:
@@ -127,15 +144,15 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
       tip_spot = tip_rack.get_item("A1")
       with no_tip_tracking():
         tip = tip_spot.get_tip()
-      response = client.post(
+      task = client.post(
         self.base_url + "/pick-up-tips",
         json={"channels": [{
           "resource_name": tip_spot.name,
           "tip": serialize(tip),
           "offset": None,
         }], "use_channels": [0]})
-      print(response.json)
-      self.assertIn(response.json.get("status"), {"running", "succeeded"})
+      response = _wait_for_task_done(self.base_url, client, task.json.get("id"))
+      self.assertEqual(response.json.get("status"), "succeeded")
       self.assertEqual(response.status_code, 200)
 
   def test_drop_tip(self):
@@ -147,15 +164,15 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
 
       self.test_tip_pickup() # Pick up a tip first
 
-      response = client.post(
+      task = client.post(
         self.base_url + "/drop-tips",
         json={"channels": [{
           "resource_name": tip_spot.name,
           "tip": serialize(tip),
           "offset": None,
         }], "use_channels": [0]})
-      print(response.json)
-      self.assertIn(response.json.get("status"), {"running", "succeeded"})
+      response = _wait_for_task_done(self.base_url, client, task.json.get("id"))
+      self.assertEqual(response.json.get("status"), "succeeded")
       self.assertEqual(response.status_code, 200)
 
   def test_aspirate(self):
@@ -164,20 +181,20 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
     self.test_tip_pickup() # pick up a tip first
     with self.app.test_client() as client:
       well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
-      response = client.post(
+      task = client.post(
         self.base_url + "/aspirate",
         json={"channels": [{
           "resource_name": well.name,
           "volume": 10,
           "tip": serialize(tip),
-          "offset": None,
+          "offset": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
           "liquids": [[None, 10]],
           "flow_rate": None,
           "liquid_height": None,
           "blow_out_air_volume": 0,
         }], "use_channels": [0]})
-      print(response.json)
-      self.assertIn(response.json.get("status"), {"running", "succeeded"})
+      response = _wait_for_task_done(self.base_url, client, task.json.get("id"))
+      self.assertEqual(response.json.get("status"), "succeeded")
       self.assertEqual(response.status_code, 200)
 
   def test_dispense(self):
@@ -186,20 +203,20 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
     self.test_aspirate() # aspirate first
     with self.app.test_client() as client:
       well = cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
-      response = client.post(
+      task = client.post(
         self.base_url + "/dispense",
         json={"channels": [{
           "resource_name": well.name,
           "volume": 10,
           "tip": serialize(tip),
-          "offset": None,
+          "offset": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
           "liquids": [[None, 10]],
           "flow_rate": None,
           "liquid_height": None,
           "blow_out_air_volume": 0,
         }], "use_channels": [0]})
-      print(response.json)
-      self.assertIn(response.json.get("status"), {"running", "succeeded"})
+      response = _wait_for_task_done(self.base_url, client, task.json.get("id"))
+      self.assertEqual(response.json.get("status"), "succeeded")
       self.assertEqual(response.status_code, 200)
 
   def test_config(self):
