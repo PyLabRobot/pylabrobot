@@ -43,7 +43,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - All VENUS-imported Corning-Costar plates, because they don't have unique and usable identifiers, and are probably wrong.
 - Passing single values to LiquidHandler `pick_up_tips`, `drop_tips`, `aspirate`, and `dispense` methods. These methods now require a list of values.
-- `PLT_CAR_L4_SHAKER` was deprecated in favor of `MFX_CAR_L5_base` (https://github.com/PyLabRobot/pylabrobot/pull/188/).
 - `utils.positions`: `string_to_position`, `string_to_index`, `string_to_indices`, `string_to_pattern`.
 
 ### Fixed
@@ -58,3 +57,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - HamiltonDeck.load_from_lay_file
 - `hamilton_parse` module and the VENUS labware database parser.
+- `PLT_CAR_L4_SHAKER` was removed in favor of `MFX_CAR_L5_base` (https://github.com/PyLabRobot/pylabrobot/pull/188/).

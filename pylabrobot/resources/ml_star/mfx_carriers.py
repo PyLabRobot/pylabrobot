@@ -35,13 +35,6 @@ def MFX_CAR_L5_base(name: str) -> MFXCarrier:
   )
 
 
-def PLT_CAR_L4_SHAKER(name: str):
-  raise NotImplementedError(
-    "PLT_CAR_L4_SHAKER is deprecated and will be removed in a future version."
-    "Please use MFX_CAR_L4_SHAKER instead."
-  )
-
-
 def MFX_CAR_L4_SHAKER(name: str) -> MFXCarrier:
   """ Hamilton cat. no.: 187001
   Sometimes referred to as "PLT_CAR_L4_SHAKER" by Hamilton.
