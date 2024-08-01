@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 from typing import Generic, List, Optional, Type, TypeVar, Union
 
-from pylabrobot.resources.tube import Tube
-
 from .coordinate import Coordinate
 from .plate import Plate
 from .resource import Resource
