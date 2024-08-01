@@ -55,6 +55,7 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
       response = client.post(self.base_url + "/setup")
       self.assertEqual(response.status_code, 200)
 
+      print(response.json)
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
 
       time.sleep(0.1)
@@ -64,6 +65,7 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
     with self.app.test_client() as client:
       response = client.post(self.base_url + "/stop")
       self.assertEqual(response.status_code, 200)
+      print(response.json)
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
 
       assert not self.lh.setup_finished
@@ -77,6 +79,7 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
       await self.lh.setup()
       response = client.get(self.base_url + "/status")
       self.assertEqual(response.status_code, 200)
+      print(response.json)
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
 
   def test_load_labware(self):
@@ -131,6 +134,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
           "tip": serialize(tip),
           "offset": None,
         }], "use_channels": [0]})
+      print(response.json)
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
@@ -150,6 +154,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
           "tip": serialize(tip),
           "offset": None,
         }], "use_channels": [0]})
+      print(response.json)
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
@@ -171,6 +176,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
           "liquid_height": None,
           "blow_out_air_volume": 0,
         }], "use_channels": [0]})
+      print(response.json)
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
@@ -192,6 +198,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
           "liquid_height": None,
           "blow_out_air_volume": 0,
         }], "use_channels": [0]})
+      print(response.json)
       self.assertIn(response.json.get("status"), {"running", "succeeded"})
       self.assertEqual(response.status_code, 200)
 
