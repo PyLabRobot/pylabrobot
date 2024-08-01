@@ -41,6 +41,7 @@ from pylabrobot.resources import (
   does_cross_contamination_tracking
 )
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
 from .standard import (
@@ -133,14 +134,14 @@ class LiquidHandler(Machine):
     self.location = Coordinate.zero()
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
-  async def setup(self):
+  async def setup(self, **backend_kwargs):
     """ Prepare the robot for use. """
 
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
     self.backend.set_deck(self.deck)
-    await super().setup()
+    await super().setup(**backend_kwargs)
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
     self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
@@ -1823,7 +1824,9 @@ class LiquidHandler(Machine):
     if isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
       to_location = to.get_absolute_location(z="top")
-    elif isinstance(to, MFXModule):
+    elif isinstance(to, Coordinate):
+      to_location = to
+    elif isinstance(to, (MFXModule, Tilter)):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateAdapter):
       # Calculate location adjustment of Plate based on PlateAdapter geometry
@@ -1857,7 +1860,7 @@ class LiquidHandler(Machine):
       if isinstance(to, ResourceStack) and to.direction != "z":
         raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       to.assign_child_resource(plate)
-    elif isinstance(to, MFXModule):
+    elif isinstance(to, (MFXModule, Tilter)):
       to.assign_child_resource(plate, location=to.child_resource_location)
     elif isinstance(to, PlateAdapter):
       to.assign_child_resource(plate, location=to.compute_plate_location(plate))
