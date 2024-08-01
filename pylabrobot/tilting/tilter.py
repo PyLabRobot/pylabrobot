@@ -88,6 +88,7 @@ class Tilter(Machine):
     if absolute_angle is None:
       absolute_angle = self._absolute_angle
     assert absolute_angle is not None # mypy
+    # pylint: disable=invalid-unary-operand-type
     angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
 
     _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
@@ -117,6 +118,7 @@ class Tilter(Machine):
     if absolute_angle is None:
       absolute_angle = self._absolute_angle
     assert absolute_angle is not None # mypy
+    # pylint: disable=invalid-unary-operand-type
     angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
 
     _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
