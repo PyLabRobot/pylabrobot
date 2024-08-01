@@ -53,51 +53,81 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
     print(f"Dropping tips {ops}.")
 
+  _pip_length = 5
+  _vol_length = 8
+  _resource_length = 20
+  _offset_length = 16
+  _flow_rate_length = 10
+  _blowout_length = 10
+  _lld_z_length = 10
+  _kwargs_length = 15
+
   async def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
     print("Aspirating:")
-    header = f"{'pip#':<5} {'vol(ul)':<8} {'resource':<20} {'offset':<16} {'flowrate':<10} {'blowout':<10} {'lld_z':<10}  " #{'liquids':<20}" #TODO: add liquids
-    for key in backend_kwargs.keys():
-      header += f"{key:<15} "[-16:]
+    header = (
+      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
+      f"{'vol(ul)':<{ChatterBoxBackend._vol_length}} "
+      f"{'resource':<{ChatterBoxBackend._resource_length}} "
+      f"{'offset':<{ChatterBoxBackend._offset_length}} "
+      f"{'flow rate':<{ChatterBoxBackend._flow_rate_length}} "
+      f"{'blowout':<{ChatterBoxBackend._blowout_length}} "
+      f"{'lld_z':<{ChatterBoxBackend._lld_z_length}}  "
+      # f"{'liquids':<20}" # TODO: add liquids
+    )
+    for key in backend_kwargs:
+      header += f"{key:<{ChatterBoxBackend._kwargs_length}} "[-16:]
     print(header)
+
     for o, p in zip(ops, use_channels):
-      flow_rate = o.flow_rate if o.flow_rate is not None else 'none'
+      cord = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
       row = (
-        f"  p{p}: {o.volume:<8} "
-        f"{o.resource.name[-20:]:<20} "
-        f"{f'{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}':<16} "
-        f"{flow_rate:<10} "
-        f"{o.blow_out_air_volume if o.blow_out_air_volume is not None else 'none':<10} "
-        f"{o.liquid_height if o.liquid_height is not None else 'none':<10} "
+        f"  p{p}: "
+        f"{o.volume:<{ChatterBoxBackend._vol_length}} "
+        f"{o.resource.name[-20:]:<{ChatterBoxBackend._resource_length}} "
+        f"{cord:<{ChatterBoxBackend._offset_length}} "
+        f"{str(o.flow_rate):<{ChatterBoxBackend._flow_rate_length}} "
+        f"{str(o.blow_out_air_volume):<{ChatterBoxBackend._blowout_length}} "
+        f"{str(o.liquid_height):<{ChatterBoxBackend._lld_z_length}} "
         # f"{o.liquids if o.liquids is not None else 'none'}"
       )
       for key, value in backend_kwargs.items():
         if isinstance(value, list):
-          value = ''.join(map(str, value))
+          value = "".join(map(str, value))
         row += f" {value:<15}"
       print(row)
 
-
   async def dispense(self, ops: List[Dispense], use_channels: List[int], **backend_kwargs):
     print("Dispensing:")
-    header = f"{'pip#':<5} {'vol(ul)':<8} {'resource':<20} {'offset':<16} {'flowrate':<10} {'blowout':<10} {'lld_z':<10}  " #{'liquids':<20}" #TODO: add liquids
-    for key in backend_kwargs.keys():
-      header += f"{key:<15} "[-16:]
+    header = (
+      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
+      f"{'vol(ul)':<{ChatterBoxBackend._vol_length}} "
+      f"{'resource':<{ChatterBoxBackend._resource_length}} "
+      f"{'offset':<{ChatterBoxBackend._offset_length}} "
+      f"{'flow rate':<{ChatterBoxBackend._flow_rate_length}} "
+      f"{'blowout':<{ChatterBoxBackend._blowout_length}} "
+      f"{'lld_z':<{ChatterBoxBackend._lld_z_length}}  "
+      # f"{'liquids':<20}" # TODO: add liquids
+    )
+    for key in backend_kwargs:
+      header += f"{key:<{ChatterBoxBackend._kwargs_length}} "[-16:]
     print(header)
+
     for o, p in zip(ops, use_channels):
-      flow_rate = o.flow_rate if o.flow_rate is not None else 'none'
+      cord = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
       row = (
-        f"  p{p}: {o.volume:<8} "
-        f"{o.resource.name[-20:]:<20} "
-        f"{f'{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}':<16} "
-        f"{flow_rate:<10} "
-        f"{o.blow_out_air_volume if o.blow_out_air_volume is not None else 'none':<10} "
-        f"{o.liquid_height if o.liquid_height is not None else 'none':<10} "
+        f"  p{p}: "
+        f"{o.volume:<{ChatterBoxBackend._vol_length}} "
+        f"{o.resource.name[-20:]:<{ChatterBoxBackend._resource_length}} "
+        f"{cord:<{ChatterBoxBackend._offset_length}} "
+        f"{str(o.flow_rate):<{ChatterBoxBackend._flow_rate_length}} "
+        f"{str(o.blow_out_air_volume):<{ChatterBoxBackend._blowout_length}} "
+        f"{str(o.liquid_height):<{ChatterBoxBackend._lld_z_length}} "
         # f"{o.liquids if o.liquids is not None else 'none'}"
       )
       for key, value in backend_kwargs.items():
         if isinstance(value, list):
-          value = ''.join(map(str, value))
-        row += f" {value:<15}"
+          value = "".join(map(str, value))
+        row += f" {value:<{ChatterBoxBackend._kwargs_length}}"
       print(row)
 
   async def pick_up_tips96(self, pickup: PickupTipRack, **backend_kwargs):
