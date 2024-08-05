@@ -8,7 +8,7 @@ def Opentrons_96_adapter_Vb(name: str) -> PlateAdapter:
   - Material: aluminium
   - Part of "Aluminium block set
   - Adapter for 96 well PCR plate (skirted, semi-, and non-skirted).
-  - ANSI/SLAS footprint.
+  - ANSI/SLAS footprint with centrally-located hole-grid (i.e. is orientation agnostic).
   """
   return PlateAdapter(
     name=name,
