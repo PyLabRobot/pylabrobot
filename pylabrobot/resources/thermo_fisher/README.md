@@ -8,22 +8,23 @@ Company page: [Thermo Fisher Scientific Inc. Wikipedia](https://en.wikipedia.org
 
 A basic structure of the companiy and some well-known brands and product lines looks like this:
 
+```rust
 Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
 ├── Applied Biosystems (AB; brand)
 │   └── MicroAmp
 │      └── EnduraPlate
 ├── Fisher Scientific (FS; brand)
-├── Invitrogen (Inv; brand)
+├── Invitrogen (INV; brand)
 ├── Ion Torrent (IT; brand)
-├── Gibco (Gib; brand)
+├── Gibco (GIB; brand)
 ├── Thermo Scientific (TS; brand)
 │   ├── Nalgene
 │   ├── Nunc
 │   └── Pierce
 ├── Unity Lab Services (brand, services)
 ├── Patheon (brand, services)
-└── PPD (brand, services)
-
+└── Ppd (brand, services)
+```
 
 ## Plates
 
