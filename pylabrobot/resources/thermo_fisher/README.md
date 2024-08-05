@@ -23,15 +23,15 @@ Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
 │   └── Pierce
 ├── Unity Lab Services (brand, services)
 ├── Patheon (brand, services)
-└── Ppd (brand, services)
+└── PPD (brand, services)
 ```
 
 ## Plates
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
-| 'ThermoScientific_96_DWP_1200ul_Rd'<br>Part no.: AB-1127 or 10243223<br>[manufacturer website](https://www.fishersci.co.uk/shop/products/product/10243223) <br><br>- Material: Polypropylene (AB-1068, polystyrene) <br> | <img src="imgs/ThermoScientific_96_DWP_1200ul_Rd.webp" alt="ThermoScientific_96_DWP_1200ul_Rd" style="width:250px;"/> | `ThermoScientific_96_DWP_1200ul_Rd` |
-| 'Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate'<br>Part no.: 4483354 (TFS) or 15273005 (TS) (= with barcode)<br>Part no.: 16698853 (TS) (= **without** barcode)<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/4483354) <br><br>- Material: Polycarbonate, Polypropylene<br>- plate_type: semi-skirted<br>- product line: "MicroAmp"<br>- (sub)product line: "EnduraPlate" | <img src="imgs/Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate.png" alt="Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate" style="width:250px;"/> | `Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate` |
+| 'ThermoScientific_96_wellplate_1200ul_Rd'<br>Part no.: AB-1127 or 10243223<br>[manufacturer website](https://www.fishersci.co.uk/shop/products/product/10243223) <br><br>- Material: Polypropylene (AB-1068, polystyrene) <br> | <img src="imgs/ThermoScientific_96_wellplate_1200ul_Rd.webp" alt="ThermoScientific_96_wellplate_1200ul_Rd" style="width:250px;"/> | `ThermoScientific_96_wellplate_1200ul_Rd` |
+| 'Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate'<br>Part no.: 4483354 (TFS) or 15273005 (FS) (= with barcode)<br>Part no.: 16698853 (FS) (= **without** barcode)<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/4483354) <br><br>- Material: Polycarbonate, Polypropylene<br>- plate_type: semi-skirted<br>- product line: "MicroAmp"<br>- (sub)product line: "EnduraPlate" | <img src="imgs/Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate.png" alt="Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate" style="width:250px;"/> | `Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate` |
 
 ## Troughs
 
