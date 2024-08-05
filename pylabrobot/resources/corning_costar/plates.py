@@ -8,13 +8,11 @@ from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.utils import create_ordered_items_2d
 
-from pylabrobot.resources.volume_functions import (
-  calculate_liquid_volume_container_1segment_round_fbottom,
-  calculate_liquid_volume_container_2segments_square_vbottom
-)
-from pylabrobot.resources.height_functions import (
+from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_container_1segment_round_fbottom,
   calculate_liquid_height_in_container_2segments_square_vbottom,
+  calculate_liquid_volume_container_1segment_round_fbottom,
+  calculate_liquid_volume_container_2segments_square_vbottom
 )
 
 
