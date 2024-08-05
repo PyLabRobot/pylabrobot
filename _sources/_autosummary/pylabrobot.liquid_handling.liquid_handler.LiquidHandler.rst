@@ -1,0 +1,92 @@
+﻿pylabrobot.liquid\_handling.liquid\_handler.LiquidHandler
+=========================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.liquid_handler
+
+.. autoclass:: LiquidHandler
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LiquidHandler.ALLOWED_CALLBACKS
+      ~LiquidHandler.callbacks
+      ~LiquidHandler.name
+      ~LiquidHandler.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~LiquidHandler.__init__
+      ~LiquidHandler.aspirate
+      ~LiquidHandler.aspirate96
+      ~LiquidHandler.assign_child_resource
+      ~LiquidHandler.center
+      ~LiquidHandler.centers
+      ~LiquidHandler.clear_head_state
+      ~LiquidHandler.copy
+      ~LiquidHandler.deregister_did_assign_resource_callback
+      ~LiquidHandler.deregister_did_unassign_resource_callback
+      ~LiquidHandler.deregister_state_update_callback
+      ~LiquidHandler.deregister_will_assign_resource_callback
+      ~LiquidHandler.deregister_will_unassign_resource_callback
+      ~LiquidHandler.deserialize
+      ~LiquidHandler.discard_tips
+      ~LiquidHandler.discard_tips96
+      ~LiquidHandler.dispense
+      ~LiquidHandler.dispense96
+      ~LiquidHandler.drop_tips
+      ~LiquidHandler.drop_tips96
+      ~LiquidHandler.get_absolute_location
+      ~LiquidHandler.get_absolute_rotation
+      ~LiquidHandler.get_all_children
+      ~LiquidHandler.get_anchor
+      ~LiquidHandler.get_resource
+      ~LiquidHandler.get_size_x
+      ~LiquidHandler.get_size_y
+      ~LiquidHandler.get_size_z
+      ~LiquidHandler.load
+      ~LiquidHandler.load_all_state
+      ~LiquidHandler.load_from_json_file
+      ~LiquidHandler.load_state
+      ~LiquidHandler.load_state_from_file
+      ~LiquidHandler.move_lid
+      ~LiquidHandler.move_plate
+      ~LiquidHandler.move_resource
+      ~LiquidHandler.pick_up_tips
+      ~LiquidHandler.pick_up_tips96
+      ~LiquidHandler.register_callback
+      ~LiquidHandler.register_did_assign_resource_callback
+      ~LiquidHandler.register_did_unassign_resource_callback
+      ~LiquidHandler.register_state_update_callback
+      ~LiquidHandler.register_will_assign_resource_callback
+      ~LiquidHandler.register_will_unassign_resource_callback
+      ~LiquidHandler.return_tips
+      ~LiquidHandler.return_tips96
+      ~LiquidHandler.rotate
+      ~LiquidHandler.rotated
+      ~LiquidHandler.save
+      ~LiquidHandler.save_state_to_file
+      ~LiquidHandler.serialize
+      ~LiquidHandler.serialize_all_state
+      ~LiquidHandler.serialize_state
+      ~LiquidHandler.setup
+      ~LiquidHandler.stamp
+      ~LiquidHandler.stop
+      ~LiquidHandler.summary
+      ~LiquidHandler.transfer
+      ~LiquidHandler.unassign
+      ~LiquidHandler.unassign_child_resource
+      ~LiquidHandler.update_head_state
+      ~LiquidHandler.use_channels
+   
+   
