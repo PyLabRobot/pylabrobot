@@ -70,7 +70,7 @@ class PlateAdapter(Resource):
     site_pedestal_z: float,
     adapter_hole_dx: float = 9.0,
     adapter_hole_dy: float = 9.0,
-    plate_z_offset: float = None,
+    plate_z_offset: float = 0.0,
     category: Optional[str] = None,
     model: Optional[str] = None
   ):
@@ -122,9 +122,8 @@ class PlateAdapter(Resource):
     # Calculate adjustment to place center of H1_plate on top of center of H1_adapter
     plate_x_adjustment = self.dx - plate_dx + self.adapter_hole_size_x/2 - well_size_x/2
     plate_y_adjustment = self.dy - plate_dy + self.adapter_hole_size_x/2 - well_size_y/2
-    plate_z_adjustment = self.dz
-    if self.plate_z_offset: # basic plate_z_adjustment ability
-      plate_z_adjustment += self.plate_z_offset
+    # basic plate_z_adjustment ability
+    plate_z_adjustment = self.dz + self.plate_z_offset
     # TODO: create more sophisticated plate_z_adjustment based on
     # PlateAdapter.adapter_hole_size_z & Plate.well.get_size_z() relationship, when
     # Plate definitions are fixed, which can be modified if needed using plate_z_offset

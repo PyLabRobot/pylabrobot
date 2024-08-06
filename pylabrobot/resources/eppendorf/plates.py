@@ -38,7 +38,7 @@ def _compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb(liquid_volume: f
 # results_testing_optimal_arguments_dict = {
 #     "Volume (ul)": [0, 4, 8, 20, 70, 120, 170, 220, 260],
 #     "Observed Height (mm)": [0, 0.45, 1.45, 2.55, 6.45, 9.05, 11.6, 13.15, 14.349],
-#     "Predicted Height (mm)": [0.0, 2.905012, 3.660086, 4.967501, 7.54213, 9.05511, 10.456574, 11.858037, 12.979208],
+#     "Predicted Height (mm)": [0.0, 2.91, 3.66, 4.97, 7.54, 9.06, 10.46, 11.86, 12.98],
 #     "Relative Deviation (%)": [None, 545.56, 152.42, 94.80, 16.93, 0.056, 9.86, 9.82, 9.55]
 # }
 
