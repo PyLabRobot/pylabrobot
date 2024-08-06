@@ -145,6 +145,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:
 def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = False) -> Plate:
   """ Thermo Fisher Scientific/Fisher Scientific cat. no.: 4483354/15273005 (= with barcode)
   - Part no.: 16698853 (FS) (= **without** barcode).
+  - See `./engineering_diagrams/` directory for more part numbers (different colours).
   - Material: Polycarbonate, Polypropylene.
   - Sterilization compatibility: ?
   - Chemical resistance: ?
