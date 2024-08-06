@@ -1,4 +1,4 @@
-""" Thermo Fisher & Thermo Fisher Scientific plates """
+""" Thermo Fisher Scientific  Inc. (and all its brand) plates """
 
 # pylint: disable=invalid-name
 
@@ -13,30 +13,49 @@ from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_volume_container_2segments_round_vbottom
   )
 
+"""
+Please conform with the 'manufacturer-first, then brands' naming principle:
 
-# # # # # # # # # # ThermoScientific_96_wellplate_1200ul_Rd # # # # # # # # # #
+Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
+├── Applied Biosystems (AB; brand)
+│   └── MicroAmp
+│      └── EnduraPlate
+├── Fisher Scientific (FS; brand)
+├── Invitrogen (INV; brand)
+├── Ion Torrent (IT; brand)
+├── Gibco (GIB; brand)
+├── Thermo Scientific (TS; brand)
+│   ├── Nalgene
+│   ├── Nunc
+│   └── Pierce
+├── Unity Lab Services (brand, services)
+├── Patheon (brand, services)
+└── PPD (brand, services)
+"""
 
-def _compute_volume_from_height_ThermoScientific_96_wellplate_1200ul_Rd(h: float):
+# # # # # # # # # # Thermo_TS_96_wellplate_1200ul_Rb # # # # # # # # # #
+
+def _compute_volume_from_height_Thermo_TS_96_wellplate_1200ul_Rb(h: float):
   if h > 20.5:
     raise ValueError(f"Height {h} is too large for" + \
-                     "ThermoScientific_96_wellplate_1200ul_Rd")
+                     "Thermo_TS_96_wellplate_1200ul_Rb")
   return calculate_liquid_volume_container_2segments_square_ubottom(
     x=8.15,
     h_cuboid=16.45,
     liquid_height=h)
 
 
-def _compute_height_from_volume_ThermoScientific_96_wellplate_1200ul_Rd(liquid_volume: float):
+def _compute_height_from_volume_Thermo_TS_96_wellplate_1200ul_Rb(liquid_volume: float):
   if liquid_volume > 1260: # 5% tolerance
     raise ValueError(f"Volume {liquid_volume} is too large for" + \
-                     "ThermoScientific_96_wellplate_1200ul_Rd")
+                     "Thermo_TS_96_wellplate_1200ul_Rb")
   return round(calculate_liquid_height_in_container_2segments_square_ubottom(
     x=8.15,
     h_cuboid=16.45,
     liquid_volume=liquid_volume),3)
 
 
-def ThermoScientific_96_wellplate_1200ul_Rd_Lid(name: str) -> Lid:
+def Thermo_TS_96_wellplate_1200ul_Rb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
   # See https://github.com/PyLabRobot/pylabrobot/pull/161.
   # return Lid(
@@ -50,31 +69,35 @@ def ThermoScientific_96_wellplate_1200ul_Rd_Lid(name: str) -> Lid:
 
 def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
   raise NotImplementedError("This function is deprecated and will be removed in a future version."
-          " Use 'ThermoScientific_96_wellplate_1200ul_Rd' instead.")
-
+          " Use 'Thermo_TS_96_wellplate_1200ul_Rb' instead.")
 
 def ThermoScientific_96_wellplate_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
-  """ Thermo Fisher Scientific/Thermo Fisher cat. no.: 10243223/AB1127.
-  - Material: Polypropylene (AB-1068, polystyrene)
+  raise NotImplementedError("This function is deprecated and will be removed in a future version."
+          " Use 'Thermo_TS_96_wellplate_1200ul_Rb' instead.")
+
+def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate:
+  """ Thermo Fisher Scientific/Fisher Scientific cat. no.: AB1127/10243223.
+  - Material: Polypropylene (AB-1068, polystyrene).
+  - Brand: Thermo Scientific.
   - Sterilization compatibility: Autoclaving (15 minutes at 121°C) or
-    Gamma Irradiation
-  - Chemical resistance: to DMSO (100%); Ethanol (100%); Isopropanol (100%)
+    Gamma Irradiation.
+  - Chemical resistance: to DMSO (100%); Ethanol (100%); Isopropanol (100%).
   - Round well shape designed for optimal sample recovery or square shape to
-    maximize sample volume within ANSI footprint design
+    maximize sample volume within ANSI footprint design.
   - Each well has an independent sealing rim to prevent cross-contamination
-  - U-bottomed wells ideally suited for sample resuspension
+  - U-bottomed wells ideally suited for sample resuspension.
   - Sealing options: Adhesive Seals, Heat Seals, Storage Plate Caps and Cap
-    Strips, and Storage Plate Sealing Mats
-  - Cleanliness: 10243223/AB1127: Cleanroom manufacture
-  - ANSI/SLAS-format for compatibility with automated systems
+    Strips, and Storage Plate Sealing Mats.
+  - Cleanliness: 10243223/AB1127: Cleanroom manufacture.
+  - ANSI/SLAS-format for compatibility with automated systems.
   """
   return Plate(
     name=name,
     size_x=127.76,
     size_y=85.48,
     size_z=24.0,
-    lid=ThermoScientific_96_wellplate_1200ul_Rd_Lid(name + "_lid") if with_lid else None,
-    model="ThermoScientific_96_wellplate_1200ul_Rd",
+    lid=Thermo_TS_96_wellplate_1200ul_Rb_Lid(name + "_lid") if with_lid else None,
+    model="Thermo_TS_96_wellplate_1200ul_Rb",
     ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
@@ -90,19 +113,19 @@ def ThermoScientific_96_wellplate_1200ul_Rd(name: str, with_lid: bool = False) -
       material_z_thickness=1.0,
       cross_section_type=CrossSectionType.RECTANGLE,
       compute_volume_from_height=(
-        _compute_volume_from_height_ThermoScientific_96_wellplate_1200ul_Rd
+        _compute_volume_from_height_Thermo_TS_96_wellplate_1200ul_Rb
       ),
       compute_height_from_volume=(
-        _compute_height_from_volume_ThermoScientific_96_wellplate_1200ul_Rd
+        _compute_height_from_volume_Thermo_TS_96_wellplate_1200ul_Rb
       )
     ),
   )
 
-def ThermoScientific_96_wellplate_1200ul_Rd_L(name: str, with_lid: bool = False) -> Plate:
-  return ThermoScientific_96_wellplate_1200ul_Rd(name=name, with_lid=with_lid)
+def Thermo_TS_96_wellplate_1200ul_Rb_L(name: str, with_lid: bool = False) -> Plate:
+  return Thermo_TS_96_wellplate_1200ul_Rb(name=name, with_lid=with_lid)
 
-def ThermoScientific_96_wellplate_1200ul_Rd_P(name: str, with_lid: bool = False) -> Plate:
-  return ThermoScientific_96_wellplate_1200ul_Rd(name=name, with_lid=with_lid).rotated(90)
+def Thermo_TS_96_wellplate_1200ul_Rb_P(name: str, with_lid: bool = False) -> Plate:
+  return Thermo_TS_96_wellplate_1200ul_Rb(name=name, with_lid=with_lid).rotated(90)
 
 
 
