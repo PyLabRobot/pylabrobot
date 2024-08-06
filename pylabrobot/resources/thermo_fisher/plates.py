@@ -54,7 +54,7 @@ def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plat
 
 
 def ThermoScientific_96_wellplate_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
-  """ Fisher Scientific/Thermo Fisher cat. no.: 10243223/AB1127.
+  """ Thermo Fisher Scientific/Thermo Fisher cat. no.: 10243223/AB1127.
   - Material: Polypropylene (AB-1068, polystyrene)
   - Sterilization compatibility: Autoclaving (15 minutes at 121°C) or
     Gamma Irradiation
@@ -113,9 +113,9 @@ def _compute_volume_from_height_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(h: f
     raise ValueError(f"Height {h} is too large for" + \
                      "ThermoScientific_96_wellplate_1200ul_Rd")
   return calculate_liquid_volume_container_2segments_round_vbottom(
-    d=5.5,
-    h_cone=13.6,
-    h_cylinder=7.5,
+    d=4.76,
+    h_cone=1.9,
+    h_cylinder=18.2,
     liquid_height=h)
 
 
@@ -124,11 +124,17 @@ def _compute_height_from_volume_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(liqu
     raise ValueError(f"Volume {liquid_volume} is too large for" + \
                      "ThermoScientific_96_wellplate_1200ul_Rd")
   return round(calculate_liquid_height_in_container_2segments_round_vbottom(
-    d=5.5,
-    h_cone=13.6,
-    h_cylinder=7.5,
+    d=4.76,
+    h_cone=1.9,
+    h_cylinder=18.2,
     liquid_volume=liquid_volume),3)
 
+# results_testing_optimal_arguments_dict = {
+#     "Volume (ul)": [0, 4, 8, 20, 70, 120, 170, 220, 260],
+#     "Observed Height (mm)": [0, 0.17, 0.77, 2.27, 6.57, 9.17, 11.17, 13.17, 15.17],
+#     "Predicted Height (mm)": [0.0, 2.1635041470672373, 2.725843766373121, 3.6995387820701767, 6.422184897328373, 9.129543412406672, 11.836901927484972, 14.544260442563271, 16.710144899706163],
+#     "Relative Deviation (%)": [0.0, 1172.65067356308, 253.3199648889489, 62.994219824233256, 2.2408080974392467, 0.4101799342996536, 5.946717788325545, 10.42481583089982, 10.139325710631395]
+# }
 
 def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
@@ -152,6 +158,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
   - Thermal resistance: ?
   - Cleanliness: 'Certified DNA-, RNAse-, and PCR inhibitor-free with in-process sampling tests'.
   - ANSI/SLAS-format for compatibility with automated systems.
+  - optimal pickup_distance_from_top=4 mm.
   - total_volume = 300 ul.
   - working_volume = 200 ul (recommended by manufacturer).
   """
