@@ -13,25 +13,25 @@ from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_volume_container_2segments_round_vbottom
   )
 
-"""
-Please conform with the 'manufacturer-first, then brands' naming principle:
 
-Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
-├── Applied Biosystems (AB; brand)
-│   └── MicroAmp
-│      └── EnduraPlate
-├── Fisher Scientific (FS; brand)
-├── Invitrogen (INV; brand)
-├── Ion Torrent (IT; brand)
-├── Gibco (GIB; brand)
-├── Thermo Scientific (TS; brand)
-│   ├── Nalgene
-│   ├── Nunc
-│   └── Pierce
-├── Unity Lab Services (brand, services)
-├── Patheon (brand, services)
-└── PPD (brand, services)
-"""
+# Please conform with the 'manufacturer-first, then brands' naming principle:
+
+# Thermo Fisher Scientific Inc. (TFS, aka "Thermo")
+# ├── Applied Biosystems (AB; brand)
+# │   └── MicroAmp
+# │      └── EnduraPlate
+# ├── Fisher Scientific (FS; brand)
+# ├── Invitrogen (INV; brand)
+# ├── Ion Torrent (IT; brand)
+# ├── Gibco (GIB; brand)
+# ├── Thermo Scientific (TS; brand)
+# │   ├── Nalgene
+# │   ├── Nunc
+# │   └── Pierce
+# ├── Unity Lab Services (brand, services)
+# ├── Patheon (brand, services)
+# └── PPD (brand, services)
+
 
 # # # # # # # # # # Thermo_TS_96_wellplate_1200ul_Rb # # # # # # # # # #
 
