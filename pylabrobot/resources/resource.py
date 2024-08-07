@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import itertools
 import json
 import logging
@@ -402,7 +403,7 @@ class Resource:
   def rotated(self, x: float = 0, y: float = 0, z: float = 0) -> Self:
     """ Return a copy of this resource rotated by the given number of degrees. """
 
-    new_resource = self.copy()
+    new_resource = copy.deepcopy(self)
     new_resource.rotate(x=x, y=y, z=z)
     return new_resource
 
