@@ -62,11 +62,11 @@ class TipSpot(Resource):
     }
 
   @classmethod
-  def deserialize(cls, data: dict) -> TipSpot:
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> TipSpot:
     """ Deserialize a tip spot. """
     tip_data = data["prototype_tip"]
     def make_tip() -> Tip:
-      return cast(Tip, deserialize(tip_data))
+      return cast(Tip, deserialize(tip_data, allow_marshal=allow_marshal))
 
     return cls(
       name=data["name"],
