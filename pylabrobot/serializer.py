@@ -38,7 +38,7 @@ def serialize(obj: Any) -> JSON:
   if isinstance(obj, enum.Enum):
     return obj.name
   if inspect.isfunction(obj):
-    return {"type": "function", "code": marshal.dumps(obj.__code__)}
+    return {"type": "function", "code": marshal.dumps(obj.__code__).hex()}
   if isinstance(obj, object):
     if hasattr(obj, "serialize"): # if the object has a custom serialize method
       return cast(JSON, obj.serialize())
@@ -65,7 +65,8 @@ def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
       data = data.copy()
       klass_type = cast(str, data.pop("type"))
       if klass_type == "function" and allow_marshal:
-        code = marshal.loads(data["code"])
+        assert isinstance(data["code"], str)
+        code = marshal.loads(bytes.fromhex(data["code"]))
         return types.FunctionType(code, globals())
       klass = get_plr_class_from_string(klass_type)
       params = {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
