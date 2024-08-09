@@ -284,8 +284,10 @@ class LiquidHandler(Machine):
     if len(missing) > 0:
       raise TypeError(f"Missing arguments to backend.{method.__name__}: {missing}")
 
-    extra = backend_kws - set(args.keys())
+    if len(vars_keyword) > 0:
+      return set() # no extra arguments if the method accepts **kwargs
 
+    extra = backend_kws - set(args.keys())
     if len(extra) > 0 and len(vars_keyword) == 0:
       if strictness == Strictness.STRICT:
         raise TypeError(f"Extra arguments to backend.{method.__name__}: {extra}")
