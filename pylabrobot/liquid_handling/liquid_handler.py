@@ -1894,7 +1894,7 @@ class LiquidHandler(Machine):
     return self._callbacks
 
   @classmethod
-  def deserialize(cls, data: dict) -> LiquidHandler:
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> LiquidHandler:
     """ Deserialize a liquid handler from a dictionary.
 
     Args:
@@ -1902,7 +1902,7 @@ class LiquidHandler(Machine):
     """
 
     deck_data = data["children"][0]
-    deck = Deck.deserialize(data=deck_data)
+    deck = Deck.deserialize(data=deck_data, allow_marshal=allow_marshal)
     backend = LiquidHandlerBackend.deserialize(data=data["backend"])
     return cls(deck=deck, backend=backend)
 
