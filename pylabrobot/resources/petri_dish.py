@@ -1,4 +1,4 @@
-from typing import Optional, cast
+from typing import Callable, Optional, cast
 
 from .container import Container
 from .coordinate import Coordinate
@@ -16,7 +16,9 @@ class PetriDish(Container):
     material_z_thickness: Optional[float] = None,
     category: str = "petri_dish",
     model: Optional[str] = None,
-    max_volume: Optional[float] = None
+    max_volume: Optional[float] = None,
+    compute_volume_from_height: Optional[Callable[[float], float]] = None,
+    compute_height_from_volume: Optional[Callable[[float], float]] = None,
   ):
     super().__init__(
       name=name,
@@ -26,7 +28,9 @@ class PetriDish(Container):
       material_z_thickness=material_z_thickness,
       category=category,
       model=model,
-      max_volume=max_volume
+      max_volume=max_volume,
+      compute_volume_from_height=compute_volume_from_height,
+      compute_height_from_volume=compute_height_from_volume,
     )
     self.diameter = diameter
     self.height = height

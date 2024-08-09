@@ -42,7 +42,7 @@ extras_inheco = [
 ]
 
 extras_agrow = [
-  "pymodbus"
+  "pymodbus==3.6.8"
 ]
 
 extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets + \
