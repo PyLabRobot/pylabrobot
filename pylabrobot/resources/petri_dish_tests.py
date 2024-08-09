@@ -16,6 +16,8 @@ class TestPetriDish(unittest.TestCase):
       "diameter": 90.0,
       "height": 15.0,
       "material_z_thickness": None,
+      "compute_volume_from_height": None,
+      "compute_height_from_volume": None,
       "parent_name": None,
       "type": "PetriDish",
       "children": [],
@@ -60,6 +62,7 @@ class TestPetriDish(unittest.TestCase):
     petri_dish_holder = PetriDishHolder("petri_dish_holder")
     petri_dish_holder.assign_child_resource(PetriDish("petri_dish", 90.0, 15.0),
                                             location=Coordinate.zero())
+    print(petri_dish_holder.serialize())
     petri_dish_holder = PetriDishHolder.deserialize(petri_dish_holder.serialize())
 
     self.assertEqual(petri_dish_holder.name, "petri_dish_holder")

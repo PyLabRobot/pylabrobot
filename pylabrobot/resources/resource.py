@@ -538,6 +538,7 @@ class Resource:
     children_data = data_copy.pop("children")
     rotation = data_copy.pop("rotation")
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
+    # resource = subclass(**data_copy)
     resource.rotation = Rotation.deserialize(rotation) # not pretty, should be done in init.
 
     for child_data in children_data:

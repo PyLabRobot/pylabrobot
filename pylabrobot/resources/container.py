@@ -1,8 +1,9 @@
-import marshal
 from typing import Any, Callable, Dict, Optional
 
 from .resource import Resource
 from .volume_tracker import VolumeTracker
+
+from pylabrobot.serializer import serialize
 
 
 class Container(Resource):
@@ -50,10 +51,8 @@ class Container(Resource):
       **super().serialize(),
       "max_volume": self.max_volume,
       "material_z_thickness": self._material_z_thickness,
-      "compute_volume_from_height": marshal.dumps(self._compute_volume_from_height.__code__)
-        if self._compute_volume_from_height is not None else None,
-      "compute_height_from_volume": marshal.dumps(self._compute_height_from_volume.__code__)
-        if self._compute_height_from_volume is not None else None,
+      "compute_volume_from_height": serialize(self._compute_volume_from_height),
+      "compute_height_from_volume": serialize(self._compute_height_from_volume),
     }
 
   def serialize_state(self) -> Dict[str, Any]:
