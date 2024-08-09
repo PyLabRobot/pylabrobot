@@ -1,4 +1,4 @@
-# pylint: disable=unused-argument
+# pylint: disable=unused-argument, inconsistent-quotes
 
 from typing import List, Union
 
@@ -20,7 +20,22 @@ from pylabrobot.liquid_handling.standard import (
 
 
 class ChatterBoxBackend(LiquidHandlerBackend):
-  """ Chatter box backend for 'How to Open Source' """
+  """ Chatter box backend for device-free testing. Prints out all operations. """
+
+  _pip_length = 5
+  _vol_length = 8
+  _resource_length = 20
+  _offset_length = 16
+  _flow_rate_length = 10
+  _blowout_length = 10
+  _lld_z_length = 10
+  _kwargs_length = 15
+  _tip_type_length = 12
+  _max_volume_length = 16
+  _fitting_depth_length = 20
+  _tip_length_length = 16
+  # _pickup_method_length = 20
+  _filter_length = 10
 
   def __init__(self, num_channels: int = 8):
     """ Initialize a chatter box backend. """
@@ -47,57 +62,65 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   async def unassigned_resource_callback(self, name: str):
     print(f"Resource {name} was unassigned from the robot.")
 
-  # async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
-  #   print(f"Picking up tips {ops}.")
-
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
     print("Picking up tips:")
-    header = f"{'pip#':<5} {'resource':<30} {'offset':<16} {'tip type':<12} {'max volume (µL)':<16} {'fitting depth (mm)':<20} {'tip length (mm)':<16} {'pickup method':<20} {'filter':<10}"
+    header = (
+      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
+      f"{'resource':<{ChatterBoxBackend._resource_length}} "
+      f"{'offset':<{ChatterBoxBackend._offset_length}} "
+      f"{'tip type':<{ChatterBoxBackend._tip_type_length}} "
+      f"{'max volume (µL)':<{ChatterBoxBackend._max_volume_length}} "
+      f"{'fitting depth (mm)':<{ChatterBoxBackend._fitting_depth_length}} "
+      f"{'tip length (mm)':<{ChatterBoxBackend._tip_length_length}} "
+      # f"{'pickup method':<{ChatterBoxBackend._pickup_method_length}} "
+      f"{'filter':<{ChatterBoxBackend._filter_length}}"
+    )
     print(header)
-    for op, channel in zip(ops, use_channels):
-        row = (
-            f"  p{channel}: "
-            f"{op.resource.name[-30:]:<30} "
-            f"{f'{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}':<16} "
-            f"{op.tip.__class__.__name__:<12} "
-            f"{op.tip.maximal_volume:<16} "
-            f"{op.tip.fitting_depth:<20} "
-            f"{op.tip.total_tip_length:<16} "
-            f"{str(op.tip.pickup_method)[-20:]:<20} "
-            f"{'Yes' if op.tip.has_filter else 'No':<10}"
-        )
-        print(row)
 
-  # async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
-  #   print(f"Dropping tips {ops}.")
+    for op, channel in zip(ops, use_channels):
+      offset = f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
+      row = (
+        f"  p{channel}: "
+        f"{op.resource.name[-30:]:<{ChatterBoxBackend._resource_length}} "
+        f"{offset:<{ChatterBoxBackend._offset_length}} "
+        f"{op.tip.__class__.__name__:<{ChatterBoxBackend._tip_type_length}} "
+        f"{op.tip.maximal_volume:<{ChatterBoxBackend._max_volume_length}} "
+        f"{op.tip.fitting_depth:<{ChatterBoxBackend._fitting_depth_length}} "
+        f"{op.tip.total_tip_length:<{ChatterBoxBackend._tip_length_length}} "
+        # f"{str(op.tip.pickup_method)[-20:]:<{ChatterBoxBackend._pickup_method_length}} "
+        f"{'Yes' if op.tip.has_filter else 'No':<{ChatterBoxBackend._filter_length}}"
+      )
+      print(row)
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
     print("Dropping tips:")
-    header = f"{'pip#':<5} {'resource':<30}{'offset':<16} {'tip type':<12} {'max volume (µL)':<16} {'fitting depth (mm)':<20} {'tip length (mm)':<16} {'pickup method':<20} {'filter':<10}"
+    header = (
+      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
+      f"{'resource':<{ChatterBoxBackend._resource_length}} "
+      f"{'offset':<{ChatterBoxBackend._offset_length}} "
+      f"{'tip type':<{ChatterBoxBackend._tip_type_length}} "
+      f"{'max volume (µL)':<{ChatterBoxBackend._max_volume_length}} "
+      f"{'fitting depth (mm)':<{ChatterBoxBackend._fitting_depth_length}} "
+      f"{'tip length (mm)':<{ChatterBoxBackend._tip_length_length}} "
+      # f"{'pickup method':<{ChatterBoxBackend._pickup_method_length}} "
+      f"{'filter':<{ChatterBoxBackend._filter_length}}"
+    )
     print(header)
+
     for op, channel in zip(ops, use_channels):
-        row = (
-            f"  p{channel}: "
-            f"{op.resource.name[-30:]:<30}"
-            f"{f'{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}':<16} "
-            f"{op.tip.__class__.__name__:<12} "
-            f"{op.tip.maximal_volume:<16} "
-            f"{op.tip.fitting_depth:<20} "
-            f"{op.tip.total_tip_length:<16} "
-            f"{str(op.tip.pickup_method)[-20:]:<20} "
-            f"{'Yes' if op.tip.has_filter else 'No':<10}"
-        )
-        print(row)
-
-
-  _pip_length = 5
-  _vol_length = 8
-  _resource_length = 20
-  _offset_length = 16
-  _flow_rate_length = 10
-  _blowout_length = 10
-  _lld_z_length = 10
-  _kwargs_length = 15
+      offset = f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
+      row = (
+        f"  p{channel}: "
+        f"{op.resource.name[-30:]:<{ChatterBoxBackend._resource_length}} "
+        f"{offset:<{ChatterBoxBackend._offset_length}} "
+        f"{op.tip.__class__.__name__:<{ChatterBoxBackend._tip_type_length}} "
+        f"{op.tip.maximal_volume:<{ChatterBoxBackend._max_volume_length}} "
+        f"{op.tip.fitting_depth:<{ChatterBoxBackend._fitting_depth_length}} "
+        f"{op.tip.total_tip_length:<{ChatterBoxBackend._tip_length_length}} "
+        # f"{str(op.tip.pickup_method)[-20:]:<{ChatterBoxBackend._pickup_method_length}} "
+        f"{'Yes' if op.tip.has_filter else 'No':<{ChatterBoxBackend._filter_length}}"
+      )
+      print(row)
 
   async def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
     print("Aspirating:")
@@ -116,12 +139,12 @@ class ChatterBoxBackend(LiquidHandlerBackend):
     print(header)
 
     for o, p in zip(ops, use_channels):
-      cord = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
+      offset = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
       row = (
         f"  p{p}: "
         f"{o.volume:<{ChatterBoxBackend._vol_length}} "
         f"{o.resource.name[-20:]:<{ChatterBoxBackend._resource_length}} "
-        f"{cord:<{ChatterBoxBackend._offset_length}} "
+        f"{offset:<{ChatterBoxBackend._offset_length}} "
         f"{str(o.flow_rate):<{ChatterBoxBackend._flow_rate_length}} "
         f"{str(o.blow_out_air_volume):<{ChatterBoxBackend._blowout_length}} "
         f"{str(o.liquid_height):<{ChatterBoxBackend._lld_z_length}} "
@@ -152,12 +175,12 @@ class ChatterBoxBackend(LiquidHandlerBackend):
     print(header)
 
     for o, p in zip(ops, use_channels):
-      cord = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
+      offset = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
       row = (
         f"  p{p}: "
         f"{o.volume:<{ChatterBoxBackend._vol_length}} "
         f"{o.resource.name[-20:]:<{ChatterBoxBackend._resource_length}} "
-        f"{cord:<{ChatterBoxBackend._offset_length}} "
+        f"{offset:<{ChatterBoxBackend._offset_length}} "
         f"{str(o.flow_rate):<{ChatterBoxBackend._flow_rate_length}} "
         f"{str(o.blow_out_air_volume):<{ChatterBoxBackend._blowout_length}} "
         f"{str(o.liquid_height):<{ChatterBoxBackend._lld_z_length}} "
