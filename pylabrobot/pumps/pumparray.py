@@ -57,13 +57,13 @@ class PumpArray(Machine):
     return {**super().serialize(), "calibration": self.calibration.serialize()}
 
   @classmethod
-  def deserialize(cls, data: dict):
+  def deserialize(cls, data: dict, allow_marshal: bool = False):
     data_copy = data.copy()
     calibration_data = data_copy.pop("calibration", None)
     if calibration_data is not None:
       calibration = PumpCalibration.deserialize(calibration_data)
       data_copy["calibration"] = calibration
-    return super().deserialize(data_copy)
+    return super().deserialize(data_copy, allow_marshal=allow_marshal)
 
   async def run_revolutions(self, num_revolutions: Union[float, List[float]],
                             use_channels: Union[int, List[int]]):
