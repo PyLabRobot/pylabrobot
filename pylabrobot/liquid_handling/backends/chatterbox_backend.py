@@ -47,17 +47,129 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   async def unassigned_resource_callback(self, name: str):
     print(f"Resource {name} was unassigned from the robot.")
 
+  # async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
+  #   print(f"Picking up tips {ops}.")
+
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
-    print(f"Picking up tips {ops}.")
+    print("Picking up tips:")
+    header = f"{'pip#':<5} {'resource':<30} {'offset':<16} {'tip type':<12} {'max volume (µL)':<16} {'fitting depth (mm)':<20} {'tip length (mm)':<16} {'pickup method':<20} {'filter':<10}"
+    print(header)
+    for op, channel in zip(ops, use_channels):
+        row = (
+            f"  p{channel}: "
+            f"{op.resource.name[-30:]:<30} "
+            f"{f'{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}':<16} "
+            f"{op.tip.__class__.__name__:<12} "
+            f"{op.tip.maximal_volume:<16} "
+            f"{op.tip.fitting_depth:<20} "
+            f"{op.tip.total_tip_length:<16} "
+            f"{str(op.tip.pickup_method)[-20:]:<20} "
+            f"{'Yes' if op.tip.has_filter else 'No':<10}"
+        )
+        print(row)
+
+  # async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
+  #   print(f"Dropping tips {ops}.")
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
-    print(f"Dropping tips {ops}.")
+    print("Dropping tips:")
+    header = f"{'pip#':<5} {'resource':<30}{'offset':<16} {'tip type':<12} {'max volume (µL)':<16} {'fitting depth (mm)':<20} {'tip length (mm)':<16} {'pickup method':<20} {'filter':<10}"
+    print(header)
+    for op, channel in zip(ops, use_channels):
+        row = (
+            f"  p{channel}: "
+            f"{op.resource.name[-30:]:<30}"
+            f"{f'{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}':<16} "
+            f"{op.tip.__class__.__name__:<12} "
+            f"{op.tip.maximal_volume:<16} "
+            f"{op.tip.fitting_depth:<20} "
+            f"{op.tip.total_tip_length:<16} "
+            f"{str(op.tip.pickup_method)[-20:]:<20} "
+            f"{'Yes' if op.tip.has_filter else 'No':<10}"
+        )
+        print(row)
+
+
+  _pip_length = 5
+  _vol_length = 8
+  _resource_length = 20
+  _offset_length = 16
+  _flow_rate_length = 10
+  _blowout_length = 10
+  _lld_z_length = 10
+  _kwargs_length = 15
 
   async def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
-    print(f"Aspirating {ops}.")
+    print("Aspirating:")
+    header = (
+      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
+      f"{'vol(ul)':<{ChatterBoxBackend._vol_length}} "
+      f"{'resource':<{ChatterBoxBackend._resource_length}} "
+      f"{'offset':<{ChatterBoxBackend._offset_length}} "
+      f"{'flow rate':<{ChatterBoxBackend._flow_rate_length}} "
+      f"{'blowout':<{ChatterBoxBackend._blowout_length}} "
+      f"{'lld_z':<{ChatterBoxBackend._lld_z_length}}  "
+      # f"{'liquids':<20}" # TODO: add liquids
+    )
+    for key in backend_kwargs:
+      header += f"{key:<{ChatterBoxBackend._kwargs_length}} "[-16:]
+    print(header)
+
+    for o, p in zip(ops, use_channels):
+      cord = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
+      row = (
+        f"  p{p}: "
+        f"{o.volume:<{ChatterBoxBackend._vol_length}} "
+        f"{o.resource.name[-20:]:<{ChatterBoxBackend._resource_length}} "
+        f"{cord:<{ChatterBoxBackend._offset_length}} "
+        f"{str(o.flow_rate):<{ChatterBoxBackend._flow_rate_length}} "
+        f"{str(o.blow_out_air_volume):<{ChatterBoxBackend._blowout_length}} "
+        f"{str(o.liquid_height):<{ChatterBoxBackend._lld_z_length}} "
+        # f"{o.liquids if o.liquids is not None else 'none'}"
+      )
+      for key, value in backend_kwargs.items():
+        if isinstance(value, list) and all(isinstance(v, bool) for v in value):
+          value = ''.join('T' if v else 'F' for v in value)
+        if isinstance(value, list):
+          value = "".join(map(str, value))
+        row += f" {value:<15}"
+      print(row)
 
   async def dispense(self, ops: List[Dispense], use_channels: List[int], **backend_kwargs):
-    print(f"Dispensing {ops}.")
+    print("Dispensing:")
+    header = (
+      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
+      f"{'vol(ul)':<{ChatterBoxBackend._vol_length}} "
+      f"{'resource':<{ChatterBoxBackend._resource_length}} "
+      f"{'offset':<{ChatterBoxBackend._offset_length}} "
+      f"{'flow rate':<{ChatterBoxBackend._flow_rate_length}} "
+      f"{'blowout':<{ChatterBoxBackend._blowout_length}} "
+      f"{'lld_z':<{ChatterBoxBackend._lld_z_length}}  "
+      # f"{'liquids':<20}" # TODO: add liquids
+    )
+    for key in backend_kwargs:
+      header += f"{key:<{ChatterBoxBackend._kwargs_length}} "[-16:]
+    print(header)
+
+    for o, p in zip(ops, use_channels):
+      cord = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
+      row = (
+        f"  p{p}: "
+        f"{o.volume:<{ChatterBoxBackend._vol_length}} "
+        f"{o.resource.name[-20:]:<{ChatterBoxBackend._resource_length}} "
+        f"{cord:<{ChatterBoxBackend._offset_length}} "
+        f"{str(o.flow_rate):<{ChatterBoxBackend._flow_rate_length}} "
+        f"{str(o.blow_out_air_volume):<{ChatterBoxBackend._blowout_length}} "
+        f"{str(o.liquid_height):<{ChatterBoxBackend._lld_z_length}} "
+        # f"{o.liquids if o.liquids is not None else 'none'}"
+      )
+      for key, value in backend_kwargs.items():
+        if isinstance(value, list) and all(isinstance(v, bool) for v in value):
+          value = ''.join('T' if v else 'F' for v in value)
+        if isinstance(value, list):
+          value = "".join(map(str, value))
+        row += f" {value:<{ChatterBoxBackend._kwargs_length}}"
+      print(row)
 
   async def pick_up_tips96(self, pickup: PickupTipRack, **backend_kwargs):
     print(f"Picking up tips from {pickup.resource.name}.")
