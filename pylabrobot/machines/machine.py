@@ -59,8 +59,8 @@ class Machine(Resource, metaclass=ABCMeta):
     data_copy["backend"] = backend
     return super().deserialize(data_copy)
 
-  async def setup(self):
-    await self.backend.setup()
+  async def setup(self, **backend_kwargs):
+    await self.backend.setup(**backend_kwargs)
     self._setup_finished = True
 
   @need_setup_finished
