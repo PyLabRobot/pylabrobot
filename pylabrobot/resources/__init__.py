@@ -40,6 +40,7 @@ from .azenta import *
 from .boekel import *
 from .corning_costar import *
 from .corning_axygen import *
+from .eppendorf import *
 from .falcon import *
 from .greiner import *
 from .hamilton import *

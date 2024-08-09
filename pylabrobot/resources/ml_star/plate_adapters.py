@@ -18,6 +18,7 @@ def Hamilton_96_adapter_188182(name: str) -> PlateAdapter:
     dz=2.8, # TODO: correct dz once Plate definition has been completely fixed
     adapter_hole_size_x=7.4,
     adapter_hole_size_y=7.4,
+    adapter_hole_size_z=10.0, # guesstimate
     site_pedestal_z=15.0,
     model="Hamilton_96_adapter_188182",
   )
