@@ -2,6 +2,7 @@
 
 import enum
 import inspect
+import marshal
 import sys
 from typing import Any, Dict, List, Union, cast
 
@@ -49,19 +50,21 @@ def serialize(obj: Any) -> JSON:
   raise TypeError(f"Cannot serialize {obj} of type {type(obj)}")
 
 
-def deserialize(data: JSON) -> Any:
+def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
   """ Deserialize an object. """
 
   if isinstance(data, (int, float, str, bool, type(None))):
     return data
   if isinstance(data, list):
-    return [deserialize(item) for item in data]
+    return [deserialize(item, allow_marshal=allow_marshal) for item in data]
   if isinstance(data, dict):
     if "type" in data: # deserialize a class
       data = data.copy()
       klass_type = cast(str, data.pop("type"))
+      if klass_type == "function" and allow_marshal:
+        return marshal.loads(data["code"])
       klass = get_plr_class_from_string(klass_type)
-      params = {k: deserialize(v) for k, v in data.items()}
+      params = {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
       return klass(**params)
-    return {k: deserialize(v) for k, v in data.items()}
+    return {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
   raise TypeError(f"Cannot deserialize {data} of type {type(data)}")
