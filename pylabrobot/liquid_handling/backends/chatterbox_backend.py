@@ -47,11 +47,48 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   async def unassigned_resource_callback(self, name: str):
     print(f"Resource {name} was unassigned from the robot.")
 
+  # async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
+  #   print(f"Picking up tips {ops}.")
+
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
-    print(f"Picking up tips {ops}.")
+    print("Picking up tips:")
+    header = f"{'pip#':<5} {'resource':<30} {'offset':<16} {'tip type':<12} {'max volume (µL)':<16} {'fitting depth (mm)':<20} {'tip length (mm)':<16} {'pickup method':<20} {'filter':<10}"
+    print(header)
+    for op, channel in zip(ops, use_channels):
+        row = (
+            f"  p{channel}: "
+            f"{op.resource.name[-30:]:<30} "
+            f"{f'{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}':<16} "
+            f"{op.tip.__class__.__name__:<12} "
+            f"{op.tip.maximal_volume:<16} "
+            f"{op.tip.fitting_depth:<20} "
+            f"{op.tip.total_tip_length:<16} "
+            f"{str(op.tip.pickup_method)[-20:]:<20} "
+            f"{'Yes' if op.tip.has_filter else 'No':<10}"
+        )
+        print(row)
+
+  # async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
+  #   print(f"Dropping tips {ops}.")
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
-    print(f"Dropping tips {ops}.")
+    print("Dropping tips:")
+    header = f"{'pip#':<5} {'resource':<30}{'offset':<16} {'tip type':<12} {'max volume (µL)':<16} {'fitting depth (mm)':<20} {'tip length (mm)':<16} {'pickup method':<20} {'filter':<10}"
+    print(header)
+    for op, channel in zip(ops, use_channels):
+        row = (
+            f"  p{channel}: "
+            f"{op.resource.name[-30:]:<30}"
+            f"{f'{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}':<16} "
+            f"{op.tip.__class__.__name__:<12} "
+            f"{op.tip.maximal_volume:<16} "
+            f"{op.tip.fitting_depth:<20} "
+            f"{op.tip.total_tip_length:<16} "
+            f"{str(op.tip.pickup_method)[-20:]:<20} "
+            f"{'Yes' if op.tip.has_filter else 'No':<10}"
+        )
+        print(row)
+
 
   async def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
     print("Aspirating:")
@@ -59,18 +96,20 @@ class ChatterBoxBackend(LiquidHandlerBackend):
     for key in backend_kwargs.keys():
       header += f"{key:<15} "[-16:]
     print(header)
-    for o, p in zip(ops, use_channels):
-      flow_rate = o.flow_rate if o.flow_rate is not None else 'none'
+    for op, channel in zip(ops, use_channels):
+      flow_rate = op.flow_rate if op.flow_rate is not None else 'none'
       row = (
-        f"  p{p}: {o.volume:<8} "
-        f"{o.resource.name[-20:]:<20} "
-        f"{f'{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}':<16} "
+        f"  p{channel}: {op.volume:<8} "
+        f"{op.resource.name[-20:]:<20} "
+        f"{f'{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}':<16} "
         f"{flow_rate:<10} "
-        f"{o.blow_out_air_volume if o.blow_out_air_volume is not None else 'none':<10} "
-        f"{o.liquid_height if o.liquid_height is not None else 'none':<10} "
+        f"{op.blow_out_air_volume if op.blow_out_air_volume is not None else 'none':<10} "
+        f"{op.liquid_height if op.liquid_height is not None else 'none':<10} "
         # f"{o.liquids if o.liquids is not None else 'none'}"
       )
       for key, value in backend_kwargs.items():
+        if isinstance(value, list) and all(isinstance(v, bool) for v in value):
+          value = ''.join('T' if v else 'F' for v in value)
         if isinstance(value, list):
           value = ''.join(map(str, value))
         row += f" {value:<15}"
@@ -95,6 +134,8 @@ class ChatterBoxBackend(LiquidHandlerBackend):
         # f"{o.liquids if o.liquids is not None else 'none'}"
       )
       for key, value in backend_kwargs.items():
+        if isinstance(value, list) and all(isinstance(v, bool) for v in value):
+          value = ''.join('T' if v else 'F' for v in value)
         if isinstance(value, list):
           value = ''.join(map(str, value))
         row += f" {value:<15}"
