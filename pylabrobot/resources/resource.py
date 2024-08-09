@@ -530,7 +530,7 @@ class Resource:
 
     subclass = find_subclass(data["type"], cls=Resource)
     if subclass is None:
-      raise ValueError(f"Could not find subclass with name '{data['type']}'")
+      raise ValueError(f'Could not find subclass with name "{data["type"]}"')
     assert issubclass(subclass, cls) # mypy does not know the type after the None check...
 
     for key in ["type", "parent_name", "location"]: # delete meta keys
