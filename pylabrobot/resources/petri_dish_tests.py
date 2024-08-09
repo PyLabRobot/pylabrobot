@@ -62,7 +62,6 @@ class TestPetriDish(unittest.TestCase):
     petri_dish_holder = PetriDishHolder("petri_dish_holder")
     petri_dish_holder.assign_child_resource(PetriDish("petri_dish", 90.0, 15.0),
                                             location=Coordinate.zero())
-    print(petri_dish_holder.serialize())
     petri_dish_holder = PetriDishHolder.deserialize(petri_dish_holder.serialize())
 
     self.assertEqual(petri_dish_holder.name, "petri_dish_holder")
