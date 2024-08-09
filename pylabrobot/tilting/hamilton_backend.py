@@ -1,7 +1,11 @@
 import re
 from typing import Optional, cast
 
-import serial
+try:
+  import serial
+  HAS_SERIAL = True
+except ImportError:
+  HAS_SERIAL = False
 
 from pylabrobot.tilting.tilter_backend import TilterBackend, TiltModuleError
 
@@ -18,6 +22,8 @@ class HamiltonTiltModuleBackend(TilterBackend):
     self.ser: Optional[serial.Serial] = None
 
   async def setup(self, initial_offset: int = 0):
+    if not HAS_SERIAL:
+      raise RuntimeError("pyserial not installed.")
     self.ser = serial.Serial(
       port=self.com_port,
       baudrate=1200,
