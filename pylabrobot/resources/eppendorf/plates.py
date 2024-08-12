@@ -6,10 +6,6 @@ from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.plate import Lid, Plate
 
-from pylabrobot.resources.height_volume_functions import (
-  calculate_liquid_height_in_container_2segments_round_vbottom,
-  calculate_liquid_volume_container_2segments_round_vbottom
-  )
 
 
 # # # # # # # # # # Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate # # # # # # # # # #
