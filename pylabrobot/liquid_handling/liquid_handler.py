@@ -1825,7 +1825,7 @@ class LiquidHandler(Machine):
       to_location = to.get_absolute_location(z="top")
     elif isinstance(to, Coordinate):
       to_location = to
-    elif isinstance(to, MFXModule):
+    elif isinstance(to, (MFXModule, Tilter)):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateCarrierSite):
       to_location = to.get_absolute_location()
