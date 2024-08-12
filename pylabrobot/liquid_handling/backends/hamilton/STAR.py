@@ -1574,7 +1574,7 @@ class STAR(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hamilton_liquid_classes):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z for op in ops]
+    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness for op in ops]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 1)
                               for wb, op in zip(well_bottoms, ops)]
     if lld_search_height is None:
@@ -1836,7 +1836,7 @@ class STAR(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hamilton_liquid_classes):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z for op in ops]
+    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness for op in ops]
     liquid_surfaces_no_lld = liquid_surface_no_lld or \
       [ls + (op.liquid_height or 1) for ls, op in zip(well_bottoms, ops)]
     if lld_search_height is None:
@@ -2080,7 +2080,8 @@ class STAR(HamiltonLiquidHandler):
     # get the first well and tip as representatives
     if isinstance(aspiration, AspirationPlate):
       top_left_well = aspiration.wells[0]
-      position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
+      position = top_left_well.get_absolute_location() + top_left_well.center() + \
+        top_left_well.material_z_thickness + aspiration.offset
     else:
       position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
 
@@ -2254,7 +2255,8 @@ class STAR(HamiltonLiquidHandler):
     # get the first well and tip as representatives
     if isinstance(dispense, DispensePlate):
       top_left_well = dispense.wells[0]
-      position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
+      position = top_left_well.get_absolute_location() + top_left_well.center() + \
+        top_left_well.material_z_thickness + dispense.offset
     else:
       position = dispense.container.get_absolute_location(y="b") + dispense.offset
     tip = dispense.tips[0]
