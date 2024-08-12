@@ -1831,7 +1831,7 @@ class LiquidHandler(Machine):
       to_location = to.get_absolute_location()
       # Sanity check for equal well clearances / dz
       well_dz_set = {round(well.location.z, 2) for well in plate.get_all_children()
-               if all([well.category == "well", well.location is not None])}
+               if well.category == "well" and well.location is not None}
       assert len(well_dz_set) == 1, "All wells must have the same dz"
       well_dz = well_dz_set.pop()
       # Plate "sinking" logic based on well dz to pedestal relationship
