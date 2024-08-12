@@ -9,7 +9,7 @@ from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_in_container_2segments_square_ubottom,
   calculate_liquid_volume_container_2segments_square_ubottom
-  )
+)
 
 
 # Please conform with the 'manufacturer-first, then brands' naming principle:
