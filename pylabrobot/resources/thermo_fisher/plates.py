@@ -135,28 +135,20 @@ def _compute_volume_from_height_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(h: f
   if h > 21.1:
     raise ValueError(f"Height {h} is too large for" + \
                      "ThermoScientific_96_wellplate_1200ul_Rd")
-  return calculate_liquid_volume_container_2segments_round_vbottom(
-    d=4.76,
-    h_cone=1.9,
-    h_cylinder=18.2,
-    liquid_height=h)
-
+  return max(0.9617 + 10.2590 * h - 1.3069 * h**2 + 0.26799 * h**3 - 0.01003 * h**4, 0)
 
 def _compute_height_from_volume_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(liquid_volume: float):
   if liquid_volume > 315: # 5% tolerance
     raise ValueError(f"Volume {liquid_volume} is too large for" + \
                      "ThermoScientific_96_wellplate_1200ul_Rd")
-  return round(calculate_liquid_height_in_container_2segments_round_vbottom(
-    d=4.76,
-    h_cone=1.9,
-    h_cylinder=18.2,
-    liquid_volume=liquid_volume),3)
+  return max(-0.1823 + 0.1327 * liquid_volume - 0.000637 * liquid_volume**2 + 1.6577e-6 * \
+             liquid_volume**3 - 1.1487e-9 * liquid_volume**4, 0)
 
-# results_testing_optimal_arguments_dict = {
+# results_measurement_fitting_dict = {
 #     "Volume (ul)": [0, 4, 8, 20, 70, 120, 170, 220, 260],
 #     "Observed Height (mm)": [0, 0.17, 0.77, 2.27, 6.57, 9.17, 11.17, 13.17, 15.17],
-#     "Predicted Height (mm)": [0.0, 2.16, 2.73, 3.70, 6.42, 9.13,11.84, 14.54, 16.71],
-#     "Relative Deviation (%)": [0.0, 1172.65, 253.32, 63.00, 2.24, 0.41, 5.95, 10.43, 10.14]
+#     "Predicted Height (mm)": [0, 0.338, 0.839, 2.230, 6.526, 9.195, 11.152, 13.141, 15.145],
+#     "Relative Deviation (%)": [0, 99.07, 9.01, -1.76, -0.66, 0.27, -0.16, -0.22, -0.17]
 # }
 
 def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:

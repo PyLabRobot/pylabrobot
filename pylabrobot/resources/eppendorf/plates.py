@@ -18,30 +18,22 @@ def _compute_volume_from_height_Eppendorf_96_wellplate_250ul_Vb(h: float):
   if h > 20.3:
     raise ValueError(f"Height {h} is too large for" + \
                      "Eppendorf_96_wellplate_250ul_Vb")
-  return calculate_liquid_volume_container_2segments_round_vbottom(
-    d=6.74,
-    h_cone=8.54,
-    h_cylinder=10.96,
-    liquid_height=h)
-
+  return max( 0.89486648 + 2.92455131 * h + 2.03472797 * h**2 + -0.16509371 * h**3 + \
+             0.00675759 * h**4, 0 )
 
 def _compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb(liquid_volume: float):
   if liquid_volume > 262.5: # 5% tolerance
     raise ValueError(f"Volume {liquid_volume} is too large for" + \
                      "Eppendorf_96_wellplate_250ul_Vb")
-  return round(calculate_liquid_height_in_container_2segments_round_vbottom(
-    d=6.74,
-    h_cone=8.54,
-    h_cylinder=10.96,
-    liquid_volume=liquid_volume),3)
+  return max( 0.118078503 + 0.133333914 * liquid_volume + -0.000802726227 * liquid_volume**2 + \
+             3.29761957e-06 * liquid_volume**3 + -5.29119614e-09 * liquid_volume**4, 0 )
 
-# results_testing_optimal_arguments_dict = {
+# results_measurement_fitting_dict = {
 #     "Volume (ul)": [0, 4, 8, 20, 70, 120, 170, 220, 260],
 #     "Observed Height (mm)": [0, 0.45, 1.45, 2.55, 6.45, 9.05, 11.6, 13.15, 14.349],
-#     "Predicted Height (mm)": [0.0, 2.91, 3.66, 4.97, 7.54, 9.06, 10.46, 11.86, 12.98],
-#     "Relative Deviation (%)": [None, 545.56, 152.42, 94.80, 16.93, 0.056, 9.86, 9.82, 9.55]
+#     "Predicted Height (mm)": [0.118, 0.637, 1.139, 2.49, 6.516, 9.177, 11.359, 13.31, 14.291],
+#     "Relative Deviation (%)": [0, 41.525, -21.793, -2.365, 1.024, 1.399, -2.078, 1.216, -0.408]
 # }
-
 
 def Eppendorf_96_wellplate_250ul_Vb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
