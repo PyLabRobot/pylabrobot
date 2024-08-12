@@ -395,7 +395,7 @@ class Resource:
     self.rotation.z = (self.rotation.z + z) % 360
 
   def copy(self) -> Self:
-    resource_copy = self.__class__.deserialize(self.serialize())
+    resource_copy = self.__class__.deserialize(self.serialize(), allow_marshal=True)
     resource_copy.load_all_state(self.serialize_all_state())
     return resource_copy
 
@@ -510,8 +510,12 @@ class Resource:
       json.dump(serialized, f, indent=indent)
 
   @classmethod
-  def deserialize(cls, data: dict) -> Self:
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> Self:
     """ Deserialize a resource from a dictionary.
+
+    Args:
+      allow_marshal: If `True`, the `marshal` module will be used to deserialize functions. This
+        can be a security risk if the data is not trusted. Defaults to `False`.
 
     Examples:
       Loading a resource from a json file:
@@ -526,21 +530,21 @@ class Resource:
 
     subclass = find_subclass(data["type"], cls=Resource)
     if subclass is None:
-      raise ValueError(f"Could not find subclass with name '{data['type']}'")
+      raise ValueError(f'Could not find subclass with name "{data["type"]}"')
     assert issubclass(subclass, cls) # mypy does not know the type after the None check...
 
     for key in ["type", "parent_name", "location"]: # delete meta keys
       del data_copy[key]
     children_data = data_copy.pop("children")
     rotation = data_copy.pop("rotation")
-    resource = subclass(**data_copy)
-    resource.rotation = Rotation.deserialize(rotation)
+    resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
+    resource.rotation = Rotation.deserialize(rotation) # not pretty, should be done in init.
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
       if child_cls is None:
         raise ValueError(f"Could not find subclass with name {child_data['type']}")
-      child = child_cls.deserialize(child_data)
+      child = child_cls.deserialize(child_data, allow_marshal=allow_marshal)
       location_data = child_data.get("location", None)
       if location_data is not None:
         location = cast(Coordinate, deserialize(location_data))

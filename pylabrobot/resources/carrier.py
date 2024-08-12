@@ -27,7 +27,7 @@ class CarrierSite(Resource):
     reassign: bool = True
   ):
     self.resource = resource
-    return super().assign_child_resource(resource, location=location)
+    return super().assign_child_resource(resource, location, reassign)
 
   def unassign_child_resource(self, resource):
     self.resource = None
@@ -195,7 +195,7 @@ class TipCarrier(Carrier):
     category="tip_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
-      sites,category=category, model=model)
+      sites, category=category, model=model)
 
 
 class PlateCarrierSite(CarrierSite):
@@ -276,7 +276,7 @@ class TubeCarrier(Carrier):
     category="tube_carrier",
     model: Optional[str] = None):
     super().__init__(name, size_x, size_y, size_z,
-      sites,category=category, model=model)
+      sites, category=category, model=model)
 
 
 class TroughCarrier(Carrier):
