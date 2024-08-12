@@ -42,6 +42,7 @@ from pylabrobot.resources import (
   does_cross_contamination_tracking
 )
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
 from .standard import (
@@ -1837,7 +1838,7 @@ class LiquidHandler(Machine):
       z_sinking_depth = min(pedestal_size_z, well_dz)
       correction_anchor = Coordinate(0, 0, -z_sinking_depth)
       to_location += correction_anchor
-    elif isinstance(to, MFXModule):
+    elif isinstance(to, (MFXModule,Tilter)):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateAdapter):
       # Calculate location adjustment of Plate based on PlateAdapter geometry
