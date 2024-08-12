@@ -41,12 +41,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `CellTreat_96_DWP_350ul_Ub` and `CellTreat_6_DWP_16300ul_Fb` (https://github.com/PyLabRobot/pylabrobot/pull/200)
 - `Opentrons_96_adapter_Vb` to integrate Opentrons Aluminum 96-well plate adapter (part of the "Aluminum Block Set") and `README.md` for Opentrons resource folder
 - Serialization of functions. Serialize `compute_volume_from_height` and `compute_height_from_volume` functions in `Container`s (https://github.com/PyLabRobot/pylabrobot/pull/215)
+- `Eppendorf_96_wellplate_250ul_Vb` (https://github.com/PyLabRobot/pylabrobot/pull/205)
+- `Thermo_TS_96_wellplate_1200ul_Rb` (https://github.com/PyLabRobot/pylabrobot/pull/205)
+- `Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate` (https://github.com/PyLabRobot/pylabrobot/pull/205)
+- `adapter_hole_size_z` and `plate_z_offset` parameters to `PlateAdapter` (https://github.com/PyLabRobot/pylabrobot/pull/205)
 
 ### Deprecated
 
 - All VENUS-imported Corning-Costar plates, because they don't have unique and usable identifiers, and are probably wrong.
 - Passing single values to LiquidHandler `pick_up_tips`, `drop_tips`, `aspirate`, and `dispense` methods. These methods now require a list of values.
 - `utils.positions`: `string_to_position`, `string_to_index`, `string_to_indices`, `string_to_pattern`.
+- `ThermoScientific_96_DWP_1200ul_Rd` in favor of `Thermo_TS_96_wellplate_1200ul_Rb` (https://github.com/PyLabRobot/pylabrobot/pull/205)
 
 ### Fixed
 
