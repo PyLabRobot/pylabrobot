@@ -1823,7 +1823,9 @@ class LiquidHandler(Machine):
     if isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
       to_location = to.get_absolute_location(z="top")
-    elif isinstance(to, (MFXModule,Tilter)):
+    elif isinstance(to, Coordinate):
+      to_location = to
+    elif isinstance(to, MFXModule):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateCarrierSite):
       to_location = to.get_absolute_location()
@@ -1844,8 +1846,6 @@ class LiquidHandler(Machine):
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = to.compute_plate_location(plate)
       to_location = to.get_absolute_location() + adjusted_plate_anchor
-    elif isinstance(to, Coordinate):
-      to_location = to
     else:
       to_location = to.get_absolute_location()
 
