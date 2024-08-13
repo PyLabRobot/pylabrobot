@@ -1576,7 +1576,7 @@ class STAR(HamiltonLiquidHandler):
 
     well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
                     op.resource.material_z_thickness for op in ops]
-    liquid_surfaces_no_lld = [wb + (op.liquid_height or 1)
+    liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
                               for wb, op in zip(well_bottoms, ops)]
     if lld_search_height is None:
       lld_search_height = [
@@ -1840,7 +1840,7 @@ class STAR(HamiltonLiquidHandler):
     well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
                     op.resource.material_z_thickness for op in ops]
     liquid_surfaces_no_lld = liquid_surface_no_lld or \
-      [ls + (op.liquid_height or 1) for ls, op in zip(well_bottoms, ops)]
+      [ls + (op.liquid_height or 0) for ls, op in zip(well_bottoms, ops)]
     if lld_search_height is None:
       lld_search_height = [
         (wb + op.resource.get_size_z() + (2.7 if isinstance(op.resource, Well) else 5)) #?
