@@ -174,6 +174,12 @@ class Resource:
       z_ = self.get_size_z() / 2
     elif z.lower() in {"b", "bottom"}:
       z_ = 0
+    elif z.lower() in {"cb", "cavity_bottom"}:
+      from .container import Container
+      if isinstance(self, Container):
+        z_ = self.material_z_thickness
+      else:
+        raise ValueError(f"Cavity bottom only implemented for containers; you used {self.name}")
     else:
       raise ValueError(f"Invalid z value: {z}")
 
