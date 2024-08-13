@@ -19,8 +19,8 @@ from .tip_creators import (
 )
 
 
-#: Tip Rack 24x 4ml Tip with Filter landscape oriented
 def FourmlTF_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack 24x 4ml Tip with Filter landscape oriented """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -43,13 +43,13 @@ def FourmlTF_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Tip Rack 24x 4ml Tip with Filter portrait oriented
 def FourmlTF_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack 24x 4ml Tip with Filter portrait oriented """
   return FourmlTF_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Tip Rack 24x 5ml Tip landscape oriented
 def FivemlT_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack 24x 5ml Tip landscape oriented """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -72,13 +72,13 @@ def FivemlT_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Tip Rack 24x 5ml Tip portrait oriented
 def FivemlT_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack 24x 5ml Tip portrait oriented """
   return FivemlT_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Rack with 96 1000ul High Volume Tip with filter
 def HTF_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 1000ul High Volume Tip with filter """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -101,13 +101,13 @@ def HTF_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Rack with 96 1000ul High Volume Tip with filter (portrait)
 def HTF_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 1000ul High Volume Tip with filter (portrait) """
   return HTF_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Rack with 96 1000ul High Volume Tip
 def HT_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 1000ul High Volume Tip """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -130,13 +130,13 @@ def HT_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Rack with 96 1000ul High Volume Tip (portrait)
 def HT_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 1000ul High Volume Tip (portrait) """
   return HT_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Rack with 96 10ul Low Volume Tip with filter
 def LTF_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 10ul Low Volume Tip with filter """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -159,13 +159,13 @@ def LTF_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Rack with 96 10ul Low Volume Tip with filter (portrait)
 def LTF_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 10ul Low Volume Tip with filter (portrait) """
   return LTF_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Rack with 96 10ul Low Volume Tip
 def LT_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 10ul Low Volume Tip """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -188,13 +188,13 @@ def LT_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Rack with 96 10ul Low Volume Tip (portrait)
 def LT_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 10ul Low Volume Tip (portrait) """
   return LT_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Rack with 96 300ul Standard Volume Tip with filter
 def STF_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 300ul Standard Volume Tip with filter """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -217,13 +217,13 @@ def STF_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Rack with 96 300ul Standard Volume Tip with filter (portrait)
 def STF_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 300ul Standard Volume Tip with filter (portrait) """
   return STF_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Rack with 96 300ul Slim Standard Volume Tip with filter
 def STF_Slim_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 300ul Slim Standard Volume Tip with filter """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -245,13 +245,13 @@ def STF_Slim_L(name: str, with_tips: bool = True) -> TipRack:
     with_tips=with_tips
   )
 
-#: Rack with 96 300ul Standard Volume Tip with filter (portrait)
 def STF_Slim_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 300ul Slim Standard Volume Tip with filter (portrait) """
   return STF_Slim_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Rack with 96 300ul Standard Volume Tip
 def ST_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 300ul Standard Volume Tip """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -274,13 +274,13 @@ def ST_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Rack with 96 300ul Standard Volume Tip (portrait)
 def ST_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 300ul Standard Volume Tip (portrait) """
   return ST_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Rack with 96 50ul Tip with filter
 def TIP_50ul_w_filter_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 50ul Tip with filter """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -303,13 +303,13 @@ def TIP_50ul_w_filter_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Tip Rack 96 50ul Tip with filter portrait oriented
 def TIP_50ul_w_filter_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 50ul Tip with filter (portrait) """
   return TIP_50ul_w_filter_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-#: Rack with 96 50ul Tip
 def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 50ul Tip """
   return TipRack(
     name=name,
     size_x=122.4,
@@ -332,6 +332,6 @@ def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-#: Tip Rack 96 50ul Tip portrait oriented
 def TIP_50ul_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 50ul Tip (portrait) """
   return TIP_50ul_L(name=name, with_tips=with_tips).rotated(z=90)
