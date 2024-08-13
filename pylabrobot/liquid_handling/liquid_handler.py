@@ -135,14 +135,14 @@ class LiquidHandler(Machine):
     self.location = Coordinate.zero()
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
-  async def setup(self):
+  async def setup(self, **backend_kwargs):
     """ Prepare the robot for use. """
 
     if self.setup_finished:
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
     self.backend.set_deck(self.deck)
-    await super().setup()
+    await super().setup(**backend_kwargs)
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
     self.head96 = {c: TipTracker(thing=f"Channel {c}") for c in range(96)}
@@ -285,8 +285,10 @@ class LiquidHandler(Machine):
     if len(missing) > 0:
       raise TypeError(f"Missing arguments to backend.{method.__name__}: {missing}")
 
-    extra = backend_kws - set(args.keys())
+    if len(vars_keyword) > 0:
+      return set() # no extra arguments if the method accepts **kwargs
 
+    extra = backend_kws - set(args.keys())
     if len(extra) > 0 and len(vars_keyword) == 0:
       if strictness == Strictness.STRICT:
         raise TypeError(f"Extra arguments to backend.{method.__name__}: {extra}")
@@ -921,7 +923,6 @@ class LiquidHandler(Machine):
     if isinstance(blow_out_air_volume, numbers.Number):
       raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
-    self._blow_out_air_volume = None
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     # Check the blow out air volume with what was aspirated
@@ -988,6 +989,9 @@ class LiquidHandler(Machine):
         if not op.resource.tracker.is_disabled:
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
         (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
+
+    if any(bav is not None for bav in blow_out_air_volume):
+      self._blow_out_air_volume = None
 
     # trigger callback
     self._trigger_callback(
@@ -1874,7 +1878,7 @@ class LiquidHandler(Machine):
       if isinstance(to, ResourceStack) and to.direction != "z":
         raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       to.assign_child_resource(plate)
-    elif isinstance(to, MFXModule):
+    elif isinstance(to, (MFXModule, Tilter)):
       to.assign_child_resource(plate, location=to.child_resource_location)
     elif isinstance(to, PlateAdapter):
       to.assign_child_resource(plate, location=to.compute_plate_location(plate))
@@ -1906,7 +1910,7 @@ class LiquidHandler(Machine):
     return self._callbacks
 
   @classmethod
-  def deserialize(cls, data: dict) -> LiquidHandler:
+  def deserialize(cls, data: dict, allow_marshal: bool = False) -> LiquidHandler:
     """ Deserialize a liquid handler from a dictionary.
 
     Args:
@@ -1914,7 +1918,7 @@ class LiquidHandler(Machine):
     """
 
     deck_data = data["children"][0]
-    deck = Deck.deserialize(data=deck_data)
+    deck = Deck.deserialize(data=deck_data, allow_marshal=allow_marshal)
     backend = LiquidHandlerBackend.deserialize(data=data["backend"])
     return cls(deck=deck, backend=backend)
 

@@ -1,14 +1,15 @@
 import math
-from typing import Optional, cast
+from typing import List, Optional
 
-from pylabrobot.machines.machine import Machine
-from pylabrobot.resources import Coordinate, Plate, Resource
+from pylabrobot.machines import Machine
+from pylabrobot.resources import Coordinate, Plate
+from pylabrobot.resources.well import Well
 
 from .tilter_backend import TilterBackend
 
 
 class Tilter(Machine):
-  """ A tilt module """
+  """ Resources that tilt plates. """
 
   def __init__(
     self,
@@ -17,73 +18,127 @@ class Tilter(Machine):
     size_y: float,
     size_z: float,
     backend: TilterBackend,
-    category: str = "tilter",
-    model: Optional[str] = None
+    hinge_coordinate: Coordinate,
+    child_resource_location: Coordinate,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
   ):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
-                     category=category, model=model)
+    super().__init__(
+      name=name,
+      size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
+      category=category, model=model)
     self.backend: TilterBackend = backend  # fix type
-    self._angle: int = 0
-
-  def get_plate(self) -> Plate:
-    """ Get the plate that is currently attached to the tilt module. If no plate is assigned, raise
-    a RuntimeError. """
-
-    if len(self.children) != 1:
-      raise RuntimeError("No plate on this tilt module.")
-
-    return cast(Plate, self.children[0])
-
-  def assign_child_resource(self, resource: Resource, location: Coordinate, reassign: bool = True):
-    if len(self.children) > 0:
-      raise RuntimeError("Tilt module already has a plate.")
-    if not isinstance(resource, Plate):
-      raise RuntimeError("Tilt module can only have plates.")
-    return super().assign_child_resource(resource=resource, location=location, reassign=reassign)
+    self._absolute_angle: float = 0
+    self._hinge_coordinate = hinge_coordinate
+    self.child_resource_location = child_resource_location
 
   @property
-  def angle(self) -> int:
-    return self._angle
+  def absolute_angle(self) -> float:
+    return self._absolute_angle
 
-  async def set_angle(self, angle: int):
-    """ Set the tilt module to rotate by a given angle.
-
-    We assume the rotation anchor is the right side of the module. This may change in the future
-    if we integrate other tilt modules.
+  async def set_angle(self, absolute_angle: float):
+    """ Set the tilt module to rotate to a given angle.
 
     Args:
-      angle: The angle to rotate by, in degrees. Clockwise. 0 is horizontal.
+      absolute_angle: The absolute (unsigned) angle to set rotation to, in degrees, measured from
+        horizontal as zero.
     """
 
-    await self.backend.set_angle(angle=angle)
+    await self.backend.set_angle(angle=absolute_angle)
+    self._absolute_angle = absolute_angle
 
-    for well in self.get_plate().children:
-      assert well.location is not None
+  def experimental_rotate_coordinate_around_hinge(
+      self, absolute_coordinate: Coordinate, angle: float) -> Coordinate:
+    """ Rotate an absolute coordinate around the hinge of the tilter by a given angle.
 
-      # Convert angle to radians.
-      theta = math.radians(angle)
+    Args:
+      absolute_coordinate: The coordinate to rotate.
+      angle: The angle to rotate by, in degrees. Negative is clockwise.
 
-      # Compute the current location of the well. Use the rotation anchor as the origin.
-      x = self.get_plate().get_size_x() - well.location.x
-      z = well.location.z
-      h = math.sqrt(x**2 + z**2) # hypotenuse (dist from anchor to well)
+    Returns:
+      Coordinate: The new coordinate after rotation.
+    """
+    theta = math.radians(angle)
 
-      d = 1 # offset of well from tilting plane (perpendicular to tilt axis)
+    rotation_arm_x = absolute_coordinate.x - (
+      self._hinge_coordinate.x + self.get_absolute_location("l", "f", "b").x
+    )
+    rotation_arm_z = absolute_coordinate.z - (
+      self._hinge_coordinate.z + self.get_absolute_location("l", "f", "b").z
+    )
 
-      # Compute the new location of the well after rotation.
-      x_prime = h * math.cos(theta) + d * math.cos(theta+(math.pi/2)) # x component of vector
-      z_prime = h * math.sin(theta) + d * math.sin(theta+(math.pi/2)) # z component of vector
+    x_prime = rotation_arm_x * math.cos(theta) - rotation_arm_z * math.sin(theta)
+    z_prime = rotation_arm_x * math.sin(theta) + rotation_arm_z * math.cos(theta)
 
-      well.location.x = self.get_plate().get_size_x() - x_prime
-      well.location.z = z_prime
+    new_x = x_prime + (self._hinge_coordinate.x + self.get_absolute_location("l", "f", "b").x)
+    new_z = z_prime + (self._hinge_coordinate.z + self.get_absolute_location("l", "f", "b").z)
 
-    self._angle = angle
+    return Coordinate(new_x, absolute_coordinate.y, new_z)
 
-  async def tilt(self, angle: int):
+  def experimental_get_plate_drain_offsets(
+      self, plate: Plate, absolute_angle: Optional[float] = None) -> List[Coordinate]:
+    """ Get the drain edge offsets for all wells in the given plate, tilted around the hinge at a
+    given absolute angle.
+
+    Args:
+      plate: The plate to calculate the offsets for.
+      absolute_angle: The absolute angle to rotate the plate. If `None`, the current tilt angle.
+    """
+
+    if absolute_angle is None:
+      absolute_angle = self._absolute_angle
+    assert absolute_angle is not None # mypy
+    # pylint: disable=invalid-unary-operand-type
+    angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
+
+    _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
+
+    well_drain_offsets = []
+    for well in plate.children:
+      level_absolute_well_drain_coordinate = well.get_absolute_location(_hinge_side, "c", "b")
+      rotated_absolute_well_drain_coordinate = self.experimental_rotate_coordinate_around_hinge(
+        level_absolute_well_drain_coordinate, angle
+      )
+      well_drain_offset = (rotated_absolute_well_drain_coordinate -
+                           well.get_absolute_location("c", "c", "b"))
+      well_drain_offsets.append(well_drain_offset)
+
+    return well_drain_offsets
+
+  def experimental_get_well_drain_offsets(
+      self, wells: List[Well], absolute_angle: Optional[float] = None) -> List[Coordinate]:
+    """ Get the drain edge offsets for the given wells, tilted around the hinge at a
+    given absolute angle.
+
+    Args:
+      wells: The wells to calculate the offsets for.
+      absolute_angle: The absolute angle to rotate the wells. If `None`, the current tilt angle.
+    """
+
+    if absolute_angle is None:
+      absolute_angle = self._absolute_angle
+    assert absolute_angle is not None # mypy
+    # pylint: disable=invalid-unary-operand-type
+    angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
+
+    _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
+
+    well_drain_offsets = []
+    for well in wells:
+      level_absolute_well_drain_coordinate = well.get_absolute_location(_hinge_side, "c", "b")
+      rotated_absolute_well_drain_coordinate = self.experimental_rotate_coordinate_around_hinge(
+        level_absolute_well_drain_coordinate, angle
+      )
+      well_drain_offset = (rotated_absolute_well_drain_coordinate -
+                           well.get_absolute_location("c", "c", "b"))
+      well_drain_offsets.append(well_drain_offset)
+
+    return well_drain_offsets
+
+  async def tilt(self, relative_angle: float):
     """ Tilt the plate contained in the tilt module by a given angle relative to the current angle.
 
     Args:
-      angle: The angle to rotate by, in degrees. Clockwise. 0 is horizontal.
+      relative_angle: The angle to rotate by, in degrees. Clockwise. 0 is horizontal.
     """
-
-    await self.set_angle(self.angle + angle)
+    await self.set_angle(self._absolute_angle + relative_angle)

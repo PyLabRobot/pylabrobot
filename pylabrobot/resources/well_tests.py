@@ -29,6 +29,8 @@ class TestWell(unittest.TestCase):
         "type": "Rotation",
         "x": 0, "y": 0, "z": 0
       },
+      "compute_volume_from_height": None,
+      "compute_height_from_volume": None,
     })
 
     self.assertEqual(Well.deserialize(well.serialize()), well)
