@@ -119,7 +119,7 @@ def standard_volume_tip_no_filter() -> HamiltonTip:
   )
 
 def standard_volume_tip_with_filter() -> HamiltonTip:
-  """ Low volume tip without a filter (`tt01` in venus) """
+  """ Standard volume tip without a filter (`tt01` in venus) """
   return HamiltonTip(
     has_filter=True,
     total_tip_length=59.9, # 60 in the ctr file, but 59.9 in the log file (519+80)/10
@@ -128,8 +128,18 @@ def standard_volume_tip_with_filter() -> HamiltonTip:
     pickup_method=TipPickupMethod.OUT_OF_RACK
   )
 
+def slim_standard_volume_tip_with_filter() -> HamiltonTip:
+  """ Slim standard volume tip without a filter """
+  return HamiltonTip(
+    has_filter=True,
+    total_tip_length=94.8, # 60 in the ctr file, but 59.9 in the log file (519+80)/10
+    maximal_volume=360,
+    tip_size=TipSize.HIGH_VOLUME,
+    pickup_method=TipPickupMethod.OUT_OF_RACK
+  )
+
 def low_volume_tip_no_filter() -> HamiltonTip:
-  """ Standard volume tip with a filter (`tt02` in venus) """
+  """ Low volume tip with a filter (`tt02` in venus) """
   return HamiltonTip(
     has_filter=False,
     total_tip_length=29.9,

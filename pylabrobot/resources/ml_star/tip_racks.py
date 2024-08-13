@@ -7,6 +7,7 @@ from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from .tip_creators import (
   low_volume_tip_no_filter,
   low_volume_tip_with_filter,
+  slim_standard_volume_tip_with_filter,
   standard_volume_tip_no_filter,
   standard_volume_tip_with_filter,
   high_volume_tip_no_filter,
@@ -219,6 +220,34 @@ def STF_L(name: str, with_tips: bool = True) -> TipRack:
 #: Rack with 96 300ul Standard Volume Tip with filter (portrait)
 def STF_P(name: str, with_tips: bool = True) -> TipRack:
   return STF_L(name=name, with_tips=with_tips).rotated(z=90)
+
+
+#: Rack with 96 300ul Slim Standard Volume Tip with filter
+def STF_Slim_L(name: str, with_tips: bool = True) -> TipRack:
+  return TipRack(
+    name=name,
+    size_x=122.4,
+    size_y=82.6,
+    size_z=20.0,
+    model=STF_Slim_L.__name__,
+    ordered_items=create_ordered_items_2d(TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      dx=7.2,
+      dy=5.3,
+      dz=-83.5,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
+      make_tip=slim_standard_volume_tip_with_filter,
+    ),
+    with_tips=with_tips
+  )
+
+#: Rack with 96 300ul Standard Volume Tip with filter (portrait)
+def STF_Slim_P(name: str, with_tips: bool = True) -> TipRack:
+  return STF_Slim_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
 #: Rack with 96 300ul Standard Volume Tip
