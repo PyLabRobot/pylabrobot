@@ -93,7 +93,7 @@ class Container(Resource):
       A relative location within the container, the anchor point wrt the left front bottom corner.
     """
 
-    if z.lower() in {"cb", "cavity_bottom"}:
+    if z.lower() in {"cavity_bottom"}:
       # Reuse superclass Resource method but update z location based on
       # Container's additional information
       coordinate = super().get_anchor(x, y, z="bottom")
