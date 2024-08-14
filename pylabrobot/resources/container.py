@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, Optional
 
 from .resource import Resource
+from .coordinate import Coordinate
 from .volume_tracker import VolumeTracker
 
 from pylabrobot.serializer import serialize
@@ -78,3 +79,33 @@ class Container(Resource):
       raise NotImplementedError(f"compute_height_from_volume not implemented for {self.name}.")
 
     return self._compute_height_from_volume(liquid_volume)
+  
+  def get_anchor(self, x: str, y: str, z: str) -> Coordinate:
+    """ Get a relative location within the container. (Update to Resource superclass to
+      include cavity_bottom)
+
+    Args:
+      x: `"l"`/`"left"`, `"c"`/`"center"`, or `"r"`/`"right"`
+      y: `"b"`/`"back"`, `"c"`/`"center"`, or `"f"`/`"front"`
+      z: `"t"`/`"top"`, `"c"`/`"center"`, `"b"`/`"bottom"`, or `"cb"`/`"cavity_bottom"`
+
+    Returns:
+      A relative location within the container, the anchor point wrt the left front bottom corner.
+    """
+
+    if z.lower() in {"cb", "cavity_bottom"}:
+      # Reuse superclass Resource method but update z location based on
+      # Container's additional information
+      coordinate = super().get_anchor(x, y, z="bottom")
+      x_, y_ = coordinate.x, coordinate.y
+
+      if self._material_z_thickness is None:
+        raise ValueError(f"Cavity bottom only implemented for containers with a defined" + \
+                         " material_z_thickness; you used {self.name}")
+      z_ = self._material_z_thickness
+
+      return Coordinate(x_, y_, z_)
+    
+    else:
+      return super().get_anchor(x, y, z)
+
