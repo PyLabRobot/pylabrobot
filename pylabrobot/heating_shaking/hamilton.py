@@ -28,6 +28,10 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     USBBackend.__init__(self, id_vendor, id_product)
 
   async def setup(self):
+    """
+    If USBBackend.setup() fails, ensure that libusb drivers were installed
+    for the HHS as per PyLabRobot documentation.
+    """
     await USBBackend.setup(self)
     await self._initialize_lock()
 
@@ -102,10 +106,16 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     return self._send_command("SW")
 
   async def set_temperature(self, temperature: float):
-    raise NotImplementedError()
+    """set temperature in Celsius"""
+    temp_str = f"{round(10*temperature):04d}"
+    return self._send_command("TA", ta=temp_str)
 
   async def get_current_temperature(self) -> float:
-    raise NotImplementedError()
+    """get temperature in Celsius"""
+    response = self._send_command("RT").decode("ascii")
+    temp = str(response).split(" ")[1].strip("+")
+    return float(temp) / 10
 
   async def deactivate(self):
-    raise NotImplementedError()
+    """turn off heating"""
+    return self._send_command("TO")
