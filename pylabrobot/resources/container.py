@@ -79,7 +79,7 @@ class Container(Resource):
       raise NotImplementedError(f"compute_height_from_volume not implemented for {self.name}.")
 
     return self._compute_height_from_volume(liquid_volume)
-  
+
   def get_anchor(self, x: str, y: str, z: str) -> Coordinate:
     """ Get a relative location within the container. (Update to Resource superclass to
       include cavity_bottom)
@@ -100,12 +100,11 @@ class Container(Resource):
       x_, y_ = coordinate.x, coordinate.y
 
       if self._material_z_thickness is None:
-        raise ValueError(f"Cavity bottom only implemented for containers with a defined" + \
-                         " material_z_thickness; you used {self.name}")
+        raise ValueError("Cavity bottom only implemented for containers with a defined" + \
+                         f" material_z_thickness; you used {self.category}")
       z_ = self._material_z_thickness
 
       return Coordinate(x_, y_, z_)
-    
     else:
       return super().get_anchor(x, y, z)
 
