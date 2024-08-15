@@ -1592,7 +1592,7 @@ class STAR(HamiltonLiquidHandler):
     second_section_height = _fill_in_defaults(second_section_height, [3.2]*n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0]*n)
     minimum_height = \
-      _fill_in_defaults(minimum_height, [ls-5 for ls in liquid_surfaces_no_lld])
+      _fill_in_defaults(minimum_height, [wb for wb in well_bottoms])
     # TODO: I think minimum height should be the minimum height of the well
     immersion_depth = _fill_in_defaults(immersion_depth, [0]*n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
@@ -1857,8 +1857,7 @@ class STAR(HamiltonLiquidHandler):
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10.0]*n)
     second_section_height = _fill_in_defaults(second_section_height, [3.2]*n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0]*n)
-    minimum_height = _fill_in_defaults(minimum_height,
-      default=[ls+5 for ls in liquid_surfaces_no_lld])
+    minimum_height = _fill_in_defaults(minimum_height, [wb for wb in well_bottoms])
     immersion_depth = _fill_in_defaults(immersion_depth, [0]*n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0]*n)
@@ -2007,7 +2006,7 @@ class STAR(HamiltonLiquidHandler):
     blow_out: bool = False,
 
     use_lld: bool = False,
-    liquid_height: float = 1,
+    liquid_height: float = 0,
     air_transport_retract_dist: float = 10,
     hlc: Optional[HamiltonLiquidClass] = None,
 
@@ -2083,7 +2082,7 @@ class STAR(HamiltonLiquidHandler):
     if isinstance(aspiration, AspirationPlate):
       top_left_well = aspiration.wells[0]
       position = top_left_well.get_absolute_location() + top_left_well.center() + \
-        top_left_well.material_z_thickness + aspiration.offset
+        Coordinate(z=top_left_well.material_z_thickness) + aspiration.offset
     else:
       position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
 
@@ -2188,7 +2187,7 @@ class STAR(HamiltonLiquidHandler):
     blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
 
-    liquid_height: float = 1,
+    liquid_height: float = 0,
     dispense_mode: Optional[int] = None,
     air_transport_retract_dist=10,
     use_lld: bool = False,
@@ -2258,7 +2257,7 @@ class STAR(HamiltonLiquidHandler):
     if isinstance(dispense, DispensePlate):
       top_left_well = dispense.wells[0]
       position = top_left_well.get_absolute_location() + top_left_well.center() + \
-        top_left_well.material_z_thickness + dispense.offset
+        Coordinate(z=top_left_well.material_z_thickness) + dispense.offset
     else:
       position = dispense.container.get_absolute_location(y="b") + dispense.offset
     tip = dispense.tips[0]
