@@ -2,7 +2,9 @@
 
 import enum
 import inspect
+import marshal
 import sys
+import types
 from typing import Any, Dict, List, Union, cast
 
 if sys.version_info >= (3, 10):
@@ -35,6 +37,8 @@ def serialize(obj: Any) -> JSON:
     return {k: serialize(v) for k, v in obj.items()}
   if isinstance(obj, enum.Enum):
     return obj.name
+  if inspect.isfunction(obj):
+    return {"type": "function", "code": marshal.dumps(obj.__code__).hex()}
   if isinstance(obj, object):
     if hasattr(obj, "serialize"): # if the object has a custom serialize method
       return cast(JSON, obj.serialize())
@@ -49,19 +53,25 @@ def serialize(obj: Any) -> JSON:
   raise TypeError(f"Cannot serialize {obj} of type {type(obj)}")
 
 
-def deserialize(data: JSON) -> Any:
+def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
   """ Deserialize an object. """
 
   if isinstance(data, (int, float, str, bool, type(None))):
     return data
   if isinstance(data, list):
-    return [deserialize(item) for item in data]
+    return [deserialize(item, allow_marshal=allow_marshal) for item in data]
   if isinstance(data, dict):
     if "type" in data: # deserialize a class
       data = data.copy()
       klass_type = cast(str, data.pop("type"))
+      if klass_type == "function" and allow_marshal:
+        assert isinstance(data["code"], str)
+        code = marshal.loads(bytes.fromhex(data["code"]))
+        return types.FunctionType(code, globals())
       klass = get_plr_class_from_string(klass_type)
-      params = {k: deserialize(v) for k, v in data.items()}
+      params = {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
       return klass(**params)
-    return {k: deserialize(v) for k, v in data.items()}
+    return {k: deserialize(v, allow_marshal=allow_marshal) for k, v in data.items()}
+  if isinstance(data, object):
+    return data
   raise TypeError(f"Cannot deserialize {data} of type {type(data)}")

@@ -54,4 +54,3 @@ class TestMachine(unittest.TestCase):
                          size_z=10,
                          backend=self.MockBackend("mock_param"))
     self.assertEqual(Machine.deserialize(m.serialize()), m)
-
