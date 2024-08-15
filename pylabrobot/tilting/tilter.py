@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from pylabrobot.machines import Machine
 from pylabrobot.resources import Coordinate, Plate
-from pylabrobot.resources.well import Well
+from pylabrobot.resources.well import CrossSectionType, Well
 
 from .tilter_backend import TilterBackend
 
@@ -104,34 +104,64 @@ class Tilter(Machine):
       well_drain_offsets.append(well_drain_offset)
 
     return well_drain_offsets
+    
 
   def experimental_get_well_drain_offsets(
-      self, wells: List[Well], absolute_angle: Optional[float] = None) -> List[Coordinate]:
+      self, wells: List[Well], n_tips: int = 1, absolute_angle: Optional[float] = None) -> List[List[Coordinate]]:
     """ Get the drain edge offsets for the given wells, tilted around the hinge at a
-    given absolute angle.
+    given absolute angle, for multiple tips.
 
     Args:
       wells: The wells to calculate the offsets for.
+      n_tips: The number of tips to calculate offsets for. Defaults to 1.
       absolute_angle: The absolute angle to rotate the wells. If `None`, the current tilt angle.
+
+    Returns:
+      A list of lists of Coordinates, where each inner list contains the offsets for n_tips.
     """
 
     if absolute_angle is None:
       absolute_angle = self._absolute_angle
     assert absolute_angle is not None # mypy
-    # pylint: disable=invalid-unary-operand-type
-    angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
+    angle = absolute_angle * (-1 if self._hinge_coordinate.x >= self._size_x / 2 else 1)
 
-    _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
+    hinge_on_left = self._hinge_coordinate.x < self._size_x / 2
+    min_tip_distance = 9  # mm
 
     well_drain_offsets = []
     for well in wells:
-      level_absolute_well_drain_coordinate = well.get_absolute_location(_hinge_side, "c", "b")
-      rotated_absolute_well_drain_coordinate = self.experimental_rotate_coordinate_around_hinge(
-        level_absolute_well_drain_coordinate, angle
-      )
-      well_drain_offset = (rotated_absolute_well_drain_coordinate -
-                           well.get_absolute_location("c", "c", "b"))
-      well_drain_offsets.append(well_drain_offset)
+      assert well.cross_section_type == CrossSectionType.CIRCLE, "Wells must have circular cross-section"
+
+      diameter = well.get_size_x() # assuming circular well
+      radius = diameter / 2
+
+      if n_tips > 1:
+        assert (n_tips - 1) * min_tip_distance <= diameter, \
+          f"Cannot fit {n_tips} tips in a well with diameter {diameter} mm"
+
+        y_offsets = [
+          ((n_tips - 1) / 2 - tip_index) * min_tip_distance
+          for tip_index in range(n_tips)
+        ]
+
+        x_offset = math.sqrt(radius**2 - max(y_offsets)**2)
+        x_offset = -x_offset if hinge_on_left else x_offset
+
+        tip_coords = [Coordinate(x_offset, y, 0) for y in y_offsets]
+      else:
+        # Default case: n_tips = 1
+        x_offset = -radius if hinge_on_left else radius
+        tip_coords = [Coordinate(x_offset, 0, 0)]
+
+      offsets = []
+      for tip_coord in tip_coords:
+          rotated_tip = self.experimental_rotate_coordinate_around_hinge(
+              well.get_absolute_location("c", "c", "b") + tip_coord, angle
+          )
+          offset = rotated_tip - well.get_absolute_location("c", "c", "b")
+          offsets.append(offset)
+
+      well_drain_offsets.append(offsets)
 
     return well_drain_offsets
 
