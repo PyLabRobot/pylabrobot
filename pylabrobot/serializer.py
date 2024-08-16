@@ -76,7 +76,8 @@ def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
       if klass_type == "function" and allow_marshal:
         assert isinstance(data["code"], str)
         code = marshal.loads(bytes.fromhex(data["code"]))
-        closure = tuple(deserialize(data["closure"], allow_marshal=allow_marshal)) if data["closure"] else None
+        closure = tuple(deserialize(data["closure"], allow_marshal=allow_marshal)) \
+            if data["closure"] else None
         return types.FunctionType(code, globals(), closure=closure)
       if klass_type == "cell":
         return types.CellType(deserialize(data["contents"], allow_marshal=allow_marshal))
