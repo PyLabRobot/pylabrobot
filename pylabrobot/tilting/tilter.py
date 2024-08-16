@@ -104,10 +104,14 @@ class Tilter(Machine):
       well_drain_offsets.append(well_drain_offset)
 
     return well_drain_offsets
-    
+
 
   def experimental_get_well_drain_offsets(
-      self, wells: List[Well], n_tips: int = 1, absolute_angle: Optional[float] = None) -> List[Coordinate]:
+      self,
+      wells: List[Well],
+      n_tips: int = 1,
+      absolute_angle: Optional[float] = None
+  ) -> List[Coordinate]:
     """ Get the drain edge offsets for the given wells, tilted around the hinge at a
     given absolute angle, for multiple tips.
 
@@ -130,7 +134,8 @@ class Tilter(Machine):
 
     well_drain_offsets = []
     for well in wells:
-      assert well.cross_section_type == CrossSectionType.CIRCLE, "Wells must have circular cross-section"
+      assert well.cross_section_type == CrossSectionType.CIRCLE, \
+          "Wells must have circular cross-section"
 
       diameter = well.get_size_x() # assuming circular well
       radius = diameter / 2
@@ -155,11 +160,11 @@ class Tilter(Machine):
 
       offsets = []
       for tip_coord in tip_coords:
-          rotated_tip = self.experimental_rotate_coordinate_around_hinge(
-              well.get_absolute_location("c", "c", "b") + tip_coord, angle
-          )
-          offset = rotated_tip - well.get_absolute_location("c", "c", "b")
-          offsets.append(offset)
+        rotated_tip = self.experimental_rotate_coordinate_around_hinge(
+          well.get_absolute_location("c", "c", "b") + tip_coord, angle
+        )
+        offset = rotated_tip - well.get_absolute_location("c", "c", "b")
+        offsets.append(offset)
 
       well_drain_offsets.append(offsets)
 
