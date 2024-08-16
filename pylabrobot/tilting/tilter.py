@@ -107,7 +107,7 @@ class Tilter(Machine):
     
 
   def experimental_get_well_drain_offsets(
-      self, wells: List[Well], n_tips: int = 1, absolute_angle: Optional[float] = None) -> List[List[Coordinate]]:
+      self, wells: List[Well], n_tips: int = 1, absolute_angle: Optional[float] = None) -> List[Coordinate]:
     """ Get the drain edge offsets for the given wells, tilted around the hinge at a
     given absolute angle, for multiple tips.
 
@@ -162,6 +162,8 @@ class Tilter(Machine):
           offsets.append(offset)
 
       well_drain_offsets.append(offsets)
+
+    well_drain_offsets = [offset for well_offsets in well_drain_offsets for offset in well_offsets]
 
     return well_drain_offsets
 
