@@ -7,8 +7,7 @@ from pylabrobot.liquid_handling.standard import Pickup, GripDirection
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
 from pylabrobot.resources import (
-  Plate, Well, WellBottomType, CrossSectionType, Coordinate, Container, create_ordered_items_2d,
-  ResourceStack, Lid,
+  Plate, Coordinate, Container, ResourceStack, Lid,
   TIP_CAR_480_A00, TIP_CAR_288_C00, PLT_CAR_L5AC_A00, HT_P, HTF_L, Cor_96_wellplate_360ul_Fb,
   no_volume_tracking
 )
