@@ -168,9 +168,7 @@ class Tilter(Machine):
 
       well_drain_offsets.append(offsets)
 
-    well_drain_offsets = [offset for well_offsets in well_drain_offsets for offset in well_offsets]
-
-    return well_drain_offsets
+    return [offset for well_offsets in well_drain_offsets for offset in well_offsets]
 
   async def tilt(self, relative_angle: float):
     """ Tilt the plate contained in the tilt module by a given angle relative to the current angle.
