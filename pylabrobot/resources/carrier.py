@@ -224,8 +224,8 @@ class PlateCarrierSite(CarrierSite):
                       f" not {type(resource)}")
     return super().assign_child_resource(resource, location, reassign)
 
-  def _get_child_location(self, resource: Resource) -> float:
-    z_sinking_depth = 0
+  def _get_child_location(self, resource: Resource) -> Coordinate:
+    z_sinking_depth = 0.0
     if isinstance(resource, Plate):
       # Sanity check for equal well clearances / dz
       well_dz_set = {round(well.location.z, 2) for well in resource.get_all_children()
