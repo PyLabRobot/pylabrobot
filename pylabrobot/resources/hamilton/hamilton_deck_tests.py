@@ -44,9 +44,9 @@ class HamiltonDeckTests(unittest.TestCase):
           │   ├── <empty>
           │
     (21)  ├── plate carrier             PlateCarrier   (550.000, 063.000, 100.000)
-          │   ├── aspiration plate      Plate          (554.000, 071.500, 186.150)
+          │   ├── aspiration plate      Plate          (554.000, 071.500, 183.120)
           │   ├── <empty>
-          │   ├── dispense plate        Plate          (554.000, 263.500, 186.150)
+          │   ├── dispense plate        Plate          (554.000, 263.500, 183.120)
           │   ├── <empty>
           │   ├── <empty>
           │

@@ -1873,7 +1873,7 @@ class LiquidHandler(Machine):
     elif isinstance(to, PlateCarrierSite): # .zero() resources
       to.assign_child_resource(plate)
     elif isinstance(to, CarrierSite): # .zero() resources
-      to.assign_child_resource(plate, location=Coordinate.zero())
+      to.assign_child_resource(plate)
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       if isinstance(to, ResourceStack) and to.direction != "z":
         raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
