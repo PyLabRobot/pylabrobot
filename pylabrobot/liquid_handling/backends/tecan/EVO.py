@@ -147,6 +147,10 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
     resp = self.read(timeout=read_timeout)
     return self.parse_response(resp)
 
+  async def setup(self):
+    await LiquidHandlerBackend.setup(self)
+    await USBBackend.setup(self)
+
 
 class EVO(TecanLiquidHandler):
   """

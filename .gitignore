@@ -2,6 +2,7 @@
 *__pycache__
 *.DS_store
 *.swp
+*.swo
 build/pdf-intermediate.md
 pyhamilton/LAY-BACKUP
 .ipynb_checkpoints
