@@ -592,24 +592,24 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.dispense96(self.plate, 0)
 
   async def test_iswap(self):
-    await self.lh.move_plate(self.plate, self.plt_car[2])
+    await self.lh.move_plate(self.plate, self.plt_car[2], pickup_distance_from_top=13.2-3.33)
     self._assert_command_sent_once(
-      "C0PPid0011xs03479xd0yj1142yd0zj1875zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
+      "C0PPid0011xs03479xd0yj1142yd0zj1874zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
       "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0012xs03479xd0yj3062yd0zj1875zd0th2450te2450gr1go1308ga0",
+      "C0PRid0012xs03479xd0yj3062yd0zj1874zd0th2450te2450gr1go1308ga0",
       "xs#####xd#yj####yd#zj####zd#th####te####go####ga#")
 
   async def test_iswap_plate_reader(self):
     plate_reader = PlateReader(name="plate_reader", backend=MockPlateReaderBackend(),
       size_x=0, size_y=0, size_z=0)
     self.lh.deck.assign_child_resource(plate_reader,
-      location=Coordinate(1000, 264.7, 200)) # 666: 00002
+      location=Coordinate(1000, 264.7, 200-3.03)) # 666: 00002
 
-    await self.lh.move_plate(self.plate, plate_reader, pickup_distance_from_top=8.2,
+    await self.lh.move_plate(self.plate, plate_reader, pickup_distance_from_top=8.2-3.33,
       get_direction=GripDirection.FRONT, put_direction=GripDirection.LEFT)
     self._assert_command_sent_once(
-      "C0PPid0003xs03479xd0yj1142yd0zj1925zd0th2450te2450gw4gb1245go1308gt20gr1ga0gc1",
+      "C0PPid0003xs03479xd0yj1142yd0zj1924zd0th2450te2450gw4gb1245go1308gt20gr1ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#th####te####gw#gb####go####gt##gr#ga#gc#")
     self._assert_command_sent_once(
       "C0PRid0004xs10427xd0yj3286yd0zj2063zd0th2450te2450go1308gr4ga0",
@@ -620,13 +620,13 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertAlmostEqual(self.plate.get_size_y(), 127.76, places=2)
 
     await self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0],
-      pickup_distance_from_top=8.2, get_direction=GripDirection.LEFT,
+      pickup_distance_from_top=8.2-3.33, get_direction=GripDirection.LEFT,
       put_direction=GripDirection.FRONT)
     self._assert_command_sent_once(
       "C0PPid0005xs10427xd0yj3286yd0zj2063zd0gr4th2450te2450gw4go1308gb1245gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0006xs03479xd0yj1142yd0zj1925zd0th2450te2450gr1go1308ga0",
+      "C0PRid0006xs03479xd0yj1142yd0zj1924zd0th2450te2450gr1go1308ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
   async def test_iswap_move_lid(self):
@@ -645,7 +645,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
     # self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
-    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2))
+    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2-3.33))
 
     assert self.plate.lid is not None
     await self.lh.move_lid(self.plate.lid, stacking_area)
@@ -667,7 +667,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
     stacking_area = ResourceStack("stacking_area", direction="z")
-    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2))
+    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2-3.33))
 
     assert self.plate.lid is not None and self.other_plate.lid is not None
 
@@ -711,14 +711,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     ])
 
     self._assert_command_sent_once(
-      "C0PPid0023xs03479xd0yj1142yd0zj1875zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
+      "C0PPid0023xs03479xd0yj1142yd0zj1874zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
       GET_PLATE_FMT)
     self._assert_command_sent_once(
-      "C0PMid0024xs02979xd0yj4022yd0zj2434zd0gr1th2450ga1xe4 1", INTERMEDIATE_FMT)
+      "C0PMid0024xs02979xd0yj4022yd0zj2432zd0gr1th2450ga1xe4 1", INTERMEDIATE_FMT)
     self._assert_command_sent_once(
-      "C0PMid0025xs03979xd0yj3062yd0zj2434zd0gr1th2450ga1xe4 1", INTERMEDIATE_FMT)
+      "C0PMid0025xs03979xd0yj3062yd0zj2432zd0gr1th2450ga1xe4 1", INTERMEDIATE_FMT)
     self._assert_command_sent_once(
-      "C0PRid0026xs03479xd0yj2102yd0zj1875zd0th2450te2450gr1go1308ga0",
+      "C0PRid0026xs03479xd0yj2102yd0zj1874zd0th2450te2450gr1go1308ga0",
       PUT_PLATE_FMT)
 
   async def test_discard_tips(self):
@@ -762,14 +762,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(deserialized.backend.__class__.__name__, "STAR")
 
   async def test_move_core(self):
-    await self.lh.move_plate(self.plate, self.plt_car[1], pickup_distance_from_top=13,
+    await self.lh.move_plate(self.plate, self.plt_car[1], pickup_distance_from_top=13-3.33,
                              use_arm="core")
     self._assert_command_sent_once("C0ZTid0020xs07975xd0ya1240yb1065pa07pb08tp2350tz2250th2450tt14",
                                    "xs#####xd#ya####yb####pa##pb##tp####tz####th####tt##")
-    self._assert_command_sent_once("C0ZPid0021xs03479xd0yj1142yv0050zj1866zy0500yo0885yg0825yw15"
+    self._assert_command_sent_once("C0ZPid0021xs03479xd0yj1142yv0050zj1876zy0500yo0885yg0825yw15"
                                    "th2450te2450",
                                    "xs#####xd#yj####yv####zj####zy####yo####yg####yw##th####te####")
-    self._assert_command_sent_once("C0ZRid0022xs03479xd0yj2102zj1866zi000zy0500yo0885th2450te2450",
+    self._assert_command_sent_once("C0ZRid0022xs03479xd0yj2102zj1876zi000zy0500yo0885th2450te2450",
                                    "xs#####xd#yj####zj####zi###zy####yo####th####te####")
     self._assert_command_sent_once("C0ZSid0023xs07975xd0ya1240yb1065tp2150tz2050th2450te2450",
                                     "xs#####xd#ya####yb####tp####tz####th####te####")

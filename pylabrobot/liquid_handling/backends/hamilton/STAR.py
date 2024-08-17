@@ -4393,7 +4393,7 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: int = 2750,
     minimum_z_position_at_the_command_end: int = 2750,
   ):
-    """ Get plate with CoRe gripper tool from wasteblock mount. """\
+    """ Get plate with CoRe gripper tool from wasteblock mount. """
 
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
