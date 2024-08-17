@@ -1591,8 +1591,7 @@ class STAR(HamiltonLiquidHandler):
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10]*n)
     second_section_height = _fill_in_defaults(second_section_height, [3.2]*n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0]*n)
-    minimum_height = \
-      _fill_in_defaults(minimum_height, [wb for wb in well_bottoms])
+    minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
     # TODO: I think minimum height should be the minimum height of the well
     immersion_depth = _fill_in_defaults(immersion_depth, [0]*n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
@@ -1857,7 +1856,7 @@ class STAR(HamiltonLiquidHandler):
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10.0]*n)
     second_section_height = _fill_in_defaults(second_section_height, [3.2]*n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0]*n)
-    minimum_height = _fill_in_defaults(minimum_height, [wb for wb in well_bottoms])
+    minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
     immersion_depth = _fill_in_defaults(immersion_depth, [0]*n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0]*n)
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0]*n)
