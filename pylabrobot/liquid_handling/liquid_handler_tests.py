@@ -148,7 +148,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1")
         .get_absolute_location() +
       cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1").center(),
-        Coordinate(x=320.8, y=145.7, z=189.18) )
+        Coordinate(x=320.8, y=145.7, z=186.15) )
 
   def test_illegal_subresource_assignment_before(self):
     # Test assigning subresource with the same name as another resource in another carrier. This
@@ -183,7 +183,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertIsNone(plt_car[0].resource)
     self.assertEqual(plt_car[2].resource, self.lh.deck.get_resource("plate"))
     self.assertEqual(plate.get_item("A1").get_absolute_location() + plate.get_item("A1").center(),
-                     Coordinate(x=568.3, y=337.7, z=189.18))
+                     Coordinate(x=568.3, y=337.7, z=186.15))
 
   async def test_move_plate_free(self):
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
