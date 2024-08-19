@@ -360,3 +360,32 @@ def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
 def TIP_50ul_P(name: str, with_tips: bool = True) -> TipRack:
   """ Tip Rack with 96 50ul Tip (portrait) """
   return TIP_50ul_L(name=name, with_tips=with_tips).rotated(z=90)
+
+
+def NTR_50ul_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Nested Tip Rack with 96 50ul Tip """
+  return TipRack(
+    name=name,
+    size_x=122.4,
+    size_y=82.6,
+    size_z=18.0,
+    model="NTR_50ul",
+    ordered_items=create_ordered_items_2d(TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      dx=7.2,
+      dy=5.3,
+      dz=-40.5,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
+      make_tip=fifty_ul_tip_no_filter,
+    ),
+    with_tips=with_tips
+  )
+
+
+def NTR_50ul_P(name: str, with_tips: bool = True) -> TipRack:
+  """ Nested Tip Rack with 96 50ul Tip (portrait) """
+  return NTR_50ul_L(name=name, with_tips=with_tips).rotated(z=90)
