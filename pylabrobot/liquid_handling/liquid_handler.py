@@ -25,6 +25,7 @@ from pylabrobot.resources import (
   ResourceStack,
   Coordinate,
   CarrierSite,
+  PlateCarrierSite,
   Lid,
   MFXModule,
   Plate,
@@ -1717,7 +1718,7 @@ class LiquidHandler(Machine):
     destination_offset: Coordinate = Coordinate.zero(),
     get_direction: GripDirection = GripDirection.FRONT,
     put_direction: GripDirection = GripDirection.FRONT,
-    pickup_distance_from_top: float = 5.7,
+    pickup_distance_from_top: float = 5.7-3.33,
     **backend_kwargs
   ):
     """ Move a lid to a new location.
@@ -1788,7 +1789,7 @@ class LiquidHandler(Machine):
     destination_offset: Coordinate = Coordinate.zero(),
     put_direction: GripDirection = GripDirection.FRONT,
     get_direction: GripDirection = GripDirection.FRONT,
-    pickup_distance_from_top: float = 13.2,
+    pickup_distance_from_top: float = 13.2-3.33,
     **backend_kwargs
   ):
     """ Move a plate to a new location.
@@ -1830,12 +1831,25 @@ class LiquidHandler(Machine):
       to_location = to
     elif isinstance(to, (MFXModule, Tilter)):
       to_location = to.get_absolute_location() + to.child_resource_location
+    elif isinstance(to, PlateCarrierSite):
+      to_location = to.get_absolute_location()
+      # Sanity check for equal well clearances / dz
+      well_dz_set = {round(well.location.z, 2) for well in plate.get_all_children()
+               if well.category == "well" and well.location is not None}
+      assert len(well_dz_set) == 1, "All wells must have the same dz"
+      well_dz = well_dz_set.pop()
+      # Plate "sinking" logic based on well dz to pedestal relationship
+      # 1. no pedestal
+      # 2. pedestal taller than plate.well.dz
+      # 3. pedestal shorter than plate.well.dz
+      pedestal_size_z = abs(to.pedestal_size_z)
+      z_sinking_depth = min(pedestal_size_z, well_dz)
+      correction_anchor = Coordinate(0, 0, -z_sinking_depth)
+      to_location += correction_anchor
     elif isinstance(to, PlateAdapter):
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = to.compute_plate_location(plate)
       to_location = to.get_absolute_location() + adjusted_plate_anchor
-    elif isinstance(to, Coordinate):
-      to_location = to
     else:
       to_location = to.get_absolute_location()
 
@@ -1856,8 +1870,10 @@ class LiquidHandler(Machine):
     if isinstance(to, Coordinate):
       to_location -= self.deck.location # passed as an absolute location, but stored as relative
       self.deck.assign_child_resource(plate, location=to_location)
+    elif isinstance(to, PlateCarrierSite): # .zero() resources
+      to.assign_child_resource(plate)
     elif isinstance(to, CarrierSite): # .zero() resources
-      to.assign_child_resource(plate, location=Coordinate.zero())
+      to.assign_child_resource(plate)
     elif isinstance(to, (ResourceStack, PlateReader)): # manage its own resources
       if isinstance(to, ResourceStack) and to.direction != "z":
         raise ValueError("Only ResourceStacks with direction 'z' are currently supported")

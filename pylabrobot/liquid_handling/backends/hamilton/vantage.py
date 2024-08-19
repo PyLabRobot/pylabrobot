@@ -623,7 +623,8 @@ class Vantage(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hlcs):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z for op in ops]
+    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
+                    op.resource.material_z_thickness for op in ops]
     liquid_surfaces_no_lld = liquid_surface_at_function_without_lld or [wb + (op.liquid_height or 0)
                               for wb, op in zip(well_bottoms, ops)]
     # -1 compared to STAR?
@@ -658,7 +659,7 @@ class Vantage(HamiltonLiquidHandler):
       tube_2nd_section_height_measured_from_zm=
         [round(t2sh*10) for t2sh in tube_2nd_section_height_measured_from_zm or [0]*len(ops)],
       tube_2nd_section_ratio=[round(t2sr*10) for t2sr in tube_2nd_section_ratio or [0]*len(ops)],
-      minimum_height=[round(ls * 10) for ls in minimum_height or liquid_surfaces_no_lld],
+      minimum_height=[round(wb * 10) for wb in minimum_height or well_bottoms],
       immersion_depth=[round(id_*10) for id_ in immersion_depth or [0]*len(ops)],
       surface_following_distance=[round(sfd*10) for sfd in surface_following_distance or
                                   [0]*len(ops)],
@@ -787,7 +788,8 @@ class Vantage(HamiltonLiquidHandler):
     for op, hlc in zip(ops, hlcs):
       op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
 
-    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z for op in ops]
+    well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
+                    op.resource.material_z_thickness for op in ops]
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
                               for wb, op in zip(well_bottoms, ops)]
     # -1 compared to STAR?
@@ -958,12 +960,14 @@ class Vantage(HamiltonLiquidHandler):
 
     if isinstance(aspiration, AspirationPlate):
       top_left_well = aspiration.wells[0]
-      position = top_left_well.get_absolute_location() + top_left_well.center() + aspiration.offset
+      position = top_left_well.get_absolute_location() + top_left_well.center() + \
+        aspiration.offset + Coordinate(z=top_left_well.material_z_thickness)
       # -1 compared to STAR?
       well_bottoms = position.z
       lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
     else:
-      position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
+      position = aspiration.container.get_absolute_location(y="b") + aspiration.offset + \
+        Coordinate(z=aspiration.container.material_z_thickness)
       bottom = position.z
       lld_search_height = bottom + aspiration.container.get_size_z() + 2.7-1
 
@@ -1087,12 +1091,14 @@ class Vantage(HamiltonLiquidHandler):
 
     if isinstance(dispense, DispensePlate):
       top_left_well = dispense.wells[0]
-      position = top_left_well.get_absolute_location() + top_left_well.center() + dispense.offset
+      position = top_left_well.get_absolute_location() + top_left_well.center() + \
+        dispense.offset + Coordinate(z=top_left_well.material_z_thickness)
       # -1 compared to STAR?
       well_bottoms = position.z
       lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
     else:
-      position = dispense.container.get_absolute_location(y="b") + dispense.offset
+      position = dispense.container.get_absolute_location(y="b") + dispense.offset + \
+        Coordinate(z=dispense.container.material_z_thickness)
       bottom = position.z
       lld_search_height = bottom + dispense.container.get_size_z() + 2.7-1
 

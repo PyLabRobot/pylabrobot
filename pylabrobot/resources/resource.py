@@ -543,7 +543,7 @@ class Resource:
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
       if child_cls is None:
-        raise ValueError(f"Could not find subclass with name {child_data['type']}")
+        raise ValueError(f'Could not find subclass with name {child_data["type"]}')
       child = child_cls.deserialize(child_data, allow_marshal=allow_marshal)
       location_data = child_data.get("location", None)
       if location_data is not None:

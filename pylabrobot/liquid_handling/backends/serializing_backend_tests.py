@@ -180,7 +180,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
         "intermediate_locations": [],
         "resource_offset": serialize(Coordinate.zero()),
         "destination_offset": serialize(Coordinate.zero()),
-        "pickup_distance_from_top": 13.2,
+        "pickup_distance_from_top": 9.87,
         "get_direction": "FRONT",
         "put_direction": "FRONT",
       }})
