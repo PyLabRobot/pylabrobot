@@ -376,7 +376,7 @@ def Hamilton_96_tiprack_NTR_50ul(name: str, with_tips: bool = True) -> TipRack:
       dx=9.45,
       dy=7.55,
       dz=56.0-40.5-2,
-      # top of Hamilton_96_tiprack_NTR_50ul - TIP_50ul_L.max_tip_length - ?
+      # top of Hamilton_96_tiprack_NTR_50ul - TIP_50ul_L.max_tip_length - "inbetween-space"(?)
       item_dx=9.0,
       item_dy=9.0,
       size_x=8.15,
