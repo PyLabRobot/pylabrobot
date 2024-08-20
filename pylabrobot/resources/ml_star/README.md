@@ -6,15 +6,27 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Tip carriers:
+### Tip carriers
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
 | 'TIP_CAR_480_A00'<br>Part no.: 182085<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182085) <br>Carrier for 5x 96 tip (10μl, 50μl, 300μl, 1000μl) racks or 5x 24 tip (5ml) racks (6T) | <img src="ims/TIP_CAR_480_A00_182085.jpg" alt="TIP_CAR_480_A00" width="250"/> | `TIP_CAR_480_A00` |
 
+
+#### TipRacks
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'TIP_50ul_L'<br>Formats:<br> - "50μL CO-RE Tips, sterile with filter": Part no.: [235979](https://www.hamiltoncompany.com/automated-liquid-handling/disposable-tips/50-%CE%BCl-conductive-sterile-filter-tips)<br>&nbsp;&nbsp;&nbsp;&nbsp;• Filter=Filter  <br>&nbsp;&nbsp;&nbsp;&nbsp;• Sterile=Sterile<br>&nbsp;&nbsp;&nbsp;&nbsp;• Tip Color (Conductivity)=Black (Conductive) | <img src="ims/TIP_50ul_L.png" alt="TIP_50ul_L" width="250"/> | `TIP_50ul_L` |
+| 'Hamilton_96_tiprack_50ul_NTR'<br>Formats:<br> - "50μL CO-REII Tips, stacked NTRs, sterile": Part no.: [235987](https://www.hamiltoncompany.com/automated-liquid-handling/disposable-tips/50-%C2%B5l-nested-clear-sterile-tips)<br>&nbsp;&nbsp;&nbsp;&nbsp;• Filter=Non-Filter  <br>&nbsp;&nbsp;&nbsp;&nbsp;• Sterile=Sterile<br>&nbsp;&nbsp;&nbsp;&nbsp;• Tip Color (Conductivity)=Black (Conductive)<br> - "50uL CO-REII Nested Clear Tips": Part no.: [235964](https://www.hamiltoncompany.com/automated-liquid-handling/disposable-tips/50-%C2%B5l-nested-clear-tips)<br>&nbsp;&nbsp;&nbsp;&nbsp;• Filter=Non-Filter  <br>&nbsp;&nbsp;&nbsp;&nbsp;• Sterile=Non-Sterile<br>&nbsp;&nbsp;&nbsp;&nbsp;• Tip Color (Conductivity)=Clear (Non-Conductive) <br> <br> Note: a **single** `NTR` is only **one rack**.<br> Multiple NTRs stacked on top of each other (as shown in the images on the right) are called a `TipStack`. | <img src="ims/Hamilton_96_tiprack_50ul_NTR.png" alt="Hamilton_96_tiprack_50ul_NTR" width="250"/><img src="ims/Hamilton_96_tiprack_50ul_NTR_CLEAR.png" alt="Hamilton_96_tiprack_50ul_NTR" width="250"/> | `Hamilton_96_tiprack_50ul_NTR` |
+
+
+
+
+
 ---
 
-### Plate carriers:
+### Plate carriers
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -22,7 +34,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### MFX carriers:
+### MFX carriers
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -30,7 +42,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 | 'MFX_CAR_L4_SHAKER'<br>Part no.: 187001<br>[secondary supplier website](https://www.testmart.com/estore/unit.cfm/PIPPET/HAMROB/187001/automated_pippetting_devices_and_systems/8.html) (cannot find information on Hamilton website)<br>Sometimes referred to as "PLT_CAR_L4_SHAKER" by Hamilton. <br>Template carrier with 4 positions for Hamilton Heater Shaker. <br>Occupies 7 tracks (7T). Can be screwed onto the deck. | <img src="ims/MFX_CAR_L4_SHAKER_187001.png" alt="MFX_CAR_L4_SHAKER" width="250"/> | `MFX_CAR_L4_SHAKER_187001` |
 
 
-#### MFX modules:
+#### MFX modules
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -40,7 +52,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Tube carriers:
+### Tube carriers
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -49,7 +61,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Trough carriers:
+### Trough carriers
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -57,7 +69,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 
 
-#### Troughs:
+#### Troughs
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
@@ -66,7 +78,7 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 
 ---
 
-### Adapters:
+### Adapters
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
