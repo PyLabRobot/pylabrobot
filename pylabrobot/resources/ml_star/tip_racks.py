@@ -368,18 +368,19 @@ def Hamilton_96_tiprack_NTR_50ul(name: str, with_tips: bool = True) -> TipRack:
     name=name,
     size_x=127.76,
     size_y=85.48,
-    size_z=56.0+10, # Hamilton_96_tiprack_NTR_50ul + TIP_50ul_L.fitting_depth
+    size_z=56.0, # Hamilton_96_tiprack_NTR_50ul + TIP_50ul_L.fitting_depth
     model="Hamilton_96_tiprack_NTR_50ul",
     ordered_items=create_ordered_items_2d(TipSpot,
       num_items_x=12,
       num_items_y=8,
-      dx=11.7, # 7.2,
-      dy=9.8, # 5.3,
-      dz=56.0-40.5, # top of Hamilton_96_tiprack_NTR_50ul - TIP_50ul_L.max_tip_length
+      dx=9.45,
+      dy=7.55,
+      dz=56.0-40.5-2,
+      # top of Hamilton_96_tiprack_NTR_50ul - TIP_50ul_L.max_tip_length - ?
       item_dx=9.0,
       item_dy=9.0,
-      size_x=9.0,
-      size_y=9.0,
+      size_x=8.15,
+      size_y=8.15,
       make_tip=fifty_ul_tip_no_filter,
     ),
     with_tips=with_tips

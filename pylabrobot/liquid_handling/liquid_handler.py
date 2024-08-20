@@ -1677,6 +1677,9 @@ class LiquidHandler(Machine):
       put_direction: The direction from which to put down the resource.
     """
 
+    # TODO: move conditional statements from move_plate into move_resource to enable
+    # movement to other types besides Coordinate
+
     extras = self._check_args(self.backend.move_resource, backend_kwargs, default={"move"})
     for extra in extras:
       del backend_kwargs[extra]
