@@ -362,20 +362,20 @@ def TIP_50ul_P(name: str, with_tips: bool = True) -> TipRack:
   return TIP_50ul_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-def NTR_50ul_L(name: str, with_tips: bool = True) -> TipRack:
+def Hamilton_96_tiprack_NTR_50ul(name: str, with_tips: bool = True) -> TipRack:
   """ Nested Tip Rack with 96 50ul Tip """
   return TipRack(
     name=name,
-    size_x=122.4,
-    size_y=82.6,
-    size_z=18.0,
-    model="NTR_50ul",
+    size_x=127.76,
+    size_y=85.48,
+    size_z=56.0+10, # Hamilton_96_tiprack_NTR_50ul + TIP_50ul_L.fitting_depth
+    model="Hamilton_96_tiprack_NTR_50ul",
     ordered_items=create_ordered_items_2d(TipSpot,
       num_items_x=12,
       num_items_y=8,
-      dx=7.2,
-      dy=5.3,
-      dz=-40.5,
+      dx=11.7, # 7.2,
+      dy=9.8, # 5.3,
+      dz=56.0-40.5, # top of Hamilton_96_tiprack_NTR_50ul - TIP_50ul_L.max_tip_length
       item_dx=9.0,
       item_dy=9.0,
       size_x=9.0,
@@ -385,7 +385,10 @@ def NTR_50ul_L(name: str, with_tips: bool = True) -> TipRack:
     with_tips=with_tips
   )
 
+def Hamilton_96_tiprack_NTR_50ul_L(name: str, with_tips: bool = True) -> TipRack:
+  """ Nested Tip Rack with 96 50ul Tip (landscape, i.e. default) """
+  return Hamilton_96_tiprack_NTR_50ul(name=name, with_tips=with_tips)
 
-def NTR_50ul_P(name: str, with_tips: bool = True) -> TipRack:
+def Hamilton_96_tiprack_NTR_50ul_P(name: str, with_tips: bool = True) -> TipRack:
   """ Nested Tip Rack with 96 50ul Tip (portrait) """
-  return NTR_50ul_L(name=name, with_tips=with_tips).rotated(z=90)
+  return Hamilton_96_tiprack_NTR_50ul(name=name, with_tips=with_tips).rotated(z=90)

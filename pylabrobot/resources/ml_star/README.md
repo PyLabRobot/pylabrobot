@@ -12,6 +12,15 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 |--------------------|--------------------|--------------------|
 | 'TIP_CAR_480_A00'<br>Part no.: 182085<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182085) <br>Carrier for 5x 96 tip (10μl, 50μl, 300μl, 1000μl) racks or 5x 24 tip (5ml) racks (6T) | <img src="ims/TIP_CAR_480_A00_182085.jpg" alt="TIP_CAR_480_A00" width="250"/> | `TIP_CAR_480_A00` |
 
+
+#### TipRacks:
+
+| Description               | Image              | PLR definition |
+|--------------------|--------------------|--------------------|
+| 'Hamilton_96_tiprack_NTR_50ul'<br>Versions<br> - "50μL CO-REII Tips, stacked NTRs, sterile": Part no.: 235987 (Filter=Non-Filter; Sterile=Sterile; Tip Color (Conductivity)=Black (Conductive))<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/disposable-tips/50-%C2%B5l-nested-clear-sterile-tips)<br> - "50uL CO-REII Nested Clear Tips": Part no.: 235964 (Filter=Non-Filter; Sterile=Non-Sterile; Tip Color (Conductivity)=Clear (Non-Conductive))<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/disposable-tips/50-%C2%B5l-nested-clear-tips) <br>Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack) | <img src="ims/Hamilton_96_tiprack_NTR_50ul.png" alt="Hamilton_96_tiprack_NTR_50ul" width="250"/><img src="ims/Hamilton_96_tiprack_NTR_50ul_CLEAR.png" alt="Hamilton_96_tiprack_NTR_50ul_CLEAR" width="250"/> | `Hamilton_96_tiprack_NTR_50ul` |
+
+
+
 ---
 
 ### Plate carriers:
