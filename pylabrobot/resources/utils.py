@@ -1,5 +1,6 @@
+import re
 from string import ascii_uppercase as LETTERS
-from typing import Dict, List, Type, TypeVar
+from typing import Dict, List, Optional, Type, TypeVar
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
@@ -154,3 +155,47 @@ def create_ordered_items_2d(
   )
   keys = [f"{LETTERS[j]}{i+1}" for i in range(num_items_x) for j in range(num_items_y)]
   return dict(zip(keys, [item for sublist in items for item in sublist]))
+
+
+U = TypeVar("U", bound=Resource)
+def query(
+  root: Resource,
+  type_: Type[U] = Resource, # type: ignore
+  name: Optional[str] = None,
+  x: Optional[float] = None,
+  y: Optional[float] = None,
+  z: Optional[float] = None,
+) -> List[U]:
+  """ Query resources based on their attributes.
+
+  Args:
+    root: The root resource to search
+    type_: The type of resources to search for
+    name: The regular expression to match the name of the resources
+    x: The x-coordinate of the resources
+    y: The y-coordinate of the resources
+    z: The z-coordinate of the resources
+  """
+  matched: List[U] = []
+  for resource in root.children:
+    if type_ is not None and not isinstance(resource, type_):
+      continue
+    if name is not None and not re.match(name, resource.name):
+      continue
+    if x is not None and (resource.location is None or resource.location.x != x):
+      continue
+    if y is not None and (resource.location is None or resource.location.y != y):
+      continue
+    if z is not None and (resource.location is None or resource.location.z != z):
+      continue
+    matched.append(resource)
+
+    matched.extend(query(
+      root=resource,
+      type_=type_,
+      name=name,
+      x=x,
+      y=y,
+      z=z,
+    ))
+  return matched
