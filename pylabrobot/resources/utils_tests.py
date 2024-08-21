@@ -34,5 +34,4 @@ def test_deep():
   root.assign_child_resource(child1, location=Coordinate(0, 0, 0))
   child1.assign_child_resource(grandchild, location=Coordinate(1, 1, 0))
 
-  print(query(root, Resource))
   assert query(root, Resource) == [child1, grandchild]
