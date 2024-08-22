@@ -1185,15 +1185,12 @@ def Cos_96_DWP_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
 
 
 def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
-  raise NotImplementedError("This lid is not currently defined.")
-  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
-
   return Lid(
     name=name,
     size_x=127.76,
     size_y=85.48,
-    size_z=None,             # measure the total z height
-    nesting_z_height=None,   # measure overlap between lid and plate
+    size_z=8.9,             # measure the total z height
+    nesting_z_height=7.6,   # measure overlap between lid and plate
     model="Cor_96_wellplate_360ul_Fb_Lid",
   )
 

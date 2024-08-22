@@ -6,6 +6,7 @@ from typing import Generic, List, Optional, Type, TypeVar, Union
 from .coordinate import Coordinate
 from .plate import Plate
 from .resource import Resource
+from .resource_stack import ResourceStack
 from .plate_adapter import PlateAdapter
 
 logger = logging.getLogger("pylabrobot")
@@ -216,8 +217,10 @@ class PlateCarrierSite(CarrierSite):
   def assign_child_resource(self, resource: Resource, location: Coordinate = Coordinate.zero(),
                             reassign: bool = True):
     if not isinstance(resource, (Plate, PlateAdapter)):
-      raise TypeError("PlateCarrierSite can only store Plate or PlateAdapter resources," + \
-                      f" not {type(resource)}")
+      if isinstance(resource, ResourceStack):
+        if not isinstance(resource.children[-1], (Plate, PlateAdapter)):
+          raise TypeError("PlateCarrierSite can only store Plate or PlateAdapter resources," + \
+                          f" not {type(resource)}")
 
     # TODO: add conditional logic to modify Plate position based on whether
     # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
