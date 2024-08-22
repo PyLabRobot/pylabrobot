@@ -216,11 +216,15 @@ class PlateCarrierSite(CarrierSite):
 
   def assign_child_resource(self, resource: Resource, location: Coordinate = Coordinate.zero(),
                             reassign: bool = True):
-    if not isinstance(resource, (Plate, PlateAdapter)):
-      if isinstance(resource, ResourceStack):
-        if not isinstance(resource.children[-1], (Plate, PlateAdapter)):
-          raise TypeError("PlateCarrierSite can only store Plate or PlateAdapter resources," + \
-                          f" not {type(resource)}")
+    if isinstance(resource, ResourceStack):
+      if not resource.direction == "z":
+        raise ValueError("ResourceStack assigned to PlateCarrierSite must have direction 'z'")
+      if not isinstance(resource.children[-1], (Plate, PlateAdapter)):
+        raise TypeError("If a ResourceStack is assigned to a PlateCarrierSite, the top item " + \
+                        f"must be a Plate or PlateAdapter, not {type(resource.children[-1])}")
+    elif not isinstance(resource, (Plate, PlateAdapter)):
+      raise TypeError("PlateCarrierSite can only store Plate, PlateAdapter or ResourceStack " + \
+                      f"resources, not {type(resource)}")
 
     # TODO: add conditional logic to modify Plate position based on whether
     # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
