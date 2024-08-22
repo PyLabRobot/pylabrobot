@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Serialize code cells and closures (https://github.com/PyLabRobot/pylabrobot/pull/220)
 - `Container.get_anchor()` now supports `"cavity_bottom"` as an argument for `z` (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - `pylabrobot.resources.utils.query` for basic querying (https://github.com/PyLabRobot/pylabrobot/commit/4a07f6a32a9a33d0370eb9c29015567c98aea002)
+- `HamiltonLiquidHandler.allow_firmware_planning` to allow STAR/Vantage to plan complex liquid handling operations automatically (may break hardware agnosticity unexpectedly) (https://github.com/PyLabRobot/pylabrobot/pull/224)
 
 ### Deprecated
 

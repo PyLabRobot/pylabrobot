@@ -62,6 +62,12 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, float]] = {}
     self._tth2tti: dict[int, int] = {} # hash to tip type index
 
+    # Whether to allow the firmware to plan liquid handling operations when the y positions are
+    # equal (same container). This allows you to pass the same container to aspirate and dispense
+    # multiple times in a single call, and the onboard firmware will compute the optimal order of
+    # operations. This is useful for efficiency but may hurt protocol interoperability.
+    self.allow_firmware_planning = False
+
   async def setup(self):
     await LiquidHandlerBackend.setup(self)
     await USBBackend.setup(self)
@@ -347,7 +353,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
           continue
         if x1 != x2: # channels not on the same column -> will be two operations on the machine
           continue
-        if abs(y1 - y2) < 90:
+        if not (self.allow_firmware_planning and y1 == y2) and abs(y1 - y2) < 90:
           raise ValueError(f"Minimum distance between two y positions is <9mm: {y1}, {y2}"
                            f" (channel {channel_idx1} and {channel_idx2})")
 
