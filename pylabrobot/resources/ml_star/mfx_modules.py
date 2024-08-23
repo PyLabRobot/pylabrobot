@@ -121,8 +121,8 @@ def MFX_DWP_rackbased_module(name: str) -> MFXModule:
     name=name,
     size_x=135.0,
     size_y=94.0,
-    size_z=178.73-18.195-100,
+    size_z=178.0-18.195-100,
     # probe height - carrier_height - deck_height
-    child_resource_location=Coordinate(4.0, 3.5, 178.73-18.195-100),
+    child_resource_location=Coordinate(4.0, 3.5, 178.0-18.195-100),
     model="MFX_TIP_module",
   )

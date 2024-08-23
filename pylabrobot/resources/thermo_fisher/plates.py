@@ -101,14 +101,14 @@ def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate
       num_items_y=8,
       dx=10.0,
       dy=7.3,
-      dz=1.0, # 2.5. https://github.com/PyLabRobot/pylabrobot/pull/183
+      dz=2.5, # 2.5. https://github.com/PyLabRobot/pylabrobot/pull/183
       item_dx=9,
       item_dy=9,
       size_x=8.3,
       size_y=8.3,
       size_z=20.5,
       bottom_type=WellBottomType.U,
-      material_z_thickness=1.0,
+      material_z_thickness=1.15,
       cross_section_type=CrossSectionType.RECTANGLE,
       compute_volume_from_height=(
         _compute_volume_from_height_Thermo_TS_96_wellplate_1200ul_Rb

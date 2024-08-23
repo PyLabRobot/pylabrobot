@@ -28,6 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Merge `height_functions.py` and `volume_functions.py` into `height_volume_functions.py` (https://github.com/PyLabRobot/pylabrobot/pull/200)
 - Type checking for `lh.pick_up_tips`, `lh.drop_tips`, `lh.aspirate`, and `lh.dispense` and 96-channel versions.
 - `ChatterBoxBackend` outputs are now pretty (https://github.com/PyLabRobot/pylabrobot/pull/208)
+- `liquid_height` now defaults to 0 instead of 1 (https://github.com/PyLabRobot/pylabrobot/pull/205/)
+- `material_z_thickness` of a `Container` is used in computing its bottom (https://github.com/PyLabRobot/pylabrobot/pull/205/)
+- Default `pickup_distance_from_top` in `LiquidHandler.{move_plate,move_lid}` were lowered by 3.33 (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - `PlateCarrierSite` can now take `ResourceStack` as a child, as long as the top item is a `Plate` or `PlateAdapter` (https://github.com/PyLabRobot/pylabrobot/pull/226)
 
 ### Added
@@ -46,6 +49,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Thermo_TS_96_wellplate_1200ul_Rb` (https://github.com/PyLabRobot/pylabrobot/pull/215)
 - `Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate` (https://github.com/PyLabRobot/pylabrobot/pull/215)
 - `adapter_hole_size_z` and `plate_z_offset` parameters to `PlateAdapter` (https://github.com/PyLabRobot/pylabrobot/pull/215)
+- `wide_high_volume_tip_with_filter` and `HTF_L_WIDE` (https://github.com/PyLabRobot/pylabrobot/pull/222)
+- Serialize code cells and closures (https://github.com/PyLabRobot/pylabrobot/pull/220)
+- `Container.get_anchor()` now supports `"cavity_bottom"` as an argument for `z` (https://github.com/PyLabRobot/pylabrobot/pull/205/)
+- `pylabrobot.resources.utils.query` for basic querying (https://github.com/PyLabRobot/pylabrobot/commit/4a07f6a32a9a33d0370eb9c29015567c98aea002)
+- `HamiltonLiquidHandler.allow_firmware_planning` to allow STAR/Vantage to plan complex liquid handling operations automatically (may break hardware agnosticity unexpectedly) (https://github.com/PyLabRobot/pylabrobot/pull/224)
 - `size_z` and ``nesting_z_height` for `Cor_96_wellplate_360ul_Fb_Lid` (https://github.com/PyLabRobot/pylabrobot/pull/226)
 
 ### Deprecated
@@ -54,6 +62,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Passing single values to LiquidHandler `pick_up_tips`, `drop_tips`, `aspirate`, and `dispense` methods. These methods now require a list of values.
 - `utils.positions`: `string_to_position`, `string_to_index`, `string_to_indices`, `string_to_pattern`.
 - `ThermoScientific_96_DWP_1200ul_Rd` in favor of `Thermo_TS_96_wellplate_1200ul_Rb` (https://github.com/PyLabRobot/pylabrobot/pull/215)
+- `Azenta4titudeFrameStar_96_wellplate_skirted` in favor of `Azenta4titudeFrameStar_96_wellplate_200ul_Vb` (https://github.com/PyLabRobot/pylabrobot/pull/205/)
+- `Cos_96_DWP_2mL_Vb` in favor of `Cos_96_wellplate_2mL_Vb (https://github.com/PyLabRobot/pylabrobot/pull/205/)`
 
 ### Fixed
 
@@ -62,6 +72,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fix Opentrons backend resource definitions: Opentrons takes well locations as ccc instead of lfb
 - Fix ThermoScientific_96_DWP_1200ul_Rd to ThermoScientific_96_wellplate_1200ul_Rd (https://github.com/PyLabRobot/pylabrobot/pull/183).
 - `libusb_package` is now an optional dependency.
+- Plates with a skirt are now correctly lowered when placed on plate carriers with a pedestal (https://github.com/PyLabRobot/pylabrobot/pull/205/)
+- `minimum_height` in `STAR` and `Vantage` now correctly refer to a `Container`s bottom instead of being a function of liquid height (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 
 ### Removed
 

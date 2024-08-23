@@ -24,10 +24,11 @@ class CarrierSite(Resource):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate = Coordinate.zero(),
+    location: Optional[Coordinate] = None,
     reassign: bool = True
   ):
     self.resource = resource
+    location = location or self._get_child_location(resource)
     return super().assign_child_resource(resource, location, reassign)
 
   def unassign_child_resource(self, resource):
@@ -36,6 +37,20 @@ class CarrierSite(Resource):
 
   def __eq__(self, other):
     return super().__eq__(other) and self.resource == other.resource
+
+  def _get_child_location(self, resource: Resource) -> Coordinate:
+    """ Get the location of the child resource if it is assigned to this carrier site. """
+    if not resource.rotation.y == resource.rotation.x == 0:
+      raise ValueError("Resource rotation must be 0 around the x and y axes")
+    if not resource.rotation.z % 90 == 0:
+      raise ValueError("Resource rotation must be a multiple of 90 degrees on the z axis")
+    location = {
+      0.0: Coordinate(x=0, y=0, z=0),
+      90.0: Coordinate(x=resource.get_size_x(), y=0, z=0),
+      180.0: Coordinate(x=resource.get_size_x(), y=resource.get_size_y(), z=0),
+      270.0: Coordinate(x=0, y=resource.get_size_y(), z=0),
+    }[resource.rotation.z % 360]
+    return location
 
 
 S = TypeVar("S", bound=Resource)
@@ -124,18 +139,7 @@ class Carrier(Resource, Generic[S]):
       raise IndexError(f"Invalid spot {spot}")
     if self.sites[spot].resource is not None:
       raise ValueError(f"spot {spot} already has a resource")
-
-    if not resource.rotation.y == resource.rotation.x == 0:
-      raise ValueError("Resource rotation must be 0 around the x and y axis")
-    if not resource.rotation.z % 90 == 0:
-      raise ValueError("Resource rotation must be a multiple of 90 degrees on the z axis")
-    location = {
-      0.0: Coordinate(x=0, y=0, z=0),
-      90.0: Coordinate(x=resource.get_size_x(), y=0, z=0),
-      180.0: Coordinate(x=resource.get_size_x(), y=resource.get_size_y(), z=0),
-      270.0: Coordinate(x=0, y=resource.get_size_y(), z=0),
-    }[resource.rotation.z % 360]
-    self.sites[spot].assign_child_resource(resource, location=location)
+    self.sites[spot].assign_child_resource(resource)
 
   def unassign_child_resource(self, resource):
     """ Unassign a resource from this carrier, checked by name.
@@ -214,7 +218,7 @@ class PlateCarrierSite(CarrierSite):
     self.resource: Optional[Plate] = None  # fix type
     # TODO: add self.pedestal_2D_offset if necessary in the future
 
-  def assign_child_resource(self, resource: Resource, location: Coordinate = Coordinate.zero(),
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
                             reassign: bool = True):
     if isinstance(resource, ResourceStack):
       if not resource.direction == "z":
@@ -225,10 +229,21 @@ class PlateCarrierSite(CarrierSite):
     elif not isinstance(resource, (Plate, PlateAdapter)):
       raise TypeError("PlateCarrierSite can only store Plate, PlateAdapter or ResourceStack " + \
                       f"resources, not {type(resource)}")
-
-    # TODO: add conditional logic to modify Plate position based on whether
-    # pedestal_size_z>plate_true_dz OR pedestal_z<pedestal_size_z IF child.category == 'plate'
     return super().assign_child_resource(resource, location, reassign)
+
+  def _get_child_location(self, resource: Resource) -> Coordinate:
+    z_sinking_depth = 0.0
+    if isinstance(resource, Plate):
+      # Sanity check for equal well clearances / dz
+      well_dz_set = {round(well.location.z, 2) for well in resource.get_all_children()
+               if well.category == "well" and well.location is not None}
+      assert len(well_dz_set) == 1, "All wells must have the same z location"
+      well_dz = well_dz_set.pop()
+      # Plate "sinking" logic based on well dz to pedestal relationship
+      pedestal_size_z = abs(self.pedestal_size_z)
+      z_sinking_depth = min(pedestal_size_z, well_dz)
+
+    return super()._get_child_location(resource) - Coordinate(z=z_sinking_depth)
 
   def serialize(self) -> dict:
     return { **super().serialize(), "pedestal_size_z": self.pedestal_size_z, }
