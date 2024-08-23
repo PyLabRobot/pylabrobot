@@ -1431,7 +1431,8 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: Optional[int] = None,
     min_z_endpos: Optional[int] = None,
 
-    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None
+    hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
+    liquid_surfaces_no_lld: Optional[List[float]] = None,
   ):
     """ Aspirate liquid from the specified channels.
 
@@ -1500,6 +1501,8 @@ class STAR(HamiltonLiquidHandler):
 
       hamilton_liquid_classes: Override the default liquid classes. See
         pylabrobot/liquid_handling/liquid_classes/hamilton/star.py
+      liquid_surface_no_lld: Liquid surface at function without LLD [0.1mm]. Must be between 0
+          and 3600. Default 3600.
     """
 
     x_positions, y_positions, channels_involved = \
@@ -1538,7 +1541,7 @@ class STAR(HamiltonLiquidHandler):
 
     well_bottoms = [op.resource.get_absolute_location().z + \
                     (op.offset.z if op.offset is not None else 0) for op in ops]
-    liquid_surfaces_no_lld = [wb + (op.liquid_height or 1)
+    liquid_surfaces_no_lld = liquid_surfaces_no_lld or [wb + (op.liquid_height or 1)
                               for wb, op in zip(well_bottoms, ops)]
     lld_search_heights = [wb + op.resource.get_size_z() + \
                             (2.7 if isinstance(op.resource, Well) else 5) #?
