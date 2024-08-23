@@ -185,3 +185,46 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
   def get_all_tips(self) -> List[Tip]:
     """ Get all tips in the tip rack. """
     return [ts.get_tip() for ts in self.get_all_items()]
+
+
+class NestedTipRack(TipRack):
+  """ A nested tip rack. """
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    stacking_z_height: float,
+    ordered_items: Optional[Dict[str, TipSpot]] = None,
+    ordering: Optional[List[str]] = None,
+    items: Optional[List[List[TipSpot]]] = None,
+    num_items_x: Optional[int] = None,
+    num_items_y: Optional[int] = None,
+    category: str = "tip_rack",
+    model: Optional[str] = None,
+    with_tips: bool = True,
+  ):
+  # Call the superclass constructor
+  super().__init__(
+    name=name,
+    size_x=size_x,
+    size_y=size_y,
+    size_z=size_z,
+    ordered_items=ordered_items,
+    ordering=ordering,
+    items=items,
+    num_items_x=num_items_x,
+    num_items_y=num_items_y,
+    category=category,
+    model=model,
+    with_tips=with_tips
+  )
+
+  # Initialize the new attribute
+  self.stacking_z_height = stacking_z_height
+
+  def __repr__(self) -> str:
+    return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
+            f"size_y={self._size_y}, size_z={self._size_z}, "
+            f"stacking_z_height={self.stacking_z_height}, location={self.location})")
