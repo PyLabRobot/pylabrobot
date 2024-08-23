@@ -232,18 +232,46 @@ class PlateCarrierSite(CarrierSite):
     return super().assign_child_resource(resource, location, reassign)
 
   def _get_child_location(self, resource: Resource) -> Coordinate:
-    z_sinking_depth = 0.0
-    if isinstance(resource, Plate):
+    def get_plate_sinking_depth(plate: Plate):
       # Sanity check for equal well clearances / dz
-      well_dz_set = {round(well.location.z, 2) for well in resource.get_all_children()
-               if well.category == "well" and well.location is not None}
+      well_dz_set = {round(well.location.z, 2) for well in plate.get_all_children()
+                     if well.category == "well" and well.location is not None}
       assert len(well_dz_set) == 1, "All wells must have the same z location"
       well_dz = well_dz_set.pop()
       # Plate "sinking" logic based on well dz to pedestal relationship
       pedestal_size_z = abs(self.pedestal_size_z)
       z_sinking_depth = min(pedestal_size_z, well_dz)
+      return z_sinking_depth
+
+    z_sinking_depth = 0.0
+    if isinstance(resource, Plate):
+      z_sinking_depth = get_plate_sinking_depth(resource)
+    elif isinstance(resource, ResourceStack) and len(resource.children) > 0:
+      first_child = resource.children[0]
+      if isinstance(first_child, Plate):
+        z_sinking_depth = get_plate_sinking_depth(first_child)
+      resource.register_did_assign_resource_callback(self._update_resource_stack_location)
+      self.register_did_unassign_resource_callback(self._deregister_resource_stack_callback)
 
     return super()._get_child_location(resource) - Coordinate(z=z_sinking_depth)
+
+  def _update_resource_stack_location(self, resource: Resource):
+    """ Callback called when the lowest resource on a ResourceStack changes. Since the location of
+    the lowest resource on the stack wrt the ResourceStack is always 0,0,0, we need to update the
+    location of the ResourceStack itself to make sure we take into account sinking of the plate.
+
+    Args:
+      resource: The Resource on the ResourceStack tht was assigned.
+    """
+    resource_stack = resource.parent
+    assert isinstance(resource_stack, ResourceStack)
+    if resource_stack.children[0] == resource:
+      resource_stack.location = self._get_child_location(resource)
+
+  def _deregister_resource_stack_callback(self, resource: Resource):
+    """ Callback called when a ResourceStack (or child) is unassigned from this PlateCarrierSite."""
+    if isinstance(resource, ResourceStack): # the ResourceStack itself is unassigned
+      resource.deregister_did_assign_resource_callback(self._update_resource_stack_location)
 
   def serialize(self) -> dict:
     return { **super().serialize(), "pedestal_size_z": self.pedestal_size_z, }
