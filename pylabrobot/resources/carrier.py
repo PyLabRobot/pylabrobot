@@ -223,9 +223,9 @@ class PlateCarrierSite(CarrierSite):
     if isinstance(resource, ResourceStack):
       if not resource.direction == "z":
         raise ValueError("ResourceStack assigned to PlateCarrierSite must have direction 'z'")
-      if not isinstance(resource.children[-1], (Plate, PlateAdapter)):
-        raise TypeError("If a ResourceStack is assigned to a PlateCarrierSite, the top item " + \
-                        f"must be a Plate or PlateAdapter, not {type(resource.children[-1])}")
+      if not all(isinstance(c, Plate) for c in resource.children):
+        raise TypeError("If a ResourceStack is assigned to a PlateCarrierSite, the items " + \
+                        f"must be Plates, not {type(resource.children[-1])}")
     elif not isinstance(resource, (Plate, PlateAdapter)):
       raise TypeError("PlateCarrierSite can only store Plate, PlateAdapter or ResourceStack " + \
                       f"resources, not {type(resource)}")
