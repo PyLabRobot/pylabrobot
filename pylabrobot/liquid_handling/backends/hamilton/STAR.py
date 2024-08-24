@@ -1540,7 +1540,7 @@ class STAR(HamiltonLiquidHandler):
       hamilton_liquid_classes: Override the default liquid classes. See
         pylabrobot/liquid_handling/liquid_classes/hamilton/star.py
       liquid_surface_no_lld: Liquid surface at function without LLD [mm]. Must be between 0
-          and 360. Defaults to liquid height or 1 + well bottom. Should use absolute z.
+          and 360. Defaults to well bottom + liquid height. Should use absolute z.
     """
 
     x_positions, y_positions, channels_involved = \
