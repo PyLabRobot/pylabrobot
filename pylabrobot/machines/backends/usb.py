@@ -4,13 +4,13 @@ from abc import ABCMeta, abstractmethod
 import logging
 import time
 from typing import List, Optional, TYPE_CHECKING
-import libusb_package
 
 from pylabrobot.machines.backends.machine import MachineBackend
 
 try:
   import usb.core
   import usb.util
+  import libusb_package
   USE_USB = True
 except ImportError:
   USE_USB = False
@@ -32,7 +32,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     self,
     id_vendor: int,
     id_product: int,
-    address: Optional[int] = None,
+    device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
@@ -43,8 +43,8 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     Args:
       id_vendor: The USB vendor ID of the machine.
       id_product: The USB product ID of the machine.
-      address: The USB address of the machine. If `None`, use the first device found. This is useful
-        for machines that have no unique serial number, such as the Hamilton STAR.
+      device_address: The USB device_address of the machine. If `None`, use the first device found.
+        This is useful for machines that have no unique serial number, such as the Hamilton STAR.
       serial_number: The serial number of the machine. If `None`, use the first device found.
       packet_read_timeout: The timeout for reading packets from the machine in seconds.
       read_timeout: The timeout for reading from the machine in seconds.
@@ -58,7 +58,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
 
     self.id_vendor = id_vendor
     self.id_product = id_product
-    self.address = address
+    self.device_address = device_address
     self.serial_number = serial_number
 
     self.packet_read_timeout = packet_read_timeout
@@ -148,7 +148,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
 
   def get_available_devices(self) -> List["usb.core.Device"]:
     """ Get a list of available devices that match the specified vendor and product IDs, and serial
-    number and address if specified. """
+    number and device_address if specified. """
 
     found_devices = libusb_package.find(
       idVendor=self.id_vendor,
@@ -157,12 +157,12 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     )
     devices: List["usb.core.Device"] = []
     for dev in found_devices:
-      if self.address is not None:
+      if self.device_address is not None:
         if dev.address is None:
           raise RuntimeError("A device address was specified, but the backend used for PyUSB does "
           "not support device addresses.")
 
-        if dev.address != self.address:
+        if dev.address != self.device_address:
           continue
 
       if self.serial_number is not None:
@@ -189,7 +189,8 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     """ Initialize the USB connection to the machine."""
 
     if not USE_USB:
-      raise RuntimeError("USB is not enabled. Please install pyusb.")
+      raise RuntimeError("USB is not enabled. Please install pyusb and libusb."
+                         "https://docs.pylabrobot.org/installation.html")
 
     if self.dev is not None:
       logging.warning("Already initialized. Please call stop() first.")
@@ -242,3 +243,17 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     logging.warning("Closing connection to USB device.")
     usb.util.dispose_resources(self.dev)
     self.dev = None
+
+  def serialize(self) -> dict:
+    """ Serialize the backend to a dictionary. """
+
+    return {
+      **super().serialize(),
+      "id_vendor": self.id_vendor,
+      "id_product": self.id_product,
+      "device_address": self.device_address,
+      "serial_number": self.serial_number,
+      "packet_read_timeout": self.packet_read_timeout,
+      "read_timeout": self.read_timeout,
+      "write_timeout": self.write_timeout
+    }

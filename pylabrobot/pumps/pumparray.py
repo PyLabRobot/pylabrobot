@@ -1,5 +1,5 @@
 import asyncio
-from typing import Union, Optional, List, Literal
+from typing import Union, Optional, List
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.pumps.backend import PumpArrayBackend
@@ -18,12 +18,28 @@ class PumpArray(Machine):
     num_channels: The number of channels that the pump array has.
   """
 
-  def __init__(self, backend: PumpArrayBackend, calibration: Optional[PumpCalibration] = None):
-    self._setup_finished = False
-    self.backend: PumpArrayBackend = backend
+  def __init__(
+    self,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    backend: PumpArrayBackend,
+    category: Optional[str] = None,
+    model: Optional[str] = None,
+    calibration: Optional[PumpCalibration] = None,
+  ):
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      backend=backend,
+      category=category,
+      model=model,
+    )
+    self.backend: PumpArrayBackend = backend # fix type
     self.calibration = calibration
-    self.calibration_mode: Optional[Literal["duration", "revolutions"]] = \
-      calibration.calibration_mode if calibration else None
 
   @property
   def num_channels(self) -> int:
@@ -34,6 +50,20 @@ class PumpArray(Machine):
     """
 
     return self.backend.num_channels
+
+  def serialize(self) -> dict:
+    if self.calibration is None:
+      return super().serialize()
+    return {**super().serialize(), "calibration": self.calibration.serialize()}
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False):
+    data_copy = data.copy()
+    calibration_data = data_copy.pop("calibration", None)
+    if calibration_data is not None:
+      calibration = PumpCalibration.deserialize(calibration_data)
+      data_copy["calibration"] = calibration
+    return super().deserialize(data_copy, allow_marshal=allow_marshal)
 
   async def run_revolutions(self, num_revolutions: Union[float, List[float]],
                             use_channels: Union[int, List[int]]):
@@ -127,7 +157,7 @@ class PumpArray(Machine):
       raise ValueError("Volume must be positive.")
     if not len(speed) == len(use_channels) == len(volume):
       raise ValueError("Speed, use_channels, and volume must be the same length.")
-    if self.calibration_mode == "duration":
+    if self.calibration.calibration_mode == "duration":
       durations = [channel_volume / self.calibration[channel] for channel, channel_volume in
                     zip(use_channels, volume)]
       tasks = [asyncio.create_task(
@@ -135,7 +165,7 @@ class PumpArray(Machine):
                               use_channels=channel,
                               duration=duration))
           for channel_speed, channel, duration in zip(speed, use_channels, durations)]
-    elif self.calibration_mode == "revolutions":
+    elif self.calibration.calibration_mode == "revolutions":
       num_rotations = [channel_volume / self.calibration[channel] for channel, channel_volume in
                         zip(use_channels, volume)]
       tasks = [asyncio.create_task(

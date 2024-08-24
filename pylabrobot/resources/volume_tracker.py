@@ -10,20 +10,40 @@ from pylabrobot.serializer import serialize, deserialize
 
 this = sys.modules[__name__]
 this.volume_tracking_enabled = False # type: ignore
+this.cross_contamination_tracking_enabled = False # type: ignore
 
 def set_volume_tracking(enabled: bool):
   this.volume_tracking_enabled = enabled # type: ignore
+  if not enabled:
+    this.cross_contamination_tracking_enabled = False # type: ignore
 
 def does_volume_tracking() -> bool:
   return this.volume_tracking_enabled # type: ignore
 
 @contextlib.contextmanager
 def no_volume_tracking():
-  old_value = this.volume_tracking_enabled
+  vt, ct = this.volume_tracking_enabled, this.cross_contamination_tracking_enabled # type: ignore
   this.volume_tracking_enabled = False # type: ignore
+  this.cross_contamination_tracking_enabled = False # type: ignore
   yield
-  this.volume_tracking_enabled = old_value # type: ignore
+  this.volume_tracking_enabled = vt # type: ignore
+  this.cross_contamination_tracking_enabled = ct # type: ignore
 
+def set_cross_contamination_tracking(enabled: bool):
+  if enabled:
+    assert this.volume_tracking_enabled, \
+      "Cross contamination tracking only possible if volume tracking active."
+  this.cross_contamination_tracking_enabled = enabled # type: ignore
+
+def does_cross_contamination_tracking() -> bool:
+  return this.cross_contamination_tracking_enabled # type: ignore
+
+@contextlib.contextmanager
+def no_cross_contamination_tracking():
+  old_value = this.cross_contamination_tracking_enabled
+  this.cross_contamination_tracking_enabled = False # type: ignore
+  yield
+  this.cross_contamination_tracking_enabled = old_value # type: ignore
 
 VolumeTrackerCallback = Callable[[], None]
 
@@ -36,13 +56,17 @@ class VolumeTracker:
     self,
     max_volume: float,
     liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None,
-    pending_liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None
+    pending_liquids: Optional[List[Tuple[Optional[Liquid], float]]] = None,
+    liquid_history: Optional[set] = None
   ) -> None:
     self._is_disabled = False
+    self._is_cross_contamination_tracking_disabled = False
     self.max_volume = max_volume
 
     self.liquids: List[Tuple[Optional[Liquid], float]] = liquids or []
     self.pending_liquids: List[Tuple[Optional[Liquid], float]] = pending_liquids or []
+
+    self.liquid_history = {liquid for liquid in (liquid_history or set()) if liquid is not None}
 
     self._callback: Optional[VolumeTrackerCallback] = None
 
@@ -50,18 +74,34 @@ class VolumeTracker:
   def is_disabled(self) -> bool:
     return self._is_disabled
 
+  @property
+  def is_cross_contamination_tracking_disabled(self) -> bool:
+    return self._is_cross_contamination_tracking_disabled
+
   def disable(self) -> None:
     """ Disable the volume tracker. """
     self._is_disabled = True
+
+  def disable_cross_contamination_tracking(self) -> None:
+    """ Disable the cross contamination tracker. """
+    self._is_cross_contamination_tracking_disabled = True
 
   def enable(self) -> None:
     """ Enable the volume tracker. """
     self._is_disabled = False
 
+  def enable_cross_contamination_tracking(self) -> None:
+    """ Enable the cross contamination tracker. """
+    self._is_cross_contamination_tracking_disabled = False
+
   def set_liquids(self, liquids: List[Tuple[Optional["Liquid"], float]]) -> None:
     """ Set the liquids in the container. """
     self.liquids = liquids
     self.pending_liquids = liquids
+
+    if not self.is_cross_contamination_tracking_disabled:
+      self.liquid_history.update([l[0] for l in liquids])
+
     if self._callback is not None:
       self._callback()
 
@@ -85,6 +125,9 @@ class VolumeTracker:
       else:
         removed_liquids.append((liquid, liquid_volume))
 
+    if self._callback is not None:
+      self._callback()
+
     return removed_liquids
 
   def add_liquid(self, liquid: Optional["Liquid"], volume: float) -> None:
@@ -93,6 +136,11 @@ class VolumeTracker:
     if volume > self.get_free_volume():
       raise TooLittleVolumeError(
         f"Container has too little volume: {volume}uL > {self.get_free_volume()}uL.")
+
+    # Update the liquid history tracker if needed
+    if not self.is_cross_contamination_tracking_disabled:
+      if liquid is not None:
+        self.liquid_history.add(liquid)
 
     # If the last liquid is the same as the one we want to add, just add the volume to it.
     if len(self.pending_liquids) > 0:
@@ -103,6 +151,9 @@ class VolumeTracker:
         self.pending_liquids.append((liquid, volume))
     else:
       self.pending_liquids.append((liquid, volume))
+
+    if self._callback is not None:
+      self._callback()
 
   def get_used_volume(self) -> float:
     """ Get the used volume of the container. Note that this includes pending operations. """
@@ -146,8 +197,20 @@ class VolumeTracker:
     assert not self.is_disabled, "Volume tracker is disabled. Call `enable()`."
     self.pending_liquids.clear()
 
+  def clear_cross_contamination_history(self) -> None:
+    """ Resets the liquid_history for cross contamination tracking. Use when there is a wash step.
+    """
+    self.liquid_history.clear()
+
   def serialize(self) -> dict:
     """ Serialize the volume tracker. """
+
+    if not self.is_cross_contamination_tracking_disabled:
+      return {
+        "liquids": [serialize(l) for l in self.liquids],
+        "pending_liquids": [serialize(l) for l in self.pending_liquids],
+        "liquid_history": [serialize(l) for l in self.liquid_history],
+      }
 
     return {
       "liquids": [serialize(l) for l in self.liquids],
@@ -162,6 +225,9 @@ class VolumeTracker:
 
     self.liquids = [load_liquid(l) for l in state["liquids"]]
     self.pending_liquids = [load_liquid(l) for l in state["pending_liquids"]]
+
+    if not self.is_cross_contamination_tracking_disabled:
+      self.liquid_history = set(state["liquid_history"])
 
   def register_callback(self, callback: VolumeTrackerCallback) -> None:
     self._callback = callback

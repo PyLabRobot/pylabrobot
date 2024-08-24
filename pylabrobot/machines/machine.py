@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
 from typing import Optional, Callable
 
 from pylabrobot.machines.backends import MachineBackend
@@ -25,10 +25,10 @@ def need_setup_finished(func: Callable):
     return await func(self, *args, **kwargs)
   return wrapper
 
+
 class Machine(Resource, metaclass=ABCMeta):
   """ Abstract class for machine frontends. All Machines are Resources. """
 
-  @abstractmethod
   def __init__(
     self,
     name: str,
@@ -48,8 +48,19 @@ class Machine(Resource, metaclass=ABCMeta):
   def setup_finished(self) -> bool:
     return self._setup_finished
 
-  async def setup(self):
-    await self.backend.setup()
+  def serialize(self) -> dict:
+    return {**super().serialize(), "backend": self.backend.serialize()}
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False):
+    data_copy = data.copy() # copy data because we will be modifying it
+    backend_data = data_copy.pop("backend")
+    backend = MachineBackend.deserialize(backend_data)
+    data_copy["backend"] = backend
+    return super().deserialize(data_copy, allow_marshal=allow_marshal)
+
+  async def setup(self, **backend_kwargs):
+    await self.backend.setup(**backend_kwargs)
     self._setup_finished = True
 
   @need_setup_finished

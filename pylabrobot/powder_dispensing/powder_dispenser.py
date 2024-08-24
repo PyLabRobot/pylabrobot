@@ -80,7 +80,3 @@ class PowderDispenser(Machine):
     result = await self.backend.dispense(powder_dispenses, **backend_kwargs)
 
     return cast(List[Dict[str, Any]], result)
-
-  async def setup(self):
-    """ Setup the powder dispenser. This method should be called before any dispensing actions. """
-    await super().setup()

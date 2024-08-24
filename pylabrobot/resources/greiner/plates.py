@@ -2,9 +2,9 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType
-from pylabrobot.resources.itemized_resource import create_equally_spaced
+from pylabrobot.resources.utils import create_ordered_items_2d
 
 
 def _compute_volume_from_height_Gre_384_Sq(h: float) -> float:
@@ -14,6 +14,19 @@ def _compute_volume_from_height_Gre_384_Sq(h: float) -> float:
   return volume
 
 
+def Gre_384_Sq_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Gre_384_Sq_Lid",
+  # )
+
+
 def Gre_384_Sq(name: str, with_lid: bool = False) -> Plate:
   """ Gre_384_Sq """
   return Plate(
@@ -21,14 +34,14 @@ def Gre_384_Sq(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.5,
-    with_lid=with_lid,
+    lid=Gre_384_Sq_Lid(name + "_lid") if with_lid else None,
     model="Gre_384_Sq",
-    items=create_equally_spaced(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=24,
       num_items_y=16,
-      dx=9.5,
       # dy=-1215.5, # from hamilton definition
-      dy=12.155, # verified empirically
+      dx=7 + 2.25, # (86 - 16*4.5) / 2 + half well width
+      dy=9.5 + 2.25, # (86 - 16*4.5) / 2 + half well width
       dz=2.85,
       item_dx=4.5,
       item_dy=4.5,
@@ -48,6 +61,19 @@ def _compute_volume_from_height_Gre_1536_Sq(h: float) -> float:
   return volume
 
 
+def Gre_1536_Sq_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Gre_1536_Sq_Lid",
+  # )
+
+
 def Gre_1536_Sq(name: str, with_lid: bool = False) -> Plate:
   """ Gre_1536_Sq """
   return Plate(
@@ -55,9 +81,9 @@ def Gre_1536_Sq(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=10.4,
-    with_lid=with_lid,
+    lid=Gre_1536_Sq_Lid(name + "_lid") if with_lid else None,
     model="Gre_1536_Sq",
-    items=create_equally_spaced(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=48,
       num_items_y=32,
       dx=9.5,
@@ -82,12 +108,25 @@ def Gre_1536_Sq_L(name: str, with_lid: bool = False) -> Plate:
 
 def Gre_1536_Sq_P(name: str, with_lid: bool = False) -> Plate:
   """ Gre_1536_Sq """
-  return Gre_1536_Sq(name=name, with_lid=with_lid).rotated(90)
+  return Gre_1536_Sq(name=name, with_lid=with_lid).rotated(z=90)
 def _compute_volume_from_height_Greiner96Well_655_101(h: float) -> float:
   volume = min(h, 10.9)*35.0152
   if h > 10.9:
     raise ValueError(f"Height {h} is too large for Greiner96Well_655_101")
   return volume
+
+
+def Greiner96Well_655_101_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Greiner96Well_655_101_Lid",
+  # )
 
 
 # done with python
@@ -101,9 +140,9 @@ def Greiner96Well_655_101(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.4,
-    with_lid=with_lid,
+    lid=Greiner96Well_655_101_Lid(name + "_lid") if with_lid else None,
     model="Greiner96Well_655_101",
-    items=create_equally_spaced(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=9.5,
@@ -129,6 +168,19 @@ def _compute_volume_from_height_Greiner96Well_650_201_RB(h: float) -> float:
   return volume
 
 
+def Greiner96Well_650_201_RB_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
+  # return Lid(
+  #   name=name,
+  #   size_x=127.0,
+  #   size_y=86.0,
+  #   size_z=None,           # measure the total z height
+  #   nesting_z_height=None, # measure overlap between lid and plate
+  #   model="Greiner96Well_650_201_RB_Lid",
+  # )
+
+
 def Greiner96Well_650_201_RB(name: str, with_lid: bool = False) -> Plate:
   """ Greiner96Well_650_201_RB """
   return Plate(
@@ -136,9 +188,9 @@ def Greiner96Well_650_201_RB(name: str, with_lid: bool = False) -> Plate:
     size_x=127.0,
     size_y=86.0,
     size_z=14.6,
-    with_lid=with_lid,
+    lid=Greiner96Well_650_201_RB_Lid(name + "_lid") if with_lid else None,
     model="Greiner96Well_650_201_RB",
-    items=create_equally_spaced(Well,
+    ordered_items=create_ordered_items_2d(Well,
       num_items_x=12,
       num_items_y=8,
       dx=9.88,

@@ -7,11 +7,21 @@
 
 ## What is PyLabRobot?
 
-PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots and other lab automation equipment. Read [the paper](<https://www.cell.com/device/fulltext/S2666-9986(23)00170-9>) in Device.
+PyLabRobot is a hardware agnostic, pure Python library for liquid handling robots, plate readers, pumps, scales, heater shakers, and other lab automation equipment. Read [the paper](<https://www.cell.com/device/fulltext/S2666-9986(23)00170-9>) in Device.
 
-### Liquid handling robots
+Advantages over proprietary software:
 
-PyLabRobot provides a layer of general-purpose abstractions over robot functions, with various device drivers for communicating with different kinds of robots. Right now we only have drivers for Hamilton, Tecan and Opentrons liquid handling robots, but we will soon have drivers for many more. The Hamiton and Tecan backends provide an interactive firmware interface that works on Windows, macOS and Linux. The Opentrons driver is based on the [Opentrons HTTP API](https://github.com/rickwierenga/opentrons-python-api). We also provide a browser-based Visualizer which can visualize the state of the deck during a run, and testing backends which do not require access to a robot.
+- **Cross-platform**: PyLabRobot works on Windows, macOS, and Linux. Many other interfaces are Windows-only.
+- **Universal**: PyLabRobot works with any supported liquid handling robot, plate reader, pump, scale, heater shaker, etc. through a single interface.
+- **Fast iteration**: PyLabRobot enables rapid development of protocols using atomic commands run interactively in Jupyter notebooks or the Python REPL. This decreases iteration time from minutes to seconds.
+- **Open-source**: PyLabRobot is open-source and free to use.
+- **Control**: With Python, you have ultimate flexibility to control your lab automation equipment. You can write Turing-complete protocols that include feedback loops.
+- **Modern**: PyLabRobot is built on modern Python 3.8+ features and async/await syntax.
+- **Fast support**: PyLabRobot has [an active community forum](https://labautomation.io/c/pylabrobot-user-discussion/26) for support and discussion, and most pull requests are merged within a day.
+
+### Liquid handling robots ([docs](https://docs.pylabrobot.org/basic.html))
+
+PyLabRobot enables the use of any liquid handling robot through a single universal interface, that works on any modern operating system (Windows, macOS, Linux). We currently support Hamilton STAR, Hamilton Vantage, Tecan Freedom EVO, and Opentrons OT-2 robots, but we will soon support many more.
 
 Here's a quick example showing how to move 100uL of liquid from well A1 to A2 using firmware on **Hamilton STAR** (this will work on any operating system!):
 
@@ -30,40 +40,34 @@ await lh.dispense(lh.deck.get_resource("plate")["A2"], vols=100)
 await lh.return_tips()
 ```
 
-To run the same procedure on an **Opentrons**, change the following lines:
+To run the same protocol on an **Opentrons**, use the following:
 
-```diff
-- from pylabrobot.liquid_handling.backends import STAR
-+ from pylabrobot.liquid_handling.backends import OpentronsBackend
-
-- deck = Deck.load_from_json_file("hamilton-layout.json")
-+ deck = Deck.load_from_json_file("opentrons-layout.json")
-
-- lh = LiquidHandler(backend=STAR(), deck=deck)
-+ lh = LiquidHandler(backend=OpentronsBackend(host="x.x.x.x"), deck=deck)
+```python
+from pylabrobot.liquid_handling.backends import OpentronsBackend
+deck = Deck.load_from_json_file("opentrons-layout.json")
+lh = LiquidHandler(backend=OpentronsBackend(host="x.x.x.x"), deck=deck)
 ```
 
 Or **Tecan** (also works on any operating system!):
 
-```diff
-- from pylabrobot.liquid_handling.backends import STAR
-+ from pylabrobot.liquid_handling.backends import EVO
-
-- deck = Deck.load_from_json_file("hamilton-layout.json")
-+ deck = Deck.load_from_json_file("tecan-layout.json")
-
-- lh = LiquidHandler(backend=STAR(), deck=deck)
-+ lh = LiquidHandler(backend=EVO(), deck=deck)
+```python
+from pylabrobot.liquid_handling.backends import EVO
+deck = Deck.load_from_json_file("tecan-layout.json")
+lh = LiquidHandler(backend=EVO(), deck=deck)
 ```
 
-### Plate readers
+We also provide a browser-based Visualizer which can visualize the state of the deck during a run, and can be used to develop and test protocols without a physical robot.
+
+![Visualizer](.github/img/visualizer.png)
+
+### Plate readers ([docs](https://docs.pylabrobot.org/plate_reading.html))
 
 PyLabRobot also provides a layer of general-purpose abstractions for plate readers, currently with just a driver for the ClarioStar. This driver works on Windows, macOS and Linux. Here's a quick example showing how to read a plate using the ClarioStar:
 
 ```python
 from pylabrobot.plate_reading import PlateReader, ClarioStar
 
-pr = PlateReader(name="plate reader", backend=ClarioStar())
+pr = PlateReader(name="plate reader", backend=ClarioStar(), size_x=1, size_y=1, size_z=1)
 await pr.setup()
 
 # Use in combination with a liquid handler
@@ -71,6 +75,61 @@ lh.assign_child_resource(pr, location=Coordinate(x, y, z))
 lh.move_plate(lh.deck.get_resource("plate"), pr)
 
 data = await pr.read_luminescence()
+```
+
+### Pumps ([docs](https://docs.pylabrobot.org/pumps.html))
+
+Pumping at 100 rpm for 30 seconds using a Masterflex pump:
+
+```python
+from pylabrobot.pumps import Pump
+from pylabrobot.pumps.cole_parmer.masterflex import Masterflex
+
+p = Pump(backend=Masterflex())
+await p.setup()
+await p.run_for_duration(speed=100, duration=30)
+```
+
+### Scales ([docs](https://docs.pylabrobot.org/scales.html))
+
+Taking a measurement from a Mettler Toledo scale:
+
+```python
+from pylabrobot.scales import Scale
+from pylabrobot.scales.mettler_toledo import MettlerToledoWXS205SDU
+
+backend = MettlerToledoWXS205SDU(port="/dev/cu.usbserial-110")
+scale = Scale(backend=backend, size_x=0, size_y=0, size_z=0)
+await scale.setup()
+
+weight = await scale.get_weight()
+```
+
+### Heater shakers ([docs](https://docs.pylabrobot.org/heater_shakers.html))
+
+Setting the temperature of a heater shaker to 37&deg;C:
+
+```python
+from pylabrobot.heating_shaking import HeaterShaker
+from pylabrobot.heating_shaking import InhecoThermoShake
+
+backend = InhecoThermoShake()
+hs = HeaterShaker(backend=backend, name="HeaterShaker", size_x=0, size_y=0, size_z=0)
+await hs.setup()
+await hs.set_temperature(37)
+```
+
+### Fans ([docs](https://docs.pylabrobot.org/fans.html))
+
+Running a fan at 100% intensity for one minute:
+
+```python
+from pylabrobot.only_fans import Fan
+from pylabrobot.only_fans import HamiltonHepaFan
+
+fan = Fan(backend=HamiltonHepaFan(), name="my fan")
+await fan.setup()
+await fan.turn_on(intensity=100, duration=60)
 ```
 
 ## Resources

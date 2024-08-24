@@ -19,11 +19,11 @@ def _is_python_3_10():
 def _mock_define(lw):
   return {
     "data": {
-      "definitionUri": f"lw['namespace']/{lw['metadata']['displayName']}/1"
+      "definitionUri": f'lw["namespace"]/{lw["metadata"]["displayName"]}/1'
     }
   }
 
-def _mock_add(load_name, namespace, slot, version, labware_id, display_name):
+def _mock_add(load_name, namespace, ot_location, version, labware_id, display_name):
   # pylint: disable=unused-argument
   return labware_id
 

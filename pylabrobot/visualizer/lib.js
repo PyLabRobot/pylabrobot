@@ -20,6 +20,16 @@ var resources = {}; // name -> Resource object
 
 let trash;
 
+let gif;
+
+let resourceImage;
+
+// Used in gif generation
+let isRecording = false;
+let recordingCounter = 0; // Counter to track the number of recorded frames
+var frameImages = [];
+let frameInterval = 8;
+
 function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
   // Return the snapping resource that the given point is within, or undefined if there is no such resource.
   // A snapping resource is a spot within a plate/tip carrier or the OT deck.
@@ -376,6 +386,13 @@ class Resource {
 
   update() {
     this.draw(resourceLayer);
+
+    if (isRecording) {
+      if (recordingCounter % frameInterval == 0) {
+        stageToBlob(stage, handleBlob);
+      }
+      recordingCounter += 1;
+    }
   }
 
   setState() {}
@@ -879,6 +896,67 @@ class CarrierSite extends Resource {
   }
 }
 
+class TubeRack extends Resource {
+  constructor(resourceData, parent = undefined) {
+    super(resourceData, parent);
+    const { num_items_x, num_items_y } = resourceData;
+    this.num_items_x = num_items_x;
+    this.num_items_y = num_items_y;
+  }
+
+  drawMainShape() {
+    return new Konva.Rect({
+      width: this.size_x,
+      height: this.size_y,
+      fill: "#122D42",
+      stroke: "black",
+      strokeWidth: 1,
+    });
+  }
+
+  serialize() {
+    return {
+      ...super.serialize(),
+      ...{
+        num_items_x: this.num_items_x,
+        num_items_y: this.num_items_y,
+      },
+    };
+  }
+
+  update() {
+    super.update();
+
+    // Rename the children
+    for (let i = 0; i < this.num_items_x; i++) {
+      for (let j = 0; j < this.num_items_y; j++) {
+        const child = this.children[i * this.num_items_y + j];
+        child.name = `${this.name}_tube_${i}_${j}`;
+      }
+    }
+  }
+}
+
+class Tube extends Container {
+  draggable = false;
+  canDelete = false;
+
+  constructor(resourceData, parent) {
+    super(resourceData, parent);
+  }
+
+  drawMainShape() {
+    return new Konva.Circle({
+      radius: (1.25 * this.size_x) / 2,
+      fill: Tube.colorForVolume(this.getVolume(), this.maxVolume),
+      stroke: "black",
+      strokeWidth: 1,
+      offsetX: -this.size_x / 2,
+      offsetY: -this.size_y / 2,
+    });
+  }
+}
+
 class LiquidHandler extends Resource {
   drawMainShape() {
     return undefined; // just draw the children (deck and so on)
@@ -922,6 +1000,10 @@ function classForResourceType(type) {
       return HamiltonSTARDeck;
     case "LiquidHandler":
       return LiquidHandler;
+    case "TubeRack":
+      return TubeRack;
+    case "Tube":
+      return Tube;
     default:
       return Resource;
   }
@@ -960,14 +1042,14 @@ window.addEventListener("load", function () {
   stage.scaleY(-1);
   stage.offsetY(canvasHeight);
 
+  let minX = -(1 / 2) * canvasWidth;
+  let minY = -(1 / 2) * canvasHeight;
+  let maxX = (1 / 2) * canvasWidth;
+  let maxY = (1 / 2) * canvasHeight;
+
   // limit draggable area to size of canvas
   stage.dragBoundFunc(function (pos) {
     // Set the bounds of the draggable area to 1/2 off the canvas.
-    let minX = -(1 / 2) * canvasWidth;
-    let minY = -(1 / 2) * canvasHeight;
-    let maxX = (1 / 2) * canvasWidth;
-    let maxY = (1 / 2) * canvasHeight;
-
     let newX = Math.max(minX, Math.min(maxX, pos.x));
     let newY = Math.max(minY, Math.min(maxY, pos.y));
 
@@ -977,12 +1059,185 @@ window.addEventListener("load", function () {
     };
   });
 
+  // add white background
+  var background = new Konva.Rect({
+    x: minX,
+    y: minY,
+    width: canvasWidth - minX + maxX,
+    height: canvasHeight - minY + maxY,
+    fill: "white",
+    listening: false,
+  });
+
   // add the layer to the stage
   stage.add(layer);
   stage.add(resourceLayer);
+
+  layer.add(background);
 
   // Check if there is an after stage setup callback, and if so, call it.
   if (typeof afterStageSetup === "function") {
     afterStageSetup();
   }
+});
+
+function gifResetUI() {
+  document.getElementById("gif-start").hidden = true;
+  document.getElementById("gif-recording").hidden = true;
+  document.getElementById("gif-processing").hidden = true;
+  document.getElementById("gif-download").hidden = true;
+}
+
+function gifShowStartUI() {
+  document.getElementById("gif-start").hidden = false;
+}
+
+function gifShowRecordingUI() {
+  document.getElementById("gif-recording").hidden = false;
+}
+
+function gifShowProcessingUI() {
+  document.getElementById("gif-processing").hidden = false;
+}
+
+function gifShowDownloadUI() {
+  document.getElementById("gif-download").hidden = false;
+}
+
+async function startRecording() {
+  // Turn recording on
+  isRecording = true;
+
+  // Reset saved frames buffer
+  frameImages = [];
+
+  // Reset the render progress
+  var info = document.getElementById("progressBar");
+  info.innerText = " GIF Rendering Progress: " + Math.round(0 * 100) + "%";
+
+  stageToBlob(stage, handleBlob);
+
+  gifResetUI();
+  gifShowRecordingUI();
+}
+
+function stopRecording() {
+  gifResetUI();
+  gifShowProcessingUI();
+
+  // Turn recording off
+  isRecording = false;
+
+  // Render the final image
+  // Do it twice bc it looks better
+
+  stageToBlob(stage, handleBlob);
+  stageToBlob(stage, handleBlob);
+
+  gif = new GIF({
+    workers: 10,
+    workerScript: "gif.worker.js",
+    background: "#FFFFFF",
+    width: stage.width(),
+    height: stage.height(),
+  });
+
+  // Add each frame to the GIF
+  for (var i = 0; i < frameImages.length; i++) {
+    gif.addFrame(frameImages[i], { delay: 1 });
+  }
+
+  // Add progress bar based on how much the gif is rendered
+  gif.on("progress", function (p) {
+    var info = document.getElementById("progressBar");
+    info.innerText = " GIF Rendering Progress: " + Math.round(p * 100) + "%";
+  });
+
+  // Load gif into right portion of screen
+  gif.on("finished", function (blob) {
+    renderedGifBlob = blob;
+    gifResetUI();
+    gifShowDownloadUI();
+    gifShowStartUI();
+  });
+
+  gif.render();
+}
+
+// convert stage to a blob and handle the blob
+function stageToBlob(stage, callback) {
+  stage.toBlob({
+    callback: callback,
+    mimeType: "image/jpg",
+    quality: 0.3,
+  });
+}
+
+// handle the blob (e.g., create an Image element and add it to frameImages)
+function handleBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  const myImg = new Image();
+
+  myImg.src = url;
+  myImg.width = stage.width();
+  myImg.height = stage.height();
+
+  frameImages.push(myImg);
+
+  myImg.onload = function () {
+    URL.revokeObjectURL(url); // Free up memory
+  };
+}
+
+// Set up event listeners for the buttons
+document
+  .getElementById("start-recording-button")
+  .addEventListener("click", startRecording);
+
+document
+  .getElementById("stop-recording-button")
+  .addEventListener("click", stopRecording);
+
+document
+  .getElementById("gif-download-button")
+  .addEventListener("click", function () {
+    if (!renderedGifBlob) {
+      alert("No GIF rendered yet. Please stop the recording first.");
+      return;
+    }
+
+    var fileName =
+      document.getElementById("fileName").value || "plr-visualizer";
+    var url = URL.createObjectURL(renderedGifBlob);
+    var a = document.createElement("a");
+    a.href = url;
+    if (!fileName.endsWith(".gif")) {
+      fileName += ".gif";
+    }
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+document
+  .getElementById("gif-frame-rate")
+  .addEventListener("input", function () {
+    let value = parseInt(this.value);
+    // Adjust the value to the nearest multiple of 8
+    value = Math.round(value / 8) * 8;
+    // Ensure the value stays within the allowed range
+    if (value < 1) value = 1;
+    if (value > 96) value = 96;
+
+    this.value = value; // Update the slider value
+    document.getElementById("current-value").textContent =
+      "Frame Save Interval: " + value;
+
+    frameInterval = value;
+  });
+
+window.addEventListener("load", function () {
+  gifResetUI();
+  gifShowStartUI();
 });

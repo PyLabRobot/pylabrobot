@@ -132,17 +132,18 @@ class MettlerToledoWXS205SDU(ScaleBackend):
     self.ser: Optional[serial.Serial] = None
 
   async def setup(self) -> None:
-    await super().setup()
     self.ser = serial.Serial(self.port, baudrate=9600, timeout=1)
 
     # set output unit to grams
     await self.send_command("M21 0 0")
 
   async def stop(self) -> None:
-    await super().stop()
     if self.ser is not None:
       self.ser.close()
       self.ser = None
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), "port": self.port}
 
   async def send_command(self, command: str, timeout: int = 60) -> MettlerToledoResponse:
     """ Send a command to the scale and receive the response.

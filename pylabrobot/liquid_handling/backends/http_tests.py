@@ -10,7 +10,7 @@ from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
   HTF_L,
-  Cos_96_EZWash,
+  Cor_96_wellplate_360ul_Fb,
   no_tip_tracking,
   no_volume_tracking
 )
@@ -75,7 +75,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
     self.tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
     self.tip_carrier[0] = self.tip_rack = HTF_L(name="tiprack")
     self.plate_carrier = PLT_CAR_L5AC_A00(name="plate_carrier")
-    self.plate_carrier[0] = self.plate = Cos_96_EZWash(name="plate")
+    self.plate_carrier[0] = self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_carrier, rails=3)
     self.deck.assign_child_resource(self.plate_carrier, rails=15)
 
@@ -132,7 +132,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     well = self.plate.get_item("A1")
     well.tracker.set_liquids([(None, 10)])
-    await self.lh.aspirate([well], 10)
+    await self.lh.aspirate([well], [10])
 
   @responses.activate
   async def test_dispense(self):
@@ -146,7 +146,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     self.lh.head[0].get_tip().tracker.add_liquid(None, 10)
     with no_volume_tracking():
-      await self.lh.dispense(self.plate["A1"], 10)
+      await self.lh.dispense(self.plate["A1"], [10])
 
   @responses.activate
   async def test_pick_up_tips96(self):

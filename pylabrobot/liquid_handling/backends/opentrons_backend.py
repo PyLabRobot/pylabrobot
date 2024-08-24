@@ -1,5 +1,5 @@
 import sys
-from typing import Dict, Optional, List, cast
+from typing import Dict, Optional, List, cast, Union
 
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.errors import NoChannelError
@@ -10,8 +10,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
+  AspirationContainer,
   Dispense,
   DispensePlate,
+  DispenseContainer,
   Move
 )
 from pylabrobot.resources import (
@@ -22,8 +24,7 @@ from pylabrobot.resources import (
   TipRack,
   TipSpot
 )
-from pylabrobot.resources.opentrons import OTDeck
-from pylabrobot.temperature_controlling import OpentronsTemperatureModuleV2
+from pylabrobot.resources.opentrons import OTDeck, OTModule
 from pylabrobot import utils
 
 PYTHON_VERSION = sys.version_info[:2]
@@ -73,6 +74,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     self.host = host
     self.port = port
 
+    # pylint: disable=possibly-used-before-assignment
     ot_api.set_host(host)
     ot_api.set_port(port)
 
@@ -89,7 +91,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     }
 
   async def setup(self):
-    await super().setup()
+    # pylint: disable=possibly-used-before-assignment
 
     # create run
     run_id = ot_api.runs.create()
@@ -110,12 +112,14 @@ class OpentronsBackend(LiquidHandlerBackend):
 
   async def stop(self):
     self.defined_labware = {}
-    await super().stop()
 
-  def _get_resource_slot(self, resource: Resource) -> int:
-    """ Get the ultimate slot of a given resource. Some resources are assigned to another resource,
-    such as a temperature controller, and we need to find the slot of the parent resource. Nesting
-    may be deeper than one level, so we need to traverse the tree from the bottom up. """
+  def _get_resource_ot_location(self, resource: Resource) -> Union[str, int]:
+    """ Get the OT location (slot or area) of a given resource. Some resources are assigned to
+    another resource, such as plates on a temperature controller, and we need to find the slot of
+    the parent resource (site). """
+
+    if isinstance(resource.parent, OTModule):
+      return self.defined_labware[resource.parent.name]
 
     slot = None
     while resource.parent is not None:
@@ -144,17 +148,25 @@ class OpentronsBackend(LiquidHandlerBackend):
       resource.name == "trash_container":
       return
 
-    slot = self._get_resource_slot(resource)
+    ot_location = self._get_resource_ot_location(resource)
 
     # check if resource is actually a Module
-    if isinstance(resource, OpentronsTemperatureModuleV2):
+    if isinstance(resource, OTModule):
+      assert isinstance(ot_location, int)
+      # pylint: disable=possibly-used-before-assignment
       ot_api.modules.load_module(
-        slot=slot,
-        model="temperatureModuleV2",
-        module_id=resource.backend.opentrons_id
+        slot=ot_location,
+        model=resource.model,
+        module_id=resource.backend.opentrons_id # type: ignore
       )
-      # call self to assign the tube rack
-      await self.assigned_resource_callback(resource.tube_rack)
+
+      self.defined_labware[resource.name] = resource.backend.opentrons_id # type: ignore
+
+      # call self to assign the child to module
+      if hasattr(resource, "child") and resource.child is not None:
+        await self.assigned_resource_callback(resource.child)
+      else:
+        raise RuntimeError(f"Module {resource.name} must have a child when it assigned.")
       return
 
     well_names = [well.name for well in resource.children]
@@ -180,8 +192,8 @@ class OpentronsBackend(LiquidHandlerBackend):
     well_definitions = {
       child.name: {
         "depth": child.get_size_z(),
-        "x": cast(Coordinate, child.location).x,
-        "y": cast(Coordinate, child.location).y,
+        "x": cast(Coordinate, child.location).x + child.get_size_x() / 2,
+        "y": cast(Coordinate, child.location).y + child.get_size_y() / 2,
         "z": cast(Coordinate, child.location).z,
         "shape": "circular",
 
@@ -261,7 +273,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.labware.add(
       load_name=definition,
       namespace=namespace,
-      slot=slot,
+      ot_location=ot_location,
       version=version,
       labware_id=labware_uuid,
       display_name=resource.name)
@@ -319,10 +331,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
 
-    if op.offset is not None:
-      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
-    else:
-      offset_x = offset_y = offset_z = 0
+    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
 
     # ad-hoc offset adjustment that makes it smoother.
     offset_z += 50
@@ -358,10 +367,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
 
-    if op.offset is not None:
-      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
-    else:
-      offset_x = offset_y = offset_z = 0
+    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
 
     # ad-hoc offset adjustment that makes it smoother.
     offset_z += 10
@@ -460,10 +466,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
-    if op.offset is not None:
-      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
-    else:
-      offset_x = offset_y = offset_z = 0
+    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
 
     ot_api.lh.aspirate(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=flow_rate, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
@@ -513,10 +516,7 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
-    if op.offset is not None:
-      offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
-    else:
-      offset_x = offset_y = offset_z = 0
+    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
 
     ot_api.lh.dispense(labware_id, well_name=op.resource.name, pipette_id=pipette_id,
       volume=volume, flow_rate=flow_rate, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z)
@@ -531,10 +531,10 @@ class OpentronsBackend(LiquidHandlerBackend):
   async def drop_tips96(self, drop: DropTipRack):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  async def aspirate96(self, aspiration: AspirationPlate):
+  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
-  async def dispense96(self, dispense: DispensePlate):
+  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
     raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
 
   async def move_resource(self, move: Move):

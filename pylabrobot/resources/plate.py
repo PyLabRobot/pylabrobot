@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence, Tuple, Union, cast
+from typing import Dict, List, Optional, Sequence, Tuple, Union, cast, Literal
 
 
 from .liquid import Liquid
@@ -21,7 +21,9 @@ class Lid(Resource):
     size_x: float,
     size_y: float,
     size_z: float,
-    category: str = "lid"
+    nesting_z_height: float,
+    category: str = "lid",
+    model: Optional[str] = None
   ):
     """ Create a lid for a plate.
 
@@ -30,8 +32,16 @@ class Lid(Resource):
       size_x: Size of the lid in x-direction.
       size_y: Size of the lid in y-direction.
       size_z: Size of the lid in z-direction.
+      nesting_z_height: the overlap in mm between the lid and its parent plate (in the z-direction).
     """
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,category=category,
+                     model=model)
+    self.nesting_z_height = nesting_z_height
+    if nesting_z_height == 0:
+      print(f"{self.name}: Are you certain that the lid nests 0 mm with its parent plate?")
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), "nesting_z_height": self.nesting_z_height}
 
 
 class Plate(ItemizedResource[Well]):
@@ -43,44 +53,33 @@ class Plate(ItemizedResource[Well]):
     size_x: float,
     size_y: float,
     size_z: float,
+    ordered_items: Optional[Dict[str, Well]] = None,
+    ordering: Optional[List[str]] = None,
     items: Optional[List[List[Well]]] = None,
     num_items_x: Optional[int] = None,
     num_items_y: Optional[int] = None,
     category: str = "plate",
-    lid_height: float = 0,
-    with_lid: bool = False,
-    model: Optional[str] = None
+    lid: Optional[Lid] = None,
+    model: Optional[str] = None,
+    plate_type: Literal["skirted", "semi-skirted", "non-skirted"] = "skirted",
   ):
     """ Initialize a Plate resource.
 
     Args:
-      name: Name of the plate.
-      size_x: Size of the plate in the x direction.
-      size_y: Size of the plate in the y direction.
-      size_z: Size of the plate in the z direction.
-      dx: The distance between the start of the plate and the center of the first well (A1) in the x
-        direction.
-      dy: The distance between the start of the plate and the center of the first well (A1) in the y
-        direction.
-      dz: The distance between the start of the plate and the center of the first well (A1) in the z
-        direction.
-      num_items_x: Number of wells in the x direction.
-      num_items_y: Number of wells in the y direction.
       well_size_x: Size of the wells in the x direction.
       well_size_y: Size of the wells in the y direction.
-      lid_height: Height of the lid in mm, only used if `with_lid` is True.
-      with_lid: Whether the plate has a lid.
+      lid: Immediately assign a lid to the plate.
+      plate_type: Type of the plate. One of "skirted", "semi-skirted", or "non-skirted". A
+        WIP: https://github.com/PyLabRobot/pylabrobot/pull/152#discussion_r1625831517
     """
 
     super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
-      num_items_y=num_items_y, category=category, model=model)
+      num_items_y=num_items_y, ordered_items=ordered_items, ordering=ordering, category=category,
+      model=model)
     self.lid: Optional[Lid] = None
-    self.lid_height = lid_height
+    self.plate_type = plate_type
 
-    if with_lid:
-      assert lid_height > 0, "Lid height must be greater than 0 if with_lid == True."
-
-      lid = Lid(name + "_lid", size_x=size_x, size_y=size_y, size_z=lid_height)
+    if lid is not None:
       self.assign_child_resource(lid)
 
   def assign_child_resource(
@@ -93,8 +92,7 @@ class Plate(ItemizedResource[Well]):
       if self.has_lid():
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self.lid = resource
-      assert self.lid_height > 0, "Lid height must be greater than 0."
-      location = Coordinate(0, 0, self.get_size_z() - self.lid_height)
+      location = location or Coordinate(0, 0, self.get_size_z() - self.lid.nesting_z_height)
     else:
       assert location is not None, "Location must be specified for if resource is not a lid."
     return super().assign_child_resource(resource, location=location, reassign=reassign)
@@ -149,7 +147,7 @@ class Plate(ItemizedResource[Well]):
     Example:
       Set the volume of each well in a 96-well plate to 10 uL.
 
-      >>> plate = Plate("plate", 127.0, 86.0, 14.5, num_items_x=12, num_items_y=8)
+      >>> plate = Plate("plate", 127.76, 85.48, 14.5, num_items_x=12, num_items_y=8)
       >>> plate.set_well_liquids((Liquid.WATER, 10))
     """
 
@@ -181,6 +179,8 @@ class Plate(ItemizedResource[Well]):
     for well in self.get_all_items():
       well.tracker.enable()
 
+# TODO: add quadrant definition for 96-well plates & specify current
+# quadrant definition is only for 384-well plates
   def get_quadrant(self, quadrant: int) -> List[Well]:
     """ Return the wells in the specified quadrant. Quadrants are overlapping and refer to
     alternating rows and columns of the plate. Quadrant 1 contains A1, A3, C1, etc. Quadrant 2

@@ -6,7 +6,7 @@ from pylabrobot.resources import (
   STARLetDeck,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
-  Cos_96_EZWash,
+  Cor_96_wellplate_360ul_Fb,
   STF_L,
   Coordinate,
   no_tip_tracking,
@@ -29,8 +29,8 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-    self.plt_car[0] = self.plate = Cos_96_EZWash(name="plate_01", with_lid=True)
-    self.plt_car[1] = self.other_plate = Cos_96_EZWash(name="plate_02", with_lid=True)
+    self.plt_car[0] = self.plate = Cor_96_wellplate_360ul_Fb(name="plate_01")
+    self.plt_car[1] = self.other_plate = Cor_96_wellplate_360ul_Fb(name="plate_02")
     self.deck.assign_child_resource(self.plt_car, rails=9)
 
     self.backend.clear()
@@ -46,7 +46,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.backend.sent_commands[0]["data"], {
       "channels": [{
         "resource_name": tip_spot.name,
-        "offset": None,
+        "offset": serialize(Coordinate.zero()),
         "tip": serialize(tip),
       }], "use_channels": [0]})
 
@@ -63,7 +63,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.backend.sent_commands[0]["data"], {
       "channels": [{
         "resource_name": tip_spot.name,
-        "offset": None,
+        "offset": serialize(Coordinate.zero()),
         "tip": serialize(tip),
       }], "use_channels": [0]})
 
@@ -72,16 +72,14 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     well.tracker.set_liquids([(None, 10)])
     tip = self.tip_rack.get_tip(0)
     self.lh.update_head_state({0: tip})
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
     self.backend.clear()
-    await self.lh.aspirate([well], vols=10)
+    await self.lh.aspirate([well], vols=[10])
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "aspirate")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
       "channels": [{
         "resource_name": well.name,
-        "offset": None,
+        "offset": serialize(Coordinate.zero()),
         "tip": tip.serialize(),
         "volume": 10,
         "flow_rate": None,
@@ -94,17 +92,15 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     wells = self.plate["A1"]
     tip = self.tip_rack.get_tip(0)
     self.lh.update_head_state({0: tip})
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
     self.backend.clear()
     with no_volume_tracking():
-      await self.lh.dispense(wells, vols=10)
+      await self.lh.dispense(wells, vols=[10])
     self.assertEqual(len(self.backend.sent_commands), 1)
     self.assertEqual(self.backend.sent_commands[0]["command"], "dispense")
     self.assertEqual(self.backend.sent_commands[0]["data"], {
       "channels": [{
         "resource_name": wells[0].name,
-        "offset": None,
+        "offset": serialize(Coordinate.zero()),
         "tip": tip.serialize(),
         "volume": 10,
         "flow_rate": None,
@@ -137,8 +133,6 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
     self.backend.clear()
 
     tips = [channel.get_tip() for channel in self.lh.head96.values()]
-    assert self.plate.lid is not None
-    self.plate.lid.unassign()
     self.backend.clear()
     await self.lh.aspirate96(self.plate, volume=10)
     self.assertEqual(len(self.backend.sent_commands), 1)
@@ -186,7 +180,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
         "intermediate_locations": [],
         "resource_offset": serialize(Coordinate.zero()),
         "destination_offset": serialize(Coordinate.zero()),
-        "pickup_distance_from_top": 13.2,
+        "pickup_distance_from_top": 9.87,
         "get_direction": "FRONT",
         "put_direction": "FRONT",
       }})

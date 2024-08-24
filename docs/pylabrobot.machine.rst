@@ -7,6 +7,6 @@ Machine is a backend'd Resource. Check out the contributing section for more inf
   :nosignatures:
   :recursive:
 
-    pylabrobot.machines.machine.Machine
-    pylabrobot.machines.backends.machine.MachineBackend
-    pylabrobot.machines.backends.usb.USBBackend
+    machine.Machine
+    backends.machine.MachineBackend
+    backends.usb.USBBackend

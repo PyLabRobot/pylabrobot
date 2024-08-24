@@ -24,14 +24,6 @@ class TemperatureController(Machine):
     self.backend: TemperatureControllerBackend = backend  # fix type
     self.target_temperature: Optional[float] = None
 
-  async def setup(self):
-    """ Setup the temperature controller. """
-    return await self.backend.setup()
-
-  async def stop(self):
-    """ Stop the temperature controller. """
-    return await self.backend.stop()
-
   async def set_temperature(self, temperature: float):
     """ Set the temperature of the temperature controller.
 

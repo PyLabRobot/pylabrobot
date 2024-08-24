@@ -43,3 +43,6 @@ class Coordinate:
 
   def __neg__(self) -> Coordinate:
     return Coordinate(-self.x, -self.y, -self.z)
+
+  def vector(self) -> list[float]:
+    return [self.x, self.y, self.z]

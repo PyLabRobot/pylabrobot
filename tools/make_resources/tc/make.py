@@ -8,10 +8,10 @@ from pylabrobot.resources import Coordinate
 # path = "Carrier_Coley.cfg"
 path = "Carrier.cfg"
 
-RES = re.compile("(\d{2});(.*?);(\S*)")
-SITE = re.compile("998;0;(\S{2,});")
-DESC = re.compile("998;(Tecan part no\. .*);")
-DESC2 = re.compile("998;(.* pn \d{8}.*);")
+RES = re.compile(r"(\d{2});(.*?);(\S*)")
+SITE = re.compile(r"998;0;(\S{2,});")
+DESC = re.compile(r"998;(Tecan part no\. .*);")
+DESC2 = re.compile(r"998;(.* pn \d{8}.*);")
 
 
 def main(pc, tc, p, tr, tcr):
@@ -33,7 +33,7 @@ def main(pc, tc, p, tr, tcr):
       size_y = float(dim[2][1]) / 10
       size_z = float(dim[1][2]) / 10
 
-      locations = []
+      locations=[]
       site_size_x = []
       site_size_y = []
       desc = ""
@@ -47,7 +47,7 @@ def main(pc, tc, p, tr, tcr):
           x = float(site_dim[1][0]) / 10
           y = size_y - h - float(site_dim[1][1]) / 10
           z = float(site_dim[1][2]) / 10 + size_z
-          locations = [Coordinate(x, y, z)] + locations
+          locations=[Coordinate(x, y, z)] + locations
           site_size_x = [w] + site_size_x
           site_size_y = [h] + site_size_y
 
@@ -79,7 +79,7 @@ def main(pc, tc, p, tr, tcr):
         o.write(f'    off_y={off_y},\n')
         if all(x == site_size_x[0] for x in site_size_x) and \
            all(y == site_size_y[0] for y in site_size_y):
-          o.write(f'    sites=create_homogeneous_carrier_sites(locations=[\n')
+          o.write(f'    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[\n')
           for l in locations:
             o.write(f'        {repr(l)},\n')
           o.write(f'      ],\n')
@@ -87,7 +87,7 @@ def main(pc, tc, p, tr, tcr):
           o.write(f'      site_size_y={site_size_y[0]},\n')
           o.write(f'    ),\n')
         else:
-          o.write(f'    sites=create_carrier_sites(locations = [\n')
+          o.write(f'    sites=create_carrier_sites(CarrierSite, locations=[\n')
           for l in locations:
             o.write(f'        {repr(l)},\n')
           o.write(f'      ], site_size_x=[\n')
@@ -126,7 +126,7 @@ def main(pc, tc, p, tr, tcr):
       z_max = float(dim[3][0])
       # the best approximation,
       # https://forums.pylabrobot.org/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2987
-      size_z = (z_max - z_dispense) / 10
+      size_z = (z_max - z_start) / 10
 
       if num_x <= 1 or num_y <= 1:
         continue
@@ -160,6 +160,21 @@ def main(pc, tc, p, tr, tcr):
 
       if o is not None:
         o.write(f'\n\n')
+
+        if bc == 'TecanPlate':
+          lid_name = f"{name}_Lid"
+          o.write(f"def {lid_name}(name: str) -> Lid:\n")
+          o.write( "  raise NotImplementedError(\"This lid is not currently defined.\")\n")
+          o.write( "  # See https://github.com/PyLabRobot/pylabrobot/pull/161.\n") #TODO: rpl with docs
+          o.write( "  # return Lid(\n")
+          o.write( "  #   name=name,\n")
+          o.write(f"  #   size_x={size_x},\n")
+          o.write(f"  #   size_y={size_y},\n")
+          o.write( "  #   size_z=None,           # measure the total z height\n")
+          o.write( "  #   nesting_z_height=None, # measure overlap between lid and plate\n")
+          o.write(f"  #   model=\"{lid_name}\",\n")
+          o.write( "  # )\n\n\n")
+
         o.write(f'def {name}(name: str')
         if bc == 'TecanPlate':
           o.write(f', with_lid: bool = False')
@@ -172,15 +187,14 @@ def main(pc, tc, p, tr, tcr):
         o.write(f'    size_y={size_y},\n')
         o.write(f'    size_z={size_z},\n')
         if bc == 'TecanPlate':
-          o.write(f'    with_lid=with_lid,\n')
-          o.write(f'    lid_height=8,\n')
+          o.write(f"    lid={lid_name}(name=name + \"_lid\") if with_lid else None,\n")
         o.write(f'    model="{name}",\n')
         o.write(f'    z_travel={z_travel},\n')
         o.write(f'    z_start={z_start},\n')
         o.write(f'    z_dispense={z_dispense},\n')
         o.write(f'    z_max={z_max},\n')
         o.write(f'    area={area},\n')
-        o.write(f'    items=create_equally_spaced({it},\n')
+        o.write(f'    ordered_items=create_ordered_items_2d({it},\n')
         o.write(f'      num_items_x={num_x},\n')
         o.write(f'      num_items_y={num_y},\n')
         o.write(f'      dx={dx},\n')

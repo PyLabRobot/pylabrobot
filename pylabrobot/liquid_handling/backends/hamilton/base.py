@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
 from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import PipettingOp
 from pylabrobot.machines.backends import USBBackend
-from pylabrobot.resources import TipSpot, Well
+from pylabrobot.resources import TipSpot
 from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
 
 T = TypeVar("T")
@@ -27,6 +27,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     self,
     id_product: int,
     device_address: Optional[int] = None,
+    serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
     write_timeout: int = 30,
@@ -36,18 +37,23 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     Args:
       device_address: The USB address of the Hamilton device. Only useful if using more than one
         Hamilton device.
+      serial_number: The serial number of the Hamilton device. Only useful if using more than one
+        Hamilton device.
       packet_read_timeout: The timeout for reading packets from the Hamilton machine in seconds.
       read_timeout: The timeout for  from the Hamilton machine in seconds.
       num_channels: the number of pipette channels present on the robot.
     """
 
-    super().__init__(
-      address=device_address,
+    USBBackend.__init__(
+      self,
+      device_address=device_address,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_vendor=0x08af,
-      id_product=id_product)
+      id_product=id_product,
+      serial_number=serial_number)
+    LiquidHandlerBackend.__init__(self)
 
     self.id_ = 0
 
@@ -56,9 +62,26 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, float]] = {}
     self._tth2tti: dict[int, int] = {} # hash to tip type index
 
+    # Whether to allow the firmware to plan liquid handling operations when the y positions are
+    # equal (same container). This allows you to pass the same container to aspirate and dispense
+    # multiple times in a single call, and the onboard firmware will compute the optimal order of
+    # operations. This is useful for efficiency but may hurt protocol interoperability.
+    self.allow_firmware_planning = False
+
+  async def setup(self):
+    await LiquidHandlerBackend.setup(self)
+    await USBBackend.setup(self)
+
   async def stop(self):
     self._waiting_tasks.clear()
     await super().stop()
+
+  def serialize(self) -> dict:
+    usb_backend_serialized = USBBackend.serialize(self)
+    del usb_backend_serialized["id_vendor"]
+    del usb_backend_serialized["id_product"]
+    liquid_handler_serialized = LiquidHandlerBackend.serialize(self)
+    return {**usb_backend_serialized, **liquid_handler_serialized}
 
   @property
   @abstractmethod
@@ -313,21 +336,12 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         x_positions.append(0)
         y_positions.append(0)
       channels_involved.append(True)
-      offset = ops[i].offset
 
-      x_pos = ops[i].resource.get_absolute_location().x
-      if isinstance(ops[i].resource, (TipSpot, Well)):
-        x_pos += ops[i].resource.center().x
-      if offset is not None:
-        x_pos += offset.x
-      x_positions.append(int(x_pos*10))
+      x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
+      x_positions.append(round(x_pos*10))
 
-      y_pos = ops[i].resource.get_absolute_location().y
-      if isinstance(ops[i].resource, (TipSpot, Well)):
-        y_pos += ops[i].resource.center().y
-      if offset is not None:
-        y_pos += offset.y
-      y_positions.append(int(y_pos*10))
+      y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
+      y_positions.append(round(y_pos*10))
 
     # check that the minimum d between any two y positions is >9mm
     # O(n^2) search is not great but this is most readable, and the max size is 16, so it's fine.
@@ -339,7 +353,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
           continue
         if x1 != x2: # channels not on the same column -> will be two operations on the machine
           continue
-        if abs(y1 - y2) < 90:
+        if not (self.allow_firmware_planning and y1 == y2) and abs(y1 - y2) < 90:
           raise ValueError(f"Minimum distance between two y positions is <9mm: {y1}, {y2}"
                            f" (channel {channel_idx1} and {channel_idx2})")
 
@@ -383,8 +397,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       await self.define_tip_needle(
         tip_type_table_index=ttti,
         has_filter=tip.has_filter,
-        tip_length=int((tip.total_tip_length - tip.fitting_depth) * 10), # in 0.1mm
-        maximum_tip_volume=int(tip.maximal_volume * 10), # in 0.1ul
+        tip_length=round((tip.total_tip_length - tip.fitting_depth) * 10), # in 0.1mm
+        maximum_tip_volume=round(tip.maximal_volume * 10), # in 0.1ul
         tip_size=tip.tip_size,
         pickup_method=tip.pickup_method
       )

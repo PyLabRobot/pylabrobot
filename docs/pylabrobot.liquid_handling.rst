@@ -1,4 +1,4 @@
-﻿.. currentmodule:: pylabrobot.liquid_handling
+.. currentmodule:: pylabrobot.liquid_handling
 
 pylabrobot.liquid_handling package
 ==================================
@@ -16,7 +16,7 @@ be run on practically all supported hardware.
   :nosignatures:
   :recursive:
 
-    pylabrobot.liquid_handling.liquid_handler.LiquidHandler
+    liquid_handler.LiquidHandler
 
 
 Backends
@@ -39,7 +39,7 @@ Operations are the main data holders used to transmit information from the liqui
   :nosignatures:
   :recursive:
 
-  pylabrobot.liquid_handling.standard
+  standard
 
 
 Strictness

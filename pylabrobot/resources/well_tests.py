@@ -14,6 +14,7 @@ class TestWell(unittest.TestCase):
       "size_x": 1,
       "size_y": 2,
       "size_z": 3,
+      "material_z_thickness": None,
       "bottom_type": "flat",
       "cross_section_type": "circle",
       "max_volume": 10,
@@ -24,6 +25,12 @@ class TestWell(unittest.TestCase):
       "type": "Well",
       "parent_name": None,
       "location": None,
+      "rotation": {
+        "type": "Rotation",
+        "x": 0, "y": 0, "z": 0
+      },
+      "compute_volume_from_height": None,
+      "compute_height_from_volume": None,
     })
 
     self.assertEqual(Well.deserialize(well.serialize()), well)

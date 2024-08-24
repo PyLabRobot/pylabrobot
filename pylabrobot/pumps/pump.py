@@ -33,6 +33,20 @@ class Pump(Machine):
       raise ValueError("Calibration may only have a single item for this pump")
     self.calibration = calibration
 
+  def serialize(self) -> dict:
+    if self.calibration is None:
+      return super().serialize()
+    return {**super().serialize(), "calibration": self.calibration.serialize()}
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshal: bool = False):
+    data_copy = data.copy()
+    calibration_data = data_copy.pop("calibration", None)
+    if calibration_data is not None:
+      calibration = PumpCalibration.deserialize(calibration_data)
+      data_copy["calibration"] = calibration
+    return super().deserialize(data_copy, allow_marshal=allow_marshal)
+
   async def run_revolutions(self, num_revolutions: float):
     """ Run a given number of revolutions. This method will return after the command has been sent,
     and the pump will run until `halt` is called.

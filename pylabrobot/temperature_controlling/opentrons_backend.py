@@ -23,7 +23,7 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
 
     Args:
       opentrons_id: Opentrons ID of the temperature module. Get it from
-        `OpentronsTemperatureModuleBackend.list_connected_modules()`.
+        `OpentronsBackend(host="x.x.x.x", port=31950).list_connected_modules()`.
     """
     self.opentrons_id = opentrons_id
 
@@ -32,20 +32,25 @@ class OpentronsTemperatureModuleBackend(TemperatureControllerBackend):
                          " Only supported on Python 3.10.")
 
   async def setup(self):
-    await super().setup()
+    pass
 
   async def stop(self):
     await self.deactivate()
-    await super().stop()
+
+  def serialize(self) -> dict:
+    return {**super().serialize(), "opentrons_id": self.opentrons_id}
 
   async def set_temperature(self, temperature: float):
+    # pylint: disable=possibly-used-before-assignment
     ot_api.modules.temperature_module_set_temperature(celsius=temperature,
                                                       module_id=self.opentrons_id)
 
   async def deactivate(self):
+    # pylint: disable=possibly-used-before-assignment
     ot_api.modules.temperature_module_deactivate(module_id=self.opentrons_id)
 
   async def get_current_temperature(self) -> float:
+    # pylint: disable=possibly-used-before-assignment
     modules = ot_api.modules.list_connected_modules()
     for module in modules:
       if module["id"] == self.opentrons_id:

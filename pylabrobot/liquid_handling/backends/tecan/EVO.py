@@ -18,8 +18,10 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   Aspiration,
   AspirationPlate,
+  AspirationContainer,
   Dispense,
   DispensePlate,
+  DispenseContainer,
   Move
 )
 from pylabrobot.resources import (
@@ -54,12 +56,14 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
       read_timeout: The timeout for reading from the Tecan machine in seconds.
     """
 
-    super().__init__(
+    USBBackend.__init__(
+      self,
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_vendor=0x0C47,
       id_product=0x4000)
+    LiquidHandlerBackend.__init__(self)
 
     self._cache: Dict[str, List[Optional[int]]] = {}
 
@@ -142,6 +146,10 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
 
     resp = self.read(timeout=read_timeout)
     return self.parse_response(resp)
+
+  async def setup(self):
+    await LiquidHandlerBackend.setup(self)
+    await USBBackend.setup(self)
 
 
 class EVO(TecanLiquidHandler):
@@ -495,10 +503,10 @@ class EVO(TecanLiquidHandler):
   async def drop_tips96(self, drop: DropTipRack):
     raise NotImplementedError()
 
-  async def aspirate96(self, aspiration: AspirationPlate):
+  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
     raise NotImplementedError()
 
-  async def dispense96(self, dispense: DispensePlate):
+  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
     raise NotImplementedError()
 
   async def move_resource(self, move: Move):
