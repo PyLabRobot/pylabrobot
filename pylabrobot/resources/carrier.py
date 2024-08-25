@@ -270,7 +270,7 @@ class PlateCarrierSite(CarrierSite):
 
   def _deregister_resource_stack_callback(self, resource: Resource):
     """ Callback called when a ResourceStack (or child) is unassigned from this PlateCarrierSite."""
-    if isinstance(resource, ResourceStack): # the ResourceStack itself is unassigned
+    if resource.parent == self: # the ResourceStack itself is unassigned
       resource.deregister_did_assign_resource_callback(self._update_resource_stack_location)
 
   def serialize(self) -> dict:
