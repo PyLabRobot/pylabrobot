@@ -3,7 +3,7 @@
 # pylint: skip-file
 
 from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.tip_rack import TipRack, TipSpot
+from pylabrobot.resources.tip_rack import TipSpot, TipRack, NestedTipRack
 from .tip_creators import (
   low_volume_tip_no_filter,
   low_volume_tip_with_filter,
@@ -362,14 +362,15 @@ def TIP_50ul_P(name: str, with_tips: bool = True) -> TipRack:
   return TIP_50ul_L(name=name, with_tips=with_tips).rotated(z=90)
 
 
-def Hamilton_96_tiprack_50ul_NTR(name: str, with_tips: bool = True) -> TipRack:
+def Hamilton_96_tiprack_50ul_NTR(name: str, with_tips: bool = True) -> NestedTipRack:
   """ Nested Tip Rack with 96 50ul Tip """
-  return TipRack(
+  return NestedTipRack(
     name=name,
     size_x=127.76,
     size_y=85.48,
     size_z=56.0, # Hamilton_96_tiprack_50ul_NTR + TIP_50ul_L.fitting_depth
     model="Hamilton_96_tiprack_50ul_NTR",
+    stacking_z_height=16.0,
     ordered_items=create_ordered_items_2d(TipSpot,
       num_items_x=12,
       num_items_y=8,
@@ -386,10 +387,10 @@ def Hamilton_96_tiprack_50ul_NTR(name: str, with_tips: bool = True) -> TipRack:
     with_tips=with_tips
   )
 
-def Hamilton_96_tiprack_50ul_NTR_L(name: str, with_tips: bool = True) -> TipRack:
+def Hamilton_96_tiprack_50ul_NTR_L(name: str, with_tips: bool = True) -> NestedTipRack:
   """ Nested Tip Rack with 96 50ul Tip (landscape, i.e. default) """
   return Hamilton_96_tiprack_50ul_NTR(name=name, with_tips=with_tips)
 
-def Hamilton_96_tiprack_50ul_NTR_P(name: str, with_tips: bool = True) -> TipRack:
+def Hamilton_96_tiprack_50ul_NTR_P(name: str, with_tips: bool = True) -> NestedTipRack:
   """ Nested Tip Rack with 96 50ul Tip (portrait) """
   return Hamilton_96_tiprack_50ul_NTR(name=name, with_tips=with_tips).rotated(z=90)

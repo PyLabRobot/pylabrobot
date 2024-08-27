@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABCMeta
 from typing import Any, Dict, List, Union, Optional, Sequence, cast
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip, TipCreator
 from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
 from pylabrobot.serializer import deserialize
@@ -205,26 +206,38 @@ class NestedTipRack(TipRack):
     model: Optional[str] = None,
     with_tips: bool = True,
   ):
-  # Call the superclass constructor
-  super().__init__(
-    name=name,
-    size_x=size_x,
-    size_y=size_y,
-    size_z=size_z,
-    ordered_items=ordered_items,
-    ordering=ordering,
-    items=items,
-    num_items_x=num_items_x,
-    num_items_y=num_items_y,
-    category=category,
-    model=model,
-    with_tips=with_tips
-  )
+    # Call the superclass constructor
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      ordered_items=ordered_items,
+      ordering=ordering,
+      items=items,
+      num_items_x=num_items_x,
+      num_items_y=num_items_y,
+      category=category,
+      model=model,
+      with_tips=with_tips
+    )
 
-  # Initialize the new attribute
-  self.stacking_z_height = stacking_z_height
+    self.stacking_z_height = stacking_z_height
 
   def __repr__(self) -> str:
     return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
             f"size_y={self._size_y}, size_z={self._size_z}, "
             f"stacking_z_height={self.stacking_z_height}, location={self.location})")
+  
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True
+  ):
+    if isinstance(resource, NestedTipRack):
+      location = location or Coordinate(0, 0, self.stacking_z_height)
+    else:
+      assert location is not None, "Location must be specified if " + \
+        "resource is not a NestedTipRack."
+    return super().assign_child_resource(resource, location=location, reassign=reassign)
