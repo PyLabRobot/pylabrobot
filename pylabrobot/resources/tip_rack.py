@@ -228,7 +228,7 @@ class NestedTipRack(TipRack):
     return (f"{self.__class__.__name__}(name={self.name}, size_x={self._size_x}, "
             f"size_y={self._size_y}, size_z={self._size_z}, "
             f"stacking_z_height={self.stacking_z_height}, location={self.location})")
-  
+
   def assign_child_resource(
     self,
     resource: Resource,
