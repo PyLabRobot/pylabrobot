@@ -90,9 +90,9 @@ class AgilentCentrifuge():
         s = ""
         c = ""
         for i, byte in enumerate(resp):
-            s += f" {byte:02x} "  # Format byte as two-digit hexadecimal
+            s += f" {byte:02x} "
         for i, byte in enumerate(cmd):
-            c += f" {byte:02x} "  # Format byte as two-digit hexadecimal
+            c += f" {byte:02x} "
         print(f"TX: {len(cmd)}-bytes -\t {c}")
         print(f"RX: {len(resp)}-bytes -\t {s}\n")
         return resp
@@ -236,7 +236,6 @@ class AgilentCentrifuge():
         stat = f"{resp[0]:02x}"
         print(f"status: {stat} position: {self.position}   homing position: {self.homing_position}")
         return resp
-
 
     async def open_door(self):
         await self.send(b"\xaa\x02\x26\x00\x07\x2f")
@@ -436,8 +435,6 @@ class AgilentCentrifuge():
     "aa 01 0e 0f",
         ]
 
-
-
         for tx in tx_payloads:
             if isinstance(tx, str):
                 # Convert the hex string into a byte literal
@@ -445,9 +442,6 @@ class AgilentCentrifuge():
                 await self.send(byte_literal)
             else:
                 await self.send(tx)
-
-
-
 
     async def start_spin_cycle(self, plate, rpm, time_seconds, acceleration, deceleration):
         """Start a spin cycle."""
