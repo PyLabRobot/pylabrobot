@@ -188,6 +188,16 @@ def wide_high_volume_tip_with_filter() -> HamiltonTip:
     pickup_method=TipPickupMethod.OUT_OF_RACK
   )
 
+def ultrawide_high_volume_tip_with_filter() -> HamiltonTip:
+  """ Ultra wide bore (3.20 mm) high volume tip with a filter, Hamilton P/N 235541 """
+  return HamiltonTip(
+    has_filter=True,
+    total_tip_length=80.0, # Measured
+    maximal_volume=1065,
+    tip_size=TipSize.HIGH_VOLUME,
+    pickup_method=TipPickupMethod.OUT_OF_RACK
+  )
+
 def four_ml_tip_with_filter() -> HamiltonTip:
   """ 4mL tip with a filter (`tt29` in venus) """
   return HamiltonTip(

@@ -16,6 +16,7 @@ from .tip_creators import (
   five_ml_tip,
   fifty_ul_tip_with_filter,
   fifty_ul_tip_no_filter,
+  ultrawide_high_volume_tip_with_filter,
   wide_high_volume_tip_with_filter
 )
 
@@ -121,6 +122,29 @@ def HTF_L_WIDE(name: str, with_tips: bool = True) -> TipRack:
       size_x=9.0,
       size_y=9.0,
       make_tip=wide_high_volume_tip_with_filter,
+    ),
+    with_tips=with_tips
+  )
+
+def HTF_L_ULTRAWIDE(name: str, with_tips: bool = True) -> TipRack:
+  """ Tip Rack with 96 1000ul High Volume Tip with filter """
+  return TipRack(
+    name=name,
+    size_x=122.4,
+    size_y=82.6,
+    size_z=20.0,
+    model=HTF_L_ULTRAWIDE.__name__,
+    ordered_items=create_ordered_items_2d(TipSpot,
+      num_items_x=12,
+      num_items_y=8,
+      dx=7.2,
+      dy=5.3,
+      dz=-68.4,
+      item_dx=9.0,
+      item_dy=9.0,
+      size_x=9.0,
+      size_y=9.0,
+      make_tip=ultrawide_high_volume_tip_with_filter,
     ),
     with_tips=with_tips
   )
