@@ -1360,8 +1360,8 @@ class LiquidHandler(Machine):
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    if not isinstance(resource, (Plate, Container)) or \
-      (isinstance(resource, list) and all(isinstance(w, Well) for w in resource)):
+    if not (isinstance(resource, (Plate, Container)) or \
+      (isinstance(resource, list) and all(isinstance(w, Well) for w in resource))):
       raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
 
     extras = self._check_args(self.backend.aspirate96, backend_kwargs, default={"aspiration"})
@@ -1501,8 +1501,8 @@ class LiquidHandler(Machine):
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
-    if not isinstance(resource, (Plate, Container)) or \
-      (isinstance(resource, list) and all(isinstance(w, Well) for w in resource)):
+    if not (isinstance(resource, (Plate, Container)) or \
+      (isinstance(resource, list) and all(isinstance(w, Well) for w in resource))):
       raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
 
     extras = self._check_args(self.backend.dispense96, backend_kwargs, default={"dispense"})
