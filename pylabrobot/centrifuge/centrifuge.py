@@ -53,15 +53,15 @@ class Centrifuge(Machine):
 
   async def start_spin_cycle(
     self,
-    plate: Optional[Plate] = None,
-    rpm: Optional[float] = None,
+    plates: Optional[Plate] = None,
+    g: Optional[float] = None,
     time_seconds: Optional[float] = None,
     acceleration: Optional[float] = None,
     deceleration: Optional[float] = None,
   ) -> None:
     await self.backend.start_spin_cycle(
-      plate=plate,
-      rpm=rpm,
+      plates=plates,
+      g=g,
       time_seconds=time_seconds,
       acceleration=acceleration,
       deceleration=deceleration,
