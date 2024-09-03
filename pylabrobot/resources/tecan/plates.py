@@ -28,13 +28,12 @@ class TecanPlate(Plate, TecanResource):
     z_dispense: float,
     z_max: float,
     area: float,
-    items: Optional[List[List[Well]]] = None,
     ordered_items: Optional[Dict[str, Well]] = None,
     category: str = "tecan_plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None
   ):
-    super().__init__(name, size_x, size_y, size_z, items=items, ordered_items=ordered_items,
+    super().__init__(name, size_x, size_y, size_z, ordered_items=ordered_items,
       category=category, lid=lid, model=model)
 
     self.z_travel = z_travel

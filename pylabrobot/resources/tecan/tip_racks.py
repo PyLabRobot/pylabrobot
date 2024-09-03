@@ -86,12 +86,11 @@ class TecanTipRack(TipRack, TecanResource):
     z_dispense: float,
     z_max: float,
     area: float,
-    items: Optional[List[List[TipSpot]]] = None,
     ordered_items: Optional[Dict[str, TipSpot]] = None,
     category: str = "tecan_plate",
     model: Optional[str] = None
   ):
-    super().__init__(name, size_x, size_y, size_z, items=items, ordered_items=ordered_items,
+    super().__init__(name, size_x, size_y, size_z, ordered_items=ordered_items,
                      category=category, model=model)
 
     self.z_travel = z_travel

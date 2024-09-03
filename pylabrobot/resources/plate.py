@@ -55,9 +55,6 @@ class Plate(ItemizedResource[Well]):
     size_z: float,
     ordered_items: Optional[Dict[str, Well]] = None,
     ordering: Optional[List[str]] = None,
-    items: Optional[List[List[Well]]] = None,
-    num_items_x: Optional[int] = None,
-    num_items_y: Optional[int] = None,
     category: str = "plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None,
@@ -73,9 +70,8 @@ class Plate(ItemizedResource[Well]):
         WIP: https://github.com/PyLabRobot/pylabrobot/pull/152#discussion_r1625831517
     """
 
-    super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
-      num_items_y=num_items_y, ordered_items=ordered_items, ordering=ordering, category=category,
-      model=model)
+    super().__init__(name, size_x, size_y, size_z, ordered_items=ordered_items, ordering=ordering,
+                     category=category, model=model)
     self.lid: Optional[Lid] = None
     self.plate_type = plate_type
 
