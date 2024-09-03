@@ -441,9 +441,6 @@ class AgilentCentrifuge():
             else:
                 await self.send(tx)
 
-
-
-
     async def start_spin_cycle(
     self,
     plates: Optional[Plate] = None,
