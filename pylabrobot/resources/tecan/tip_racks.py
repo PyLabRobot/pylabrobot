@@ -4,7 +4,7 @@
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
