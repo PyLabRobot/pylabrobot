@@ -55,6 +55,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `pylabrobot.resources.utils.query` for basic querying (https://github.com/PyLabRobot/pylabrobot/commit/4a07f6a32a9a33d0370eb9c29015567c98aea002)
 - `HamiltonLiquidHandler.allow_firmware_planning` to allow STAR/Vantage to plan complex liquid handling operations automatically (may break hardware agnosticity unexpectedly) (https://github.com/PyLabRobot/pylabrobot/pull/224)
 - `size_z` and `nesting_z_height` for `Cor_96_wellplate_360ul_Fb_Lid` (https://github.com/PyLabRobot/pylabrobot/pull/226)
+- `NestedTipRack` (https://github.com/PyLabRobot/pylabrobot/pull/228)
+- `HTF_L_ULTRAWIDE`, `ultrawide_high_volume_tip_with_filter` (https://github.com/PyLabRobot/pylabrobot/pull/229/)
 
 ### Deprecated
 
@@ -74,6 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `libusb_package` is now an optional dependency.
 - Plates with a skirt are now correctly lowered when placed on plate carriers with a pedestal (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - `minimum_height` in `STAR` and `Vantage` now correctly refer to a `Container`s bottom instead of being a function of liquid height (https://github.com/PyLabRobot/pylabrobot/pull/205/)
+- `aspirate96` and `dispense96` type check
 
 ### Removed
 
