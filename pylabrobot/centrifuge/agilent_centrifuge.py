@@ -262,11 +262,10 @@ class AgilentCentrifuge():
         await self.com()
 
     async def go_to_bucket2(self):
-        st = self.position + 4000
-        byte_string = st.to_bytes(4, byteorder='little')
-        byte_string = b"\xaa\x01\xd4\x97" + byte_string + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
-        last_byte = (sum(byte_string)-0xaa)&0xff
-        byte_string += last_byte.to_bytes(1, byteorder='little')
+        new_position = (self.position + 4000).to_bytes(4, byteorder='little')
+        byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
+        sum_byte = (sum(byte_string)-0xaa)&0xff
+        byte_string += sum_byte.to_bytes(1, byteorder='little')
         tx_payloads = [
     "aa 01 0e 0f",
     "aa 02 0e 10",
@@ -434,8 +433,6 @@ class AgilentCentrifuge():
     "aa 02 0e 10",
     "aa 01 0e 0f",
         ]
-
-
 
         for tx in tx_payloads:
             if isinstance(tx, str):
