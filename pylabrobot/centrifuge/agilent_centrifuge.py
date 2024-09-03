@@ -2,8 +2,9 @@ import logging
 from typing import Optional, Union
 import time
 import asyncio
-
+import time
 from .backend import CentrifugeBackend
+from pylabrobot.resources import Plate
 from pylabrobot import utils
 
 try:
@@ -90,9 +91,9 @@ class AgilentCentrifuge():
         s = ""
         c = ""
         for i, byte in enumerate(resp):
-            s += f" {byte:02x} "
+            s += f" {byte:02x} "  # Format byte as two-digit hexadecimal
         for i, byte in enumerate(cmd):
-            c += f" {byte:02x} "
+            c += f" {byte:02x} "  # Format byte as two-digit hexadecimal
         print(f"TX: {len(cmd)}-bytes -\t {c}")
         print(f"RX: {len(resp)}-bytes -\t {s}\n")
         return resp
@@ -223,6 +224,193 @@ class AgilentCentrifuge():
         await self.com()
         await self.lock_door()
 
+        # for _ in range(14):
+        #     await self.status_check()
+        #     await self.com()
+        # await self.com()
+        # await self.close_door()
+        # await self.status_check()
+        # await self.com()
+        # await self.open_door()
+        # await self.status_check()
+        # await self.com()
+        # await self.status_check()
+        # await self.com()
+        # await self.com()
+        # await self.status_check()
+        # await self.com()
+        # await self.send(b"\xaa\x01\x0e\x0f")
+    #     tx_data = [
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    #     "aa 01 0e 0f",
+    #     "aa 02 0e 10",
+    #     "aa 02 0e 10",
+    # ]
+
+    #     # Generate the lines for each TX payload
+    #     for tx in tx_data:
+    #         # Convert the hex string into a byte literal
+    #         bytes_str = " ".join(tx.split())  # Split by spaces and join to ensure correct formatting
+    #         byte_literal = bytes.fromhex(bytes_str)  # Convert hex string to byte object
+
+    #         # Print the Python line
+    #         await self.send(byte_literal)
+
+
+
+
     async def status_check(self):
         """Check the status of the centrifuge."""
         resp = await self.send(b"\xaa\x01\x0e\x0f")
@@ -236,6 +424,7 @@ class AgilentCentrifuge():
         stat = f"{resp[0]:02x}"
         print(f"status: {stat} position: {self.position}   homing position: {self.homing_position}")
         return resp
+
 
     async def open_door(self):
         await self.send(b"\xaa\x02\x26\x00\x07\x2f")
@@ -435,57 +624,173 @@ class AgilentCentrifuge():
     "aa 01 0e 0f",
         ]
 
+
+
         for tx in tx_payloads:
             if isinstance(tx, str):
-                # Convert the hex string into a byte literal
                 byte_literal = bytes.fromhex(tx)
                 await self.send(byte_literal)
             else:
                 await self.send(tx)
 
-    async def start_spin_cycle(self, plate, rpm, time_seconds, acceleration, deceleration):
+
+
+
+    async def start_spin_cycle(
+    self,
+    plates: Optional[Plate] = None,
+    g: Optional[float] = 250,
+    time_seconds: Optional[float] = 10,
+    acceleration: Optional[float] = 80,
+    deceleration: Optional[float] = None,
+  ) -> None:
         """Start a spin cycle."""
-        await self.com()
-        if self.door_status:
-            await self.close_door()
-        await self.status_check()
-
-        await self.com()
-        if not self.lock_status:
-            await self.lock_door()
-        await self.status_check()
-
-        await self.com()
-        await self.com()
-        await self.send(b"\xaa\x02\x26\x00\x00\x28")
-        await self.com()
-        await self.status_check()
-
-        await self.send(b"\xaa\x01\x17\x02\x1a")
-        await self.send(b"\xaa\x01\x0e\x0f")
-        await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
-        await self.send(b"\xaa\x01\x17\x04\x1c")
-        await self.send(b"\xaa\x01\x17\x01\x19")
-
-        await self.status_check()
-        print('status check')
-        while True:
-            await self.status_check()
-            await self.send(b"\xaa\x01\x0e\x0f")
-            await self.send(b"\xaa\x01\x0e\x0f")
-            # s = ""
-            # for i, byte in enumerate(resp):
-            #     s += f"{i}: {byte:02x} "  # Format byte as two-digit hexadecimal
-            # print(s)
-        # await self.send(b"\xaa\x01\x0e\x0f")
-        # await self.send(b"\xaa\x01\x0e\x0f")
-
-        # resp = await self.status_check()
-        # print(resp)
-        # while len(resp) != 14:
-        #     print('position tracking')
-        #     await self.send(b"\xaa\x01\x0e\x0f")
-        #     await self.send(b"\xaa\x01\x0e\x0f")
-
-        #     resp = await self.status_check()
+        base = int(-1779 + 678*g*6+ 0.413*(g*6)**2)
+        rpm_bytes = (g*6*4474).to_bytes(4, byteorder='little')
+        acc_bytes = (int(915*acceleration/100)).to_bytes(2, byteorder='little')
+        byte_string = (self.position + base + 4000*g*6//30*time_seconds).to_bytes(4, byteorder='little')
+        byte_string = b"\xaa\x01\xd4\x97" + byte_string + rpm_bytes + acc_bytes+b"\x00\x00"
+        last_byte = (sum(byte_string)-0xaa)&0xff
+        byte_string += last_byte.to_bytes(1, byteorder='little')
+        payloads = [
+    "aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 02 0e 10",
+"aa 02 26 00 05 2d",
+"aa 02 0e 10",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 02 0e 10",
+"aa 02 26 00 01 29",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 02 0e 10",
+"aa 02 0e 10",
+"aa 02 26 00 00 28",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 02 0e 10",
+"aa 01 17 02 1a",
+"aa 01 0e 0f",
+"aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+"aa 01 17 04 1c",
+"aa 01 17 01 19",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0b 0c",
+"aa 01 0e 0f",
+"aa 01 e6 05 00 64 00 00 00 00 00 fd 00 80 3e 01 00 0c",
+byte_string,
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+]
+        status = ["aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 02 0e 10"
+]
+        last_payloads = [
+            "aa 01 17 02 1a",
+"aa 01 0e 0f",
+"aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+"aa 01 17 04 1c",
+"aa 01 17 01 19",
+"aa 01 0e 0f",
+"aa 02 0e 10",
+"aa 01 0b 0c",
+"aa 01 0e 0f",
+"aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+"aa 01 d4 97 0f 26 00 00 c3 f5 28 00 d7 1a 00 00 72",
+"aa 01 0e 0f",
+"aa 01 0e 0f",
+"aa 01 0e 0f"
+        ]
+        for tx in payloads:
+            if isinstance(tx, str):
+                byte_literal = bytes.fromhex(tx)
+                await self.send(byte_literal)
+            else:
+                await self.send(tx)
+        start_time = time.time()
+        while time.time() - start_time < time_seconds*0.8:
+             for tx in status:
+                byte_literal = bytes.fromhex(tx)
+                await self.send(byte_literal)
+        for tx in last_payloads:
+            byte_literal = bytes.fromhex(tx)
+            await self.send(byte_literal)
+        time.sleep(1)
+        for tx in last_payloads:
+            byte_literal = bytes.fromhex(tx)
+            await self.send(byte_literal)
 
