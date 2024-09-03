@@ -237,7 +237,6 @@ class AgilentCentrifuge():
         print(f"status: {stat} position: {self.position}   homing position: {self.homing_position}")
         return resp
 
-
     async def open_door(self):
         await self.send(b"\xaa\x02\x26\x00\x07\x2f")
         await self.com()
