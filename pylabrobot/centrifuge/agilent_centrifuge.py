@@ -580,6 +580,7 @@ byte_string,
 "aa 01 0e 0f",
 "aa 01 0e 0f"
         ]
+
         for tx in payloads:
             if isinstance(tx, str):
                 byte_literal = bytes.fromhex(tx)
