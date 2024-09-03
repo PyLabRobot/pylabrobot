@@ -229,9 +229,8 @@ class AgilentCentrifuge():
         resp = await self.send(b"\xaa\x01\x0e\x0f")
         s = []
         for byte in resp:
-            s.append(f"{byte:02x}")  # Append the bytes as hexadecimal strings
+            s.append(f"{byte:02x}")
         await self.com()
-        # Convert the hexadecimal strings to integers before slicing and converting
         self.position = int.from_bytes(bytes.fromhex(''.join(s[1:4])), byteorder='little')
         self.homing_position = int.from_bytes(bytes.fromhex(''.join(s[9:12])), byteorder='little')
         stat = f"{resp[0]:02x}"
