@@ -173,14 +173,16 @@ class Move:
       return 270
     if (self.get_direction, self.put_direction) in (
         (GripDirection.FRONT, GripDirection.BACK),
+        (GripDirection.BACK, GripDirection.FRONT),
         (GripDirection.LEFT, GripDirection.RIGHT),
+        (GripDirection.RIGHT, GripDirection.LEFT),
     ):
       return 180
-    if (self.put_direction, self.get_direction) in (
-        (GripDirection.FRONT, GripDirection.RIGHT),
-        (GripDirection.RIGHT, GripDirection.BACK),
-        (GripDirection.BACK, GripDirection.LEFT),
-        (GripDirection.LEFT, GripDirection.FRONT),
+    if (self.get_direction, self.put_direction) in (
+        (GripDirection.RIGHT, GripDirection.FRONT),
+        (GripDirection.BACK, GripDirection.RIGHT),
+        (GripDirection.LEFT, GripDirection.BACK),
+        (GripDirection.FRONT, GripDirection.LEFT),
     ):
       return 90
     raise ValueError(f"Invalid grip directions: {self.get_direction}, {self.put_direction}")
