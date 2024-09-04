@@ -2377,7 +2377,7 @@ class STAR(HamiltonLiquidHandler):
     assert self.iswap_installed, "iswap must be installed"
 
     # Get center of source plate. Also gripping height and plate width.
-    center = resource.get_absolute_location() + resource.center() + offset
+    center = resource.get_absolute_location(x="c", y="c", z="b") + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
       plate_width = resource.get_size_x()

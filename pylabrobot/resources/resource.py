@@ -201,9 +201,12 @@ class Resource:
       return self.location
     parent_pos = self.parent.get_absolute_location()
     parent_rotation_matrix = self.parent.get_absolute_rotation().get_rotation_matrix()
-    local_vector = (self.location + self.get_anchor(x=x, y=y, z=z)).vector()
-    rotated_position = Coordinate(*matrix_vector_multiply_3x3(parent_rotation_matrix, local_vector))
-    return parent_pos + rotated_position
+    self_rotation_matrix = self.get_absolute_rotation().get_rotation_matrix()
+    
+    rotated_location = Coordinate(*matrix_vector_multiply_3x3(parent_rotation_matrix, self.location.vector()))
+    rotated_anchor = Coordinate(*matrix_vector_multiply_3x3(self_rotation_matrix, self.get_anchor(x=x, y=y, z=z).vector()))
+    
+    return parent_pos + rotated_location + rotated_anchor
 
   def _get_rotated_corners(self) -> List[Coordinate]:
     absolute_rotation = self.get_absolute_rotation()
