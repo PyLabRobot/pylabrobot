@@ -151,17 +151,17 @@ class Resource:
     if x.lower() in {"l", "left"}:
       x_ = 0
     elif x.lower() in {"c", "center"}:
-      x_ = self.get_size_x() / 2
+      x_ = self._size_x / 2
     elif x.lower() in {"r", "right"}:
-      x_ = self.get_size_x()
+      x_ = self._size_x
     else:
       raise ValueError(f"Invalid x value: {x}")
 
     y_: float
     if y.lower() in {"b", "back"}:
-      y_ = self.get_size_y()
+      y_ = self._size_y
     elif y.lower() in {"c", "center"}:
-      y_ = self.get_size_y() / 2
+      y_ = self._size_y / 2
     elif y.lower() in {"f", "front"}:
       y_ = 0
     else:
@@ -169,9 +169,9 @@ class Resource:
 
     z_: float
     if z.lower() in {"t", "top"}:
-      z_ = self.get_size_z()
+      z_ = self._size_z
     elif z.lower() in {"c", "center"}:
-      z_ = self.get_size_z() / 2
+      z_ = self._size_z / 2
     elif z.lower() in {"b", "bottom"}:
       z_ = 0
     else:

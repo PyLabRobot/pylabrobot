@@ -2539,7 +2539,7 @@ class STAR(HamiltonLiquidHandler):
     """
 
     # Get center of source plate. Also gripping height and plate width.
-    center = resource.get_absolute_location() + resource.center() + offset
+    center = resource.get_absolute_location(x="c", y="c", z="b") + offset
     grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
     grip_width = resource.get_size_y() #grip width is y size of resource
 
