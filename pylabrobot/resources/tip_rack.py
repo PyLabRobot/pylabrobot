@@ -96,16 +96,12 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
     size_z: float,
     ordered_items: Optional[Dict[str, TipSpot]] = None,
     ordering: Optional[List[str]] = None,
-    items: Optional[List[List[TipSpot]]] = None,
-    num_items_x: Optional[int] = None,
-    num_items_y: Optional[int] = None,
     category: str = "tip_rack",
     model: Optional[str] = None,
     with_tips: bool = True,
   ):
-    super().__init__(name, size_x, size_y, size_z, items=items, num_items_x=num_items_x,
-      num_items_y=num_items_y, ordered_items=ordered_items, ordering=ordering, category=category,
-      model=model)
+    super().__init__(name, size_x, size_y, size_z, ordered_items=ordered_items, ordering=ordering,
+                     category=category, model=model)
 
     if ordered_items is not None and len(ordered_items) > 0:
       if with_tips:
@@ -199,9 +195,6 @@ class NestedTipRack(TipRack):
     stacking_z_height: float,
     ordered_items: Optional[Dict[str, TipSpot]] = None,
     ordering: Optional[List[str]] = None,
-    items: Optional[List[List[TipSpot]]] = None,
-    num_items_x: Optional[int] = None,
-    num_items_y: Optional[int] = None,
     category: str = "tip_rack",
     model: Optional[str] = None,
     with_tips: bool = True,
@@ -214,9 +207,6 @@ class NestedTipRack(TipRack):
       size_z=size_z,
       ordered_items=ordered_items,
       ordering=ordering,
-      items=items,
-      num_items_x=num_items_x,
-      num_items_y=num_items_y,
       category=category,
       model=model,
       with_tips=with_tips
