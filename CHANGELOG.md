@@ -78,6 +78,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `minimum_height` in `STAR` and `Vantage` now correctly refer to a `Container`s bottom instead of being a function of liquid height (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - `aspirate96` and `dispense96` type check
 - fix angles computed by grip directions (https://github.com/PyLabRobot/pylabrobot/pull/234)
+- picking up rotated resources in `STAR` (https://github.com/PyLabRobot/pylabrobot/pull/233)
+- assigning rotated resources to `PlateReader` now have the correct location (https://github.com/PyLabRobot/pylabrobot/pull/233)
+- use local sizes in computing anchor (https://github.com/PyLabRobot/pylabrobot/pull/233)
 
 ### Removed
 
