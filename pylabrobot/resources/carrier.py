@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Generic, List, Optional, Type, TypeVar, Union
 
+from pylabrobot.resources.utils import get_child_location
+
 from .coordinate import Coordinate
 from .plate import Plate
 from .resource import Resource
@@ -28,7 +30,7 @@ class CarrierSite(Resource):
     reassign: bool = True
   ):
     self.resource = resource
-    location = location or self._get_child_location(resource)
+    location = location or get_child_location(resource)
     return super().assign_child_resource(resource, location, reassign)
 
   def unassign_child_resource(self, resource):
@@ -37,21 +39,6 @@ class CarrierSite(Resource):
 
   def __eq__(self, other):
     return super().__eq__(other) and self.resource == other.resource
-
-  def _get_child_location(self, resource: Resource) -> Coordinate:
-    """ Get the location of the child resource if it is assigned to this carrier site. """
-    if not resource.rotation.y == resource.rotation.x == 0:
-      raise ValueError("Resource rotation must be 0 around the x and y axes")
-    if not resource.rotation.z % 90 == 0:
-      raise ValueError("Resource rotation must be a multiple of 90 degrees on the z axis")
-    location = {
-      0.0: Coordinate(x=0, y=0, z=0),
-      90.0: Coordinate(x=resource.get_size_x(), y=0, z=0),
-      180.0: Coordinate(x=resource.get_size_x(), y=resource.get_size_y(), z=0),
-      270.0: Coordinate(x=0, y=resource.get_size_y(), z=0),
-    }[resource.rotation.z % 360]
-    return location
-
 
 S = TypeVar("S", bound=Resource)
 
@@ -220,6 +207,7 @@ class PlateCarrierSite(CarrierSite):
 
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
                             reassign: bool = True):
+    location = location or self._get_child_location(resource)
     if isinstance(resource, ResourceStack):
       if not resource.direction == "z":
         raise ValueError("ResourceStack assigned to PlateCarrierSite must have direction 'z'")
@@ -235,7 +223,7 @@ class PlateCarrierSite(CarrierSite):
     def get_plate_sinking_depth(plate: Plate):
       # Sanity check for equal well clearances / dz
       well_dz_set = {round(well.location.z, 2) for well in plate.get_all_children()
-                     if well.category == "well" and well.location is not None}
+                      if well.category == "well" and well.location is not None}
       assert len(well_dz_set) == 1, "All wells must have the same z location"
       well_dz = well_dz_set.pop()
       # Plate "sinking" logic based on well dz to pedestal relationship
@@ -253,7 +241,7 @@ class PlateCarrierSite(CarrierSite):
       resource.register_did_assign_resource_callback(self._update_resource_stack_location)
       self.register_did_unassign_resource_callback(self._deregister_resource_stack_callback)
 
-    return super()._get_child_location(resource) - Coordinate(z=z_sinking_depth)
+    return get_child_location(resource) - Coordinate(z=z_sinking_depth)
 
   def _update_resource_stack_location(self, resource: Resource):
     """ Callback called when the lowest resource on a ResourceStack changes. Since the location of
