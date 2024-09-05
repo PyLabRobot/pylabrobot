@@ -179,7 +179,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       """ Temporary hack to get the volume of the well (in ul), TODO: store in resource. """
       if isinstance(well, TipSpot):
         return well.make_tip().maximal_volume
-      return well.get_absolute_size_x() * well.get_absolute_size_y() * well.get_absolute_size_z()
+      return well.get_size_x() * well.get_size_y() * well.get_size_z()
 
     # try to stick to opentrons' naming convention
     if isinstance(resource, Plate):

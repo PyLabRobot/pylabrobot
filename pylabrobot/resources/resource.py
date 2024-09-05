@@ -460,9 +460,9 @@ class Resource:
     """
 
     return Coordinate(
-      self.get_absolute_size_x() / 2 if x else 0,
-      self.get_absolute_size_y() / 2 if y else 0,
-      self.get_absolute_size_z() / 2 if z else 0
+      self.get_size_x() / 2 if x else 0,
+      self.get_size_y() / 2 if y else 0,
+      self.get_size_z() / 2 if z else 0
     )
 
   def centers(self, xn: int = 1, yn: int = 1, zn: int = 1) -> List[Coordinate]:
@@ -506,9 +506,9 @@ class Resource:
         return [0]
       return [(i+1) * dim_size/(n+1)  for i in range(n)]
 
-    xs = _get_centers(xn, self.get_absolute_size_x())
-    ys = _get_centers(yn, self.get_absolute_size_y())
-    zs = _get_centers(zn, self.get_absolute_size_z())
+    xs = _get_centers(xn, self.get_size_x())
+    ys = _get_centers(yn, self.get_size_y())
+    zs = _get_centers(zn, self.get_size_z())
 
     return [Coordinate(x, y, z) for x, y, z in itertools.product(xs, ys, zs)]
 

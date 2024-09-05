@@ -68,16 +68,16 @@ class ResourceStack(Resource):
     if len(self.children) == 0:
       return 0
     if self.direction == "x":
-      return sum(child.get_absolute_size_x() for child in self.children)
-    return max(resource.get_absolute_size_x() for resource in self.children)
+      return sum(child.get_size_x() for child in self.children)
+    return max(resource.get_size_x() for resource in self.children)
 
   def get_size_y(self) -> float:
     """ Get local size in the y direction. """
     if len(self.children) == 0:
       return 0
     if self.direction == "y":
-      return sum(child.get_absolute_size_y() for child in self.children)
-    return max(resource.get_absolute_size_y() for resource in self.children)
+      return sum(child.get_size_y() for child in self.children)
+    return max(resource.get_size_y() for resource in self.children)
 
   def get_size_z(self) -> float:
     """ Get local size in the z direction. """
