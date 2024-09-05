@@ -2488,7 +2488,7 @@ class STAR(HamiltonLiquidHandler):
     # so that the lfb of the plate is lfb in absolute space, not local.
     center_in_absolute_space += get_child_location(resource.rotated(z=rotation))
 
-    center = location + center_in_absolute_space + offset # this is now the local center, but we should have the center in absolute space
+    center = location + center_in_absolute_space + offset
     grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
     # grip_direction here is the put_direction. We use `rotation` to cancel it out and get the
     # original grip direction. Hack.
