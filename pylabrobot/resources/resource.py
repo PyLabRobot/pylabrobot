@@ -181,7 +181,6 @@ class Resource:
 
     z_: float
     if z.lower() in {"t", "top"}:
-      # z_ = self.get_size_z()
       z_ = self._size_z
     elif z.lower() in {"c", "center"}:
       z_ = self._size_z / 2
