@@ -11,6 +11,7 @@ import logging
 import re
 from typing import Callable, Dict, List, Literal, Optional, Sequence, Type, TypeVar, Union, cast
 
+from pylabrobot import audio
 from pylabrobot.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
@@ -39,7 +40,8 @@ from pylabrobot.resources.errors import (
 from pylabrobot.resources.hamilton.hamilton_decks import STAR_SIZE_X, STARLET_SIZE_X
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-from pylabrobot import audio
+from pylabrobot.resources.utils import get_child_location
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 T = TypeVar("T")
 
@@ -2476,8 +2478,17 @@ class STAR(HamiltonLiquidHandler):
 
     assert self.iswap_installed, "iswap must be installed"
 
-    # Get center of source plate. Also gripping height and plate width.
-    center = location + resource.rotated(z=rotation).center() + offset
+    # Get center of source plate in absolute space.
+    # The computation of the center has to be rotated so that the offset is in absolute space.
+    center_in_absolute_space = Coordinate(*matrix_vector_multiply_3x3(
+      resource.rotated(z=rotation).get_absolute_rotation().get_rotation_matrix(),
+      resource.center().vector()
+    ))
+    # This is when the resource is rotated (around its origin), but we also need to translate
+    # so that the lfb of the plate is lfb in absolute space, not local.
+    center_in_absolute_space += get_child_location(resource.rotated(z=rotation))
+
+    center = location + center_in_absolute_space + offset # this is now the local center, but we should have the center in absolute space
     grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
     # grip_direction here is the put_direction. We use `rotation` to cancel it out and get the
     # original grip direction. Hack.
