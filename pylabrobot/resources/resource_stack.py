@@ -107,7 +107,6 @@ class ResourceStack(Resource):
   def _size_z(self, size_z: float):
     raise AttributeError("Cannot set size_z for ResourceStack, use assign_child_resource instead")
 
-
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
     reassign: bool = False):
     if self.direction == "x":
