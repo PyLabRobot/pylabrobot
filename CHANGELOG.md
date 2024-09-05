@@ -83,3 +83,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - HamiltonDeck.load_from_lay_file
 - `hamilton_parse` module and the VENUS labware database parser.
 - `PLT_CAR_L4_SHAKER` was removed in favor of `MFX_CAR_L5_base` (https://github.com/PyLabRobot/pylabrobot/pull/188/).
+- `items`, `num_items_x` and `num_items_y` attributes of `ItemizedResource` (https://github.com/PyLabRobot/pylabrobot/pull/231)
