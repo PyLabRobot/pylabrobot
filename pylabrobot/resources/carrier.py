@@ -207,7 +207,7 @@ class PlateCarrierSite(CarrierSite):
 
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
                             reassign: bool = True):
-    location = location or self.custom_get_child_location(resource)
+    location = location or self._get_child_location(resource)
     if isinstance(resource, ResourceStack):
       if not resource.direction == "z":
         raise ValueError("ResourceStack assigned to PlateCarrierSite must have direction 'z'")
@@ -219,7 +219,7 @@ class PlateCarrierSite(CarrierSite):
                       f"resources, not {type(resource)}")
     return super().assign_child_resource(resource, location, reassign)
 
-  def custom_get_child_location(self, resource: Resource) -> Coordinate:
+  def _get_child_location(self, resource: Resource) -> Coordinate:
     def get_plate_sinking_depth(plate: Plate):
       # Sanity check for equal well clearances / dz
       well_dz_set = {round(well.location.z, 2) for well in plate.get_all_children()
@@ -243,7 +243,6 @@ class PlateCarrierSite(CarrierSite):
 
     return get_child_location(resource) - Coordinate(z=z_sinking_depth)
 
-
   def _update_resource_stack_location(self, resource: Resource):
     """ Callback called when the lowest resource on a ResourceStack changes. Since the location of
     the lowest resource on the stack wrt the ResourceStack is always 0,0,0, we need to update the
@@ -255,7 +254,7 @@ class PlateCarrierSite(CarrierSite):
     resource_stack = resource.parent
     assert isinstance(resource_stack, ResourceStack)
     if resource_stack.children[0] == resource:
-      resource_stack.location = self.custom_get_child_location(resource)
+      resource_stack.location = self._get_child_location(resource)
 
   def _deregister_resource_stack_callback(self, resource: Resource):
     """ Callback called when a ResourceStack (or child) is unassigned from this PlateCarrierSite."""
