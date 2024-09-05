@@ -77,6 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Plates with a skirt are now correctly lowered when placed on plate carriers with a pedestal (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - `minimum_height` in `STAR` and `Vantage` now correctly refer to a `Container`s bottom instead of being a function of liquid height (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - `aspirate96` and `dispense96` type check
+- fix angles computed by grip directions (https://github.com/PyLabRobot/pylabrobot/pull/234)
 
 ### Removed
 

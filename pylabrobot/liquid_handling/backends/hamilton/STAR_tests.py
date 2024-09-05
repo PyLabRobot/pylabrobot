@@ -614,7 +614,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "C0PRid0004xs10427xd0yj3286yd0zj2063zd0th2450te2450go1308gr4ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####go####gr#ga#")
 
-    assert self.plate.rotation.z == 90
+    assert self.plate.rotation.z == 270
     self.assertAlmostEqual(self.plate.get_size_x(), 85.48, places=2)
     self.assertAlmostEqual(self.plate.get_size_y(), 127.76, places=2)
 
