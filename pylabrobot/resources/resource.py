@@ -52,9 +52,9 @@ class Resource:
     model: Optional[str] = None,
   ):
     self._name = name
-    self._size_x = size_x
-    self._size_y = size_y
-    self._size_z = size_z
+    self._local_size_x = size_x
+    self._local_size_y = size_y
+    self._local_size_z = size_z
     self.rotation = rotation or Rotation()
     self.category = category
     self.model = model
@@ -68,6 +68,18 @@ class Resource:
     self._will_unassign_resource_callbacks: List[WillUnassignResourceCallback] = []
     self._did_unassign_resource_callbacks: List[DidUnassignResourceCallback] = []
     self._resource_state_updated_callbacks: List[ResourceDidUpdateState] = []
+
+  @property
+  def _size_x(self) -> float:
+    return self._local_size_x
+
+  @property
+  def _size_y(self) -> float:
+    return self._local_size_y
+
+  @property
+  def _size_z(self) -> float:
+    return self._local_size_z
 
   def serialize(self) -> dict:
     """ Serialize this resource. """
@@ -151,17 +163,17 @@ class Resource:
     if x.lower() in {"l", "left"}:
       x_ = 0
     elif x.lower() in {"c", "center"}:
-      x_ = self.get_size_x() / 2
+      x_ = self._size_x / 2
     elif x.lower() in {"r", "right"}:
-      x_ = self.get_size_x()
+      x_ = self._size_x
     else:
       raise ValueError(f"Invalid x value: {x}")
 
     y_: float
     if y.lower() in {"b", "back"}:
-      y_ = self.get_size_y()
+      y_ = self._size_y
     elif y.lower() in {"c", "center"}:
-      y_ = self.get_size_y() / 2
+      y_ = self._size_y / 2
     elif y.lower() in {"f", "front"}:
       y_ = 0
     else:
@@ -169,9 +181,9 @@ class Resource:
 
     z_: float
     if z.lower() in {"t", "top"}:
-      z_ = self.get_size_z()
+      z_ = self._size_z
     elif z.lower() in {"c", "center"}:
-      z_ = self.get_size_z() / 2
+      z_ = self._size_z / 2
     elif z.lower() in {"b", "bottom"}:
       z_ = 0
     else:
@@ -200,10 +212,16 @@ class Resource:
     if self.parent is None:
       return self.location
     parent_pos = self.parent.get_absolute_location()
-    parent_rotation_matrix = self.parent.get_absolute_rotation().get_rotation_matrix()
-    local_vector = (self.location + self.get_anchor(x=x, y=y, z=z)).vector()
-    rotated_position = Coordinate(*matrix_vector_multiply_3x3(parent_rotation_matrix, local_vector))
-    return parent_pos + rotated_position
+
+    rotated_location = Coordinate(*matrix_vector_multiply_3x3(
+        self.parent.get_absolute_rotation().get_rotation_matrix(),
+        self.location.vector()
+    ))
+    rotated_anchor = Coordinate(*matrix_vector_multiply_3x3(
+        self.get_absolute_rotation().get_rotation_matrix(),
+        self.get_anchor(x=x, y=y, z=z).vector()
+    ))
+    return parent_pos + rotated_location + rotated_anchor
 
   def _get_rotated_corners(self) -> List[Coordinate]:
     absolute_rotation = self.get_absolute_rotation()
