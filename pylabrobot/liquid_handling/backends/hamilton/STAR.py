@@ -2485,7 +2485,7 @@ class STAR(HamiltonLiquidHandler):
       resource.center().vector()
     ))
     # This is when the resource is rotated (around its origin), but we also need to translate
-    # so that the lfb of the plate is lfb in absolute space, not local.
+    # so that the left front bottom corner of the plate is lfb in absolute space, not local.
     center_in_absolute_space += get_child_location(resource.rotated(z=rotation))
 
     center = location + center_in_absolute_space + offset
