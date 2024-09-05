@@ -32,9 +32,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
                 ordered_items: Optional[Dict[str, T]] = None,
                 ordering: Optional[List[str]] = None,
-                items: Optional[List[List[T]]] = None,
-                num_items_x: Optional[int] = None,
-                num_items_y: Optional[int] = None,
                 category: Optional[str] = None,
                 model: Optional[str] = None):
     """ Initialize an itemized resource
@@ -51,9 +48,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       ordering: The order of the items on the resource. This is a list of identifiers. If this is
         specified, `ordered_items` must be `None`. See `ordered_items` for the format of the
         identifiers.
-      items: Deprecated.
-      num_items_x: Deprecated.
-      num_items_y: Deprecated.
       category: The category of the resource.
 
     Examples:
@@ -73,13 +67,6 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         >>> plate = Plate("plate", size_x=1, size_y=1, size_z=1,
         ...   ordered_items={"A1": Well("well", size_x=1, size_y=1, size_z=1)})
     """
-
-    if items is not None:
-      raise NotImplementedError("items is deprecated, use ordered_items instead")
-    if num_items_x is not None:
-      raise NotImplementedError("num_items_x is deprecated, use ordered_items instead")
-    if num_items_y is not None:
-      raise NotImplementedError("num_items_y is deprecated, use ordered_items instead")
 
     super().__init__(name, size_x, size_y, size_z, category=category, model=model)
 

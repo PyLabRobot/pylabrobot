@@ -8,7 +8,7 @@ https://forums.pylabrobot.org/t/pylabrobot-tecan-error-in-adding-labware-to-carr
 # pylint: disable=invalid-name
 # pylint: disable=line-too-long
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from pylabrobot.resources.plate import Lid, Plate, Well
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
@@ -28,13 +28,12 @@ class TecanPlate(Plate, TecanResource):
     z_dispense: float,
     z_max: float,
     area: float,
-    items: Optional[List[List[Well]]] = None,
     ordered_items: Optional[Dict[str, Well]] = None,
     category: str = "tecan_plate",
     lid: Optional[Lid] = None,
     model: Optional[str] = None
   ):
-    super().__init__(name, size_x, size_y, size_z, items=items, ordered_items=ordered_items,
+    super().__init__(name, size_x, size_y, size_z, ordered_items=ordered_items,
       category=category, lid=lid, model=model)
 
     self.z_travel = z_travel

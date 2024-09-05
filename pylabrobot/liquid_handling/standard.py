@@ -170,7 +170,7 @@ class Move:
         (GripDirection.BACK, GripDirection.LEFT),
         (GripDirection.LEFT, GripDirection.FRONT),
     ):
-      return 270
+      return 90
     if (self.get_direction, self.put_direction) in (
         (GripDirection.FRONT, GripDirection.BACK),
         (GripDirection.BACK, GripDirection.FRONT),
@@ -184,7 +184,7 @@ class Move:
         (GripDirection.LEFT, GripDirection.BACK),
         (GripDirection.FRONT, GripDirection.LEFT),
     ):
-      return 90
+      return 270
     raise ValueError(f"Invalid grip directions: {self.get_direction}, {self.put_direction}")
 
 PipettingOp = Union[Pickup, Drop, Aspiration, Dispense]
