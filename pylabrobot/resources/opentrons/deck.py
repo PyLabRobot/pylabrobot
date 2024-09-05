@@ -147,7 +147,7 @@ class OTDeck(Deck):
       return name.ljust(length)
 
     summary_ = f"""
-      Deck: {self.get_size_x()}mm x {self.get_size_y()}mm
+      Deck: {self.get_absolute_size_x()}mm x {self.get_absolute_size_y()}mm
 
       +-----------------+-----------------+-----------------+
       |                 |                 |                 |

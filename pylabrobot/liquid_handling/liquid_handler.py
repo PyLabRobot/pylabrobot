@@ -1378,7 +1378,8 @@ class LiquidHandler(Machine):
     blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
     if isinstance(resource, Container):
-      if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
+      if resource.get_absolute_size_x() < 108.0 or \
+        resource.get_absolute_size_y() < 70.0:  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
 
       for channel in self.head96.values():
@@ -1519,7 +1520,8 @@ class LiquidHandler(Machine):
     blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
     if isinstance(resource, Container):
-      if resource.get_size_x() < 108.0 or resource.get_size_y() < 70.0:  # TODO: analyze as attr
+      if resource.get_absolute_size_x() < 108.0 or \
+        resource.get_absolute_size_y() < 70.0:  # TODO: analyze as attr
         raise ValueError("Container too small to accommodate 96 head")
 
       for channel in self.head96.values():
@@ -1753,7 +1755,7 @@ class LiquidHandler(Machine):
       to_location = Coordinate(
         x=to_location.x,
         y=to_location.y,
-        z=to_location.z  + to.get_size_z() - lid.nesting_z_height)
+        z=to_location.z  + to.get_absolute_size_z() - lid.nesting_z_height)
     elif isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
       to_location = to.get_absolute_location(z="top")

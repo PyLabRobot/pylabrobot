@@ -52,8 +52,9 @@ class Resource:
     model: Optional[str] = None,
   ):
     self._name = name
-    self._local_size_x = size_x
-    self._local_size_y = size_y
+    self._size_x = size_x
+    self._size_y = size_y
+    self._size_z = size_z
     self._local_size_z = size_z
     self.rotation = rotation or Rotation()
     self.category = category
@@ -69,16 +70,16 @@ class Resource:
     self._did_unassign_resource_callbacks: List[DidUnassignResourceCallback] = []
     self._resource_state_updated_callbacks: List[ResourceDidUpdateState] = []
 
-  @property
-  def _size_x(self) -> float:
-    return self._local_size_x
+  def get_size_x(self) -> float:
+    """ Local size in the x direction. """
+    return self._size_x
 
-  @property
-  def _size_y(self) -> float:
-    return self._local_size_y
+  def get_size_y(self) -> float:
+    """ Local size in the y direction. """
+    return self._size_y
 
-  @property
-  def _size_z(self) -> float:
+  def get_size_z(self) -> float:
+    """ Local size in the z direction. """
     return self._local_size_z
 
   def serialize(self) -> dict:
@@ -117,9 +118,9 @@ class Resource:
     return (
       isinstance(other, Resource) and
       self.name == other.name and
-      self.get_size_x() == other.get_size_x() and
-      self.get_size_y() == other.get_size_y() and
-      self.get_size_z() == other.get_size_z() and
+      self.get_absolute_size_x() == other.get_absolute_size_x() and
+      self.get_absolute_size_y() == other.get_absolute_size_y() and
+      self.get_absolute_size_z() == other.get_absolute_size_z() and
       self.location == other.location and
       self.category == other.category and
       self.children == other.children
@@ -163,17 +164,17 @@ class Resource:
     if x.lower() in {"l", "left"}:
       x_ = 0
     elif x.lower() in {"c", "center"}:
-      x_ = self._size_x / 2
+      x_ = self.get_size_x() / 2
     elif x.lower() in {"r", "right"}:
-      x_ = self._size_x
+      x_ = self.get_size_x()
     else:
       raise ValueError(f"Invalid x value: {x}")
 
     y_: float
     if y.lower() in {"b", "back"}:
-      y_ = self._size_y
+      y_ = self.get_size_y()
     elif y.lower() in {"c", "center"}:
-      y_ = self._size_y / 2
+      y_ = self.get_size_y() / 2
     elif y.lower() in {"f", "front"}:
       y_ = 0
     else:
@@ -181,9 +182,9 @@ class Resource:
 
     z_: float
     if z.lower() in {"t", "top"}:
-      z_ = self._size_z
+      z_ = self.get_size_z()
     elif z.lower() in {"c", "center"}:
-      z_ = self._size_z / 2
+      z_ = self.get_size_z() / 2
     elif z.lower() in {"b", "bottom"}:
       z_ = 0
     else:
@@ -230,25 +231,28 @@ class Resource:
       Coordinate(*matrix_vector_multiply_3x3(rot_mat, corner.vector()))
       for corner in [
         Coordinate(0, 0, 0),
-        Coordinate(self._size_x, 0, 0),
-        Coordinate(0, self._size_y, 0),
-        Coordinate(self._size_x, self._size_y, 0),
-        Coordinate(0, 0, self._size_z),
-        Coordinate(self._size_x, 0, self._size_z),
-        Coordinate(0, self._size_y, self._size_z),
-        Coordinate(self._size_x, self._size_y, self._size_z)
+        Coordinate(self.get_size_x(), 0, 0),
+        Coordinate(0, self.get_size_y(), 0),
+        Coordinate(self.get_size_x(), self.get_size_y(), 0),
+        Coordinate(0, 0, self.get_size_z()),
+        Coordinate(self.get_size_x(), 0, self.get_size_z()),
+        Coordinate(0, self.get_size_y(), self.get_size_z()),
+        Coordinate(self.get_size_x(), self.get_size_y(), self.get_size_z())
       ]
     ]
 
-  def get_size_x(self) -> float:
+  def get_absolute_size_x(self) -> float:
+    """ Get the absolute size in the x direction. """
     rotated_corners = self._get_rotated_corners()
     return max(c.x for c in rotated_corners) - min(c.x for c in rotated_corners)
 
-  def get_size_y(self) -> float:
+  def get_absolute_size_y(self) -> float:
+    """ Get the absolute size in the y direction. """
     rotated_corners = self._get_rotated_corners()
     return max(c.y for c in rotated_corners) - min(c.y for c in rotated_corners)
 
-  def get_size_z(self) -> float:
+  def get_absolute_size_z(self) -> float:
+    """ Get the absolute size in the z direction. """
     rotated_corners = self._get_rotated_corners()
     return max(c.z for c in rotated_corners) - min(c.z for c in rotated_corners)
 

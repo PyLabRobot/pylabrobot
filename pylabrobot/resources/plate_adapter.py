@@ -84,7 +84,7 @@ class PlateAdapter(Resource):
     self.adapter_hole_size_x = adapter_hole_size_x
     self.adapter_hole_size_y = adapter_hole_size_y
     self.adapter_hole_size_z = adapter_hole_size_z
-    self.adapter_hole_size_z = self.get_size_z() - self.dz
+    self.adapter_hole_size_z = self.get_absolute_size_z() - self.dz
     self.adapter_hole_dx = adapter_hole_dx
     self.adapter_hole_dy = adapter_hole_dy
     self.plate_z_offset = plate_z_offset
@@ -111,8 +111,8 @@ class PlateAdapter(Resource):
     plate_dx, plate_dy = float(x_locations[0]), float(y_locations[0])
     plate_item_dx = abs(calculate_well_spacing(x_locations))
     plate_item_dy = abs(calculate_well_spacing(y_locations))
-    well_size_x = resource.children[0].get_size_x()
-    well_size_y = resource.children[0].get_size_y()
+    well_size_x = resource.children[0].get_absolute_size_x()
+    well_size_y = resource.children[0].get_absolute_size_y()
     # true_dz = resource.get_size_z() - resource.children[0].get_size_z()
 
     # Well-grid to hole-grid compatibility check
