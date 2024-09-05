@@ -80,7 +80,7 @@ class Resource:
   @property
   def _size_z(self) -> float:
     return self._local_size_z
-    
+
   def serialize(self) -> dict:
     """ Serialize this resource. """
     return {

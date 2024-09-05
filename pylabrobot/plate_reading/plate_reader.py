@@ -54,7 +54,7 @@ class PlateReader(Machine):
     if not isinstance(resource, Plate):
       raise ValueError("The resource must be a Plate.")
     super().assign_child_resource(resource, location=location)
-  
+
   def get_plate(self) -> Plate:
     if len(self.children) == 0:
       raise NoPlateError("There is no plate in the plate reader.")

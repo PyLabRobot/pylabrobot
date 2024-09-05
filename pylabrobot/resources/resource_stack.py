@@ -70,7 +70,7 @@ class ResourceStack(Resource):
     if self.direction == "x":
       return sum(child.get_size_x() for child in self.children)
     return max(resource.get_size_x() for resource in self.children)
-  
+
   @_size_x.setter
   def _size_x(self, size_x: float):
     raise AttributeError("Cannot set size_x for ResourceStack, use assign_child_resource instead")
@@ -98,11 +98,11 @@ class ResourceStack(Resource):
 
     if len(self.children) == 0:
       return 0
-    
+
     if self.direction != "z":
       return max(get_actual_resource_height(child) for child in self.children)
     return sum(get_actual_resource_height(child) for child in self.children)
-  
+
   @_size_z.setter
   def _size_z(self, size_z: float):
     raise AttributeError("Cannot set size_z for ResourceStack, use assign_child_resource instead")
