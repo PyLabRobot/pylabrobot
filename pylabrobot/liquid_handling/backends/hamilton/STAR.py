@@ -1583,7 +1583,7 @@ class STAR(HamiltonLiquidHandler):
                               for wb, op in zip(well_bottoms, ops)]
     if lld_search_height is None:
       lld_search_height = [
-        (wb + op.resource.get_size_z() + (2.7 if isinstance(op.resource, Well) else 5)) # ?
+        (wb + op.resource.get_absolute_size_z() + (2.7 if isinstance(op.resource, Well) else 5)) # ?
         for wb, op in zip(well_bottoms, ops)
       ]
     else:
@@ -1845,7 +1845,7 @@ class STAR(HamiltonLiquidHandler):
       [ls + (op.liquid_height or 0) for ls, op in zip(well_bottoms, ops)]
     if lld_search_height is None:
       lld_search_height = [
-        (wb + op.resource.get_size_z() + (2.7 if isinstance(op.resource, Well) else 5)) #?
+        (wb + op.resource.get_absolute_size_z() + (2.7 if isinstance(op.resource, Well) else 5)) #?
         for wb, op in zip(well_bottoms, ops)
       ]
     else:
@@ -2378,11 +2378,11 @@ class STAR(HamiltonLiquidHandler):
 
     # Get center of source plate. Also gripping height and plate width.
     center = resource.get_absolute_location(x="c", y="c", z="b") + offset
-    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.get_size_x()
+      plate_width = resource.get_absolute_size_x()
     elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.get_size_y()
+      plate_width = resource.get_absolute_size_y()
     else:
       raise ValueError("Invalid grip direction")
 
@@ -2435,7 +2435,7 @@ class STAR(HamiltonLiquidHandler):
       x_direction=0,
       y_position=round(center.y * 10),
       y_direction=0,
-      z_position=round((location.z + resource.get_size_z() / 2) * 10),
+      z_position=round((location.z + resource.get_absolute_size_z() / 2) * 10),
       z_direction=0,
       grip_direction={
         GripDirection.FRONT: 1,
@@ -2478,13 +2478,13 @@ class STAR(HamiltonLiquidHandler):
 
     # Get center of source plate. Also gripping height and plate width.
     center = location + resource.rotated(z=rotation).center() + offset
-    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
+    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
     # grip_direction here is the put_direction. We use `rotation` to cancel it out and get the
     # original grip direction. Hack.
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.rotated(z=rotation).get_size_x()
+      plate_width = resource.rotated(z=rotation).get_absolute_size_x()
     elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.rotated(z=rotation).get_size_y()
+      plate_width = resource.rotated(z=rotation).get_absolute_size_y()
     else:
       raise ValueError("Invalid grip direction")
 
@@ -2540,8 +2540,8 @@ class STAR(HamiltonLiquidHandler):
 
     # Get center of source plate. Also gripping height and plate width.
     center = resource.get_absolute_location(x="c", y="c", z="b") + offset
-    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    grip_width = resource.get_size_y() #grip width is y size of resource
+    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
+    grip_width = resource.get_absolute_size_y() #grip width is y size of resource
 
     if self.core_parked:
       await self.get_core(p1=channel_1, p2=channel_2)
@@ -2625,8 +2625,8 @@ class STAR(HamiltonLiquidHandler):
 
     # Get center of destination location. Also gripping height and plate width.
     center = location + resource.center() + offset
-    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    grip_width = resource.get_size_y()
+    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
+    grip_width = resource.get_absolute_size_y()
 
     await self.core_put_plate(
       x_position=round(center.x * 10),
@@ -2691,7 +2691,7 @@ class STAR(HamiltonLiquidHandler):
 
     previous_location = move.resource.get_absolute_location() + move.resource_offset
     minimum_traverse_height = 284.0
-    previous_location.z = minimum_traverse_height - move.resource.get_size_z() / 2
+    previous_location.z = minimum_traverse_height - move.resource.get_absolute_size_z() / 2
 
     for location in move.intermediate_locations:
       if use_arm == "iswap":
@@ -2793,9 +2793,9 @@ class STAR(HamiltonLiquidHandler):
       """
 
     center = location + resource.centers()[0] + offset
-    y_width_to_gripper_bump = resource.get_size_y() - gripper_y_margin*2
-    assert 9 <= y_width_to_gripper_bump <= round(resource.get_size_y()), \
-      f"width between channels must be between 9 and {resource.get_size_y()} mm" \
+    y_width_to_gripper_bump = resource.get_absolute_size_y() - gripper_y_margin*2
+    assert 9 <= y_width_to_gripper_bump <= round(resource.get_absolute_size_y()), \
+      f"width between channels must be between 9 and {resource.get_absolute_size_y()} mm" \
       " (i.e. the minimal distance between channels and the max y size of the resource"
 
     # Check if CoRe gripper currently in use
@@ -4325,7 +4325,7 @@ class STAR(HamiltonLiquidHandler):
     # This appears to be deck.get_size_x() - 562.5, but let's keep an explicit check so that we
     # can catch unknown deck sizes. Can the grippers exist at another location? If so, define it as
     # a resource on the robot deck and use deck.get_resource().get_absolute_location().
-    deck_size = self.deck.get_size_x()
+    deck_size = self.deck.get_absolute_size_x()
     if deck_size == STARLET_SIZE_X:
       xs = 7975 # 1360-797.5 = 562.5
     elif deck_size == STAR_SIZE_X:
@@ -4354,7 +4354,7 @@ class STAR(HamiltonLiquidHandler):
   async def put_core(self):
     """ Put CoRe gripper tool at wasteblock mount. """
     assert self.deck is not None, "must have deck defined to access CoRe grippers"
-    deck_size = self.deck.get_size_x()
+    deck_size = self.deck.get_absolute_size_x()
     if deck_size == STARLET_SIZE_X:
       xs = 7975
     elif deck_size == STAR_SIZE_X:
@@ -5591,7 +5591,7 @@ class STAR(HamiltonLiquidHandler):
     """ Use autoload to unload carrier. """
     # Identify carrier end rail
     track_width = 22.5
-    carrier_width = carrier.get_absolute_location().x - 100  + carrier.get_size_x()
+    carrier_width = carrier.get_absolute_location().x - 100  + carrier.get_absolute_size_x()
     carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
@@ -5655,7 +5655,7 @@ class STAR(HamiltonLiquidHandler):
     }
     # Identify carrier end rail
     track_width = 22.5
-    carrier_width = carrier.get_absolute_location().x - 100  + carrier.get_size_x()
+    carrier_width = carrier.get_absolute_location().x - 100  + carrier.get_absolute_size_x()
     carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 

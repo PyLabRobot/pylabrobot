@@ -137,7 +137,7 @@ class Tilter(Machine):
       assert well.cross_section_type == CrossSectionType.CIRCLE, \
           "Wells must have circular cross-section"
 
-      diameter = well.get_size_x() # assuming circular well
+      diameter = well.get_absolute_size_x() # assuming circular well
       radius = diameter / 2
 
       if n_tips > 1:
