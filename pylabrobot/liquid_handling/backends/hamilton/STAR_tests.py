@@ -637,8 +637,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
                 "xs#####xd#yj####yd#zj####zd#th####te####go####gr#ga#")
 
     assert self.plate.rotation.z == 270
-    self.assertAlmostEqual(self.plate.get_size_x(), 85.48, places=2)
-    self.assertAlmostEqual(self.plate.get_size_y(), 127.76, places=2)
+    self.assertAlmostEqual(self.plate.get_absolute_size_x(), 85.48, places=2)
+    self.assertAlmostEqual(self.plate.get_absolute_size_y(), 127.76, places=2)
 
     await self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0],
       pickup_distance_from_top=8.2-3.33, get_direction=GripDirection.LEFT,

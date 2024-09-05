@@ -63,32 +63,24 @@ class ResourceStack(Resource):
   def __str__(self) -> str:
     return f"ResourceGroup({self.name})"
 
-  @property
-  def _size_x(self) -> float:
+  def get_size_x(self) -> float:
+    """ Get local size in the x direction. """
     if len(self.children) == 0:
       return 0
     if self.direction == "x":
       return sum(child.get_size_x() for child in self.children)
     return max(resource.get_size_x() for resource in self.children)
 
-  @_size_x.setter
-  def _size_x(self, size_x: float):
-    raise AttributeError("Cannot set size_x for ResourceStack, use assign_child_resource instead")
-
-  @property
-  def _size_y(self) -> float:
+  def get_size_y(self) -> float:
+    """ Get local size in the y direction. """
     if len(self.children) == 0:
       return 0
     if self.direction == "y":
       return sum(child.get_size_y() for child in self.children)
     return max(resource.get_size_y() for resource in self.children)
 
-  @_size_y.setter
-  def _size_y(self, size_y: float):
-    raise AttributeError("Cannot set size_y for ResourceStack, use assign_child_resource instead")
-
-  @property
-  def _size_z(self) -> float:
+  def get_size_z(self) -> float:
+    """ Get local size in the z direction. """
     def get_actual_resource_height(resource: Resource) -> float:
       """ Helper function to get the actual height of a resource, accounting for the lid nesting
       height if the resource is a plate with a lid. """
@@ -102,10 +94,6 @@ class ResourceStack(Resource):
     if self.direction != "z":
       return max(get_actual_resource_height(child) for child in self.children)
     return sum(get_actual_resource_height(child) for child in self.children)
-
-  @_size_z.setter
-  def _size_z(self, size_z: float):
-    raise AttributeError("Cannot set size_z for ResourceStack, use assign_child_resource instead")
 
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
     reassign: bool = False):
