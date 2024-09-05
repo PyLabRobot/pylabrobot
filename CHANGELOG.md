@@ -32,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `material_z_thickness` of a `Container` is used in computing its bottom (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - Default `pickup_distance_from_top` in `LiquidHandler.{move_plate,move_lid}` were lowered by 3.33 (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - `PlateCarrierSite` can now take `ResourceStack` as a child, as long as the children are `Plate`s (https://github.com/PyLabRobot/pylabrobot/pull/226)
+- `Resource.get_size_{x,y,z}` now return the size of the resource in local space, not absolute space (https://github.com/PyLabRobot/pylabrobot/pull/235)
+- `Resource.center` now returns the center of the resource in local space, not absolute space (https://github.com/PyLabRobot/pylabrobot/pull/235)
 
 ### Added
 
@@ -57,6 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `size_z` and `nesting_z_height` for `Cor_96_wellplate_360ul_Fb_Lid` (https://github.com/PyLabRobot/pylabrobot/pull/226)
 - `NestedTipRack` (https://github.com/PyLabRobot/pylabrobot/pull/228)
 - `HTF_L_ULTRAWIDE`, `ultrawide_high_volume_tip_with_filter` (https://github.com/PyLabRobot/pylabrobot/pull/229/)
+- `get_absolute_size_x`, `get_absolute_size_y`, `get_absolute_size_z` for `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/235)
 
 ### Deprecated
 
