@@ -622,7 +622,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       pickup_distance_from_top=8.2-3.33, get_direction=GripDirection.LEFT,
       put_direction=GripDirection.FRONT)
     self._assert_command_sent_once(
-      "C0PPid0005xs10427xd0yj3286yd0zj2063zd0gr4th2450te2450gw4go1308gb1245gt20ga0gc1",
+      "C0PPid0005xs09361xd0yj3074yd0zj2063zd0gr4th2450te2450gw4go1308gb1245gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
       "C0PRid0006xs03479xd0yj1142yd0zj1924zd0th2450te2450gr1go1308ga0",
