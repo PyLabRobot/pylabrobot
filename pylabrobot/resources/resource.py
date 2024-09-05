@@ -52,9 +52,9 @@ class Resource:
     model: Optional[str] = None,
   ):
     self._name = name
-    self._size_x = size_x
-    self._size_y = size_y
-    self._size_z = size_z
+    self._local_size_x = size_x
+    self._local_size_y = size_y
+    self._local_size_z = size_z
     self.rotation = rotation or Rotation()
     self.category = category
     self.model = model
@@ -69,6 +69,18 @@ class Resource:
     self._did_unassign_resource_callbacks: List[DidUnassignResourceCallback] = []
     self._resource_state_updated_callbacks: List[ResourceDidUpdateState] = []
 
+  @property
+  def _size_x(self) -> float:
+    return self._local_size_x
+
+  @property
+  def _size_y(self) -> float:
+    return self._local_size_y
+
+  @property
+  def _size_z(self) -> float:
+    return self._local_size_z
+    
   def serialize(self) -> dict:
     """ Serialize this resource. """
     return {
@@ -169,6 +181,7 @@ class Resource:
 
     z_: float
     if z.lower() in {"t", "top"}:
+      # z_ = self.get_size_z()
       z_ = self._size_z
     elif z.lower() in {"c", "center"}:
       z_ = self._size_z / 2
