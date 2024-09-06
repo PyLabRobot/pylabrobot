@@ -48,6 +48,9 @@ class Centrifuge(Machine):
   async def lock_bucket(self) -> None:
     await self.backend.lock_bucket()
 
+  async def go_to_bucket1(self) -> None:
+    await self.backend.go_to_bucket1()
+
   async def go_to_bucket2(self) -> None:
     await self.backend.go_to_bucket2()
 

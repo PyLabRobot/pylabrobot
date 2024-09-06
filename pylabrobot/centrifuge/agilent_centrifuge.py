@@ -29,6 +29,7 @@ class AgilentCentrifuge():
         # self.lock_status = True   # starts off unlocked - locked = True
         self.position = 0
         self.homing_position = 0
+        self.current_bucket = 1
 
     async def setup(self):
         if not USE_FTDI:
@@ -261,7 +262,9 @@ class AgilentCentrifuge():
         await self.send(b"\xaa\x02\x26\x00\x06\x2e")
         await self.com()
 
-    async def go_to_bucket2(self):
+    async def go_to_bucket1(self):
+        if self.current_bucket == 2:
+            return
         new_position = (self.position + 4000).to_bytes(4, byteorder='little')
         byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
         sum_byte = (sum(byte_string)-0xaa)&0xff
@@ -440,6 +443,192 @@ class AgilentCentrifuge():
                 await self.send(byte_literal)
             else:
                 await self.send(tx)
+
+        self.current_bucket = 1
+
+    async def go_to_bucket2(self):
+        if self.current_bucket == 1:
+            return
+        new_position = (self.position + 4000).to_bytes(4, byteorder='little')
+        byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
+        sum_byte = (sum(byte_string)-0xaa)&0xff
+        byte_string += sum_byte.to_bytes(1, byteorder='little')
+        tx_payloads = [
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 26 00 05 2d",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 26 00 01 29",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 26 00 00 28",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 17 02 1a",
+    "aa 01 0e 0f",
+    "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+    "aa 01 17 04 1c",
+    "aa 01 17 01 19",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0b 0c",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 17 02 1a",
+    "aa 01 0e 0f",
+    "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+    "aa 01 17 04 1c",
+    "aa 01 17 01 19",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0b 0c",
+    "aa 01 0e 0f",
+    "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+    byte_string,
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 17 02 1a",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 26 00 01 29",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 26 00 05 2d",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 26 00 07 2f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+    "aa 02 0e 10",
+    "aa 01 0e 0f",
+        ]
+
+        for tx in tx_payloads:
+            if isinstance(tx, str):
+                byte_literal = bytes.fromhex(tx)
+                await self.send(byte_literal)
+            else:
+                await self.send(tx)
+
+        self.current_bucket = 2
 
     async def start_spin_cycle(
     self,

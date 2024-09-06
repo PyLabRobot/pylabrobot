@@ -33,9 +33,9 @@ class CentrifugeBackend(MachineBackend, metaclass=ABCMeta):
     async def unlock_door(self) -> None:
         """ Unlock the centrifuge door. Also known as unlock door. """
 
-    # @abstractmethod
-    # async def bucket1(self) -> None:
-    #     """ Goes to bucket1. Also known as go to bucket 1. """
+    @abstractmethod
+    async def go_to_bucket1(self) -> None:
+        """ Goes to bucket1. Also known as go to bucket 1. """
 
     @abstractmethod
     async def go_to_bucket2(self) -> None:
