@@ -57,5 +57,5 @@ class CentrifugeBackend(MachineBackend, metaclass=ABCMeta):
     time_seconds: Optional[float] = None,
     acceleration: Optional[float] = None,
     deceleration: Optional[float] = None,
-  ) -> None: # TODO: add parameters for settings
+  ) -> None:
         """ Takes user settings and starts spinning buckets. Also known as start spin cycle. """
