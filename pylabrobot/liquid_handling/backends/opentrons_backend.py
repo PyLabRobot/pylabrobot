@@ -191,14 +191,14 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     well_definitions = {
       child.name: {
-        "depth": child.get_size_z(),
-        "x": cast(Coordinate, child.location).x + child.get_size_x() / 2,
-        "y": cast(Coordinate, child.location).y + child.get_size_y() / 2,
+        "depth": child.get_absolute_size_z(),
+        "x": cast(Coordinate, child.location).x + child.get_absolute_size_x() / 2,
+        "y": cast(Coordinate, child.location).y + child.get_absolute_size_y() / 2,
         "z": cast(Coordinate, child.location).z,
         "shape": "circular",
 
         # inscribed circle has diameter equal to the width of the well
-        "diameter": child.get_size_x(),
+        "diameter": child.get_absolute_size_x(),
 
         # Opentrons requires `totalLiquidVolume`, even for tip racks!
         "totalLiquidVolume": _get_volume(child),
@@ -247,9 +247,9 @@ class OpentronsBackend(LiquidHandlerBackend):
         "z": 0
       },
       "dimensions":{
-        "xDimension": resource.get_size_x(),
-        "yDimension": resource.get_size_y(),
-        "zDimension": resource.get_size_z(),
+        "xDimension": resource.get_absolute_size_x(),
+        "yDimension": resource.get_absolute_size_y(),
+        "zDimension": resource.get_absolute_size_z(),
       },
       "wells": well_definitions,
       "groups": [

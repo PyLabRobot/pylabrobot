@@ -144,10 +144,10 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       resource_location = None # unknown resource location
 
     if resource_location is not None: # collision detection
-      if resource_location.x + resource.get_size_x() > \
+      if resource_location.x + resource.get_absolute_size_x() > \
           self.rails_to_location(self.num_rails + 1).x and \
         rails is not None:
-        raise ValueError(f"Resource with width {resource.get_size_x()} does not "
+        raise ValueError(f"Resource with width {resource.get_absolute_size_x()} does not "
                         f"fit at rails {rails}.")
 
       # Check if there is space for this new resource.
@@ -158,12 +158,14 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         # A resource is not allowed to overlap with another resource. Resources overlap when a
         # corner of one resource is inside the boundaries of another resource.
         if any([
-          og_x <= resource_location.x < og_x + og_resource.get_size_x(),
-          og_x < resource_location.x + resource.get_size_x() < og_x + og_resource.get_size_x()
+          og_x <= resource_location.x < og_x + og_resource.get_absolute_size_x(),
+          og_x < resource_location.x + resource.get_absolute_size_x() \
+            < og_x + og_resource.get_absolute_size_x()
           ]) and any(
             [
-              og_y <= resource_location.y < og_y + og_resource.get_size_y(),
-              og_y < resource_location.y + resource.get_size_y() < og_y + og_resource.get_size_y()
+              og_y <= resource_location.y < og_y + og_resource.get_absolute_size_y(),
+              og_y < resource_location.y + resource.get_absolute_size_y() \
+                < og_y + og_resource.get_absolute_size_y()
             ]
           ):
           raise ValueError(f"Location {resource_location} is already occupied by resource "

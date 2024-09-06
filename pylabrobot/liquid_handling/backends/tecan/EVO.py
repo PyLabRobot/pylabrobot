@@ -320,7 +320,7 @@ class EVO(TecanLiquidHandler):
     for op, tlc in zip(ops, tecan_liquid_classes):
       op.volume = tlc.compute_corrected_volume(op.volume) if tlc is not None else op.volume
 
-    ys = int(ops[0].resource.get_size_y() * 10)
+    ys = int(ops[0].resource.get_absolute_size_y() * 10)
     zadd: List[Optional[int]] = [0] * self.num_channels
     for i, channel in enumerate(use_channels):
       par = ops[i].resource.parent
@@ -397,7 +397,7 @@ class EVO(TecanLiquidHandler):
     """
 
     x_positions, y_positions, z_positions = self._liha_positions(ops, use_channels)
-    ys = int(ops[0].resource.get_size_y() * 10)
+    ys = int(ops[0].resource.get_absolute_size_y() * 10)
 
     tecan_liquid_classes = [
       get_liquid_class(
@@ -443,7 +443,7 @@ class EVO(TecanLiquidHandler):
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
     # move channels
-    ys = int(ops[0].resource.get_size_y() * 10)
+    ys = int(ops[0].resource.get_absolute_size_y() * 10)
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
@@ -517,7 +517,7 @@ class EVO(TecanLiquidHandler):
 
     z_range = await self.roma.report_z_param(5)
     x, y, z = self._roma_positions(move.resource, move.resource.get_absolute_location(), z_range)
-    h = int(move.resource.get_size_y() * 10)
+    h = int(move.resource.get_absolute_size_y() * 10)
     xt, yt, zt = self._roma_positions(move.resource, move.destination, z_range)
 
     # move to resource
@@ -778,7 +778,7 @@ class EVO(TecanLiquidHandler):
       or par.roma_z_travel is None or par.roma_z_end is None:
       raise ValueError(f"Operation is not supported by resource {par}.")
     x_position = int((offset.x - 100)* 10 + par.roma_x)
-    y_position = int((347.1 - (offset.y + resource.get_size_y())) * 10 + par.roma_y)
+    y_position = int((347.1 - (offset.y + resource.get_absolute_size_y())) * 10 + par.roma_y)
     z_positions = {
       "safe": z_range - int(par.roma_z_safe),
       "travel": z_range - int(par.roma_z_travel - offset.z * 10),

@@ -607,25 +607,53 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     await self.lh.move_plate(self.plate, plate_reader, pickup_distance_from_top=8.2-3.33,
       get_direction=GripDirection.FRONT, put_direction=GripDirection.LEFT)
+    plate_origin_location = {
+      "xs": "03479",
+      "xd": "0",
+      "yj": "1142",
+      "yd": "0",
+      "zj": "1924",
+      "zd": "0",
+    }
+    plate_reader_location = {
+      "xs": "10427",
+      "xd": "0",
+      "yj": "3286",
+      "yd": "0",
+      "zj": "2063",
+      "zd": "0",
+    }
     self._assert_command_sent_once(
-      "C0PPid0003xs03479xd0yj1142yd0zj1924zd0th2450te2450gw4gb1245go1308gt20gr1ga0gc1",
+      f"C0PPid0003xs{plate_origin_location['xs']}xd{plate_origin_location['xd']}"
+      f"yj{plate_origin_location['yj']}yd{plate_origin_location['yd']}"
+      f"zj{plate_origin_location['zj']}zd{plate_origin_location['zd']}"
+      f"th2450te2450gw4gb1245go1308gt20gr1ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#th####te####gw#gb####go####gt##gr#ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0004xs10427xd0yj3286yd0zj2063zd0th2450te2450go1308gr4ga0",
+      f"C0PRid0004xs{plate_reader_location['xs']}xd{plate_reader_location['xd']}"
+      f"yj{plate_reader_location['yj']}yd{plate_reader_location['yd']}"
+      f"zj{plate_reader_location['zj']}zd{plate_reader_location['zd']}"
+      f"th2450te2450go1308gr4ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####go####gr#ga#")
 
-    assert self.plate.rotation.z == 90
-    self.assertAlmostEqual(self.plate.get_size_x(), 85.48, places=2)
-    self.assertAlmostEqual(self.plate.get_size_y(), 127.76, places=2)
+    assert self.plate.rotation.z == 270
+    self.assertAlmostEqual(self.plate.get_absolute_size_x(), 85.48, places=2)
+    self.assertAlmostEqual(self.plate.get_absolute_size_y(), 127.76, places=2)
 
     await self.lh.move_plate(plate_reader.get_plate(), self.plt_car[0],
       pickup_distance_from_top=8.2-3.33, get_direction=GripDirection.LEFT,
       put_direction=GripDirection.FRONT)
     self._assert_command_sent_once(
-      "C0PPid0005xs10427xd0yj3286yd0zj2063zd0gr4th2450te2450gw4go1308gb1245gt20ga0gc1",
+      f"C0PPid0005xs{plate_reader_location['xs']}xd{plate_reader_location['xd']}"
+      f"yj{plate_reader_location['yj']}yd{plate_reader_location['yd']}"
+      f"zj{plate_reader_location['zj']}zd{plate_reader_location['zd']}"
+      f"gr4th2450te2450gw4go1308gb1245gt20ga0gc1",
                 "xs#####xd#yj####yd#zj####zd#gr#th####te####gw#go####gb####gt##ga#gc#")
     self._assert_command_sent_once(
-      "C0PRid0006xs03479xd0yj1142yd0zj1924zd0th2450te2450gr1go1308ga0",
+      f"C0PRid0006xs{plate_origin_location['xs']}xd{plate_origin_location['xd']}"
+      f"yj{plate_origin_location['yj']}yd{plate_origin_location['yd']}"
+      f"zj{plate_origin_location['zj']}zd{plate_origin_location['zd']}"
+      f"th2450te2450gr1go1308ga0",
                 "xs#####xd#yj####yd#zj####zd#th####te####gr#go####ga#")
 
   async def test_iswap_move_lid(self):
