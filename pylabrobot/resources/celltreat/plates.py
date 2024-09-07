@@ -3,7 +3,7 @@ from pylabrobot.resources.height_volume_functions import (
   compute_height_from_volume_conical_frustum, compute_volume_from_height_conical_frustum)
 
 from pylabrobot.resources.plate import Lid, Plate
-from pylabrobot.resources.utils import create_equally_spaced_2d
+from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import Well, WellBottomType
 
 
@@ -30,7 +30,7 @@ def CellTreat_96_DWP_350ul_Ub(name: str, lid: Optional[Lid] = None) -> Plate:
     size_z=14.30,  # without lid
     lid=lid,
     model=CellTreat_96_DWP_350ul_Ub.__name__,
-    items=create_equally_spaced_2d(
+    ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
       num_items_y=8,
@@ -90,7 +90,7 @@ def CellTreat_6_DWP_16300ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
     size_z=20.2, # from plate specs/drawing
     lid=lid,
     model=CellTreat_6_DWP_16300ul_Fb.__name__,
-    items=create_equally_spaced_2d(
+    ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=3,
       num_items_y=2,

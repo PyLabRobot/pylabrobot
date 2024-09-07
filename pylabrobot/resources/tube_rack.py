@@ -16,7 +16,6 @@ class TubeRack(ItemizedResource[Tube]):
     size_x: float,
     size_y: float,
     size_z: float,
-    items: Optional[List[List[Tube]]] = None,
     ordered_items: Optional[Dict[str, Tube]] = None,
     model: Optional[str] = None,
   ):
@@ -35,7 +34,6 @@ class TubeRack(ItemizedResource[Tube]):
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
-      items=items,
       ordered_items=ordered_items,
       model=model)
 

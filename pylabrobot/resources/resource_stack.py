@@ -64,6 +64,7 @@ class ResourceStack(Resource):
     return f"ResourceGroup({self.name})"
 
   def get_size_x(self) -> float:
+    """ Get local size in the x direction. """
     if len(self.children) == 0:
       return 0
     if self.direction == "x":
@@ -71,6 +72,7 @@ class ResourceStack(Resource):
     return max(resource.get_size_x() for resource in self.children)
 
   def get_size_y(self) -> float:
+    """ Get local size in the y direction. """
     if len(self.children) == 0:
       return 0
     if self.direction == "y":
@@ -78,12 +80,16 @@ class ResourceStack(Resource):
     return max(resource.get_size_y() for resource in self.children)
 
   def get_size_z(self) -> float:
+    """ Get local size in the z direction. """
     def get_actual_resource_height(resource: Resource) -> float:
       """ Helper function to get the actual height of a resource, accounting for the lid nesting
       height if the resource is a plate with a lid. """
       if isinstance(resource, Plate) and resource.lid is not None:
         return resource.get_size_z() + resource.lid.get_size_z() - resource.lid.nesting_z_height
       return resource.get_size_z()
+
+    if len(self.children) == 0:
+      return 0
 
     if self.direction != "z":
       return max(get_actual_resource_height(child) for child in self.children)
