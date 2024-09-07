@@ -328,7 +328,7 @@ class Vantage(HamiltonLiquidHandler):
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
-    read_timeout: int = 30,
+    read_timeout: int = 60,
     write_timeout: int = 30,
   ):
     """ Create a new STAR interface.
