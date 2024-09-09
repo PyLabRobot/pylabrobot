@@ -16,7 +16,7 @@ class TestLid(unittest.TestCase):
 
     assert plate.lid is not None
     self.assertEqual(plate.lid.name, "plate_lid")
-    self.assertEqual(plate.lid.get_size_x(), 1)
+    self.assertEqual(plate.lid.get_absolute_size_x(), 1)
     self.assertEqual(plate.lid.get_absolute_location(), Coordinate(0, 0, 5))
 
   def test_add_lid(self):

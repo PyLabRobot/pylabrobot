@@ -55,6 +55,7 @@ class Resource:
     self._size_x = size_x
     self._size_y = size_y
     self._size_z = size_z
+    self._local_size_z = size_z
     self.rotation = rotation or Rotation()
     self.category = category
     self.model = model
@@ -68,6 +69,18 @@ class Resource:
     self._will_unassign_resource_callbacks: List[WillUnassignResourceCallback] = []
     self._did_unassign_resource_callbacks: List[DidUnassignResourceCallback] = []
     self._resource_state_updated_callbacks: List[ResourceDidUpdateState] = []
+
+  def get_size_x(self) -> float:
+    """ Local size in the x direction. """
+    return self._size_x
+
+  def get_size_y(self) -> float:
+    """ Local size in the y direction. """
+    return self._size_y
+
+  def get_size_z(self) -> float:
+    """ Local size in the z direction. """
+    return self._local_size_z
 
   def serialize(self) -> dict:
     """ Serialize this resource. """
@@ -105,9 +118,9 @@ class Resource:
     return (
       isinstance(other, Resource) and
       self.name == other.name and
-      self.get_size_x() == other.get_size_x() and
-      self.get_size_y() == other.get_size_y() and
-      self.get_size_z() == other.get_size_z() and
+      self.get_absolute_size_x() == other.get_absolute_size_x() and
+      self.get_absolute_size_y() == other.get_absolute_size_y() and
+      self.get_absolute_size_z() == other.get_absolute_size_z() and
       self.location == other.location and
       self.category == other.category and
       self.children == other.children
@@ -200,10 +213,16 @@ class Resource:
     if self.parent is None:
       return self.location
     parent_pos = self.parent.get_absolute_location()
-    parent_rotation_matrix = self.parent.get_absolute_rotation().get_rotation_matrix()
-    local_vector = (self.location + self.get_anchor(x=x, y=y, z=z)).vector()
-    rotated_position = Coordinate(*matrix_vector_multiply_3x3(parent_rotation_matrix, local_vector))
-    return parent_pos + rotated_position
+
+    rotated_location = Coordinate(*matrix_vector_multiply_3x3(
+        self.parent.get_absolute_rotation().get_rotation_matrix(),
+        self.location.vector()
+    ))
+    rotated_anchor = Coordinate(*matrix_vector_multiply_3x3(
+        self.get_absolute_rotation().get_rotation_matrix(),
+        self.get_anchor(x=x, y=y, z=z).vector()
+    ))
+    return parent_pos + rotated_location + rotated_anchor
 
   def _get_rotated_corners(self) -> List[Coordinate]:
     absolute_rotation = self.get_absolute_rotation()
@@ -212,25 +231,28 @@ class Resource:
       Coordinate(*matrix_vector_multiply_3x3(rot_mat, corner.vector()))
       for corner in [
         Coordinate(0, 0, 0),
-        Coordinate(self._size_x, 0, 0),
-        Coordinate(0, self._size_y, 0),
-        Coordinate(self._size_x, self._size_y, 0),
-        Coordinate(0, 0, self._size_z),
-        Coordinate(self._size_x, 0, self._size_z),
-        Coordinate(0, self._size_y, self._size_z),
-        Coordinate(self._size_x, self._size_y, self._size_z)
+        Coordinate(self.get_size_x(), 0, 0),
+        Coordinate(0, self.get_size_y(), 0),
+        Coordinate(self.get_size_x(), self.get_size_y(), 0),
+        Coordinate(0, 0, self.get_size_z()),
+        Coordinate(self.get_size_x(), 0, self.get_size_z()),
+        Coordinate(0, self.get_size_y(), self.get_size_z()),
+        Coordinate(self.get_size_x(), self.get_size_y(), self.get_size_z())
       ]
     ]
 
-  def get_size_x(self) -> float:
+  def get_absolute_size_x(self) -> float:
+    """ Get the absolute size in the x direction. """
     rotated_corners = self._get_rotated_corners()
     return max(c.x for c in rotated_corners) - min(c.x for c in rotated_corners)
 
-  def get_size_y(self) -> float:
+  def get_absolute_size_y(self) -> float:
+    """ Get the absolute size in the y direction. """
     rotated_corners = self._get_rotated_corners()
     return max(c.y for c in rotated_corners) - min(c.y for c in rotated_corners)
 
-  def get_size_z(self) -> float:
+  def get_absolute_size_z(self) -> float:
+    """ Get the absolute size in the z direction. """
     rotated_corners = self._get_rotated_corners()
     return max(c.z for c in rotated_corners) - min(c.z for c in rotated_corners)
 
