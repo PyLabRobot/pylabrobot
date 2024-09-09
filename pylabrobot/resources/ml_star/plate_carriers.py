@@ -157,27 +157,6 @@ def PLT_CAR_L5FLEX_AC_A00(name: str) -> PlateCarrier:
   )
 
 
-def PLT_CAR_L5FLEX_MD(name: str) -> PlateCarrier:
-  """ Plate carrier with 5 adjustable (height) positions for MTP """
-  return PlateCarrier(
-    name=name,
-    size_x=157.5,
-    size_y=497.0,
-    size_z=130.0,
-    sites=create_homogeneous_carrier_sites(klass=PlateCarrierSite, locations=[
-        Coordinate(15.25, 8.5, 115.8),
-        Coordinate(15.25, 104.5, 115.8),
-        Coordinate(15.25, 200.5, 115.8),
-        Coordinate(15.25, 296.5, 115.8),
-        Coordinate(15.25, 392.5, 115.8),
-      ],
-      site_size_x=127.0,
-      site_size_y=86.0,
-    ),
-    model="PLT_CAR_L5FLEX_MD"
-  )
-
-
 def PLT_CAR_L5FLEX_MD_A00(name: str) -> PlateCarrier:
   """ Plate carrier with 5 adjustable (height) positions for MTP """
   return PlateCarrier(
@@ -194,6 +173,7 @@ def PLT_CAR_L5FLEX_MD_A00(name: str) -> PlateCarrier:
       ],
       site_size_x=127.0,
       site_size_y=86.0,
+      pedestal_size_z=-4.8,
     ),
     model="PLT_CAR_L5FLEX_MD_A00"
   )
