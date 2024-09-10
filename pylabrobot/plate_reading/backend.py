@@ -35,7 +35,7 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
   async def read_absorbance(self, wavelength: int) -> List[List[float]]:
     """ Read the absorbance from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate. """
-  
+
   @abstractmethod
   async def read_fluorescence(
     self,

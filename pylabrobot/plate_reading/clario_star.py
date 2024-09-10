@@ -333,7 +333,7 @@ class CLARIOStar(PlateReaderBackend):
 
     if report == "transmittance":
       return utils.reshape_2d(transmittance, (8, 12))
-  
+
   async def read_fluorescence(
     self,
     excitation_wavelength: int,

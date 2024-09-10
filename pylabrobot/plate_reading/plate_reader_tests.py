@@ -26,6 +26,10 @@ class MockPlateReaderBackend(PlateReaderBackend):
   async def read_absorbance(self, wavelength: int):
     return [[1, 2, 3], [4, 5, 6]]
 
+  async def read_fluorescence(self, excitation_wavelength: int, emission_wavelength: int,
+                              focal_height: float):
+    raise NotImplementedError
+
 
 class TestPlateReaderResource(unittest.TestCase):
   """ Test plate reade as a resource. """

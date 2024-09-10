@@ -147,9 +147,9 @@ class Cytation5Backend(PlateReaderBackend):
 
   async def read_fluorescence(
     self,
+    excitation_wavelength: int,
+    emission_wavelength: int,
     focal_height: float,
-    excitation_wavelength: float,
-    emission_wavelength: float
   ) -> List[List[float]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
