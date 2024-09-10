@@ -225,7 +225,7 @@ class Cytation5Backend(PlateReaderBackend):
       assert resp == b"\x06"
       resp = await self._read_until(b"\x03")
       assert resp == b"0000\x03"
-    
+
     def shake_continuous(loop):
       while self._shaking:
         asyncio.run_coroutine_threadsafe(shake_maximal_duration(), loop)
@@ -237,12 +237,14 @@ class Cytation5Backend(PlateReaderBackend):
           seconds_since_start += 1
 
     self._shaking = True
-    self._shaking_thread = threading.Thread(target=shake_continuous, args=(asyncio.get_event_loop(),))
+    self._shaking_thread = threading.Thread(target=shake_continuous,
+                                            args=(asyncio.get_event_loop(),))
     self._shaking_thread.start()
 
   async def stop_shaking(self) -> None:
     await self._abort()
     if self._shaking:
       self._shaking = False
-      self._shaking_thread.join()
-      self._shaking_thread = None
+      if self._shaking_thread is not None:
+        self._shaking_thread.join()
+        self._shaking_thread = None
