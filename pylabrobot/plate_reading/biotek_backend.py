@@ -1,6 +1,7 @@
 import asyncio
 import enum
 import logging
+import threading
 import time
 from typing import List, Optional, Union
 from pylibftdi import Device
@@ -26,8 +27,12 @@ class Cytation5Backend(PlateReaderBackend):
     self.dev.ftdi_fn.ftdi_setflowctrl(SIO_RTS_CTS_HS)
     self.dev.ftdi_fn.ftdi_setrts(1)
 
+    self._shaking = False
+    self._shaking_thread: Optional[threading.Thread] = None
+
   async def stop(self) -> None:
     logger.info("[cytation5] stopping")
+    await self.stop_shaking()
     self.dev.close()
 
   async def _purge_buffers(self) -> None:
@@ -195,26 +200,49 @@ class Cytation5Backend(PlateReaderBackend):
     LINEAR = "linear"
     ORBITAL = "orbital"
 
-  async def start_shaking(self, shake_type: ShakeType) -> None:
-    resp = await self.send_command("y", wait_for_char=b"\x06")
-    assert resp == b"\x06"
-    await self.send_command(b"08120112207434014351135308559127881422\x03", purge=False)
-
-    resp = await self.send_command("D", wait_for_char=b"\x06")
-    assert resp == b"\x06"
-    shake_type_bit = "0" if shake_type == self.ShakeType.LINEAR else "1"
-
+  async def shake(self, shake_type: ShakeType) -> None:
+    """ Warning: the duration for shaknig has to be specified on the machine, and the maximum is
+    16 minutes and 39 seconds. As a hack, we start shaking for the maximum duration every time
+    as long as stop is not called. """
     max_duration = 16*60 + 39 # 16m39s
-    duration = str(max_duration).zfill(3)
-    cmd = f"0033010101010100002000000013{duration}{shake_type_bit}301".encode()
-    checksum = str((sum(cmd)+73) % 100).encode() # don't know why +73
-    cmd = cmd + checksum + b"\x03"
-    await self.send_command(cmd, purge=False)
 
-    resp = await self.send_command("O", wait_for_char=b"\x06")
-    assert resp == b"\x06"
-    resp = await self._read_until(b"\x03")
-    assert resp == b"0000\x03"
+    async def shake_maximal_duration():
+      resp = await self.send_command("y", wait_for_char=b"\x06")
+      assert resp == b"\x06"
+      await self.send_command(b"08120112207434014351135308559127881422\x03", purge=False)
+
+      resp = await self.send_command("D", wait_for_char=b"\x06")
+      assert resp == b"\x06"
+      shake_type_bit = "0" if shake_type == self.ShakeType.LINEAR else "1"
+
+      duration = str(max_duration).zfill(3)
+      cmd = f"0033010101010100002000000013{duration}{shake_type_bit}301".encode()
+      checksum = str((sum(cmd)+73) % 100).encode() # don't know why +73
+      cmd = cmd + checksum + b"\x03"
+      await self.send_command(cmd, purge=False)
+
+      resp = await self.send_command("O", wait_for_char=b"\x06")
+      assert resp == b"\x06"
+      resp = await self._read_until(b"\x03")
+      assert resp == b"0000\x03"
+    
+    def shake_continuous(loop):
+      while self._shaking:
+        asyncio.run_coroutine_threadsafe(shake_maximal_duration(), loop)
+
+        # short sleep allows = frequent checks for fast stopping
+        seconds_since_start = 0
+        while seconds_since_start < max_duration and self._shaking:
+          time.sleep(0.5)
+          seconds_since_start += 1
+
+    self._shaking = True
+    self._shaking_thread = threading.Thread(target=shake_continuous, args=(asyncio.get_event_loop(),))
+    self._shaking_thread.start()
 
   async def stop_shaking(self) -> None:
     await self._abort()
+    if self._shaking:
+      self._shaking = False
+      self._shaking_thread.join()
+      self._shaking_thread = None
