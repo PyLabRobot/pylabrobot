@@ -9,8 +9,11 @@ import unittest.mock
 
 from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
 from pylabrobot.resources import no_tip_tracking, set_tip_tracking, Liquid
+from pylabrobot.resources.carrier import PlateCarrierSite
 from pylabrobot.resources.errors import HasTipError, NoTipError, CrossContaminationError
 from pylabrobot.resources.volume_tracker import set_volume_tracking, set_cross_contamination_tracking
+from pylabrobot.resources.well import Well
+from pylabrobot.resources.utils import create_ordered_items_2d
 
 from . import backends
 from .liquid_handler import LiquidHandler, OperationCallback
@@ -30,6 +33,7 @@ from pylabrobot.resources import (
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF_L, HTF_L
 from .standard import (
+  GripDirection,
   Pickup,
   Drop,
   DropTipRack,
@@ -248,6 +252,29 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(plate1.location.z, 0)
     self.assertEqual(plate2.location.z, 15)
     self.assertEqual(stack.get_absolute_size_z(), 30)
+
+  async def test_move_plate_rotation(self):
+      test_cases = [
+          (0, GripDirection.LEFT, GripDirection.RIGHT),
+          (0, GripDirection.FRONT, GripDirection.BACK),
+          (90, GripDirection.LEFT, GripDirection.RIGHT),
+          (90, GripDirection.FRONT, GripDirection.BACK),
+          (270, GripDirection.LEFT, GripDirection.RIGHT),
+          (270, GripDirection.FRONT, GripDirection.BACK),
+      ]
+      stack = PlateCarrierSite(name="carrier_site", size_x=100, size_y=100, size_z=15, pedestal_size_z=1)
+      self.deck.assign_child_resource(stack, location=Coordinate(100, 100, 0))
+      for rotation, get_direction, put_direction in test_cases:
+          with self.subTest(rotation=rotation, get_direction=get_direction, put_direction=put_direction):
+              plate = Plate("plate", size_x=100, size_y=100, size_z=15, ordered_items=create_ordered_items_2d(Well, num_items_x=1, num_items_y=1, dx=0, dy=0, dz=0, item_dx=10, item_dy=10, size_x=10, size_y=10, size_z=10))
+              plate.rotate(z=rotation)
+              stack.assign_child_resource(plate)
+              original_center = plate.get_absolute_location(x="c", y="c", z="c")
+              await self.lh.move_plate(plate, stack, get_direction=get_direction, put_direction=put_direction)
+              new_center = plate.get_absolute_location(x="c", y="c", z="c")
+
+              self.assertEqual(new_center, original_center, f"Center mismatch for rotation {rotation}, get_direction {get_direction}, put_direction {put_direction}")
+              plate.unassign()
 
   def test_serialize(self):
     serialized = self.lh.serialize()
