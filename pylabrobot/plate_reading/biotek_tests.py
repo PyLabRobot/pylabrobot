@@ -83,7 +83,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.dev.write.assert_any_call(b"D")
     self.backend.dev.write.assert_any_call(
       b"004701010108120001200100001100100000106000080580113\x03")
-    self.backend.dev.write.asert_any_call(b"O")
+    self.backend.dev.write.assert_any_call(b"O")
 
     assert resp == [
       [0.1917, 0.1225, 0.0667, 0.0728, 0.0722, 0.0664, 0.0763, 0.0726, 0.0825, 0.1001, 0.1443,
@@ -141,7 +141,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.dev.write.assert_any_call(
       b"0084010101081200012001000011001000001350001002002000485000052800000000000000000021001119"
       b"\x03")
-    self.backend.dev.write.asert_any_call(b"O")
+    self.backend.dev.write.assert_any_call(b"O")
 
     assert resp == [
       [427.0, 746.0, 598.0, 742.0, 1516.0, 704.0, 676.0, 734.0, 1126.0, 790.0, 531.0, 531.0],
