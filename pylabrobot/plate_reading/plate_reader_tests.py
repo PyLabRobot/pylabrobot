@@ -1,4 +1,3 @@
-from typing import Literal
 import unittest
 
 from pylabrobot.plate_reading import PlateReader
@@ -24,7 +23,7 @@ class MockPlateReaderBackend(PlateReaderBackend):
   async def read_luminescence(self, focal_height: float):
     return [[1, 2, 3], [4, 5, 6]]
 
-  async def read_absorbance(self, wavelength: int, report: Literal["OD", "transmittance"]):
+  async def read_absorbance(self, wavelength: int):
     return [[1, 2, 3], [4, 5, 6]]
 
 

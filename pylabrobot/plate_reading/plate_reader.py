@@ -77,19 +77,30 @@ class PlateReader(Machine):
     return await self.backend.read_luminescence(focal_height=focal_height)
 
   @need_setup_finished
-  async def read_absorbance(
-    self,
-    wavelength: int,
-    report: Literal["OD", "transmittance"]
-  ) -> List[List[float]]:
-    """ Read the absorbance from the plate in either OD or transmittance.
+  async def read_absorbance(self, wavelength: int) -> List[List[float]]:
+    """ Read the absorbance from the plate in OD, unless otherwise specified by the backend.
 
     Args:
       wavelength: The wavelength to read the absorbance at, in nanometers.
-      report: Whether to report the absorbance in OD or transmittance.
     """
 
-    if report not in {"OD", "transmittance"}:
-      raise ValueError("report must be either 'OD' or 'transmittance'.")
+    return await self.backend.read_absorbance(wavelength=wavelength)
 
-    return await self.backend.read_absorbance(wavelength=wavelength, report=report)
+  @need_setup_finished
+  async def read_fluorescence(
+    self,
+    excitation_wavelength: int,
+    emission_wavelength: int,
+    focal_height: float
+  ) -> List[List[float]]:
+    """ Read the fluorescence from the plate.
+
+    Args:
+      excitation_wavelength: The excitation wavelength to read the fluorescence at, in nanometers.
+      emission_wavelength: The emission wavelength to read the fluorescence at, in nanometers.
+      focal_height: The focal height to read the fluorescence at, in micrometers.
+    """
+
+    return await self.backend.read_fluorescence(excitation_wavelength=excitation_wavelength,
+                                                emission_wavelength=emission_wavelength,
+                                                focal_height=focal_height)

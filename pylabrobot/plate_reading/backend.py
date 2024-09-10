@@ -1,15 +1,9 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-import sys
 from typing import List, Optional, Type
 
 from pylabrobot.machines.backends import MachineBackend
-
-if sys.version_info >= (3, 8):
-  from typing import Literal
-else:
-  from typing_extensions import Literal
 
 
 class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
@@ -38,12 +32,18 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
     outer list is the columns of the plate and the inner list is the rows of the plate. """
 
   @abstractmethod
-  async def read_absorbance(
-    self,
-    wavelength: int,
-    report: Literal["OD", "transmittance"]
-  ) -> List[List[float]]:
+  async def read_absorbance(self, wavelength: int) -> List[List[float]]:
     """ Read the absorbance from the plate reader. This should return a list of lists, where the
+    outer list is the columns of the plate and the inner list is the rows of the plate. """
+  
+  @abstractmethod
+  async def read_fluorescence(
+    self,
+    excitation_wavelength: int,
+    emission_wavelength: int,
+    focal_height: float
+  ) -> List[List[float]]:
+    """ Read the fluorescence from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate. """
 
   # Copied from liquid_handling/backend.py. Maybe we should create a shared base class?
