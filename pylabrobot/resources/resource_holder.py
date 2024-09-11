@@ -6,7 +6,7 @@ from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.utils import get_child_location
 
 
-class ResourceHolder(Resource):
+class ResourceHolderMixin:
   def __init__(
     self,
     name: str,
