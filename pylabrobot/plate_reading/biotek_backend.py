@@ -111,7 +111,6 @@ class Cytation5Backend(PlateReaderBackend):
     parsed_data: List[List[float]] = []
     for row_idx, row in enumerate(rows):
       parsed_data.append([])
-      # (well, row, value)
       values = row.split(b",")
       grouped_values = [values[i:i+3] for i in range(0, len(values), 3)]
 
