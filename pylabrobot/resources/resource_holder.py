@@ -1,6 +1,5 @@
 from typing import Optional
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.rotation import Rotation
 

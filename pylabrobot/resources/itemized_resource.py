@@ -33,7 +33,8 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
                 ordered_items: Optional[Dict[str, T]] = None,
                 ordering: Optional[List[str]] = None,
                 category: Optional[str] = None,
-                model: Optional[str] = None):
+                model: Optional[str] = None,
+                **kwargs):
     """ Initialize an itemized resource
 
     Args:
