@@ -1,7 +1,6 @@
 import asyncio
 import enum
 import logging
-import threading
 import time
 from typing import List, Optional, Union
 from pylibftdi import Device
@@ -28,7 +27,7 @@ class Cytation5Backend(PlateReaderBackend):
     self.dev.ftdi_fn.ftdi_setrts(1)
 
     self._shaking = False
-    self._shaking_thread: Optional[threading.Thread] = None
+    self._shaking_task: Optional[asyncio.Task] = None
 
   async def stop(self) -> None:
     logger.info("[cytation5] stopping")
@@ -206,6 +205,8 @@ class Cytation5Backend(PlateReaderBackend):
     max_duration = 16*60 + 39 # 16m39s
 
     async def shake_maximal_duration():
+      """ This method will start the shaking, but returns immediately after
+      shaking has started. """
       resp = await self.send_command("y", wait_for_char=b"\x06")
       assert resp == b"\x06"
       await self.send_command(b"08120112207434014351135308559127881422\x03", purge=False)
@@ -225,9 +226,9 @@ class Cytation5Backend(PlateReaderBackend):
       resp = await self._read_until(b"\x03")
       assert resp == b"0000\x03"
 
-    def shake_continuous(loop):
+    async def shake_continuous():
       while self._shaking:
-        asyncio.run_coroutine_threadsafe(shake_maximal_duration(), loop)
+        await shake_maximal_duration()
 
         # short sleep allows = frequent checks for fast stopping
         seconds_since_start: float = 0
@@ -237,14 +238,16 @@ class Cytation5Backend(PlateReaderBackend):
           time.sleep(loop_wait_time)
 
     self._shaking = True
-    self._shaking_thread = threading.Thread(target=shake_continuous,
-                                            args=(asyncio.get_event_loop(),))
-    self._shaking_thread.start()
+    self._shaking_task = asyncio.create_task(shake_continuous())
 
   async def stop_shaking(self) -> None:
     await self._abort()
     if self._shaking:
       self._shaking = False
-      if self._shaking_thread is not None:
-        self._shaking_thread.join()
-        self._shaking_thread = None
+    if self._shaking_task is not None:
+      self._shaking_task.cancel()
+      try:
+        await self._shaking_task
+      except asyncio.CancelledError:
+        pass
+      self._shaking_task = None
