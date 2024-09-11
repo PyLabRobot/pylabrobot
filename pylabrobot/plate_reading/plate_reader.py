@@ -5,7 +5,6 @@ from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.resources import Coordinate, Plate, Resource
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources.resource_holder import ResourceHolderMixin
-from pylabrobot.resources.utils import get_child_location
 
 if sys.version_info >= (3, 8):
   from typing import Literal
