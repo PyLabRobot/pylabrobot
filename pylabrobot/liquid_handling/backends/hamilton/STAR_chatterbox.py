@@ -4,8 +4,8 @@ from typing import Optional
 
 from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
 
-class STARChatterBoxBackend(STAR):
-  """ Chatter box backend for "STAR" """
+class STARChatterboxBackend(STAR):
+  """ Chatterbox backend for "STAR" """
 
   def __init__(self, num_channels: int = 8):
     """ Initialize a chatter box backend. """
