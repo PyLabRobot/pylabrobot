@@ -50,7 +50,7 @@ class Resource:
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
-    **kwargs
+    **_kwargs
   ):
     self._name = name
     self._size_x = size_x
