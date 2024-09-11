@@ -21,4 +21,5 @@ Backends
   :nosignatures:
   :recursive:
 
+    chatterbox.PlateReaderChatterboxBackend
     clario_star.CLARIOStar
