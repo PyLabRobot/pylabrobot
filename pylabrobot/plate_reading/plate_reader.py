@@ -87,7 +87,7 @@ class PlateReader(Machine):
     emission_wavelength: int,
     focal_height: float
   ) -> List[List[float]]:
-    """ Read the fluorescence from the plate.
+    """ 
 
     Args:
       excitation_wavelength: The excitation wavelength to read the fluorescence at, in nanometers.
