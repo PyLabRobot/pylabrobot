@@ -34,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `PlateCarrierSite` can now take `ResourceStack` as a child, as long as the children are `Plate`s (https://github.com/PyLabRobot/pylabrobot/pull/226)
 - `Resource.get_size_{x,y,z}` now return the size of the resource in local space, not absolute space (https://github.com/PyLabRobot/pylabrobot/pull/235)
 - `Resource.center` now returns the center of the resource in local space, not absolute space (https://github.com/PyLabRobot/pylabrobot/pull/235)
+- Rename `ChatterBoxBackend` to `LiquidHandlerChatterboxBackend` (https://github.com/PyLabRobot/pylabrobot/pull/242)
+- Move `LiquidHandlerChatterboxBackend` from `liquid_handling.backends.chatterbox_backend` to `liquid_handling.backends.chatterbox` (https://github.com/PyLabRobot/pylabrobot/pull/242)
 
 ### Added
 
@@ -61,6 +63,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `HTF_L_ULTRAWIDE`, `ultrawide_high_volume_tip_with_filter` (https://github.com/PyLabRobot/pylabrobot/pull/229/)
 - `get_absolute_size_x`, `get_absolute_size_y`, `get_absolute_size_z` for `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/235)
 - `Cytation5Backend` for plate reading on BioTek Cytation 5 (https://github.com/PyLabRobot/pylabrobot/pull/238)
+- More chatterboxes (https://github.com/PyLabRobot/pylabrobot/pull/242)
+  - `FanChatterboxBackend`
+  - `PlateReaderChatterboxBackend`
+  - `PowderDispenserChatterboxBackend`
+  - `PumpChatterboxBackend`
+  - `PumpArrayChatterboxBackend`
+  - `ScaleChatterboxBackend`
+  - `ShakerChatterboxBackend`
+  - `TemperatureControllerChatterboxBackend`
 
 ### Deprecated
 
