@@ -21,4 +21,5 @@ Backends
   :nosignatures:
   :recursive:
 
+    chatterbox.ScaleChatterboxBackend
     mettler_toledo.MettlerToledoWXS205SDU

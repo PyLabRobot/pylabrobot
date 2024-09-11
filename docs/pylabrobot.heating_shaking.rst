@@ -21,4 +21,5 @@ Backends
   :nosignatures:
   :recursive:
 
+    chatterbox.HeaterShakerChatterboxBackend
     inheco.InhecoThermoShake

@@ -2,5 +2,5 @@ from pylabrobot.shaking.chatterbox import ShakerChatterboxBackend
 from pylabrobot.temperature_controlling.chatterbox import TemperatureControllerChatterboxBackend
 
 
-class HeaterShakerBackend(ShakerChatterboxBackend, TemperatureControllerChatterboxBackend):
+class HeaterShakerChatterboxBackend(ShakerChatterboxBackend, TemperatureControllerChatterboxBackend):
   pass
