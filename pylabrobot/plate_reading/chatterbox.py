@@ -7,9 +7,9 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
   absorbance, or fluorescence from a plate. """
 
   def __init__(self):
-    self.dummy_luminescence = [[0]*12]*8
-    self.dummy_absorbance = [[0]*12]*8
-    self.dummy_fluorescence = [[0]*12]*8
+    self.dummy_luminescence = [[0.0]*12]*8
+    self.dummy_absorbance = [[0.0]*12]*8
+    self.dummy_fluorescence = [[0.0]*12]*8
 
   async def setup(self) -> None:
     print("Setting up the plate reader.")
