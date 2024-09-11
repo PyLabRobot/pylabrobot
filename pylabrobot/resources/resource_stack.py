@@ -1,10 +1,9 @@
 from typing import List, Optional
 
-from pylabrobot.resources.resource_holder import ResourceHolderMixin
+from pylabrobot.resources.resource_holder import ResourceHolderMixin, get_child_location
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Lid, Plate
-from pylabrobot.resources.utils import get_child_location
 
 
 class ResourceStack(ResourceHolderMixin, Resource):

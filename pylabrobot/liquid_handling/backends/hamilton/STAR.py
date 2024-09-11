@@ -40,7 +40,7 @@ from pylabrobot.resources.errors import (
 from pylabrobot.resources.hamilton.hamilton_decks import STAR_SIZE_X, STARLET_SIZE_X
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-from pylabrobot.resources.utils import get_child_location
+from pylabrobot.resources.resource_holder import get_child_location
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 T = TypeVar("T")
