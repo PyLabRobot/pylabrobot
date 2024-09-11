@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Generic, List, Optional, Type, TypeVar, Union
 
-from pylabrobot.resources.utils import get_child_location
+from pylabrobot.resources.resource_holder import ResourceHolder
 
 from .coordinate import Coordinate
 from .plate import Plate
@@ -14,7 +14,7 @@ from .plate_adapter import PlateAdapter
 logger = logging.getLogger("pylabrobot")
 
 
-class CarrierSite(Resource):
+class CarrierSite(ResourceHolder):
   """ A single site within a carrier. """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
@@ -30,7 +30,6 @@ class CarrierSite(Resource):
     reassign: bool = True
   ):
     self.resource = resource
-    location = location or get_child_location(resource)
     return super().assign_child_resource(resource, location, reassign)
 
   def unassign_child_resource(self, resource):
@@ -241,7 +240,7 @@ class PlateCarrierSite(CarrierSite):
       resource.register_did_assign_resource_callback(self._update_resource_stack_location)
       self.register_did_unassign_resource_callback(self._deregister_resource_stack_callback)
 
-    return get_child_location(resource) - Coordinate(z=z_sinking_depth)
+    return - Coordinate(z=z_sinking_depth)
 
   def _update_resource_stack_location(self, resource: Resource):
     """ Callback called when the lowest resource on a ResourceStack changes. Since the location of
