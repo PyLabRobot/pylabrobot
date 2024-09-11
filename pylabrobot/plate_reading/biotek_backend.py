@@ -201,7 +201,7 @@ class Cytation5Backend(PlateReaderBackend):
     ORBITAL = "orbital"
 
   async def shake(self, shake_type: ShakeType) -> None:
-    """ Warning: the duration for shaknig has to be specified on the machine, and the maximum is
+    """ Warning: the duration for shaking has to be specified on the machine, and the maximum is
     16 minutes and 39 seconds. As a hack, we start shaking for the maximum duration every time
     as long as stop is not called. """
     max_duration = 16*60 + 39 # 16m39s
