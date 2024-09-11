@@ -8,7 +8,7 @@ from pylibftdi import Device
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger("pylabrobot.plate_reading.biotek")
 
 
 class Cytation5Backend(PlateReaderBackend):
@@ -195,9 +195,9 @@ class Cytation5Backend(PlateReaderBackend):
   async def _abort(self) -> None:
     await self.send_command("x", wait_for_char=None)
 
-  class ShakeType(enum.Enum):
-    LINEAR = "linear"
-    ORBITAL = "orbital"
+  class ShakeType(enum.IntEnum):
+    LINEAR = 0
+    ORBITAL = 1
 
   async def shake(self, shake_type: ShakeType) -> None:
     """ Warning: the duration for shaking has to be specified on the machine, and the maximum is
@@ -212,7 +212,7 @@ class Cytation5Backend(PlateReaderBackend):
 
       resp = await self.send_command("D", wait_for_char=b"\x06")
       assert resp == b"\x06"
-      shake_type_bit = "0" if shake_type == self.ShakeType.LINEAR else "1"
+      shake_type_bit = str(shake_type.value)
 
       duration = str(max_duration).zfill(3)
       cmd = f"0033010101010100002000000013{duration}{shake_type_bit}301".encode()
@@ -231,9 +231,10 @@ class Cytation5Backend(PlateReaderBackend):
 
         # short sleep allows = frequent checks for fast stopping
         seconds_since_start = 0
+        loop_wait_time = 0.25
         while seconds_since_start < max_duration and self._shaking:
-          time.sleep(0.5)
-          seconds_since_start += 1
+          seconds_since_start += loop_wait_time
+          time.sleep(loop_wait_time)
 
     self._shaking = True
     self._shaking_thread = threading.Thread(target=shake_continuous,
