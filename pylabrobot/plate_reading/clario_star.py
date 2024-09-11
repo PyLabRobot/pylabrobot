@@ -275,7 +275,7 @@ class CLARIOStar(PlateReaderBackend):
   async def read_absorbance(
     self,
     wavelength: int,
-    report: Literal["OD", "transmittance"]
+    report: Literal["OD", "transmittance"] = "OD"
   ) -> List[List[float]]:
     """ Read absorbance values from the device.
 
@@ -333,3 +333,11 @@ class CLARIOStar(PlateReaderBackend):
 
     if report == "transmittance":
       return utils.reshape_2d(transmittance, (8, 12))
+
+  async def read_fluorescence(
+    self,
+    excitation_wavelength: int,
+    emission_wavelength: int,
+    focal_height: float
+  ) -> List[List[float]]:
+    raise NotImplementedError("Not implemented yet")
