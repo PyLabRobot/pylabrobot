@@ -1,6 +1,7 @@
 """ Tests for LiquidHandler """
 # pylint: disable=missing-class-docstring
 
+import itertools
 import pytest
 import tempfile
 from typing import Any, Dict, List, Optional, cast
@@ -254,36 +255,48 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(stack.get_absolute_size_z(), 30)
 
   async def test_move_plate_rotation(self):
-    test_cases = [
-        (0, GripDirection.LEFT, GripDirection.RIGHT),
-        (0, GripDirection.FRONT, GripDirection.BACK),
-        (90, GripDirection.LEFT, GripDirection.RIGHT),
-        (90, GripDirection.FRONT, GripDirection.BACK),
-        (270, GripDirection.LEFT, GripDirection.RIGHT),
-        (270, GripDirection.FRONT, GripDirection.BACK),
+    rotations = [0, 90, 270, 360]
+    grip_directions = [
+        (GripDirection.LEFT, GripDirection.RIGHT),
+        (GripDirection.FRONT, GripDirection.BACK),
     ]
-    stack = PlateCarrierSite(name="carrier_site", size_x=100, size_y=100, size_z=15,
-                             pedestal_size_z=1)
-    self.deck.assign_child_resource(stack, location=Coordinate(100, 100, 0))
-    for rotation, get_direction, put_direction in test_cases:
-      with self.subTest(rotation=rotation, get_direction=get_direction,
-                        put_direction=put_direction):
+    site_classes = [ResourceStack, PlateCarrierSite]
+
+    test_cases = itertools.product(site_classes, rotations, grip_directions)
+
+    for site_class, rotation, (get_direction, put_direction) in test_cases:
+      with self.subTest(stack_type=site_class.__name__, rotation=rotation,
+                        get_direction=get_direction, put_direction=put_direction):
+        if site_class == ResourceStack:
+          site = site_class(name=f"{site_class.__name__.lower()}", direction="z")
+        else:
+          site = site_class(
+            name=f"{site_class.__name__.lower()}",
+            size_x=100,
+            size_y=100,
+            size_z=15,
+            pedestal_size_z=1
+          )
+
+        self.deck.assign_child_resource(site, location=Coordinate(100, 100, 0))
+
         plate = Plate("plate", size_x=100, size_y=100, size_z=15,
                       ordered_items=create_ordered_items_2d(
                         Well, num_items_x=1, num_items_y=1, dx=0, dy=0, dz=0,
                         item_dx=10, item_dy=10, size_x=10, size_y=10, size_z=10))
         plate.rotate(z=rotation)
-        stack.assign_child_resource(plate)
+        site.assign_child_resource(plate)
         original_center = plate.get_absolute_location(x="c", y="c", z="c")
-        await self.lh.move_plate(plate, stack, get_direction=get_direction,
+        await self.lh.move_plate(plate, site, get_direction=get_direction,
                                  put_direction=put_direction)
         new_center = plate.get_absolute_location(x="c", y="c", z="c")
 
         self.assertEqual(new_center, original_center,
-                         f"Center mismatch for rotation {rotation}, "
+                         f"Center mismatch for {site_class.__name__}, rotation {rotation}, "
                          f"get_direction {get_direction}, "
                          f"put_direction {put_direction}")
         plate.unassign()
+        self.deck.unassign_child_resource(site)
 
   def test_serialize(self):
     serialized = self.lh.serialize()

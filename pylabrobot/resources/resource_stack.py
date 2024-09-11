@@ -3,6 +3,7 @@ from typing import List, Optional
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Lid, Plate
+from pylabrobot.resources.utils import get_child_location
 
 
 class ResourceStack(Resource):
@@ -109,12 +110,18 @@ class ResourceStack(Resource):
         top_item = self.get_top_item()
         if isinstance(resource, Lid) and isinstance(top_item, Plate):
           resource_location.z -= resource.nesting_z_height
-          top_item.assign_child_resource(resource, location=resource_location)
+          top_item.assign_child_resource(
+            resource,
+            location=get_child_location(resource) + resource_location
+          )
           return
     else:
       raise ValueError("self.direction must be one of 'x', 'y', or 'z'")
 
-    super().assign_child_resource(resource, location=resource_location)
+    super().assign_child_resource(
+      resource,
+      location=get_child_location(resource) + resource_location
+    )
 
   def unassign_child_resource(self, resource: Resource):
     if self.direction == "z" and resource != self.children[-1]: # no floating resources
