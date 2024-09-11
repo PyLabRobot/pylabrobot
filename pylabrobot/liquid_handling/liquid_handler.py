@@ -362,8 +362,6 @@ class LiquidHandler(Machine):
       raise TypeError(f"Resources must be `TipSpot`s, got {not_tip_spots}")
 
     # fix arguments
-    if isinstance(offsets, Coordinate):
-      raise NotImplementedError("Single offset is deprecated, use a list of offsets.")
     if use_channels is None:
       if self._default_use_channels is None:
         use_channels = list(range(len(tip_spots)))
@@ -482,8 +480,6 @@ class LiquidHandler(Machine):
       raise TypeError(f"Resources must be `TipSpot`s or Trash, got {not_tip_spots}")
 
     # fix arguments
-    if isinstance(offsets, Coordinate):
-      raise NotImplementedError("Single offset is deprecated, use a list of offsets.")
     if use_channels is None:
       if self._default_use_channels is None:
         use_channels = list(range(len(tip_spots)))
@@ -695,11 +691,6 @@ class LiquidHandler(Machine):
       ValueError: If all channels are `None`.
     """
 
-    if isinstance(resources, Resource):
-      raise NotImplementedError("Single resource is deprecated, use a list of resources. If you "
-                                "want to aspirate from a single resource, use a list with that "
-                                "resource and specify the channels to use.")
-
     self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
@@ -709,16 +700,6 @@ class LiquidHandler(Machine):
     flow_rates = flow_rates or [None] * len(use_channels)
     liquid_height = liquid_height or [None] * len(use_channels)
     blow_out_air_volume = blow_out_air_volume or [None] * len(use_channels)
-
-    # Deprecation check for single values
-    if isinstance(vols, numbers.Number):
-      raise NotImplementedError("Single volume is deprecated, use a list of volumes.")
-    if isinstance(flow_rates, numbers.Number):
-      raise NotImplementedError("Single flow rate is deprecated, use a list of flow rates.")
-    if isinstance(liquid_height, numbers.Number):
-      raise NotImplementedError("Single liquid height is deprecated, use a list of liquid heights.")
-    if isinstance(blow_out_air_volume, numbers.Number):
-      raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
     # Convert everything to floats to handle exotic number types
     vols = [float(v) for v in vols]
@@ -881,11 +862,6 @@ class LiquidHandler(Machine):
     # want to space the channels evenly across the resource. Note that offsets are relative to the
     # center of the resource.
 
-    if isinstance(resources, Resource):
-      raise NotImplementedError("Single resource is deprecated, use a list of resources. If you "
-                                "want to dispense to a single resource, use a list with that "
-                                "resource and specify the channels to use.")
-
     self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
@@ -912,16 +888,6 @@ class LiquidHandler(Machine):
       centers = list(reversed(resource.centers(yn=n, zn=0)))
       centers = [c - resource.center() for c in centers] # offset is wrt center
       offsets = [c + o for c, o in zip(centers, offsets)] # user-defined
-
-    # Deprecation check for single values
-    if isinstance(vols, numbers.Number):
-      raise NotImplementedError("Single volume is deprecated, use a list of volumes.")
-    if isinstance(flow_rates, numbers.Number):
-      raise NotImplementedError("Single flow rate is deprecated, use a list of flow rates.")
-    if isinstance(liquid_height, numbers.Number):
-      raise NotImplementedError("Single liquid height is deprecated, use a list of liquid heights.")
-    if isinstance(blow_out_air_volume, numbers.Number):
-      raise NotImplementedError("Single blow out air volume is deprecated, use a list of volumes.")
 
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
@@ -1051,12 +1017,6 @@ class LiquidHandler(Machine):
     Raises:
       RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
     """
-
-    # Deprecation check for single values
-    if isinstance(targets, Well):
-      raise NotImplementedError("Single target is deprecated, use a list of targets.")
-    if isinstance(dispense_flow_rates, numbers.Rational):
-      raise NotImplementedError("Single dispense flow rate is deprecated, use a list of flow rates")
 
     if target_vols is not None:
       if ratios is not None:
