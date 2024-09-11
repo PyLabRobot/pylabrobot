@@ -15,7 +15,8 @@ class ResourceHolderMixin:
     size_z: float,
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    **kwargs
   ):
     super().__init__(
       name,
@@ -24,7 +25,8 @@ class ResourceHolderMixin:
       size_z,
       rotation=rotation,
       category=category,
-      model=model
+      model=model,
+      **kwargs
     )
 
   def assign_child_resource(

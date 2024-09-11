@@ -2,11 +2,12 @@ import asyncio
 from typing import Optional
 
 from pylabrobot.machines.machine import Machine
+from pylabrobot.resources.resource_holder import ResourceHolderMixin
 
 from .backend import ShakerBackend
 
 
-class Shaker(Machine):
+class Shaker(ResourceHolderMixin, Machine):
   """ A shaker machine """
 
   def __init__(

@@ -4,6 +4,7 @@ from typing import List, Optional, cast
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.resources import Coordinate, Plate, Resource
 from pylabrobot.plate_reading.backend import PlateReaderBackend
+from pylabrobot.resources.resource_holder import ResourceHolderMixin
 from pylabrobot.resources.utils import get_child_location
 
 if sys.version_info >= (3, 8):
@@ -16,7 +17,7 @@ class NoPlateError(Exception):
   pass
 
 
-class PlateReader(Machine):
+class PlateReader(ResourceHolderMixin, Machine):
   """ The front end for plate readers. Plate readers are devices that can read luminescence,
   absorbance, or fluorescence from a plate.
 
@@ -48,12 +49,16 @@ class PlateReader(Machine):
 
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]=None,
                             reassign: bool = True):
-    location = location or get_child_location(resource)
     if len(self.children) >= 1:
       raise ValueError("There already is a plate in the plate reader.")
     if not isinstance(resource, Plate):
       raise ValueError("The resource must be a Plate.")
-    super().assign_child_resource(resource, location=location)
+
+    if location is not None:
+      # Directly call Machine's assign_child_resource method to allow for custom location
+      Machine.assign_child_resource(self, resource, location=location, reassign=reassign)
+    else:
+      super().assign_child_resource(resource, reassign=reassign)
 
   def get_plate(self) -> Plate:
     if len(self.children) == 0:

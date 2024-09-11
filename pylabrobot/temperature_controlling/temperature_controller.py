@@ -3,11 +3,11 @@ import time
 from typing import Optional
 
 from pylabrobot.machines.machine import Machine
-
+from pylabrobot.resources.resource_holder import ResourceHolderMixin
 from .backend import TemperatureControllerBackend
 
 
-class TemperatureController(Machine):
+class TemperatureController(ResourceHolderMixin, Machine):
   """ Temperature controller, for heating or for cooling. """
 
   def __init__(
