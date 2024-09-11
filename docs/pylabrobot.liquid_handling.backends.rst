@@ -52,4 +52,4 @@ Testing
   :nosignatures:
   :recursive:
 
-    backends.chatterbox_backend.ChatterBoxBackend
+    backends.chatterbox.ChatterboxBackend
