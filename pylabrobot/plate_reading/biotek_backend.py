@@ -186,7 +186,6 @@ class Cytation5Backend(PlateReaderBackend):
     resp2 = await self._read_until(b"\x03")
     assert resp2 == b"0000\x03"
 
-    # read data
     body = await self._read_until(b"\x03", timeout=60*2)
     assert body is not None
     return self._parse_body(body)
@@ -200,9 +199,9 @@ class Cytation5Backend(PlateReaderBackend):
 
   async def shake(self, shake_type: ShakeType) -> None:
     """ Warning: the duration for shaking has to be specified on the machine, and the maximum is
-    16 minutes and 39 seconds. As a hack, we start shaking for the maximum duration every time
-    as long as stop is not called. """
-    max_duration = 16*60 + 39 # 16m39s
+    16 minutes. As a hack, we start shaking for the maximum duration every time as long as stop
+    is not called. """
+    max_duration = 16*60 # 16 minutes
 
     async def shake_maximal_duration():
       """ This method will start the shaking, but returns immediately after
@@ -235,7 +234,7 @@ class Cytation5Backend(PlateReaderBackend):
         loop_wait_time = 0.25
         while seconds_since_start < max_duration and self._shaking:
           seconds_since_start += loop_wait_time
-          time.sleep(loop_wait_time)
+          await asyncio.sleep(loop_wait_time)
 
     self._shaking = True
     self._shaking_task = asyncio.create_task(shake_continuous())
