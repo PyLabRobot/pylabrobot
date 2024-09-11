@@ -19,7 +19,13 @@ from pylabrobot.liquid_handling.standard import (
 )
 
 
-class ChatterBoxBackend(LiquidHandlerBackend):
+class ChatterBoxBackend:
+  def __init__(self, num_channels: int = 8):
+    raise NotImplementedError("ChatterBoxBackend is deprecated. "
+                              "Use LiquidHandlerChatterBoxBackend instead.")
+
+
+class LiquidHandlerChatterBoxBackend(LiquidHandlerBackend):
   """ Chatter box backend for device-free testing. Prints out all operations. """
 
   _pip_length = 5
@@ -65,15 +71,15 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
     print("Picking up tips:")
     header = (
-      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
-      f"{'resource':<{ChatterBoxBackend._resource_length}} "
-      f"{'offset':<{ChatterBoxBackend._offset_length}} "
-      f"{'tip type':<{ChatterBoxBackend._tip_type_length}} "
-      f"{'max volume (µL)':<{ChatterBoxBackend._max_volume_length}} "
-      f"{'fitting depth (mm)':<{ChatterBoxBackend._fitting_depth_length}} "
-      f"{'tip length (mm)':<{ChatterBoxBackend._tip_length_length}} "
+      f"{'pip#':<{LiquidHandlerChatterBoxBackend._pip_length}} "
+      f"{'resource':<{LiquidHandlerChatterBoxBackend._resource_length}} "
+      f"{'offset':<{LiquidHandlerChatterBoxBackend._offset_length}} "
+      f"{'tip type':<{LiquidHandlerChatterBoxBackend._tip_type_length}} "
+      f"{'max volume (µL)':<{LiquidHandlerChatterBoxBackend._max_volume_length}} "
+      f"{'fitting depth (mm)':<{LiquidHandlerChatterBoxBackend._fitting_depth_length}} "
+      f"{'tip length (mm)':<{LiquidHandlerChatterBoxBackend._tip_length_length}} "
       # f"{'pickup method':<{ChatterBoxBackend._pickup_method_length}} "
-      f"{'filter':<{ChatterBoxBackend._filter_length}}"
+      f"{'filter':<{LiquidHandlerChatterBoxBackend._filter_length}}"
     )
     print(header)
 
@@ -81,29 +87,29 @@ class ChatterBoxBackend(LiquidHandlerBackend):
       offset = f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
       row = (
         f"  p{channel}: "
-        f"{op.resource.name[-30:]:<{ChatterBoxBackend._resource_length}} "
-        f"{offset:<{ChatterBoxBackend._offset_length}} "
-        f"{op.tip.__class__.__name__:<{ChatterBoxBackend._tip_type_length}} "
-        f"{op.tip.maximal_volume:<{ChatterBoxBackend._max_volume_length}} "
-        f"{op.tip.fitting_depth:<{ChatterBoxBackend._fitting_depth_length}} "
-        f"{op.tip.total_tip_length:<{ChatterBoxBackend._tip_length_length}} "
+        f"{op.resource.name[-30:]:<{LiquidHandlerChatterBoxBackend._resource_length}} "
+        f"{offset:<{LiquidHandlerChatterBoxBackend._offset_length}} "
+        f"{op.tip.__class__.__name__:<{LiquidHandlerChatterBoxBackend._tip_type_length}} "
+        f"{op.tip.maximal_volume:<{LiquidHandlerChatterBoxBackend._max_volume_length}} "
+        f"{op.tip.fitting_depth:<{LiquidHandlerChatterBoxBackend._fitting_depth_length}} "
+        f"{op.tip.total_tip_length:<{LiquidHandlerChatterBoxBackend._tip_length_length}} "
         # f"{str(op.tip.pickup_method)[-20:]:<{ChatterBoxBackend._pickup_method_length}} "
-        f"{'Yes' if op.tip.has_filter else 'No':<{ChatterBoxBackend._filter_length}}"
+        f"{'Yes' if op.tip.has_filter else 'No':<{LiquidHandlerChatterBoxBackend._filter_length}}"
       )
       print(row)
 
   async def drop_tips(self, ops: List[Drop], use_channels: List[int], **backend_kwargs):
     print("Dropping tips:")
     header = (
-      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
-      f"{'resource':<{ChatterBoxBackend._resource_length}} "
-      f"{'offset':<{ChatterBoxBackend._offset_length}} "
-      f"{'tip type':<{ChatterBoxBackend._tip_type_length}} "
-      f"{'max volume (µL)':<{ChatterBoxBackend._max_volume_length}} "
-      f"{'fitting depth (mm)':<{ChatterBoxBackend._fitting_depth_length}} "
-      f"{'tip length (mm)':<{ChatterBoxBackend._tip_length_length}} "
+      f"{'pip#':<{LiquidHandlerChatterBoxBackend._pip_length}} "
+      f"{'resource':<{LiquidHandlerChatterBoxBackend._resource_length}} "
+      f"{'offset':<{LiquidHandlerChatterBoxBackend._offset_length}} "
+      f"{'tip type':<{LiquidHandlerChatterBoxBackend._tip_type_length}} "
+      f"{'max volume (µL)':<{LiquidHandlerChatterBoxBackend._max_volume_length}} "
+      f"{'fitting depth (mm)':<{LiquidHandlerChatterBoxBackend._fitting_depth_length}} "
+      f"{'tip length (mm)':<{LiquidHandlerChatterBoxBackend._tip_length_length}} "
       # f"{'pickup method':<{ChatterBoxBackend._pickup_method_length}} "
-      f"{'filter':<{ChatterBoxBackend._filter_length}}"
+      f"{'filter':<{LiquidHandlerChatterBoxBackend._filter_length}}"
     )
     print(header)
 
@@ -111,43 +117,43 @@ class ChatterBoxBackend(LiquidHandlerBackend):
       offset = f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
       row = (
         f"  p{channel}: "
-        f"{op.resource.name[-30:]:<{ChatterBoxBackend._resource_length}} "
-        f"{offset:<{ChatterBoxBackend._offset_length}} "
-        f"{op.tip.__class__.__name__:<{ChatterBoxBackend._tip_type_length}} "
-        f"{op.tip.maximal_volume:<{ChatterBoxBackend._max_volume_length}} "
-        f"{op.tip.fitting_depth:<{ChatterBoxBackend._fitting_depth_length}} "
-        f"{op.tip.total_tip_length:<{ChatterBoxBackend._tip_length_length}} "
+        f"{op.resource.name[-30:]:<{LiquidHandlerChatterBoxBackend._resource_length}} "
+        f"{offset:<{LiquidHandlerChatterBoxBackend._offset_length}} "
+        f"{op.tip.__class__.__name__:<{LiquidHandlerChatterBoxBackend._tip_type_length}} "
+        f"{op.tip.maximal_volume:<{LiquidHandlerChatterBoxBackend._max_volume_length}} "
+        f"{op.tip.fitting_depth:<{LiquidHandlerChatterBoxBackend._fitting_depth_length}} "
+        f"{op.tip.total_tip_length:<{LiquidHandlerChatterBoxBackend._tip_length_length}} "
         # f"{str(op.tip.pickup_method)[-20:]:<{ChatterBoxBackend._pickup_method_length}} "
-        f"{'Yes' if op.tip.has_filter else 'No':<{ChatterBoxBackend._filter_length}}"
+        f"{'Yes' if op.tip.has_filter else 'No':<{LiquidHandlerChatterBoxBackend._filter_length}}"
       )
       print(row)
 
   async def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
     print("Aspirating:")
     header = (
-      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
-      f"{'vol(ul)':<{ChatterBoxBackend._vol_length}} "
-      f"{'resource':<{ChatterBoxBackend._resource_length}} "
-      f"{'offset':<{ChatterBoxBackend._offset_length}} "
-      f"{'flow rate':<{ChatterBoxBackend._flow_rate_length}} "
-      f"{'blowout':<{ChatterBoxBackend._blowout_length}} "
-      f"{'lld_z':<{ChatterBoxBackend._lld_z_length}}  "
+      f"{'pip#':<{LiquidHandlerChatterBoxBackend._pip_length}} "
+      f"{'vol(ul)':<{LiquidHandlerChatterBoxBackend._vol_length}} "
+      f"{'resource':<{LiquidHandlerChatterBoxBackend._resource_length}} "
+      f"{'offset':<{LiquidHandlerChatterBoxBackend._offset_length}} "
+      f"{'flow rate':<{LiquidHandlerChatterBoxBackend._flow_rate_length}} "
+      f"{'blowout':<{LiquidHandlerChatterBoxBackend._blowout_length}} "
+      f"{'lld_z':<{LiquidHandlerChatterBoxBackend._lld_z_length}}  "
       # f"{'liquids':<20}" # TODO: add liquids
     )
     for key in backend_kwargs:
-      header += f"{key:<{ChatterBoxBackend._kwargs_length}} "[-16:]
+      header += f"{key:<{LiquidHandlerChatterBoxBackend._kwargs_length}} "[-16:]
     print(header)
 
     for o, p in zip(ops, use_channels):
       offset = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
       row = (
         f"  p{p}: "
-        f"{o.volume:<{ChatterBoxBackend._vol_length}} "
-        f"{o.resource.name[-20:]:<{ChatterBoxBackend._resource_length}} "
-        f"{offset:<{ChatterBoxBackend._offset_length}} "
-        f"{str(o.flow_rate):<{ChatterBoxBackend._flow_rate_length}} "
-        f"{str(o.blow_out_air_volume):<{ChatterBoxBackend._blowout_length}} "
-        f"{str(o.liquid_height):<{ChatterBoxBackend._lld_z_length}} "
+        f"{o.volume:<{LiquidHandlerChatterBoxBackend._vol_length}} "
+        f"{o.resource.name[-20:]:<{LiquidHandlerChatterBoxBackend._resource_length}} "
+        f"{offset:<{LiquidHandlerChatterBoxBackend._offset_length}} "
+        f"{str(o.flow_rate):<{LiquidHandlerChatterBoxBackend._flow_rate_length}} "
+        f"{str(o.blow_out_air_volume):<{LiquidHandlerChatterBoxBackend._blowout_length}} "
+        f"{str(o.liquid_height):<{LiquidHandlerChatterBoxBackend._lld_z_length}} "
         # f"{o.liquids if o.liquids is not None else 'none'}"
       )
       for key, value in backend_kwargs.items():
@@ -161,29 +167,29 @@ class ChatterBoxBackend(LiquidHandlerBackend):
   async def dispense(self, ops: List[Dispense], use_channels: List[int], **backend_kwargs):
     print("Dispensing:")
     header = (
-      f"{'pip#':<{ChatterBoxBackend._pip_length}} "
-      f"{'vol(ul)':<{ChatterBoxBackend._vol_length}} "
-      f"{'resource':<{ChatterBoxBackend._resource_length}} "
-      f"{'offset':<{ChatterBoxBackend._offset_length}} "
-      f"{'flow rate':<{ChatterBoxBackend._flow_rate_length}} "
-      f"{'blowout':<{ChatterBoxBackend._blowout_length}} "
-      f"{'lld_z':<{ChatterBoxBackend._lld_z_length}}  "
+      f"{'pip#':<{LiquidHandlerChatterBoxBackend._pip_length}} "
+      f"{'vol(ul)':<{LiquidHandlerChatterBoxBackend._vol_length}} "
+      f"{'resource':<{LiquidHandlerChatterBoxBackend._resource_length}} "
+      f"{'offset':<{LiquidHandlerChatterBoxBackend._offset_length}} "
+      f"{'flow rate':<{LiquidHandlerChatterBoxBackend._flow_rate_length}} "
+      f"{'blowout':<{LiquidHandlerChatterBoxBackend._blowout_length}} "
+      f"{'lld_z':<{LiquidHandlerChatterBoxBackend._lld_z_length}}  "
       # f"{'liquids':<20}" # TODO: add liquids
     )
     for key in backend_kwargs:
-      header += f"{key:<{ChatterBoxBackend._kwargs_length}} "[-16:]
+      header += f"{key:<{LiquidHandlerChatterBoxBackend._kwargs_length}} "[-16:]
     print(header)
 
     for o, p in zip(ops, use_channels):
       offset = f"{round(o.offset.x, 1)},{round(o.offset.y, 1)},{round(o.offset.z, 1)}"
       row = (
         f"  p{p}: "
-        f"{o.volume:<{ChatterBoxBackend._vol_length}} "
-        f"{o.resource.name[-20:]:<{ChatterBoxBackend._resource_length}} "
-        f"{offset:<{ChatterBoxBackend._offset_length}} "
-        f"{str(o.flow_rate):<{ChatterBoxBackend._flow_rate_length}} "
-        f"{str(o.blow_out_air_volume):<{ChatterBoxBackend._blowout_length}} "
-        f"{str(o.liquid_height):<{ChatterBoxBackend._lld_z_length}} "
+        f"{o.volume:<{LiquidHandlerChatterBoxBackend._vol_length}} "
+        f"{o.resource.name[-20:]:<{LiquidHandlerChatterBoxBackend._resource_length}} "
+        f"{offset:<{LiquidHandlerChatterBoxBackend._offset_length}} "
+        f"{str(o.flow_rate):<{LiquidHandlerChatterBoxBackend._flow_rate_length}} "
+        f"{str(o.blow_out_air_volume):<{LiquidHandlerChatterBoxBackend._blowout_length}} "
+        f"{str(o.liquid_height):<{LiquidHandlerChatterBoxBackend._lld_z_length}} "
         # f"{o.liquids if o.liquids is not None else 'none'}"
       )
       for key, value in backend_kwargs.items():
@@ -191,7 +197,7 @@ class ChatterBoxBackend(LiquidHandlerBackend):
           value = ''.join('T' if v else 'F' for v in value)
         if isinstance(value, list):
           value = "".join(map(str, value))
-        row += f" {value:<{ChatterBoxBackend._kwargs_length}}"
+        row += f" {value:<{LiquidHandlerChatterBoxBackend._kwargs_length}}"
       print(row)
 
   async def pick_up_tips96(self, pickup: PickupTipRack, **backend_kwargs):

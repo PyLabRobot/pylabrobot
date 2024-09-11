@@ -1,5 +1,5 @@
 from .backend import LiquidHandlerBackend
-from .chatterbox_backend import ChatterBoxBackend
+from .chatterbox_backend import LiquidHandlerChatterBoxBackend
 from .serializing_backend import SerializingBackend, SerializingSavingBackend # many rely on this
 from .websocket import WebSocketBackend
 
