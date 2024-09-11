@@ -7,7 +7,6 @@ import contextlib
 import inspect
 import json
 import logging
-import numbers
 import threading
 from typing import Any, Callable, Dict, Union, Optional, List, Sequence, Set, Tuple, Protocol, cast
 import warnings
@@ -632,7 +631,7 @@ class LiquidHandler(Machine):
   @need_setup_finished
   async def aspirate(
     self,
-    resources: Union[Container, Sequence[Container]],
+    resources: Sequence[Container],
     vols: List[float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[List[Optional[float]]] = None,
@@ -797,7 +796,7 @@ class LiquidHandler(Machine):
   @need_setup_finished
   async def dispense(
     self,
-    resources: Union[Container, Sequence[Container]],
+    resources: Sequence[Container],
     vols: List[float],
     use_channels: Optional[List[int]] = None,
     flow_rates: Optional[List[Optional[float]]] = None,
