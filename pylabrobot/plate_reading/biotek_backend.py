@@ -230,7 +230,7 @@ class Cytation5Backend(PlateReaderBackend):
         asyncio.run_coroutine_threadsafe(shake_maximal_duration(), loop)
 
         # short sleep allows = frequent checks for fast stopping
-        seconds_since_start = 0
+        seconds_since_start: float = 0
         loop_wait_time = 0.25
         while seconds_since_start < max_duration and self._shaking:
           seconds_since_start += loop_wait_time
