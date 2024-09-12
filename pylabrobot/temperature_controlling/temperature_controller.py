@@ -20,7 +20,8 @@ class TemperatureController(ResourceHolderMixin, Machine):
     category: str = "temperature_controller",
     model: Optional[str] = None
   ):
-    super().__init__(name, size_x, size_y, size_z, backend, category, model)
+    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
+                     backend=backend, category=category, model=model)
     self.backend: TemperatureControllerBackend = backend  # fix type
     self.target_temperature: Optional[float] = None
 
