@@ -21,5 +21,6 @@ Backends
   :nosignatures:
   :recursive:
 
+    chatterbox.TilterChatterboxBackend
     tilter_backend.TilterBackend
     hamilton_backend.HamiltonTiltModuleBackend

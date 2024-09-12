@@ -21,4 +21,5 @@ Backends
   :nosignatures:
   :recursive:
 
+    chatterbox.PumpChatterboxBackend
     cole_parmer.masterflex.Masterflex

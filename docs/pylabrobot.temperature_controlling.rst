@@ -22,4 +22,5 @@ Backends
   :nosignatures:
   :recursive:
 
+    chatterbox.TemperatureControllerChatterboxBackend
     opentrons_backend.OpentronsTemperatureModuleBackend

@@ -22,3 +22,4 @@ Backends
   :recursive:
 
     backend.ShakerBackend
+    chatterbox.ShakerChatterboxBackend
