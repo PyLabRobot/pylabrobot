@@ -744,22 +744,22 @@ byte_string,
 "aa 01 0e 0f",
 "aa 02 0e 10"
 ]
-    last_payloads = [
-      "aa 01 17 02 1a",
-"aa 01 0e 0f",
-"aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-"aa 01 17 04 1c",
-"aa 01 17 01 19",
-"aa 01 0e 0f",
-"aa 02 0e 10",
-"aa 01 0b 0c",
-"aa 01 0e 0f",
-"aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-"aa 01 d4 97 0f 26 00 00 c3 f5 28 00 d7 1a 00 00 72",
-"aa 01 0e 0f",
-"aa 01 0e 0f",
-"aa 01 0e 0f"
-    ]
+#     last_payloads = [
+#       "aa 01 17 02 1a",
+# "aa 01 0e 0f",
+# "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+# "aa 01 17 04 1c",
+# "aa 01 17 01 19",
+# "aa 01 0e 0f",
+# "aa 02 0e 10",
+# "aa 01 0b 0c",
+# "aa 01 0e 0f",
+# "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+# "aa 01 d4 97 0f 26 00 00 c3 f5 28 00 d7 1a 00 00 72",
+# "aa 01 0e 0f",
+# "aa 01 0e 0f",
+# "aa 01 0e 0f"
+#     ]
 
     for tx in payloads:
       if isinstance(tx, str):
