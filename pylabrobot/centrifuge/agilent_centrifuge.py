@@ -81,14 +81,14 @@ class AgilentCentrifuge(CentrifugeBackend):
         if written != len(cmd):
             raise RuntimeError("Failed to write all bytes")
         resp = await self.read_resp(timeout=read_timeout)
-        s = ""
-        c = ""
-        for i, byte in enumerate(resp):
-            s += f" {byte:02x} "  # Format byte as two-digit hexadecimal
-        for i, byte in enumerate(cmd):
-            c += f" {byte:02x} "  # Format byte as two-digit hexadecimal
-        print(f"TX: {len(cmd)}-bytes -\t {c}")
-        print(f"RX: {len(resp)}-bytes -\t {s}\n")
+        # s = ""
+        # c = ""
+        # for i, byte in enumerate(resp):
+        #     s += f" {byte:02x} "  # Format byte as two-digit hexadecimal
+        # for i, byte in enumerate(cmd):
+        #     c += f" {byte:02x} "  # Format byte as two-digit hexadecimal
+        # print(f"TX: {len(cmd)}-bytes -\t {c}")
+        # print(f"RX: {len(resp)}-bytes -\t {s}\n")
         return resp
 
     async def configure_and_initialize(self):
@@ -220,14 +220,14 @@ class AgilentCentrifuge(CentrifugeBackend):
     async def status_check(self):
         """Check the status of the centrifuge."""
         resp = await self.send(b"\xaa\x01\x0e\x0f")
-        s = []
-        for byte in resp:
-            s.append(f"{byte:02x}")
-        await self.com()
-        self.position = int.from_bytes(bytes.fromhex(''.join(s[1:4])), byteorder='little')
-        self.homing_position = int.from_bytes(bytes.fromhex(''.join(s[9:12])), byteorder='little')
-        stat = f"{resp[0]:02x}"
-        print(f"status: {stat} position: {self.position}   homing position: {self.homing_position}")
+        # s = []
+        # for byte in resp:
+        #     s.append(f"{byte:02x}")
+        # await self.com()
+        # self.position = int.from_bytes(bytes.fromhex(''.join(s[1:4])), byteorder='little')
+        # self.homing_position = int.from_bytes(bytes.fromhex(''.join(s[9:12])), byteorder='little')
+        # stat = f"{resp[0]:02x}"
+        # print(f"status: {stat} position: {self.position}   homing position: {self.homing_position}")
         return resp
 
     async def open_door(self):
@@ -629,11 +629,15 @@ class AgilentCentrifuge(CentrifugeBackend):
     acceleration: Optional[float] = 80,
   ) -> None:
         """Start a spin cycle."""
+        if acceleration < 0:
+            acceleration = acceleration*(-1)
+        if acceleration > 100:
+            acceleration = 100
         base = int(-1779 + 678*g*6+ 0.413*(g*6)**2)
         g_bytes = (int(135333*(g*9.8)**0.5)).to_bytes(4, byteorder='little')
         acc_bytes = (int(915*acceleration/100)).to_bytes(2, byteorder='little')
-        byte_string = (self.position + base + 4000*g*6//30*time_seconds).to_bytes(4, byteorder='little')
-        byte_string = b"\xaa\x01\xd4\x97" + byte_string + g_bytes + acc_bytes+b"\x00\x00"
+        new_position_bytes = (self.position + base + 4000*g*6//30*time_seconds).to_bytes(4, byteorder='little')
+        byte_string = b"\xaa\x01\xd4\x97" + new_position_bytes + g_bytes + acc_bytes+b"\x00\x00"
         last_byte = (sum(byte_string)-0xaa)&0xff
         byte_string += last_byte.to_bytes(1, byteorder='little')
         payloads = [
