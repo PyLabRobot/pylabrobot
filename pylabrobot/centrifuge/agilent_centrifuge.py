@@ -12,8 +12,8 @@ except ImportError:
 
 logger = logging.getLogger("pylabrobot")
 class AgilentCentrifuge(CentrifugeBackend):
-  """A centrifuge backend for the Agilent Centrifuge. Note that this is not a complete implementation
-  and many commands and parameters are not implemented yet."""
+  """A centrifuge backend for the Agilent Centrifuge.
+  Note that this is not a complete implementation. """
 
   def __init__(self):
     self.dev: Optional[Device] = None
@@ -194,7 +194,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x01\x0b\x0c")
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
-    # send 17 byte - different depedning on homing position - bytes index 4:7 = homing position + 8000
+    # send 17 byte - bytes index 4:7 = homing position + 8000
     st = self.homing_position + 8000
     byte_string = st.to_bytes(4, byteorder='little')
     await self.send(b"\xaa\x01\xd4\x97" + byte_string + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
@@ -629,11 +629,12 @@ class AgilentCentrifuge(CentrifugeBackend):
     if acceleration < 0:
       acceleration = acceleration*(-1)
     acceleration = min(acceleration, 100)
-    base = int(-1779 + 678*g*6+ 0.413*(g*6)**2)
-    g_bytes = (int(135333*(g*9.8)**0.5)).to_bytes(4, byteorder='little')
+    rpm = (g*9.8/0.00109)*0.5
+    base = int(-1779 + 678*rpm+ 0.413*(rpm)**2)
+    rpm_bytes = (int(4481*rpm + 10852)).to_bytes(4, byteorder='little')
     acc_bytes = (int(915*acceleration/100)).to_bytes(2, byteorder='little')
-    new_position_bytes = (self.position + base + 4000*g*6//30*time_seconds).to_bytes(4, byteorder='little')
-    byte_string = b"\xaa\x01\xd4\x97" + new_position_bytes + g_bytes + acc_bytes+b"\x00\x00"
+    new_position_bytes = (self.position + base + 4000*rpm//30*time_seconds).to_bytes(4, byteorder='little')
+    byte_string = b"\xaa\x01\xd4\x97" + new_position_bytes + rpm_bytes + acc_bytes+b"\x00\x00"
     last_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += last_byte.to_bytes(1, byteorder='little')
     payloads = [
