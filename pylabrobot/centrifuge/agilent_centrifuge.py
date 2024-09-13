@@ -2,9 +2,7 @@ import logging
 from typing import Optional, Union
 import time
 import asyncio
-import time
 from .backend import CentrifugeBackend
-from pylabrobot import utils
 
 try:
     from pylibftdi import Device
@@ -630,8 +628,7 @@ class AgilentCentrifuge(CentrifugeBackend):
         """Start a spin cycle."""
         if acceleration < 0:
             acceleration = acceleration*(-1)
-        if acceleration > 100:
-            acceleration = 100
+        acceleration = min(acceleration, 100)
         base = int(-1779 + 678*g*6+ 0.413*(g*6)**2)
         g_bytes = (int(135333*(g*9.8)**0.5)).to_bytes(4, byteorder='little')
         acc_bytes = (int(915*acceleration/100)).to_bytes(2, byteorder='little')
