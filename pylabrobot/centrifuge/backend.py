@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-import sys
-from typing import List, Optional, Type
+from typing import Optional
 
 from pylabrobot.machines.backends import MachineBackend
-from pylabrobot.resources import Plate
 
 class CentrifugeBackend(MachineBackend, metaclass=ABCMeta):
     """ An abstract class for a centrifuge"""
