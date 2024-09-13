@@ -1,16 +1,11 @@
-import sys
-from typing import List, Optional, cast
+from typing import Optional
 
-from pylabrobot.machines.machine import Machine, need_setup_finished
+from pylabrobot.machines.machine import Machine
 from pylabrobot.centrifuge.backend import CentrifugeBackend
 
-if sys.version_info >= (3, 8):
- from typing import Literal
-else:
- from typing_extensions import Literal
-
 class Centrifuge(Machine):
- """ The front end for centrifuges. Centrifuges are devices that can spin samples at high speeds."""
+ """ The front end for centrifuges.
+ Centrifuges are devices that can spin samples at high speeds."""
 
  def __init__(
   self,
