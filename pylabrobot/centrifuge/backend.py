@@ -52,10 +52,8 @@ class CentrifugeBackend(MachineBackend, metaclass=ABCMeta):
     @abstractmethod
     async def start_spin_cycle(
     self,
-    plates: Optional[Plate] = None,
     g: Optional[float] = None,
     time_seconds: Optional[float] = None,
     acceleration: Optional[float] = None,
-    deceleration: Optional[float] = None,
   ) -> None:
         """ Takes user settings and starts spinning buckets. Also known as start spin cycle. """

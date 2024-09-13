@@ -4,7 +4,6 @@ import time
 import asyncio
 import time
 from .backend import CentrifugeBackend
-from pylabrobot.resources import Plate
 from pylabrobot import utils
 
 try:
@@ -19,7 +18,7 @@ class DoorOperationError(Exception):
     """Custom exception for door operation errors."""
     pass
 
-class AgilentCentrifuge():
+class AgilentCentrifuge(CentrifugeBackend):
     """A centrifuge backend for the Agilent Centrifuge. Note that this is not a complete implementation
     and many commands and parameters are not implemented yet."""
 
@@ -632,11 +631,9 @@ class AgilentCentrifuge():
 
     async def start_spin_cycle(
     self,
-    plates: Optional[Plate] = None,
-    g: Optional[float] = 250,
+    g: Optional[float] = 500,
     time_seconds: Optional[float] = 10,
     acceleration: Optional[float] = 80,
-    deceleration: Optional[float] = None,
   ) -> None:
         """Start a spin cycle."""
         base = int(-1779 + 678*g*6+ 0.413*(g*6)**2)

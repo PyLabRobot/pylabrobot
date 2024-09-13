@@ -2,7 +2,6 @@ import sys
 from typing import List, Optional, cast
 
 from pylabrobot.machines.machine import Machine, need_setup_finished
-from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.centrifuge.backend import CentrifugeBackend
 
 if sys.version_info >= (3, 8):
@@ -56,16 +55,12 @@ class Centrifuge(Machine):
 
   async def start_spin_cycle(
     self,
-    plates: Optional[Plate] = None,
     g: Optional[float] = None,
     time_seconds: Optional[float] = None,
     acceleration: Optional[float] = None,
-    deceleration: Optional[float] = None,
   ) -> None:
     await self.backend.start_spin_cycle(
-      plates=plates,
       g=g,
       time_seconds=time_seconds,
       acceleration=acceleration,
-      deceleration=deceleration,
     )
