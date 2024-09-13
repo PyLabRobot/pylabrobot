@@ -19,9 +19,6 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     def __init__(self):
         self.dev: Optional[Device] = None
-        self.door_status = True  # starts off opened - closed = False
-        self.lock_status = True   # starts off unlocked - locked = False
-        self.bucket_status = True # starts off locked - unlocked = False
         self.position = 0
         self.homing_position = 0
         self.current_bucket = 1
@@ -234,38 +231,26 @@ class AgilentCentrifuge(CentrifugeBackend):
         return resp
 
     async def open_door(self):
-        if self.door_status == True:
-            return
         await self.send(b"\xaa\x02\x26\x00\x07\x2f")
         await self.com()
 
     async def close_door(self):
-        if self.door_status == False:
-            return
         await self.send(b"\xaa\x02\x26\x00\x05\x2d")
         await self.com()
 
     async def lock_door(self):
-        if self.lock_status == False:
-            return
         await self.send(b"\xaa\x02\x26\x00\x01\x29")
         await self.com()
 
     async def unlock_door(self):
-        if self.lock_status == True:
-            return
         await self.send(b"\xaa\x02\x26\x00\x05\x2d")
         await self.com()
 
     async def lock_bucket(self):
-        if self.bucket_status == True:
-            return
         await self.send(b"\xaa\x02\x26\x00\x07\x2f")
         await self.com()
 
     async def unlock_bucket(self):
-        if self.bucket_status == False:
-            return
         await self.send(b"\xaa\x02\x26\x00\x06\x2e")
         await self.com()
 
