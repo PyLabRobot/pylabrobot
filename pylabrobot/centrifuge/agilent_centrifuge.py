@@ -26,7 +26,6 @@ class AgilentCentrifuge(CentrifugeBackend):
     async def setup(self):
         if not USE_FTDI:
             raise RuntimeError("pylibftdi is not installed.")
-
         self.dev = Device()
         self.dev.open()
         print(self.dev, "open")
