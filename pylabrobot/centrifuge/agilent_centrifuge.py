@@ -630,13 +630,16 @@ class AgilentCentrifuge(CentrifugeBackend):
       acceleration = acceleration*(-1)
     acceleration = min(acceleration, 100)
     rpm = (g*9.8/0.00109)*0.5
+
     base = int(-1779 + 678*rpm+ 0.413*(rpm)**2)
-    rpm_bytes = (int(4481*rpm + 10852)).to_bytes(4, byteorder='little')
-    acc_bytes = (int(915*acceleration/100)).to_bytes(2, byteorder='little')
-    new_position_bytes = (self.position + base + 4000*rpm//30*time_seconds).to_bytes(4, byteorder='little')
-    byte_string = b"\xaa\x01\xd4\x97" + new_position_bytes + rpm_bytes + acc_bytes+b"\x00\x00"
+    rpm = (int(4481*rpm + 10852)).to_bytes(4, byteorder='little')
+    acc = (int(915*acceleration/100)).to_bytes(2, byteorder='little')
+    position = (self.position + base + 4000*rpm//30*time_seconds).to_bytes(4, byteorder='little')
+
+    byte_string = b"\xaa\x01\xd4\x97" + position + rpm + acc+b"\x00\x00"
     last_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += last_byte.to_bytes(1, byteorder='little')
+
     payloads = [
   "aa 01 0e 0f",
 "aa 02 0e 10",
