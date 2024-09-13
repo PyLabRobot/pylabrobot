@@ -13,19 +13,15 @@ except ImportError:
     USE_FTDI = False
 
 logger = logging.getLogger("pylabrobot")
-
-class DoorOperationError(Exception):
-    """Custom exception for door operation errors."""
-    pass
-
 class AgilentCentrifuge(CentrifugeBackend):
     """A centrifuge backend for the Agilent Centrifuge. Note that this is not a complete implementation
     and many commands and parameters are not implemented yet."""
 
     def __init__(self):
         self.dev: Optional[Device] = None
-        # self.door_status = True  # starts off opened - closed = False
-        # self.lock_status = True   # starts off unlocked - locked = True
+        self.door_status = True  # starts off opened - closed = False
+        self.lock_status = True   # starts off unlocked - locked = False
+        self.bucket_status = True # starts off locked - unlocked = False
         self.position = 0
         self.homing_position = 0
         self.current_bucket = 1
@@ -238,26 +234,38 @@ class AgilentCentrifuge(CentrifugeBackend):
         return resp
 
     async def open_door(self):
+        if self.door_status == True:
+            return
         await self.send(b"\xaa\x02\x26\x00\x07\x2f")
         await self.com()
 
     async def close_door(self):
+        if self.door_status == False:
+            return
         await self.send(b"\xaa\x02\x26\x00\x05\x2d")
         await self.com()
 
     async def lock_door(self):
+        if self.lock_status == False:
+            return
         await self.send(b"\xaa\x02\x26\x00\x01\x29")
         await self.com()
 
     async def unlock_door(self):
+        if self.lock_status == True:
+            return
         await self.send(b"\xaa\x02\x26\x00\x05\x2d")
         await self.com()
 
     async def lock_bucket(self):
+        if self.bucket_status == True:
+            return
         await self.send(b"\xaa\x02\x26\x00\x07\x2f")
         await self.com()
 
     async def unlock_bucket(self):
+        if self.bucket_status == False:
+            return
         await self.send(b"\xaa\x02\x26\x00\x06\x2e")
         await self.com()
 
@@ -785,4 +793,4 @@ byte_string,
         for tx in last_payloads:
             byte_literal = bytes.fromhex(tx)
             await self.send(byte_literal)
-
+        self.current_bucket = 1
