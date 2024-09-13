@@ -23,9 +23,9 @@ class ResourceStackTests(unittest.TestCase):
     self.assertEqual(stack.get_resource("A").location, Coordinate(0, 0, 0))
     self.assertEqual(stack.get_resource("B").location, Coordinate(10, 0, 0))
 
-    self.assertEqual(stack.get_size_x(), 20)
-    self.assertEqual(stack.get_size_y(), 10)
-    self.assertEqual(stack.get_size_z(), 10)
+    self.assertEqual(stack.get_absolute_size_x(), 20)
+    self.assertEqual(stack.get_absolute_size_y(), 10)
+    self.assertEqual(stack.get_absolute_size_z(), 10)
 
   def test_create_y(self):
     stack = ResourceStack("stack", "y", [
@@ -35,9 +35,9 @@ class ResourceStackTests(unittest.TestCase):
     self.assertEqual(stack.get_resource("A").location, Coordinate(0, 0, 0))
     self.assertEqual(stack.get_resource("B").location, Coordinate(0, 10, 0))
 
-    self.assertEqual(stack.get_size_x(), 10)
-    self.assertEqual(stack.get_size_y(), 20)
-    self.assertEqual(stack.get_size_z(), 10)
+    self.assertEqual(stack.get_absolute_size_x(), 10)
+    self.assertEqual(stack.get_absolute_size_y(), 20)
+    self.assertEqual(stack.get_absolute_size_z(), 10)
 
   def test_create_z(self):
     stack = ResourceStack("stack", "z", [
@@ -47,15 +47,15 @@ class ResourceStackTests(unittest.TestCase):
     self.assertEqual(stack.get_resource("A").location, Coordinate(0, 0, 10))
     self.assertEqual(stack.get_resource("B").location, Coordinate(0, 0, 0))
 
-    self.assertEqual(stack.get_size_x(), 10)
-    self.assertEqual(stack.get_size_y(), 10)
-    self.assertEqual(stack.get_size_z(), 20)
+    self.assertEqual(stack.get_absolute_size_x(), 10)
+    self.assertEqual(stack.get_absolute_size_y(), 10)
+    self.assertEqual(stack.get_absolute_size_z(), 20)
 
   def test_get_size_empty_stack(self):
     stack = ResourceStack("stack", "z")
-    self.assertEqual(stack.get_size_x(), 0)
-    self.assertEqual(stack.get_size_y(), 0)
-    self.assertEqual(stack.get_size_z(), 0)
+    self.assertEqual(stack.get_absolute_size_x(), 0)
+    self.assertEqual(stack.get_absolute_size_y(), 0)
+    self.assertEqual(stack.get_absolute_size_z(), 0)
 
   # Tests for using ResourceStack as a stacking area, like the one near the washer on the STARs.
 
@@ -107,4 +107,4 @@ class ResourceStackTests(unittest.TestCase):
     self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
     assert plate.lid is not None and plate.lid.location is not None
     self.assertEqual(plate.lid.location, Coordinate(0, 0, 8))
-    self.assertEqual(stacking_area.get_size_z(), 13)
+    self.assertEqual(stacking_area.get_absolute_size_z(), 13)

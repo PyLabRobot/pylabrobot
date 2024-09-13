@@ -55,8 +55,8 @@ class TestPetriDish(unittest.TestCase):
     petri_dish_holder = PetriDishHolder.deserialize(petri_dish_holder.serialize())
 
     self.assertEqual(petri_dish_holder.name, "petri_dish_holder")
-    self.assertEqual(petri_dish_holder.get_size_x(), 127.76)
-    self.assertEqual(petri_dish_holder.get_size_y(), 85.48)
+    self.assertEqual(petri_dish_holder.get_absolute_size_x(), 127.76)
+    self.assertEqual(petri_dish_holder.get_absolute_size_y(), 85.48)
 
   def test_petri_dish_holder_deserialization_with_dish(self):
     petri_dish_holder = PetriDishHolder("petri_dish_holder")
@@ -65,9 +65,9 @@ class TestPetriDish(unittest.TestCase):
     petri_dish_holder = PetriDishHolder.deserialize(petri_dish_holder.serialize())
 
     self.assertEqual(petri_dish_holder.name, "petri_dish_holder")
-    self.assertEqual(petri_dish_holder.get_size_x(), 127.76)
-    self.assertEqual(petri_dish_holder.get_size_y(), 85.48)
-    self.assertEqual(petri_dish_holder.get_size_z(), 14.5)
+    self.assertEqual(petri_dish_holder.get_absolute_size_x(), 127.76)
+    self.assertEqual(petri_dish_holder.get_absolute_size_y(), 85.48)
+    self.assertEqual(petri_dish_holder.get_absolute_size_z(), 14.5)
 
     self.assertEqual(len(petri_dish_holder.children), 1)
     dish = cast(PetriDish, petri_dish_holder.children[0])

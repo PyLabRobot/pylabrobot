@@ -328,7 +328,7 @@ class Vantage(HamiltonLiquidHandler):
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
-    read_timeout: int = 30,
+    read_timeout: int = 60,
     write_timeout: int = 30,
   ):
     """ Create a new STAR interface.
@@ -628,7 +628,7 @@ class Vantage(HamiltonLiquidHandler):
     liquid_surfaces_no_lld = liquid_surface_at_function_without_lld or [wb + (op.liquid_height or 0)
                               for wb, op in zip(well_bottoms, ops)]
     # -1 compared to STAR?
-    lld_search_heights = lld_search_height or [wb + op.resource.get_size_z() + \
+    lld_search_heights = lld_search_height or [wb + op.resource.get_absolute_size_z() + \
                           (2.7-1 if isinstance(op.resource, Well) else 5) #?
                           for wb, op in zip(well_bottoms, ops)]
 
@@ -793,7 +793,7 @@ class Vantage(HamiltonLiquidHandler):
     liquid_surfaces_no_lld = [wb + (op.liquid_height or 0)
                               for wb, op in zip(well_bottoms, ops)]
     # -1 compared to STAR?
-    lld_search_heights = lld_search_height or [wb + op.resource.get_size_z() + \
+    lld_search_heights = lld_search_height or [wb + op.resource.get_absolute_size_z() + \
                           (2.7-1 if isinstance(op.resource, Well) else 5) #?
                           for wb, op in zip(well_bottoms, ops)]
 
@@ -964,12 +964,12 @@ class Vantage(HamiltonLiquidHandler):
         aspiration.offset + Coordinate(z=top_left_well.material_z_thickness)
       # -1 compared to STAR?
       well_bottoms = position.z
-      lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
+      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7-1
     else:
       position = aspiration.container.get_absolute_location(y="b") + aspiration.offset + \
         Coordinate(z=aspiration.container.material_z_thickness)
       bottom = position.z
-      lld_search_height = bottom + aspiration.container.get_size_z() + 2.7-1
+      lld_search_height = bottom + aspiration.container.get_absolute_size_z() + 2.7-1
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
@@ -1095,12 +1095,12 @@ class Vantage(HamiltonLiquidHandler):
         dispense.offset + Coordinate(z=top_left_well.material_z_thickness)
       # -1 compared to STAR?
       well_bottoms = position.z
-      lld_search_height = well_bottoms + top_left_well.get_size_z() + 2.7-1
+      lld_search_height = well_bottoms + top_left_well.get_absolute_size_z() + 2.7-1
     else:
       position = dispense.container.get_absolute_location(y="b") + dispense.offset + \
         Coordinate(z=dispense.container.material_z_thickness)
       bottom = position.z
-      lld_search_height = bottom + dispense.container.get_size_z() + 2.7-1
+      lld_search_height = bottom + dispense.container.get_absolute_size_z() + 2.7-1
 
     liquid_height = position.z + (dispense.liquid_height or 0) + 10
 
@@ -1202,8 +1202,8 @@ class Vantage(HamiltonLiquidHandler):
     allows you to pick up and move a resource with a single command. """
 
     center = resource.get_absolute_location() + resource.center() + offset
-    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    plate_width = resource.get_size_x()
+    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
+    plate_width = resource.get_absolute_size_x()
 
     await self.ipg_grip_plate(
       x_position=round(center.x * 10),
@@ -1247,8 +1247,8 @@ class Vantage(HamiltonLiquidHandler):
     """
 
     center = destination + resource.center() + offset
-    grip_height = center.z + resource.get_size_z() - pickup_distance_from_top
-    plate_width = resource.get_size_x()
+    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
+    plate_width = resource.get_absolute_size_x()
 
     await self.ipg_put_plate(
       x_position=round(center.x * 10),

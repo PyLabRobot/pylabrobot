@@ -59,6 +59,7 @@ PyLabRobot provides a layer of general-purpose abstractions over robot functions
    :caption: Plate reading
 
    plate_reading
+   cytation5
 
 
 .. toctree::
