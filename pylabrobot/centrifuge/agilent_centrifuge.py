@@ -72,7 +72,7 @@ class AgilentCentrifuge(CentrifugeBackend):
       raise RuntimeError("Device not initialized")
 
     logger.debug("Sending %s", cmd.hex())
-    written = self.dev.write(cmd.decode('latin-1'))
+    written = self.dev.write(cmd.decode("latin-1"))
     logger.debug("Wrote %s bytes", written)
 
     if written != len(cmd):
@@ -196,7 +196,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
     # send 17 byte - bytes index 4:7 = homing position + 8000
     st = self.homing_position + 8000
-    byte_string = st.to_bytes(4, byteorder='little')
+    byte_string = st.to_bytes(4, byteorder="little")
     await self.send(b"\xaa\x01\xd4\x97" + byte_string + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
@@ -221,8 +221,8 @@ class AgilentCentrifuge(CentrifugeBackend):
     # for byte in resp:
     #   s.append(f"{byte:02x}")
     # await self.com()
-    # self.position = int.from_bytes(bytes.fromhex(''.join(s[1:4])), byteorder='little')
-    # self.homing_position = int.from_bytes(bytes.fromhex(''.join(s[9:12])), byteorder='little')
+    # self.position = int.from_bytes(bytes.fromhex("".join(s[1:4])), byteorder="little")
+    # self.homing_position = int.from_bytes(bytes.fromhex("".join(s[9:12])), byteorder="little")
     # stat = f"{resp[0]:02x}"
     # print(f"status: {stat} position: {self.position}  homing position: {self.homing_position}")
     return resp
@@ -254,10 +254,10 @@ class AgilentCentrifuge(CentrifugeBackend):
   async def go_to_bucket1(self):
     if self.current_bucket == 2:
       return
-    new_position = (self.position + 4000).to_bytes(4, byteorder='little')
+    new_position = (self.position + 4000).to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
-    byte_string += sum_byte.to_bytes(1, byteorder='little')
+    byte_string += sum_byte.to_bytes(1, byteorder="little")
     tx_payloads = [
   "aa 01 0e 0f",
   "aa 02 0e 10",
@@ -438,10 +438,10 @@ class AgilentCentrifuge(CentrifugeBackend):
   async def go_to_bucket2(self):
     if self.current_bucket == 1:
       return
-    new_position = (self.position + 4000).to_bytes(4, byteorder='little')
+    new_position = (self.position + 4000).to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
-    byte_string += sum_byte.to_bytes(1, byteorder='little')
+    byte_string += sum_byte.to_bytes(1, byteorder="little")
     tx_payloads = [
   "aa 01 0e 0f",
   "aa 02 0e 10",
@@ -632,13 +632,13 @@ class AgilentCentrifuge(CentrifugeBackend):
     rpm = (g*9.8/0.00109)*0.5
 
     base = int(-1779 + 678*rpm+ 0.413*(rpm)**2)
-    rpm = (int(4481*rpm + 10852)).to_bytes(4, byteorder='little')
-    acc = (int(915*acceleration/100)).to_bytes(2, byteorder='little')
-    position = (self.position + base + 4000*rpm//30*time_seconds).to_bytes(4, byteorder='little')
+    rpm = (int(4481*rpm + 10852)).to_bytes(4, byteorder="little")
+    acc = (int(915*acceleration/100)).to_bytes(2, byteorder="little")
+    position = (self.position + base + 4000*rpm//30*time_seconds).to_bytes(4, byteorder="little")
 
     byte_string = b"\xaa\x01\xd4\x97" + position + rpm + acc+b"\x00\x00"
     last_byte = (sum(byte_string)-0xaa)&0xff
-    byte_string += last_byte.to_bytes(1, byteorder='little')
+    byte_string += last_byte.to_bytes(1, byteorder="little")
 
     payloads = [
   "aa 01 0e 0f",
