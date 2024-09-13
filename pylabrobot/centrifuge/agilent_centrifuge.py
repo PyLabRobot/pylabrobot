@@ -252,8 +252,6 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.com()
 
   async def go_to_bucket1(self):
-    if self.current_bucket == 2:
-      return
     new_position = (self.position + 4000).to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
@@ -436,8 +434,6 @@ class AgilentCentrifuge(CentrifugeBackend):
     self.current_bucket = 1
 
   async def go_to_bucket2(self):
-    if self.current_bucket == 1:
-      return
     new_position = (self.position + 4000).to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
@@ -629,14 +625,15 @@ class AgilentCentrifuge(CentrifugeBackend):
     if acceleration < 0:
       acceleration = acceleration*(-1)
     acceleration = min(acceleration, 100)
-    rpm = (g*9.8/0.00109)*0.5
 
-    base = int(-1779 + 678*rpm+ 0.413*(rpm)**2)
-    rpm = (int(4481*rpm + 10852)).to_bytes(4, byteorder="little")
+    rpm = int((g/(1.118*(10**(-4))))**0.5)
+    base = int(107007 - 328*rpm + 1.13*(rpm**2))
+    rpm_b = (int(4481*rpm + 10852)).to_bytes(4, byteorder="little")
     acc = (int(915*acceleration/100)).to_bytes(2, byteorder="little")
-    position = (self.position + base + 4000*rpm//30*time_seconds).to_bytes(4, byteorder="little")
+    maxp = min((self.position + base + 4000*rpm//30*time_seconds), 4294967294)
+    position = maxp.to_bytes(4, byteorder="little")
 
-    byte_string = b"\xaa\x01\xd4\x97" + position + rpm + acc+b"\x00\x00"
+    byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc+b"\x00\x00"
     last_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += last_byte.to_bytes(1, byteorder="little")
 
@@ -777,14 +774,14 @@ byte_string,
         byte_literal = bytes.fromhex(tx)
         await self.send(byte_literal)
 
-    for tx in last_payloads:
-      byte_literal = bytes.fromhex(tx)
-      await self.send(byte_literal)
+    # for tx in last_payloads:
+    #   byte_literal = bytes.fromhex(tx)
+    #   await self.send(byte_literal)
 
-    time.sleep(1)
+    # time.sleep(1)
 
-    for tx in last_payloads:
-      byte_literal = bytes.fromhex(tx)
-      await self.send(byte_literal)
+    # for tx in last_payloads:
+    #   byte_literal = bytes.fromhex(tx)
+    #   await self.send(byte_literal)
 
     self.current_bucket = 1
