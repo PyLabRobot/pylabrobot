@@ -640,10 +640,10 @@ class AgilentCentrifuge():
   ) -> None:
         """Start a spin cycle."""
         base = int(-1779 + 678*g*6+ 0.413*(g*6)**2)
-        rpm_bytes = (g*6*4474).to_bytes(4, byteorder='little')
+        g_bytes = (int(135333*(g*9.8)**0.5)).to_bytes(4, byteorder='little')
         acc_bytes = (int(915*acceleration/100)).to_bytes(2, byteorder='little')
-        new_position_bytes = (self.position + base + 4000*g*6//30*time_seconds).to_bytes(4, byteorder='little')
-        byte_string = b"\xaa\x01\xd4\x97" + new_position_bytes + rpm_bytes + acc_bytes+b"\x00\x00"
+        byte_string = (self.position + base + 4000*g*6//30*time_seconds).to_bytes(4, byteorder='little')
+        byte_string = b"\xaa\x01\xd4\x97" + byte_string + g_bytes + acc_bytes+b"\x00\x00"
         last_byte = (sum(byte_string)-0xaa)&0xff
         byte_string += last_byte.to_bytes(1, byteorder='little')
         payloads = [
