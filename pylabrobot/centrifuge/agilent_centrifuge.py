@@ -148,8 +148,8 @@ class AgilentCentrifuge(CentrifugeBackend):
     s = []
     for byte in resp:
       s.append(f"{byte:02x}")
-    self.position = int.from_bytes(bytes.fromhex("".join(s[1:5])), byteorder="little")
-    self.homing_position = int.from_bytes(bytes.fromhex("".join(s[9:13])), byteorder="little")
+    self.position = int.from_bytes(bytes.fromhex(''.join(s[1:5])), byteorder='little')
+    self.homing_position = int.from_bytes(bytes.fromhex(''.join(s[9:13])), byteorder='little')
     self.status = s[0]
 
     print(f"Current position: {self.position}")
@@ -323,6 +323,8 @@ class AgilentCentrifuge(CentrifugeBackend):
  ) -> None:
     """Start a spin cycle. spin spin spin spin
 
+    At the end of spin, centrifuge lands on bucket 1.
+
     Args:
       g: relative centrifugal force, also known as g-force
       time_seconds: How much time spent actually spinning at the desired g in seconds
@@ -385,8 +387,6 @@ byte_string,
       "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
       "aa 01 17 04 1c",
       "aa 01 17 01 19",
-      "aa 01 0e 0f",
-      "aa 02 0e 10",
       "aa 01 0b 0c",
       "aa 01 00 01",
       "aa 01 e6 05 00 64 00 00 00 00 00 32 00 e8 03 01 00 6e",
