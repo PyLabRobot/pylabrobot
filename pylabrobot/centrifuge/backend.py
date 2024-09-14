@@ -17,35 +17,35 @@ class CentrifugeBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def open_door(self) -> None:
-    """ Open the centrifuge door. Also known as open door. """
+    pass
 
   @abstractmethod
   async def close_door(self) -> None:
-    """ Close the centrifuge door. Also known as close door. """
+    pass
 
   @abstractmethod
   async def lock_door(self) -> None:
-    """ Lock the centrifuge door. Also known as lock door. """
+    pass
 
   @abstractmethod
   async def unlock_door(self) -> None:
-    """ Unlock the centrifuge door. Also known as unlock door. """
+    pass
 
   @abstractmethod
   async def go_to_bucket1(self) -> None:
-    """ Goes to bucket1. Also known as go to bucket 1. """
+    pass
 
   @abstractmethod
   async def go_to_bucket2(self) -> None:
-    """ Goes to bucket2. Also known as go to bucket 2. """
+    pass
 
   @abstractmethod
   async def lock_bucket(self) -> None:
-    """ Locks buckets so they cannot move freely. Also known as go to lock bucket. """
+    pass
 
   @abstractmethod
   async def unlock_bucket(self) -> None:
-    """ Unlocks buckets so they can move freely. Also known as go to unlock bucket. """
+    pass
 
   @abstractmethod
   async def start_spin_cycle(
