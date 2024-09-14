@@ -23,6 +23,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     self.dev: Optional[Device] = None
     self.position = 0
     self.homing_position = 0
+    self.status = 0
     self.current_bucket = 1
 
   async def setup(self):
@@ -149,6 +150,7 @@ class AgilentCentrifuge(CentrifugeBackend):
       s.append(f"{byte:02x}")
     self.position = int.from_bytes(bytes.fromhex(''.join(s[1:5])), byteorder='little')
     self.homing_position = int.from_bytes(bytes.fromhex(''.join(s[9:13])), byteorder='little')
+    self.status = s[0]
 
     print(f"Current position: {self.position}")
 
@@ -427,48 +429,15 @@ class AgilentCentrifuge(CentrifugeBackend):
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
 
+    await self.close_door()
+    await self.lock_door()
+
     payloads = [
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 26 00 05 2d",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 26 00 01 29",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
   "aa 02 26 00 00 28",
   "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
+  "aa 02 0e 10"]
+
+    move_bucket = [
   "aa 01 17 02 1a",
   "aa 01 0e 0f",
   "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
@@ -476,127 +445,38 @@ class AgilentCentrifuge(CentrifugeBackend):
   "aa 01 17 01 19",
   "aa 01 0e 0f",
   "aa 02 0e 10",
-  "aa 01 0b 0c",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 17 02 1a",
-  "aa 01 0e 0f",
-  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  "aa 01 17 04 1c",
-  "aa 01 17 01 19",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0b 0c",
-  "aa 01 0e 0f",
-  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  byte_string,
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 17 02 1a",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 26 00 01 29",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 26 00 05 2d",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 26 00 07 2f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-    ]
+  "aa 01 0b 0c"]
 
     await self.send_payloads(payloads)
+    await self.send_payloads(move_bucket)
+    await self.send_payloads(move_bucket)
+  # "aa 01 0e 0f",
+  # "aa 02 0e 10",
+  # "aa 01 17 02 1a",
+  # "aa 01 0e 0f",
+  # "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+  # "aa 01 17 04 1c",
+  # "aa 01 17 01 19",
+  # "aa 01 0e 0f",
+  # "aa 02 0e 10",
+  # "aa 01 0b 0c",
 
+    payloads = [
+    "aa 01 0e 0f",
+    "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+    byte_string,
+    ]
+    await self.send_payloads(payloads)
+    time.sleep(2)
+
+    final = [
+  "aa 01 17 02 1a",
+  "aa 02 0e 10",
+    ]
+
+
+    await self.send_payloads(final)
+    await self.open_door()
     self.current_bucket = 2
 
     await self.get_status()
@@ -742,17 +622,31 @@ byte_string,
 "aa 01 0e 0f",
 "aa 02 0e 10",
 ]
-    status = ["aa 01 0e 0f",
-"aa 01 0e 0f",
-"aa 01 0e 0f",
-"aa 02 0e 10"
-]
 
     await self.send_payloads(payloads)
 
-    start_time = time.time()
-    while time.time() - start_time < time_seconds*0.75:
-      await self.send_payloads(status)
+    await self.get_status()
+
+    while self.status == "08":
+      time.sleep(1)
       await self.get_status()
 
+    time.sleep(2)
+
+    # reset position back to 0ish
+    payloads = [
+      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+      "aa 01 17 04 1c",
+      "aa 01 17 01 19",
+      "aa 01 0e 0f",
+      "aa 02 0e 10",
+      "aa 01 0b 0c",
+      "aa 01 00 01",
+      "aa 01 e6 05 00 64 00 00 00 00 00 32 00 e8 03 01 00 6e",
+      "aa 01 94 b6 12 83 00 00 12 01 00 00 f3",
+      "aa 01 19 28 42"
+    ]
+
+    await self.send_payloads(payloads)
+    await self.get_status()
     self.current_bucket = 1
