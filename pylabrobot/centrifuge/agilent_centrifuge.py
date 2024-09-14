@@ -36,10 +36,10 @@ class AgilentCentrifuge(CentrifugeBackend):
       await self.configure_and_initialize()
       await self.send(b"\xaa\x00\x21\x01\xff\x21")
     await self.finish_setup()
-    await self.status_check()
+    await self.send(b"\xaa\x01\x0e\x0f")
 
   async def stop(self):
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
     await self.configure_and_initialize()
     if self.dev:
       self.dev.close()
@@ -111,10 +111,6 @@ class AgilentCentrifuge(CentrifugeBackend):
       self.dev.write(packet)
     await self.send(b"\xaa\xff\x0f\x0e")
 
-  async def com(self):
-    """start/end command, i think..."""
-    await self.send(b"\xaa\x02\x0e\x10")
-
   async def finish_setup(self):
     """Finish the setup process."""
     await self.send(b"\xaa\x00\x21\x01\xff\x21")
@@ -128,7 +124,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     self.dev.ftdi_fn.ftdi_setrts(1)
     self.dev.ftdi_fn.ftdi_setdtr(1)
 
-    await self.status_check()
+    await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x12\x1f\x32")
     for _ in range(8):
       await self.send(b"\xaa\x02\x20\xff\x0f\x30")
@@ -141,31 +137,31 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x02\x12\x03\x17")
     for _ in range(5):
       await self.send(b"\xaa\x02\x26\x20\x00\x48")
-      await self.com()
+      await self.send(b"\xaa\x02\x0e\x10")
       await self.send(b"\xaa\x02\x26\x00\x00\x28")
-      await self.com()
-    await self.com()
+      await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(b"\xaa\x02\x0e\x10")
     await self.lock_door()
 
-    await self.status_check()
-    await self.com()
+    await self.send(b"\xaa\x01\x0e\x0f")
+    await self.send(b"\xaa\x02\x0e\x10")
 
-    await self.status_check()
-    await self.com()
+    await self.send(b"\xaa\x01\x0e\x0f")
+    await self.send(b"\xaa\x02\x0e\x10")
 
-    await self.status_check()
-    await self.com()
+    await self.send(b"\xaa\x01\x0e\x0f")
+    await self.send(b"\xaa\x02\x0e\x10")
 
-    await self.com()
-    await self.status_check()
+    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(b"\xaa\x01\x0e\x0f")
 
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
     await self.send(b"\xaa\x02\x26\x00\x00\x28")
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
 
-    await self.com()
-    await self.status_check()
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
+    await self.send(b"\xaa\x01\x0e\x0f")
+    await self.send(b"\xaa\x02\x0e\x10")
 
     await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.send(b"\xaa\x01\x0e\x0f")
@@ -182,8 +178,8 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     resp = "89"
     while resp == "89":
-      await self.com()
-      resp = await self.status_check()
+      await self.send(b"\xaa\x02\x0e\x10")
+      resp = await self.send(b"\xaa\x01\x0e\x0f")
       resp = f"{resp[0]:02x}"
 
     await self.send(b"\xaa\x01\x0e\x0f")
@@ -206,45 +202,41 @@ class AgilentCentrifuge(CentrifugeBackend):
     resp = "08"
     while resp != "09":
       resp = await self.send(b"\xaa\x01\x0e\x0f")
-      await self.status_check()
+      await self.send(b"\xaa\x01\x0e\x0f")
       resp = f"{resp[0]:02x}"
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
 
     await self.send(b"\xaa\x01\x17\x02\x1a")
 
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
     await self.lock_door()
-
-  async def status_check(self):
-    """Check the status of the centrifuge."""
-    return await self.send(b"\xaa\x01\x0e\x0f")
 
 # Centrifuge operations
 
   async def open_door(self):
     await self.send(b"\xaa\x02\x26\x00\x07\x2f")
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
 
   async def close_door(self):
     await self.send(b"\xaa\x02\x26\x00\x05\x2d")
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
 
   async def lock_door(self):
     await self.send(b"\xaa\x02\x26\x00\x01\x29")
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
 
   async def unlock_door(self):
     await self.send(b"\xaa\x02\x26\x00\x05\x2d")
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
 
   async def lock_bucket(self):
     await self.send(b"\xaa\x02\x26\x00\x07\x2f")
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
 
   async def unlock_bucket(self):
     await self.send(b"\xaa\x02\x26\x00\x06\x2e")
-    await self.com()
+    await self.send(b"\xaa\x02\x0e\x10")
 
   async def go_to_bucket1(self):
     new_position = (self.position + 4000).to_bytes(4, byteorder="little")
@@ -623,10 +615,8 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     if acceleration < 1 or acceleration > 100:
       raise CentrifugeOperationError("Acceleration must be within 1-100.")
-
     if g < 1 or g > 1000:
       raise CentrifugeOperationError("G-force must be within 1-1000")
-
     if time_seconds < 1:
       raise CentrifugeOperationError("Spin time must be atleast 1 second")
 
