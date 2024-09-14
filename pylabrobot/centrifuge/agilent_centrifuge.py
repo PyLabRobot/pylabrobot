@@ -148,8 +148,8 @@ class AgilentCentrifuge(CentrifugeBackend):
     s = []
     for byte in resp:
       s.append(f"{byte:02x}")
-    self.position = int.from_bytes(bytes.fromhex(''.join(s[1:5])), byteorder='little')
-    self.homing_position = int.from_bytes(bytes.fromhex(''.join(s[9:13])), byteorder='little')
+    self.position = int.from_bytes(bytes.fromhex("".join(s[1:5])), byteorder="little")
+    self.homing_position = int.from_bytes(bytes.fromhex("".join(s[9:13])), byteorder="little")
     self.status = s[0]
 
     print(f"Current position: {self.position}")
