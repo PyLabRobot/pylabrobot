@@ -16,7 +16,7 @@ class AgilentCentrifuge(CentrifugeBackend):
   Note that this is not a complete implementation. """
 
   def __init__(self):
-    self.dev: Device
+    self.dev: Optional[Device] = None
     self.position = 0
     self.homing_position = 0
     self.current_bucket = 1
