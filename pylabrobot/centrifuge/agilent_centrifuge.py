@@ -258,168 +258,29 @@ class AgilentCentrifuge(CentrifugeBackend):
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
 
-    payloads = [
-  "aa 02 0e 10",
-  "aa 02 26 00 05 2d",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 26 00 01 29",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
+    move_bucket = [
   "aa 02 26 00 00 28",
   "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
   "aa 01 17 02 1a",
   "aa 01 0e 0f",
   "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
   "aa 01 17 04 1c",
   "aa 01 17 01 19",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
   "aa 01 0b 0c",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 17 02 1a",
-  "aa 01 0e 0f",
   "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  "aa 01 17 04 1c",
-  "aa 01 17 01 19",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0b 0c",
-  "aa 01 0e 0f",
-  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  byte_string,
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 17 02 1a",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 26 00 01 29",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 26 00 05 2d",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 26 00 07 2f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-    ]
+  byte_string
+  ]
+    await self.close_door()
+    await self.lock_door()
 
-    await self.send_payloads(payloads)
+    await self.send_payloads(move_bucket)
+
+    time.sleep(2)
+
+    await self.send(b"\xaa\x01\x17\x02\x1a")
+    await self.open_door()
 
     self.current_bucket = 1
-
     await self.get_status()
 
   async def go_to_bucket2(self):
@@ -429,56 +290,29 @@ class AgilentCentrifuge(CentrifugeBackend):
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
 
-    await self.close_door()
-    await self.lock_door()
-
-    payloads = [
+    move_bucket = [
   "aa 02 26 00 00 28",
   "aa 02 0e 10",
-  "aa 02 0e 10"]
-
-    move_bucket = [
   "aa 01 17 02 1a",
   "aa 01 0e 0f",
   "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
   "aa 01 17 04 1c",
   "aa 01 17 01 19",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0b 0c"]
+  "aa 01 0b 0c",
+  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+  byte_string
+  ]
+    await self.close_door()
+    await self.lock_door()
 
-    await self.send_payloads(payloads)
     await self.send_payloads(move_bucket)
-    await self.send_payloads(move_bucket)
-  # "aa 01 0e 0f",
-  # "aa 02 0e 10",
-  # "aa 01 17 02 1a",
-  # "aa 01 0e 0f",
-  # "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  # "aa 01 17 04 1c",
-  # "aa 01 17 01 19",
-  # "aa 01 0e 0f",
-  # "aa 02 0e 10",
-  # "aa 01 0b 0c",
 
-    payloads = [
-    "aa 01 0e 0f",
-    "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-    byte_string,
-    ]
-    await self.send_payloads(payloads)
     time.sleep(2)
 
-    final = [
-  "aa 01 17 02 1a",
-  "aa 02 0e 10",
-    ]
-
-
-    await self.send_payloads(final)
+    await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.open_door()
-    self.current_bucket = 2
 
+    self.current_bucket = 2
     await self.get_status()
 
   async def start_spin_cycle(
