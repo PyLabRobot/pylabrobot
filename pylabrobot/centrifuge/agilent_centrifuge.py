@@ -10,7 +10,7 @@ try:
 except ImportError:
   USE_FTDI = False
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger("pylabrobot.centrifuge.vspin")
 class AgilentCentrifuge(CentrifugeBackend):
   """A centrifuge backend for the Agilent Centrifuge.
   Note that this is not a complete implementation. """
@@ -618,13 +618,14 @@ class AgilentCentrifuge(CentrifugeBackend):
   async def start_spin_cycle(
   self,
   g: Optional[float] = 500,
-  time_seconds: Optional[float] = 10,
+  time_seconds: Optional[float] = 60,
   acceleration: Optional[float] = 80,
  ) -> None:
     """Start a spin cycle."""
     if acceleration < 0:
       acceleration = acceleration*(-1)
     acceleration = min(acceleration, 100)
+    acceleration = max(1, acceleration)
 
     rpm = int((g/(1.118*(10**(-4))))**0.5)
     base = int(107007 - 328*rpm + 1.13*(rpm**2))
