@@ -144,8 +144,13 @@ class AgilentCentrifuge(CentrifugeBackend):
 
   async def get_status(self):
     resp = await self.send(b"\xaa\x01\x0e\x0f")
-    self.position = int.from_bytes(bytes.fromhex(''.join(resp[1:5])), byteorder='little')
-    self.homing_position = int.from_bytes(bytes.fromhex(''.join(resp[9:13])), byteorder='little')
+    s = []
+    for byte in resp:
+      s.append(f"{byte:02x}")
+    self.position = int.from_bytes(bytes.fromhex(''.join(s[1:5])), byteorder='little')
+    self.homing_position = int.from_bytes(bytes.fromhex(''.join(s[9:13])), byteorder='little')
+
+    print(f"Current position: {self.position}")
 
 # Centrifuge communication: read_resp, send, send_payloads
 
@@ -413,6 +418,8 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     self.current_bucket = 1
 
+    await self.get_status()
+
   async def go_to_bucket2(self):
     await self.get_status()
     new_position = (self.position + 4000).to_bytes(4, byteorder="little")
@@ -592,6 +599,8 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     self.current_bucket = 2
 
+    await self.get_status()
+
   async def start_spin_cycle(
   self,
   g: Optional[float] = 500,
@@ -744,5 +753,6 @@ byte_string,
     start_time = time.time()
     while time.time() - start_time < time_seconds*0.75:
       await self.send_payloads(status)
+      await self.get_status()
 
     self.current_bucket = 1
