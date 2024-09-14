@@ -14,6 +14,7 @@ logger = logging.getLogger("pylabrobot.centrifuge.vspin")
 
 class CentrifugeOperationError(Exception):
   """Raised when unsupported user inputs are given"""
+
 class AgilentCentrifuge(CentrifugeBackend):
   """A centrifuge backend for the Agilent Centrifuge.
   Note that this is not a complete implementation. """
@@ -622,6 +623,12 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     if acceleration < 1 or acceleration > 100:
       raise CentrifugeOperationError("Acceleration must be within 1-100.")
+
+    if g < 1 or g > 1000:
+      raise CentrifugeOperationError("G-force must be within 1-1000")
+
+    if time_seconds < 1:
+      raise CentrifugeOperationError("Spin time must be atleast 1 second")
 
     rpm = int((g/(1.118*(10**(-4))))**0.5)
     base = int(107007 - 328*rpm + 1.13*(rpm**2))
