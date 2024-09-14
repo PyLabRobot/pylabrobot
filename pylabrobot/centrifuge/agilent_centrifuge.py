@@ -11,6 +11,9 @@ except ImportError:
   USE_FTDI = False
 
 logger = logging.getLogger("pylabrobot.centrifuge.vspin")
+
+class CentrifugeOperationError(Exception):
+  """Raised when unsupported user inputs are given"""
 class AgilentCentrifuge(CentrifugeBackend):
   """A centrifuge backend for the Agilent Centrifuge.
   Note that this is not a complete implementation. """
@@ -78,6 +81,15 @@ class AgilentCentrifuge(CentrifugeBackend):
     if written != len(cmd):
       raise RuntimeError("Failed to write all bytes")
     return await self.read_resp(timeout=read_timeout)
+
+  async def send_payloads(self, payloads) -> None:
+    """Send a list of commands to the centrifuge."""
+    for tx in payloads:
+      if isinstance(tx, str):
+        byte_literal = bytes.fromhex(tx)
+        await self.send(byte_literal)
+      else:
+        await self.send(tx)
 
   async def configure_and_initialize(self):
     await self.set_configuration_data()
@@ -238,7 +250,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
-    tx_payloads = [
+    payloads = [
   "aa 01 0e 0f",
   "aa 02 0e 10",
   "aa 01 0e 0f",
@@ -406,12 +418,7 @@ class AgilentCentrifuge(CentrifugeBackend):
   "aa 01 0e 0f",
     ]
 
-    for tx in tx_payloads:
-      if isinstance(tx, str):
-        byte_literal = bytes.fromhex(tx)
-        await self.send(byte_literal)
-      else:
-        await self.send(tx)
+    await self.send_payloads(payloads)
 
     self.current_bucket = 1
 
@@ -420,7 +427,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
-    tx_payloads = [
+    payloads = [
   "aa 01 0e 0f",
   "aa 02 0e 10",
   "aa 01 0e 0f",
@@ -588,12 +595,7 @@ class AgilentCentrifuge(CentrifugeBackend):
   "aa 01 0e 0f",
     ]
 
-    for tx in tx_payloads:
-      if isinstance(tx, str):
-        byte_literal = bytes.fromhex(tx)
-        await self.send(byte_literal)
-      else:
-        await self.send(tx)
+    await self.send_payloads(payloads)
 
     self.current_bucket = 2
 
@@ -610,11 +612,14 @@ class AgilentCentrifuge(CentrifugeBackend):
       time_seconds: How much time spent actually spinning at the desired g in seconds
       acceleration: 1-100% of total acceleration
 
+    Examples:
+      Spin with 1000 g-force (close to 3000rpm) for 5 minutes at 100% acceleration
+
+      >>> cf.start_spin_cycle(g = 1000, time_seconds = 300, acceleration = 100)
     """
-    if acceleration < 0:
-      acceleration = acceleration*(-1)
-    acceleration = min(acceleration, 100)
-    acceleration = max(1, acceleration)
+
+    if acceleration < 1 or acceleration > 100:
+      raise CentrifugeOperationError("Acceleration must be within 1-100.")
 
     rpm = int((g/(1.118*(10**(-4))))**0.5)
     base = int(107007 - 328*rpm + 1.13*(rpm**2))
@@ -751,18 +756,11 @@ byte_string,
 # "aa 01 0e 0f"
 #     ]
 
-    for tx in payloads:
-      if isinstance(tx, str):
-        byte_literal = bytes.fromhex(tx)
-        await self.send(byte_literal)
-      else:
-        await self.send(tx)
+    await self.send_payloads(payloads)
 
     start_time = time.time()
     while time.time() - start_time < time_seconds*0.8:
-      for tx in status:
-        byte_literal = bytes.fromhex(tx)
-        await self.send(byte_literal)
+      await self.send_payloads(status)
 
     # for tx in last_payloads:
     #   byte_literal = bytes.fromhex(tx)
