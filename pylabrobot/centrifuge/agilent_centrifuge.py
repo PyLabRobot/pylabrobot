@@ -142,6 +142,8 @@ class AgilentCentrifuge(CentrifugeBackend):
     if self.dev:
       self.dev.close()
 
+# Centrifuge communication: read_resp, send, send_payloads
+
   async def read_resp(self, timeout=20) -> bytes:
     """Read a response from the centrifuge. If the timeout is reached, return the data that has
     been read so far."""
@@ -189,6 +191,8 @@ class AgilentCentrifuge(CentrifugeBackend):
         await self.send(byte_literal)
       else:
         await self.send(tx)
+
+# setup() and stop() helper functions: configure_and_initialize, set_configuration_data, initialize
 
   async def configure_and_initialize(self):
     await self.set_configuration_data()
