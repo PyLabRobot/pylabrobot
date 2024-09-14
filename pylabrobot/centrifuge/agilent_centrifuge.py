@@ -35,84 +35,6 @@ class AgilentCentrifuge(CentrifugeBackend):
     for _ in range(3):
       await self.configure_and_initialize()
       await self.send(b"\xaa\x00\x21\x01\xff\x21")
-    await self.finish_setup()
-    await self.send(b"\xaa\x01\x0e\x0f")
-
-  async def stop(self):
-    await self.send(b"\xaa\x02\x0e\x10")
-    await self.configure_and_initialize()
-    if self.dev:
-      self.dev.close()
-
-  async def read_resp(self, timeout=20) -> bytes:
-    """Read a response from the centrifuge. If the timeout is reached, return the data that has
-    been read so far."""
-    if not self.dev:
-      raise RuntimeError("Device not initialized")
-
-    data = b""
-    end_byte_found = False
-    start_time = time.time()
-
-    while True:
-      chunk = self.dev.read(25)
-      if chunk:
-        data += chunk
-        end_byte_found = data[-1] == 0x0d
-        if len(chunk) < 25 and end_byte_found:
-          break
-      else:
-        if end_byte_found or time.time() - start_time > timeout:
-          logger.warning("Timed out reading response")
-          break
-        await asyncio.sleep(0.0001)
-
-    logger.debug("Read %s", data.hex())
-    return data
-
-  async def send(self, cmd: Union[bytearray, bytes], read_timeout=0.2) -> bytes:
-    """Send a command to the centrifuge and return the response."""
-    if not self.dev:
-      raise RuntimeError("Device not initialized")
-
-    logger.debug("Sending %s", cmd.hex())
-    written = self.dev.write(cmd.decode("latin-1"))
-    logger.debug("Wrote %s bytes", written)
-
-    if written != len(cmd):
-      raise RuntimeError("Failed to write all bytes")
-    return await self.read_resp(timeout=read_timeout)
-
-  async def send_payloads(self, payloads) -> None:
-    """Send a list of commands to the centrifuge."""
-    for tx in payloads:
-      if isinstance(tx, str):
-        byte_literal = bytes.fromhex(tx)
-        await self.send(byte_literal)
-      else:
-        await self.send(tx)
-
-  async def configure_and_initialize(self):
-    await self.set_configuration_data()
-    await self.initialize()
-
-  async def set_configuration_data(self):
-    """Set the device configuration data."""
-    self.dev.ftdi_fn.ftdi_set_latency_timer(16)
-    self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0)
-    self.dev.ftdi_fn.ftdi_setflowctrl(0)
-    self.dev.baudrate = 19200
-
-  async def initialize(self):
-    """Initialize the device."""
-    self.dev.write(b"\x00" * 20)
-    for i in range(33):
-      packet = b"\xaa" + bytes([i & 0xFF, 0x0e, 0x0e + (i & 0xFF)]) + b"\x00" * 8
-      self.dev.write(packet)
-    await self.send(b"\xaa\xff\x0f\x0e")
-
-  async def finish_setup(self):
-    """Finish the setup process."""
     await self.send(b"\xaa\x00\x21\x01\xff\x21")
     await self.send(b"\xaa\x01\x13\x20\x34")
     await self.send(b"\xaa\x00\x21\x02\xff\x22")
@@ -211,6 +133,81 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     await self.send(b"\xaa\x02\x0e\x10")
     await self.lock_door()
+
+    await self.send(b"\xaa\x01\x0e\x0f")
+
+  async def stop(self):
+    await self.send(b"\xaa\x02\x0e\x10")
+    await self.configure_and_initialize()
+    if self.dev:
+      self.dev.close()
+
+  async def read_resp(self, timeout=20) -> bytes:
+    """Read a response from the centrifuge. If the timeout is reached, return the data that has
+    been read so far."""
+    if not self.dev:
+      raise RuntimeError("Device not initialized")
+
+    data = b""
+    end_byte_found = False
+    start_time = time.time()
+
+    while True:
+      chunk = self.dev.read(25)
+      if chunk:
+        data += chunk
+        end_byte_found = data[-1] == 0x0d
+        if len(chunk) < 25 and end_byte_found:
+          break
+      else:
+        if end_byte_found or time.time() - start_time > timeout:
+          logger.warning("Timed out reading response")
+          break
+        await asyncio.sleep(0.0001)
+
+    logger.debug("Read %s", data.hex())
+    return data
+
+  async def send(self, cmd: Union[bytearray, bytes], read_timeout=0.2) -> bytes:
+    """Send a command to the centrifuge and return the response."""
+    if not self.dev:
+      raise RuntimeError("Device not initialized")
+
+    logger.debug("Sending %s", cmd.hex())
+    written = self.dev.write(cmd.decode("latin-1"))
+    logger.debug("Wrote %s bytes", written)
+
+    if written != len(cmd):
+      raise RuntimeError("Failed to write all bytes")
+    return await self.read_resp(timeout=read_timeout)
+
+  async def send_payloads(self, payloads) -> None:
+    """Send a list of commands to the centrifuge."""
+    for tx in payloads:
+      if isinstance(tx, str):
+        byte_literal = bytes.fromhex(tx)
+        await self.send(byte_literal)
+      else:
+        await self.send(tx)
+
+  async def configure_and_initialize(self):
+    await self.set_configuration_data()
+    await self.initialize()
+
+  async def set_configuration_data(self):
+    """Set the device configuration data."""
+    self.dev.ftdi_fn.ftdi_set_latency_timer(16)
+    self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0)
+    self.dev.ftdi_fn.ftdi_setflowctrl(0)
+    self.dev.baudrate = 19200
+
+  async def initialize(self):
+    """Initialize the device."""
+    self.dev.write(b"\x00" * 20)
+    for i in range(33):
+      packet = b"\xaa" + bytes([i & 0xFF, 0x0e, 0x0e + (i & 0xFF)]) + b"\x00" * 8
+      self.dev.write(packet)
+    await self.send(b"\xaa\xff\x0f\x0e")
 
 # Centrifuge operations
 
