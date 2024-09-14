@@ -142,6 +142,11 @@ class AgilentCentrifuge(CentrifugeBackend):
     if self.dev:
       self.dev.close()
 
+  async def get_status(self):
+    resp = await self.send(b"\xaa\x01\x0e\x0f")
+    self.position = int.from_bytes(bytes.fromhex(''.join(resp[1:5])), byteorder='little')
+    self.homing_position = int.from_bytes(bytes.fromhex(''.join(resp[9:13])), byteorder='little')
+
 # Centrifuge communication: read_resp, send, send_payloads
 
   async def read_resp(self, timeout=20) -> bytes:
@@ -240,24 +245,15 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x02\x0e\x10")
 
   async def go_to_bucket1(self):
+    await self.get_status()
     new_position = (self.position + 4000).to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
 
     payloads = [
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
-  "aa 02 0e 10",
   "aa 02 0e 10",
   "aa 02 26 00 05 2d",
-  "aa 02 0e 10",
-  "aa 01 0e 0f",
   "aa 02 0e 10",
   "aa 02 0e 10",
   "aa 01 0e 0f",
@@ -418,6 +414,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     self.current_bucket = 1
 
   async def go_to_bucket2(self):
+    await self.get_status()
     new_position = (self.position + 4000).to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
@@ -621,6 +618,8 @@ class AgilentCentrifuge(CentrifugeBackend):
     if time_seconds < 1:
       raise CentrifugeOperationError("Spin time must be atleast 1 second")
 
+    await self.get_status()
+
     rpm = int((g/(1.118*(10**(-4))))**0.5)
     base = int(107007 - 328*rpm + 1.13*(rpm**2))
     rpm_b = (int(4481*rpm + 10852)).to_bytes(4, byteorder="little")
@@ -743,7 +742,7 @@ byte_string,
     await self.send_payloads(payloads)
 
     start_time = time.time()
-    while time.time() - start_time < time_seconds*0.8:
+    while time.time() - start_time < time_seconds*0.75:
       await self.send_payloads(status)
 
     self.current_bucket = 1
