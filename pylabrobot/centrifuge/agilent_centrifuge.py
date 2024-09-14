@@ -197,10 +197,8 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x01\x0b\x0c")
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
-    # send 17 byte - bytes index 4:7 = homing position + 8000
-    st = self.homing_position + 8000
-    byte_string = st.to_bytes(4, byteorder="little")
-    await self.send(b"\xaa\x01\xd4\x97" + byte_string + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
+    new_postiion = (self.homing_position + 8000).to_bytes(4, byteorder="little")
+    await self.send(b"\xaa\x01\xd4\x97" + new_postiion + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
 
@@ -220,6 +218,8 @@ class AgilentCentrifuge(CentrifugeBackend):
   async def status_check(self):
     """Check the status of the centrifuge."""
     return await self.send(b"\xaa\x01\x0e\x0f")
+
+# Centrifuge operations
 
   async def open_door(self):
     await self.send(b"\xaa\x02\x26\x00\x07\x2f")
@@ -250,6 +250,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
+
     payloads = [
   "aa 01 0e 0f",
   "aa 02 0e 10",
@@ -427,6 +428,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
+
     payloads = [
   "aa 01 0e 0f",
   "aa 02 0e 10",
@@ -739,37 +741,11 @@ byte_string,
 "aa 01 0e 0f",
 "aa 02 0e 10"
 ]
-#     last_payloads = [
-#       "aa 01 17 02 1a",
-# "aa 01 0e 0f",
-# "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-# "aa 01 17 04 1c",
-# "aa 01 17 01 19",
-# "aa 01 0e 0f",
-# "aa 02 0e 10",
-# "aa 01 0b 0c",
-# "aa 01 0e 0f",
-# "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-# "aa 01 d4 97 0f 26 00 00 c3 f5 28 00 d7 1a 00 00 72",
-# "aa 01 0e 0f",
-# "aa 01 0e 0f",
-# "aa 01 0e 0f"
-#     ]
 
     await self.send_payloads(payloads)
 
     start_time = time.time()
     while time.time() - start_time < time_seconds*0.8:
       await self.send_payloads(status)
-
-    # for tx in last_payloads:
-    #   byte_literal = bytes.fromhex(tx)
-    #   await self.send(byte_literal)
-
-    # time.sleep(1)
-
-    # for tx in last_payloads:
-    #   byte_literal = bytes.fromhex(tx)
-    #   await self.send(byte_literal)
 
     self.current_bucket = 1
