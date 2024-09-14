@@ -26,7 +26,7 @@ class AgilentCentrifuge(CentrifugeBackend):
       raise RuntimeError("pylibftdi is not installed.")
     self.dev = Device()
     self.dev.open()
-    print(self.dev, "open")
+    logger.debug("Open")
     # TODO: add functionality where if robot has been intialized before nothing needs to happen
     for _ in range(3):
       await self.configure_and_initialize()
@@ -77,16 +77,7 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     if written != len(cmd):
       raise RuntimeError("Failed to write all bytes")
-    resp = await self.read_resp(timeout=read_timeout)
-    # s = ""
-    # c = ""
-    # for i, byte in enumerate(resp):
-    #   s += f" {byte:02x} " # Format byte as two-digit hexadecimal
-    # for i, byte in enumerate(cmd):
-    #   c += f" {byte:02x} " # Format byte as two-digit hexadecimal
-    # print(f"TX: {len(cmd)}-bytes -\t {c}")
-    # print(f"RX: {len(resp)}-bytes -\t {s}\n")
-    return resp
+    return await self.read_resp(timeout=read_timeout)
 
   async def configure_and_initialize(self):
     await self.set_configuration_data()
@@ -216,16 +207,7 @@ class AgilentCentrifuge(CentrifugeBackend):
 
   async def status_check(self):
     """Check the status of the centrifuge."""
-    resp = await self.send(b"\xaa\x01\x0e\x0f")
-    # s = []
-    # for byte in resp:
-    #   s.append(f"{byte:02x}")
-    # await self.com()
-    # self.position = int.from_bytes(bytes.fromhex("".join(s[1:4])), byteorder="little")
-    # self.homing_position = int.from_bytes(bytes.fromhex("".join(s[9:12])), byteorder="little")
-    # stat = f"{resp[0]:02x}"
-    # print(f"status: {stat} position: {self.position}  homing position: {self.homing_position}")
-    return resp
+    return await self.send(b"\xaa\x01\x0e\x0f")
 
   async def open_door(self):
     await self.send(b"\xaa\x02\x26\x00\x07\x2f")
@@ -621,7 +603,14 @@ class AgilentCentrifuge(CentrifugeBackend):
   time_seconds: Optional[float] = 60,
   acceleration: Optional[float] = 80,
  ) -> None:
-    """Start a spin cycle."""
+    """Start a spin cycle. spin spin spin spin
+
+    Args:
+      g: relative centrifugal force, also known as g-force
+      time_seconds: How much time spent actually spinning at the desired g in seconds
+      acceleration: 1-100% of total acceleration
+
+    """
     if acceleration < 0:
       acceleration = acceleration*(-1)
     acceleration = min(acceleration, 100)
