@@ -22,7 +22,9 @@ def get_child_location(resource: Resource) -> Coordinate:
 
 class ResourceHolderMixin:
   """
-  A mixin class for resources that can hold other resources, like a plate or a lid
+  A mixin class for resources that can hold other resources, like a plate or a lid.
+
+  This applies a linear transformation after the rotation to correctly place the child resource.
   """
 
   def assign_child_resource(
