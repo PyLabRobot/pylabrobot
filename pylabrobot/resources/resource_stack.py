@@ -96,31 +96,40 @@ class ResourceStack(ResourceHolderMixin, Resource):
       return max(get_actual_resource_height(child) for child in self.children)
     return sum(get_actual_resource_height(child) for child in self.children)
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
-    reassign: bool = False):
+
+  def get_resource_stack_size(self) -> Coordinate:
     if self.direction == "x":
       resource_location = Coordinate(self.get_size_x(), 0, 0)
     elif self.direction == "y":
       resource_location = Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
       resource_location = Coordinate(0, 0, self.get_size_z())
-
-      # special handling for putting a lid on a plate
-      if len(self.children) > 0:
-        top_item = self.get_top_item()
-        if isinstance(resource, Lid) and isinstance(top_item, Plate):
-          resource_location.z -= resource.nesting_z_height
-          top_item.assign_child_resource(
-            resource,
-            location=get_child_location(resource) + resource_location
-          )
-          return
     else:
       raise ValueError("self.direction must be one of 'x', 'y', or 'z'")
 
+    return resource_location
+
+  def get_default_child_location(self, resource: Resource) -> Coordinate:
+    return super().get_default_child_location(resource) + self.get_resource_stack_size()
+
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
+    reassign: bool = False):
+
+    # special handling for putting a lid on a plate
+    if len(self.children) > 0:
+      top_item = self.get_top_item()
+      if isinstance(resource, Lid) and isinstance(top_item, Plate):
+        resource_location = self.get_resource_stack_size()
+        resource_location.z -= resource.nesting_z_height
+        top_item.assign_child_resource(
+          resource,
+          location=get_child_location(resource) + resource_location
+        )
+        return
+
     super().assign_child_resource(
       resource,
-      location=resource_location,
+      location=location,
       reassign=reassign
     )
 

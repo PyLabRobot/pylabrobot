@@ -27,12 +27,15 @@ class ResourceHolderMixin:
   This applies a linear transformation after the rotation to correctly place the child resource.
   """
 
+  def get_default_child_location(self, resource: Resource) -> Coordinate:
+    return get_child_location(resource)
+
   def assign_child_resource(
     self,
     resource: Resource,
     location: Optional[Coordinate] = None,
     reassign: bool = True
   ):
-    location = get_child_location(resource) + (location or Coordinate.zero())
+    location = location or self.get_default_child_location(resource)
     # mypy doesn't play well with the Mixin pattern
     return super().assign_child_resource(resource, location, reassign) # type: ignore
