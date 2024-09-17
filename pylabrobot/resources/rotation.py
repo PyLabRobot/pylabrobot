@@ -37,26 +37,26 @@ class Rotation:
     rotation_matrix = self.get_rotation_matrix()
 
     return [
-            [
-                rotation_matrix[0][0],
-                rotation_matrix[0][1],
-                rotation_matrix[0][2],
-                origin.x * (1 - rotation_matrix[0][0]) - origin.y * rotation_matrix[0][1] - origin.z * rotation_matrix[0][2]
-            ], # transforms & translates x axis
-            [
-                rotation_matrix[1][0],
-                rotation_matrix[1][1],
-                rotation_matrix[1][2],
-                origin.y * (1 - rotation_matrix[1][1]) - origin.x * rotation_matrix[1][0] - origin.z * rotation_matrix[1][2]
-            ], # transforms & translates y axis
-            [
-                rotation_matrix[2][0],
-                rotation_matrix[2][1],
-                rotation_matrix[2][2],
-                origin.z * (1 - rotation_matrix[2][2]) - origin.x * rotation_matrix[2][0] - origin.y * rotation_matrix[2][1]
-            ], # transforms & translates z axis
-            [0, 0, 0, 1]  # affine transformation for 3D coordinates
-        ]
+      [
+        rotation_matrix[0][0],
+        rotation_matrix[0][1],
+        rotation_matrix[0][2],
+        origin.x * (1 - rotation_matrix[0][0]) - origin.y * rotation_matrix[0][1] - origin.z * rotation_matrix[0][2]
+      ], # transforms & translates x axis
+      [
+        rotation_matrix[1][0],
+        rotation_matrix[1][1],
+        rotation_matrix[1][2],
+        origin.y * (1 - rotation_matrix[1][1]) - origin.x * rotation_matrix[1][0] - origin.z * rotation_matrix[1][2]
+      ], # transforms & translates y axis
+      [
+        rotation_matrix[2][0],
+        rotation_matrix[2][1],
+        rotation_matrix[2][2],
+        origin.z * (1 - rotation_matrix[2][2]) - origin.x * rotation_matrix[2][0] - origin.y * rotation_matrix[2][1]
+      ], # transforms & translates z axis
+      [0, 0, 0, 1]  # affine transformation for 3D coordinates
+    ]
   
   def __str__(self) -> str:
     return f"Rotation(x={self.x}, y={self.y}, z={self.z})"
