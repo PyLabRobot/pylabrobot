@@ -2,8 +2,6 @@ import math
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.utils.linalg import matrix_multiply_3x3
 import unittest
-from pylabrobot.resources.rotation import Rotation
-
 
 class Rotation:
   """ Represents a 3D rotation. """
@@ -76,9 +74,8 @@ class Rotation:
     return Rotation(data["x"], data["y"], data["z"])
 
 
-
-
 class TestRotation(unittest.TestCase):
+  """ Tests for the Rotation class. """
 
   def test_get_rotation_matrix_around_origin(self):
     rotation = Rotation(x=90, y=0, z=0)
@@ -97,5 +94,5 @@ class TestRotation(unittest.TestCase):
       for j in range(4):
         self.assertAlmostEqual(rotation_matrix[i][j], expected_matrix[i][j], places=6)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   unittest.main()
