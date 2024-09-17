@@ -47,11 +47,7 @@ class PlateReader(ResourceHolderMixin, Machine):
     if not isinstance(resource, Plate):
       raise ValueError("The resource must be a Plate.")
 
-    if location is not None:
-      # Directly call Machine's assign_child_resource method to allow for custom location
-      Machine.assign_child_resource(self, resource, location=location, reassign=reassign)
-    else:
-      super().assign_child_resource(resource, reassign=reassign)
+    super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def get_plate(self) -> Plate:
     if len(self.children) == 0:
@@ -91,7 +87,7 @@ class PlateReader(ResourceHolderMixin, Machine):
     emission_wavelength: int,
     focal_height: float
   ) -> List[List[float]]:
-    """ 
+    """
 
     Args:
       excitation_wavelength: The excitation wavelength to read the fluorescence at, in nanometers.
