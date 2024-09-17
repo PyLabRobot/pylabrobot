@@ -12,7 +12,7 @@ logger = logging.getLogger("pylabrobot.plate_reading.biotek")
 
 class Cytation5Backend(PlateReaderBackend):
   """ Backend for biotek cytation 5 image reader """
-  def __init__(self, timeout: float = 60) -> None:
+  def __init__(self, timeout: float = 20) -> None:
     super().__init__()
     self.timeout = timeout
     self.dev = Device(lazy_open=True)
@@ -20,7 +20,8 @@ class Cytation5Backend(PlateReaderBackend):
   async def setup(self) -> None:
     logger.info("[cytation5] setting up")
     self.dev.open()
-    self.dev.baudrate = 9600
+    # self.dev.baudrate = 9600 # worked in the past
+    self.dev.baudrate = 38400
     self.dev.ftdi_fn.ftdi_set_line_property(8, 2, 0) # 8 bits, 2 stop bits, no parity
     SIO_RTS_CTS_HS = 0x1 << 8
     self.dev.ftdi_fn.ftdi_setflowctrl(SIO_RTS_CTS_HS)
@@ -52,6 +53,7 @@ class Cytation5Backend(PlateReaderBackend):
       res += x
 
       if time.time() - t0 > timeout:
+        logger.debug("[cytation5] received incomplete %s", res)
         raise TimeoutError("Timeout while waiting for response")
 
       if x == b"":
@@ -146,7 +148,33 @@ class Cytation5Backend(PlateReaderBackend):
     return self._parse_body(body)
 
   async def read_luminescence(self, focal_height: float) -> List[List[float]]:
-    raise NotImplementedError("Not implemented yet")
+    if not 4.5 <= focal_height <= 13.88:
+      raise ValueError("Focal height must be between 4.5 and 13.88")
+
+    resp = await self.send_command("t", wait_for_char=b"\x06")
+    assert resp == b"\x06"
+
+    cmd = f"3{14220 + int(1000*focal_height)}\x03".encode()
+    await self.send_command(cmd, purge=False)
+
+    resp = await self.send_command("y", wait_for_char=b"\x06")
+    assert resp == b"\x06"
+    await self.send_command(b"08120112207434014351135308559127881772\x03", purge=False)
+
+    resp = await self.send_command("D", wait_for_char=b"\x06")
+    assert resp == b"\x06"
+    cmd = (b"008401010108120001200100001100100000123000500200200"
+           b"-001000-00300000000000000000001351092")
+    await self.send_command(cmd, purge=False)
+
+    resp1 = await self.send_command("O", wait_for_char=b"\x06")
+    assert resp1 == b"\x06"
+    resp2 = await self._read_until(b"\x03")
+    assert resp2 == b"0000\x03"
+
+    body = await self._read_until(b"\x03", timeout=60*3)
+    assert body is not None
+    return self._parse_body(body)
 
   async def read_fluorescence(
     self,
