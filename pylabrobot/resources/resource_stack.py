@@ -114,7 +114,7 @@ class ResourceStack(ResourceHolderMixin, Resource):
   def get_default_child_location(self, resource: Resource) -> Coordinate:
     return super().get_default_child_location(resource) + self.get_resource_stack_edge()
 
-  def assign_child_resource(self, resouridkce: Resource, location: Optional[Coordinate] = None,
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
     reassign: bool = False):
 
     # special handling for putting a lid on a plate
