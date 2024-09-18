@@ -116,6 +116,7 @@ class ResourceStack(ResourceHolderMixin, Resource):
     reassign: bool = False):
 
     # special handling for putting a lid on a plate
+    # TODO #247 - Remove special case assignment of a lid to a resource stack
     if len(self.children) > 0:
       top_item = self.get_top_item()
       if isinstance(resource, Lid) and isinstance(top_item, Plate):
