@@ -1,7 +1,7 @@
 import math
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.utils.linalg import matrix_multiply_3x3
-import unittest
+
 
 class Rotation:
   """ Represents a 3D rotation. """
@@ -11,7 +11,7 @@ class Rotation:
     self.y = y  # around y-axis, pitch
     self.z = z  # around z-axis, yaw
 
-  def get_rotation_matrix(self):
+  def get_rotation_matrix(self, origin: Coordinate = Coordinate.zero()):
     # Create rotation matrices for each axis
     Rz = ([
       [math.cos(math.radians(self.z)), -math.sin(math.radians(self.z)), 0],
@@ -30,38 +30,9 @@ class Rotation:
     ])
     # Combine rotations: The order of multiplication matters and defines the behavior significantly.
     # This is a common order: Rz * Ry * Rx
-    return matrix_multiply_3x3(matrix_multiply_3x3(Rz, Ry), Rx)
+    rotation_matrix = matrix_multiply_3x3(matrix_multiply_3x3(Rz, Ry), Rx)
 
-  def get_rotation_matrix_around_origin(self, origin: Coordinate):
-    rotation_matrix = self.get_rotation_matrix()
-
-    return [
-      [
-        rotation_matrix[0][0],
-        rotation_matrix[0][1],
-        rotation_matrix[0][2],
-        origin.x * (1 - rotation_matrix[0][0]) -
-        origin.y * rotation_matrix[0][1] -
-        origin.z * rotation_matrix[0][2]
-      ], # transforms & translates x axis
-      [
-        rotation_matrix[1][0],
-        rotation_matrix[1][1],
-        rotation_matrix[1][2],
-        origin.y * (1 - rotation_matrix[1][1]) -
-        origin.x * rotation_matrix[1][0] -
-        origin.z * rotation_matrix[1][2]
-      ], # transforms & translates y axis
-      [
-        rotation_matrix[2][0],
-        rotation_matrix[2][1],
-        rotation_matrix[2][2],
-        origin.z * (1 - rotation_matrix[2][2]) -
-        origin.x * rotation_matrix[2][0] -
-        origin.y * rotation_matrix[2][1]
-      ], # transforms & translates z axis
-      [0, 0, 0, 1]  # affine transformation for 3D coordinates
-    ]
+    return rotation_matrix
 
   def __str__(self) -> str:
     return f"Rotation(x={self.x}, y={self.y}, z={self.z})"
@@ -72,27 +43,3 @@ class Rotation:
   @staticmethod
   def deserialize(data) -> "Rotation":
     return Rotation(data["x"], data["y"], data["z"])
-
-
-class TestRotation(unittest.TestCase):
-  """ Tests for the Rotation class. """
-
-  def test_get_rotation_matrix_around_origin(self):
-    rotation = Rotation(x=90, y=0, z=0)
-    origin = Coordinate(x=1, y=1, z=1)
-
-    expected_matrix = [
-      [1, 0, 0, 0],
-      [0, 0, -1, 2],
-      [0, 1, 0, 0],
-      [0, 0, 0, 1]
-    ]
-
-    rotation_matrix = rotation.get_rotation_matrix_around_origin(origin)
-
-    for i in range(4):
-      for j in range(4):
-        self.assertAlmostEqual(rotation_matrix[i][j], expected_matrix[i][j], places=6)
-
-if __name__ == "__main__":
-  unittest.main()
