@@ -47,6 +47,5 @@
     "editor.wordWrap": "bounded",
     "editor.wordWrapColumn": 100
   },
-  "mypy.runUsingActiveInterpreter": true,
-  "makefile.configureOnOpen": false
+  "mypy.runUsingActiveInterpreter": true
 }
