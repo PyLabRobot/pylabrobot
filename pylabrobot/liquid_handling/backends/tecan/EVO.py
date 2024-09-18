@@ -317,9 +317,6 @@ class EVO(TecanLiquidHandler):
         tip_type=op.tip.tip_type
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
 
-    for op, tlc in zip(ops, tecan_liquid_classes):
-      op.volume = tlc.compute_corrected_volume(op.volume) if tlc is not None else op.volume
-
     ys = int(ops[0].resource.get_absolute_size_y() * 10)
     zadd: List[Optional[int]] = [0] * self.num_channels
     for i, channel in enumerate(use_channels):
@@ -405,11 +402,6 @@ class EVO(TecanLiquidHandler):
         liquid_class=op.liquids[-1][0] or Liquid.WATER,
         tip_type=op.tip.tip_type
       ) if isinstance(op.tip, TecanTip) else None for op in ops]
-
-    for op, tlc in zip(ops, tecan_liquid_classes):
-      op.volume = tlc.compute_corrected_volume(op.volume) + \
-        tlc.aspirate_lag_volume + tlc.aspirate_tag_volume \
-        if tlc is not None else op.volume
 
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
@@ -724,7 +716,8 @@ class EVO(TecanLiquidHandler):
       assert tlc is not None and z is not None
       sep[channel] = int(tlc.aspirate_speed * 12) # 6?
       ssz[channel] = round(z * tlc.aspirate_speed / ops[i].volume)
-      mtr[channel] = round(ops[i].volume * 6) # 3?
+      volume = tlc.compute_corrected_volume(ops[i].volume)
+      mtr[channel] = round(volume * 6) # 3?
       ssz_r[channel] = int(tlc.aspirate_retract_speed * 10)
 
     return ssz, sep, stz, mtr, ssz_r
@@ -755,7 +748,9 @@ class EVO(TecanLiquidHandler):
       sep[channel] = int(tlc.dispense_speed * 12) # 6?
       spp[channel] = int(tlc.dispense_breakoff * 12) # 6?
       stz[channel] = 0
-      mtr[channel] = -round(ops[i].volume * 6) # 3?
+      volume = tlc.compute_corrected_volume(ops[i].volume) + tlc.aspirate_lag_volume + \
+        tlc.aspirate_tag_volume
+      mtr[channel] = -round(volume * 6) # 3?
 
     return sep, spp, stz, mtr
 
