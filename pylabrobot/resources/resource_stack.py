@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 
 from pylabrobot.resources.resource_holder import ResourceHolderMixin, get_child_location
@@ -5,6 +6,7 @@ from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Lid, Plate
 
+logger = logging.getLogger("pylabrobot")
 
 class ResourceStack(ResourceHolderMixin, Resource):
   """ ResourceStack represent a group of resources that are stacked together and act as a single
@@ -120,6 +122,8 @@ class ResourceStack(ResourceHolderMixin, Resource):
     if len(self.children) > 0:
       top_item = self.get_top_item()
       if isinstance(resource, Lid) and isinstance(top_item, Plate):
+        logger.warning("Assigning a lid to a resource stack is deprecated and will be removed in a future version. "
+                        "Assign the lid to the plate directly instead.")
         resource_location = self.get_resource_stack_edge()
         resource_location.z -= resource.nesting_z_height
         top_item.assign_child_resource(
