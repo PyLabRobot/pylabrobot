@@ -256,7 +256,7 @@ class PlateCarrierSite(CarrierSite):
     resource_stack = resource.parent
     assert isinstance(resource_stack, ResourceStack)
     if resource_stack.children[0] == resource:
-      resource_stack.location = self._get_sinking_depth(resource)
+      resource_stack.location = self.get_default_child_location(resource)
 
   def _deregister_resource_stack_callback(self, resource: Resource):
     """ Callback called when a ResourceStack (or child) is unassigned from this PlateCarrierSite."""
