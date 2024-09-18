@@ -260,24 +260,16 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         (GripDirection.LEFT, GripDirection.RIGHT),
         (GripDirection.FRONT, GripDirection.BACK),
     ]
-    site_classes = [ResourceStack, PlateCarrierSite]
+    sites = [
+      ResourceStack(name="stack", direction="z"),
+      PlateCarrierSite(name="site", size_x=100, size_y=100, size_z=15, pedestal_size_z=1)
+    ]
 
-    test_cases = itertools.product(site_classes, rotations, grip_directions)
+    test_cases = itertools.product(sites, rotations, grip_directions)
 
-    for site_class, rotation, (get_direction, put_direction) in test_cases:
-      with self.subTest(stack_type=site_class.__name__, rotation=rotation,
+    for site, rotation, (get_direction, put_direction) in test_cases:
+      with self.subTest(stack_type=site.__class__.__name__, rotation=rotation,
                         get_direction=get_direction, put_direction=put_direction):
-        if site_class == ResourceStack:
-          site = site_class(name=f"{site_class.__name__.lower()}", direction="z")
-        else:
-          site = site_class(
-            name=f"{site_class.__name__.lower()}",
-            size_x=100,
-            size_y=100,
-            size_z=15,
-            pedestal_size_z=1
-          )
-
         self.deck.assign_child_resource(site, location=Coordinate(100, 100, 0))
 
         plate = Plate("plate", size_x=100, size_y=100, size_z=15,
@@ -292,7 +284,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         new_center = plate.get_absolute_location(x="c", y="c", z="c")
 
         self.assertEqual(new_center, original_center,
-                         f"Center mismatch for {site_class.__name__}, rotation {rotation}, "
+                         f"Center mismatch for {site.__class__.__name__}, rotation {rotation}, "
                          f"get_direction {get_direction}, "
                          f"put_direction {put_direction}")
         plate.unassign()
