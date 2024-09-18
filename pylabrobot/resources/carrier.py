@@ -236,6 +236,8 @@ class PlateCarrierSite(CarrierSite):
       first_child = resource.children[0]
       if isinstance(first_child, Plate):
         z_sinking_depth = get_plate_sinking_depth(first_child)
+
+      # TODO #246 - _get_sinking_depth should not handle callbacks
       resource.register_did_assign_resource_callback(self._update_resource_stack_location)
       self.register_did_unassign_resource_callback(self._deregister_resource_stack_callback)
     return -Coordinate(z=z_sinking_depth)

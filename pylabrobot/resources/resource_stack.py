@@ -97,7 +97,7 @@ class ResourceStack(ResourceHolderMixin, Resource):
     return sum(get_actual_resource_height(child) for child in self.children)
 
 
-  def get_resource_stack_size(self) -> Coordinate:
+  def get_resource_stack_edge(self) -> Coordinate:
     if self.direction == "x":
       resource_location = Coordinate(self.get_size_x(), 0, 0)
     elif self.direction == "y":
@@ -110,7 +110,7 @@ class ResourceStack(ResourceHolderMixin, Resource):
     return resource_location
 
   def get_default_child_location(self, resource: Resource) -> Coordinate:
-    return super().get_default_child_location(resource) + self.get_resource_stack_size()
+    return super().get_default_child_location(resource) + self.get_resource_stack_edge()
 
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
     reassign: bool = False):
@@ -119,7 +119,7 @@ class ResourceStack(ResourceHolderMixin, Resource):
     if len(self.children) > 0:
       top_item = self.get_top_item()
       if isinstance(resource, Lid) and isinstance(top_item, Plate):
-        resource_location = self.get_resource_stack_size()
+        resource_location = self.get_resource_stack_edge()
         resource_location.z -= resource.nesting_z_height
         top_item.assign_child_resource(
           resource,
