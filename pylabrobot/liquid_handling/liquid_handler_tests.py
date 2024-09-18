@@ -4,7 +4,7 @@
 import itertools
 import pytest
 import tempfile
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Union, cast
 import unittest
 import unittest.mock
 
@@ -260,7 +260,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         (GripDirection.LEFT, GripDirection.RIGHT),
         (GripDirection.FRONT, GripDirection.BACK),
     ]
-    sites = [
+    sites: List[Union[ResourceStack, PlateCarrierSite]] = [
       ResourceStack(name="stack", direction="z"),
       PlateCarrierSite(name="site", size_x=100, size_y=100, size_z=15, pedestal_size_z=1)
     ]
