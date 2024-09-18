@@ -38,7 +38,6 @@ class Machine(Resource, metaclass=ABCMeta):
     backend: MachineBackend,
     category: Optional[str] = None,
     model: Optional[str] = None,
-    **_kwargs
   ):
     super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
                      category=category, model=model)
