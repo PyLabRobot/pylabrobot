@@ -1,11 +1,14 @@
+import logging
 from typing import List, Optional
 
+from pylabrobot.resources.resource_holder import ResourceHolderMixin, get_child_location
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Lid, Plate
 
+logger = logging.getLogger("pylabrobot")
 
-class ResourceStack(Resource):
+class ResourceStack(ResourceHolderMixin, Resource):
   """ ResourceStack represent a group of resources that are stacked together and act as a single
   unit. Stacks can grow be configured to be able to grow in x, y, or z direction. Stacks growing
   in the x direction are from left to right. Stacks growing in the y direction are from front to
@@ -95,26 +98,45 @@ class ResourceStack(Resource):
       return max(get_actual_resource_height(child) for child in self.children)
     return sum(get_actual_resource_height(child) for child in self.children)
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
-    reassign: bool = False):
+
+  def get_resource_stack_edge(self) -> Coordinate:
     if self.direction == "x":
       resource_location = Coordinate(self.get_size_x(), 0, 0)
     elif self.direction == "y":
       resource_location = Coordinate(0, self.get_size_y(), 0)
     elif self.direction == "z":
       resource_location = Coordinate(0, 0, self.get_size_z())
-
-      # special handling for putting a lid on a plate
-      if len(self.children) > 0:
-        top_item = self.get_top_item()
-        if isinstance(resource, Lid) and isinstance(top_item, Plate):
-          resource_location.z -= resource.nesting_z_height
-          top_item.assign_child_resource(resource, location=resource_location)
-          return
     else:
       raise ValueError("self.direction must be one of 'x', 'y', or 'z'")
 
-    super().assign_child_resource(resource, location=resource_location)
+    return resource_location
+
+  def get_default_child_location(self, resource: Resource) -> Coordinate:
+    return super().get_default_child_location(resource) + self.get_resource_stack_edge()
+
+  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
+    reassign: bool = False):
+
+    # special handling for putting a lid on a plate
+    # TODO #247 - Remove special case assignment of a lid to a resource stack
+    if len(self.children) > 0:
+      top_item = self.get_top_item()
+      if isinstance(resource, Lid) and isinstance(top_item, Plate):
+        logger.warning("Assigning a lid to a resource stack is deprecated and will be "
+                       "removed in a future version. Assign the lid to the plate directly instead.")
+        resource_location = self.get_resource_stack_edge()
+        resource_location.z -= resource.nesting_z_height
+        top_item.assign_child_resource(
+          resource,
+          location=get_child_location(resource) + resource_location
+        )
+        return
+
+    super().assign_child_resource(
+      resource,
+      location=location,
+      reassign=reassign
+    )
 
   def unassign_child_resource(self, resource: Resource):
     if self.direction == "z" and resource != self.children[-1]: # no floating resources

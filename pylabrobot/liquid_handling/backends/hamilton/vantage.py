@@ -638,7 +638,7 @@ class Vantage(HamiltonLiquidHandler):
       immersion_depth=[round(id_*10) for id_ in immersion_depth or [0]*len(ops)],
       surface_following_distance=[round(sfd*10) for sfd in surface_following_distance or
                                   [0]*len(ops)],
-      aspiration_volume=[round(op.volume*100) for op in ops],
+      aspiration_volume=[round(vol*100) for vol in volumes],
       aspiration_speed=[round(fr * 10) for fr in flow_rates],
       transport_air_volume=[round(tav*10) for tav in transport_air_volume or [0]*len(ops)],
       blow_out_air_volume=[round(bav*100) for bav in blow_out_air_volumes],
