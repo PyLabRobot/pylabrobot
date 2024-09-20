@@ -294,14 +294,16 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       except TimeoutError:
         continue
 
-      logger.info("Received response: %s", resp)
+      if resp == "":
+        continue
+
+      logger.debug("Received response: %s", resp)
 
       # Parse response.
       try:
         response_id = self.get_id_from_fw_response(resp)
       except ValueError as e:
-        if resp != "":
-          logger.warning("Could not parse response: %s (%s)", resp, e)
+        logger.warning("Could not parse response: %s (%s)", resp, e)
         continue
 
       for id_, (loop, fut, cmd, timeout_time) in self._waiting_tasks.items():
