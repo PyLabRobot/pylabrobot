@@ -40,7 +40,7 @@ class STARParameterSet(ParameterSet):
       "jet": self.aspiration_jet,
       "blow_out": self.aspiration_blow_out,
       "flow_rates": self.aspiration_flow_rates,
-      "mix_flow_rate": self.aspiration_mix_flow_rates,
+      "homogenization_speed": self.aspiration_mix_flow_rates,
       "transport_air_volume": self.transport_air_volumes,
       "swap_speed": self.aspiration_swap_speeds,
       "settling_time": self.aspiration_settling_times,
@@ -53,7 +53,7 @@ class STARParameterSet(ParameterSet):
     return {
       "jet": self.dispense_jet,
       "blow_out": self.dispense_blow_out,
-      "flow_rate": self.dispense_flow_rates,
+      "flow_rates": self.dispense_flow_rates,
       "mix_speed": self.dispense_mix_speeds,
       "transport_air_volume": self.transport_air_volumes,
       "swap_speed": self.dispense_swap_speeds,
