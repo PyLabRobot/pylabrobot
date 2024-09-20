@@ -183,7 +183,6 @@ class AgilentCentrifuge(CentrifugeBackend):
     return data
 
   async def send(self, cmd: Union[bytearray, bytes], read_timeout=0.2) -> bytes:
-    """Send a command to the centrifuge and return the response."""
     if not self.dev:
       raise RuntimeError("Device not initialized")
 
