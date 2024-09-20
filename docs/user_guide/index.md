@@ -16,7 +16,7 @@ using-the-visualizer
 using-trackers
 writing-robot-agnostic-methods
 hamilton-star/hamilton-star
-hamilton-star/star-lld
+hamilton-star/star_lld
 ```
 
 ```{toctree}
