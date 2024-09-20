@@ -328,7 +328,7 @@ class Vantage(HamiltonLiquidHandler):
     device_address: Optional[int] = None,
     serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
-    read_timeout: int = 30,
+    read_timeout: int = 60,
     write_timeout: int = 30,
   ):
     """ Create a new STAR interface.
@@ -620,8 +620,8 @@ class Vantage(HamiltonLiquidHandler):
     self._assert_valid_resources([op.resource for op in ops])
 
     # correct volumes using the liquid class
-    for op, hlc in zip(ops, hlcs):
-      op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+    volumes = [hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+               for op, hlc in zip(ops, hlcs)]
 
     well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
                     op.resource.material_z_thickness for op in ops]
@@ -663,7 +663,7 @@ class Vantage(HamiltonLiquidHandler):
       immersion_depth=[round(id_*10) for id_ in immersion_depth or [0]*len(ops)],
       surface_following_distance=[round(sfd*10) for sfd in surface_following_distance or
                                   [0]*len(ops)],
-      aspiration_volume=[round(op.volume*100) for op in ops],
+      aspiration_volume=[round(vol*100) for vol in volumes],
       aspiration_speed=[round(fr * 10) for fr in flow_rates],
       transport_air_volume=[round(tav*10) for tav in
         transport_air_volume or [hlc.aspiration_air_transport_volume if hlc is not None else 0
@@ -785,8 +785,8 @@ class Vantage(HamiltonLiquidHandler):
     self._assert_valid_resources([op.resource for op in ops])
 
     # correct volumes using the liquid class
-    for op, hlc in zip(ops, hlcs):
-      op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+    volumes = [hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+               for op, hlc in zip(ops, hlcs)]
 
     well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
                     op.resource.material_z_thickness for op in ops]
@@ -831,7 +831,7 @@ class Vantage(HamiltonLiquidHandler):
           minimal_traverse_height_at_begin_of_command or [self._traversal_height]*len(ops)],
       minimal_height_at_command_end=
         [round(mh*10) for mh in minimal_height_at_command_end or [self._traversal_height]*len(ops)],
-      dispense_volume=[round(op.volume * 100) for op in ops],
+      dispense_volume=[round(vol*100) for vol in volumes],
       dispense_speed=[round(fr*10) for fr in flow_rates],
       cut_off_speed=[round(cs*10) for cs in cut_off_speed or [250]*len(ops)],
       stop_back_volume=[round(sbv*100) for sbv in stop_back_volume or [0]*len(ops)],
