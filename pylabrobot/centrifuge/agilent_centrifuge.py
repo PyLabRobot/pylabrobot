@@ -145,6 +145,8 @@ class AgilentCentrifuge(CentrifugeBackend):
 
   async def get_status(self):
     resp = await self.send(b"\xaa\x01\x0e\x0f")
+    if len(resp) == 0:
+        raise IOError("Empty status from centrifuge")
     s = [f"{byte:02x}" for byte in resp]
     self.position = int.from_bytes(bytes.fromhex("".join(s[1:5])), byteorder="little")
     self.homing_position = int.from_bytes(bytes.fromhex("".join(s[9:13])), byteorder="little")
