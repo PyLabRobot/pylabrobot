@@ -1619,7 +1619,7 @@ class STAR(HamiltonLiquidHandler):
         x_positions=x_positions,
         y_positions=y_positions,
 
-        aspiration_volumes=[round(vol * 10) for vol in volumes],
+        aspiration_volumes=[round(op.volume * 10) for op in ops],
         lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
         clot_detection_height=[round(cd * 10) for cd in clot_detection_height],
         liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
