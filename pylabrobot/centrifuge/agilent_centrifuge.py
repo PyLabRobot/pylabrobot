@@ -217,7 +217,6 @@ class AgilentCentrifuge(CentrifugeBackend):
     self.dev.baudrate = 19200
 
   async def initialize(self):
-    """Initialize the device."""
     self.dev.write(b"\x00" * 20)
     for i in range(33):
       packet = b"\xaa" + bytes([i & 0xFF, 0x0e, 0x0e + (i & 0xFF)]) + b"\x00" * 8
