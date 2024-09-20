@@ -1,7 +1,7 @@
 .. currentmodule:: pylabrobot
 
-Public API: pylabrobot package
-==============================
+API
+===
 
 Subpackages
 -----------

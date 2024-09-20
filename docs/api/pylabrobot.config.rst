@@ -3,7 +3,7 @@
 pylabrobot.config package
 =========================
 
-This package contains APIs for configuring PLR. More information in :doc:`configuration tutorial <configuration>`.
+This package contains APIs for configuring PLR. More information in :doc:`configuration tutorial </user_guide/configuration>`.
 
 .. autosummary::
   :toctree: _autosummary

@@ -4,11 +4,11 @@ This guide explains how to add support for a new machine of an existing type. Fo
 
 The machine types that are currently supported are:
 
-- [Liquid handlers](basic)
-- [Plate readers](plate_reading)
-- [Pumps](pumps)
-- [Temperature controllers](temperature)
-- [Heater shakers](/heating-shaking)
+- [Liquid handlers](/user_guide/basic)
+- [Plate readers](/user_guide/plate_reading)
+- [Pumps](/user_guide/pumps)
+- [Temperature controllers](/user_guide/temperature)
+- [Heater shakers](/user_guide/heating-shaking)
 
 Two documents that you can read before you start are:
 

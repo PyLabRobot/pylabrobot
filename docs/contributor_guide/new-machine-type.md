@@ -2,11 +2,11 @@
 
 PyLabRobot supports a number of different types of machines. Currently, these are:
 
-- [Liquid handlers](basic)
-- [Plate readers](plate_reading)
-- [Pumps](pumps)
-- [Temperature controllers](temperature)
-- [Heater shakers](/heating-shaking)
+- [Liquid handlers](/user_guide/basic)
+- [Plate readers](/user_guide/plate_reading)
+- [Pumps](/user_guide/pumps)
+- [Temperature controllers](/user_guide/temperature)
+- [Heater shakers](/user_guide/heating-shaking)
 
 If you want to add support for a new type of machine, this guide will explain the process. If you want to add a new machine for a type that already exists, you should read {doc}`this guide <new-concrete-backend>` instead.
 
@@ -49,7 +49,7 @@ The abstract class {class}`~pylabrobot.machine.MachineFrontend` must be used as 
 
 You should put the front end in a file called `<machine_type>.py` in the module you created in step 1. For example, the liquid handling front end is located at `pylabrobot.liquid_handling.liquid_handler.py`.
 
-If your devices updates the resource tree or its state, the front end should handle this. See [the resources guide](resources/introduction.md) for more information.
+If your devices updates the resource tree or its state, the front end should handle this. See [the resources guide](/resources/introduction.md) for more information.
 
 ## 4. Creating a new concrete backend for a specific machine
 

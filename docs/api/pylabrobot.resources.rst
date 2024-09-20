@@ -224,7 +224,7 @@ VWR
 Tip trackers
 ------------
 
-See :doc:`Using trackers <using-trackers>` for a tutorial.
+See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
 
 .. autosummary::
   :toctree: _autosummary
@@ -239,7 +239,7 @@ See :doc:`Using trackers <using-trackers>` for a tutorial.
 Volume trackers
 ---------------
 
-See :doc:`Using trackers <using-trackers>` for a tutorial.
+See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
 
 .. autosummary::
   :toctree: _autosummary

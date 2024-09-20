@@ -72,7 +72,7 @@ default_role = 'code' # allow single backticks for inline code
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_book_theme'
+html_theme = 'pydata_sphinx_theme'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -80,12 +80,37 @@ html_theme = 'sphinx_book_theme'
 html_static_path = ['_static']
 
 html_theme_options = {
-  'repository_url': 'https://github.com/pylabrobot/pylabrobot',
-  'use_repository_button': False,
+  # 'repository_url': 'https://github.com/pylabrobot/pylabrobot',
+  # 'use_repository_button': True,
   'use_edit_page_button': True,
-  'repository_branch': 'main',
-  'path_to_docs': 'docs',
-  'use_issues_button': False,
+  # 'repository_branch': 'main',
+  # 'path_to_docs': 'docs',
+  # 'use_issues_button': False,
+
+  "navbar_start": ["navbar-logo"],
+  "navbar_center": ["navbar-nav"],
+  "navbar_end": ["navbar-icon-links"],
+  "navbar_persistent": ["search-button"],
+
+  "icon_links": [
+    {
+      "name": "X",
+      "url": "https://x.com/pylabrobot",
+      "icon": "fa-brands fa-x-twitter",
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/pylabrobot/pylabrobot",
+      "icon": "fa-brands fa-github",
+    },
+  ],
+}
+
+html_context = {
+  "github_user": "pylabrobot",
+  "github_repo": "pylabrobot",
+  "github_version": "main",
+  "doc_path": "docs",
 }
 
 html_logo = '_static/logo.png'

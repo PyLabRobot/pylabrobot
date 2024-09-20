@@ -27,7 +27,7 @@ cd pylabrobot
 pip install -e '.[dev]'
 ```
 
-See [CONTRIBUTING.md](https://github.com/PyLabRobot/pylabrobot/blob/main/CONTRIBUTING.md) for specific instructions on testing, documentation and development.
+See [CONTRIBUTING.md](/contributor_guide/contributing) for specific instructions on testing, documentation and development.
 
 ### Using pip (often outdated NOT recommended)
 
@@ -107,23 +107,23 @@ brew install libusb
 
 3. Open Zadig and select "Options" -> "List All Devices".
 
-![](./img/installation/install-1.png)
+![](/user_guide/img/installation/install-1.png)
 
 4. Select "ML Star" from the list if you're using a Hamilton STAR or STARlet. If you're using a Tecan robot, select "TECU".
 
-![](./img/installation/install-2.png)
+![](/user_guide/img/installation/install-2.png)
 
 5. Select "libusbK" using the arrow buttons.
 
-![](./img/installation/install-3.png)
+![](/user_guide/img/installation/install-3.png)
 
 6. Click "Replace Driver".
 
-![](./img/installation/install-4.png)
+![](/user_guide/img/installation/install-4.png)
 
 7. Click "Close" to finish.
 
-![](./img/installation/install-5.png)
+![](/user_guide/img/installation/install-5.png)
 
 #### Uninstalling
 
@@ -133,31 +133,31 @@ If you ever wish to switch back from firmware command to use `pyhamilton` or pla
 
 1. This guide is only relevant if ML Star is listed under libusbK USB Devices in the Device Manager program.
 
-![](./img/installation/uninstall-1.png)
+![](/user_guide/img/installation/uninstall-1.png)
 
 2. If that"s the case, double click "ML Star" (or similar) to open this dialog, then click "Driver".
 
-![](./img/installation/uninstall-2.png)
+![](/user_guide/img/installation/uninstall-2.png)
 
 3. Click "Update Driver".
 
-![](./img/installation/uninstall-3.png)
+![](/user_guide/img/installation/uninstall-3.png)
 
 4. Select "Browse my computer for driver software".
 
-![](./img/installation/uninstall-4.png)
+![](/user_guide/img/installation/uninstall-4.png)
 
 5. Select "Let me pick from a list of device drivers on my computer".
 
-![](./img/installation/uninstall-5.png)
+![](/user_guide/img/installation/uninstall-5.png)
 
 6. Select "Microlab STAR" and click "Next".
 
-![](./img/installation/uninstall-6.png)
+![](/user_guide/img/installation/uninstall-6.png)
 
 7. Click "Close" to finish.
 
-![](./img/installation/uninstall-7.png)
+![](/user_guide/img/installation/uninstall-7.png)
 
 ### Troubleshooting
 
