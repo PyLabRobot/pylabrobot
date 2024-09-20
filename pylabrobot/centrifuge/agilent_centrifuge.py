@@ -273,7 +273,7 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     await self.send_payloads(move_bucket)
 
-    time.sleep(2)
+    await asyncio.sleep(2)
 
     await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.open_door()
