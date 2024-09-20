@@ -339,7 +339,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     if g < 1 or g > 1000:
       raise CentrifugeOperationError("G-force must be within 1-1000")
     if time_seconds < 1:
-      raise CentrifugeOperationError("Spin time must be atleast 1 second")
+      raise CentrifugeOperationError("Spin time must be at least 1 second")
 
     await self.get_status()
 
