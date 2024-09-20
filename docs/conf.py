@@ -36,7 +36,7 @@ extensions = [
   'sphinx.ext.mathjax',
   'myst_nb',
   'sphinx_copybutton',
-  'IPython.sphinxext.ipython_console_highlighting'
+  'IPython.sphinxext.ipython_console_highlighting',
 ]
 
 intersphinx_mapping = {
@@ -80,16 +80,11 @@ html_theme = 'pydata_sphinx_theme'
 html_static_path = ['_static']
 
 html_theme_options = {
-  # 'repository_url': 'https://github.com/pylabrobot/pylabrobot',
-  # 'use_repository_button': True,
   'use_edit_page_button': True,
-  # 'repository_branch': 'main',
-  # 'path_to_docs': 'docs',
-  # 'use_issues_button': False,
 
   "navbar_start": ["navbar-logo"],
   "navbar_center": ["navbar-nav"],
-  "navbar_end": ["navbar-icon-links"],
+  "navbar_end": ["theme-switcher", "navbar-icon-links"],
   "navbar_persistent": ["search-button"],
 
   "icon_links": [
@@ -103,7 +98,16 @@ html_theme_options = {
       "url": "https://github.com/pylabrobot/pylabrobot",
       "icon": "fa-brands fa-github",
     },
+    {
+      "name": "YouTube",
+      "url": "https://youtube.com/@pylabrobot",
+      "icon": "fa-brands fa-youtube",
+    }
   ],
+
+  "logo": {
+    "text": "PyLabRobot",
+  }
 }
 
 html_context = {
