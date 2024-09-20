@@ -375,10 +375,10 @@ byte_string,
     await self.get_status()
 
     while self.status == "08":
-      time.sleep(1)
+      await asyncio.sleep(1)
       await self.get_status()
 
-    time.sleep(2)
+    await asyncio.sleep(2)
 
     # reset position back to 0ish
     payloads = [
