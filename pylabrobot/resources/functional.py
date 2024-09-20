@@ -1,36 +1,43 @@
-import os
 import json
+import logging
+import os
 import random
 from collections import deque
-from typing import List, Optional
-from pylabrobot.resources.tip_rack import TipRack
+from typing import AsyncGenerator, List, Optional
+from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
 
-async def linear_tip_spot_generator(tip_racks: List[TipRack],
-                                    cache_file_path: Optional[str]=None):
+logger = logging.getLogger("pylabrobot.resources")
+
+async def linear_tip_spot_generator(
+  tip_racks: List[TipRack],
+  cache_file_path: Optional[str]=None
+) -> AsyncGenerator[TipSpot, None]:
   """ Tip spot generator with disk caching. Linearly iterate through all tip spots and
   raise StopIteration when all spots have been used. """
   tip_rack_idx, tip_spot_idx = 0, 0
   if cache_file_path is not None and os.path.exists(cache_file_path):
     with open(cache_file_path, "r", encoding="utf-8") as f:
       data = json.load(f)
-      tip_rack_idx, tip_spot_idx = data["tri"], data["tsi"]
-      print("loaded tip idx from disk:", data)
+      tip_rack_idx, tip_spot_idx = data["tip_rack_index"], data["tip_spot_idx"]
+      logger.info.f("loaded tip idx from disk: %s", data)
 
   while tip_rack_idx < len(tip_racks):
     while tip_spot_idx < 96:
       tip_spot_idx += 1
       if cache_file_path is not None:
         with open(cache_file_path, "w", encoding="utf-8") as f:
-          json.dump({"tri": tip_rack_idx, "tsi": tip_spot_idx}, f)
+          json.dump({"tip_rack_index": tip_rack_idx, "tip_spot_idx": tip_spot_idx}, f)
       yield tip_racks[tip_rack_idx][tip_spot_idx]
 
     tip_rack_idx += 1
     tip_spot_idx = 0
 
 
-async def randomized_tip_spot_generator(tip_racks: List[TipRack], K: int,
-                                        cache_file_path: Optional[str]=None):
+async def randomized_tip_spot_generator(
+  tip_racks: List[TipRack], K: int,
+  cache_file_path: Optional[str]=None
+) -> AsyncGenerator[TipSpot, None]:
   """ Randomized tip spot generator with disk caching. Don't return tip spots that have been
   sampled in the last K samples. """
   
@@ -41,7 +48,7 @@ async def randomized_tip_spot_generator(tip_racks: List[TipRack], K: int,
     with open(cache_file_path, "r", encoding="utf-8") as f:
       data = json.load(f)
       recently_sampled = deque(data["recently_sampled"], maxlen=K)
-      print(f"Loaded recently sampled tips from disk: {recently_sampled}")
+      logger.info.f("loaded recently sampled tip spots from disk: %s", recently_sampled)
 
   while True:
     available_tips = [ts for ts in all_tip_spots if ts.name not in recently_sampled]
