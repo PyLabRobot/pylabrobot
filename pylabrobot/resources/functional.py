@@ -16,7 +16,8 @@ def get_all_tip_spots(tip_racks: List[TipRack]) -> List[TipSpot]:
 
 async def linear_tip_spot_generator(
   tip_spots: List[TipSpot],
-  cache_file_path: Optional[str]=None
+  cache_file_path: Optional[str]=None,
+  repeat: bool=False
 ) -> AsyncGenerator[TipSpot, None]:
   """ Tip spot generator with disk caching. Linearly iterate through all tip spots and
   raise StopIteration when all spots have been used. """
@@ -27,12 +28,17 @@ async def linear_tip_spot_generator(
       tip_spot_idx = data["tip_spot_idx"]
       logger.info("loaded tip idx from disk: %s", data)
 
-  while tip_spot_idx < len(tip_spots):
+  while True:
     if cache_file_path is not None:
       with open(cache_file_path, "w", encoding="utf-8") as f:
         json.dump({"tip_spot_idx": tip_spot_idx}, f)
     yield tip_spots[tip_spot_idx]
     tip_spot_idx += 1
+    if tip_spot_idx >= len(tip_spots):
+      if repeat:
+        tip_spot_idx = 0
+      else:
+        return
 
 
 async def randomized_tip_spot_generator(
