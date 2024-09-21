@@ -3,7 +3,7 @@ import logging
 import os
 import random
 from collections import deque
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Deque, List, Optional
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 
 
@@ -11,7 +11,7 @@ logger = logging.getLogger("pylabrobot.resources")
 
 
 def get_all_tip_spots(tip_racks: List[TipRack]) -> List[TipSpot]:
-  return [spot for rack in tip_racks for spot in rack.items]
+  return [spot for rack in tip_racks for spot in rack.get_all_items()]
 
 
 async def linear_tip_spot_generator(
@@ -32,7 +32,7 @@ async def linear_tip_spot_generator(
       with open(cache_file_path, "w", encoding="utf-8") as f:
         json.dump({"tip_spot_idx": tip_spot_idx}, f)
     yield tip_spots[tip_spot_idx]
-    tip_rack_idx += 1
+    tip_spot_idx += 1
 
 
 async def randomized_tip_spot_generator(
@@ -41,8 +41,8 @@ async def randomized_tip_spot_generator(
 ) -> AsyncGenerator[TipSpot, None]:
   """ Randomized tip spot generator with disk caching. Don't return tip spots that have been
   sampled in the last K samples. """
-  
-  recently_sampled = deque(maxlen=K)
+
+  recently_sampled: Deque[str] = deque(maxlen=K)
 
   if cache_file_path is not None and os.path.exists(cache_file_path):
     with open(cache_file_path, "r", encoding="utf-8") as f:
