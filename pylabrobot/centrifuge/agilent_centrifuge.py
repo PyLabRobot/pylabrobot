@@ -203,7 +203,6 @@ class AgilentCentrifuge(CentrifugeBackend):
       else:
         await self.send(tx)
 
-# setup() and stop() helper functions: configure_and_initialize, set_configuration_data, initialize
 
   async def configure_and_initialize(self):
     await self.set_configuration_data()
