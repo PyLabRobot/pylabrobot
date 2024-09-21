@@ -79,7 +79,7 @@ data = await pr.read_luminescence()
 
 ### Centrifuges
 
-PyLabRobot also supports centrifugation (spin spin spin), currently limited to the Agilent Centrifuge. This functionality allows users to automate centrifuging processes on any modern operating system. Here is a quick example of centrifugation at 800 g-force for 60 seconds:
+Here is a quick example of centrifugation at 800 g-force for 60 seconds:
 
 ```python
 from pylabrobot.centrifuge import Centrifuge, AgilentCentrifuge
