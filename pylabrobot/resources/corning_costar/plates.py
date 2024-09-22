@@ -1270,44 +1270,44 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
   )
 
 def Corning_6_WP_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
-    """
-    Corning cat. no.: 3471
-    - Material: Polystyrene
-    - Tissue culture treated: No
-    """
-    BOTTOM_INNER_WELL_RADIUS = 34.798 / 2  # from Corning Product Description
-    TOP_INNER_WELL_RADIUS = 35.433 / 2  # from Corning Product Description
+  """
+  Corning cat. no.: 3471
+  - Material: Polystyrene
+  - Tissue culture treated: No
+  """
+  BOTTOM_INNER_WELL_RADIUS = 34.798 / 2  # from Corning Product Description
+  TOP_INNER_WELL_RADIUS = 35.433 / 2  # from Corning Product Description
 
-    well_kwargs = {
-        "size_x": BOTTOM_INNER_WELL_RADIUS * 2,
-        "size_y": BOTTOM_INNER_WELL_RADIUS * 2,
-        "size_z": 17.399,  # from Corning Product Description
-        "bottom_type": WellBottomType.FLAT,
-        "max_volume": 16.850,  # calculated
-        "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
-            liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
-        ),
-        "compute_height_from_volume": lambda liquid_volume: _compute_height_from_volume_conicalfrustum(
-            liquid_volume, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
-        ),
-    }
+  well_kwargs = {
+    "size_x": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_y": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_z": 17.399,  # from Corning Product Description
+    "bottom_type": WellBottomType.FLAT,
+    "max_volume": 16.850,  # calculated
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
+      liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+    "compute_height_from_volume": lambda liquid_volume: _compute_height_from_volume_conicalfrustum(
+      liquid_volume, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+  }
 
-    return Plate(
-        name=name,
-        size_x=127.762,  # from Corning Product Description
-        size_y=85.471,  # from Corning Product Description
-        size_z=22.6314,  # from Corning Product Description
-        lid=lid,
-        model=Corning_6_WP_Fl.__name__,
-        ordered_items=create_ordered_items_2d(
-            Well,
-            num_items_x=3,
-            num_items_y=2,
-            dx=7.5,  # measured as distance between left/right outer plate edge and left/right outer well edge
-            dy=6.3,  # measured as distance between top/bottom outer plate edge and top/bottom outer well edge
-            dz=1.8,  # calibrated manually by z-stepping down using a pipette.
-            item_dx=39,  # measured as distance between inner left edge of one well and inner left edge of next well
-            item_dy=39,  # measured as distance between inner bottom edge of one well and inner top edge of next well
-            **well_kwargs,
-        ),
-    )
+  return Plate(
+    name=name,
+    size_x=127.762,  # from Corning Product Description
+    size_y=85.471,   # from Corning Product Description
+    size_z=22.6314,  # from Corning Product Description
+    lid=lid,
+    model=Corning_6_WP_Fl.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=3,
+      num_items_y=2,
+      dx=7.5,  # measured
+      dy=6.3,  # measured
+      dz=1.8,  # calibrated manually by z-stepping down using a pipette.
+      item_dx=39,  # measured
+      item_dy=39,  # measured
+      **well_kwargs,
+    ),
+  )
