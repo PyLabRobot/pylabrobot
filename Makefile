@@ -6,7 +6,7 @@ endif
 .PHONY: docs lint test
 
 docs:
-	sphinx-build -b html docs docs/build/ -j 1 -W
+	sphinx-build -b html docs docs/build/ -j 16 -W
 
 clean-docs:
 	rm -rf docs/build
