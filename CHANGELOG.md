@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Resource.center` now returns the center of the resource in local space, not absolute space (https://github.com/PyLabRobot/pylabrobot/pull/235)
 - Rename `ChatterBoxBackend` to `LiquidHandlerChatterboxBackend` (https://github.com/PyLabRobot/pylabrobot/pull/242)
 - Move `LiquidHandlerChatterboxBackend` from `liquid_handling.backends.chatterbox_backend` to `liquid_handling.backends.chatterbox` (https://github.com/PyLabRobot/pylabrobot/pull/242)
+- Changed `pedestal_size_z=-5` to `pedestal_size_z=-4.74` for `PLT_CAR_L5AC_A00` (https://github.com/PyLabRobot/pylabrobot/pull/255)
 
 ### Added
 
@@ -73,6 +74,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `ShakerChatterboxBackend`
   - `TemperatureControllerChatterboxBackend`
 - Add fluorescence reading to Cytation 5 (https://github.com/PyLabRobot/pylabrobot/pull/244)
+- Add `F.linear_tip_spot_generator` and `F.randomized_tip_spot_generator` for looping over tip spots, with caching (https://github.com/PyLabRobot/pylabrobot/pull/256)
 
 ### Deprecated
 

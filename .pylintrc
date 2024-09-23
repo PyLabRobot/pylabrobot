@@ -148,7 +148,8 @@ disable=abstract-method,
         zip-builtin-not-iterating,
         missing-module-docstring,  # added
         missing-function-docstring,  # added
-        C0103  # added, invalid module name
+        C0103,  # added, invalid module name
+        too-many-positional-arguments, # backends take many arguments
 
 
 [REPORTS]
