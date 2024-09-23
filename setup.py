@@ -54,7 +54,8 @@ extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets 
     "pytest-timeout",
     "pylint",
     "mypy",
-    "responses"
+    "responses",
+    "sphinx-reredirects",
   ]
 
 # Some extras are not available on all platforms. `dev` should be available everywhere

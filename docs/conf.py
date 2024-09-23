@@ -37,10 +37,11 @@ extensions = [
   'myst_nb',
   'sphinx_copybutton',
   'IPython.sphinxext.ipython_console_highlighting',
+  'sphinx_reredirects',
 ]
 
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3/', None),
+  'python': ('https://docs.python.org/3/', None),
 }
 
 # Add any paths that contain templates here, relative to this directory.
@@ -135,3 +136,26 @@ napoleon_use_ivar = True
 
 nb_execution_mode = 'off'
 myst_enable_extensions = ['dollarmath']
+
+redirects = {
+  "installation.html": "user_guide/installation.html",
+  "contributing.html": "contributor_guide/index.html",
+  "configuration.html": "user_guide/configuration.html",
+  "new-machine-type.html": "contributor_guide/new_machine_type.html",
+  "new-concrete-backend.html": "contributor_guide/new_concrete_backend.html",
+  "how-to-open-source.html": "contributor_guide/how_to_open_source.html",
+  "basic.html": "user_guide/basic.html",
+  "using-the-visualizer.html": "user_guide/using_the_visualizer.html",
+  "using-trackers.html": "user_guide/using_trackers.html",
+  "writing-robot-agnostic-methods.html": "user_guide/writing_robot_agnostic_methods.html",
+  "hamilton-star/hamilton-star.html": "user_guide/hamilton_star/hamilton_star.html",
+  "hamilton-star/iswap-module.html": "user_guide/hamilton_star/iswap_module.html",
+  "plate_reading.html": "user_guide/plate_reading.html",
+  "cytation5.html": "user_guide/cytation5.html",
+  "pumps.html": "user_guide/pumps.html",
+  "scales.html": "user_guide/scales.html",
+  "temperature.html": "user_guide/temperature.html",
+  "tilting.html": "user_guide/tilting.html",
+  "heating-shaking.html": "user_guide/heating_shaking.html",
+  "fans.html": "user_guide/fans.html",
+}
