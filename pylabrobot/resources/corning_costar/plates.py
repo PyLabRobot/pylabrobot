@@ -14,9 +14,9 @@ from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_in_container_2segments_square_vbottom,
   calculate_liquid_volume_container_1segment_round_fbottom,
   calculate_liquid_volume_container_2segments_square_vbottom,
+  compute_height_from_volume_conical_frustum,
   compute_volume_from_height_conical_frustum
 )
-from retro_pylabrobot.resources.plates import _compute_height_from_volume_conicalfrustum
 
 
 def _compute_volume_from_height_Cos_1536_10ul(h: float) -> float:
@@ -1287,7 +1287,7 @@ def Corning_6_WP_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
     "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
       liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
     ),
-    "compute_height_from_volume": lambda liquid_volume: _compute_height_from_volume_conicalfrustum(
+    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
       liquid_volume, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
     ),
   }
