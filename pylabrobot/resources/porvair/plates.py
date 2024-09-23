@@ -132,7 +132,7 @@ def Porvair_24_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.3,  # measured
     size_z=19.2,  # measured
     lid=lid,
-    model=Porvair_24_wellplate_V.__name__,
+    model=Porvair_24_wellplate_Vb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,

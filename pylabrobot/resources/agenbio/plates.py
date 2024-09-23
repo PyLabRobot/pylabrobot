@@ -38,11 +38,11 @@ def AGenBio_4_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
 
   return Plate(
     name=name,
-    size_x=127.76,  # from spec
+    size_x=127.76, # from spec
     size_y=85.48,  # from spec
     size_z=43.80,  # measured
     lid=lid,
-    model=AGenBio_4_wellplate_V.__name__,
+    model=AGenBio_4_wellplate_Vb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=4,

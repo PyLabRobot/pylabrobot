@@ -1298,7 +1298,7 @@ def Cor_6_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.471,   # from Corning Product Description
     size_z=22.6314,  # from Corning Product Description
     lid=lid,
-    model=Corning_6_WP_Fl.__name__,
+    model=Corning_6_wellplate_Fl.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=3,
