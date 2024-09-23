@@ -9,7 +9,7 @@ from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 
 
-def Falcon_96_WP_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
+def Falcon_96_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Falcon cat. no.: 353072
   - Material: Polystyrene
@@ -23,7 +23,7 @@ def Falcon_96_WP_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.11,  # directly from reference manual
     size_z=14.30,  # without lid, directly from reference manual
     lid=lid,
-    model=Falcon_96_WP_Fl.__name__,
+    model=Falcon_96_wellplate_Fl.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -46,7 +46,7 @@ def Falcon_96_WP_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
     ),
   )
 
-def Falcon_96_WP_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
+def Falcon_96_wellplate_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Falcon cat. no.: 353077
   - Material: Polystyrene
@@ -70,7 +70,7 @@ def Falcon_96_WP_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.11,
     size_z=14.30,
     lid=lid,
-    model=Falcon_96_WP_Rb.__name__,
+    model=Falcon_96_wellplate_Rb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,
@@ -84,7 +84,7 @@ def Falcon_96_WP_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
     ),
   )
 
-def Falcon_96_WP_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
+def Falcon_96_wellplate_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Falcon Catalog No. 353219
   """
@@ -112,7 +112,7 @@ def Falcon_96_WP_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.48,  # from spec
     size_z=14.40,  # from spec
     lid=lid,
-    model=Falcon_96_WP_Fl_Black.__name__,
+    model=Falcon_96_wellplate_Fl_Black.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,

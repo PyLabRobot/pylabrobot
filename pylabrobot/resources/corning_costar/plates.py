@@ -1269,7 +1269,7 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
     ),
   )
 
-def Corning_6_WP_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
+def Cor_6_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.: 3471
   - Material: Polystyrene

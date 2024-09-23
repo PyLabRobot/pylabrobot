@@ -95,7 +95,7 @@ def Porvair_6_reservoir_47ml_Vb_P(name: str, with_lid: bool = False) -> Plate:
   return Porvair_6_reservoir_47ml_Vb(name=name, with_lid=with_lid).rotated(z=90)
 
 
-def Porvair_24_WP_V(name: str, lid: Optional[Lid] = None) -> Plate:
+def Porvair_24_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Porvair cat. no.: 390108
   - Material: Polypropylene
@@ -132,7 +132,7 @@ def Porvair_24_WP_V(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.3,  # measured
     size_z=19.2,  # measured
     lid=lid,
-    model=Porvair_24_WP_V.__name__,
+    model=Porvair_24_wellplate_V.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=12,

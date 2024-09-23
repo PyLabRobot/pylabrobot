@@ -8,7 +8,7 @@ from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
 
 
-def AGenBio_4_WP_V(name: str, lid: Optional[Lid] = None) -> Plate:
+def AGenBio_4_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   AGenBio Catalog No. RES-75-4MW
   - Material: Polypropylene
@@ -42,7 +42,7 @@ def AGenBio_4_WP_V(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.48,  # from spec
     size_z=43.80,  # measured
     lid=lid,
-    model=AGenBio_4_WP_V.__name__,
+    model=AGenBio_4_wellplate_V.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=4,
@@ -57,7 +57,7 @@ def AGenBio_4_WP_V(name: str, lid: Optional[Lid] = None) -> Plate:
   )
 
 
-def AGenBio_1_WP_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
+def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   AGenBio Catalog No. RES-190-F
   - Material: Polypropylene
@@ -91,7 +91,7 @@ def AGenBio_1_WP_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.48,  # from spec
     size_z=31.4,  # from spec
     lid=lid,
-    model=AGenBio_1_WP_Fl.__name__,
+    model=AGenBio_1_wellplate_Fl.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=1,
