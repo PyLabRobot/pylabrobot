@@ -25,12 +25,20 @@ PyLabRobot is different from [PyHamilton](https://github.com/dgretton/pyhamilton
 :class: company
 ```
 
+```{image} /img/used_by/tt.png
+:alt: T-Therapeutics
+:class: company tt
+```
+
 ```{raw} html
 <style>
 .company {
   max-width: 200px;
   display: inline-block;
   margin: 0 1em;
+}
+.tt {
+  max-width: 300px; /* T-Therapeutics logo is wider */
 }
 </style>
 ```
