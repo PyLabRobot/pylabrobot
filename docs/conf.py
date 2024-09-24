@@ -78,7 +78,8 @@ html_theme = 'pydata_sphinx_theme'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ['_static', 'resources/library/img']
+html_extra_path = ['resources/library/img']
 
 html_theme_options = {
   'use_edit_page_button': True,
@@ -159,3 +160,7 @@ redirects = {
   "heating-shaking.html": "user_guide/heating_shaking.html",
   "fans.html": "user_guide/fans.html",
 }
+
+if tags.has('no-api'):
+  exclude_patterns.append('api/**')
+  suppress_warnings = ['toc.excluded']

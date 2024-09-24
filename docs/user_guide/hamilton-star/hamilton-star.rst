@@ -7,3 +7,4 @@ Tools for working with Hamilton-STAR specific functions.
    :maxdepth: 1
 
    iswap-module
+   star_lld
