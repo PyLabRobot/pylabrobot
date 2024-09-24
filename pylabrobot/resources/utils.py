@@ -23,7 +23,7 @@ def create_equally_spaced_2d(
     num_items_x: The number of items in the x direction
     num_items_y: The number of items in the y direction
     dx: The bottom left corner for items in the left column
-    dy: The bottom left corner for items in the top row
+    dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
     item_dx: The size of the items in the x direction
     item_dy: The size of the items in the y direction
@@ -65,7 +65,7 @@ def create_equally_spaced_x(
     klass: The class of the resource to create
     num_items_x: The number of items in the x direction
     dx: The bottom left corner for items in the left column
-    dy: The bottom left corner for items in the top row
+    dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
     item_dx: The size of the items in the x direction
     **kwargs: Additional keyword arguments to pass to the resource constructor
@@ -99,7 +99,7 @@ def create_equally_spaced_y(
     klass: The class of the resource to create
     num_items_y: The number of items in the y direction
     dx: The bottom left corner for items in the left column
-    dy: The bottom left corner for items in the top row
+    dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
     item_dy: The size of the items in the y direction
     **kwargs: Additional keyword arguments to pass to the resource constructor
@@ -134,7 +134,7 @@ def create_ordered_items_2d(
     num_items_x: The number of items in the x direction
     num_items_y: The number of items in the y direction
     dx: The bottom left corner for items in the left column
-    dy: The bottom left corner for items in the top row
+    dy: The bottom left corner for items in the bottom row
     dz: The z coordinate for all items
     item_dx: The size of the items in the x direction
     item_dy: The size of the items in the y direction
