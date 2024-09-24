@@ -6,11 +6,17 @@ endif
 .PHONY: docs lint test
 
 docs:
-	sphinx-build -b html docs docs/build/ -j 1 -W
+	sphinx-build -b html docs docs/build/ -j 16 -W
+
+docs-fast:
+	echo "building docs without api for speed"
+	sphinx-build -t no-api -b html docs docs/build/ -j 16 -W
 
 clean-docs:
 	rm -rf docs/build
 	rm -rf docs/_autosummary
+	rm -rf docs/jupyter_execute
+	rm -rf docs/user_guide/jupyter_execute
 
 lint:
 	$(BIN)python -m pylint pylabrobot
