@@ -4,7 +4,7 @@ The PLR Resource Library (PLR-RL) is the world's biggest and most accurate centr
 
 
 ```{toctree}
-:caption: Introduction
+:maxdepth: 1
 
 introduction
 custom-resources

@@ -1,14 +1,14 @@
 # Contributor guide
 
 ```{toctree}
-:hidden:
+:maxdepth: 2
 
 contributing
 how-to-open-source
 ```
 
 ```{toctree}
-:hidden:
+:maxdepth: 2
 
 new-machine-type
 new-concrete-backend
