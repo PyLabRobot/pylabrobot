@@ -14,7 +14,8 @@ def falcon_tube_50mL(name: str) -> Tube: # pylint: disable=invalid-name
     size_y=diameter,
     size_z=115,
     model="Falcon 50mL",
-    max_volume=50_000
+    max_volume=50_000,
+    material_z_thickness=1.2
   )
 
 

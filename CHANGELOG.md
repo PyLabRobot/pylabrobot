@@ -74,6 +74,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `ShakerChatterboxBackend`
   - `TemperatureControllerChatterboxBackend`
 - Add fluorescence reading to Cytation 5 (https://github.com/PyLabRobot/pylabrobot/pull/244)
+- Add `F.linear_tip_spot_generator` and `F.randomized_tip_spot_generator` for looping over tip spots, with caching (https://github.com/PyLabRobot/pylabrobot/pull/256)
 
 ### Deprecated
 
