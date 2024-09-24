@@ -6916,7 +6916,7 @@ class STAR(HamiltonLiquidHandler):
   async def clld_probe_z_height_using_channel(
     self,
     channel_idx: int, # 0-based indexing of channels!
-    lowest_immers_pos: float = 105.0, # mm
+    lowest_immers_pos: float = 99.0, # mm
     start_pos_search: float = 330.0, # mm
     channel_speed: float = 10.0, # mm
     channel_acceleration: float = 800.0, # mm/sec**2
@@ -7020,7 +7020,7 @@ class STAR(HamiltonLiquidHandler):
     self,
     channel_idx: int, # 0-based indexing of channels!
     tip_len: float, # mm
-    lowest_immers_pos: float = 100.0, # mm
+    lowest_immers_pos: float = 99.0, # mm
     start_pos_search: float = 330.0, # mm
     channel_speed: float = 10.0, # mm/sec
     channel_acceleration: float = 800.0, # mm/sec**2
