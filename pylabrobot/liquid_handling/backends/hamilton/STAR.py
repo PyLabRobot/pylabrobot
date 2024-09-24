@@ -6913,91 +6913,230 @@ class STAR(HamiltonLiquidHandler):
 
 # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
-  async def probe_z_height_using_channel(
+  async def clld_probe_z_height_using_channel(
     self,
-    channel_idx: int,
-    lowest_immers_pos: int = 10000,
-    start_pos_lld_search: int = 31200,
-    channel_speed: int = 1000,
-    channel_acceleration: int = 75,
+    channel_idx: int, # 0-based indexing of channels!
+    lowest_immers_pos: float = 105.0, # mm
+    start_pos_search: float = 330.0, # mm
+    channel_speed: float = 10.0, # mm
+    channel_acceleration: float = 800.0, # mm/sec**2
     detection_edge: int = 10,
     detection_drop: int = 2,
     post_detection_trajectory: Literal[0, 1] = 1,
-    post_detection_dist: int = 100,
+    post_detection_dist: float = 2.0, # mm
     move_channels_to_save_pos_after: bool = False
   ) -> float:
-    """ Probes the Z-height using a specified channel on a liquid handling device.
-    Commands the liquid handler to perform a Liquid Level Detection (LLD) operation using the
-    specified channel (this means only conductive materials can be probed!).
+    """ Probes the Z-height below the specified channel on a Hamilton STAR liquid handling machine
+    using the channels 'capacitive Liquid Level Detection' (cLLD) capabilities.
+    N.B.: this means only conductive materials can be probed!
 
     Args:
       self: The liquid handler.
-      channel_idx: The index of the channel to use for probing.
-      lowest_immers_pos: The lowest immersion position in increments.
-      start_pos_lld_search: The start position for LLD search in increments.
-      channel_speed: The speed of channel movement.
-      channel_acceleration: The acceleration of the channel.
-      detection_edge: The edge steepness at capacitive LLD detection.
-      detection_drop: The offset after capacitive LLD edge detection.
-      post_detection_trajectory: Movement of the channel up (1) or down (0) after contacting the
-        surface.
-      post_detection_dist (int): Distance to move up after detection to avoid pressure build-up.
+      channel_idx (int): The index of the channel to use for probing. Backmost channel = 0.
+      lowest_immers_pos (float): The lowest immersion position in mm.
+      start_pos_lld_search (float): The start position for z-touch search in mm.
+      channel_speed (float): The speed of channel movement in mm/sec.
+      channel_acceleration (float): The acceleration of the channel in mm/sec**2.
+      detection_edge (int): The edge steepness at capacitive LLD detection.
+      detection_drop (int): The offset after capacitive LLD edge detection.
+      post_detection_trajectory (0, 1): Movement of the channel up (1) or down (0) after
+        contacting the surface.
+      post_detection_dist (float): Distance to move into the trajectory after detection in mm.
       move_channels_to_save_pos_after (bool): Flag to move channels to a safe position after
        operation.
 
     Returns:
       float: The detected Z-height in mm.
     """
+    z_drive_mm_per_increment = 0.01072765  # mm per increment
 
-    assert 9320 <= lowest_immers_pos <= 31200, (
-        "Lowest immersion position [increment] must be between 9320 and 31200"
+    def mm_to_increment(value_mm: float) -> int:
+        return round(value_mm / z_drive_mm_per_increment)
+    def increment_to_mm(value_mm: float) -> float:
+        return round(value_mm * z_drive_mm_per_increment, 2)
+
+    lowest_immers_pos_increments = mm_to_increment(lowest_immers_pos)
+    start_pos_search_increments = mm_to_increment(start_pos_search)
+    channel_speed_increments = mm_to_increment(channel_speed)
+    channel_acceleration_thousand_increments = mm_to_increment(channel_acceleration / 1000)
+    post_detection_dist_increments = mm_to_increment(post_detection_dist)
+      
+    assert 9320 <= lowest_immers_pos_increments <= 31_200, (
+      "Lowest immersion position must be between " + \
+      f"{increment_to_mm(9_320)} and {increment_to_mm(31_200)} mm"
     )
-    assert 9320 <= start_pos_lld_search <= 31200, (
-        "Start position of LLD search [increment] must be between 9320 and 31200"
+    assert 9_320 <= start_pos_search_increments <= 31_200, (
+      "Start position of LLD search must be between " + \
+      f"{increment_to_mm(9_320)} and {increment_to_mm(31_200)} mm"
     )
-    assert 20 <= channel_speed <= 15000, (
-        "LLD search speed [increment/second] must be between 20 and 15000"
+    assert 20 <= channel_speed_increments <= 15000, (
+      "LLD search speed must be between " + \
+      f"{increment_to_mm(20)} and {increment_to_mm(15_000)} mm"
     )
-    assert 5 <= channel_acceleration <= 150, (
-        "Channel acceleration [increment] must be between 5 and 150"
+    assert 5 <= channel_acceleration_thousand_increments <= 150, (
+      "Channel acceleration must be between " + #
+      f"{increment_to_mm(5*1_000)} and {increment_to_mm(150*1_000)} mm/sec**2."
     )
     assert 0 <= detection_edge <= 1023, (
-        "Edge steepness at capacitive LLD detection must be between 0 and 1023"
+      "Edge steepness at capacitive LLD detection must be between 0 and 1023"
     )
     assert 0 <= detection_drop <= 1023, (
-        "Offset after capacitive LLD edge detection must be between 0 and 1023"
+      "Offset after capacitive LLD edge detection must be between 0 and 1023"
     )
-    assert 0 <= post_detection_dist <= 9999, (
-        "Immersion depth after Liquid Level Detection [increment] must be between 0 and 9999"
+    assert 0 <= post_detection_dist_increments <= 9999, (
+      "Immersion depth after Liquid Level Detection must be between " + \
+      f"{increment_to_mm(0)} and {increment_to_mm(9_999)} mm"
     )
 
-    lowest_immers_pos_str = f"{lowest_immers_pos:05}"
-    start_pos_lld_search_str = f"{start_pos_lld_search:05}"
-    channel_speed_str = f"{channel_speed:05}"
-    channel_acc_str = f"{channel_acceleration:03}"
+    lowest_immers_pos_str = f"{lowest_immers_pos_increments:05}"
+    start_pos_search_str = f"{start_pos_search_increments:05}"
+    channel_speed_str = f"{channel_speed_increments:05}"
+    channel_acc_str = f"{channel_acceleration_thousand_increments:03}"
     detection_edge_str = f"{detection_edge:04}"
     detection_drop_str = f"{detection_drop:04}"
-    post_detection_dist_str = f"{post_detection_dist:04}"
+    post_detection_dist_str = f"{post_detection_dist_increments:04}"
 
     await self.send_command(
-      module=f"P{channel_idx}",
+      module=f"P{channel_idx+1}",
       command="ZL",
         zh=lowest_immers_pos_str,  # Lowest immersion position [increment]
-        zc=start_pos_lld_search_str,  # Start position of LLD search [increment]
+        zc=start_pos_search_str,  # Start position of LLD search [increment]
         zl=channel_speed_str,  # Speed of channel movement
         zr=channel_acc_str,  # Acceleration [1000 increment/second^2]
         gt=detection_edge_str,  # Edge steepness at capacitive LLD detection
         gl=detection_drop_str,  # Offset after capacitive LLD edge detection
         zj=post_detection_trajectory,  # Movement of the channel after contacting surface
-        zi=post_detection_dist_str  # Distance to move up after detection
+        zi=post_detection_dist_str  # Distance to move up after detection [increment]
     )
     if move_channels_to_save_pos_after:
       await self.move_all_channels_in_z_safety()
 
     get_llds = await self.request_pip_height_last_lld()
-    result_in_mm = float(get_llds["lh"][channel_idx-1] / 10)
+    result_in_mm = float(get_llds["lh"][channel_idx] / 10)
 
     return result_in_mm
+
+  async def ztouch_probe_z_height_using_channel(
+    self,
+    channel_idx: int, # 0-based indexing of channels!
+    tip_len: float, # mm
+    lowest_immers_pos: float = 100.0, # mm
+    start_pos_search: float = 330.0, # mm
+    channel_speed: float = 10.0, # mm/sec
+    channel_acceleration: int = 800.0, # mm/sec**2
+    channel_speed_upwards: float = 125.0, # mm
+    detection_limiter_in_PWM: int = 1,
+    push_down_force_in_PWM: int = 0,
+    post_detection_dist: float = 2.0, # mm
+    move_channels_to_save_pos_after: bool = False
+    ) -> float:
+    """ Probes the Z-height below the specified channel on a Hamilton STAR liquid handling machine
+    using the channels 'z-touchoff' capabilities, i.e. a controlled triggering of the z-drive,
+    aka a controlled 'crash'.
+
+    Args:
+      self: The liquid handler.
+      channel_idx (int): The index of the channel to use for probing. Backmost channel = 0.
+      lowest_immers_pos (float): The lowest immersion position in mm.
+      start_pos_lld_search (float): The start position for z-touch search in mm.
+      channel_speed (float): The speed of channel movement in mm/sec.
+      channel_acceleration (float): The acceleration of the channel in mm/sec**2.
+      detection_limiter_in_PWM (int): Offset PWM limiter value for searching
+      push_down_force_in_PWM (int): Offset PWM value for push down force.
+        cf000 = No push down force, drive is switched off.
+      post_detection_dist (float): Distance to move into the trajectory after detection in mm.
+      move_channels_to_save_pos_after (bool): Flag to move channels to a safe position after
+      operation.
+
+    Returns:
+      float: The detected Z-height in mm.
+    """
+    z_drive_mm_per_increment = 0.01072765  # mm per increment
+    fitting_depth = 8 # mm, for 10, 50, 300, 1000 ul Hamilton tips
+    tip_len_used_in_increments = (tip_len - fitting_depth) / z_drive_mm_per_increment
+    
+    # TODO: check whether tip_len can be called directly from STAR backend here, 
+    # i.e enable removal of tip_len attribute this way 
+
+    def mm_to_increment(value_mm: float) -> int:
+        return round(value_mm / z_drive_mm_per_increment)
+    def increment_to_mm(value_mm: float) -> float:
+        return round(value_mm * z_drive_mm_per_increment, 2)
+
+    lowest_immers_pos_increments = mm_to_increment(lowest_immers_pos)
+    start_pos_search_increments = mm_to_increment(start_pos_search)
+    channel_speed_increments = mm_to_increment(channel_speed)
+    channel_acceleration_thousand_increments = mm_to_increment(channel_acceleration / 1000)
+    channel_speed_upwards_increments = mm_to_increment(channel_speed_upwards)
+
+    assert 1 <= channel_idx <= 16, (
+      "channel_idx must be between 1 and 16"
+    )
+    assert 20 <= tip_len <= 120, (
+      "Total tip length must be between 20 and 120")
+    assert 9320 <= lowest_immers_pos_increments <= 31_200, (
+      "Lowest immersion position must be between " + #
+      f"{increment_to_mm(9_320)} and {increment_to_mm(31_200)} mm."
+    )
+    assert 9320 <= start_pos_search_increments <= 31_200, (
+      "Start position of LLD search must be between " + #
+      f"{increment_to_mm(9_320)} and {increment_to_mm(31_200)} mm."
+    )
+    assert 20 <= channel_speed_increments <= 15_000, (
+      "Z-touch search speed must be between " + #
+      f"{increment_to_mm(20)} and {increment_to_mm(15_000)} mm/sec."
+    )
+    assert 5 <= channel_acceleration_thousand_increments <= 150, (
+      "Channel acceleration must be between " + #
+      f"{increment_to_mm(5*1_000)} and {increment_to_mm(150*1_000)} mm/sec**2."
+    )
+    assert 20 <= channel_speed_upwards_increments <= 15_000, (
+      "Channel retraction speed must be between " + #
+      f"{increment_to_mm(20)} and {increment_to_mm(15_000)} mm/sec."
+    )
+    assert 0 <= detection_limiter_in_PWM <= 125, (
+      "Detection limiter value must be between 0 and 125 PWM."
+    )
+    assert 0 <= push_down_force_in_PWM <= 125, (
+      "Push down force between 0 and 125 PWM values"
+    )
+    assert 0 <= post_detection_dist <= 245, (
+      "Post detection distance must be between 0 and 245 mm."
+    )
+
+    lowest_immers_pos_str = f"{lowest_immers_pos_increments:05}"
+    start_pos_search_str = f"{start_pos_search_increments:05}"
+    channel_speed_str = f"{channel_speed_increments:05}"
+    channel_acc_str = f"{channel_acceleration_thousand_increments:03}"
+    channel_speed_up_str = f"{channel_speed_upwards_increments:05}"
+    detection_limiter_in_PWM_str = f"{detection_limiter_in_PWM:03}"
+    push_down_force_in_PWM_str = f"{push_down_force_in_PWM:03}"
+
+    ztouch_probed_z_height = await self.send_command(
+      module=f"P{channel_idx+1}",
+      command="ZH",
+      zb=start_pos_search_str, # begin of searching range [increment]
+      za=lowest_immers_pos_str, # end of searching range [increment]
+      zv=channel_speed_up_str, # speed z-drive upper section [increment/second]
+      zr=channel_acc_str, # acceleration z-drive [1000 increment/second]
+      zu=channel_speed_str, # speed z-drive lower section [increment/second]
+      cg=detection_limiter_in_PWM_str, # offset PWM limiter value for searching
+      cf=push_down_force_in_PWM_str, # offset PWM value for push down force
+      fmt="rz#####"
+      )
+    # Subtract tip_length from measurement in increment, and convert to mm
+    result_in_mm = z_drive_mm_per_increment * (ztouch_probed_z_height["rz"] - tip_len_used_in_increments)
+
+    if post_detection_dist != 0: # Safety first
+      await self.move_channel_z(
+        z=result_in_mm+post_detection_dist,
+        channel=channel_idx)
+    if move_channels_to_save_pos_after:
+      await self.move_all_channels_in_z_safety()
+
+    return round(result_in_mm, 2)
+
+# -------------- -------------- -------------- -------------- -------------- --------------
 
 
 class UnSafe:
