@@ -6951,16 +6951,16 @@ class STAR(HamiltonLiquidHandler):
     z_drive_mm_per_increment = 0.01072765  # mm per increment
 
     def mm_to_increment(value_mm: float) -> int:
-        return round(value_mm / z_drive_mm_per_increment)
+      return round(value_mm / z_drive_mm_per_increment)
     def increment_to_mm(value_mm: float) -> float:
-        return round(value_mm * z_drive_mm_per_increment, 2)
+      return round(value_mm * z_drive_mm_per_increment, 2)
 
     lowest_immers_pos_increments = mm_to_increment(lowest_immers_pos)
     start_pos_search_increments = mm_to_increment(start_pos_search)
     channel_speed_increments = mm_to_increment(channel_speed)
     channel_acceleration_thousand_increments = mm_to_increment(channel_acceleration / 1000)
     post_detection_dist_increments = mm_to_increment(post_detection_dist)
-      
+
     assert 9320 <= lowest_immers_pos_increments <= 31_200, (
       "Lowest immersion position must be between " + \
       f"{increment_to_mm(9_320)} and {increment_to_mm(31_200)} mm"
@@ -7023,7 +7023,7 @@ class STAR(HamiltonLiquidHandler):
     lowest_immers_pos: float = 100.0, # mm
     start_pos_search: float = 330.0, # mm
     channel_speed: float = 10.0, # mm/sec
-    channel_acceleration: int = 800.0, # mm/sec**2
+    channel_acceleration: float = 800.0, # mm/sec**2
     channel_speed_upwards: float = 125.0, # mm
     detection_limiter_in_PWM: int = 1,
     push_down_force_in_PWM: int = 0,
@@ -7054,14 +7054,14 @@ class STAR(HamiltonLiquidHandler):
     z_drive_mm_per_increment = 0.01072765  # mm per increment
     fitting_depth = 8 # mm, for 10, 50, 300, 1000 ul Hamilton tips
     tip_len_used_in_increments = (tip_len - fitting_depth) / z_drive_mm_per_increment
-    
-    # TODO: check whether tip_len can be called directly from STAR backend here, 
-    # i.e enable removal of tip_len attribute this way 
+
+    # TODO: check whether tip_len can be called directly from STAR backend here,
+    # i.e enable removal of tip_len attribute this way
 
     def mm_to_increment(value_mm: float) -> int:
-        return round(value_mm / z_drive_mm_per_increment)
+      return round(value_mm / z_drive_mm_per_increment)
     def increment_to_mm(value_mm: float) -> float:
-        return round(value_mm * z_drive_mm_per_increment, 2)
+      return round(value_mm * z_drive_mm_per_increment, 2)
 
     lowest_immers_pos_increments = mm_to_increment(lowest_immers_pos)
     start_pos_search_increments = mm_to_increment(start_pos_search)
@@ -7125,7 +7125,7 @@ class STAR(HamiltonLiquidHandler):
       fmt="rz#####"
       )
     # Subtract tip_length from measurement in increment, and convert to mm
-    result_in_mm = z_drive_mm_per_increment * (ztouch_probed_z_height["rz"] - tip_len_used_in_increments)
+    result_in_mm = increment_to_mm(ztouch_probed_z_height["rz"] - tip_len_used_in_increments)
 
     if post_detection_dist != 0: # Safety first
       await self.move_channel_z(
@@ -7134,7 +7134,7 @@ class STAR(HamiltonLiquidHandler):
     if move_channels_to_save_pos_after:
       await self.move_all_channels_in_z_safety()
 
-    return round(result_in_mm, 2)
+    return float(result_in_mm)
 
 # -------------- -------------- -------------- -------------- -------------- --------------
 
