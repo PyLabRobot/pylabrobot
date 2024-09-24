@@ -14,42 +14,34 @@ if TYPE_CHECKING:
   from pylabrobot.resources.tip_rack import TipSpot
 
 
-@dataclass
+@dataclass(frozen=True)
 class Pickup:
-  """ A pickup operation. """
   resource: TipSpot
   offset: Coordinate
   tip: Tip # TODO: perhaps we can remove this, because the tip spot has the tip?
 
 
-@dataclass
+@dataclass(frozen=True)
 class Drop:
-  """ A drop operation. """
   resource: Resource
   offset: Coordinate
   tip: Tip
 
 
-@dataclass
+@dataclass(frozen=True)
 class PickupTipRack:
-  """ A pickup operation for an entire tip rack. """
-
   resource: TipRack
   offset: Coordinate
 
 
-@dataclass
+@dataclass(frozen=True)
 class DropTipRack:
-  """ A drop operation for an entire tip rack. """
-
   resource: Union[TipRack, Trash]
   offset: Coordinate
 
 
-@dataclass
+@dataclass(frozen=True)
 class Aspiration:
-  """ Aspiration contains information about an aspiration. """
-
   resource: Container
   offset: Coordinate
   tip: Tip
@@ -60,10 +52,8 @@ class Aspiration:
   liquids: List[Tuple[Optional[Liquid], float]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Dispense:
-  """ Dispense contains information about an dispense. """
-
   resource: Container
   offset: Coordinate
   tip: Tip
@@ -74,10 +64,8 @@ class Dispense:
   liquids: List[Tuple[Optional[Liquid], float]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class AspirationPlate:
-  """ Contains information about an aspiration from a plate (in a single movement). """
-
   wells: List[Well]
   offset: Coordinate
   tips: List[Tip]
@@ -88,10 +76,8 @@ class AspirationPlate:
   liquids: List[List[Tuple[Optional[Liquid], float]]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class DispensePlate:
-  """ Contains information about an aspiration from a plate (in a single movement). """
-
   wells: List[Well]
   offset: Coordinate
   tips: List[Tip]
@@ -101,10 +87,8 @@ class DispensePlate:
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
 
-@dataclass
+@dataclass(frozen=True)
 class AspirationContainer:
-  """ Contains information about an aspiration from a plate (in a single movement). """
-
   container: Container
   offset: Coordinate
   tips: List[Tip]
@@ -115,10 +99,8 @@ class AspirationContainer:
   liquids: List[List[Tuple[Optional[Liquid], float]]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class DispenseContainer:
-  """ Contains information about an aspiration from a plate (in a single movement). """
-
   container: Container
   offset: Coordinate
   tips: List[Tip]
@@ -130,17 +112,15 @@ class DispenseContainer:
 
 
 class GripDirection(enum.Enum):
-  """ A direction from which to grab the resource. """
   FRONT = enum.auto()
   BACK = enum.auto()
   LEFT = enum.auto()
   RIGHT = enum.auto()
 
 
-@dataclass
+@dataclass(frozen=True)
 class Move:
-  """ A move operation.
-
+  """
   Attributes:
     resource: The resource to move.
     destination: The destination of the move.

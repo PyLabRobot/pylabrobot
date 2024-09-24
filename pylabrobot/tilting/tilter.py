@@ -4,11 +4,11 @@ from typing import List, Optional
 from pylabrobot.machines import Machine
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.well import CrossSectionType, Well
-
+from pylabrobot.resources.resource_holder import ResourceHolderMixin
 from .tilter_backend import TilterBackend
 
 
-class Tilter(Machine):
+class Tilter(ResourceHolderMixin, Machine):
   """ Resources that tilt plates. """
 
   def __init__(

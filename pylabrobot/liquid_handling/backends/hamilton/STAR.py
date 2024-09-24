@@ -40,7 +40,7 @@ from pylabrobot.resources.errors import (
 from pylabrobot.resources.hamilton.hamilton_decks import STAR_SIZE_X, STARLET_SIZE_X
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-from pylabrobot.resources.utils import get_child_location
+from pylabrobot.resources.resource_holder import get_child_location
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 T = TypeVar("T")
@@ -79,8 +79,9 @@ def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
   # if the val is a list, it must be of the correct length.
   if len(val) != len(default):
     raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
-  # if the val is a list of the correct length, the values must be of the right type.
-  # automatically handle int and float.
+  # replace None values in list with default values.
+  val = [v if v is not None else d for v, d in zip(val, default)]
+  # the values must be of the right type. automatically handle int and float.
   if t in [int, float]:
     return [t(v) for v in val] # type: ignore
   if not all(isinstance(v, t) for v in val):
@@ -1576,8 +1577,8 @@ class STAR(HamiltonLiquidHandler):
     self._assert_valid_resources([op.resource for op in ops])
 
     # correct volumes using the liquid class
-    for op, hlc in zip(ops, hamilton_liquid_classes):
-      op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+    volumes = [hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+               for op, hlc in zip(ops, hamilton_liquid_classes)]
 
     well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
                     op.resource.material_z_thickness for op in ops]
@@ -1656,7 +1657,7 @@ class STAR(HamiltonLiquidHandler):
         x_positions=x_positions,
         y_positions=y_positions,
 
-        aspiration_volumes=[round(op.volume * 10) for op in ops],
+        aspiration_volumes=[round(vol * 10) for vol in volumes],
         lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
         clot_detection_height=[round(cd * 10) for cd in clot_detection_height],
         liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
@@ -1838,8 +1839,8 @@ class STAR(HamiltonLiquidHandler):
         ))
 
     # correct volumes using the liquid class
-    for op, hlc in zip(ops, hamilton_liquid_classes):
-      op.volume = hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+    volumes = [hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+               for op, hlc in zip(ops, hamilton_liquid_classes)]
 
     well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
                     op.resource.material_z_thickness for op in ops]
@@ -1857,7 +1858,6 @@ class STAR(HamiltonLiquidHandler):
       [_dispensing_mode_for_op(empty=empty[i], jet=jet[i], blow_out=blow_out[i])
        for i in range(len(ops))]
 
-    dispense_volumes = [op.volume for op in ops]
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10.0]*n)
     second_section_height = _fill_in_defaults(second_section_height, [3.2]*n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0]*n)
@@ -1906,7 +1906,7 @@ class STAR(HamiltonLiquidHandler):
         y_positions=y_positions,
 
         dispensing_mode=dispensing_modes,
-        dispense_volumes=[round(dv*10) for dv in dispense_volumes],
+        dispense_volumes=[round(vol*10) for vol in volumes],
         lld_search_height=[round(lsh*10) for lsh in lld_search_height],
         liquid_surface_no_lld=[round(ls*10) for ls in liquid_surfaces_no_lld],
         pull_out_distance_transport_air=[round(po*10) for po in pull_out_distance_transport_air],

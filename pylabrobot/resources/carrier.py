@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Generic, List, Optional, Type, TypeVar, Union
 
-from pylabrobot.resources.utils import get_child_location
+from pylabrobot.resources.resource_holder import ResourceHolderMixin
 
 from .coordinate import Coordinate
 from .plate import Plate
@@ -14,7 +14,7 @@ from .plate_adapter import PlateAdapter
 logger = logging.getLogger("pylabrobot")
 
 
-class CarrierSite(Resource):
+class CarrierSite(ResourceHolderMixin, Resource):
   """ A single site within a carrier. """
 
   def __init__(self, name: str, size_x: float, size_y: float, size_z: float,
@@ -30,7 +30,6 @@ class CarrierSite(Resource):
     reassign: bool = True
   ):
     self.resource = resource
-    location = location or get_child_location(resource)
     return super().assign_child_resource(resource, location, reassign)
 
   def unassign_child_resource(self, resource):
@@ -207,7 +206,6 @@ class PlateCarrierSite(CarrierSite):
 
   def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
                             reassign: bool = True):
-    location = location or self._get_child_location(resource)
     if isinstance(resource, ResourceStack):
       if not resource.direction == "z":
         raise ValueError("ResourceStack assigned to PlateCarrierSite must have direction 'z'")
@@ -219,7 +217,7 @@ class PlateCarrierSite(CarrierSite):
                       f"resources, not {type(resource)}")
     return super().assign_child_resource(resource, location, reassign)
 
-  def _get_child_location(self, resource: Resource) -> Coordinate:
+  def _get_sinking_depth(self, resource: Resource) -> Coordinate:
     def get_plate_sinking_depth(plate: Plate):
       # Sanity check for equal well clearances / dz
       well_dz_set = {round(well.location.z, 2) for well in plate.get_all_children()
@@ -238,10 +236,14 @@ class PlateCarrierSite(CarrierSite):
       first_child = resource.children[0]
       if isinstance(first_child, Plate):
         z_sinking_depth = get_plate_sinking_depth(first_child)
+
+      # TODO #246 - _get_sinking_depth should not handle callbacks
       resource.register_did_assign_resource_callback(self._update_resource_stack_location)
       self.register_did_unassign_resource_callback(self._deregister_resource_stack_callback)
+    return -Coordinate(z=z_sinking_depth)
 
-    return get_child_location(resource) - Coordinate(z=z_sinking_depth)
+  def get_default_child_location(self, resource: Resource) -> Coordinate:
+    return super().get_default_child_location(resource) + self._get_sinking_depth(resource)
 
   def _update_resource_stack_location(self, resource: Resource):
     """ Callback called when the lowest resource on a ResourceStack changes. Since the location of
@@ -254,7 +256,7 @@ class PlateCarrierSite(CarrierSite):
     resource_stack = resource.parent
     assert isinstance(resource_stack, ResourceStack)
     if resource_stack.children[0] == resource:
-      resource_stack.location = self._get_child_location(resource)
+      resource_stack.location = self.get_default_child_location(resource)
 
   def _deregister_resource_stack_callback(self, resource: Resource):
     """ Callback called when a ResourceStack (or child) is unassigned from this PlateCarrierSite."""

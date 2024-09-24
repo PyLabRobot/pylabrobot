@@ -22,4 +22,5 @@ Backends
   :recursive:
 
     backend.FanBackend
+    chatterbox.FanChatterboxBackend
     hamilton_hepa_fan.HamiltonHepaFan

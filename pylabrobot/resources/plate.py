@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Tuple, Union, cast, Literal
 
+from pylabrobot.resources.resource_holder import ResourceHolderMixin
+
 
 from .liquid import Liquid
 from .itemized_resource import ItemizedResource
@@ -44,7 +46,7 @@ class Lid(Resource):
     return {**super().serialize(), "nesting_z_height": self.nesting_z_height}
 
 
-class Plate(ItemizedResource[Well]):
+class Plate(ResourceHolderMixin, ItemizedResource[Well]):
   """ Base class for Plate resources. """
 
   def __init__(
