@@ -891,12 +891,14 @@ class LiquidHandler(Machine):
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
     # Check the blow out air volume with what was aspirated
-    if any(bav is not None for bav in blow_out_air_volume):
-      if self._blow_out_air_volume is None:
-        raise BlowOutVolumeError("No blowout volume was aspirated.")
-      for requested_bav, done_bav in zip(blow_out_air_volume, self._blow_out_air_volume):
-        if requested_bav is not None and done_bav is not None and requested_bav > done_bav:
-          raise BlowOutVolumeError("Blowout volume is larger than aspirated volume")
+    if does_volume_tracking():
+      if any(bav is not None and bav != 0.0 for bav in blow_out_air_volume):
+        if self._blow_out_air_volume is None:
+          print(blow_out_air_volume)
+          raise BlowOutVolumeError("No blowout volume was aspirated.")
+        for requested_bav, done_bav in zip(blow_out_air_volume, self._blow_out_air_volume):
+          if requested_bav is not None and done_bav is not None and requested_bav > done_bav:
+            raise BlowOutVolumeError("Blowout volume is larger than aspirated volume")
 
     for resource in resources:
       if isinstance(resource.parent, Plate) and resource.parent.has_lid():

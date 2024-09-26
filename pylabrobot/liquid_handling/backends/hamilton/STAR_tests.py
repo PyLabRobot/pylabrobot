@@ -514,7 +514,9 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     with no_volume_tracking():
-      await self.lh.dispense(self.plate["A1"], vols=[100], jet=[True], blow_out=[True])
+      corrected_vol = self.hlc.compute_corrected_volume(100)
+      await self.lh.dispense(self.plate["A1"], vols=[corrected_vol],
+                             jet=[True], blow_out=[True])
     self._assert_command_sent_once(
       "C0DSid0002dm1 1&tm1 0&xp02983 00000&yp1457 0000&zx1866 1866&lp2000 2000&zl1866 1866&"
       "po0100 0100&ip0000 0000&it0 0&fp0000 0000&zu0032 0032&zr06180 06180&th2450te2450"
@@ -529,7 +531,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     assert self.plate.lid is not None
     self.plate.lid.unassign()
     with no_volume_tracking():
-      await self.lh.dispense(self.plate["A1:B1"], vols=[100]*2, jet=[True]*2, blow_out=[True]*2)
+      corrected_vol = self.hlc.compute_corrected_volume(100)
+      await self.lh.dispense(self.plate["A1:B1"], vols=[corrected_vol]*2, jet=[True]*2, blow_out=[True]*2)
 
     self._assert_command_sent_once(
       "C0DSid0002dm1 1 1&tm1 1 0&xp02983 02983 00000&yp1457 1367 0000&zx1866 1866 1866&lp2000 2000 "
@@ -577,7 +580,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # TODO: Hamilton liquid classes
     assert self.plate.lid is not None
     self.plate.lid.unassign()
-    await self.lh.aspirate96(self.plate, volume=100, blow_out=True)
+    corrected_volume = self.hlc.compute_corrected_volume(100) # need different liquid class
+    await self.lh.aspirate96(self.plate, volume=corrected_volume)
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
@@ -592,10 +596,11 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack2) # pick up high volume tips
     if self.plate.lid is not None:
       self.plate.lid.unassign()
-    await self.lh.aspirate96(self.plate, 100, blow_out=True) # aspirate first
+    corrected_volume = self.hlc.compute_corrected_volume(100) # need different liquid class
+    await self.lh.aspirate96(self.plate, corrected_volume) # aspirate first
 
     with no_volume_tracking():
-      await self.lh.dispense96(self.plate, 100, blow_out=True)
+      await self.lh.dispense96(self.plate, corrected_volume)
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
