@@ -111,3 +111,6 @@ class HamiltonLiquidClass:
       "dispense_stop_flow_rate": self.dispense_stop_flow_rate,
       "dispense_stop_back_volume": self.dispense_stop_back_volume,
     }
+
+  def copy(self) -> "HamiltonLiquidClass":
+    return HamiltonLiquidClass(**self.serialize())

@@ -4,6 +4,10 @@ import unittest.mock
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import Pickup, GripDirection
+from pylabrobot.liquid_handling.liquid_classes.hamilton.star import (
+  StandardVolumeFilter_Water_DispenseSurface,
+  StandardVolumeFilter_Water_DispenseJet_Empty)
+from pylabrobot.liquid_handling.parameter_sets.star import STARParameterSet
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
 from pylabrobot.resources import (
@@ -224,6 +228,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     await self.lh.setup()
 
+    self.hlc = StandardVolumeFilter_Water_DispenseSurface.copy()
+    self.hlc.aspiration_air_transport_volume = 0
+    self.hlc.dispense_air_transport_volume = 0
+
   async def asyncTearDown(self):
     await self.lh.stop()
 
@@ -370,7 +378,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate.lid.unassign()
     for well in self.plate.get_items(["A1", "B1"]):
       well.tracker.set_liquids([(None, 100 * 1.072)]) # liquid class correction
-    await self.lh.aspirate(self.plate["A1", "B1"], vols=[100, 100], use_channels=[4, 5])
+    ps = STARParameterSet.from_hamilton_liquid_class(self.hlc, num_channels=2)
+    corrected_vol = self.hlc.compute_corrected_volume(100)
+    await self.lh.aspirate(self.plate["A1", "B1"], vols=[corrected_vol, corrected_vol],
+                           use_channels=[4, 5], **ps.make_asp_kwargs())
     self._assert_command_sent_once("C0ASid0004at0 0 0 0 0 0 0&tm0 0 0 0 1 1 0&xp00000 00000 00000 "
       "00000 02983 02983 00000&yp0000 0000 0000 0000 1457 1367 0000&th2450te2450lp2000 2000 2000 "
       "2000 2000 2000 2000&ch000 000 000 000 000 000 000&zl1866 1866 1866 1866 1866 1866 1866&"
@@ -394,7 +405,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate.lid.unassign()
     well = self.plate.get_item("A1")
     well.tracker.set_liquids([(None, 100 * 1.072)]) # liquid class correction
-    await self.lh.aspirate([well], vols=[100])
+    ps = STARParameterSet.from_hamilton_liquid_class(self.hlc, num_channels=1)
+    await self.lh.aspirate([well], vols=[self.hlc.compute_corrected_volume(100)], **ps.make_asp_kwargs())
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -413,7 +425,9 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.plate.lid.unassign()
     well = self.plate.get_item("A1")
     well.tracker.set_liquids([(None, 100 * 1.072)]) # liquid class correction
-    await self.lh.aspirate([well], vols=[100], liquid_height=[10])
+    ps = STARParameterSet.from_hamilton_liquid_class(self.hlc, num_channels=1)
+    await self.lh.aspirate([well], vols=[self.hlc.compute_corrected_volume(100)],
+                           liquid_height=[10], **ps.make_asp_kwargs())
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -433,7 +447,9 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     wells = self.plate.get_items("A1:B1")
     for well in wells:
       well.tracker.set_liquids([(None, 100 * 1.072)]) # liquid class correction
-    await self.lh.aspirate(self.plate["A1:B1"], vols=[100]*2)
+    ps = STARParameterSet.from_hamilton_liquid_class(self.hlc, num_channels=2)
+    corrected_vol = self.hlc.compute_corrected_volume(100)
+    await self.lh.aspirate(self.plate["A1:B1"], vols=[corrected_vol]*2, **ps.make_asp_kwargs())
 
     # This passes the test, but is not the real command.
     self._assert_command_sent_once(
@@ -449,8 +465,11 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate_single_resource(self):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
+    ps = STARParameterSet.from_hamilton_liquid_class(self.hlc, num_channels=5)
+    corrected_vol = self.hlc.compute_corrected_volume(10)
     with no_volume_tracking():
-      await self.lh.aspirate([self.bb]*5,vols=[10]*5, use_channels=[0,1,2,3,4], liquid_height=[1]*5)
+      await self.lh.aspirate([self.bb]*5,vols=[corrected_vol]*5, use_channels=[0,1,2,3,4],
+                             liquid_height=[1]*5, **ps.make_asp_kwargs())
     self._assert_command_sent_once(
       "C0ASid0002at0 0 0 0 0 0&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1962 "
       "1825 1688 1552 0000&th2450te2450lp2000 2000 2000 2000 2000 2000&ch000 000 000 000 000 000&"
@@ -469,9 +488,14 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense_single_resource(self):
     self.lh.update_head_state({i: self.tip_rack.get_tip(i) for i in range(5)})
+    hlc = StandardVolumeFilter_Water_DispenseJet_Empty
+    ps = STARParameterSet.from_hamilton_liquid_class(hlc, num_channels=5,
+                                                     jet=[True]*5, blow_out=[True]*5)
+    print(ps.make_disp_kwargs())
+    corrected_vol = hlc.compute_corrected_volume(10)
     with no_volume_tracking():
-      await self.lh.dispense([self.bb]*5, vols=[10]*5, use_channels=[0,1,2,3,4],
-                             liquid_height=[1]*5, blow_out=[True]*5, jet=[True]*5)
+      await self.lh.dispense([self.bb]*5, vols=[corrected_vol]*5, liquid_height=[1]*5,
+                             **ps.make_disp_kwargs())
     self._assert_command_sent_once(
       "C0DSid0002dm1 1 1 1 1 1&tm1 1 1 1 1 0&xp04865 04865 04865 04865 04865 00000&yp2098 1962 "
       "1825 1688 1552 0000&zx1200 1200 1200 1200 1200 1200&lp2000 2000 2000 2000 2000 2000&zl1210 "
