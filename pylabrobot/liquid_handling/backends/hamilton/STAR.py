@@ -1456,11 +1456,11 @@ class STAR(HamiltonLiquidHandler):
     detection_height_difference_for_dual_lld: Optional[List[float]] = None,
     swap_speed: Optional[List[float]] = None,
     settling_time: Optional[List[float]] = None,
-    homogenization_volume: Optional[List[float]] = None,
-    homogenization_cycles: Optional[List[int]] = None,
-    homogenization_position_from_liquid_surface: Optional[List[float]] = None,
-    homogenization_speed: Optional[List[float]] = None,
-    homogenization_surface_following_distance: Optional[List[float]] = None,
+    mix_volume: Optional[List[float]] = None,
+    mix_cycles: Optional[List[int]] = None,
+    mix_position_from_liquid_surface: Optional[List[float]] = None,
+    mix_speed: Optional[List[float]] = None,
+    mix_surface_following_distance: Optional[List[float]] = None,
     limit_curve_index: Optional[List[int]] = None,
 
     use_2nd_section_aspiration: Optional[List[bool]] = None,
@@ -1514,14 +1514,14 @@ class STAR(HamiltonLiquidHandler):
       detection_height_difference_for_dual_lld: Difference between the gamma and DP LLD heights if
         the LLD mode is DUAL.
       swap_speed: Swap speed (on leaving liquid) [1mm/s]. Must be between 3 and 1600. Default 100.
-      settling_time: The time to wait after homogenization.
-      homogenization_volume: The volume to aspirate for homogenization.
-      homogenization_cycles: The number of cycles to perform for homogenization.
-      homogenization_position_from_liquid_surface: The height to aspirate from for homogenization
+      settling_time: The time to wait after mix.
+      mix_volume: The volume to aspirate for mix.
+      mix_cycles: The number of cycles to perform for mix.
+      mix_position_from_liquid_surface: The height to aspirate from for mix
         (LLD or absolute terms).
-      homogenization_speed: The speed to aspirate at for homogenization.
-      homogenization_surface_following_distance: The distance to follow the liquid surface for
-        homogenization.
+      mix_speed: The speed to aspirate at for mix.
+      mix_surface_following_distance: The distance to follow the liquid surface for
+        mix.
       limit_curve_index: The index of the limit curve to use.
 
       use_2nd_section_aspiration: Whether to use the second section of aspiration.
@@ -1568,7 +1568,7 @@ class STAR(HamiltonLiquidHandler):
       ]
     else:
       lld_search_height = [(wb + sh) for wb, sh in zip(well_bottoms, lld_search_height)]
-    clot_detection_height = _fill_in_defaults(clot_detection_height, default=[0])
+    clot_detection_height = _fill_in_defaults(clot_detection_height, default=[0]*n)
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10]*n)
     second_section_height = _fill_in_defaults(second_section_height, [3.2]*n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0]*n)
@@ -1590,13 +1590,13 @@ class STAR(HamiltonLiquidHandler):
       _fill_in_defaults(detection_height_difference_for_dual_lld, [0]*n)
     swap_speed = _fill_in_defaults(swap_speed, default=[100]*n)
     settling_time = _fill_in_defaults(settling_time, default=[0]*n)
-    homogenization_volume = _fill_in_defaults(homogenization_volume, [0]*n)
-    homogenization_cycles = _fill_in_defaults(homogenization_cycles, [0]*n)
-    homogenization_position_from_liquid_surface = \
-      _fill_in_defaults(homogenization_position_from_liquid_surface, [0]*n)
-    homogenization_speed = _fill_in_defaults(homogenization_speed, [50]*n)
-    homogenization_surface_following_distance = \
-      _fill_in_defaults(homogenization_surface_following_distance, [0]*n)
+    mix_volume = _fill_in_defaults(mix_volume, [0]*n)
+    mix_cycles = _fill_in_defaults(mix_cycles, [0]*n)
+    mix_position_from_liquid_surface = \
+      _fill_in_defaults(mix_position_from_liquid_surface, [0]*n)
+    mix_speed = _fill_in_defaults(mix_speed, [50]*n)
+    mix_surface_following_distance = \
+      _fill_in_defaults(mix_surface_following_distance, [0]*n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0]*n)
 
     use_2nd_section_aspiration = _fill_in_defaults(use_2nd_section_aspiration, [False]*n)
@@ -1643,13 +1643,13 @@ class STAR(HamiltonLiquidHandler):
                                                 for dh in detection_height_difference_for_dual_lld],
         swap_speed=[round(ss * 10) for ss in swap_speed],
         settling_time=[round(st * 10) for st in settling_time],
-        homogenization_volume=[round(hv * 10) for hv in homogenization_volume],
-        homogenization_cycles=homogenization_cycles,
-        homogenization_position_from_liquid_surface=[round(hp * 10)
-                                            for hp in homogenization_position_from_liquid_surface],
-        homogenization_speed=[round(hs * 10) for hs in homogenization_speed],
-        homogenization_surface_following_distance=[round(hsd * 10)
-                                            for hsd in homogenization_surface_following_distance],
+        mix_volume=[round(hv * 10) for hv in mix_volume],
+        mix_cycles=mix_cycles,
+        mix_position_from_liquid_surface=[round(hp * 10)
+                                            for hp in mix_position_from_liquid_surface],
+        mix_speed=[round(hs * 10) for hs in mix_speed],
+        mix_surface_following_distance=[round(hsd * 10)
+                                            for hsd in mix_surface_following_distance],
         limit_curve_index=limit_curve_index,
 
         use_2nd_section_aspiration=use_2nd_section_aspiration,
@@ -1745,12 +1745,12 @@ class STAR(HamiltonLiquidHandler):
       dp_lld_sensitivity: The dp LLD sensitivity. (1 = high, 4 = low)
       swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600. Default 100.
       settling_time: The settling time.
-      mix_volume: The volume to use for homogenization.
-      mix_cycles: The number of homogenization cycles.
+      mix_volume: The volume to use for mix.
+      mix_cycles: The number of mix cycles.
       mix_position_from_liquid_surface: The height to move above the liquid surface for
-        homogenization.
-      mix_speed: The homogenization speed.
-      mix_surface_following_distance: The distance to follow the liquid surface for homogenization.
+        mix.
+      mix_speed: The mix speed.
+      mix_surface_following_distance: The distance to follow the liquid surface for mix.
       limit_curve_index: The limit curve to use for the dispense.
       minimum_traverse_height_at_beginning_of_a_command: The minimum height to move to before
         starting a dispense.
@@ -1958,11 +1958,11 @@ class STAR(HamiltonLiquidHandler):
     gamma_lld_sensitivity: int = 1,
     swap_speed: float = 2.0,
     settling_time: float = 1.0,
-    homogenization_volume: float = 0,
-    homogenization_cycles: int = 0,
-    homogenization_position_from_liquid_surface: float = 0,
-    surface_following_distance_during_homogenization: float = 0,
-    speed_of_homogenization: float = 120.0,
+    mix_volume: float = 0,
+    mix_cycles: int = 0,
+    mix_position_from_liquid_surface: float = 0,
+    surface_following_distance_during_mix: float = 0,
+    speed_of_mix: float = 120.0,
     limit_curve_index: int = 0,
   ):
     """ Aspirate using the Core96 head.
@@ -1997,13 +1997,13 @@ class STAR(HamiltonLiquidHandler):
       gamma_lld_sensitivity: The sensitivity of the gamma liquid level detection.
       swap_speed: Swap speed (on leaving liquid) [1mm/s]. Must be between 0.3 and 160. Default 2.
       settling_time: The time to wait after aspirating.
-      homogenization_volume: The volume of liquid to aspirate for homogenization.
-      homogenization_cycles: The number of cycles to perform for homogenization.
-      homogenization_position_from_liquid_surface: The position of the homogenization from the
+      mix_volume: The volume of liquid to aspirate for mix.
+      mix_cycles: The number of cycles to perform for mix.
+      mix_position_from_liquid_surface: The position of the mix from the
         liquid surface.
-      surface_following_distance_during_homogenization: The distance to follow the liquid surface
-        during homogenization.
-      speed_of_homogenization: The speed of homogenization.
+      surface_following_distance_during_mix: The distance to follow the liquid surface
+        during mix.
+      speed_of_mix: The speed of mix.
       limit_curve_index: The index of the limit curve to use.
     """
 
@@ -2012,7 +2012,7 @@ class STAR(HamiltonLiquidHandler):
 
     assert self.core96_head_installed, "96 head must be installed"
 
-    if jet is not None or blow_out is not None:
+    if jet or blow_out:
       raise NotImplementedError("jet and blow out are not implemented for aspirate96 yet")
 
     # get the first well and tip as representatives
@@ -2030,7 +2030,7 @@ class STAR(HamiltonLiquidHandler):
     flow_rate = aspiration.flow_rate or 250
     swap_speed = swap_speed or 100
     settling_time = settling_time or 0.5
-    speed_of_homogenization = speed_of_homogenization or 10.0
+    speed_of_mix = speed_of_mix or 10.0
 
     channel_pattern = [True]*12*8
 
@@ -2076,13 +2076,13 @@ class STAR(HamiltonLiquidHandler):
       gamma_lld_sensitivity=gamma_lld_sensitivity,
       swap_speed=round(swap_speed*10),
       settling_time=round(settling_time * 10),
-      homogenization_volume=round(homogenization_volume * 10),
-      homogenization_cycles=homogenization_cycles,
-      homogenization_position_from_liquid_surface=
-       round(homogenization_position_from_liquid_surface * 10),
-      surface_following_distance_during_homogenization=
-       round(surface_following_distance_during_homogenization * 10),
-      speed_of_homogenization=round(speed_of_homogenization * 10),
+      mix_volume=round(mix_volume * 10),
+      mix_cycles=mix_cycles,
+      mix_position_from_liquid_surface=
+       round(mix_position_from_liquid_surface * 10),
+      surface_following_distance_during_mix=
+       round(surface_following_distance_during_mix * 10),
+      speed_of_mix=round(speed_of_mix * 10),
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -2164,7 +2164,7 @@ class STAR(HamiltonLiquidHandler):
     if hlc is not None:
       raise NotImplementedError("Hamilton liquid classes are deprecated.")
 
-    if jet is not None or blow_out is not None:
+    if jet or blow_out:
       raise NotImplementedError("jet and blow out are not implemented for aspirate96 yet")
 
     assert self.core96_head_installed, "96 head must be installed"
@@ -3767,11 +3767,11 @@ class STAR(HamiltonLiquidHandler):
     detection_height_difference_for_dual_lld: List[int] = [0],
     swap_speed: List[int] = [100],
     settling_time: List[int] = [5],
-    homogenization_volume: List[int] = [0],
-    homogenization_cycles: List[int] = [0],
-    homogenization_position_from_liquid_surface: List[int] = [250],
-    homogenization_speed: List[int] = [500],
-    homogenization_surface_following_distance: List[int] = [0],
+    mix_volume: List[int] = [0],
+    mix_cycles: List[int] = [0],
+    mix_position_from_liquid_surface: List[int] = [250],
+    mix_speed: List[int] = [500],
+    mix_surface_following_distance: List[int] = [0],
     limit_curve_index: List[int] = [0],
     tadm_algorithm: bool = False,
     recording_mode: int = 0,
@@ -3845,14 +3845,14 @@ class STAR(HamiltonLiquidHandler):
       swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1600.
             Default 100.
       settling_time: Settling time [0.1s]. Must be between 0 and 99. Default 5.
-      homogenization_volume: Homogenization volume [0.1ul]. Must be between 0 and 12500. Default 0
-      homogenization_cycles: Number of homogenization cycles. Must be between 0 and 99. Default 0.
-      homogenization_position_from_liquid_surface: Homogenization position in Z- direction from
+      mix_volume: mix volume [0.1ul]. Must be between 0 and 12500. Default 0
+      mix_cycles: Number of mix cycles. Must be between 0 and 99. Default 0.
+      mix_position_from_liquid_surface: mix position in Z- direction from
           liquid surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 900. Default 250.
-      homogenization_speed: Speed of homogenization [0.1ul/s]. Must be between 4 and 5000.
+      mix_speed: Speed of mix [0.1ul/s]. Must be between 4 and 5000.
           Default 500.
-      homogenization_surface_following_distance: Surface following distance during
-          homogenization [0.1mm]. Must be between 0 and 3600. Default 0.
+      mix_surface_following_distance: Surface following distance during
+          mix [0.1mm]. Must be between 0 and 3600. Default 0.
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
       tadm_algorithm: TADM algorithm. Default False.
       recording_mode: Recording mode 0 : no 1 : TADM errors only 2 : all TADM measurement. Must
@@ -3919,16 +3919,16 @@ class STAR(HamiltonLiquidHandler):
       "detection_height_difference_for_dual_lld must be between 0 and 99"
     assert all(3 <= x <= 1600 for x in swap_speed), "swap_speed must be between 3 and 1600"
     assert all(0 <= x <= 99 for x in settling_time), "settling_time must be between 0 and 99"
-    assert all(0 <= x <= 12500 for x in homogenization_volume), \
-      "homogenization_volume must be between 0 and 12500"
-    assert all(0 <= x <= 99 for x in homogenization_cycles), \
-      "homogenization_cycles must be between 0 and 99"
-    assert all(0 <= x <= 900 for x in homogenization_position_from_liquid_surface), \
-      "homogenization_position_from_liquid_surface must be between 0 and 900"
-    assert all(4 <= x <= 5000 for x in homogenization_speed), \
-      "homogenization_speed must be between 4 and 5000"
-    assert all(0 <= x <= 3600 for x in homogenization_surface_following_distance), \
-      "homogenization_surface_following_distance must be between 0 and 3600"
+    assert all(0 <= x <= 12500 for x in mix_volume), \
+      "mix_volume must be between 0 and 12500"
+    assert all(0 <= x <= 99 for x in mix_cycles), \
+      "mix_cycles must be between 0 and 99"
+    assert all(0 <= x <= 900 for x in mix_position_from_liquid_surface), \
+      "mix_position_from_liquid_surface must be between 0 and 900"
+    assert all(4 <= x <= 5000 for x in mix_speed), \
+      "mix_speed must be between 4 and 5000"
+    assert all(0 <= x <= 3600 for x in mix_surface_following_distance), \
+      "mix_surface_following_distance must be between 0 and 3600"
     assert all(0 <= x <= 999 for x in limit_curve_index), \
       "limit_curve_index must be between 0 and 999"
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
@@ -3979,11 +3979,11 @@ class STAR(HamiltonLiquidHandler):
       ld=[f"{ld:02}" for ld in detection_height_difference_for_dual_lld],
       de=[f"{de:04}" for de in swap_speed],
       wt=[f"{wt:02}" for wt in settling_time],
-      mv=[f"{mv:05}" for mv in homogenization_volume],
-      mc=[f"{mc:02}" for mc in homogenization_cycles],
-      mp=[f"{mp:03}" for mp in homogenization_position_from_liquid_surface],
-      ms=[f"{ms:04}" for ms in homogenization_speed],
-      mh=[f"{mh:04}" for mh in homogenization_surface_following_distance],
+      mv=[f"{mv:05}" for mv in mix_volume],
+      mc=[f"{mc:02}" for mc in mix_cycles],
+      mp=[f"{mp:03}" for mp in mix_position_from_liquid_surface],
+      ms=[f"{ms:04}" for ms in mix_speed],
+      mh=[f"{mh:04}" for mh in mix_surface_following_distance],
       gi=[f"{gi:03}" for gi in limit_curve_index],
       gj=tadm_algorithm,
       gk=recording_mode,
@@ -4935,11 +4935,11 @@ class STAR(HamiltonLiquidHandler):
     gamma_lld_sensitivity: int = 1,
     swap_speed: int = 100,
     settling_time: int = 5,
-    homogenization_volume: int = 0,
-    homogenization_cycles: int = 0,
-    homogenization_position_from_liquid_surface: int = 250,
-    surface_following_distance_during_homogenization: int = 0,
-    speed_of_homogenization: int = 1000,
+    mix_volume: int = 0,
+    mix_cycles: int = 0,
+    mix_position_from_liquid_surface: int = 250,
+    surface_following_distance_during_mix: int = 0,
+    speed_of_mix: int = 1000,
     channel_pattern: List[bool] = [True] * 96,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
@@ -4987,13 +4987,13 @@ class STAR(HamiltonLiquidHandler):
           Default 1.
       swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1000. Default 100.
       settling_time: Settling time [0.1s]. Must be between 0 and 99. Default 5.
-      homogenization_volume: Homogenization volume [0.1ul]. Must be between 0 and 11500. Default 0.
-      homogenization_cycles: Number of homogenization cycles. Must be between 0 and 99. Default 0.
-      homogenization_position_from_liquid_surface: Homogenization position in Z- direction from
+      mix_volume: mix volume [0.1ul]. Must be between 0 and 11500. Default 0.
+      mix_cycles: Number of mix cycles. Must be between 0 and 99. Default 0.
+      mix_position_from_liquid_surface: mix position in Z- direction from
           liquid surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 990. Default 250.
-      surface_following_distance_during_homogenization: surface following distance during
-          homogenization [0.1mm]. Must be between 0 and 990. Default 0.
-      speed_of_homogenization: Speed of homogenization [0.1ul/s]. Must be between 3 and 5000.
+      surface_following_distance_during_mix: surface following distance during
+          mix [0.1mm]. Must be between 0 and 990. Default 0.
+      speed_of_mix: Speed of mix [0.1ul/s]. Must be between 3 and 5000.
           Default 1000.
       todo: TODO: 24 hex chars. Must be between 4 and 5000.
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
@@ -5033,14 +5033,14 @@ class STAR(HamiltonLiquidHandler):
     assert 1 <= gamma_lld_sensitivity <= 4, "gamma_lld_sensitivity must be between 1 and 4"
     assert 3 <= swap_speed <= 1000, "swap_speed must be between 3 and 1000"
     assert 0 <= settling_time <= 99, "settling_time must be between 0 and 99"
-    assert 0 <= homogenization_volume <= 11500, "homogenization_volume must be between 0 and 11500"
-    assert 0 <= homogenization_cycles <= 99, "homogenization_cycles must be between 0 and 99"
-    assert 0 <= homogenization_position_from_liquid_surface <= 990, \
-      "homogenization_position_from_liquid_surface must be between 0 and 990"
-    assert 0 <= surface_following_distance_during_homogenization <= 990, \
-      "surface_following_distance_during_homogenization must be between 0 and 990"
-    assert 3 <= speed_of_homogenization <= 5000, \
-      "speed_of_homogenization must be between 3 and 5000"
+    assert 0 <= mix_volume <= 11500, "mix_volume must be between 0 and 11500"
+    assert 0 <= mix_cycles <= 99, "mix_cycles must be between 0 and 99"
+    assert 0 <= mix_position_from_liquid_surface <= 990, \
+      "mix_position_from_liquid_surface must be between 0 and 990"
+    assert 0 <= surface_following_distance_during_mix <= 990, \
+      "surface_following_distance_during_mix must be between 0 and 990"
+    assert 3 <= speed_of_mix <= 5000, \
+      "speed_of_mix must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
 
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
@@ -5077,11 +5077,11 @@ class STAR(HamiltonLiquidHandler):
       cs=gamma_lld_sensitivity,
       bs=f"{swap_speed:04}",
       wh=f"{settling_time:02}",
-      hv=f"{homogenization_volume:05}",
-      hc=f"{homogenization_cycles:02}",
-      hp=f"{homogenization_position_from_liquid_surface:03}",
-      mj=f"{surface_following_distance_during_homogenization:03}",
-      hs=f"{speed_of_homogenization:04}",
+      hv=f"{mix_volume:05}",
+      hc=f"{mix_cycles:02}",
+      hp=f"{mix_position_from_liquid_surface:03}",
+      mj=f"{surface_following_distance_during_mix:03}",
+      hs=f"{speed_of_mix:04}",
       cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
@@ -5172,9 +5172,9 @@ class STAR(HamiltonLiquidHandler):
         Must be between 0 and 45. Default 1.
       swap_speed: Swap speed (on leaving liquid) [0.1mm/s]. Must be between 3 and 1000. Default 100.
       settling_time: Settling time [0.1s]. Must be between 0 and 99. Default 5.
-      mixing_volume: Homogenization volume [0.1ul]. Must be between 0 and 11500. Default 0.
+      mixing_volume: mix volume [0.1ul]. Must be between 0 and 11500. Default 0.
       mixing_cycles: Number of mixing cycles. Must be between 0 and 99. Default 0.
-      mixing_position_from_liquid_surface: Homogenization position in Z- direction from liquid
+      mixing_position_from_liquid_surface: mix position in Z- direction from liquid
           surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 990. Default 250.
       surface_following_distance_during_mixing: surface following distance during mixing [0.1mm].
           Must be between 0 and 990. Default 0.
