@@ -12,8 +12,8 @@ The pedestal information is not typically available in labware databases (like t
 
 Here's how you measure the pedestal height:
 
-![Pedestal height measurement](/img/pedestal/measure.jpeg)
+![Pedestal height measurement](/resources/img/pedestal/measure.jpeg)
 
-Once you have measured the pedestal height, you can contribute this information to the PyLabRobot Labware database. Here's a guide on contributing to the open-source project: ["How to Open Source"](/how-to-open-source.md).
+Once you have measured the pedestal height, you can contribute this information to the PyLabRobot Labware database. Here's a guide on contributing to the open-source project: ["How to Open Source"](/contributor_guide/how-to-open-source.md).
 
 For background, see PR 143: [https://github.com/PyLabRobot/pylabrobot/pull/143](https://github.com/PyLabRobot/pylabrobot/pull/143).

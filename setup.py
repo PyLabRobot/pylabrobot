@@ -47,14 +47,15 @@ extras_agrow = [
 
 extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets + \
     extras_visualizer + extras_opentrons + extras_server + extras_inheco + extras_agrow + [
-    "sphinx_book_theme",
+    "pydata-sphinx-theme",
     "myst_nb",
     "sphinx_copybutton",
     "pytest",
     "pytest-timeout",
     "pylint",
     "mypy",
-    "responses"
+    "responses",
+    "sphinx-reredirects",
   ]
 
 # Some extras are not available on all platforms. `dev` should be available everywhere

@@ -3,6 +3,7 @@
 # pylint: disable=invalid-name
 # pylint: disable=unreachable
 
+from typing import Optional
 from pylabrobot.resources.errors import ResourceDefinitionIncompleteError
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
@@ -12,7 +13,9 @@ from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_container_1segment_round_fbottom,
   calculate_liquid_height_in_container_2segments_square_vbottom,
   calculate_liquid_volume_container_1segment_round_fbottom,
-  calculate_liquid_volume_container_2segments_square_vbottom
+  calculate_liquid_volume_container_2segments_square_vbottom,
+  compute_height_from_volume_conical_frustum,
+  compute_volume_from_height_conical_frustum
 )
 
 
@@ -1263,5 +1266,48 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
       max_volume=360,
+    ),
+  )
+
+def Cor_6_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
+  """
+  Corning cat. no.: 3471
+  - Material: Polystyrene
+  - Tissue culture treated: No
+  """
+  BOTTOM_INNER_WELL_RADIUS = 34.798 / 2  # from Corning Product Description
+  TOP_INNER_WELL_RADIUS = 35.433 / 2  # from Corning Product Description
+
+  well_kwargs = {
+    "size_x": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_y": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_z": 17.399,  # from Corning Product Description
+    "bottom_type": WellBottomType.FLAT,
+    "max_volume": 16.850,  # calculated
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
+      liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
+      liquid_volume, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.762,  # from Corning Product Description
+    size_y=85.471,   # from Corning Product Description
+    size_z=22.6314,  # from Corning Product Description
+    lid=lid,
+    model=Cor_6_wellplate_Fl.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=3,
+      num_items_y=2,
+      dx=7.5,  # measured
+      dy=6.3,  # measured
+      dz=1.8,  # calibrated manually by z-stepping down using a pipette.
+      item_dx=39,  # measured
+      item_dy=39,  # measured
+      **well_kwargs,
     ),
   )

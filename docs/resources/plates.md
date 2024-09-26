@@ -12,4 +12,4 @@ Plates can optionally have a lid, which will also be a child of the `Plate` clas
 
 The `nesting_z_height` is the overlap between the lid and the plate when the lid is placed on the plate. This property can be measured using a caliper.
 
-![nesting_z_height measurement](/img/plate/lid_nesting_z_height.jpeg)
+![nesting_z_height measurement](/resources/img/plate/lid_nesting_z_height.jpeg)

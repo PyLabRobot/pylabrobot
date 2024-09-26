@@ -3,7 +3,13 @@ import enum
 import logging
 import time
 from typing import List, Optional, Union
-from pylibftdi import Device
+
+try:
+  from pylibftdi import Device
+  USE_FTDI = True
+except ImportError:
+  USE_FTDI = False
+
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 
 
@@ -15,6 +21,9 @@ class Cytation5Backend(PlateReaderBackend):
   def __init__(self, timeout: float = 20) -> None:
     super().__init__()
     self.timeout = timeout
+    if not USE_FTDI:
+      raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
+
     self.dev = Device(lazy_open=True)
 
   async def setup(self) -> None:

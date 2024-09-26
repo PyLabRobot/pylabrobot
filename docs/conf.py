@@ -36,11 +36,12 @@ extensions = [
   'sphinx.ext.mathjax',
   'myst_nb',
   'sphinx_copybutton',
-  'IPython.sphinxext.ipython_console_highlighting'
+  'IPython.sphinxext.ipython_console_highlighting',
+  'sphinx_reredirects',
 ]
 
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3/', None),
+  'python': ('https://docs.python.org/3/', None),
 }
 
 # Add any paths that contain templates here, relative to this directory.
@@ -72,20 +73,50 @@ default_role = 'code' # allow single backticks for inline code
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_book_theme'
+html_theme = 'pydata_sphinx_theme'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ['_static', 'resources/library/img']
+html_extra_path = ['resources/library/img']
 
 html_theme_options = {
-  'repository_url': 'https://github.com/pylabrobot/pylabrobot',
-  'use_repository_button': False,
   'use_edit_page_button': True,
-  'repository_branch': 'main',
-  'path_to_docs': 'docs',
-  'use_issues_button': False,
+
+  "navbar_start": ["navbar-logo"],
+  "navbar_center": ["navbar-nav"],
+  "navbar_end": ["theme-switcher", "navbar-icon-links"],
+  "navbar_persistent": ["search-button"],
+
+  "icon_links": [
+    {
+      "name": "X",
+      "url": "https://x.com/pylabrobot",
+      "icon": "fa-brands fa-x-twitter",
+    },
+    {
+      "name": "GitHub",
+      "url": "https://github.com/pylabrobot/pylabrobot",
+      "icon": "fa-brands fa-github",
+    },
+    {
+      "name": "YouTube",
+      "url": "https://youtube.com/@pylabrobot",
+      "icon": "fa-brands fa-youtube",
+    }
+  ],
+
+  "logo": {
+    "text": "PyLabRobot",
+  }
+}
+
+html_context = {
+  "github_user": "pylabrobot",
+  "github_repo": "pylabrobot",
+  "github_version": "main",
+  "doc_path": "docs",
 }
 
 html_logo = '_static/logo.png'
@@ -106,3 +137,30 @@ napoleon_use_ivar = True
 
 nb_execution_mode = 'off'
 myst_enable_extensions = ['dollarmath']
+
+redirects = {
+  "installation.html": "user_guide/installation.html",
+  "contributing.html": "contributor_guide/index.html",
+  "configuration.html": "user_guide/configuration.html",
+  "new-machine-type.html": "contributor_guide/new_machine_type.html",
+  "new-concrete-backend.html": "contributor_guide/new_concrete_backend.html",
+  "how-to-open-source.html": "contributor_guide/how_to_open_source.html",
+  "basic.html": "user_guide/basic.html",
+  "using-the-visualizer.html": "user_guide/using_the_visualizer.html",
+  "using-trackers.html": "user_guide/using_trackers.html",
+  "writing-robot-agnostic-methods.html": "user_guide/writing_robot_agnostic_methods.html",
+  "hamilton-star/hamilton-star.html": "user_guide/hamilton_star/hamilton_star.html",
+  "hamilton-star/iswap-module.html": "user_guide/hamilton_star/iswap_module.html",
+  "plate_reading.html": "user_guide/plate_reading.html",
+  "cytation5.html": "user_guide/cytation5.html",
+  "pumps.html": "user_guide/pumps.html",
+  "scales.html": "user_guide/scales.html",
+  "temperature.html": "user_guide/temperature.html",
+  "tilting.html": "user_guide/tilting.html",
+  "heating-shaking.html": "user_guide/heating_shaking.html",
+  "fans.html": "user_guide/fans.html",
+}
+
+if tags.has('no-api'):
+  exclude_patterns.append('api/**')
+  suppress_warnings = ['toc.excluded']

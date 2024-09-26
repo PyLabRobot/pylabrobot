@@ -894,7 +894,6 @@ class LiquidHandler(Machine):
     if does_volume_tracking():
       if any(bav is not None and bav != 0.0 for bav in blow_out_air_volume):
         if self._blow_out_air_volume is None:
-          print(blow_out_air_volume)
           raise BlowOutVolumeError("No blowout volume was aspirated.")
         for requested_bav, done_bav in zip(blow_out_air_volume, self._blow_out_air_volume):
           if requested_bav is not None and done_bav is not None and requested_bav > done_bav:
