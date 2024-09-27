@@ -6,7 +6,8 @@ from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import Pickup, GripDirection
 from pylabrobot.liquid_handling.liquid_classes.hamilton.star import (
   StandardVolumeFilter_Water_DispenseSurface,
-  StandardVolumeFilter_Water_DispenseJet_Empty)
+  StandardVolumeFilter_Water_DispenseJet_Empty,
+  HighVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty)
 from pylabrobot.liquid_handling.parameter_sets.star import STARParameterSet
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import MockPlateReaderBackend
@@ -491,7 +492,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     hlc = StandardVolumeFilter_Water_DispenseJet_Empty
     ps = STARParameterSet.from_hamilton_liquid_class(hlc, num_channels=5,
                                                      jet=[True]*5, blow_out=[True]*5)
-    print(ps.make_disp_kwargs())
     corrected_vol = hlc.compute_corrected_volume(10)
     with no_volume_tracking():
       await self.lh.dispense([self.bb]*5, vols=[corrected_vol]*5, liquid_height=[1]*5,
@@ -513,10 +513,12 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh.update_head_state({0: self.tip_rack.get_tip("A1")})
     assert self.plate.lid is not None
     self.plate.lid.unassign()
+    hlc = StandardVolumeFilter_Water_DispenseJet_Empty
+    ps = STARParameterSet.from_hamilton_liquid_class(hlc, num_channels=1,
+                                                      jet=[True]*1, blow_out=[True]*1)
+    corrected_vol = hlc.compute_corrected_volume(100)
     with no_volume_tracking():
-      corrected_vol = self.hlc.compute_corrected_volume(100)
-      await self.lh.dispense(self.plate["A1"], vols=[corrected_vol],
-                             jet=[True], blow_out=[True])
+      await self.lh.dispense(self.plate["A1"], vols=[corrected_vol], **ps.make_disp_kwargs())
     self._assert_command_sent_once(
       "C0DSid0002dm1 1&tm1 0&xp02983 00000&yp1457 0000&zx1866 1866&lp2000 2000&zl1866 1866&"
       "po0100 0100&ip0000 0000&it0 0&fp0000 0000&zu0032 0032&zr06180 06180&th2450te2450"
@@ -530,9 +532,12 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # TODO: Hamilton liquid classes
     assert self.plate.lid is not None
     self.plate.lid.unassign()
+    hlc = StandardVolumeFilter_Water_DispenseJet_Empty
+    ps = STARParameterSet.from_hamilton_liquid_class(hlc, num_channels=2,
+                                                      jet=[True]*2, blow_out=[True]*2)
+    corrected_vol = hlc.compute_corrected_volume(100)
     with no_volume_tracking():
-      corrected_vol = self.hlc.compute_corrected_volume(100)
-      await self.lh.dispense(self.plate["A1:B1"], vols=[corrected_vol]*2, jet=[True]*2, blow_out=[True]*2)
+      await self.lh.dispense(self.plate["A1:B1"], vols=[corrected_vol]*2, **ps.make_disp_kwargs())
 
     self._assert_command_sent_once(
       "C0DSid0002dm1 1 1&tm1 1 0&xp02983 02983 00000&yp1457 1367 0000&zx1866 1866 1866&lp2000 2000 "
@@ -580,8 +585,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # TODO: Hamilton liquid classes
     assert self.plate.lid is not None
     self.plate.lid.unassign()
-    corrected_volume = self.hlc.compute_corrected_volume(100) # need different liquid class
-    await self.lh.aspirate96(self.plate, volume=corrected_volume)
+    hlc = HighVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty
+    ps = STARParameterSet.from_hamilton_liquid_class(hlc)
+    corrected_volume = hlc.compute_corrected_volume(100) # need different liquid class
+    await self.lh.aspirate96(self.plate, volume=corrected_volume, **ps.make_asp96_kwargs())
 
     # volume used to be 01072, but that was generated using a non-core liquid class.
     self._assert_command_sent_once(
