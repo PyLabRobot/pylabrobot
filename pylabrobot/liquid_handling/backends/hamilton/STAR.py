@@ -4653,7 +4653,7 @@ class STAR(HamiltonLiquidHandler):
       "pipetting_channel_index must be between 1 and self.num_channels"
     # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
     pipetting_channel_index = pipetting_channel_index + 1
-    
+
     return await self.send_command(
       module="C0",
       command="JP",
@@ -4684,14 +4684,16 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= pipetting_channel_index <= 15, "pipetting_channel_index must be between 0 and 15"
     # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
     pipetting_channel_index = pipetting_channel_index + 1
-
-    return await self.send_command(
+  
+    y_pos_query = await self.send_command(
       module="C0",
       command="RB",
       fmt="rb####",
       pn=f"{pipetting_channel_index:02}",
     )
-  
+
+    return y_pos_query['rb'] / 10
+
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
 
@@ -4713,12 +4715,14 @@ class STAR(HamiltonLiquidHandler):
     # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
     pipetting_channel_index = pipetting_channel_index + 1
 
-    return await self.send_command(
+    z_pos_query = await self.send_command(
       module="C0",
       command="RD",
       fmt="rd####",
       pn=f"{pipetting_channel_index:02}",
     )
+
+    return z_pos_query['rd'] / 10
 
   async def request_tip_presence(self) -> List[int]:
     """ Request query tip presence on each channel
@@ -6925,15 +6929,15 @@ class STAR(HamiltonLiquidHandler):
 
   async def clld_probe_z_height_using_channel(
     self,
-    channel_idx: int, # 0-based indexing of channels!
-    lowest_immers_pos: float = 99.98, # mm
-    start_pos_search: float = None, # mm
-    channel_speed: float = 10.0, # mm
-    channel_acceleration: float = 800.0, # mm/sec**2
+    channel_idx: int,  # 0-based indexing of channels!
+    lowest_immers_pos: float = 99.98,  # mm
+    start_pos_search: float = 330.0,  # mm
+    channel_speed: float = 10.0,  # mm
+    channel_acceleration: float = 800.0,  # mm/sec**2
     detection_edge: int = 10,
     detection_drop: int = 2,
     post_detection_trajectory: Literal[0, 1] = 1,
-    post_detection_dist: float = 2.0, # mm
+    post_detection_dist: float = 2.0,  # mm
     move_channels_to_save_pos_after: bool = False
   ) -> float:
     """ Probes the Z-height below the specified channel on a Hamilton STAR liquid handling machine
@@ -6994,7 +6998,7 @@ class STAR(HamiltonLiquidHandler):
       "Offset after capacitive LLD edge detection must be between 0 and 1023"
     )
     assert 0 <= post_detection_dist_increments <= 9_999, (
-      f"Post cLLD-detection movement distance must be between \n0" + \
+      "Post cLLD-detection movement distance must be between \n0" + \
       f" and {increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
     )
 
@@ -7031,7 +7035,7 @@ class STAR(HamiltonLiquidHandler):
     channel_idx: int, # 0-based indexing of channels!
     tip_len: float, # mm
     lowest_immers_pos: float = 99.98, # mm
-    start_pos_search: float = 330.0, # mm
+    start_pos_search: Optional[float] = None, # mm
     channel_speed: float = 10.0, # mm/sec
     channel_acceleration: float = 800.0, # mm/sec**2
     channel_speed_upwards: float = 125.0, # mm
@@ -7065,6 +7069,9 @@ class STAR(HamiltonLiquidHandler):
     fitting_depth = 8 # mm, for 10, 50, 300, 1000 ul Hamilton tips
     tip_len_used_in_increments = (tip_len - fitting_depth) / z_drive_mm_per_increment
 
+    if not start_pos_search:
+      start_pos_search = self.request_z_pos_channel_n(pipetting_channel_index=channel_idx)
+
     # TODO: check whether tip_len can be called directly from STAR backend here,
     # i.e enable removal of tip_len attribute this way
 
@@ -7079,7 +7086,7 @@ class STAR(HamiltonLiquidHandler):
     channel_acceleration_thousand_increments = mm_to_increment(channel_acceleration / 1000)
     channel_speed_upwards_increments = mm_to_increment(channel_speed_upwards)
 
-    
+
     assert 1 <= channel_idx <= 16, (
       f"channel_idx must be between 1 and 16, is {channel_idx}"
     )
