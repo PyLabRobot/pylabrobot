@@ -1215,10 +1215,13 @@ class STAR(HamiltonLiquidHandler):
     """ Parse a response from the machine. """
     return parse_star_fw_string(resp, fmt)
 
-  async def setup(self):
-    """ setup
+  async def setup(self, skip_autoload=False, skip_iswap=False, skip_core96_head=False):
+    """ Creates a USB connection and finds read/write interfaces.
 
-    Creates a USB connection and finds read/write interfaces.
+    Args:
+      skip_autoload: if True, skip initializing the autoload module, if applicable.
+      skip_iswap: if True, skip initializing the iSWAP module, if applicable.
+      skip_core96_head: if True, skip initializing the CoRe 96 head module, if applicable.
     """
 
     await super().setup()
@@ -1265,14 +1268,14 @@ class STAR(HamiltonLiquidHandler):
 
     if self.autoload_installed:
       autoload_initialized = await self.request_autoload_initialization_status()
-      if not autoload_initialized:
+      if not autoload_initialized and not skip_autoload:
         await self.initialize_autoload()
 
       await self.park_autoload()
 
     if self.iswap_installed:
       iswap_initialized = await self.request_iswap_initialization_status()
-      if not iswap_initialized:
+      if not iswap_initialized and not skip_iswap:
         await self.initialize_iswap()
 
       await self.park_iswap(minimum_traverse_height_at_beginning_of_a_command=
@@ -1280,7 +1283,7 @@ class STAR(HamiltonLiquidHandler):
 
     if self.core96_head_installed:
       core96_head_initialized = await self.request_core_96_head_initialization_status()
-      if not core96_head_initialized:
+      if not core96_head_initialized and not skip_core96_head:
         await self.initialize_core_96_head(
           z_position_at_the_command_end=int(self._traversal_height*10))
 
