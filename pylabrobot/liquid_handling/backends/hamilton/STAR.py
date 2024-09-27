@@ -4692,7 +4692,7 @@ class STAR(HamiltonLiquidHandler):
       pn=f"{pipetting_channel_index:02}",
     )
     # Extract y-coordinate and convert to mm
-    return y_pos_query["rb"] / 10
+    return float(y_pos_query["rb"] / 10)
 
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
@@ -4722,7 +4722,7 @@ class STAR(HamiltonLiquidHandler):
       pn=f"{pipetting_channel_index:02}",
     )
     # Extract z-coordinate and convert to mm
-    return z_pos_query["rd"] / 10
+    return float(z_pos_query["rd"] / 10)
 
   async def request_tip_presence(self) -> List[int]:
     """ Request query tip presence on each channel
@@ -7038,7 +7038,7 @@ class STAR(HamiltonLiquidHandler):
     Measures the length of the tip attached to the specified pipetting channel.
 
     Checks if a tip is present on the given channel. If present, moves all channels
-    to THE safe Z position, 334.3 mm measures the tip bottom Z-coordinate, and calculates 
+    to THE safe Z position, 334.3 mm, measures the tip bottom Z-coordinate, and calculates 
     the total tip length. Supports tips of lengths 50.4 mm, 59.9 mm, and 95.1 mm.
     Raises an error if the tip length is unsupported or if no tip is present.
 
@@ -7053,7 +7053,7 @@ class STAR(HamiltonLiquidHandler):
           unsupported. 
     """
 
-    # Check there is tip on the channel
+    # Check there is a tip on the channel
     all_channel_occupancy = await self.request_tip_presence()
 
     if all_channel_occupancy[channel_idx]:
