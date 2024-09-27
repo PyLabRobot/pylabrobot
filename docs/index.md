@@ -76,7 +76,7 @@ api/pylabrobot
 ```{toctree}
 :hidden:
 
-Community <https://labautomation.io/c/pylabrobot-user-discussion/26>
+Community <https://discuss.pylabrobot.org/>
 ```
 
 ## Citing
