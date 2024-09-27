@@ -111,3 +111,25 @@ class HamiltonLiquidClass:
 
   def copy(self) -> "HamiltonLiquidClass":
     return HamiltonLiquidClass(**self.serialize())
+  
+  def create_asp_kwargs(self, num_channels: int):
+    return {
+      "flow_rates": [self.aspiration_flow_rate] * num_channels,
+      "mix_speed": [self.aspiration_mix_flow_rate] * num_channels,
+      "transport_air_volume": [self.aspiration_air_transport_volume] * num_channels,
+      "blow_out_air_volume": [self.aspiration_blow_out_volume] * num_channels,
+      "swap_speed": [self.aspiration_swap_speed] * num_channels,
+      "settling_time": [self.aspiration_settling_time] * num_channels,
+      "clot_detection_height": [self.aspiration_clot_retract_height] * num_channels,
+    }
+  
+  def create_disp_kwargs(self, num_channels: int):
+    return {
+      "flow_rates": [self.dispense_flow_rate] * num_channels,
+      "mix_speed": [self.dispense_mix_flow_rate] * num_channels,
+      "transport_air_volume": [self.dispense_air_transport_volume] * num_channels,
+      "blow_out_air_volume": [self.dispense_blow_out_volume] * num_channels,
+      "swap_speed": [self.dispense_swap_speed] * num_channels,
+      "settling_time": [self.dispense_settling_time] * num_channels,
+      "stop_back_volume": [self.dispense_stop_back_volume] * num_channels,
+    }

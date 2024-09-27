@@ -38,7 +38,7 @@ class STARParameterSet(ParameterSet):
   dispense_stop_back_volumes: Optional[list[float]]
   dispense_lld_modes: Optional[list[STAR.LLDMode]]
 
-  def make_asp_kwargs(self) -> dict[str, float]:
+  def make_asp_kwargs(self) -> dict[str, list[float]]:
     return {
       "jet": self.aspiration_jet,
       "blow_out": self.aspiration_blow_out,
@@ -52,7 +52,7 @@ class STARParameterSet(ParameterSet):
       "lld_mode": self.aspiration_lld_modes,
     }
 
-  def make_disp_kwargs(self) -> dict[str, float]:
+  def make_disp_kwargs(self) -> dict[str, list[float]]:
     return {
       "jet": self.dispense_jet,
       "blow_out": self.dispense_blow_out,
@@ -106,7 +106,7 @@ class STARParameterSet(ParameterSet):
       dispense_blow_out=[blow_out] * num_channels,
       dispense_jet=[jet] * num_channels,
       dispense_flow_rates=[hlc.dispense_flow_rate] * num_channels,
-      dispense_mix_speeds=[hlc.dispense_mode] * num_channels,
+      dispense_mix_speeds=[hlc.dispense_mix_flow_rate] * num_channels,
       dispense_swap_speeds=[hlc.dispense_swap_speed] * num_channels,
       dispense_settling_times=[hlc.dispense_settling_time] * num_channels,
       dispense_stop_back_volumes=[hlc.dispense_stop_back_volume] * num_channels,
