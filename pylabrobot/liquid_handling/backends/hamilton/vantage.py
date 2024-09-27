@@ -538,8 +538,6 @@ class Vantage(HamiltonLiquidHandler):
     self,
     ops: List[Aspiration],
     use_channels: List[int],
-    jet: Optional[List[bool]] = None,
-    blow_out: Optional[List[bool]] = None,
     hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
 
     type_of_aspiration: Optional[List[int]] = None,
@@ -595,11 +593,6 @@ class Vantage(HamiltonLiquidHandler):
     x_positions, y_positions, channels_involved = \
       self._ops_to_fw_positions(ops, use_channels)
 
-    if jet is None:
-      jet = [False]*len(ops)
-    if blow_out is None:
-      blow_out = [False]*len(ops)
-
     self._assert_valid_resources([op.resource for op in ops])
 
     well_bottoms = [op.resource.get_absolute_location().z + op.offset.z + \
@@ -613,6 +606,8 @@ class Vantage(HamiltonLiquidHandler):
 
     flow_rates = [op.flow_rate or 100 for op in ops]
     blow_out_air_volumes = [op.blow_out_air_volume or 0 for op in ops]
+
+    print(mix_speed)
 
     return await self.pip_aspirate(
       x_position=x_positions,
@@ -864,8 +859,6 @@ class Vantage(HamiltonLiquidHandler):
   async def aspirate96(
     self,
     aspiration: Union[AspirationPlate, AspirationContainer],
-    jet: bool = False,
-    blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
 
     type_of_aspiration: int = 0,
@@ -877,7 +870,6 @@ class Vantage(HamiltonLiquidHandler):
     immersion_depth: float = 0,
     surface_following_distance: float = 0,
     transport_air_volume: Optional[float] = None,
-    blow_out_air_volume: Optional[float] = None,
     pre_wetting_volume: float = 0,
     lld_mode: int = 0,
     lld_sensitivity: int = 4,
@@ -893,18 +885,7 @@ class Vantage(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
   ):
-    """ Aspirate from a plate.
-
-    Args:
-      jet: Whether to find a liquid class with "jet" mode. Only used on dispense.
-      blow_out: Whether to find a liquid class with "blow out" mode. Only used on dispense. Note
-        that this is called "empty" in the VENUS liquid editor, but "blow out" in the firmware
-        documentation.
-    """
     # assert self.core96_head_installed, "96 head must be installed"
-
-    if jet is not None or blow_out is not None:
-      raise NotImplementedError("jet and blow out are not implemented for aspirate96 yet")
 
     if hlc is not None:
       raise NotImplementedError("hlc is deprecated")
@@ -924,11 +905,20 @@ class Vantage(HamiltonLiquidHandler):
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
-    transport_air_volume = transport_air_volume or 0
-    blow_out_air_volume = blow_out_air_volume or 0
-    flow_rate = aspiration.flow_rate or 250
-    swap_speed = swap_speed or 100
-    settling_time = settling_time or 5
+    if transport_air_volume is None:
+      transport_air_volume = 0
+    if aspiration.blow_out_air_volume is None:
+      blow_out_air_volume = 0.0
+    else:
+      blow_out_air_volume = aspiration.blow_out_air_volume
+    if aspiration.flow_rate is None:
+      flow_rate = 250.0
+    else:
+      flow_rate = aspiration.flow_rate
+    if swap_speed is None:
+      swap_speed = 100
+    if settling_time is None:
+      settling_time = 5
 
     return await self.core96_aspiration_of_liquid(
       x_position=round(position.x * 10),
@@ -987,7 +977,6 @@ class Vantage(HamiltonLiquidHandler):
     cut_off_speed: float = 250.0,
     stop_back_volume: float = 0,
     transport_air_volume: Optional[float] = None,
-    blow_out_air_volume: Optional[float] = None,
     lld_mode: int = 0,
     lld_sensitivity: int = 4,
     side_touch_off_distance: float = 0,
@@ -1036,14 +1025,24 @@ class Vantage(HamiltonLiquidHandler):
 
     liquid_height = position.z + (dispense.liquid_height or 0) + 10
 
-    transport_air_volume = transport_air_volume or 0
-    blow_out_air_volume = blow_out_air_volume or 0
-    flow_rate = dispense.flow_rate or 250
-    swap_speed = swap_speed or 100
-    settling_time = settling_time or 5
-    mix_speed = mix_speed or 100
-    type_of_dispensing_mode = type_of_dispensing_mode or \
-      _get_dispense_mode(jet=jet, empty=empty, blow_out=blow_out)
+    if transport_air_volume is None:
+      transport_air_volume = 0
+    if dispense.blow_out_air_volume is None:
+      blow_out_air_volume = 0.0
+    else:
+      blow_out_air_volume = dispense.blow_out_air_volume
+    if dispense.flow_rate is None:
+      flow_rate = 250.0
+    else:
+      flow_rate = dispense.flow_rate
+    if swap_speed is None:
+      swap_speed = 100
+    if settling_time is None:
+      settling_time = 5
+    if mix_speed is None:
+      mix_speed = 100
+    if type_of_dispensing_mode is None:
+      type_of_dispensing_mode = _get_dispense_mode(jet=jet, empty=empty, blow_out=blow_out)
 
     return await self.core96_dispensing_of_liquid(
       x_position=round(position.x * 10),
