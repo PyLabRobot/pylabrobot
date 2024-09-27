@@ -2752,7 +2752,7 @@ class STAR(HamiltonLiquidHandler):
   async def prepare_for_manual_channel_operation(self, channel: int):
     """ Prepare for manual operation. """
 
-    await self.position_max_free_y_for_n(pipetting_channel_index=channel + 1)
+    await self.position_max_free_y_for_n(pipetting_channel_index=channel)
 
   async def move_channel_x(self, channel: int, x: float): # pylint: disable=unused-argument
     """ Move a channel in the x direction. """
@@ -4641,17 +4641,19 @@ class STAR(HamiltonLiquidHandler):
 
   async def position_max_free_y_for_n(
     self,
-    pipetting_channel_index: int = 1
+    pipetting_channel_index: int
   ):
     """ Position all pipetting channels so that there is maximum free Y range for channel n
 
     Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
+      pipetting_channel_index: Index of pipetting channel. Must be between 0 and 15.
     """
 
     assert 1 <= pipetting_channel_index <= self.num_channels, \
       "pipetting_channel_index must be between 1 and self.num_channels"
-
+    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
+    pipetting_channel_index = pipetting_channel_index + 1
+    
     return await self.send_command(
       module="C0",
       command="JP",
@@ -4669,15 +4671,19 @@ class STAR(HamiltonLiquidHandler):
 
   async def request_y_pos_channel_n(
     self,
-    pipetting_channel_index: int = 1
+    pipetting_channel_index: int
   ):
     """ Request Y-Position of Pipetting channel n
 
     Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
+      pipetting_channel_index: Index of pipetting channel. Must be between 0 and 15.
+        0 is the backmost channel.
+
     """
 
-    assert 1 <= pipetting_channel_index <= 16, "pipetting_channel_index must be between 1 and 16"
+    assert 0 <= pipetting_channel_index <= 15, "pipetting_channel_index must be between 0 and 15"
+    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
+    pipetting_channel_index = pipetting_channel_index + 1
 
     return await self.send_command(
       module="C0",
@@ -4685,23 +4691,27 @@ class STAR(HamiltonLiquidHandler):
       fmt="rb####",
       pn=f"{pipetting_channel_index:02}",
     )
+  
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
 
   async def request_z_pos_channel_n(
     self,
-    pipetting_channel_index: int = 1
+    pipetting_channel_index: int
   ):
     """ Request Z-Position of Pipetting channel n
 
     Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
+      pipetting_channel_index: Index of pipetting channel. Must be between 0 and 15.
+        0 is the backmost channel.
 
     Returns:
       Z-Position of channel n [0.1mm]. Taking into account tip presence and length.
     """
 
-    assert 1 <= pipetting_channel_index <= 16, "pipetting_channel_index must be between 1 and 16"
+    assert 0 <= pipetting_channel_index <= 15, "pipetting_channel_index must be between 0 and 15"
+    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
+    pipetting_channel_index = pipetting_channel_index + 1
 
     return await self.send_command(
       module="C0",
@@ -6916,8 +6926,8 @@ class STAR(HamiltonLiquidHandler):
   async def clld_probe_z_height_using_channel(
     self,
     channel_idx: int, # 0-based indexing of channels!
-    lowest_immers_pos: float = 99.0, # mm
-    start_pos_search: float = 330.0, # mm
+    lowest_immers_pos: float = 99.98, # mm
+    start_pos_search: float = None, # mm
     channel_speed: float = 10.0, # mm
     channel_acceleration: float = 800.0, # mm/sec**2
     detection_edge: int = 10,
@@ -6961,31 +6971,31 @@ class STAR(HamiltonLiquidHandler):
     channel_acceleration_thousand_increments = mm_to_increment(channel_acceleration / 1000)
     post_detection_dist_increments = mm_to_increment(post_detection_dist)
 
-    assert 9320 <= lowest_immers_pos_increments <= 31_200, (
-      "Lowest immersion position must be between " + \
-      f"{increment_to_mm(9_320)} and {increment_to_mm(31_200)} mm"
+    assert 9_320 <= lowest_immers_pos_increments <= 31_200, (
+      f"Lowest immersion position must be between \n{increment_to_mm(9_320)}" + \
+      f" and {increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
     )
     assert 9_320 <= start_pos_search_increments <= 31_200, (
-      "Start position of LLD search must be between " + \
-      f"{increment_to_mm(9_320)} and {increment_to_mm(31_200)} mm"
+      f"Start position of LLD search must be between \n{increment_to_mm(9_320)}" + \
+      f" and {increment_to_mm(31_200)} mm, is {start_pos_search} mm"
     )
-    assert 20 <= channel_speed_increments <= 15000, (
-      "LLD search speed must be between " + \
-      f"{increment_to_mm(20)} and {increment_to_mm(15_000)} mm"
+    assert 20 <= channel_speed_increments <= 15_000, (
+      f"LLD search speed must be between \n{increment_to_mm(20)}" + \
+      f"and {increment_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
     )
     assert 5 <= channel_acceleration_thousand_increments <= 150, (
-      "Channel acceleration must be between " + #
-      f"{increment_to_mm(5*1_000)} and {increment_to_mm(150*1_000)} mm/sec**2."
+      f"Channel acceleration must be between \n{increment_to_mm(5*1_000)} " + \
+      f" and {increment_to_mm(150*1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
     )
-    assert 0 <= detection_edge <= 1023, (
+    assert 0 <= detection_edge <= 1_023, (
       "Edge steepness at capacitive LLD detection must be between 0 and 1023"
     )
-    assert 0 <= detection_drop <= 1023, (
+    assert 0 <= detection_drop <= 1_023, (
       "Offset after capacitive LLD edge detection must be between 0 and 1023"
     )
-    assert 0 <= post_detection_dist_increments <= 9999, (
-      "Immersion depth after Liquid Level Detection must be between " + \
-      f"{increment_to_mm(0)} and {increment_to_mm(9_999)} mm"
+    assert 0 <= post_detection_dist_increments <= 9_999, (
+      f"Post cLLD-detection movement distance must be between \n0" + \
+      f" and {increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
     )
 
     lowest_immers_pos_str = f"{lowest_immers_pos_increments:05}"
@@ -7020,7 +7030,7 @@ class STAR(HamiltonLiquidHandler):
     self,
     channel_idx: int, # 0-based indexing of channels!
     tip_len: float, # mm
-    lowest_immers_pos: float = 99.0, # mm
+    lowest_immers_pos: float = 99.98, # mm
     start_pos_search: float = 330.0, # mm
     channel_speed: float = 10.0, # mm/sec
     channel_acceleration: float = 800.0, # mm/sec**2
@@ -7069,30 +7079,32 @@ class STAR(HamiltonLiquidHandler):
     channel_acceleration_thousand_increments = mm_to_increment(channel_acceleration / 1000)
     channel_speed_upwards_increments = mm_to_increment(channel_speed_upwards)
 
+    
     assert 1 <= channel_idx <= 16, (
-      "channel_idx must be between 1 and 16"
+      f"channel_idx must be between 1 and 16, is {channel_idx}"
     )
     assert 20 <= tip_len <= 120, (
       "Total tip length must be between 20 and 120")
+
     assert 9320 <= lowest_immers_pos_increments <= 31_200, (
-      "Lowest immersion position must be between " + #
-      f"{increment_to_mm(9_320)} and {increment_to_mm(31_200)} mm."
+     f"Lowest immersion position must be between \n{increment_to_mm(9_320)}" + \
+      f" and {increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
     )
     assert 9320 <= start_pos_search_increments <= 31_200, (
-      "Start position of LLD search must be between " + #
-      f"{increment_to_mm(9_320)} and {increment_to_mm(31_200)} mm."
+      f"Start position of LLD search must be between \n{increment_to_mm(9_320)}" + \
+      f" and {increment_to_mm(31_200)} mm, is {start_pos_search} mm"
     )
     assert 20 <= channel_speed_increments <= 15_000, (
-      "Z-touch search speed must be between " + #
-      f"{increment_to_mm(20)} and {increment_to_mm(15_000)} mm/sec."
+      f"Z-touch search speed must be between \n{increment_to_mm(20)}" + \
+      f" and {increment_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
     )
     assert 5 <= channel_acceleration_thousand_increments <= 150, (
-      "Channel acceleration must be between " + #
-      f"{increment_to_mm(5*1_000)} and {increment_to_mm(150*1_000)} mm/sec**2."
+      f"Channel acceleration must be between \n{increment_to_mm(5*1_000)}" + \
+      f" and {increment_to_mm(150*1_000)} mm/sec**2, is {channel_speed} mm/sec**2"
     )
     assert 20 <= channel_speed_upwards_increments <= 15_000, (
-      "Channel retraction speed must be between " + #
-      f"{increment_to_mm(20)} and {increment_to_mm(15_000)} mm/sec."
+      f"Channel retraction speed must be between \n{increment_to_mm(20)}" + \
+      f" and {increment_to_mm(15_000)} mm/sec, is {channel_speed_upwards} mm/sec"
     )
     assert 0 <= detection_limiter_in_PWM <= 125, (
       "Detection limiter value must be between 0 and 125 PWM."
@@ -7101,7 +7113,7 @@ class STAR(HamiltonLiquidHandler):
       "Push down force between 0 and 125 PWM values"
     )
     assert 0 <= post_detection_dist <= 245, (
-      "Post detection distance must be between 0 and 245 mm."
+      f"Post detection distance must be between 0 and 245 mm, is {post_detection_dist}"
     )
 
     lowest_immers_pos_str = f"{lowest_immers_pos_increments:05}"
