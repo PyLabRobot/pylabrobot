@@ -418,7 +418,7 @@ class Vantage(HamiltonLiquidHandler):
         end_z_deposit_position=2420,
       )
 
-    if not not skip_ipg:
+    if not skip_ipg:
       ipg_initialized = await self.ipg_request_initialization_status()
       if not ipg_initialized:
         await self.ipg_initialize()
