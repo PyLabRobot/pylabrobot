@@ -21,7 +21,6 @@ class AgilentCentrifuge(CentrifugeBackend):
 
   def __init__(self):
     self.dev: Optional[Device] = None
-    self.position = 0
     self.homing_position = 0
     self.status = 0
     self.current_bucket = 1
@@ -148,11 +147,12 @@ class AgilentCentrifuge(CentrifugeBackend):
     if len(resp) == 0:
         raise IOError("Empty status from centrifuge")
     s = [f"{byte:02x}" for byte in resp]
-    self.position = int.from_bytes(bytes.fromhex("".join(s[1:5])), byteorder="little")
-    self.homing_position = int.from_bytes(bytes.fromhex("".join(s[9:13])), byteorder="little")
     self.status = s[0]
+    return resp
 
-    print(f"Current position: {self.position}")
+  async def get_position(self):
+    resp = await self.get_status()
+    return int.from_bytes(bytes.fromhex("".join(resp[1:5])), byteorder="little")
 
 # Centrifuge communication: read_resp, send, send_payloads
 
@@ -250,7 +250,7 @@ class AgilentCentrifuge(CentrifugeBackend):
 
   async def go_to_bucket1(self):
     await self.get_status()
-    new_position = (self.position + 4000).to_bytes(4, byteorder="little")
+    new_position = (await self.get_position() + 4000).to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
@@ -282,7 +282,7 @@ class AgilentCentrifuge(CentrifugeBackend):
 
   async def go_to_bucket2(self):
     await self.get_status()
-    new_position = (self.position + 4000).to_bytes(4, byteorder="little")
+    new_position = (await self.get_position() + 4000).to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
@@ -346,7 +346,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     base = int(107007 - 328*rpm + 1.13*(rpm**2))
     rpm_b = (int(4481*rpm + 10852)).to_bytes(4, byteorder="little")
     acc = (int(915*acceleration/100)).to_bytes(2, byteorder="little")
-    maxp = min((self.position + base + 4000*rpm//30*time_seconds), 4294967294)
+    maxp = min((await self.get_position() + base + 4000*rpm//30*time_seconds), 4294967294)
     position = maxp.to_bytes(4, byteorder="little")
 
     byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc+b"\x00\x00"
