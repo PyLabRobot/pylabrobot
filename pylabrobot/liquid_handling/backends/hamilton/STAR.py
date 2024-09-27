@@ -1436,8 +1436,6 @@ class STAR(HamiltonLiquidHandler):
     self,
     ops: List[Aspiration],
     use_channels: List[int],
-    jet: Optional[List[bool]] = None,
-    blow_out: Optional[List[bool]] = None,
     lld_search_height: Optional[List[float]] = None,
     clot_detection_height: Optional[List[float]] = None,
     pull_out_distance_transport_air: Optional[List[float]] = None,
@@ -1487,9 +1485,6 @@ class STAR(HamiltonLiquidHandler):
     Args:
       ops: The aspiration operations to perform.
       use_channels: The channels to use for the operations.
-      jet: whether to search for a jet liquid class. Only used on dispense. Default is False.
-      blow_out: whether to blow out air. Only used on dispense. Note that in the VENUS Liquid
-        Editor, this is called "empty". Default is False.
 
       lld_search_height: The height to start searching for the liquid level when using LLD.
       clot_detection_height: Unknown, but probably the height to search for clots when doing LLD.
@@ -1549,11 +1544,6 @@ class STAR(HamiltonLiquidHandler):
       self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
-
-    if jet is None:
-      jet = [False] * n
-    if blow_out is None:
-      blow_out = [False] * n
 
     self._assert_valid_resources([op.resource for op in ops])
 
@@ -1934,8 +1924,6 @@ class STAR(HamiltonLiquidHandler):
   async def aspirate96(
     self,
     aspiration: Union[AspirationPlate, AspirationContainer],
-    jet: bool = False,
-    blow_out: bool = False,
 
     use_lld: bool = False,
     liquid_height: float = 0,
@@ -1961,18 +1949,13 @@ class STAR(HamiltonLiquidHandler):
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mix: float = 0,
-    speed_of_mix: float = 120.0,
+    mix_speed: float = 120.0,
     limit_curve_index: int = 0,
   ):
     """ Aspirate using the Core96 head.
 
     Args:
       aspiration: The aspiration to perform.
-
-      jet: Whether to search for a jet liquid class. Only used on dispense.
-      blow_out: Whether to use "blow out" dispense mode. Only used on dispense. Note that this is
-        labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
-        documentation.
 
       use_lld: If True, use gamma liquid level detection. If False, use liquid height.
       liquid_height: The height of the liquid above the bottom of the well, in millimeters.
@@ -2002,7 +1985,7 @@ class STAR(HamiltonLiquidHandler):
         liquid surface.
       surface_following_distance_during_mix: The distance to follow the liquid surface
         during mix.
-      speed_of_mix: The speed of mix.
+      mix_speed: The speed of mix.
       limit_curve_index: The index of the limit curve to use.
     """
 
@@ -2010,9 +1993,6 @@ class STAR(HamiltonLiquidHandler):
       raise NotImplementedError("Hamilton liquid classes are deprecated.")
 
     assert self.core96_head_installed, "96 head must be installed"
-
-    if jet or blow_out:
-      raise NotImplementedError("jet and blow out are not implemented for aspirate96 yet")
 
     # get the first well and tip as representatives
     if isinstance(aspiration, AspirationPlate):
@@ -2024,27 +2004,24 @@ class STAR(HamiltonLiquidHandler):
 
     liquid_height = position.z + liquid_height
 
-    transport_air_volume = transport_air_volume or 0
-    blow_out_air_volume = aspiration.blow_out_air_volume or 0
-    flow_rate = aspiration.flow_rate or 250
-    swap_speed = swap_speed or 100
-    settling_time = settling_time or 0.5
-    speed_of_mix = speed_of_mix or 10.0
+    if transport_air_volume is None:
+      transport_air_volume = 0
+    if aspiration.blow_out_air_volume is None:
+      blow_out_air_volume = 0
+    else:
+      blow_out_air_volume = aspiration.blow_out_air_volume
+    if aspiration.flow_rate is None:
+      flow_rate = 250
+    else:
+      flow_rate = aspiration.flow_rate
+    if swap_speed is None:
+      swap_speed = 100
+    if settling_time is None:
+      settling_time = 0.5
+    if mix_speed is None:
+      mix_speed = 10.0
 
     channel_pattern = [True]*12*8
-
-    # Was this ever true? Just copied it over from pyhamilton. Could have something to do with
-    # the liquid classes and whether blow_out mode is enabled.
-    # # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
-    # # manually.
-    # if blow_out_air_volume is not None and blow_out_air_volume > 0:
-    #   await self.aspirate_core_96(
-    #     x_position=int(position.x * 10),
-    #     y_positions=int(position.y * 10),
-    #     lld_mode=0,
-    #     liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
-    #     aspiration_volumes=int(blow_out_air_volume * 10)
-    #   )
 
     return await self.aspirate_core_96(
       x_position=round(position.x * 10),
@@ -2081,7 +2058,7 @@ class STAR(HamiltonLiquidHandler):
        round(mix_position_from_liquid_surface * 10),
       surface_following_distance_during_mix=
        round(surface_following_distance_during_mix * 10),
-      speed_of_mix=round(speed_of_mix * 10),
+      mix_speed=round(mix_speed * 10),
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -2118,7 +2095,7 @@ class STAR(HamiltonLiquidHandler):
     mixing_cycles: int = 0,
     mixing_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mixing: float = 0,
-    speed_of_mixing: float = 120.0,
+    mix_speed: float = 120.0,
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
@@ -2154,7 +2131,7 @@ class STAR(HamiltonLiquidHandler):
       mixing_cycles: Mixing cycles.
       mixing_position_from_liquid_surface: Mixing position from liquid surface, in mm.
       surface_following_distance_during_mixing: Surface following distance during mixing, in mm.
-      speed_of_mixing: Speed of mixing, in ul/s.
+      mix_speed: Speed of mixing, in ul/s.
       limit_curve_index: Limit curve index.
       cut_off_speed: Unknown.
       stop_back_volume: Unknown.
@@ -2162,9 +2139,6 @@ class STAR(HamiltonLiquidHandler):
 
     if hlc is not None:
       raise NotImplementedError("Hamilton liquid classes are deprecated.")
-
-    if jet or blow_out:
-      raise NotImplementedError("jet and blow out are not implemented for aspirate96 yet")
 
     assert self.core96_head_installed, "96 head must be installed"
 
@@ -2180,12 +2154,22 @@ class STAR(HamiltonLiquidHandler):
 
     dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 
-    transport_air_volume = transport_air_volume or 0
-    blow_out_air_volume = dispense.blow_out_air_volume or 0
-    flow_rate = dispense.flow_rate or 120
-    swap_speed = swap_speed or 100
-    settling_time = settling_time or 5
-    speed_of_mixing = speed_of_mixing or 100
+    if transport_air_volume is None:
+      transport_air_volume = 0
+    if dispense.blow_out_air_volume is None:
+      blow_out_air_volume = 0
+    else:
+      blow_out_air_volume = dispense.blow_out_air_volume
+    if dispense.flow_rate is None:
+      flow_rate = 120
+    else:
+      flow_rate = dispense.flow_rate
+    if swap_speed is None:
+      swap_speed = 100
+    if settling_time is None:
+      settling_time = 5
+    if mix_speed is None:
+      mix_speed = 100
 
     channel_pattern = [True]*12*8
 
@@ -2221,7 +2205,7 @@ class STAR(HamiltonLiquidHandler):
       mixing_cycles=mixing_cycles,
       mixing_position_from_liquid_surface=round(mixing_position_from_liquid_surface*10),
       surface_following_distance_during_mixing=round(surface_following_distance_during_mixing*10),
-      speed_of_mixing=round(speed_of_mixing*10),
+      mix_speed=round(mix_speed*10),
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -4938,7 +4922,7 @@ class STAR(HamiltonLiquidHandler):
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mix: int = 0,
-    speed_of_mix: int = 1000,
+    mix_speed: int = 1000,
     channel_pattern: List[bool] = [True] * 96,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
@@ -4992,7 +4976,7 @@ class STAR(HamiltonLiquidHandler):
           liquid surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 990. Default 250.
       surface_following_distance_during_mix: surface following distance during
           mix [0.1mm]. Must be between 0 and 990. Default 0.
-      speed_of_mix: Speed of mix [0.1ul/s]. Must be between 3 and 5000.
+      mix_speed: Speed of mix [0.1ul/s]. Must be between 3 and 5000.
           Default 1000.
       todo: TODO: 24 hex chars. Must be between 4 and 5000.
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
@@ -5038,8 +5022,8 @@ class STAR(HamiltonLiquidHandler):
       "mix_position_from_liquid_surface must be between 0 and 990"
     assert 0 <= surface_following_distance_during_mix <= 990, \
       "surface_following_distance_during_mix must be between 0 and 990"
-    assert 3 <= speed_of_mix <= 5000, \
-      "speed_of_mix must be between 3 and 5000"
+    assert 3 <= mix_speed <= 5000, \
+      "mix_speed must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
 
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
@@ -5080,7 +5064,7 @@ class STAR(HamiltonLiquidHandler):
       hc=f"{mix_cycles:02}",
       hp=f"{mix_position_from_liquid_surface:03}",
       mj=f"{surface_following_distance_during_mix:03}",
-      hs=f"{speed_of_mix:04}",
+      hs=f"{mix_speed:04}",
       cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
@@ -5120,7 +5104,7 @@ class STAR(HamiltonLiquidHandler):
     mixing_cycles: int = 0,
     mixing_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mixing: int = 0,
-    speed_of_mixing: int = 1000,
+    mix_speed: int = 1000,
     channel_pattern: List[bool] = [True]*12*8,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
@@ -5177,7 +5161,7 @@ class STAR(HamiltonLiquidHandler):
           surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 990. Default 250.
       surface_following_distance_during_mixing: surface following distance during mixing [0.1mm].
           Must be between 0 and 990. Default 0.
-      speed_of_mixing: Speed of mixing [0.1ul/s]. Must be between 3 and 5000. Default 1000.
+      mix_speed: Speed of mixing [0.1ul/s]. Must be between 3 and 5000. Default 1000.
       channel_pattern: list of 96 boolean values
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
       tadm_algorithm: TADM algorithm. Default False.
@@ -5224,7 +5208,7 @@ class STAR(HamiltonLiquidHandler):
       "mixing_position_from_liquid_surface must be between 0 and 990"
     assert 0 <= surface_following_distance_during_mixing <= 990, \
       "surface_following_distance_during_mixing must be between 0 and 990"
-    assert 3 <= speed_of_mixing <= 5000, "speed_of_mixing must be between 3 and 5000"
+    assert 3 <= mix_speed <= 5000, "mix_speed must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
@@ -5266,7 +5250,7 @@ class STAR(HamiltonLiquidHandler):
       hc=f"{mixing_cycles:02}",
       hp=f"{mixing_position_from_liquid_surface:03}",
       mj=f"{surface_following_distance_during_mixing:03}",
-      hs=f"{speed_of_mixing:04}",
+      hs=f"{mix_speed:04}",
       cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
