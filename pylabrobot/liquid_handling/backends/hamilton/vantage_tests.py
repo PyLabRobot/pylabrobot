@@ -2,11 +2,15 @@ from typing import Any, List, Optional
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.liquid_handling.liquid_classes.hamilton.vantage import (
+  HighVolumeFilter_Water_DispenseSurface_Part,
+  HighVolumeFilter_Water_DispenseSurface_Empty,
+  HighVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty)
+from pylabrobot.liquid_handling.standard import Pickup
 from pylabrobot.resources import (
   Coordinate, TIP_CAR_480_A00, PLT_CAR_L5AC_A00, HT_L, LT_L, Cor_96_wellplate_360ul_Fb,
 )
 from pylabrobot.resources.hamilton import VantageDeck
-from pylabrobot.liquid_handling.standard import Pickup
 
 from .vantage import (
   Vantage,
@@ -276,25 +280,29 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=[100])
+    hlc = HighVolumeFilter_Water_DispenseSurface_Part
+    corrected_volume = hlc.compute_corrected_volume(100)
+    await self.lh.aspirate(self.plate["A1"], vols=[corrected_volume], **hlc.make_asp_kwargs(1))
 
     self._assert_command_sent_once(
       "A1PMDAid0248at0&tm1 0&xp05683 0&yp1457 0 &th2450&te2450&lp1990&"
       "ch000&zl1866&zx1866&ip0000&fp0000&av010830&as2500&ta000&ba00000&oa000&lm0&ll4&lv4&de0020&"
-      "wt10&mv00000&mc00&mp000&ms2500&gi000&gj0gk0zu0000&zr00000&mh0000&zo005&po0109&dj0la0&lb0&"
+      "wt10&mv00000&mc00&mp000&ms1200&gi000&gj0gk0zu0000&zr00000&mh0000&zo005&po0109&dj0la0&lb0&"
       "lc0&",
       ASPIRATE_FORMAT)
 
   async def test_dispense(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"]) # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=[100])
-    await self.lh.dispense(self.plate["A2"], vols=[100], liquid_height=[5], jet=[False],
-                           blow_out=[True])
+    hlc = HighVolumeFilter_Water_DispenseSurface_Empty
+    corrected_volume = hlc.compute_corrected_volume(100)
+    await self.lh.aspirate(self.plate["A1"], vols=[corrected_volume], **hlc.make_asp_kwargs(1))
+    await self.lh.dispense(self.plate["A2"], vols=[corrected_volume], liquid_height=[5],
+                           jet=[False], blow_out=[True], **hlc.make_disp_kwargs(1))
 
     self._assert_command_sent_once(
       "A1PMDDid0253dm3&tm1 0&xp05773 0&yp1457 0&zx1866&lp1990&zl1916&"
       "ip0000&fp0021&th2450&te2450&dv010830&ds1200&ss2500&rv000&ta050&ba00000&lm0&zo005&ll1&lv1&"
-      "de0010&mv00000&mc00&mp000&ms0010&wt00&gi000&gj0gk0zu0000&dj00zr00000&mh0000&po0050&la0&",
+      "de0020&mv00000&mc00&mp000&ms1200&wt00&gi000&gj0gk0zu0000&dj00zr00000&mh0000&po0050&la0&",
       DISPENSE_FORMAT)
 
   async def test_zero_volume_liquid_handling(self):
@@ -318,9 +326,11 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_aspirate96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate96(self.plate, volume=100, jet=True, blow_out=True)
+    hlc = HighVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty
+    await self.lh.aspirate96(self.plate, volume=hlc.compute_corrected_volume(100),
+                             **hlc.make_asp96_kwargs())
     self._assert_command_sent_once(
-      "A1HMDAid0236at0xp05683yp1457th2450te2450lp1990zl1866zx1866ip000fp000av010720as2500ta050"
+      "A1HMDAid0236at0xp05683yp1457th2450te2450lp1990zl1866zx1866ip000fp000av010920as2500ta050"
       "ba004000oa00000lm0ll4de0020wt10mv00000mc00mp000ms2500zu0000zr00000mh000gj0gk0gi000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpo0050",
       {"xp": "int", "yp": "int", "th": "int", "te": "int", "lp": "int", "zl": "int", "zx": "int",
@@ -331,10 +341,13 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate96(self.plate, volume=100, jet=True, blow_out=True)
-    await self.lh.dispense96(self.plate, volume=100, jet=True, blow_out=True)
+    hlc = HighVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty
+    await self.lh.aspirate96(self.plate, volume=hlc.compute_corrected_volume(100),
+                             **hlc.make_asp96_kwargs())
+    await self.lh.dispense96(self.plate, volume=hlc.compute_corrected_volume(100),
+                             jet=True, blow_out=True, **hlc.make_disp96_kwargs())
     self._assert_command_sent_once(
-      "A1HMDDid0238dm1xp05683yp1457th2450te2450lp1990zl1966zx1866ip000fp029dv010720ds4000ta050"
+      "A1HMDDid0238dm1xp05683yp1457th2450te2450lp1990zl1966zx1866ip000fp029dv10920ds4000ta050"
       "ba004000lm0ll4de0010wt00mv00000mc00mp000ms0010ss2500rv000zu0000dj00zr00000mh000gj0gk0gi000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpo0050",
       {"xp": "int", "yp": "int", "th": "int", "te": "int", "lp": "int", "zl": "int", "zx": "int",

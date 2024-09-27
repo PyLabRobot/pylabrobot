@@ -2007,11 +2007,11 @@ class STAR(HamiltonLiquidHandler):
     if transport_air_volume is None:
       transport_air_volume = 0
     if aspiration.blow_out_air_volume is None:
-      blow_out_air_volume = 0
+      blow_out_air_volume = 0.0
     else:
       blow_out_air_volume = aspiration.blow_out_air_volume
     if aspiration.flow_rate is None:
-      flow_rate = 250
+      flow_rate = 250.0
     else:
       flow_rate = aspiration.flow_rate
     if swap_speed is None:
@@ -2157,11 +2157,11 @@ class STAR(HamiltonLiquidHandler):
     if transport_air_volume is None:
       transport_air_volume = 0
     if dispense.blow_out_air_volume is None:
-      blow_out_air_volume = 0
+      blow_out_air_volume = 0.0
     else:
       blow_out_air_volume = dispense.blow_out_air_volume
     if dispense.flow_rate is None:
-      flow_rate = 120
+      flow_rate = 120.0
     else:
       flow_rate = dispense.flow_rate
     if swap_speed is None:

@@ -146,7 +146,7 @@ class HamiltonLiquidClass:
       "swap_speed": self.aspiration_swap_speed,
       "settling_time": self.aspiration_settling_time,
     }
-  
+
   def make_disp96_kwargs(self) -> Dict[str, Any]:
     return {
       "flow_rate": self.dispense_flow_rate,
