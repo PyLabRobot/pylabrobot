@@ -38,8 +38,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Move `LiquidHandlerChatterboxBackend` from `liquid_handling.backends.chatterbox_backend` to `liquid_handling.backends.chatterbox` (https://github.com/PyLabRobot/pylabrobot/pull/242)
 - Changed `pedestal_size_z=-5` to `pedestal_size_z=-4.74` for `PLT_CAR_L5AC_A00` (https://github.com/PyLabRobot/pylabrobot/pull/255)
 - rename `homogenization_` parameters in `STAR` to `mix_` (https://github.com/PyLabRobot/pylabrobot/pull/261)
-- Hamilton liquid classes are no longer automatically inferred on the backends (`STAR`/`Vantage`). Instead, they create kwargs with `make_(asp|disp)(96)?_kwargs` (https://github.com/PyLabRobot/pylabrobot/pull/248)
-  - This also applies to volume correction curves, which are now the users' responsibility.
 
 ### Added
 
