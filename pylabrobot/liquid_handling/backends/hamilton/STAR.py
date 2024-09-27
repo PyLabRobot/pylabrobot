@@ -4672,7 +4672,7 @@ class STAR(HamiltonLiquidHandler):
   async def request_y_pos_channel_n(
     self,
     pipetting_channel_index: int
-  ):
+  ) -> float:
     """ Request Y-Position of Pipetting channel n
 
     Args:
@@ -4700,7 +4700,7 @@ class STAR(HamiltonLiquidHandler):
   async def request_z_pos_channel_n(
     self,
     pipetting_channel_index: int
-  ):
+  ) -> float:
     """ Request Z-Position of Pipetting channel n
 
     Args:
@@ -7063,7 +7063,7 @@ class STAR(HamiltonLiquidHandler):
       fitting_depth_of_all_standard_channel_tips = 8 # mm
       unknown_offset_for_all_tips = 0.4 # mm
 
-      # Request z-coordinate of channel+tip bottom 
+      # Request z-coordinate of channel+tip bottom
       tip_bottom_z_coordinate = await self.request_z_pos_channel_n(
         pipetting_channel_index=channel_idx
         )
@@ -7085,7 +7085,7 @@ class STAR(HamiltonLiquidHandler):
   async def ztouch_probe_z_height_using_channel(
     self,
     channel_idx: int, # 0-based indexing of channels!
-    tip_len: float, # mm
+    tip_len: Optional[float] = None, # mm
     lowest_immers_pos: float = 99.98, # mm
     start_pos_search: float = 330.0, # mm
     channel_speed: float = 10.0, # mm/sec
@@ -7119,10 +7119,11 @@ class STAR(HamiltonLiquidHandler):
     """
     z_drive_mm_per_increment = 0.01072765  # mm per increment
     fitting_depth = 8 # mm, for 10, 50, 300, 1000 ul Hamilton tips
-    tip_len_used_in_increments = (tip_len - fitting_depth) / z_drive_mm_per_increment
 
-    # TODO: check whether tip_len can be called directly from STAR backend here,
-    # i.e enable removal of tip_len attribute this way
+    if not tip_len:
+      tip_len = await self.request_tip_len_on_channel(channel_idx=channel_idx)
+
+    tip_len_used_in_increments = (tip_len - fitting_depth) / z_drive_mm_per_increment
 
     def mm_to_increment(value_mm: float) -> int:
       return round(value_mm / z_drive_mm_per_increment)
