@@ -1200,7 +1200,7 @@ class Vantage(HamiltonLiquidHandler):
     """ Pick up a resource with the IPG. You probably want to use :meth:`move_resource`, which
     allows you to pick up and move a resource with a single command. """
 
-    center = resource.get_absolute_location() + resource.center() + offset
+    center = resource.get_absolute_location(x="c", y="c", z="b") + offset
     grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
     plate_width = resource.get_absolute_size_x()
 
