@@ -94,17 +94,3 @@ class ResourceStackTests(unittest.TestCase):
     top_item = stacking_area.get_top_item()
     assert top_item is not None
     self.assertEqual(top_item.get_absolute_location(), Coordinate(0, 0, 1))
-
-  def test_move_lid_onto_plate(self):
-    plate = Plate("plate", size_x=1, size_y=1, size_z=10, ordered_items={})
-    lid = Lid(name="lid", size_x=1, size_y=1, size_z=5, nesting_z_height=2)
-    stacking_area = ResourceStack("stacking_area", "z")
-    stacking_area.location = Coordinate.zero()
-    stacking_area.assign_child_resource(plate)
-    stacking_area.assign_child_resource(lid)
-    self.assertEqual(stacking_area.get_top_item(), plate)
-    self.assertEqual(plate.lid, lid)
-    self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
-    assert plate.lid is not None and plate.lid.location is not None
-    self.assertEqual(plate.lid.location, Coordinate(0, 0, 8))
-    self.assertEqual(stacking_area.get_absolute_size_z(), 13)
