@@ -104,6 +104,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - assigning rotated resources to `PlateReader` now have the correct location (https://github.com/PyLabRobot/pylabrobot/pull/233)
 - use local sizes in computing anchor (https://github.com/PyLabRobot/pylabrobot/pull/233)
 - don't raise a blow out air volume error when requesting 0, or when volume tracking is disabled (https://github.com/PyLabRobot/pylabrobot/pull/262)
+- fix get_child_location for resources rotated by 180 degrees (https://github.com/PyLabRobot/pylabrobot/pull/269)
 
 ### Removed
 
