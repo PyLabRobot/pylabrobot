@@ -8,7 +8,7 @@ See the installation instructions [here](docs/installation.md). For contributing
 
 If this is your first time contributing to open source, check out [How to Open Source](./docs/how-to-open-source.md) for an easy introduction.
 
-It's highly appreciated by the PyLabRobot developers if you communicate what you want to work on, to minimize any duplicate work. You can do this on the [forum](https://forums.pylabrobot.org/c/pylabrobot-development/23).
+It's highly appreciated by the PyLabRobot developers if you communicate what you want to work on, to minimize any duplicate work. You can do this on the [forum](https://discuss.pylabrobot.org).
 
 ## Development Tips
 
@@ -71,4 +71,4 @@ Backends are the primary objects used to communicate with hardware. If you want 
 
 ## Support
 
-If you have any questions, feel free to reach out using the [PyLabRobot forum](https://forums.pylabrobot.org).
+If you have any questions, feel free to reach out using the [PyLabRobot forum](https://discuss.pylabrobot.org).

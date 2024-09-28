@@ -304,7 +304,7 @@ def DiTi_500ul_SBS_MCA96_tip() -> TecanTip:
 def DiTi_Nested_Waste_MCA384_tip() -> TecanTip:
   """ Tip for DiTi_Nested_Waste_MCA384 """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=0.0,
@@ -326,7 +326,7 @@ def DiTi_1000ul_SBS_LiHa_tip() -> TecanTip:
 def DiTi_200ul_SBS_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_200ul_SBS_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.0,
@@ -338,7 +338,7 @@ def DiTi_200ul_SBS_LiHa_tip() -> TecanTip:
 def DiTi_50ul_SBS_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_50ul_SBS_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.3,
@@ -450,7 +450,7 @@ def DiTi_1000ul_LiHa_tip() -> TecanTip:
 def DiTi_10ul_Filter_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_10ul_Filter_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-31.3,
@@ -462,7 +462,7 @@ def DiTi_10ul_Filter_LiHa_tip() -> TecanTip:
 def DiTi_10ul_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_10ul_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-31.3,
@@ -474,7 +474,7 @@ def DiTi_10ul_LiHa_tip() -> TecanTip:
 def DiTi_200ul_Filter_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_200ul_Filter_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.0,
@@ -486,7 +486,7 @@ def DiTi_200ul_Filter_LiHa_tip() -> TecanTip:
 def DiTi_200ul_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_200ul_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.0,
@@ -498,7 +498,7 @@ def DiTi_200ul_LiHa_tip() -> TecanTip:
 def DiTi_50ul_Filter_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_50ul_Filter_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.3,
@@ -510,7 +510,7 @@ def DiTi_50ul_Filter_LiHa_tip() -> TecanTip:
 def DiTi_50ul_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_50ul_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.3,
@@ -522,7 +522,7 @@ def DiTi_50ul_LiHa_tip() -> TecanTip:
 def DiTi_350ul_Nested_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_350ul_Nested_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.0,
@@ -534,7 +534,7 @@ def DiTi_350ul_Nested_LiHa_tip() -> TecanTip:
 def DiTi_10ul_Filter_LiHa_L_tip() -> TecanTip:
   """ Tip for DiTi_10ul_Filter_LiHa_L """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-28.1,
@@ -546,7 +546,7 @@ def DiTi_10ul_Filter_LiHa_L_tip() -> TecanTip:
 def DiTi_10ul_Filter_Nested_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_10ul_Filter_Nested_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-28.1,
@@ -558,7 +558,7 @@ def DiTi_10ul_Filter_Nested_LiHa_tip() -> TecanTip:
 def DiTi_10ul_LiHa_L_tip() -> TecanTip:
   """ Tip for DiTi_10ul_LiHa_L """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-28.1,
@@ -570,7 +570,7 @@ def DiTi_10ul_LiHa_L_tip() -> TecanTip:
 def DiTi_10ul_Nested_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_10ul_Nested_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-28.1,
@@ -582,7 +582,7 @@ def DiTi_10ul_Nested_LiHa_tip() -> TecanTip:
 def DiTi_10ul_SBS_Filter_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_10ul_SBS_Filter_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-28.1,
@@ -594,7 +594,7 @@ def DiTi_10ul_SBS_Filter_LiHa_tip() -> TecanTip:
 def DiTi_10ul_SBS_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_10ul_SBS_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-28.1,
@@ -636,7 +636,7 @@ def DiTi_1000ul_CL_LiHa_tip() -> TecanTip:
 def DiTi_200ul_CL_Filter_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_200ul_CL_Filter_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.0,
@@ -648,7 +648,7 @@ def DiTi_200ul_CL_Filter_LiHa_tip() -> TecanTip:
 def DiTi_200ul_CL_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_200ul_CL_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.0,
@@ -660,7 +660,7 @@ def DiTi_200ul_CL_LiHa_tip() -> TecanTip:
 def DiTi_50ul_CL_Filter_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_50ul_CL_Filter_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.3,
@@ -672,7 +672,7 @@ def DiTi_50ul_CL_Filter_LiHa_tip() -> TecanTip:
 def DiTi_50ul_CL_LiHa_tip() -> TecanTip:
   """ Tip for DiTi_50ul_CL_LiHa """
   print("WARNING: total_tip_length <= 0.")
-  print("Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23")
+  print("Please get in touch at https://discuss.pylabrobot.org")
   return TecanTip(
     has_filter=False,
     total_tip_length=-5.3,
