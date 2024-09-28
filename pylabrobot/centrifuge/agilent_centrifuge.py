@@ -22,7 +22,7 @@ class AgilentCentrifuge(CentrifugeBackend):
   def __init__(self):
     self.dev: Optional[Device] = None
     self.homing_position = 0
-    self.status = 0
+    self.status = "0"
     self.current_bucket = 1
 
   async def setup(self):
