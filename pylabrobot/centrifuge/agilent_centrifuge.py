@@ -302,8 +302,6 @@ class AgilentCentrifuge(CentrifugeBackend):
   ) -> None:
     """Start a spin cycle. spin spin spin spin
 
-    At the end of spin, centrifuge lands on bucket 1.
-
     Args:
       g: relative centrifugal force, also known as g-force
       time_seconds: How much time spent actually spinning at the desired g in seconds
