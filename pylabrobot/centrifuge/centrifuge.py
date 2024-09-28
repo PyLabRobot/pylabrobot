@@ -48,8 +48,8 @@ class Centrifuge(Machine):
   async def go_to_bucket2(self) -> None:
     await self.backend.go_to_bucket2()
 
-  async def rotate_distance(self) -> None:
-    await self.backend.rotate_distance()
+  async def rotate_distance(self, distance) -> None:
+    await self.backend.rotate_distance(distance = distance)
 
   async def start_spin_cycle(
     self,
