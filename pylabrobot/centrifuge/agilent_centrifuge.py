@@ -23,13 +23,15 @@ class AgilentCentrifuge(CentrifugeBackend):
   """A centrifuge backend for the Agilent Centrifuge.
   Note that this is not a complete implementation. """
 
-  def __init__(self):
+  def __init__(self, bucket_1_position: int):
+    # TODO: is bucket_1_position really not the same for every centrifuge?
+    # if so, TODO: explain how to get this position (just use an arbitrary value at first to
+    # initialize, move to the bucket, and call get_position())
     if not USE_FTDI:
       raise RuntimeError("pylibftdi is not installed.")
     self.dev = Device()
+    self.bucket_1_position = bucket_1_position
     self.homing_position = 0
-    self.status = "0"
-    self.current_bucket = 1
 
   async def setup(self):
     self.dev = Device()
@@ -120,8 +122,8 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x01\x0b\x0c")
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
-    new_postiion = (self.homing_position + 8000).to_bytes(4, byteorder="little")
-    await self.send(b"\xaa\x01\xd4\x97" + new_postiion + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
+    new_position = (self.homing_position + 8000).to_bytes(4, byteorder="little")
+    await self.send(b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
 
@@ -151,8 +153,6 @@ class AgilentCentrifuge(CentrifugeBackend):
     resp = await self.send(b"\xaa\x01\x0e\x0f")
     if len(resp) == 0:
       raise IOError("Empty status from centrifuge")
-    s = [f"{byte:02x}" for byte in resp]
-    self.status = str(s[0])
     return resp
 
   async def get_position(self):
@@ -251,30 +251,36 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x02\x0e\x10")
 
   async def go_to_bucket1(self):
-    await self.rotate_distance(4000)
+    await self.go_to_position(self.bucket_1_position)
 
   async def go_to_bucket2(self):
-    await self.rotate_distance(4000)
+    half_rotation = 4000
+    await self.go_to_position(self.bucket_1_position + half_rotation)
 
   async def rotate_distance(self, distance):
     await self.get_status()
-    new_position = (await self.get_position() + distance).to_bytes(4, byteorder="little")
-    byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
+    current_position = await self.get_position()
+    await self.go_to_position(current_position + distance)
+
+  async def go_to_position(self, position: int):
+    await self.get_status()
+    position_bytes = position.to_bytes(4, byteorder="little")
+    byte_string = b"\xaa\x01\xd4\x97" + position_bytes + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
 
     move_bucket = [
-  "aa 02 26 00 00 28",
-  "aa 02 0e 10",
-  "aa 01 17 02 1a",
-  "aa 01 0e 0f",
-  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  "aa 01 17 04 1c",
-  "aa 01 17 01 19",
-  "aa 01 0b 0c",
-  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  byte_string
-  ]
+      "aa 02 26 00 00 28",
+      "aa 02 0e 10",
+      "aa 01 17 02 1a",
+      "aa 01 0e 0f",
+      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+      "aa 01 17 04 1c",
+      "aa 01 17 01 19",
+      "aa 01 0b 0c",
+      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+      byte_string
+    ]
     await self.close_door()
     await self.lock_door()
 
@@ -285,8 +291,8 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.open_door()
 
-    self.current_bucket = 1
     await self.get_status()
+
 
   async def start_spin_cycle(
     self,
@@ -347,9 +353,11 @@ class AgilentCentrifuge(CentrifugeBackend):
 
       await self.send_payloads(payloads)
 
-      await self.get_status()
+      status_resp = await self.get_status()
+      s = [f"{byte:02x}" for byte in status_resp]
+      status = str(s[0])
 
-      while self.status == "08":
+      while status == "08":
         await asyncio.sleep(1)
         await self.get_status()
 
@@ -369,4 +377,3 @@ class AgilentCentrifuge(CentrifugeBackend):
 
       await self.send_payloads(payloads)
       await self.get_status()
-      self.current_bucket = 1
