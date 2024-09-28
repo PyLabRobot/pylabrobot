@@ -21,7 +21,7 @@ Thank you for contributing to PyLabRobot!
 
 ## 0. Get in touch
 
-Please make a post on [the PyLabRobot Development forum](https://forums.pylabrobot.org/c/pylabrobot/23) to let us know what you are working on. This will help you avoid duplicating work, and it is also a good place to get support.
+Please make a post on [the PyLabRobot Development forum](https://discuss.pylabrobot.org) to let us know what you are working on. This will help you avoid duplicating work, and it is also a good place to get support.
 
 ## 1. Creating a new module
 
