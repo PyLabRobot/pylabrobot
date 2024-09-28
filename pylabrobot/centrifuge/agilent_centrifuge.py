@@ -210,10 +210,11 @@ class AgilentCentrifuge(CentrifugeBackend):
 
   async def set_configuration_data(self):
     """Set the device configuration data."""
-    self.dev.ftdi_fn.ftdi_set_latency_timer(16)
-    self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0)
-    self.dev.ftdi_fn.ftdi_setflowctrl(0)
-    self.dev.baudrate = 19200
+    if self.dev:
+      self.dev.ftdi_fn.ftdi_set_latency_timer(16)
+      self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0)
+      self.dev.ftdi_fn.ftdi_setflowctrl(0)
+      self.dev.baudrate = 19200
 
   async def initialize(self):
     self.dev.write(b"\x00" * 20)
