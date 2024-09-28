@@ -100,6 +100,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `aspirate96` and `dispense96` type check
 - fix angles computed by grip directions (https://github.com/PyLabRobot/pylabrobot/pull/234)
 - picking up rotated resources in `STAR` (https://github.com/PyLabRobot/pylabrobot/pull/233)
+- picking up rotated resources in `Vantage` (https://github.com/PyLabRobot/pylabrobot/pull/268)
 - assigning rotated resources to `PlateReader` now have the correct location (https://github.com/PyLabRobot/pylabrobot/pull/233)
 - use local sizes in computing anchor (https://github.com/PyLabRobot/pylabrobot/pull/233)
 - don't raise a blow out air volume error when requesting 0, or when volume tracking is disabled (https://github.com/PyLabRobot/pylabrobot/pull/262)
