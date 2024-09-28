@@ -101,8 +101,8 @@ class AgilentCentrifuge(CentrifugeBackend):
     resp = "89"
     while resp == "89":
       await self.send(b"\xaa\x02\x0e\x10")
-      resp = await self.send(b"\xaa\x01\x0e\x0f")
-      resp = f"{resp[0]:02x}"
+      bytes = await self.send(b"\xaa\x01\x0e\x0f")
+      resp = f"{bytes[0]:02x}"
 
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
