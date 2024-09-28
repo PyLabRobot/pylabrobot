@@ -252,8 +252,14 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x02\x0e\x10")
 
   async def go_to_bucket1(self):
+    await self.rotate_distance(4000)
+
+  async def go_to_bucket2(self):
+    await self.rotate_distance(4000)
+
+  async def rotate_distance(self, distance):
     await self.get_status()
-    new_position = (await self.get_position() + 4000).to_bytes(4, byteorder="little")
+    new_position = (await self.get_position() + distance).to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
     byte_string += sum_byte.to_bytes(1, byteorder="little")
@@ -282,39 +288,6 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     self.current_bucket = 1
     await self.get_status()
-
-  async def go_to_bucket2(self):
-    await self.get_status()
-    new_position = (await self.get_position() + 4000).to_bytes(4, byteorder="little")
-    byte_string = b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
-    sum_byte = (sum(byte_string)-0xaa)&0xff
-    byte_string += sum_byte.to_bytes(1, byteorder="little")
-
-    move_bucket = [
-  "aa 02 26 00 00 28",
-  "aa 02 0e 10",
-  "aa 01 17 02 1a",
-  "aa 01 0e 0f",
-  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  "aa 01 17 04 1c",
-  "aa 01 17 01 19",
-  "aa 01 0b 0c",
-  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  byte_string
-  ]
-    await self.close_door()
-    await self.lock_door()
-
-    await self.send_payloads(move_bucket)
-
-    await asyncio.sleep(2)
-
-    await self.send(b"\xaa\x01\x17\x02\x1a")
-    await self.open_door()
-
-    self.current_bucket = 2
-    await self.get_status()
-
   async def start_spin_cycle(
   self,
   g: Optional[float] = 500,
