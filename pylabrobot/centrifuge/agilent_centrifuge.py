@@ -123,9 +123,9 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     resp = "08"
     while resp != "09":
-      resp = await self.send(b"\xaa\x01\x0e\x0f")
+      bytes = await self.send(b"\xaa\x01\x0e\x0f")
       await self.send(b"\xaa\x01\x0e\x0f")
-      resp = f"{resp[0]:02x}"
+      resp = f"{bytes[0]:02x}"
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
 
@@ -147,7 +147,7 @@ class AgilentCentrifuge(CentrifugeBackend):
     if len(resp) == 0:
         raise IOError("Empty status from centrifuge")
     s = [f"{byte:02x}" for byte in resp]
-    self.status = s[0]
+    self.status = str(s[0])
     return resp
 
   async def get_position(self):
