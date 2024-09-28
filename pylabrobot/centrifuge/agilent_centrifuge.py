@@ -1,7 +1,8 @@
-import logging
-from typing import Optional, Union
-import time
 import asyncio
+import logging
+import time
+from typing import Optional, Union
+
 from .backend import CentrifugeBackend
 
 try:
@@ -10,27 +11,30 @@ try:
 except ImportError:
   USE_FTDI = False
 
+
 logger = logging.getLogger("pylabrobot.centrifuge.vspin")
+
 
 class CentrifugeOperationError(Exception):
   """Raised when unsupported user inputs are given"""
+
 
 class AgilentCentrifuge(CentrifugeBackend):
   """A centrifuge backend for the Agilent Centrifuge.
   Note that this is not a complete implementation. """
 
   def __init__(self):
-    self.dev: Optional[Device] = None
+    if not USE_FTDI:
+      raise RuntimeError("pylibftdi is not installed.")
+    self.dev = Device()
     self.homing_position = 0
     self.status = "0"
     self.current_bucket = 1
 
   async def setup(self):
-    if not USE_FTDI:
-      raise RuntimeError("pylibftdi is not installed.")
     self.dev = Device()
     self.dev.open()
-    logger.debug("Open")
+    logger.debug("open")
     # TODO: add functionality where if robot has been intialized before nothing needs to happen
     for _ in range(3):
       await self.configure_and_initialize()
@@ -184,9 +188,6 @@ class AgilentCentrifuge(CentrifugeBackend):
     return data
 
   async def send(self, cmd: Union[bytearray, bytes], read_timeout=0.2) -> bytes:
-    if not self.dev:
-      raise RuntimeError("Device not initialized")
-
     logger.debug("Sending %s", cmd.hex())
     written = self.dev.write(cmd.decode("latin-1"))
     logger.debug("Wrote %s bytes", written)
@@ -204,18 +205,16 @@ class AgilentCentrifuge(CentrifugeBackend):
       else:
         await self.send(tx)
 
-
   async def configure_and_initialize(self):
     await self.set_configuration_data()
     await self.initialize()
 
   async def set_configuration_data(self):
     """Set the device configuration data."""
-    if self.dev:
-      self.dev.ftdi_fn.ftdi_set_latency_timer(16)
-      self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0)
-      self.dev.ftdi_fn.ftdi_setflowctrl(0)
-      self.dev.baudrate = 19200
+    self.dev.ftdi_fn.ftdi_set_latency_timer(16)
+    self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0)
+    self.dev.ftdi_fn.ftdi_setflowctrl(0)
+    self.dev.baudrate = 19200
 
   async def initialize(self):
     if self.dev:
@@ -288,12 +287,13 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     self.current_bucket = 1
     await self.get_status()
+
   async def start_spin_cycle(
-  self,
-  g: Optional[float] = 500,
-  time_seconds: Optional[float] = 60,
-  acceleration: Optional[float] = 80,
- ) -> None:
+    self,
+    g: Optional[float] = 500,
+    time_seconds: Optional[float] = 60,
+    acceleration: Optional[float] = 80,
+  ) -> None:
     """Start a spin cycle. spin spin spin spin
 
     At the end of spin, centrifuge lands on bucket 1.
