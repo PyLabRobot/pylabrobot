@@ -334,65 +334,65 @@ class AgilentCentrifuge(CentrifugeBackend):
 
       >>> cf.start_spin_cycle(g = 1000, time_seconds = 300, acceleration = 100)
     """
-    if acceleration:
+    if g and time_seconds and acceleration:
       if acceleration < 1 or acceleration > 100:
         raise CentrifugeOperationError("Acceleration must be within 1-100.")
-    if g < 1 or g > 1000:
-      raise CentrifugeOperationError("G-force must be within 1-1000")
-    if time_seconds < 1:
-      raise CentrifugeOperationError("Spin time must be at least 1 second")
+      if g < 1 or g > 1000:
+        raise CentrifugeOperationError("G-force must be within 1-1000")
+      if time_seconds < 1:
+        raise CentrifugeOperationError("Spin time must be at least 1 second")
 
-    await self.get_status()
-
-    rpm = int((g/(1.118*(10**(-4))))**0.5)
-    base = int(107007 - 328*rpm + 1.13*(rpm**2))
-    rpm_b = (int(4481*rpm + 10852)).to_bytes(4, byteorder="little")
-    acc = (int(915*acceleration/100)).to_bytes(2, byteorder="little")
-    maxp = min((await self.get_position() + base + 4000*rpm//30*time_seconds), 4294967294)
-    position = maxp.to_bytes(4, byteorder="little")
-
-    byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc+b"\x00\x00"
-    last_byte = (sum(byte_string)-0xaa)&0xff
-    byte_string += last_byte.to_bytes(1, byteorder="little")
-
-    payloads = [
-"aa 02 26 00 00 28",
-"aa 02 0e 10",
-"aa 01 17 02 1a",
-"aa 01 0e 0f",
-"aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-"aa 01 17 04 1c",
-"aa 01 17 01 19",
-"aa 01 0b 0c",
-"aa 01 0e 0f",
-"aa 01 e6 05 00 64 00 00 00 00 00 fd 00 80 3e 01 00 0c",
-byte_string,
-]
-    await self.close_door()
-    await self.lock_door()
-
-    await self.send_payloads(payloads)
-
-    await self.get_status()
-
-    while self.status == "08":
-      await asyncio.sleep(1)
       await self.get_status()
 
-    await asyncio.sleep(2)
+      rpm = int((g/(1.118*(10**(-4))))**0.5)
+      base = int(107007 - 328*rpm + 1.13*(rpm**2))
+      rpm_b = (int(4481*rpm + 10852)).to_bytes(4, byteorder="little")
+      acc = (int(915*acceleration/100)).to_bytes(2, byteorder="little")
+      maxp = min((await self.get_position() + base + 4000*rpm//30*time_seconds), 4294967294)
+      position = maxp.to_bytes(4, byteorder="little")
 
-    # reset position back to 0ish
-    payloads = [
-      "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-      "aa 01 17 04 1c",
-      "aa 01 17 01 19",
-      "aa 01 0b 0c",
-      "aa 01 00 01",
-      "aa 01 e6 05 00 64 00 00 00 00 00 32 00 e8 03 01 00 6e",
-      "aa 01 94 b6 12 83 00 00 12 01 00 00 f3",
-      "aa 01 19 28 42"
-    ]
+      byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc+b"\x00\x00"
+      last_byte = (sum(byte_string)-0xaa)&0xff
+      byte_string += last_byte.to_bytes(1, byteorder="little")
 
-    await self.send_payloads(payloads)
-    await self.get_status()
-    self.current_bucket = 1
+      payloads = [
+  "aa 02 26 00 00 28",
+  "aa 02 0e 10",
+  "aa 01 17 02 1a",
+  "aa 01 0e 0f",
+  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+  "aa 01 17 04 1c",
+  "aa 01 17 01 19",
+  "aa 01 0b 0c",
+  "aa 01 0e 0f",
+  "aa 01 e6 05 00 64 00 00 00 00 00 fd 00 80 3e 01 00 0c",
+  byte_string,
+  ]
+      await self.close_door()
+      await self.lock_door()
+
+      await self.send_payloads(payloads)
+
+      await self.get_status()
+
+      while self.status == "08":
+        await asyncio.sleep(1)
+        await self.get_status()
+
+      await asyncio.sleep(2)
+
+      # reset position back to 0ish
+      payloads = [
+        "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+        "aa 01 17 04 1c",
+        "aa 01 17 01 19",
+        "aa 01 0b 0c",
+        "aa 01 00 01",
+        "aa 01 e6 05 00 64 00 00 00 00 00 32 00 e8 03 01 00 6e",
+        "aa 01 94 b6 12 83 00 00 12 01 00 00 f3",
+        "aa 01 19 28 42"
+      ]
+
+      await self.send_payloads(payloads)
+      await self.get_status()
+      self.current_bucket = 1
