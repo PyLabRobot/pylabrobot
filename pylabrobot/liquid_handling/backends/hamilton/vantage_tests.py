@@ -115,7 +115,7 @@ class VantageCommandCatcher(Vantage):
     super().__init__()
     self.commands = []
 
-  async def setup(self) -> None:
+  async def setup(self) -> None:  # type: ignore
     self.setup_finished = True
     self._num_channels = 8
     self.iswap_installed = True

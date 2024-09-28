@@ -62,7 +62,7 @@ We also provide a browser-based Visualizer which can visualize the state of the 
 
 ### Plate readers ([docs](https://docs.pylabrobot.org/plate_reading.html))
 
-PyLabRobot also provides a layer of general-purpose abstractions for plate readers, currently with just a driver for the ClarioStar. This driver works on Windows, macOS and Linux. Here's a quick example showing how to read a plate using the ClarioStar:
+Moving a plate to a ClarioStar using a liquid handler, and reading luminescence:
 
 ```python
 from pylabrobot.plate_reading import PlateReader, ClarioStar
@@ -77,9 +77,11 @@ lh.move_plate(lh.deck.get_resource("plate"), pr)
 data = await pr.read_luminescence()
 ```
 
+For Cytation5, use the `Cytation5` backend.
+
 ### Centrifuges
 
-Here is a quick example of centrifugation at 800 g-force for 60 seconds:
+Centrifugation at 800g for 60 seconds:
 
 ```python
 from pylabrobot.centrifuge import Centrifuge, AgilentCentrifuge

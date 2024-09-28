@@ -377,11 +377,9 @@ class Vantage(HamiltonLiquidHandler):
     """ Parse a firmware response. """
     return parse_vantage_fw_string(resp, fmt)
 
-  async def setup(self):
-    """ setup
-
-    Creates a USB connection and finds read/write interfaces.
-    """
+  async def setup(
+    self, skip_loading_cover: bool = False, skip_core96: bool = False, skip_ipg: bool = False):
+    """ Creates a USB connection and finds read/write interfaces. """
 
     await super().setup()
 
@@ -408,11 +406,11 @@ class Vantage(HamiltonLiquidHandler):
       )
 
     loading_cover_initialized = await self.loading_cover_request_initialization_status()
-    if not loading_cover_initialized:
+    if not loading_cover_initialized and not skip_loading_cover:
       await self.loading_cover_initialize()
 
     core96_initialized = await self.core96_request_initialization_status()
-    if not core96_initialized:
+    if not core96_initialized and not skip_core96:
       await self.core96_initialize(
         x_position=7347, # TODO: get trash location from deck.
         y_position=2684, # TODO: get trash location from deck.
@@ -421,11 +419,12 @@ class Vantage(HamiltonLiquidHandler):
         end_z_deposit_position=2420,
       )
 
-    ipg_initialized = await self.ipg_request_initialization_status()
-    if not ipg_initialized:
-      await self.ipg_initialize()
-    if not await self.ipg_get_parking_status():
-      await self.ipg_park()
+    if not skip_ipg:
+      ipg_initialized = await self.ipg_request_initialization_status()
+      if not ipg_initialized:
+        await self.ipg_initialize()
+      if not await self.ipg_get_parking_status():
+        await self.ipg_park()
 
   @property
   def num_channels(self) -> int:
