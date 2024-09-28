@@ -217,11 +217,12 @@ class AgilentCentrifuge(CentrifugeBackend):
       self.dev.baudrate = 19200
 
   async def initialize(self):
-    self.dev.write(b"\x00" * 20)
-    for i in range(33):
-      packet = b"\xaa" + bytes([i & 0xFF, 0x0e, 0x0e + (i & 0xFF)]) + b"\x00" * 8
-      self.dev.write(packet)
-    await self.send(b"\xaa\xff\x0f\x0e")
+    if self.dev:
+      self.dev.write(b"\x00" * 20)
+      for i in range(33):
+        packet = b"\xaa" + bytes([i & 0xFF, 0x0e, 0x0e + (i & 0xFF)]) + b"\x00" * 8
+        self.dev.write(packet)
+      await self.send(b"\xaa\xff\x0f\x0e")
 
 # Centrifuge operations
 
@@ -333,9 +334,9 @@ class AgilentCentrifuge(CentrifugeBackend):
 
       >>> cf.start_spin_cycle(g = 1000, time_seconds = 300, acceleration = 100)
     """
-
-    if acceleration < 1 or acceleration > 100:
-      raise CentrifugeOperationError("Acceleration must be within 1-100.")
+    if acceleration:
+      if acceleration < 1 or acceleration > 100:
+        raise CentrifugeOperationError("Acceleration must be within 1-100.")
     if g < 1 or g > 1000:
       raise CentrifugeOperationError("G-force must be within 1-1000")
     if time_seconds < 1:
