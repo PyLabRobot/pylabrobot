@@ -1,10 +1,10 @@
 import logging
 from typing import List, Optional
 
-from pylabrobot.resources.resource_holder import ResourceHolderMixin, get_child_location
+from pylabrobot.resources.resource_holder import ResourceHolderMixin
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.plate import Lid, Plate
+from pylabrobot.resources.plate import Plate
 
 logger = logging.getLogger("pylabrobot")
 
@@ -113,30 +113,6 @@ class ResourceStack(ResourceHolderMixin, Resource):
 
   def get_default_child_location(self, resource: Resource) -> Coordinate:
     return super().get_default_child_location(resource) + self.get_resource_stack_edge()
-
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
-    reassign: bool = False):
-
-    # special handling for putting a lid on a plate
-    # TODO #247 - Remove special case assignment of a lid to a resource stack
-    if len(self.children) > 0:
-      top_item = self.get_top_item()
-      if isinstance(resource, Lid) and isinstance(top_item, Plate):
-        logger.warning("Assigning a lid to a resource stack is deprecated and will be "
-                       "removed in a future version. Assign the lid to the plate directly instead.")
-        resource_location = self.get_resource_stack_edge()
-        resource_location.z -= resource.nesting_z_height
-        top_item.assign_child_resource(
-          resource,
-          location=get_child_location(resource) + resource_location
-        )
-        return
-
-    super().assign_child_resource(
-      resource,
-      location=location,
-      reassign=reassign
-    )
 
   def unassign_child_resource(self, resource: Resource):
     if self.direction == "z" and resource != self.children[-1]: # no floating resources
