@@ -41,3 +41,6 @@ class Rotation:
   @staticmethod
   def deserialize(data) -> "Rotation":
     return Rotation(data["x"], data["y"], data["z"])
+
+  def __repr__(self) -> str:
+    return self.__str__()
