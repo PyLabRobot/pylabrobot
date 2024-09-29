@@ -74,11 +74,32 @@ class Plate(ResourceHolderMixin, ItemizedResource[Well]):
 
     super().__init__(name, size_x, size_y, size_z, ordered_items=ordered_items, ordering=ordering,
                      category=category, model=model)
-    self.lid: Optional[Lid] = None
+    self._lid: Optional[Lid] = None
     self.plate_type = plate_type
 
     if lid is not None:
       self.assign_child_resource(lid)
+
+  @property
+  def lid(self) -> Optional[Lid]:
+    return self._lid
+
+  @lid.setter
+  def lid(self, lid: Optional[Lid]) -> None:
+    if lid is None:
+      self.unassign_child_resource(self._lid)
+    else:
+      self.assign_child_resource(lid)
+    self._lid = lid
+
+  def _get_lid_location(self, lid: Lid) -> Coordinate:
+    return Coordinate(0, 0, self.get_size_z() - lid.nesting_z_height)
+
+  def get_default_child_location(self, resource: Resource) -> Coordinate:
+    child_location = super().get_default_child_location(resource)
+    if isinstance(resource, Lid):
+      child_location += self._get_lid_location(resource)
+    return child_location
 
   def assign_child_resource(
     self,
@@ -89,15 +110,14 @@ class Plate(ResourceHolderMixin, ItemizedResource[Well]):
     if isinstance(resource, Lid):
       if self.has_lid():
         raise ValueError(f"Plate '{self.name}' already has a lid.")
-      self.lid = resource
-      location = location or Coordinate(0, 0, self.get_size_z() - self.lid.nesting_z_height)
+      self._lid = resource
     else:
       assert location is not None, "Location must be specified for if resource is not a lid."
     return super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def unassign_child_resource(self, resource):
-    if isinstance(resource, Lid) and self.has_lid():
-      self.lid = None
+    if isinstance(resource, Lid) and resource == self.lid:
+      self._lid = None
     return super().unassign_child_resource(resource)
 
   def __repr__(self) -> str:
