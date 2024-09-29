@@ -290,6 +290,34 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         plate.unassign()
         self.deck.unassign_child_resource(site)
 
+  async def test_move_lid_rotation(self):
+    rotations = [0, 90, 270, 360]
+    grip_directions = [
+      (GripDirection.LEFT, GripDirection.RIGHT),
+      (GripDirection.FRONT, GripDirection.BACK),
+    ]
+
+    test_cases = itertools.product(rotations, grip_directions)
+
+    plate = Plate("plate", size_x=200, size_y=100, size_z=15, ordered_items={})
+    lid = Lid(name="lid", size_x=plate.get_absolute_size_x(), size_y=plate.get_absolute_size_y(),
+      size_z=10, nesting_z_height=4)
+    self.deck.assign_child_resource(plate, location=Coordinate(100, 100, 0))
+    for rot, (get_direction, put_direction) in test_cases:
+      with self.subTest(rotation=rot, get_direction=get_direction, put_direction=put_direction):
+        plate.rotate(z=rot)
+        plate.assign_child_resource(lid)
+        original_center = lid.get_absolute_location(x="c", y="c", z="c")
+        await self.lh.move_lid(lid, plate, get_direction=get_direction, put_direction=put_direction)
+        new_center = lid.get_absolute_location(x="c", y="c", z="c")
+        self.assertEqual(new_center, original_center,
+                         f"Center mismatch for rotation {rot}, get_direction {get_direction}, "
+                         f"put_direction {put_direction}")
+        lid.unassign()
+        # reset rotations
+        plate.rotation.z = 0
+        lid.rotation.z = 0
+
   def test_serialize(self):
     serialized = self.lh.serialize()
     deserialized = LiquidHandler.deserialize(serialized)
