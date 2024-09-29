@@ -257,8 +257,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
   async def test_move_plate_rotation(self):
     rotations = [0, 90, 270, 360]
     grip_directions = [
-        (GripDirection.LEFT, GripDirection.RIGHT),
-        (GripDirection.FRONT, GripDirection.BACK),
+      (GripDirection.LEFT, GripDirection.RIGHT),
+      (GripDirection.FRONT, GripDirection.BACK),
     ]
     sites: List[Union[ResourceStack, PlateCarrierSite]] = [
       ResourceStack(name="stack", direction="z"),
@@ -272,7 +272,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
                         get_direction=get_direction, put_direction=put_direction):
         self.deck.assign_child_resource(site, location=Coordinate(100, 100, 0))
 
-        plate = Plate("plate", size_x=100, size_y=100, size_z=15,
+        plate = Plate("plate", size_x=200, size_y=100, size_z=15,
                       ordered_items=create_ordered_items_2d(
                         Well, num_items_x=1, num_items_y=1, dx=0, dy=0, dz=0,
                         item_dx=10, item_dy=10, size_x=10, size_y=10, size_z=10))
