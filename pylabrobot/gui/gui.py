@@ -10,7 +10,7 @@ from pylabrobot.resources import Resource, STARDeck, STARLetDeck, OTDeck, Deck
 
 print("!" * 80)
 print("I am not sure if the GUI still works. If you are interested in using this, please get in "
-      "touch on forums.pylabrobot.org")
+      "touch on discuss.pylabrobot.org")
 print("!" * 80)
 
 app = Flask(__name__, template_folder=".", static_folder=".")
