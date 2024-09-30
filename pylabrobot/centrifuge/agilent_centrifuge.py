@@ -230,10 +230,14 @@ class AgilentCentrifuge(CentrifugeBackend):
   async def open_door(self):
     await self.send(b"\xaa\x02\x26\x00\x07\x2f")
     await self.send(b"\xaa\x02\x0e\x10")
+    # we can't tell when the door is fully open, so we just wait a bit
+    await asyncio.sleep(4)
 
   async def close_door(self):
     await self.send(b"\xaa\x02\x26\x00\x05\x2d")
     await self.send(b"\xaa\x02\x0e\x10")
+    # we can't tell when the door is fully closed, so we just wait a bit
+    await asyncio.sleep(2)
 
   async def lock_door(self):
     await self.send(b"\xaa\x02\x26\x00\x01\x29")
