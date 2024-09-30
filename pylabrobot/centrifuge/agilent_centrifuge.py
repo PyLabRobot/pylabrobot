@@ -19,13 +19,18 @@ class AgilentCentrifuge(CentrifugeBackend):
   """ Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation. """
 
-  def __init__(self, bucket_1_position: int):
-    # TODO: is bucket_1_position really not the same for every centrifuge?
-    # if so, TODO: explain how to get this position (just use an arbitrary value at first to
-    # initialize, move to the bucket, and call get_position())
+  def __init__(self, bucket_1_position: int, device_id: Optional[str] = None):
+    """
+    Args:
+      device_id: The libftdi id for the centrifuge. Find using
+        `python3 -m pylibftdi.examples.list_devices`
+      bucket_1_position: The position of bucket 1 in the centrifuge. At first run, intialize with
+        an arbitrary value, move to the bucket, and call get_position() to get the position. Then
+        use this value for future runs.
+    """
     if not USE_FTDI:
       raise RuntimeError("pylibftdi is not installed.")
-    self.dev = Device()
+    self.dev = Device(lazy_open=True, device_id=device_id)
     self.bucket_1_position = bucket_1_position
     self.homing_position = 0
 
