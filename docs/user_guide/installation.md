@@ -163,4 +163,4 @@ If you ever wish to switch back from firmware command to use `pyhamilton` or pla
 
 If you get a `usb.core.NoBackendError: No backend available` error: [this](https://github.com/pyusb/pyusb/blob/master/docs/faq.rst#how-do-i-fix-no-backend-available-errors) may be helpful.
 
-If you are still having trouble, please reach out on the [forum](https://forums.pylabrobot.org/c/pylabrobot-user-discussion/26).
+If you are still having trouble, please reach out on [discuss.pylabrobot.org](https://discuss.pylabrobot.org).

@@ -221,7 +221,7 @@ def main(pc, tc, p, tr, tcr):
             # print a warning, because this parameter is confusing in the file and I don't have
             # have a device to test this on. tbc.
             tcr.write("  print(\"WARNING: total_tip_length <= 0.\")\n")
-            tcr.write("  print(\"Please get in touch at https://forums.pylabrobot.org/c/pylabrobot/23\")\n")
+            tcr.write("  print(\"Please get in touch at https://discuss.pylabrobot.org\")\n")
           tcr.write(f'  return TecanTip(\n')
           tcr.write(f'    has_filter={has_filter},\n')
           tcr.write(f'    total_tip_length={total_tip_length},\n')

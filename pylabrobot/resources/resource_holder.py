@@ -15,7 +15,7 @@ def get_child_location(resource: Resource) -> Coordinate:
   location = {
     0.0: Coordinate(x=0, y=0, z=0),
     90.0: Coordinate(x=resource.get_size_y(), y=0, z=0),
-    180.0: Coordinate(x=resource.get_size_y(), y=resource.get_size_x(), z=0),
+    180.0: Coordinate(x=resource.get_size_x(), y=resource.get_size_y(), z=0),
     270.0: Coordinate(x=0, y=resource.get_size_x(), z=0),
   }[resource.rotation.z % 360]
   return location
