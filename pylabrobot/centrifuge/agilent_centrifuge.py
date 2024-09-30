@@ -105,11 +105,11 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x01\x19\x28\x42")
     await self.send(b"\xaa\x01\x0e\x0f")
 
-    resp = "89"
-    while resp == "89":
+    resp = 0x89
+    while resp == 0x89:
       await self.send(b"\xaa\x02\x0e\x10")
       stat = await self.send(b"\xaa\x01\x0e\x0f")
-      resp = f"{stat[0]:02x}"
+      resp = stat[0]
 
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
@@ -128,11 +128,11 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
 
-    resp = "08"
-    while resp != "09":
+    resp = 0x08
+    while resp != 0x09:
       stat = await self.send(b"\xaa\x01\x0e\x0f")
       await self.send(b"\xaa\x01\x0e\x0f")
-      resp = f"{stat[0]:02x}"
+      resp = stat[0]
 
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
