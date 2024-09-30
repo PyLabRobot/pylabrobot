@@ -158,7 +158,7 @@ class AgilentCentrifuge(CentrifugeBackend):
 
   async def get_position(self):
     resp = await self.get_status()
-    return int.from_bytes(bytes.fromhex("".join(resp[1:5])), byteorder="little")
+    return int.from_bytes(resp[1:5], byteorder="little")
 
 # Centrifuge communication: read_resp, send, send_payloads
 
@@ -294,7 +294,6 @@ class AgilentCentrifuge(CentrifugeBackend):
 
     await self.get_status()
 
-
   async def start_spin_cycle(
     self,
     g: Optional[float] = 500,
@@ -335,30 +334,30 @@ class AgilentCentrifuge(CentrifugeBackend):
       byte_string += last_byte.to_bytes(1, byteorder="little")
 
       payloads = [
-  "aa 02 26 00 00 28",
-  "aa 02 0e 10",
-  "aa 01 17 02 1a",
-  "aa 01 0e 0f",
-  "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-  "aa 01 17 04 1c",
-  "aa 01 17 01 19",
-  "aa 01 0b 0c",
-  "aa 01 0e 0f",
-  "aa 01 e6 05 00 64 00 00 00 00 00 fd 00 80 3e 01 00 0c",
-  byte_string,
-  ]
+        "aa 02 26 00 00 28",
+        "aa 02 0e 10",
+        "aa 01 17 02 1a",
+        "aa 01 0e 0f",
+        "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
+        "aa 01 17 04 1c",
+        "aa 01 17 01 19",
+        "aa 01 0b 0c",
+        "aa 01 0e 0f",
+        "aa 01 e6 05 00 64 00 00 00 00 00 fd 00 80 3e 01 00 0c",
+        byte_string,
+      ]
       await self.close_door()
       await self.lock_door()
 
       await self.send_payloads(payloads)
 
       status_resp = await self.get_status()
-      s = [f"{byte:02x}" for byte in status_resp]
-      status = str(s[0])
+      status = status_resp[0]
 
-      while status == "08":
+      while status == 0x08:
         await asyncio.sleep(1)
-        await self.get_status()
+        status_resp = await self.get_status()
+        status = status_resp[0]
 
       await asyncio.sleep(2)
 
