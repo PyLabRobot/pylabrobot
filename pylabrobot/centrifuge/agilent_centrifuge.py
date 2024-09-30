@@ -322,6 +322,9 @@ class AgilentCentrifuge(CentrifugeBackend):
 
       await self.get_status()
 
+      await self.close_door()
+      await self.lock_door()
+
       rpm = int((g/(1.118*(10**(-4))))**0.5)
       base = int(107007 - 328*rpm + 1.13*(rpm**2))
       rpm_b = (int(4481*rpm + 10852)).to_bytes(4, byteorder="little")
@@ -346,14 +349,10 @@ class AgilentCentrifuge(CentrifugeBackend):
         "aa 01 e6 05 00 64 00 00 00 00 00 fd 00 80 3e 01 00 0c",
         byte_string,
       ]
-      await self.close_door()
-      await self.lock_door()
-
       await self.send_payloads(payloads)
 
       status_resp = await self.get_status()
       status = status_resp[0]
-
       while status == 0x08:
         await asyncio.sleep(1)
         status_resp = await self.get_status()
@@ -362,6 +361,7 @@ class AgilentCentrifuge(CentrifugeBackend):
       await asyncio.sleep(2)
 
       # reset position back to 0ish
+      # this part is needed because otherwise calling go_to_position will not work after
       payloads = [
         "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
         "aa 01 17 04 1c",
