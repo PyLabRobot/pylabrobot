@@ -320,7 +320,7 @@ class AgilentCentrifuge(CentrifugeBackend):
       if time_seconds < 1:
         raise ValueError("Spin time must be at least 1 second")
 
-      await self.get_status()
+      # await self.get_status()
 
       await self.close_door()
       await self.lock_door()
