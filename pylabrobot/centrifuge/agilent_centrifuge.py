@@ -259,12 +259,10 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.go_to_position(self.bucket_1_position + half_rotation)
 
   async def rotate_distance(self, distance):
-    await self.get_status()
     current_position = await self.get_position()
     await self.go_to_position(current_position + distance)
 
   async def go_to_position(self, position: int):
-    await self.get_status()
     position_bytes = position.to_bytes(4, byteorder="little")
     byte_string = b"\xaa\x01\xd4\x97" + position_bytes + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
     sum_byte = (sum(byte_string)-0xaa)&0xff
@@ -292,8 +290,6 @@ class AgilentCentrifuge(CentrifugeBackend):
     await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.open_door()
 
-    await self.get_status()
-
   async def start_spin_cycle(
     self,
     g: Optional[float] = 500,
@@ -319,8 +315,6 @@ class AgilentCentrifuge(CentrifugeBackend):
         raise ValueError("G-force must be within 1-1000")
       if time_seconds < 1:
         raise ValueError("Spin time must be at least 1 second")
-
-      # await self.get_status()
 
       await self.close_door()
       await self.lock_door()
@@ -374,4 +368,3 @@ class AgilentCentrifuge(CentrifugeBackend):
       ]
 
       await self.send_payloads(payloads)
-      await self.get_status()
