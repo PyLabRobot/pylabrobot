@@ -92,7 +92,7 @@ from pylabrobot.centrifuge import Centrifuge, AgilentCentrifuge
 cf = Centrifuge(name = 'centrifuge', backend = AgilentCentrifuge(), size_x= 1, size_y=1, size_z=1)
 await cf.setup()
 
-await cf.start_spin_cycle(g = 800, time_seconds = 60)
+await cf.start_spin_cycle(g = 800, duration = 60)
 ```
 
 ### Pumps ([docs](https://docs.pylabrobot.org/pumps.html))

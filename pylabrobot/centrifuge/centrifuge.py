@@ -51,14 +51,9 @@ class Centrifuge(Machine):
   async def rotate_distance(self, distance) -> None:
     await self.backend.rotate_distance(distance = distance)
 
-  async def start_spin_cycle(
-    self,
-    g: Optional[float] = None,
-    time_seconds: Optional[float] = None,
-    acceleration: Optional[float] = None,
-    ) -> None:
+  async def start_spin_cycle(self, g: float, duration: float, acceleration: float) -> None:
     await self.backend.start_spin_cycle(
       g=g,
-      time_seconds=time_seconds,
+      duration=duration,
       acceleration=acceleration,
     )

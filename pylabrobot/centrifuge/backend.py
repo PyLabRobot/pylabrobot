@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import Optional
 
 from pylabrobot.machines.backends import MachineBackend
 
@@ -52,10 +51,5 @@ class CentrifugeBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def start_spin_cycle(
-  self,
-  g: Optional[float] = None,
-  time_seconds: Optional[float] = None,
-  acceleration: Optional[float] = None,
- ) -> None:
-    """ Takes user settings and starts spinning buckets. Also known as start spin cycle. """
+  async def start_spin_cycle(self, g: float, duration: float, acceleration: float) -> None:
+    pass
