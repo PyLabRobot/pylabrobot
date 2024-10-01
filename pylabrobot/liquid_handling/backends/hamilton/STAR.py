@@ -1268,24 +1268,24 @@ class STAR(HamiltonLiquidHandler):
         discarding_method=0
       )
 
-    if self.autoload_installed:
+    if self.autoload_installed and not skip_autoload:
       autoload_initialized = await self.request_autoload_initialization_status()
-      if not autoload_initialized and not skip_autoload:
+      if not autoload_initialized:
         await self.initialize_autoload()
 
       await self.park_autoload()
 
-    if self.iswap_installed:
+    if self.iswap_installed and not skip_iswap:
       iswap_initialized = await self.request_iswap_initialization_status()
-      if not iswap_initialized and not skip_iswap:
+      if not iswap_initialized:
         await self.initialize_iswap()
 
       await self.park_iswap(minimum_traverse_height_at_beginning_of_a_command=
                             int(self._traversal_height * 10))
 
-    if self.core96_head_installed:
+    if self.core96_head_installed and not skip_core96_head:
       core96_head_initialized = await self.request_core_96_head_initialization_status()
-      if not core96_head_initialized and not skip_core96_head:
+      if not core96_head_initialized:
         await self.initialize_core_96_head(
           z_position_at_the_command_end=int(self._traversal_height*10))
 
