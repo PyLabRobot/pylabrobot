@@ -15,7 +15,7 @@ except ImportError:
 logger = logging.getLogger("pylabrobot.centrifuge.vspin")
 
 
-class AgilentCentrifuge(CentrifugeBackend):
+class VSpin(CentrifugeBackend):
   """ Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation. """
 
