@@ -151,6 +151,22 @@ class VSpin(CentrifugeBackend):
       self.dev.close()
 
   async def get_status(self):
+    """Returns 14 bytes
+
+    Example:
+     11 22 25 00 00 4f 00 00 18 e0 05 00 00 a4
+
+     First byte (index 0):
+      - 11 = idle
+      - 13 = unknown
+      - 08 = spinning
+      - 09 = also spinning but different
+      - 19 = unknown
+     2nd to 5th byte (index 1-4) = Position
+     10th to 13th byte (index 9-12) = Homing Position
+     Last byte (index 13) = checksum
+
+    """
     resp = await self.send(b"\xaa\x01\x0e\x0f")
     if len(resp) == 0:
       raise IOError("Empty status from centrifuge")
