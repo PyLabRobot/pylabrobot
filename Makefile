@@ -32,3 +32,5 @@ clear-pyc:
 	find . -name "*.pyc" | xargs rm
 	find . -name "*__pycache__" | xargs rm -r
 
+llm-docs:
+	./docs/combine.sh
