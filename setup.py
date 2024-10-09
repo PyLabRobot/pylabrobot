@@ -57,6 +57,7 @@ extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets 
     "responses",
     "sphinx-reredirects",
     "nbconvert",
+    "sphinx-sitemap",
   ]
 
 # Some extras are not available on all platforms. `dev` should be available everywhere
