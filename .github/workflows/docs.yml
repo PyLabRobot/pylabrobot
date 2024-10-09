@@ -34,6 +34,9 @@ jobs:
       - name: Build new documentation
         run: make docs
 
+      - name: Combine all docs into markdown file for LLM
+        run: make llm-docs
+
       - name: Commit generated documentation
         run: |
           cd docs/build
