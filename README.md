@@ -83,6 +83,18 @@ data = await pr.read_luminescence()
 
 For Cytation5, use the `Cytation5` backend.
 
+### Centrifuges
+
+Centrifugation at 800g for 60 seconds:
+
+```python
+from pylabrobot.centrifuge import Centrifuge, VSpin
+cf = Centrifuge(name = 'centrifuge', backend = VSpin(bucket_1_position=0), size_x= 1, size_y=1, size_z=1)
+await cf.setup()
+
+await cf.start_spin_cycle(g = 800, duration = 60)
+```
+
 ### Pumps ([docs](https://docs.pylabrobot.org/pumps.html))
 
 Pumping at 100 rpm for 30 seconds using a Masterflex pump:

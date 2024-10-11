@@ -29,16 +29,17 @@ author = "The PyLabRobot authors"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-  "sphinx.ext.napoleon",
-  "sphinx.ext.autodoc",
-  "sphinx.ext.autosummary",
-  "sphinx.ext.autosectionlabel",
-  "sphinx.ext.intersphinx",
-  "sphinx.ext.mathjax",
-  "myst_nb",
-  "sphinx_copybutton",
-  "IPython.sphinxext.ipython_console_highlighting",
-  "sphinx_reredirects",
+  'sphinx.ext.napoleon',
+  'sphinx.ext.autodoc',
+  'sphinx.ext.autosummary',
+  'sphinx.ext.autosectionlabel',
+  'sphinx.ext.intersphinx',
+  'sphinx.ext.mathjax',
+  'myst_nb',
+  'sphinx_copybutton',
+  'IPython.sphinxext.ipython_console_highlighting',
+  'sphinx_reredirects',
+  'sphinx_sitemap',
 ]
 
 intersphinx_mapping = {
@@ -159,6 +160,8 @@ redirects = {
   "fans.html": "user_guide/fans.html",
 }
 
-if tags.has("no-api"):
-  exclude_patterns.append("api/**")
-  suppress_warnings = ["toc.excluded"]
+html_baseurl="https://docs.pylabrobot.org/"
+
+if tags.has('no-api'):
+  exclude_patterns.append('api/**')
+  suppress_warnings = ['toc.excluded']

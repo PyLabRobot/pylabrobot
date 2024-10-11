@@ -984,6 +984,12 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     liquids_now = [self.plate.get_item(i).tracker.liquids for i in range(8)]
     self.assertEqual(liquids_now, initial_liquids)
 
+  async def test_channel_1_liquid_tracking(self):
+    self.plate.get_item("A1").tracker.set_liquids([(Liquid.WATER, 10)])
+    with self.lh.use_channels([1]):
+      await self.lh.pick_up_tips(self.tip_rack["A1"])
+      await self.lh.aspirate([self.plate.get_item("A1")], vols=[10])
+      await self.lh.dispense([self.plate.get_item("A2")], vols=[10])
 
 class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):

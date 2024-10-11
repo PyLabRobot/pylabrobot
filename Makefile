@@ -15,6 +15,7 @@ docs-fast:
 clean-docs:
 	rm -rf docs/build
 	rm -rf docs/_autosummary
+	rm -rf docs/api/_autosummary
 	rm -rf docs/jupyter_execute
 	rm -rf docs/user_guide/jupyter_execute
 
@@ -34,3 +35,5 @@ clear-pyc:
 	find . -name "*.pyc" | xargs rm
 	find . -name "*__pycache__" | xargs rm -r
 
+llm-docs:
+	./docs/combine.sh
