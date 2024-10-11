@@ -6121,8 +6121,10 @@ class STAR(HamiltonLiquidHandler):
     carrier_end_rail_str = str(carrier_end_rail).zfill(2)
 
     if presence_check != 1:
-      raise ValueError(f"""No carrier found at position {carrier_end_rail},
-                       have you placed the carrier onto the correct autoload tray position?""")
+      raise ValueError(
+        f"""No carrier found at position {carrier_end_rail},
+                       have you placed the carrier onto the correct autoload tray position?"""
+      )
 
     # Set carrier type for identification purposes
     await self.send_command(module="C0", command="CI", cp=carrier_end_rail_str)

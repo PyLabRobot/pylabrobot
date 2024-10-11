@@ -34,8 +34,10 @@ def _height_of_volume_in_spherical_cap(r: float, liquid_volume: float) -> float:
   # Maximum volume of the spherical cap with height equal to the radius
   max_volume = volume_of_spherical_cap(r)
   if liquid_volume > max_volume:
-    raise ValueError("""WARNING: Liquid volume exceeds the volume of a
-                         hemisphere of the given radius.""")
+    raise ValueError(
+      """WARNING: Liquid volume exceeds the volume of a
+                         hemisphere of the given radius."""
+    )
 
   # Binary search to solve for h
   low, high = 0.0, r
@@ -86,8 +88,10 @@ def calculate_liquid_height_in_container_2segments_square_vbottom(
     liquid_height = h_pyramid + cube_liquid_height
 
     if liquid_height > h_pyramid + h_cube:
-      raise ValueError("""WARNING: Liquid overflow detected;
-      check your labware definition and/or that you are using the right labware.""")
+      raise ValueError(
+        """WARNING: Liquid overflow detected;
+      check your labware definition and/or that you are using the right labware."""
+      )
 
   return float(liquid_height)
 
@@ -113,8 +117,10 @@ def calculate_liquid_volume_container_2segments_square_vbottom(
     The volume of the liquid in cubic millimeters.
   """
   if liquid_height > h_pyramid + h_cube:
-    raise ValueError("""WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware.""")
+    raise ValueError(
+      """WARNING: Liquid overflow detected;
+    check your labware definiton and/or that you are using the right labware."""
+    )
 
   # Calculating the base area
   base_area = x * y
@@ -168,8 +174,10 @@ def calculate_liquid_height_in_container_2segments_square_ubottom(
     liquid_height = r + cuboid_liquid_height
 
     if liquid_height > h_cuboid + r:
-      raise ValueError("""WARNING: Liquid overflow detected;
-      check your labware definition and/or that you are using the right labware.""")
+      raise ValueError(
+        """WARNING: Liquid overflow detected;
+      check your labware definition and/or that you are using the right labware."""
+      )
 
   return liquid_height
 
@@ -192,8 +200,10 @@ def calculate_liquid_volume_container_2segments_square_ubottom(
     The volume of the liquid in cubic millimeters.
   """
   if liquid_height > h_cuboid + x / 2:
-    raise ValueError("""WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware.""")
+    raise ValueError(
+      """WARNING: Liquid overflow detected;
+    check your labware definiton and/or that you are using the right labware."""
+    )
 
   r = x / 2  # Radius of the hemisphere
   full_hemisphere_volume = (2 / 3) * math.pi * r**3
@@ -278,8 +288,10 @@ def calculate_liquid_volume_container_2segments_round_vbottom(
     The volume of the liquid in cubic millimeters.
   """
   if liquid_height > h_cone + h_cylinder:
-    raise ValueError("""WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware.""")
+    raise ValueError(
+      """WARNING: Liquid overflow detected;
+    check your labware definiton and/or that you are using the right labware."""
+    )
 
   r = d / 2
   # Calculating the full volume of the cone
@@ -366,8 +378,10 @@ def calculate_liquid_volume_container_2segments_round_ubottom(
   """
   r = d / 2
   if liquid_height > h_cylinder + r:
-    raise ValueError("""WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware.""")
+    raise ValueError(
+      """WARNING: Liquid overflow detected;
+    check your labware definiton and/or that you are using the right labware."""
+    )
 
   # Calculating the full volume of the hemisphere
   full_hemisphere_volume = (2 / 3) * math.pi * r**3
@@ -405,8 +419,10 @@ def calculate_liquid_height_container_1segment_round_fbottom(
   max_volume = math.pi * r**2 * h_cylinder
 
   if liquid_volume > max_volume:
-    raise ValueError("""WARNING: Liquid overflow detected;
-    check your labware definition and/or that you are using the right labware.""")
+    raise ValueError(
+      """WARNING: Liquid overflow detected;
+    check your labware definition and/or that you are using the right labware."""
+    )
 
   liquid_height = liquid_volume / (math.pi * r**2)
   return liquid_height
@@ -427,8 +443,10 @@ def calculate_liquid_volume_container_1segment_round_fbottom(
   """
   r = d / 2
   if liquid_height > h_cylinder:
-    raise ValueError("""WARNING: Liquid overflow detected;
-    check your labware definiton and/or that you are using the right labware.""")
+    raise ValueError(
+      """WARNING: Liquid overflow detected;
+    check your labware definiton and/or that you are using the right labware."""
+    )
 
   cylinder_liquid_volume = math.pi * r**2 * liquid_height
   return cylinder_liquid_volume

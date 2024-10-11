@@ -9,6 +9,6 @@ from .standard import (
   Dispense,
   AspirationPlate,
   DispensePlate,
-  Move
+  Move,
 )
 from .strictness import Strictness, set_strictness, get_strictness

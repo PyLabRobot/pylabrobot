@@ -3,8 +3,9 @@ from typing import Optional
 from pylabrobot.machines.machine import Machine
 from pylabrobot.centrifuge.backend import CentrifugeBackend
 
+
 class Centrifuge(Machine):
-  """ The front end for centrifuges.
+  """The front end for centrifuges.
   Centrifuges are devices that can spin samples at high speeds."""
 
   def __init__(
@@ -17,9 +18,16 @@ class Centrifuge(Machine):
     category: Optional[str] = None,
     model: Optional[str] = None,
   ) -> None:
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
-      category=category, model=model)
-    self.backend: CentrifugeBackend = backend # fix type
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      backend=backend,
+      category=category,
+      model=model,
+    )
+    self.backend: CentrifugeBackend = backend  # fix type
 
   async def stop(self) -> None:
     await self.backend.stop()
@@ -49,9 +57,11 @@ class Centrifuge(Machine):
     await self.backend.go_to_bucket2()
 
   async def rotate_distance(self, distance) -> None:
-    await self.backend.rotate_distance(distance = distance)
+    await self.backend.rotate_distance(distance=distance)
 
-  async def start_spin_cycle(self, g: float, duration: float, acceleration: float) -> None:
+  async def start_spin_cycle(
+    self, g: float, duration: float, acceleration: float
+  ) -> None:
     await self.backend.start_spin_cycle(
       g=g,
       duration=duration,

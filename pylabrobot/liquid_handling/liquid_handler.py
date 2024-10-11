@@ -1015,8 +1015,10 @@ class LiquidHandler(Machine):
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     if does_volume_tracking():
       channels = [self.head[channel] for channel in use_channels]
-      liquids = [c.get_tip().tracker.get_liquids(top_volume=vol)
-                 for c, vol in zip(channels, vols)]
+      liquids = [
+        c.get_tip().tracker.get_liquids(top_volume=vol)
+        for c, vol in zip(channels, vols)
+      ]
     else:
       liquids = [[(None, vol)] for vol in vols]
 

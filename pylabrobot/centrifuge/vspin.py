@@ -7,6 +7,7 @@ from .backend import CentrifugeBackend
 
 try:
   from pylibftdi import Device
+
   USE_FTDI = True
 except ImportError:
   USE_FTDI = False
@@ -16,8 +17,8 @@ logger = logging.getLogger("pylabrobot.centrifuge.vspin")
 
 
 class VSpin(CentrifugeBackend):
-  """ Backend for the Agilent Centrifuge.
-  Note that this is not a complete implementation. """
+  """Backend for the Agilent Centrifuge.
+  Note that this is not a complete implementation."""
 
   def __init__(self, bucket_1_position: int, device_id: Optional[str] = None):
     """
@@ -94,13 +95,17 @@ class VSpin(CentrifugeBackend):
 
     await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+    await self.send(
+      b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07"
+    )
     await self.send(b"\xaa\x01\x17\x04\x1c")
     await self.send(b"\xaa\x01\x17\x01\x19")
 
     await self.send(b"\xaa\x01\x0b\x0c")
     await self.send(b"\xaa\x01\x00\x01")
-    await self.send(b"\xaa\x01\xe6\x05\x00\x64\x00\x00\x00\x00\x00\x32\x00\xe8\x03\x01\x00\x6e")
+    await self.send(
+      b"\xaa\x01\xe6\x05\x00\x64\x00\x00\x00\x00\x00\x32\x00\xe8\x03\x01\x00\x6e"
+    )
     await self.send(b"\xaa\x01\x94\xb6\x12\x83\x00\x00\x12\x01\x00\x00\xf3")
     await self.send(b"\xaa\x01\x19\x28\x42")
     await self.send(b"\xaa\x01\x0e\x0f")
@@ -116,15 +121,21 @@ class VSpin(CentrifugeBackend):
 
     await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+    await self.send(
+      b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07"
+    )
     await self.send(b"\xaa\x01\x17\x04\x1c")
     await self.send(b"\xaa\x01\x17\x01\x19")
 
     await self.send(b"\xaa\x01\x0b\x0c")
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+    await self.send(
+      b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07"
+    )
     new_position = (self.homing_position + 8000).to_bytes(4, byteorder="little")
-    await self.send(b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
+    await self.send(
+      b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49"
+    )
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
 
@@ -176,7 +187,7 @@ class VSpin(CentrifugeBackend):
     resp = await self.get_status()
     return int.from_bytes(resp[1:5], byteorder="little")
 
-# Centrifuge communication: read_resp, send, send_payloads
+  # Centrifuge communication: read_resp, send, send_payloads
 
   async def read_resp(self, timeout=20) -> bytes:
     """Read a response from the centrifuge. If the timeout is reached, return the data that has
@@ -192,7 +203,7 @@ class VSpin(CentrifugeBackend):
       chunk = self.dev.read(25)
       if chunk:
         data += chunk
-        end_byte_found = data[-1] == 0x0d
+        end_byte_found = data[-1] == 0x0D
         if len(chunk) < 25 and end_byte_found:
           break
       else:
@@ -237,11 +248,11 @@ class VSpin(CentrifugeBackend):
     if self.dev:
       self.dev.write(b"\x00" * 20)
       for i in range(33):
-        packet = b"\xaa" + bytes([i & 0xFF, 0x0e, 0x0e + (i & 0xFF)]) + b"\x00" * 8
+        packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
         self.dev.write(packet)
       await self.send(b"\xaa\xff\x0f\x0e")
 
-# Centrifuge operations
+  # Centrifuge operations
 
   async def open_door(self):
     await self.send(b"\xaa\x02\x26\x00\x07\x2f")
@@ -287,8 +298,10 @@ class VSpin(CentrifugeBackend):
     await self.lock_door()
 
     position_bytes = position.to_bytes(4, byteorder="little")
-    byte_string = b"\xaa\x01\xd4\x97" + position_bytes + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
-    sum_byte = (sum(byte_string)-0xaa)&0xff
+    byte_string = (
+      b"\xaa\x01\xd4\x97" + position_bytes + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
+    )
+    sum_byte = (sum(byte_string) - 0xAA) & 0xFF
     byte_string += sum_byte.to_bytes(1, byteorder="little")
     move_bucket = [
       "aa 02 26 00 00 28",
@@ -300,7 +313,7 @@ class VSpin(CentrifugeBackend):
       "aa 01 17 01 19",
       "aa 01 0b 0c",
       "aa 01 e6 c8 00 b0 04 96 00 0f 00 4b 00 a0 0f 05 00 07",
-      byte_string
+      byte_string,
     ]
     await self.send_payloads(move_bucket)
 
@@ -338,15 +351,17 @@ class VSpin(CentrifugeBackend):
     await self.close_door()
     await self.lock_door()
 
-    rpm = int((g/(1.118*(10**(-4))))**0.5)
-    base = int(107007 - 328*rpm + 1.13*(rpm**2))
-    rpm_b = (int(4481*rpm + 10852)).to_bytes(4, byteorder="little")
-    acc = (int(915*acceleration/100)).to_bytes(2, byteorder="little")
-    maxp = min((await self.get_position() + base + 4000*rpm//30*duration), 4294967294)
+    rpm = int((g / (1.118 * (10 ** (-4)))) ** 0.5)
+    base = int(107007 - 328 * rpm + 1.13 * (rpm**2))
+    rpm_b = (int(4481 * rpm + 10852)).to_bytes(4, byteorder="little")
+    acc = (int(915 * acceleration / 100)).to_bytes(2, byteorder="little")
+    maxp = min(
+      (await self.get_position() + base + 4000 * rpm // 30 * duration), 4294967294
+    )
     position = maxp.to_bytes(4, byteorder="little")
 
-    byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc+b"\x00\x00"
-    last_byte = (sum(byte_string)-0xaa)&0xff
+    byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc + b"\x00\x00"
+    last_byte = (sum(byte_string) - 0xAA) & 0xFF
     byte_string += last_byte.to_bytes(1, byteorder="little")
 
     payloads = [
@@ -383,7 +398,7 @@ class VSpin(CentrifugeBackend):
       "aa 01 00 01",
       "aa 01 e6 05 00 64 00 00 00 00 00 32 00 e8 03 01 00 6e",
       "aa 01 94 b6 12 83 00 00 12 01 00 00 f3",
-      "aa 01 19 28 42"
+      "aa 01 19 28 42",
     ]
 
     await self.send_payloads(payloads)

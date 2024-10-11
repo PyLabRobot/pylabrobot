@@ -22,7 +22,8 @@ class TestOTDeck(unittest.TestCase):
   def test_summary(self):
     self.assertEqual(
       self.deck.summary(),
-      textwrap.dedent("""
+      textwrap.dedent(
+        """
       Deck: 624.3mm x 565.2mm
 
       +-----------------+-----------------+-----------------+
@@ -42,5 +43,6 @@ class TestOTDeck(unittest.TestCase):
       |  1: Empty       |  2: Empty       |  3: Empty       |
       |                 |                 |                 |
       +-----------------+-----------------+-----------------+
-    """),
+    """
+      ),
     )
