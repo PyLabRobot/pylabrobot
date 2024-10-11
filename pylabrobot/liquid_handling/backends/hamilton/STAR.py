@@ -77,8 +77,9 @@ def need_iswap_parked(method: Callable):
   async def wrapper(self: "STAR", *args, **kwargs):
     if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
+        # pylint: disable=protected-access
         minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10)
-      )  # pylint: disable=protected-access
+      )
 
     result = await method(self, *args, **kwargs)  # pylint: disable=not-callable
 
@@ -1426,7 +1427,8 @@ class STAR(HamiltonLiquidHandler):
         tip_type_idx=ttti,
         begin_tip_pick_up_process=begin_tip_pick_up_process,
         end_tip_pick_up_process=end_tip_pick_up_process,
-        minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+        minimum_traverse_height_at_beginning_of_a_command=
+          minimum_traverse_height_at_beginning_of_a_command,
         pickup_method=pickup_method,
       )
     except STARFirmwareError as e:
@@ -1506,7 +1508,8 @@ class STAR(HamiltonLiquidHandler):
         tip_pattern=channels_involved,
         begin_tip_deposit_process=begin_tip_deposit_process,
         end_tip_deposit_process=end_tip_deposit_process,
-        minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
+        minimum_traverse_height_at_beginning_of_a_command=
+          minimum_traverse_height_at_beginning_of_a_command,
         z_position_at_end_of_a_command=z_position_at_end_of_a_command,
         discarding_method=drop_method,
       )

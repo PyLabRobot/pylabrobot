@@ -80,7 +80,9 @@ class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
   async def test_run_continuously(self):
     self.agrow_backend.modbus.write_register.reset_mock()  # type: ignore[attr-defined]
     await self.pump_array.run_continuously(speed=1, use_channels=[0])
-    self.agrow_backend.modbus.write_register.assert_called_once_with(100, 1, unit=1)  # type: ignore[attr-defined]
+    self.agrow_backend.modbus.write_register.assert_called_once_with(
+        100, 1, unit=1
+    )  # type: ignore[attr-defined]
 
     # invalid speed: cannot be bigger than 100
     with self.assertRaises(ValueError):

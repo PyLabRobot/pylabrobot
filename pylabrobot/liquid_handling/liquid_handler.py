@@ -90,7 +90,8 @@ def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
   )
 
 
-class BlowOutVolumeError(Exception): ...
+class BlowOutVolumeError(Exception):
+  pass
 
 
 class LiquidHandler(Machine):

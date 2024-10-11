@@ -265,7 +265,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     # assign labware to robot
     labware_uuid = resource.name
 
-    ot_api.labware.add(
+    ot_api.labware.add( # pylint: disable=E1120
       load_name=definition,
       namespace=namespace,
       ot_location=ot_location,

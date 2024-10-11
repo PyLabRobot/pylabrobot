@@ -886,16 +886,16 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await lh.pick_up_tips(tr["A4:A1"])
 
     self._assert_command_sent_once(
-      "C0TPid0035xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2263tz"
-      "2163th2450td0",
+      "C0TPid0035xp01360 01360 01360 01360 00000&"
+      "yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tt01tp2263tz2163th2450td0",
       PICKUP_TIP_FORMAT,
     )
 
     await lh.drop_tips(tr["A4:A1"])
 
     self._assert_command_sent_once(
-      "C0TRid0036xp01360 01360 01360 01360 00000&yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2263tz"
-      "2183th2450ti1",
+      "C0TRid0036xp01360 01360 01360 01360 00000&"
+      "yp1380 1290 1200 1110 0000&tm1 1 1 1 0&tp2263tz2183th2450ti1",
       DROP_TIP_FORMAT,
     )
 

@@ -112,12 +112,14 @@ def Porvair_24_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
     "size_z": 13.30,
     # reality: multifaceted pyramid, v bottom pyramid is a good approximation
     "bottom_type": WellBottomType.V,
-    "compute_volume_from_height": lambda liquid_height: calculate_liquid_volume_container_2segments_square_vbottom(
-      WELL_SIZE_X,
-      WELL_SIZE_Y,
-      WELL_HEIGHT_OF_PYRAMID,
-      WELL_HEIGHT_OF_CUBE,
-      liquid_height,
+    "compute_volume_from_height": lambda liquid_height: (
+      calculate_liquid_volume_container_2segments_square_vbottom(
+        WELL_SIZE_X,
+        WELL_SIZE_Y,
+        WELL_HEIGHT_OF_PYRAMID,
+        WELL_HEIGHT_OF_CUBE,
+        liquid_height,
+      )
     ),
     "compute_height_from_volume": lambda liquid_volume: (
       calculate_liquid_height_in_container_2segments_square_vbottom(

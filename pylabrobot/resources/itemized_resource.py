@@ -427,7 +427,7 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     }
 
   def index_of_item(self, item: T) -> Optional[int]:
-    """Return the index of the given item in the resource, or `None` if the resource was not found."""
+    """Return the index of the given item in the resource, or `None` if not found."""
     for i, i_item in enumerate(self.children):
       if i_item == item:
         return i
