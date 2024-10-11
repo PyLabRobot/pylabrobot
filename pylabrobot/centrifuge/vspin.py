@@ -39,110 +39,111 @@ class VSpin(CentrifugeBackend):
     self.dev.open()
     logger.debug("open")
     # TODO: add functionality where if robot has been intialized before nothing needs to happen
-    for _ in range(3):
-      await self.configure_and_initialize()
+    try:
+      for _ in range(3):
+        await self.configure_and_initialize()
+        await self.send(b"\xaa\x00\x21\x01\xff\x21")
       await self.send(b"\xaa\x00\x21\x01\xff\x21")
-    await self.send(b"\xaa\x00\x21\x01\xff\x21")
-    await self.send(b"\xaa\x01\x13\x20\x34")
-    await self.send(b"\xaa\x00\x21\x02\xff\x22")
-    await self.send(b"\xaa\x02\x13\x20\x35")
-    await self.send(b"\xaa\x00\x21\x03\xff\x23")
-    await self.send(b"\xaa\xff\x1a\x14\x2d")
-
-    self.dev.baudrate = 57600
-    self.dev.ftdi_fn.ftdi_setrts(1)
-    self.dev.ftdi_fn.ftdi_setdtr(1)
-
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\x12\x1f\x32")
-    for _ in range(8):
-      await self.send(b"\xaa\x02\x20\xff\x0f\x30")
-    await self.send(b"\xaa\x02\x20\xdf\x0f\x10")
-    await self.send(b"\xaa\x02\x20\xdf\x0e\x0f")
-    await self.send(b"\xaa\x02\x20\xdf\x0c\x0d")
-    await self.send(b"\xaa\x02\x20\xdf\x08\x09")
-    for _ in range(4):
-      await self.send(b"\xaa\x02\x26\x00\x00\x28")
-    await self.send(b"\xaa\x02\x12\x03\x17")
-    for _ in range(5):
-      await self.send(b"\xaa\x02\x26\x20\x00\x48")
-      await self.send(b"\xaa\x02\x0e\x10")
-      await self.send(b"\xaa\x02\x26\x00\x00\x28")
-      await self.send(b"\xaa\x02\x0e\x10")
-    await self.send(b"\xaa\x02\x0e\x10")
-    await self.lock_door()
-
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
-
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
-
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
-
-    await self.send(b"\xaa\x02\x0e\x10")
-    await self.send(b"\xaa\x01\x0e\x0f")
-
-    await self.send(b"\xaa\x02\x0e\x10")
-    await self.send(b"\xaa\x02\x26\x00\x00\x28")
-    await self.send(b"\xaa\x02\x0e\x10")
-
-    await self.send(b"\xaa\x02\x0e\x10")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x02\x0e\x10")
-
-    await self.send(b"\xaa\x01\x17\x02\x1a")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
-    await self.send(b"\xaa\x01\x17\x04\x1c")
-    await self.send(b"\xaa\x01\x17\x01\x19")
-
-    await self.send(b"\xaa\x01\x0b\x0c")
-    await self.send(b"\xaa\x01\x00\x01")
-    await self.send(b"\xaa\x01\xe6\x05\x00\x64\x00\x00\x00\x00\x00\x32\x00\xe8\x03\x01\x00\x6e")
-    await self.send(b"\xaa\x01\x94\xb6\x12\x83\x00\x00\x12\x01\x00\x00\xf3")
-    await self.send(b"\xaa\x01\x19\x28\x42")
-    await self.send(b"\xaa\x01\x0e\x0f")
-
-    resp = 0x89
-    while resp == 0x89:
-      await self.send(b"\xaa\x02\x0e\x10")
-      stat = await self.send(b"\xaa\x01\x0e\x0f")
-      resp = stat[0]
-
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\x0e\x0f")
-
-    await self.send(b"\xaa\x01\x17\x02\x1a")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
-    await self.send(b"\xaa\x01\x17\x04\x1c")
-    await self.send(b"\xaa\x01\x17\x01\x19")
-
-    await self.send(b"\xaa\x01\x0b\x0c")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
-    new_position = (self.homing_position + 8000).to_bytes(4, byteorder="little")
-    await self.send(b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\x0e\x0f")
-
-    resp = 0x08
-    while resp != 0x09:
-      stat = await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x01\x13\x20\x34")
+      await self.send(b"\xaa\x00\x21\x02\xff\x22")
+      await self.send(b"\xaa\x02\x13\x20\x35")
+      await self.send(b"\xaa\x00\x21\x03\xff\x23")
+      await self.send(b"\xaa\xff\x1a\x14\x2d")
+      self.dev.baudrate = 57600
+      self.dev.ftdi_fn.ftdi_setrts(1)
+      self.dev.ftdi_fn.ftdi_setdtr(1)
+      self.get_status()
+    except:
       await self.send(b"\xaa\x01\x0e\x0f")
-      resp = stat[0]
+      await self.send(b"\xaa\x01\x12\x1f\x32")
+      for _ in range(8):
+        await self.send(b"\xaa\x02\x20\xff\x0f\x30")
+      await self.send(b"\xaa\x02\x20\xdf\x0f\x10")
+      await self.send(b"\xaa\x02\x20\xdf\x0e\x0f")
+      await self.send(b"\xaa\x02\x20\xdf\x0c\x0d")
+      await self.send(b"\xaa\x02\x20\xdf\x08\x09")
+      for _ in range(4):
+        await self.send(b"\xaa\x02\x26\x00\x00\x28")
+      await self.send(b"\xaa\x02\x12\x03\x17")
+      for _ in range(5):
+        await self.send(b"\xaa\x02\x26\x20\x00\x48")
+        await self.send(b"\xaa\x02\x0e\x10")
+        await self.send(b"\xaa\x02\x26\x00\x00\x28")
+        await self.send(b"\xaa\x02\x0e\x10")
+      await self.send(b"\xaa\x02\x0e\x10")
+      await self.lock_door()
 
-    await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x02\x0e\x10")
 
-    await self.send(b"\xaa\x01\x17\x02\x1a")
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x02\x0e\x10")
 
-    await self.send(b"\xaa\x02\x0e\x10")
-    await self.lock_door()
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x02\x0e\x10")
 
-    await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x02\x0e\x10")
+      await self.send(b"\xaa\x01\x0e\x0f")
+
+      await self.send(b"\xaa\x02\x0e\x10")
+      await self.send(b"\xaa\x02\x26\x00\x00\x28")
+      await self.send(b"\xaa\x02\x0e\x10")
+
+      await self.send(b"\xaa\x02\x0e\x10")
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x02\x0e\x10")
+
+      await self.send(b"\xaa\x01\x17\x02\x1a")
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+      await self.send(b"\xaa\x01\x17\x04\x1c")
+      await self.send(b"\xaa\x01\x17\x01\x19")
+
+      await self.send(b"\xaa\x01\x0b\x0c")
+      await self.send(b"\xaa\x01\x00\x01")
+      await self.send(b"\xaa\x01\xe6\x05\x00\x64\x00\x00\x00\x00\x00\x32\x00\xe8\x03\x01\x00\x6e")
+      await self.send(b"\xaa\x01\x94\xb6\x12\x83\x00\x00\x12\x01\x00\x00\xf3")
+      await self.send(b"\xaa\x01\x19\x28\x42")
+      await self.send(b"\xaa\x01\x0e\x0f")
+
+      resp = 0x89
+      while resp == 0x89:
+        await self.send(b"\xaa\x02\x0e\x10")
+        stat = await self.send(b"\xaa\x01\x0e\x0f")
+        resp = stat[0]
+
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x01\x0e\x0f")
+
+      await self.send(b"\xaa\x01\x17\x02\x1a")
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+      await self.send(b"\xaa\x01\x17\x04\x1c")
+      await self.send(b"\xaa\x01\x17\x01\x19")
+
+      await self.send(b"\xaa\x01\x0b\x0c")
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+      new_position = (self.homing_position + 8000).to_bytes(4, byteorder="little")
+      await self.send(b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x01\x0e\x0f")
+
+      resp = 0x08
+      while resp != 0x09:
+        stat = await self.send(b"\xaa\x01\x0e\x0f")
+        await self.send(b"\xaa\x01\x0e\x0f")
+        resp = stat[0]
+
+      await self.send(b"\xaa\x01\x0e\x0f")
+      await self.send(b"\xaa\x01\x0e\x0f")
+
+      await self.send(b"\xaa\x01\x17\x02\x1a")
+
+      await self.send(b"\xaa\x02\x0e\x10")
+      await self.lock_door()
+
+      await self.send(b"\xaa\x01\x0e\x0f")
 
   async def stop(self):
     await self.send(b"\xaa\x02\x0e\x10")
