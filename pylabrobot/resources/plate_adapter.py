@@ -134,21 +134,15 @@ class PlateAdapter(Resource):
     ), "Plate well spacing must be equivalent to adapter hole spacing"
 
     # Calculate adjustment to place center of H1_plate on top of center of H1_adapter
-    plate_x_adjustment = (
-      self.dx - plate_dx + self.adapter_hole_size_x / 2 - well_size_x / 2
-    )
-    plate_y_adjustment = (
-      self.dy - plate_dy + self.adapter_hole_size_x / 2 - well_size_y / 2
-    )
+    plate_x_adjustment = self.dx - plate_dx + self.adapter_hole_size_x / 2 - well_size_x / 2
+    plate_y_adjustment = self.dy - plate_dy + self.adapter_hole_size_x / 2 - well_size_y / 2
     # basic plate_z_adjustment ability
     plate_z_adjustment = self.dz + self.plate_z_offset
     # TODO: create more sophisticated plate_z_adjustment based on
     # PlateAdapter.adapter_hole_size_z & Plate.well.get_size_z() relationship, when
     # Plate definitions are fixed, which can be modified if needed using plate_z_offset
 
-    adjusted_plate_anchor = Coordinate(
-      plate_x_adjustment, plate_y_adjustment, plate_z_adjustment
-    )
+    adjusted_plate_anchor = Coordinate(plate_x_adjustment, plate_y_adjustment, plate_z_adjustment)
     return adjusted_plate_anchor
 
   def assign_child_resource(

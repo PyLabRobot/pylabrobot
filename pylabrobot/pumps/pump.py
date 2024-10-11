@@ -70,9 +70,7 @@ class Pump(Machine):
 
     self.backend.run_continuously(speed=speed)
 
-  async def run_for_duration(
-    self, speed: Union[float, int], duration: Union[float, int]
-  ):
+  async def run_for_duration(self, speed: Union[float, int], duration: Union[float, int]):
     """Run the pump at specified speed for the specified duration.
 
     Args:

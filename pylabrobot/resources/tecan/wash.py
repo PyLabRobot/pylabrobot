@@ -26,9 +26,7 @@ class TecanWashStation(Carrier, TecanResource):
     category="tecan_wash_station",
     model: Optional[str] = None,
   ):
-    super().__init__(
-      name, size_x, size_y, size_z, sites, category=category, model=model
-    )
+    super().__init__(name, size_x, size_y, size_z, sites, category=category, model=model)
 
     self.off_x: float = off_x
     self.off_y: float = off_y

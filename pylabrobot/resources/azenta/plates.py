@@ -13,9 +13,7 @@ from pylabrobot.resources.height_volume_functions import (
 
 def _compute_volume_from_height_Azenta4titudeFrameStar_96_wellplate_200ul_Vb(h: float):
   if h > 15.1:
-    raise ValueError(
-      f"Height {h} is too large for Azenta4titudeFrameStar_96_wellplate_200ul_Vb"
-    )
+    raise ValueError(f"Height {h} is too large for Azenta4titudeFrameStar_96_wellplate_200ul_Vb")
   return calculate_liquid_volume_container_2segments_round_vbottom(
     d=5.5, h_cone=9.8, h_cylinder=5.3, liquid_height=h
   )
@@ -34,9 +32,7 @@ def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_Lid(name: str) -> Lid:
   # )
 
 
-def Azenta4titudeFrameStar_96_wellplate_skirted(
-  name: str, with_lid: bool = False
-) -> Plate:
+def Azenta4titudeFrameStar_96_wellplate_skirted(name: str, with_lid: bool = False) -> Plate:
   raise NotImplementedError(
     "This function is deprecated and will be removed in a future version."
     " Use 'Azenta4titudeFrameStar_96_wellplate_200ul_Vb' instead."
@@ -44,9 +40,7 @@ def Azenta4titudeFrameStar_96_wellplate_skirted(
 
 
 #: Azenta4titudeFrameStar_96_wellplate_skirted
-def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(
-  name: str, with_lid: bool = False
-) -> Plate:
+def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name: str, with_lid: bool = False) -> Plate:
   """Azenta cat. no.: 4ti-0960.
   - Material: Polypropylene wells, polycarbonate frame
   - Sterilization compatibility: ?
@@ -63,9 +57,7 @@ def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(
     size_x=127.76,
     size_y=85.48,
     size_z=16.1,
-    lid=Azenta4titudeFrameStar_96_wellplate_200ul_Vb_Lid(name + "_lid")
-    if with_lid
-    else None,
+    lid=Azenta4titudeFrameStar_96_wellplate_200ul_Vb_Lid(name + "_lid") if with_lid else None,
     model="Azenta4titudeFrameStar_96_wellplate_200ul_Vb",
     ordered_items=create_ordered_items_2d(
       Well,
@@ -90,16 +82,10 @@ def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(
 
 
 #: Azenta4titudeFrameStar_96_wellplate_Vb_L
-def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_L(
-  name: str, with_lid: bool = False
-) -> Plate:
+def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_L(name: str, with_lid: bool = False) -> Plate:
   return Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name=name, with_lid=with_lid)
 
 
 #: Azenta4titudeFrameStar_96_wellplate_Vb_P
-def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_P(
-  name: str, with_lid: bool = False
-) -> Plate:
-  return Azenta4titudeFrameStar_96_wellplate_200ul_Vb(
-    name=name, with_lid=with_lid
-  ).rotated(z=90)
+def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_P(name: str, with_lid: bool = False) -> Plate:
+  return Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name=name, with_lid=with_lid).rotated(z=90)

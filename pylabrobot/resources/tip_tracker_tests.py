@@ -9,9 +9,7 @@ class TestTipTracker(unittest.TestCase):
 
   def setUp(self) -> None:
     super().setUp()
-    self.tip = Tip(
-      has_filter=False, total_tip_length=10, maximal_volume=10, fitting_depth=10
-    )
+    self.tip = Tip(has_filter=False, total_tip_length=10, maximal_volume=10, fitting_depth=10)
 
   def test_init(self):
     tracker = TipTracker(thing="tester")

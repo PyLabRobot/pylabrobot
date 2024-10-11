@@ -110,9 +110,7 @@ class WebSocketBackend(SerializingBackend):
     if event == "ping":
       await self.websocket.send(json.dumps({"event": "pong"}))
 
-  async def _socket_handler(
-    self, websocket: "websockets.legacy.server.WebSocketServerProtocol"
-  ):
+  async def _socket_handler(self, websocket: "websockets.legacy.server.WebSocketServerProtocol"):
     """Handle a new websocket connection. Save the websocket connection store received
     messages in `self.received`."""
 
@@ -216,9 +214,7 @@ class WebSocketBackend(SerializingBackend):
 
     # Run and save if the websocket connection has been established, otherwise just save.
     if wait_for_response and not self.has_connection():
-      raise ValueError(
-        "Cannot wait for response when no websocket connection is established."
-      )
+      raise ValueError("Cannot wait for response when no websocket connection is established.")
 
     if self.has_connection():
       asyncio.run_coroutine_threadsafe(self.websocket.send(serialized_data), self.loop)
@@ -258,9 +254,7 @@ class WebSocketBackend(SerializingBackend):
       self._stop_ = self.loop.create_future()
       while True:
         try:
-          async with websockets.server.serve(
-            self._socket_handler, self.ws_host, self.ws_port
-          ):
+          async with websockets.server.serve(self._socket_handler, self.ws_host, self.ws_port):
             print(f"Websocket server started at http://{self.ws_host}:{self.ws_port}")
             lock.release()
             await self.stop_

@@ -310,22 +310,16 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
         call(module="C1", command="SFZ", params=[1300, None]),
         call(module="C1", command="SFR", params=[5000, 1500]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[1, 5561, 2368, 1054, 900, None, 1, 0, 0]
-        ),
+        call(module="C1", command="SAA", params=[1, 5561, 2368, 1054, 900, None, 1, 0, 0]),
         call(module="C1", command="AAC"),
         call(module="C1", command="RPX", params=[0]),
         call(module="C1", command="SSM", params=[0]),
         call(module="C1", command="PAG", params=[900]),
         call(module="C1", command="STW", params=[1, 0, 0, 0, 135, 0]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[1, 5561, 2368, 687, 900, None, 1, 0, 1]
-        ),
+        call(module="C1", command="SAA", params=[1, 5561, 2368, 687, 900, None, 1, 0, 1]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[1, 5561, 2368, 59, 900, None, 1, 0, 0]
-        ),
+        call(module="C1", command="SAA", params=[1, 5561, 2368, 59, 900, None, 1, 0, 0]),
         call(module="C1", command="AAC"),
         call(module="C1", command="RPX", params=[0]),
         call(module="C1", command="SFY", params=[3500, 1000]),
@@ -337,46 +331,28 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
         call(module="C1", command="STW", params=[3, 0, 0, 0, 55, 0]),
         call(module="C1", command="STW", params=[4, 45, 0, 0, 0, 0]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[1, 5561, 2368, 59, 900, None, 1, 0, 1]
-        ),
+        call(module="C1", command="SAA", params=[1, 5561, 2368, 59, 900, None, 1, 0, 1]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[2, 5561, 2368, 687, 900, None, 1, 0, 2]
-        ),
+        call(module="C1", command="SAA", params=[2, 5561, 2368, 687, 900, None, 1, 0, 2]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[3, 5561, 2368, 1054, 900, None, 1, 0, 3]
-        ),
+        call(module="C1", command="SAA", params=[3, 5561, 2368, 1054, 900, None, 1, 0, 3]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[4, 5561, 2368, 1054, 900, None, 1, 0, 4]
-        ),
+        call(module="C1", command="SAA", params=[4, 5561, 2368, 1054, 900, None, 1, 0, 4]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[5, 5561, 2368, 687, 900, None, 1, 0, 3]
-        ),
+        call(module="C1", command="SAA", params=[5, 5561, 2368, 687, 900, None, 1, 0, 3]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[6, 5561, 2368, 59, 900, None, 1, 0, 0]
-        ),
+        call(module="C1", command="SAA", params=[6, 5561, 2368, 59, 900, None, 1, 0, 0]),
         call(module="C1", command="AAC"),
         call(module="C1", command="RPX", params=[0]),
         call(module="C1", command="PAG", params=[900]),
         call(module="C1", command="SFY", params=[5000, 1500]),
         call(module="C1", command="SFR", params=[5000, 1500]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[1, 5561, 2368, 59, 900, None, 1, 0, 1]
-        ),
+        call(module="C1", command="SAA", params=[1, 5561, 2368, 59, 900, None, 1, 0, 1]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[2, 5561, 2368, 687, 900, None, 1, 0, 2]
-        ),
+        call(module="C1", command="SAA", params=[2, 5561, 2368, 687, 900, None, 1, 0, 2]),
         call(module="C1", command="RPX", params=[0]),
-        call(
-          module="C1", command="SAA", params=[3, 5561, 2368, 1054, 900, None, 1, 0, 0]
-        ),
+        call(module="C1", command="SAA", params=[3, 5561, 2368, 1054, 900, None, 1, 0, 0]),
         call(module="C1", command="AAC"),
         call(module="C1", command="RPX", params=[0]),
         call(module="C1", command="SFY", params=[3500, 1000]),

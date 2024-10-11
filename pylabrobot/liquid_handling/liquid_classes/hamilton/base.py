@@ -80,9 +80,9 @@ class HamiltonLiquidClass:
     # interpolate between two nearest points.
     for pt, t in zip(targets[:-1], targets[1:]):
       if pt < target_volume < t:
-        return (self.curve[t] - self.curve[pt]) / (t - pt) * (
-          target_volume - t
-        ) + self.curve[t]  # (y = slope * (x-x1) + y1)
+        return (self.curve[t] - self.curve[pt]) / (t - pt) * (target_volume - t) + self.curve[
+          t
+        ]  # (y = slope * (x-x1) + y1)
 
     assert False, "Should never reach this point. Please file an issue."
 

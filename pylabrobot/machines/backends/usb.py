@@ -80,9 +80,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
         (specified by the `write_timeout` attribute).
     """
 
-    assert (
-      self.dev is not None and self.read_endpoint is not None
-    ), "Device not connected."
+    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
 
     if timeout is None:
       timeout = self.write_timeout
@@ -98,9 +96,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
       A string containing the decoded packet, or None if no packet was received.
     """
 
-    assert (
-      self.dev is not None and self.read_endpoint is not None
-    ), "Device not connected."
+    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
 
     try:
       res = self.dev.read(
@@ -174,8 +170,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
       if self.serial_number is not None:
         if dev.serial_number is None:
           raise RuntimeError(
-            "A serial number was specified, but the device does not have a serial "
-            "number."
+            "A serial number was specified, but the device does not have a serial " "number."
           )
 
         if dev.serial_number != self.serial_number:

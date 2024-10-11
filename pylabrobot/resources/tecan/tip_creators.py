@@ -227,9 +227,7 @@ def DiTi_Nested_Waste_MCA384_tip() -> TecanTip:
   """Tip for DiTi_Nested_Waste_MCA384"""
   print("WARNING: total_tip_length <= 0.")
   print("Please get in touch at https://discuss.pylabrobot.org")
-  return TecanTip(
-    has_filter=False, total_tip_length=0.0, maximal_volume=0.0, tip_type=TipType.DITI
-  )
+  return TecanTip(has_filter=False, total_tip_length=0.0, maximal_volume=0.0, tip_type=TipType.DITI)
 
 
 def DiTi_1000ul_SBS_LiHa_tip() -> TecanTip:

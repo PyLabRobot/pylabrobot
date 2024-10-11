@@ -80,9 +80,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     resp = await self.backend.read_absorbance(wavelength=580)
 
     self.backend.dev.write.assert_any_call(b"y")
-    self.backend.dev.write.assert_any_call(
-      b"08120112207434014351135308559127881772\x03"
-    )
+    self.backend.dev.write.assert_any_call(b"08120112207434014351135308559127881772\x03")
     self.backend.dev.write.assert_any_call(b"D")
     self.backend.dev.write.assert_any_call(
       b"004701010108120001200100001100100000106000080580113\x03"
@@ -241,9 +239,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.dev.write.assert_any_call(b"t")
     self.backend.dev.write.assert_any_call(b"621720\x03")
     self.backend.dev.write.assert_any_call(b"y")
-    self.backend.dev.write.assert_any_call(
-      b"08120112207434014351135308559127881772\x03"
-    )
+    self.backend.dev.write.assert_any_call(b"08120112207434014351135308559127881772\x03")
     self.backend.dev.write.assert_any_call(b"D")
     self.backend.dev.write.assert_any_call(
       b"0084010101081200012001000011001000001350001002002000485000052800000000000000000021001119"

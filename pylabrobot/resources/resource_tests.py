@@ -90,15 +90,9 @@ class TestResource(unittest.TestCase):
 
   def test_get_anchor(self):
     resource = Resource("test", size_x=12, size_y=12, size_z=12)
-    self.assertEqual(
-      resource.get_anchor(x="left", y="back", z="bottom"), Coordinate(0, 12, 0)
-    )
-    self.assertEqual(
-      resource.get_anchor(x="right", y="front", z="top"), Coordinate(12, 0, 12)
-    )
-    self.assertEqual(
-      resource.get_anchor(x="center", y="center", z="center"), Coordinate(6, 6, 6)
-    )
+    self.assertEqual(resource.get_anchor(x="left", y="back", z="bottom"), Coordinate(0, 12, 0))
+    self.assertEqual(resource.get_anchor(x="right", y="front", z="top"), Coordinate(12, 0, 12))
+    self.assertEqual(resource.get_anchor(x="center", y="center", z="center"), Coordinate(6, 6, 6))
 
     self.assertEqual(resource.get_anchor(x="l", y="b", z="b"), Coordinate(0, 12, 0))
     self.assertEqual(resource.get_anchor(x="r", y="f", z="t"), Coordinate(12, 0, 12))
@@ -111,12 +105,8 @@ class TestResource(unittest.TestCase):
     child = Resource("child", size_x=5, size_y=5, size_z=5)
     parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
-    self.assertEqual(
-      deck.get_resource("parent").get_absolute_location(), Coordinate(10, 10, 10)
-    )
-    self.assertEqual(
-      deck.get_resource("child").get_absolute_location(), Coordinate(15, 15, 15)
-    )
+    self.assertEqual(deck.get_resource("parent").get_absolute_location(), Coordinate(10, 10, 10))
+    self.assertEqual(deck.get_resource("child").get_absolute_location(), Coordinate(15, 15, 15))
 
   def test_get_absolute_location_with_anchor(self):
     deck = Deck()
@@ -260,9 +250,7 @@ class TestResource(unittest.TestCase):
     self.assertEqual(r.centers(), [Coordinate(5.0, 60, 5.0)])
     self.assertEqual(r.centers(zn=0), [Coordinate(5.0, 60, 0.0)])
 
-    self.assertEqual(
-      r.centers(yn=2), [Coordinate(5.0, 40.0, 5.0), Coordinate(5.0, 80.0, 5.0)]
-    )
+    self.assertEqual(r.centers(yn=2), [Coordinate(5.0, 40.0, 5.0), Coordinate(5.0, 80.0, 5.0)])
     self.assertEqual(
       r.centers(yn=3),
       [

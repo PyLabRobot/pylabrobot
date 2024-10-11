@@ -33,8 +33,7 @@ def ot_definition_to_resource(
 
   if not USE_OT:
     raise ImportError(
-      "opentrons_shared_data is not installed. "
-      "run `pip install opentrons_shared_data`"
+      "opentrons_shared_data is not installed. " "run `pip install opentrons_shared_data`"
     )
 
   display_category = data["metadata"]["displayCategory"]

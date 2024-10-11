@@ -74,9 +74,7 @@ class VolumeTracker:
     self.liquids: List[Tuple[Optional[Liquid], float]] = liquids or []
     self.pending_liquids: List[Tuple[Optional[Liquid], float]] = pending_liquids or []
 
-    self.liquid_history = {
-      liquid for liquid in (liquid_history or set()) if liquid is not None
-    }
+    self.liquid_history = {liquid for liquid in (liquid_history or set()) if liquid is not None}
 
     self._callback: Optional[VolumeTrackerCallback] = None
 

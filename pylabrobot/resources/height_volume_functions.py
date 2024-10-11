@@ -347,9 +347,7 @@ def calculate_liquid_height_in_container_2segments_round_ubottom(
 
   if liquid_volume <= hemisphere_volume:
     # Liquid volume is within the hemisphere
-    liquid_height = _height_of_volume_in_spherical_cap(
-      r=radius, liquid_volume=liquid_volume
-    )
+    liquid_height = _height_of_volume_in_spherical_cap(r=radius, liquid_volume=liquid_volume)
   else:
     # Liquid volume extends into the cylinder
     cylinder_liquid_volume = liquid_volume - hemisphere_volume
@@ -470,16 +468,12 @@ def calculate_liquid_volume_container_1segment_round_fbottom(
 #   )
 
 
-def compute_volume_from_height_cylinder(
-  liquid_height: float, well_radius: float
-) -> float:
+def compute_volume_from_height_cylinder(liquid_height: float, well_radius: float) -> float:
   """Compute volume (uL) from height (mm) for a cylinder."""
   return math.pi * (well_radius**2) * liquid_height
 
 
-def compute_height_from_volume_cylinder(
-  liquid_volume: float, well_radius: float
-) -> float:
+def compute_height_from_volume_cylinder(liquid_volume: float, well_radius: float) -> float:
   """Compute height (mm) from volume (uL) for a cylinder."""
   return liquid_volume / (math.pi * (well_radius**2))
 
@@ -505,16 +499,12 @@ def compute_height_from_volume_conical_frustum(
   )
 
 
-def compute_volume_from_height_square(
-  liquid_height: float, well_side_length: float
-) -> float:
+def compute_volume_from_height_square(liquid_height: float, well_side_length: float) -> float:
   """Compute volume (uL) from height (mm) for a square well."""
   return liquid_height * (well_side_length**2)
 
 
-def compute_height_from_volume_square(
-  liquid_volume: float, well_side_length: float
-) -> float:
+def compute_height_from_volume_square(liquid_volume: float, well_side_length: float) -> float:
   """Compute height (mm) from volume (uL) for a square well."""
   return liquid_volume / (well_side_length**2)
 

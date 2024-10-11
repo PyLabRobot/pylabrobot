@@ -33,12 +33,8 @@ def Trough_CAR_4R200_A00(name: str) -> TroughCarrier:
       klass=CarrierSite,
       locations=[
         Coordinate(4.0, 2.0, 34.0 + 1.5),
-        Coordinate(
-          4.0, 123.0, 34.0 + 1.5
-        ),  # TODO: properly define troughs to remove dependency
-        Coordinate(
-          4.0, 245.0, 34.0 + 1.5
-        ),  # on this 1.5mm offset (material_z_thickness)
+        Coordinate(4.0, 123.0, 34.0 + 1.5),  # TODO: properly define troughs to remove dependency
+        Coordinate(4.0, 245.0, 34.0 + 1.5),  # on this 1.5mm offset (material_z_thickness)
         Coordinate(4.0, 366.0, 34.0 + 1.5),
       ],
       site_size_x=37.0,

@@ -97,13 +97,11 @@ class TecanDeck(Deck):
 
     if resource_location is not None:
       if (
-        resource_location.x + resource.get_absolute_size_x()
-        > self.get_absolute_size_x()
+        resource_location.x + resource.get_absolute_size_x() > self.get_absolute_size_x()
         and rails is not None
       ):
         raise ValueError(
-          f"Resource with width {resource.get_absolute_size_x()} does not "
-          f"fit at rails {rails}."
+          f"Resource with width {resource.get_absolute_size_x()} does not " f"fit at rails {rails}."
         )
 
       # Check if there is space for this new resource.
@@ -168,15 +166,7 @@ class TecanDeck(Deck):
       )
 
     # Print header.
-    summary_ = (
-      "Rail"
-      + " " * 5
-      + "Resource"
-      + " " * 19
-      + "Type"
-      + " " * 16
-      + "Coordinates (mm)\n"
-    )
+    summary_ = "Rail" + " " * 5 + "Resource" + " " * 19 + "Type" + " " * 16 + "Coordinates (mm)\n"
     summary_ += "=" * 95 + "\n"
 
     def parse_resource(resource):  # pylint: disable=invalid-name

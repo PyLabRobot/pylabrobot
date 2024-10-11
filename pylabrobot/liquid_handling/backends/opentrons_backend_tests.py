@@ -17,9 +17,7 @@ def _is_python_3_10():
 
 
 def _mock_define(lw):
-  return {
-    "data": {"definitionUri": f'lw["namespace"]/{lw["metadata"]["displayName"]}/1'}
-  }
+  return {"data": {"definitionUri": f'lw["namespace"]/{lw["metadata"]["displayName"]}/1'}}
 
 
 def _mock_add(load_name, namespace, ot_location, version, labware_id, display_name):
@@ -60,9 +58,7 @@ class OpentronsBackendSetupTests(unittest.IsolatedAsyncioTestCase):
 
   def test_serialize(self):
     serialized = OpentronsBackend(host="localhost", port=1337).serialize()
-    self.assertEqual(
-      serialized, {"type": "OpentronsBackend", "host": "localhost", "port": 1337}
-    )
+    self.assertEqual(serialized, {"type": "OpentronsBackend", "host": "localhost", "port": 1337})
     self.assertEqual(
       OpentronsBackend.deserialize(serialized).__class__.__name__, "OpentronsBackend"
     )
@@ -140,13 +136,9 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
   @patch("ot_api.lh.pick_up_tip")
   async def test_tip_pick_up(self, mock_pick_up_tip=None):
-    assert (
-      mock_pick_up_tip is not None
-    )  # just the default for pylint, provided by @patch
+    assert mock_pick_up_tip is not None  # just the default for pylint, provided by @patch
 
-    def assert_parameters(
-      labware_id, well_name, pipette_id, offset_x, offset_y, offset_z
-    ):
+    def assert_parameters(labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
       self.assertEqual(labware_id, "tip_rack")
       self.assertEqual(well_name, "tip_rack_A1")
       self.assertEqual(pipette_id, "left-pipette-id")
@@ -160,9 +152,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
   @patch("ot_api.lh.drop_tip")
   async def test_tip_drop(self, mock_drop_tip):
-    def assert_parameters(
-      labware_id, well_name, pipette_id, offset_x, offset_y, offset_z
-    ):
+    def assert_parameters(labware_id, well_name, pipette_id, offset_x, offset_y, offset_z):
       self.assertEqual(labware_id, "tip_rack")
       self.assertEqual(well_name, "tip_rack_A1")
       self.assertEqual(pipette_id, "left-pipette-id")

@@ -39,49 +39,31 @@ class SaverBackend(LiquidHandlerBackend):
     )
 
   async def pick_up_tips(self, *args, **kwargs):
-    self.commands_received.append(
-      {"command": "pick_up_tips", "args": args, "kwargs": kwargs}
-    )
+    self.commands_received.append({"command": "pick_up_tips", "args": args, "kwargs": kwargs})
 
   async def drop_tips(self, *args, **kwargs):
-    self.commands_received.append(
-      {"command": "drop_tips", "args": args, "kwargs": kwargs}
-    )
+    self.commands_received.append({"command": "drop_tips", "args": args, "kwargs": kwargs})
 
   async def aspirate(self, *args, **kwargs):
-    self.commands_received.append(
-      {"command": "aspirate", "args": args, "kwargs": kwargs}
-    )
+    self.commands_received.append({"command": "aspirate", "args": args, "kwargs": kwargs})
 
   async def dispense(self, *args, **kwargs):
-    self.commands_received.append(
-      {"command": "dispense", "args": args, "kwargs": kwargs}
-    )
+    self.commands_received.append({"command": "dispense", "args": args, "kwargs": kwargs})
 
   async def pick_up_tips96(self, *args, **kwargs):
-    self.commands_received.append(
-      {"command": "pick_up_tips96", "args": args, "kwargs": kwargs}
-    )
+    self.commands_received.append({"command": "pick_up_tips96", "args": args, "kwargs": kwargs})
 
   async def drop_tips96(self, *args, **kwargs):
-    self.commands_received.append(
-      {"command": "drop_tips96", "args": args, "kwargs": kwargs}
-    )
+    self.commands_received.append({"command": "drop_tips96", "args": args, "kwargs": kwargs})
 
   async def aspirate96(self, *args, **kwargs):
-    self.commands_received.append(
-      {"command": "aspirate96", "args": args, "kwargs": kwargs}
-    )
+    self.commands_received.append({"command": "aspirate96", "args": args, "kwargs": kwargs})
 
   async def dispense96(self, *args, **kwargs):
-    self.commands_received.append(
-      {"command": "dispense96", "args": args, "kwargs": kwargs}
-    )
+    self.commands_received.append({"command": "dispense96", "args": args, "kwargs": kwargs})
 
   async def move_resource(self, *args, **kwargs):
-    self.commands_received.append(
-      {"command": "move_resource", "args": args, "kwargs": kwargs}
-    )
+    self.commands_received.append({"command": "move_resource", "args": args, "kwargs": kwargs})
 
   # Saver specific methods
 
@@ -89,6 +71,4 @@ class SaverBackend(LiquidHandlerBackend):
     self.commands_received = []
 
   def get_commands_for_event(self, event: str) -> List[Dict[str, Any]]:
-    return [
-      command for command in self.commands_received if command["command"] == event
-    ]
+    return [command for command in self.commands_received if command["command"] == event]

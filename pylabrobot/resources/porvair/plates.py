@@ -25,9 +25,7 @@ def _compute_volume_from_height_Porvair_6_reservoir_47ml_Vb(h: float):
 
 def _compute_height_from_volume_Porvair_6_reservoir_47ml_Vb(liquid_volume: float):
   if liquid_volume > 49_350.0:  # 5% tolerance
-    raise ValueError(
-      f"Volume {liquid_volume} is too large for Porvair_6_reservoir_47ml_Vb"
-    )
+    raise ValueError(f"Volume {liquid_volume} is too large for Porvair_6_reservoir_47ml_Vb")
   return round(
     calculate_liquid_height_in_container_2segments_square_vbottom(
       x=17, y=70.8, h_pyramid=5, h_cube=37.5, liquid_volume=liquid_volume

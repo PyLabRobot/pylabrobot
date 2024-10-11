@@ -6,9 +6,7 @@ from pylabrobot.resources.liquid import Liquid
 from pylabrobot.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
 
 
-vantage_mapping: Dict[
-  Tuple[int, bool, bool, bool, Liquid, bool, bool], HamiltonLiquidClass
-] = {}
+vantage_mapping: Dict[Tuple[int, bool, bool, bool, Liquid, bool, bool], HamiltonLiquidClass] = {}
 
 
 def get_vantage_liquid_class(
@@ -48,9 +46,7 @@ def get_vantage_liquid_class(
     }.get(tip_volume, tip_volume)
   )
 
-  return vantage_mapping.get(
-    (tip_volume, is_core, is_tip, has_filter, liquid, jet, blow_out), None
-  )
+  return vantage_mapping.get((tip_volume, is_core, is_tip, has_filter, liquid, jet, blow_out), None)
 
 
 vantage_mapping[(1000, False, False, False, Liquid.WATER, True, True)] = (
@@ -1013,9 +1009,9 @@ vantage_mapping[(50, False, True, False, Liquid.WATER, False, True)] = (
 #     100                       1.04                   0.05
 #     300                       0.63                  -0.07
 #
-vantage_mapping[
-  (300, False, False, False, Liquid.ACETONITRIL80WATER20, True, False)
-] = _300ulNeedleAcetonitril80Water20DispenseJet = HamiltonLiquidClass(
+vantage_mapping[(300, False, False, False, Liquid.ACETONITRIL80WATER20, True, False)] = (
+  _300ulNeedleAcetonitril80Water20DispenseJet
+) = HamiltonLiquidClass(
   curve={300.0: 310.0, 50.0: 57.8, 0.0: 0.0, 100.0: 106.5, 20.0: 26.8, 10.0: 16.5},
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=50.0,

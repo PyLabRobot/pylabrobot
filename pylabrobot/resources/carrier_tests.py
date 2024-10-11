@@ -151,9 +151,7 @@ class CarrierTests(unittest.TestCase):
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_resource_to_site(plate, spot=0)
 
-    self.assertEqual(
-      carrier.get_resource("plate").get_absolute_location(), Coordinate(15, 15, 15)
-    )
+    self.assertEqual(carrier.get_resource("plate").get_absolute_location(), Coordinate(15, 15, 15))
 
   def test_capacity(self):
     self.assertEqual(self.tip_car.capacity, 5)
@@ -351,9 +349,7 @@ class CarrierTests(unittest.TestCase):
         pedestal_size_z=10,
       ),
     )
-    resource_stack = ResourceStack(
-      name="resource_stack", direction="z", resources=[plate2, plate1]
-    )
+    resource_stack = ResourceStack(name="resource_stack", direction="z", resources=[plate2, plate1])
     carrier[0] = resource_stack
     self.assertEqual(resource_stack.location, Coordinate(0, 0, -5))
     self.assertEqual(plate1.location, Coordinate(0, 0, 0))

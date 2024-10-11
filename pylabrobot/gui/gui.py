@@ -275,9 +275,7 @@ def create():
     elif deck_type == "opentrons-ot2":
       deck = OTDeck()
     else:
-      return jsonify(
-        {"error": f"Unknown deck type '{deck_type}'.", "success": False}
-      ), 400
+      return jsonify({"error": f"Unknown deck type '{deck_type}'.", "success": False}), 400
   else:
     return jsonify({"error": f"Unknown type '{data['type']}'.", "success": False}), 400
 

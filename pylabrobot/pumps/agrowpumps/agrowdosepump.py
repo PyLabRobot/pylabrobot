@@ -104,9 +104,7 @@ class AgrowPumpArray(PumpArrayBackend):
         logger.error("Error in keep alive thread: %s", e)
 
     self._keep_alive_thread_active = True
-    self._keep_alive_thread = threading.Thread(
-      target=manage_async_keep_alive, daemon=True
-    )
+    self._keep_alive_thread = threading.Thread(target=manage_async_keep_alive, daemon=True)
     self._keep_alive_thread.start()
 
   async def setup(self):
@@ -119,9 +117,7 @@ class AgrowPumpArray(PumpArrayBackend):
       "".join(chr(r // 256) + chr(r % 256) for r in register_return.registers)[2]
     )
     self.start_keep_alive_thread()
-    self._pump_index_to_address = {
-      pump: pump + 100 for pump in range(0, self.num_channels)
-    }
+    self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
 
   async def _setup_modbus(self):
     self._modbus = AsyncModbusSerialClient(
@@ -140,9 +136,7 @@ class AgrowPumpArray(PumpArrayBackend):
   def serialize(self):
     return {**super().serialize(), "port": self.port, "address": self.address}
 
-  async def run_revolutions(
-    self, num_revolutions: List[float], use_channels: List[int]
-  ):
+  async def run_revolutions(self, num_revolutions: List[float], use_channels: List[int]):
     """Run the specified channels at the speed selected. If speed is 0, the pump will be halted.
 
     Args:
@@ -180,9 +174,7 @@ class AgrowPumpArray(PumpArrayBackend):
   async def halt(self):
     """Halt the entire pump array."""
     assert self.modbus is not None, "Modbus connection not established"
-    assert (
-      self.pump_index_to_address is not None
-    ), "Pump address mapping not established"
+    assert self.pump_index_to_address is not None, "Pump address mapping not established"
     logger.info("Halting pump array")
     for pump in self.pump_index_to_address:
       address = self.pump_index_to_address[pump]
