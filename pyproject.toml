@@ -1,0 +1,6 @@
+[tool.ruff]
+line-length = 88
+indent-width = 2
+
+[tool.ruff.lint]
+ignore = ["F403"]

@@ -560,11 +560,11 @@ class EVO(TecanLiquidHandler):
 
   def _first_valid(
     self,
-    l: List[Optional[T]]
+    lst: List[Optional[T]]
   ) -> Tuple[Optional[T], int]:
     """ Returns first item in list that is not None """
 
-    for i, v in enumerate(l):
+    for i, v in enumerate(lst):
       if v is not None:
         return v, i
     return None, -1

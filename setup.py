@@ -52,10 +52,10 @@ extras_dev = extras_fw + extras_http + extras_plate_reading + extras_websockets 
     "sphinx_copybutton",
     "pytest",
     "pytest-timeout",
-    "pylint",
     "mypy",
     "responses",
     "sphinx-reredirects",
+    "ruff==0.2.1",
   ]
 
 # Some extras are not available on all platforms. `dev` should be available everywhere

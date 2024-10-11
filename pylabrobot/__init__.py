@@ -5,7 +5,6 @@ import sys
 from typing import Union
 import warnings
 
-from pylabrobot.__version__ import __version__
 
 from pylabrobot.config import load_config, Config
 

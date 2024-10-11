@@ -153,11 +153,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     cmd += f"id{cmd_id:04}" # id has to be the first param
 
     for k, v in kwargs.items():
-      if type(v) is datetime.datetime:
+      if isinstance(v, datetime.datetime):
         v = v.strftime("%Y-%m-%d %h:%M")
-      elif type(v) is bool:
+      elif isinstance(v, bool):
         v = 1 if v else 0
-      elif type(v) is list:
+      elif isinstance(v, list):
         # If this command is 'one-hot' encoded, for the channels, then the list should be the
         # same length as the 'one-hot' encoding key (tip_pattern.) If the list is shorter than
         # that, it will be 'one-hot encoded automatically. Note that this may raise an error if
@@ -167,7 +167,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
             # convert one-hot encoded list to int list
             v = self._to_list(v, tip_pattern)
           # list is now of length len(tip_pattern)
-        if type(v[0]) is bool: # convert bool list to int list
+        if isinstance(v[0], bool): # convert bool list to int list
           v = [int(x) for x in v]
         v = " ".join([str(e) for e in v]) + ("&" if len(v) < self.num_channels else "")
       if k.endswith("_"): # workaround for kwargs named in, as, ...

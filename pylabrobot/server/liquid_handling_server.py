@@ -136,10 +136,10 @@ async def pick_up_tips():
         raise ErrorResponse(
           {"error": f"resource with name '{sc['resource_name']}' not found"},
           404) from exc
-      if not "tip" in sc:
+      if "tip" not in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
       tip = cast(Tip, deserialize(sc["tip"]))
-      if not "offset" in sc:
+      if "offset" not in sc:
         raise ErrorResponse({"error": "missing key in json data: offset"}, 400)
       offset = cast(Coordinate, deserialize(sc["offset"]))
       pickups.append(Pickup(resource=resource, tip=tip, offset=offset))
@@ -166,10 +166,10 @@ async def drop_tips():
         raise ErrorResponse(
           {"error": f"resource with name '{sc['resource_name']}' not found"},
           404) from exc
-      if not "tip" in sc:
+      if "tip" not in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
       tip = cast(Tip, deserialize(sc["tip"]))
-      if not "offset" in sc:
+      if "offset" not in sc:
         raise ErrorResponse({"error": "missing key in json data: offset"}, 400)
       offset = cast(Coordinate, deserialize(sc["offset"]))
       drops.append(Drop(resource=resource, tip=tip, offset=offset))
@@ -196,10 +196,10 @@ async def aspirate():
         raise ErrorResponse(
           {"error": f"resource with name '{sc['resource_name']}' not found"},
           404) from exc
-      if not "tip" in sc:
+      if "tip" not in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
       tip = cast(Tip, deserialize(sc["tip"]))
-      if not "offset" in sc:
+      if "offset" not in sc:
         raise ErrorResponse({"error": "missing key in json data: offset"}, 400)
       offset = cast(Coordinate, deserialize(sc["offset"]))
       volume = sc["volume"]
@@ -238,10 +238,10 @@ async def dispense():
         raise ErrorResponse(
           {"error": f"resource with name '{sc['resource_name']}' not found"},
           404) from exc
-      if not "tip" in sc:
+      if "tip" not in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
       tip = cast(Tip, deserialize(sc["tip"]))
-      if not "offset" in sc:
+      if "offset" not in sc:
         raise ErrorResponse({"error": "missing key in json data: offset"}, 400)
       offset = cast(Coordinate, deserialize(sc["offset"]))
       volume = sc["volume"]

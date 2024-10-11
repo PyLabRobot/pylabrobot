@@ -369,7 +369,7 @@ class Vantage(HamiltonLiquidHandler):
   def check_fw_string_error(self, resp: str):
     """ Raise an error if the firmware response is an error response. """
 
-    if "er" in resp and not "er0" in resp:
+    if "er" in resp and "er0" not in resp:
       error = vantage_response_string_to_error(resp)
       raise error
 

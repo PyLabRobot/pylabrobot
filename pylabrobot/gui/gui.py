@@ -250,7 +250,7 @@ def save(filename):
 def create():
   data = request.get_json()
 
-  if not "type" in data:
+  if "type" not in data:
     return jsonify({"error": "No type specified.", "success": False}), 400
 
   # Get a deck from the submitted data, either from a file or create a new deck.

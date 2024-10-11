@@ -349,12 +349,12 @@ def create_carrier_sites(
   """ Create a list of carrier sites with the given sizes. """
 
   sites = []
-  for spot, (l, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
+  for spot, (location, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
     site = klass(
       name = f"carrier-site-{spot}",
       size_x=x, size_y=y, size_z=0,
       **kwargs)
-    site.location = l
+    site.location = location
     sites.append(site)
   return sites
 

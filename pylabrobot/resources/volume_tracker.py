@@ -100,7 +100,7 @@ class VolumeTracker:
     self.pending_liquids = liquids
 
     if not self.is_cross_contamination_tracking_disabled:
-      self.liquid_history.update([l[0] for l in liquids])
+      self.liquid_history.update([liquid[0] for liquid in liquids])
 
     if self._callback is not None:
       self._callback()
@@ -207,14 +207,14 @@ class VolumeTracker:
 
     if not self.is_cross_contamination_tracking_disabled:
       return {
-        "liquids": [serialize(l) for l in self.liquids],
-        "pending_liquids": [serialize(l) for l in self.pending_liquids],
-        "liquid_history": [serialize(l) for l in self.liquid_history],
+        "liquids": [serialize(liquid) for liquid in self.liquids],
+        "pending_liquids": [serialize(liquid) for liquid in self.pending_liquids],
+        "liquid_history": [serialize(liquid) for liquid in self.liquid_history],
       }
 
     return {
-      "liquids": [serialize(l) for l in self.liquids],
-      "pending_liquids": [serialize(l) for l in self.pending_liquids],
+      "liquids": [serialize(liquid) for liquid in self.liquids],
+      "pending_liquids": [serialize(liquid) for liquid in self.pending_liquids],
     }
 
   def load_state(self, state: dict) -> None:
@@ -223,8 +223,8 @@ class VolumeTracker:
     def load_liquid(data) -> Tuple[Optional["Liquid"], float]:
       return cast(Tuple["Liquid", float], tuple(deserialize(data)))
 
-    self.liquids = [load_liquid(l) for l in state["liquids"]]
-    self.pending_liquids = [load_liquid(l) for l in state["pending_liquids"]]
+    self.liquids = [load_liquid(liquid) for liquid in state["liquids"]]
+    self.pending_liquids = [load_liquid(liquid) for liquid in state["pending_liquids"]]
 
     if not self.is_cross_contamination_tracking_disabled:
       self.liquid_history = set(state["liquid_history"])

@@ -2679,7 +2679,7 @@ class STAR(HamiltonLiquidHandler):
         Only used if `use_arm` is "core".
     """
 
-    if not use_arm in {"iswap", "core"}:
+    if use_arm not in {"iswap", "core"}:
       raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
 
     if use_arm == "iswap":
