@@ -18,13 +18,20 @@ writing-robot-agnostic-methods
 hamilton-star/hamilton-star
 ```
 
+````{toctree}
+:maxdepth: 1
+:caption: Centrifuge
+
+centrifuge
+```
+
 ```{toctree}
 :maxdepth: 1
 :caption: Plate reading
 
 plate_reading
 cytation5
-```
+````
 
 ```{toctree}
 :maxdepth: 1
