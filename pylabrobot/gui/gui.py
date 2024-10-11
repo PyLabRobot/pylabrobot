@@ -9,8 +9,10 @@ import pylabrobot.resources as resources_module
 from pylabrobot.resources import Resource, STARDeck, STARLetDeck, OTDeck, Deck
 
 print("!" * 80)
-print("I am not sure if the GUI still works. If you are interested in using this, please get in "
-      "touch on discuss.pylabrobot.org")
+print(
+  "I am not sure if the GUI still works. If you are interested in using this, please get in "
+  "touch on discuss.pylabrobot.org"
+)
 print("!" * 80)
 
 app = Flask(__name__, template_folder=".", static_folder=".")
@@ -30,6 +32,7 @@ def get_file_data(filename):
     contents = f.read()
     data = json.loads(contents)
     return jsonify(data=data)
+
 
 @app.route("/editor/<string:filename>")
 def editor(filename):
@@ -204,7 +207,9 @@ def list_resources():
       "STF_P",
       "ST_L",
       "ST_P",
-    ])
+    ],
+  )
+
 
 @app.route("/resource/<resource_id>")
 def resource(resource_id):
@@ -258,7 +263,7 @@ def create():
     deck_data = data["deck"]
     try:
       deck = Resource.deserialize(deck_data)
-    except Exception as e: # pylint: disable=broad-exception-caught
+    except Exception as e:  # pylint: disable=broad-exception-caught
       traceback.print_exc()
       return jsonify({"error": str(e), "success": False}), 400
   elif data["type"] == "new_deck":
@@ -270,7 +275,9 @@ def create():
     elif deck_type == "opentrons-ot2":
       deck = OTDeck()
     else:
-      return jsonify({"error": f"Unknown deck type '{deck_type}'.", "success": False}), 400
+      return jsonify(
+        {"error": f"Unknown deck type '{deck_type}'.", "success": False}
+      ), 400
   else:
     return jsonify({"error": f"Unknown type '{data['type']}'.", "success": False}), 400
 

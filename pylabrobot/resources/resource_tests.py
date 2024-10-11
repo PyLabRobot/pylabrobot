@@ -1,4 +1,4 @@
-""" Tests for Resource """
+"""Tests for Resource"""
 # pylint: disable=missing-class-docstring
 
 import math
@@ -90,9 +90,15 @@ class TestResource(unittest.TestCase):
 
   def test_get_anchor(self):
     resource = Resource("test", size_x=12, size_y=12, size_z=12)
-    self.assertEqual(resource.get_anchor(x="left", y="back", z="bottom"), Coordinate(0, 12, 0))
-    self.assertEqual(resource.get_anchor(x="right", y="front", z="top"), Coordinate(12, 0, 12))
-    self.assertEqual(resource.get_anchor(x="center", y="center", z="center"), Coordinate(6, 6, 6))
+    self.assertEqual(
+      resource.get_anchor(x="left", y="back", z="bottom"), Coordinate(0, 12, 0)
+    )
+    self.assertEqual(
+      resource.get_anchor(x="right", y="front", z="top"), Coordinate(12, 0, 12)
+    )
+    self.assertEqual(
+      resource.get_anchor(x="center", y="center", z="center"), Coordinate(6, 6, 6)
+    )
 
     self.assertEqual(resource.get_anchor(x="l", y="b", z="b"), Coordinate(0, 12, 0))
     self.assertEqual(resource.get_anchor(x="r", y="f", z="t"), Coordinate(12, 0, 12))
@@ -105,8 +111,12 @@ class TestResource(unittest.TestCase):
     child = Resource("child", size_x=5, size_y=5, size_z=5)
     parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
-    self.assertEqual(deck.get_resource("parent").get_absolute_location(), Coordinate(10, 10, 10))
-    self.assertEqual(deck.get_resource("child").get_absolute_location(), Coordinate(15, 15, 15))
+    self.assertEqual(
+      deck.get_resource("parent").get_absolute_location(), Coordinate(10, 10, 10)
+    )
+    self.assertEqual(
+      deck.get_resource("child").get_absolute_location(), Coordinate(15, 15, 15)
+    )
 
   def test_get_absolute_location_with_anchor(self):
     deck = Deck()
@@ -115,10 +125,14 @@ class TestResource(unittest.TestCase):
     child = Resource("child", size_x=5, size_y=5, size_z=5)
     parent.assign_child_resource(child, location=Coordinate(5, 5, 5))
 
-    self.assertEqual(deck.get_resource("parent")\
-                     .get_absolute_location(x="right", y="front", z="top"), Coordinate(20, 10, 20))
-    self.assertEqual(deck.get_resource("child")\
-                     .get_absolute_location(x="right", y="front", z="top"), Coordinate(20, 15, 20))
+    self.assertEqual(
+      deck.get_resource("parent").get_absolute_location(x="right", y="front", z="top"),
+      Coordinate(20, 10, 20),
+    )
+    self.assertEqual(
+      deck.get_resource("child").get_absolute_location(x="right", y="front", z="top"),
+      Coordinate(20, 15, 20),
+    )
 
   def test_unassign_child(self):
     deck = Deck()
@@ -158,64 +172,78 @@ class TestResource(unittest.TestCase):
 
   def test_serialize(self):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
-    self.assertEqual(r.serialize(), {
-      "name": "test",
-      "location": None,
-      "rotation": {
-        "type": "Rotation",
-        "x": 0, "y": 0, "z": 0,
+    self.assertEqual(
+      r.serialize(),
+      {
+        "name": "test",
+        "location": None,
+        "rotation": {
+          "type": "Rotation",
+          "x": 0,
+          "y": 0,
+          "z": 0,
+        },
+        "size_x": 10,
+        "size_y": 10,
+        "size_z": 10,
+        "type": "Resource",
+        "children": [],
+        "category": None,
+        "parent_name": None,
+        "model": None,
       },
-      "size_x": 10,
-      "size_y": 10,
-      "size_z": 10,
-      "type": "Resource",
-      "children": [],
-      "category": None,
-      "parent_name": None,
-      "model": None,
-    })
+    )
 
   def test_child_serialize(self):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
     child = Resource("child", size_x=1, size_y=1, size_z=1)
     r.assign_child_resource(child, location=Coordinate(5, 5, 5))
     self.maxDiff = None
-    self.assertEqual(r.serialize(), {
-      "name": "test",
-      "location": None,
-      "rotation": {
-        "type": "Rotation",
-        "x": 0, "y": 0, "z": 0,
+    self.assertEqual(
+      r.serialize(),
+      {
+        "name": "test",
+        "location": None,
+        "rotation": {
+          "type": "Rotation",
+          "x": 0,
+          "y": 0,
+          "z": 0,
+        },
+        "size_x": 10,
+        "size_y": 10,
+        "size_z": 10,
+        "type": "Resource",
+        "children": [
+          {
+            "name": "child",
+            "location": {
+              "type": "Coordinate",
+              "x": 5,
+              "y": 5,
+              "z": 5,
+            },
+            "rotation": {
+              "type": "Rotation",
+              "x": 0,
+              "y": 0,
+              "z": 0,
+            },
+            "size_x": 1,
+            "size_y": 1,
+            "size_z": 1,
+            "type": "Resource",
+            "children": [],
+            "category": None,
+            "parent_name": "test",
+            "model": None,
+          }
+        ],
+        "category": None,
+        "parent_name": None,
+        "model": None,
       },
-      "size_x": 10,
-      "size_y": 10,
-      "size_z": 10,
-      "type": "Resource",
-      "children": [
-        {
-          "name": "child",
-          "location": {
-            "type": "Coordinate",
-            "x": 5, "y": 5, "z": 5,
-          },
-          "rotation": {
-            "type": "Rotation",
-            "x": 0, "y": 0, "z": 0,
-          },
-          "size_x": 1,
-          "size_y": 1,
-          "size_z": 1,
-          "type": "Resource",
-          "children": [],
-          "category": None,
-          "parent_name": "test",
-          "model": None,
-        }
-      ],
-      "category": None,
-      "parent_name": None,
-      "model": None,
-    })
+    )
 
   def test_deserialize(self):
     r = Resource("test", size_x=10, size_y=10, size_z=10)
@@ -232,9 +260,17 @@ class TestResource(unittest.TestCase):
     self.assertEqual(r.centers(), [Coordinate(5.0, 60, 5.0)])
     self.assertEqual(r.centers(zn=0), [Coordinate(5.0, 60, 0.0)])
 
-    self.assertEqual(r.centers(yn=2), [Coordinate(5.0, 40.0, 5.0), Coordinate(5.0, 80.0, 5.0)])
-    self.assertEqual(r.centers(yn=3), [Coordinate(5.0, 30.0, 5.0), Coordinate(5.0, 60.0, 5.0),
-                                       Coordinate(5.0, 90.0, 5.0)])
+    self.assertEqual(
+      r.centers(yn=2), [Coordinate(5.0, 40.0, 5.0), Coordinate(5.0, 80.0, 5.0)]
+    )
+    self.assertEqual(
+      r.centers(yn=3),
+      [
+        Coordinate(5.0, 30.0, 5.0),
+        Coordinate(5.0, 60.0, 5.0),
+        Coordinate(5.0, 90.0, 5.0),
+      ],
+    )
 
   def test_rotation90(self):
     r = Resource("parent", size_x=200, size_y=100, size_z=100)
@@ -282,20 +318,21 @@ class TestResource(unittest.TestCase):
     r.assign_child_resource(c, location=Coordinate(20, 10, 10))
 
     r.rotate(z=90)
-    r.rotate(z=90) # 180
+    r.rotate(z=90)  # 180
     self.assertAlmostEqual(r.get_absolute_size_x(), 200)
     self.assertAlmostEqual(r.get_absolute_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(x=-20, y=-10, z=10))
 
-    r.rotate(z=90) # 270
+    r.rotate(z=90)  # 270
     self.assertAlmostEqual(r.get_absolute_size_x(), 100)
     self.assertAlmostEqual(r.get_absolute_size_y(), 200)
     self.assertEqual(c.get_absolute_location(), Coordinate(x=10, y=-20, z=10))
 
-    r.rotate(z=90) # 0
+    r.rotate(z=90)  # 0
     self.assertAlmostEqual(r.get_absolute_size_x(), 200)
     self.assertAlmostEqual(r.get_absolute_size_y(), 100)
     self.assertEqual(c.get_absolute_location(), Coordinate(20, 10, 10))
+
 
 class TestResourceCallback(unittest.TestCase):
   def setUp(self) -> None:

@@ -3,6 +3,7 @@ from pylabrobot.machines.machine import Machine, need_setup_finished
 from .backend import PowderDispenserBackend, PowderDispense
 from pylabrobot.resources import Resource, Powder
 
+
 class PowderDispenser(Machine):
   """
   The front end for powder dispensers. Powder dispensers are devices that can dispense powder
@@ -24,11 +25,18 @@ class PowderDispenser(Machine):
     size_z: float,
     backend: PowderDispenserBackend,
     category: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
     # deck: Deck
   ) -> None:
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
-                     category=category, model=model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      backend=backend,
+      category=category,
+      model=model,
+    )
     self.backend: PowderDispenserBackend = backend
 
   @need_setup_finished
@@ -37,7 +45,7 @@ class PowderDispenser(Machine):
     resources: Union[Resource, Sequence[Resource]],
     powders: Union[Powder, Sequence[Powder]],
     amounts: Union[float, Sequence[float]],
-    **backend_kwargs
+    **backend_kwargs,
   ) -> List[Dict[str, Any]]:
     """
     Dispense powders into containers with specified amounts and tolerances.
@@ -69,13 +77,13 @@ class PowderDispenser(Machine):
     assert len(amounts) == len(powders) == len(resources)
 
     powder_dispenses = [
-        PowderDispense(resource=r, powder=p, amount=a)
-        for r, p, a in zip(
-          resources,
-          powders,
-          amounts,
-        )
-      ]
+      PowderDispense(resource=r, powder=p, amount=a)
+      for r, p, a in zip(
+        resources,
+        powders,
+        amounts,
+      )
+    ]
 
     result = await self.backend.dispense(powder_dispenses, **backend_kwargs)
 

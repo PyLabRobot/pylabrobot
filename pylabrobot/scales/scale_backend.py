@@ -3,16 +3,14 @@ from pylabrobot.machines.backends import MachineBackend
 
 
 class ScaleBackend(MachineBackend, metaclass=ABCMeta):
-  """ Backend for a scale """
+  """Backend for a scale"""
 
   @abstractmethod
-  async def tare(self):
-    ...
+  async def tare(self): ...
 
   @abstractmethod
   async def get_weight(self) -> float:
-    """ Get the weight in grams """
+    """Get the weight in grams"""
 
   @abstractmethod
-  async def zero(self):
-    ...
+  async def zero(self): ...

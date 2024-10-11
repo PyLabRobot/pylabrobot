@@ -6,7 +6,7 @@ from .resource import Resource
 
 
 class PetriDish(Container):
-  """ A petri dish """
+  """A petri dish"""
 
   def __init__(
     self,
@@ -40,15 +40,11 @@ class PetriDish(Container):
     for key in ["size_x", "size_y", "size_z"]:
       del super_serialized[key]
 
-    return {
-      **super_serialized,
-      "diameter": self.diameter,
-      "height": self.height
-    }
+    return {**super_serialized, "diameter": self.diameter, "height": self.height}
 
 
 class PetriDishHolder(Resource):
-  """ 3d printed holder for petri dish, size of a 96 well plate """
+  """3d printed holder for petri dish, size of a 96 well plate"""
 
   def __init__(
     self,
@@ -57,7 +53,7 @@ class PetriDishHolder(Resource):
     size_y: float = 85.48,
     size_z: float = 14.5,
     category: str = "petri_dish_holder",
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
     super().__init__(
       name=name,
@@ -68,8 +64,10 @@ class PetriDishHolder(Resource):
       model=model,
     )
 
-  def assign_child_resource(self, resource: Resource, location: Coordinate, reassign: bool = True):
-    """ Can only assign a single PetriDish """
+  def assign_child_resource(
+    self, resource: Resource, location: Coordinate, reassign: bool = True
+  ):
+    """Can only assign a single PetriDish"""
     if not isinstance(resource, PetriDish):
       raise TypeError("Can only assign PetriDish to PetriDishHolder")
 

@@ -4,7 +4,7 @@ from pylabrobot.pumps.backend import PumpBackend, PumpArrayBackend
 
 
 class PumpChatterboxBackend(PumpBackend):
-  """ Chatter box backend for device-free testing. Prints out all operations. """
+  """Chatter box backend for device-free testing. Prints out all operations."""
 
   async def setup(self):
     print("Setting up the pump.")
@@ -23,7 +23,7 @@ class PumpChatterboxBackend(PumpBackend):
 
 
 class PumpArrayChatterboxBackend(PumpArrayBackend):
-  """ Chatter box backend for device-free testing. Prints out all operations. """
+  """Chatter box backend for device-free testing. Prints out all operations."""
 
   def __init__(self, num_channels: int = 8) -> None:
     self._num_channels = num_channels
@@ -38,7 +38,9 @@ class PumpArrayChatterboxBackend(PumpArrayBackend):
   def num_channels(self) -> int:
     return self._num_channels
 
-  async def run_revolutions(self, num_revolutions: List[float], use_channels: List[int]):
+  async def run_revolutions(
+    self, num_revolutions: List[float], use_channels: List[int]
+  ):
     print(f"Running {num_revolutions} revolutions on channels {use_channels}.")
 
   async def run_continuously(self, speed: List[float], use_channels: List[int]):

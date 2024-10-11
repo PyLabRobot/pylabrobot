@@ -15,12 +15,12 @@ from pylabrobot.liquid_handling.standard import (
   Dispense,
   DispensePlate,
   DispenseContainer,
-  Move
+  Move,
 )
 
 
 class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
-  """ Chatter box backend for device-free testing. Prints out all operations. """
+  """Chatter box backend for device-free testing. Prints out all operations."""
 
   _pip_length = 5
   _vol_length = 8
@@ -38,7 +38,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
   _filter_length = 10
 
   def __init__(self, num_channels: int = 8):
-    """ Initialize a chatter box backend. """
+    """Initialize a chatter box backend."""
     super().__init__()
     self._num_channels = num_channels
 
@@ -62,7 +62,9 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
   async def unassigned_resource_callback(self, name: str):
     print(f"Resource {name} was unassigned from the liquid handler.")
 
-  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
+  async def pick_up_tips(
+    self, ops: List[Pickup], use_channels: List[int], **backend_kwargs
+  ):
     print("Picking up tips:")
     header = (
       f"{'pip#':<{LiquidHandlerChatterboxBackend._pip_length}} "
@@ -78,7 +80,9 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
     print(header)
 
     for op, channel in zip(ops, use_channels):
-      offset = f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
+      offset = (
+        f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
+      )
       row = (
         f"  p{channel}: "
         f"{op.resource.name[-30:]:<{LiquidHandlerChatterboxBackend._resource_length}} "
@@ -108,7 +112,9 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
     print(header)
 
     for op, channel in zip(ops, use_channels):
-      offset = f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
+      offset = (
+        f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
+      )
       row = (
         f"  p{channel}: "
         f"{op.resource.name[-30:]:<{LiquidHandlerChatterboxBackend._resource_length}} "
@@ -122,7 +128,9 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
       )
       print(row)
 
-  async def aspirate(self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs):
+  async def aspirate(
+    self, ops: List[Aspiration], use_channels: List[int], **backend_kwargs
+  ):
     print("Aspirating:")
     header = (
       f"{'pip#':<{LiquidHandlerChatterboxBackend._pip_length}} "
@@ -158,7 +166,9 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
         row += f" {value:<15}"
       print(row)
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int], **backend_kwargs):
+  async def dispense(
+    self, ops: List[Dispense], use_channels: List[int], **backend_kwargs
+  ):
     print("Dispensing:")
     header = (
       f"{'pip#':<{LiquidHandlerChatterboxBackend._pip_length}} "
@@ -188,7 +198,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
       )
       for key, value in backend_kwargs.items():
         if isinstance(value, list) and all(isinstance(v, bool) for v in value):
-          value = ''.join('T' if v else 'F' for v in value)
+          value = "".join("T" if v else "F" for v in value)
         if isinstance(value, list):
           value = "".join(map(str, value))
         row += f" {value:<{LiquidHandlerChatterboxBackend._kwargs_length}}"

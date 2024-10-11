@@ -2,6 +2,7 @@ class Powder:
   """
   A class for powders.
   """
+
   def __init__(self, name: str) -> None:
     """
     Initializes a new instance of the Powder class.

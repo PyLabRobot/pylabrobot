@@ -1,4 +1,4 @@
-""" Thermo Fisher & Thermo Fisher Scientific plates """
+"""Thermo Fisher & Thermo Fisher Scientific plates"""
 
 # pylint: disable=invalid-name
 
@@ -9,19 +9,34 @@ from pylabrobot.resources.plate import Lid, Plate
 
 # # # # # # # # # # Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate # # # # # # # # # #
 
+
 def _compute_volume_from_height_Eppendorf_96_wellplate_250ul_Vb(h: float):
   if h > 20.3:
-    raise ValueError(f"Height {h} is too large for" + \
-                     "Eppendorf_96_wellplate_250ul_Vb")
-  return max( 0.89486648 + 2.92455131 * h + 2.03472797 * h**2 + -0.16509371 * h**3 + \
-             0.00675759 * h**4, 0 )
+    raise ValueError(f"Height {h} is too large for" + "Eppendorf_96_wellplate_250ul_Vb")
+  return max(
+    0.89486648
+    + 2.92455131 * h
+    + 2.03472797 * h**2
+    + -0.16509371 * h**3
+    + 0.00675759 * h**4,
+    0,
+  )
+
 
 def _compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb(liquid_volume: float):
-  if liquid_volume > 262.5: # 5% tolerance
-    raise ValueError(f"Volume {liquid_volume} is too large for" + \
-                     "Eppendorf_96_wellplate_250ul_Vb")
-  return max( 0.118078503 + 0.133333914 * liquid_volume + -0.000802726227 * liquid_volume**2 + \
-             3.29761957e-06 * liquid_volume**3 + -5.29119614e-09 * liquid_volume**4, 0 )
+  if liquid_volume > 262.5:  # 5% tolerance
+    raise ValueError(
+      f"Volume {liquid_volume} is too large for" + "Eppendorf_96_wellplate_250ul_Vb"
+    )
+  return max(
+    0.118078503
+    + 0.133333914 * liquid_volume
+    + -0.000802726227 * liquid_volume**2
+    + 3.29761957e-06 * liquid_volume**3
+    + -5.29119614e-09 * liquid_volume**4,
+    0,
+  )
+
 
 # results_measurement_fitting_dict = {
 #     "Volume (ul)": [0, 4, 8, 20, 70, 120, 170, 220, 260],
@@ -29,6 +44,7 @@ def _compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb(liquid_volume: f
 #     "Predicted Height (mm)": [0.118, 0.637, 1.139, 2.49, 6.516, 9.177, 11.359, 13.31, 14.291],
 #     "Relative Deviation (%)": [0, 41.525, -21.793, -2.365, 1.024, 1.399, -2.078, 1.216, -0.408]
 # }
+
 
 def Eppendorf_96_wellplate_250ul_Vb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
@@ -42,13 +58,14 @@ def Eppendorf_96_wellplate_250ul_Vb_Lid(name: str) -> Lid:
   #   model="Eppendorf_96_wellplate_250ul_Vb_Lid",
   # )
 
+
 def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
-  """ Eppendorf cat. no.: 0030133374
+  """Eppendorf cat. no.: 0030133374
   - Material: polycarbonate (frame), polypropylene (wells).
   - part of the twin.tec(R) product line.
   - 'Can be divided into 4 segments of 24 wells each to prevent waste and save money'.
   - Colour: clear.
-  - Sterilization compatibility & Thermal resistance: read cpnsumables manual in 
+  - Sterilization compatibility & Thermal resistance: read cpnsumables manual in
     `./engineering_diagrams/`
   - Chemical resistance: ?
   - Cleanliness: ?
@@ -65,31 +82,34 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
     lid=Eppendorf_96_wellplate_250ul_Vb_Lid(name + "_lid") if with_lid else None,
     model="Eppendorf_96_wellplate_250ul_Vb",
     plate_type="non-skirted",
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=6.76,
       dy=8.26,
-      dz=0.0, # check that plate is non-skirted
+      dz=0.0,  # check that plate is non-skirted
       item_dx=9,
       item_dy=9,
       size_x=5.48,
       size_y=5.48,
       size_z=19.5,
       bottom_type=WellBottomType.V,
-      material_z_thickness=1.2, # engineering_diagram says 0.8 but could not replicate
+      material_z_thickness=1.2,  # engineering_diagram says 0.8 but could not replicate
       cross_section_type=CrossSectionType.CIRCLE,
       compute_volume_from_height=(
         _compute_volume_from_height_Eppendorf_96_wellplate_250ul_Vb
       ),
       compute_height_from_volume=(
         _compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb
-      )
+      ),
     ),
   )
 
+
 def Eppendorf_96_wellplate_250ul_Vb_L(name: str, with_lid: bool = False) -> Plate:
   return Eppendorf_96_wellplate_250ul_Vb(name=name, with_lid=with_lid)
+
 
 def Eppendorf_96_wellplate_250ul_Vb_P(name: str, with_lid: bool = False) -> Plate:
   return Eppendorf_96_wellplate_250ul_Vb(name=name, with_lid=with_lid).rotated(90)

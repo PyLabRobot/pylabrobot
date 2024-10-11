@@ -8,10 +8,10 @@ from pylabrobot.resources.ml_star import STF_L, HTF_L, TIP_CAR_480_A00, PLT_CAR_
 
 
 class HamiltonDeckTests(unittest.TestCase):
-  """ Tests for the HamiltonDeck class. """
+  """Tests for the HamiltonDeck class."""
 
   def build_layout(self):
-    """ Build a deck layout for testing """
+    """Build a deck layout for testing"""
     deck = STARLetDeck()
 
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
@@ -31,7 +31,10 @@ class HamiltonDeckTests(unittest.TestCase):
   def test_summary(self):
     self.maxDiff = None
     deck = self.build_layout()
-    self.assertEqual(deck.summary(), textwrap.dedent("""
+    self.assertEqual(
+      deck.summary(),
+      textwrap.dedent(
+        """
     Rail  Resource                      Type           Coordinates (mm)
     =================================================================================
     (-13) ├── trash_core96              Trash          (-232.100, 110.300, 189.000)
@@ -51,15 +54,21 @@ class HamiltonDeckTests(unittest.TestCase):
           │   ├── <empty>
           │
     (32)  ├── trash                     Trash          (800.000, 190.600, 137.100)
-    """[1:]))
+    """[1:]
+      ),
+    )
 
   def test_assign_gigantic_resource(self):
     stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
     deck = STARLetDeck()
     with self.assertLogs() as log:
       deck.assign_child_resource(stanley_cup, rails=1)
-    self.assertEqual(log.output,
-      ["WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
-       "careful when traversing the deck.",
-       "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
-       "careful when grabbing this resource."])
+    self.assertEqual(
+      log.output,
+      [
+        "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+        "careful when traversing the deck.",
+        "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+        "careful when grabbing this resource.",
+      ],
+    )

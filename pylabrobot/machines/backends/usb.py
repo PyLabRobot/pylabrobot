@@ -11,6 +11,7 @@ try:
   import usb.core
   import usb.util
   import libusb_package
+
   USE_USB = True
 except ImportError:
   USE_USB = False
@@ -24,8 +25,8 @@ logger = logging.getLogger("pylabrobot")
 
 
 class USBBackend(MachineBackend, metaclass=ABCMeta):
-  """ An abstract class for liquid handler backends that talk over a USB cable. Provides read/write
-  functionality, including timeout handling. """
+  """An abstract class for liquid handler backends that talk over a USB cable. Provides read/write
+  functionality, including timeout handling."""
 
   @abstractmethod
   def __init__(
@@ -36,9 +37,9 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     serial_number: Optional[str] = None,
     packet_read_timeout: int = 3,
     read_timeout: int = 30,
-    write_timeout: int = 30
+    write_timeout: int = 30,
   ):
-    """ Initialize a USBBackend.
+    """Initialize a USBBackend.
 
     Args:
       id_vendor: The USB vendor ID of the machine.
@@ -53,8 +54,9 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
 
     super().__init__()
 
-    assert packet_read_timeout < read_timeout, \
-      "packet_read_timeout must be smaller than read_timeout."
+    assert (
+      packet_read_timeout < read_timeout
+    ), "packet_read_timeout must be smaller than read_timeout."
 
     self.id_vendor = id_vendor
     self.id_product = id_product
@@ -65,12 +67,12 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     self.read_timeout = read_timeout
     self.write_timeout = write_timeout
 
-    self.dev: Optional["usb.core.Device"] = None # TODO: make this a property
+    self.dev: Optional["usb.core.Device"] = None  # TODO: make this a property
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
   def write(self, data: str, timeout: Optional[int] = None):
-    """ Write data to the device.
+    """Write data to the device.
 
     Args:
       data: The data to write.
@@ -78,7 +80,9 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
         (specified by the `write_timeout` attribute).
     """
 
-    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
+    assert (
+      self.dev is not None and self.read_endpoint is not None
+    ), "Device not connected."
 
     if timeout is None:
       timeout = self.write_timeout
@@ -88,30 +92,32 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     logger.info("Sent command: %s", data)
 
   def _read_packet(self) -> Optional[bytearray]:
-    """ Read a packet from the machine.
+    """Read a packet from the machine.
 
     Returns:
       A string containing the decoded packet, or None if no packet was received.
     """
 
-    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
+    assert (
+      self.dev is not None and self.read_endpoint is not None
+    ), "Device not connected."
 
     try:
       res = self.dev.read(
         self.read_endpoint,
         self.read_endpoint.wMaxPacketSize,
-        timeout=int(self.packet_read_timeout * 1000) # timeout in ms
+        timeout=int(self.packet_read_timeout * 1000),  # timeout in ms
       )
 
       if res is not None:
-        return bytearray(res) # convert res into text
+        return bytearray(res)  # convert res into text
       return None
     except usb.core.USBError:
       # No data available (yet), this will give a timeout error. Don't reraise.
       return None
 
   def read(self, timeout: Optional[int] = None) -> bytearray:
-    """ Read a response from the device.
+    """Read a response from the device.
 
     Args:
       timeout: The timeout for reading from the device in seconds. If `None`, use the default
@@ -131,7 +137,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
       # packet size: if the packet is that size, it means that there may be more data to read.
       resp = bytearray()
       last_packet: Optional[bytearray] = None
-      while True: # read while we have data, and while the last packet is the max size.
+      while True:  # read while we have data, and while the last packet is the max size.
         last_packet = self._read_packet()
         if last_packet is not None:
           resp += last_packet
@@ -147,28 +153,30 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     raise TimeoutError("Timeout while reading.")
 
   def get_available_devices(self) -> List["usb.core.Device"]:
-    """ Get a list of available devices that match the specified vendor and product IDs, and serial
-    number and device_address if specified. """
+    """Get a list of available devices that match the specified vendor and product IDs, and serial
+    number and device_address if specified."""
 
     found_devices = libusb_package.find(
-      idVendor=self.id_vendor,
-      idProduct=self.id_product,
-      find_all=True
+      idVendor=self.id_vendor, idProduct=self.id_product, find_all=True
     )
     devices: List["usb.core.Device"] = []
     for dev in found_devices:
       if self.device_address is not None:
         if dev.address is None:
-          raise RuntimeError("A device address was specified, but the backend used for PyUSB does "
-          "not support device addresses.")
+          raise RuntimeError(
+            "A device address was specified, but the backend used for PyUSB does "
+            "not support device addresses."
+          )
 
         if dev.address != self.device_address:
           continue
 
       if self.serial_number is not None:
         if dev.serial_number is None:
-          raise RuntimeError("A serial number was specified, but the device does not have a serial "
-            "number.")
+          raise RuntimeError(
+            "A serial number was specified, but the device does not have a serial "
+            "number."
+          )
 
         if dev.serial_number != self.serial_number:
           continue
@@ -178,19 +186,21 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     return devices
 
   def list_available_devices(self) -> None:
-    """ Utility to list all devices that match the specified vendor and product IDs, and serial
+    """Utility to list all devices that match the specified vendor and product IDs, and serial
     number and address if specified. You can use this to discover the serial number and address of
-    your device, if using multiple. Note that devices may not have a unique serial number. """
+    your device, if using multiple. Note that devices may not have a unique serial number."""
 
     for dev in self.get_available_devices():
       print(dev)
 
   async def setup(self):
-    """ Initialize the USB connection to the machine."""
+    """Initialize the USB connection to the machine."""
 
     if not USE_USB:
-      raise RuntimeError("USB is not enabled. Please install pyusb and libusb."
-                         "https://docs.pylabrobot.org/installation.html")
+      raise RuntimeError(
+        "USB is not enabled. Please install pyusb and libusb."
+        "https://docs.pylabrobot.org/installation.html"
+      )
 
     if self.dev is not None:
       logging.warning("Already initialized. Please call stop() first.")
@@ -212,31 +222,32 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     self.dev.set_configuration()
 
     cfg = self.dev.get_active_configuration()
-    intf = cfg[(0,0)]
+    intf = cfg[(0, 0)]
 
     self.write_endpoint = usb.util.find_descriptor(
       intf,
-      custom_match = \
-      lambda e: \
-          usb.util.endpoint_direction(e.bEndpointAddress) == \
-          usb.util.ENDPOINT_OUT)
+      custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
+      == usb.util.ENDPOINT_OUT,
+    )
 
     self.read_endpoint = usb.util.find_descriptor(
       intf,
-      custom_match = \
-      lambda e: \
-          usb.util.endpoint_direction(e.bEndpointAddress) == \
-          usb.util.ENDPOINT_IN)
+      custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
+      == usb.util.ENDPOINT_IN,
+    )
 
-    logger.info("Found endpoints. \nWrite:\n %s \nRead:\n %s", self.write_endpoint,
-      self.read_endpoint)
+    logger.info(
+      "Found endpoints. \nWrite:\n %s \nRead:\n %s",
+      self.write_endpoint,
+      self.read_endpoint,
+    )
 
     # Empty the read buffer.
     while self._read_packet() is not None:
       pass
 
   async def stop(self):
-    """ Close the USB connection to the machine. """
+    """Close the USB connection to the machine."""
 
     if self.dev is None:
       raise ValueError("USB device was not connected.")
@@ -245,7 +256,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     self.dev = None
 
   def serialize(self) -> dict:
-    """ Serialize the backend to a dictionary. """
+    """Serialize the backend to a dictionary."""
 
     return {
       **super().serialize(),
@@ -255,5 +266,5 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
       "serial_number": self.serial_number,
       "packet_read_timeout": self.packet_read_timeout,
       "read_timeout": self.read_timeout,
-      "write_timeout": self.write_timeout
+      "write_timeout": self.write_timeout,
     }

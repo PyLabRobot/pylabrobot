@@ -23,6 +23,7 @@ def project_root() -> Path:
   """
   return Path(__file__).parent.parent
 
+
 def setup_logger(log_dir: Union[Path, str], level: int):
   """
   Set up the logger for pylabrobot. If the log_dir does not exist, it will be created.
@@ -53,7 +54,8 @@ def setup_logger(log_dir: Union[Path, str], level: int):
   fh = logging.FileHandler(log_dir / f"pylabrobot-{now}.log")
   fh.setLevel(level)
   fh.setFormatter(
-    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+  )
   logger.addHandler(fh)
 
 
@@ -72,5 +74,7 @@ configure(CONFIG)
 
 # deprecation warning for 3.8
 if sys.version_info < (3, 9):
-  warnings.warn("Support for Python 3.8 is deprecated and will be removed in Dec 2024. "
-                "Please upgrade to Python 3.9 or later.")
+  warnings.warn(
+    "Support for Python 3.8 is deprecated and will be removed in Dec 2024. "
+    "Please upgrade to Python 3.9 or later."
+  )

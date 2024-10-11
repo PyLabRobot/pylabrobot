@@ -10,7 +10,7 @@ import functools
 
 
 def need_setup_finished(func: Callable):
-  """ Decorator for methods that require the liquid handler to be set up.
+  """Decorator for methods that require the liquid handler to be set up.
 
   Checked by verifying `self.setup_finished` is `True`.
 
@@ -23,11 +23,12 @@ def need_setup_finished(func: Callable):
     if not self.setup_finished:
       raise RuntimeError("The setup has not finished. See `setup`.")
     return await func(self, *args, **kwargs)
+
   return wrapper
 
 
 class Machine(Resource, metaclass=ABCMeta):
-  """ Abstract class for machine frontends. All Machines are Resources. """
+  """Abstract class for machine frontends. All Machines are Resources."""
 
   def __init__(
     self,
@@ -39,8 +40,14 @@ class Machine(Resource, metaclass=ABCMeta):
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
-                     category=category, model=model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category=category,
+      model=model,
+    )
     self.backend = backend
     self._setup_finished = False
 
@@ -53,7 +60,7 @@ class Machine(Resource, metaclass=ABCMeta):
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):
-    data_copy = data.copy() # copy data because we will be modifying it
+    data_copy = data.copy()  # copy data because we will be modifying it
     backend_data = data_copy.pop("backend")
     backend = MachineBackend.deserialize(backend_data)
     data_copy["backend"] = backend

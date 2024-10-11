@@ -4,7 +4,7 @@ from pylabrobot.tilting.hamilton_backend import HamiltonTiltModuleBackend
 
 
 class HamiltonTiltModule(Tilter):
-  """ A Hamilton tilt module. """
+  """A Hamilton tilt module."""
 
   def __init__(
     self,
@@ -15,7 +15,7 @@ class HamiltonTiltModule(Tilter):
     write_timeout: float = 3,
     timeout: float = 3,
   ):
-    """ Initialize a Hamilton tilt module.
+    """Initialize a Hamilton tilt module.
 
     Args:
       com_port: The communication port.
@@ -31,9 +31,8 @@ class HamiltonTiltModule(Tilter):
       size_y=92.57,
       size_z=85.81,
       backend=HamiltonTiltModuleBackend(
-        com_port=com_port,
-        write_timeout=write_timeout,
-        timeout=timeout),
+        com_port=com_port, write_timeout=write_timeout, timeout=timeout
+      ),
       hinge_coordinate=Coordinate(6.18, 0, 72.85),
       child_resource_location=child_resource_location,
       category="tilter",

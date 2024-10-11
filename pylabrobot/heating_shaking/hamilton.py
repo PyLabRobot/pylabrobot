@@ -15,7 +15,9 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
   an Heat Shaker Box
   """
 
-  def __init__(self, shaker_index:int, id_vendor: int = 0x8af, id_product: int = 0x8002) -> None:
+  def __init__(
+    self, shaker_index: int, id_vendor: int = 0x8AF, id_product: int = 0x8002
+  ) -> None:
     """
     Multiple Hamilton Heater Shakers can be connected to the same Heat Shaker Box. Each has A
     separate 'shaker index'
@@ -41,7 +43,11 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
   def serialize(self) -> dict:
     usb_backend_serialized = USBBackend.serialize(self)
     heater_shaker_serialized = HeaterShakerBackend.serialize(self)
-    return {**usb_backend_serialized, **heater_shaker_serialized, "shaker_index": self.shaker_index}
+    return {
+      **usb_backend_serialized,
+      **heater_shaker_serialized,
+      "shaker_index": self.shaker_index,
+    }
 
   def _send_command(self, command: str, **kwargs):
     assert len(command) == 2, "Command must be 2 characters long"
@@ -57,7 +63,7 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
   async def shake(
     self,
     speed: float = 800,
-    direction: Literal[0,1] = 0,
+    direction: Literal[0, 1] = 0,
     acceleration: int = 1_000,
   ):
     """
@@ -70,10 +76,12 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
-    await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
+    await self._start_shaking(
+      direction=direction, speed=int_speed, acceleration=acceleration
+    )
 
   async def stop_shaking(self):
-    """ Shaker `stop_shaking` implementation. """
+    """Shaker `stop_shaking` implementation."""
     await self._stop_shaking()
     await self._wait_for_stop()
 
@@ -87,22 +95,22 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     await self._move_plate_lock(PlateLockPosition.UNLOCKED)
 
   async def _initialize_lock(self):
-    """ Firmware command initialize lock. """
+    """Firmware command initialize lock."""
     result = self._send_command("LI")
     return result
 
   async def _start_shaking(self, direction: int, speed: int, acceleration: int):
-    """ Firmware command for starting shaking. """
+    """Firmware command for starting shaking."""
     speed_str = str(speed).zfill(4)
     acceleration_str = str(acceleration).zfill(5)
     return self._send_command("SB", st=direction, sv=speed_str, sr=acceleration_str)
 
   async def _stop_shaking(self):
-    """ Firmware command for stopping shaking. """
+    """Firmware command for stopping shaking."""
     return self._send_command("SC")
 
   async def _wait_for_stop(self):
-    """ Firmware command for waiting for shaking to stop. """
+    """Firmware command for waiting for shaking to stop."""
     return self._send_command("SW")
 
   async def set_temperature(self, temperature: float):

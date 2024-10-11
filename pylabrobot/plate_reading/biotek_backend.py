@@ -6,6 +6,7 @@ from typing import List, Optional, Union
 
 try:
   from pylibftdi import Device
+
   USE_FTDI = True
 except ImportError:
   USE_FTDI = False
@@ -17,12 +18,15 @@ logger = logging.getLogger("pylabrobot.plate_reading.biotek")
 
 
 class Cytation5Backend(PlateReaderBackend):
-  """ Backend for biotek cytation 5 image reader """
+  """Backend for biotek cytation 5 image reader"""
+
   def __init__(self, timeout: float = 20) -> None:
     super().__init__()
     self.timeout = timeout
     if not USE_FTDI:
-      raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
+      raise RuntimeError(
+        "pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`."
+      )
 
     self.dev = Device(lazy_open=True)
 
@@ -31,7 +35,7 @@ class Cytation5Backend(PlateReaderBackend):
     self.dev.open()
     # self.dev.baudrate = 9600 # worked in the past
     self.dev.baudrate = 38400
-    self.dev.ftdi_fn.ftdi_set_line_property(8, 2, 0) # 8 bits, 2 stop bits, no parity
+    self.dev.ftdi_fn.ftdi_set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
     SIO_RTS_CTS_HS = 0x1 << 8
     self.dev.ftdi_fn.ftdi_setflowctrl(SIO_RTS_CTS_HS)
     self.dev.ftdi_fn.ftdi_setrts(1)
@@ -45,13 +49,13 @@ class Cytation5Backend(PlateReaderBackend):
     self.dev.close()
 
   async def _purge_buffers(self) -> None:
-    """ Purge the RX and TX buffers, as implemented in Gen5.exe """
+    """Purge the RX and TX buffers, as implemented in Gen5.exe"""
     for _ in range(6):
       self.dev.ftdi_fn.ftdi_usb_purge_rx_buffer()
     self.dev.ftdi_fn.ftdi_usb_purge_tx_buffer()
 
   async def _read_until(self, char: bytes, timeout: Optional[float] = None) -> bytes:
-    """ If timeout is None, use self.timeout """
+    """If timeout is None, use self.timeout"""
     if timeout is None:
       timeout = self.timeout
     x = None
@@ -75,7 +79,8 @@ class Cytation5Backend(PlateReaderBackend):
     self,
     command: Union[bytes, str],
     purge: bool = True,
-    wait_for_char: Optional[bytes] = b"\x03") -> Optional[bytes]:
+    wait_for_char: Optional[bytes] = b"\x03",
+  ) -> Optional[bytes]:
     if purge:
       # real software does this, but I don't think it's necessary
       await self._purge_buffers()
@@ -107,7 +112,7 @@ class Cytation5Backend(PlateReaderBackend):
     return await self.send_command("A")
 
   async def get_current_temperature(self) -> float:
-    """ Get current temperature in degrees Celsius. """
+    """Get current temperature in degrees Celsius."""
     resp = await self.send_command("h")
     assert resp is not None
     return int(resp[1:-1]) / 100000
@@ -122,7 +127,7 @@ class Cytation5Backend(PlateReaderBackend):
     for row_idx, row in enumerate(rows):
       parsed_data.append([])
       values = row.split(b",")
-      grouped_values = [values[i:i+3] for i in range(0, len(values), 3)]
+      grouped_values = [values[i : i + 3] for i in range(0, len(values), 3)]
 
       for group in grouped_values:
         assert len(group) == 3
@@ -172,8 +177,10 @@ class Cytation5Backend(PlateReaderBackend):
 
     resp = await self.send_command("D", wait_for_char=b"\x06")
     assert resp == b"\x06"
-    cmd = (b"008401010108120001200100001100100000123000500200200"
-           b"-001000-00300000000000000000001351092")
+    cmd = (
+      b"008401010108120001200100001100100000123000500200200"
+      b"-001000-00300000000000000000001351092"
+    )
     await self.send_command(cmd, purge=False)
 
     resp1 = await self.send_command("O", wait_for_char=b"\x06")
@@ -181,7 +188,7 @@ class Cytation5Backend(PlateReaderBackend):
     resp2 = await self._read_until(b"\x03")
     assert resp2 == b"0000\x03"
 
-    body = await self._read_until(b"\x03", timeout=60*3)
+    body = await self._read_until(b"\x03", timeout=60 * 3)
     assert body is not None
     return self._parse_body(body)
 
@@ -212,9 +219,11 @@ class Cytation5Backend(PlateReaderBackend):
     assert resp == b"\x06"
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
-    cmd = (f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
-      f"{emission_wavelength_str}000000000000000000210011").encode()
-    checksum = str((sum(cmd)+7) % 100).encode() # don't know why +7
+    cmd = (
+      f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
+      f"{emission_wavelength_str}000000000000000000210011"
+    ).encode()
+    checksum = str((sum(cmd) + 7) % 100).encode()  # don't know why +7
     cmd = cmd + checksum + b"\x03"
     await self.send_command(cmd, purge=False)
 
@@ -223,7 +232,7 @@ class Cytation5Backend(PlateReaderBackend):
     resp2 = await self._read_until(b"\x03")
     assert resp2 == b"0000\x03"
 
-    body = await self._read_until(b"\x03", timeout=60*2)
+    body = await self._read_until(b"\x03", timeout=60 * 2)
     assert body is not None
     return self._parse_body(body)
 
@@ -235,17 +244,19 @@ class Cytation5Backend(PlateReaderBackend):
     ORBITAL = 1
 
   async def shake(self, shake_type: ShakeType) -> None:
-    """ Warning: the duration for shaking has to be specified on the machine, and the maximum is
+    """Warning: the duration for shaking has to be specified on the machine, and the maximum is
     16 minutes. As a hack, we start shaking for the maximum duration every time as long as stop
-    is not called. """
-    max_duration = 16*60 # 16 minutes
+    is not called."""
+    max_duration = 16 * 60  # 16 minutes
 
     async def shake_maximal_duration():
-      """ This method will start the shaking, but returns immediately after
-      shaking has started. """
+      """This method will start the shaking, but returns immediately after
+      shaking has started."""
       resp = await self.send_command("y", wait_for_char=b"\x06")
       assert resp == b"\x06"
-      await self.send_command(b"08120112207434014351135308559127881422\x03", purge=False)
+      await self.send_command(
+        b"08120112207434014351135308559127881422\x03", purge=False
+      )
 
       resp = await self.send_command("D", wait_for_char=b"\x06")
       assert resp == b"\x06"
@@ -253,7 +264,7 @@ class Cytation5Backend(PlateReaderBackend):
 
       duration = str(max_duration).zfill(3)
       cmd = f"0033010101010100002000000013{duration}{shake_type_bit}301".encode()
-      checksum = str((sum(cmd)+73) % 100).encode() # don't know why +73
+      checksum = str((sum(cmd) + 73) % 100).encode()  # don't know why +73
       cmd = cmd + checksum + b"\x03"
       await self.send_command(cmd, purge=False)
 

@@ -3,13 +3,13 @@ from pylabrobot.plate_reading.backend import PlateReaderBackend
 
 
 class PlateReaderChatterboxBackend(PlateReaderBackend):
-  """ An abstract class for a plate reader. Plate readers are devices that can read luminescence,
-  absorbance, or fluorescence from a plate. """
+  """An abstract class for a plate reader. Plate readers are devices that can read luminescence,
+  absorbance, or fluorescence from a plate."""
 
   def __init__(self):
-    self.dummy_luminescence = [[0.0]*12]*8
-    self.dummy_absorbance = [[0.0]*12]*8
-    self.dummy_fluorescence = [[0.0]*12]*8
+    self.dummy_luminescence = [[0.0] * 12] * 8
+    self.dummy_absorbance = [[0.0] * 12] * 8
+    self.dummy_fluorescence = [[0.0] * 12] * 8
 
   async def setup(self) -> None:
     print("Setting up the plate reader.")
@@ -32,9 +32,6 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
     return self.dummy_absorbance
 
   async def read_fluorescence(
-    self,
-    excitation_wavelength: int,
-    emission_wavelength: int,
-    focal_height: float
+    self, excitation_wavelength: int, emission_wavelength: int, focal_height: float
   ) -> List[List[float]]:
     return self.dummy_fluorescence

@@ -6,7 +6,7 @@ from typing import Union, Dict, List, Optional, Literal
 
 
 class PumpCalibration:
-  """ Calibration for a single pump or pump array
+  """Calibration for a single pump or pump array
 
   Attributes:
     calibration: The calibration of the pump or pump array.
@@ -15,9 +15,9 @@ class PumpCalibration:
   def __init__(
     self,
     calibration: List[Union[float, int]],
-    calibration_mode: Literal["duration", "revolutions"] = "duration"
+    calibration_mode: Literal["duration", "revolutions"] = "duration",
   ):
-    """ Initialize a PumpCalibration object.
+    """Initialize a PumpCalibration object.
 
     Args:
       calibration: calibration of the pump in pump-specific volume per time/revolution units.
@@ -39,7 +39,7 @@ class PumpCalibration:
     return self.calibration[item]  # type: ignore
 
   def __len__(self) -> int:
-    """ Return the length of the calibration. """
+    """Return the length of the calibration."""
 
     return len(self.calibration)
 
@@ -48,9 +48,9 @@ class PumpCalibration:
     cls,
     calibration: Optional[Union[dict, list, float, int, str]] = None,
     num_items: Optional[int] = None,
-    calibration_mode: Literal["duration", "revolutions"] = "duration"
+    calibration_mode: Literal["duration", "revolutions"] = "duration",
   ) -> PumpCalibration:
-    """ Load a calibration from a file, dictionary, list, or value. :param calibration: pump
+    """Load a calibration from a file, dictionary, list, or value. :param calibration: pump
     calibration file, dictionary, list, or value. If None, returns an empty PumpCalibration
     object.
 
@@ -66,44 +66,47 @@ class PumpCalibration:
     """
 
     if isinstance(calibration, dict):
-      return PumpCalibration.load_from_dict(calibration=calibration,
-                                            calibration_mode=calibration_mode)
+      return PumpCalibration.load_from_dict(
+        calibration=calibration, calibration_mode=calibration_mode
+      )
     if isinstance(calibration, list):
-      return PumpCalibration.load_from_list(calibration=calibration,
-                                            calibration_mode=calibration_mode)
+      return PumpCalibration.load_from_list(
+        calibration=calibration, calibration_mode=calibration_mode
+      )
     if isinstance(calibration, (float, int)):
       if num_items is None:
         raise ValueError("num_items must be specified if calibration is a value.")
-      return PumpCalibration.load_from_value(value=calibration,
-                                             num_items=num_items,
-                                             calibration_mode=calibration_mode)
+      return PumpCalibration.load_from_value(
+        value=calibration, num_items=num_items, calibration_mode=calibration_mode
+      )
     if isinstance(calibration, str):
       if calibration.endswith(".json"):
-        return PumpCalibration.load_from_json(file_path=calibration,
-                                              calibration_mode=calibration_mode)
+        return PumpCalibration.load_from_json(
+          file_path=calibration, calibration_mode=calibration_mode
+        )
       if calibration.endswith(".csv"):
-        return PumpCalibration.load_from_csv(file_path=calibration,
-                                             calibration_mode=calibration_mode)
+        return PumpCalibration.load_from_csv(
+          file_path=calibration, calibration_mode=calibration_mode
+        )
       raise NotImplementedError("Calibration filetype not supported.")
     raise NotImplementedError("Calibration format not supported.")
 
   def serialize(self) -> dict:
-    return {
-      "calibration": self.calibration,
-      "calibration_mode": self.calibration_mode
-    }
+    return {"calibration": self.calibration, "calibration_mode": self.calibration_mode}
 
   @classmethod
   def deserialize(cls, data: dict) -> PumpCalibration:
-    return cls(calibration=data["calibration"], calibration_mode=data["calibration_mode"])
+    return cls(
+      calibration=data["calibration"], calibration_mode=data["calibration_mode"]
+    )
 
   @classmethod
   def load_from_json(
     cls,
     file_path: str,
-    calibration_mode: Literal["duration", "revolutions"] = "duration"
+    calibration_mode: Literal["duration", "revolutions"] = "duration",
   ) -> PumpCalibration:
-    """ Load a calibration from a json file.
+    """Load a calibration from a json file.
 
     Args:
       file_path: json file to load calibration from.
@@ -118,8 +121,9 @@ class PumpCalibration:
       calibration = json.load(f)
     if isinstance(calibration, dict):
       calibration = {int(key): float(value) for key, value in calibration.items()}
-      return PumpCalibration.load_from_dict(calibration=calibration,
-                                            calibration_mode=calibration_mode)
+      return PumpCalibration.load_from_dict(
+        calibration=calibration, calibration_mode=calibration_mode
+      )
     if isinstance(calibration, list):
       return PumpCalibration(calibration=calibration, calibration_mode=calibration_mode)
     raise TypeError(f"Calibration pulled from {file_path} is not a dictionary or list.")
@@ -128,9 +132,9 @@ class PumpCalibration:
   def load_from_csv(
     cls,
     file_path: str,
-    calibration_mode: Literal["duration", "revolutions"] = "duration"
+    calibration_mode: Literal["duration", "revolutions"] = "duration",
   ) -> PumpCalibration:
-    """ Load a calibration from a csv file.
+    """Load a calibration from a csv file.
 
     Args:
       file_path: csv file to load calibration from. 0-indexed. The first column is treated as the
@@ -145,16 +149,17 @@ class PumpCalibration:
       if num_columns != 2:
         raise ValueError("CSV file must have two columns.")
       calibration = {int(row[0]): float(row[1]) for row in csv_file}
-      return PumpCalibration.load_from_dict(calibration=calibration,
-                                            calibration_mode=calibration_mode)
+      return PumpCalibration.load_from_dict(
+        calibration=calibration, calibration_mode=calibration_mode
+      )
 
   @classmethod
   def load_from_dict(
     cls,
     calibration: Dict[int, Union[int, float]],
-    calibration_mode: Literal["duration", "revolutions"] = "duration"
+    calibration_mode: Literal["duration", "revolutions"] = "duration",
   ) -> PumpCalibration:
-    """ Load a calibration from a dictionary.
+    """Load a calibration from a dictionary.
 
     Args:
       calibration: dictionary to load calibration from. 0-indexed.
@@ -174,9 +179,9 @@ class PumpCalibration:
   def load_from_list(
     cls,
     calibration: List[Union[int, float]],
-    calibration_mode: Literal["duration", "revolutions"] = "duration"
+    calibration_mode: Literal["duration", "revolutions"] = "duration",
   ) -> PumpCalibration:
-    """ Load a calibration from a list. Equivalent to PumpCalibration(calibration).
+    """Load a calibration from a list. Equivalent to PumpCalibration(calibration).
 
     Args:
       calibration: list to load calibration from.
@@ -191,9 +196,9 @@ class PumpCalibration:
     cls,
     value: Union[float, int],
     num_items: int,
-    calibration_mode: Literal["duration", "revolutions"] = "duration"
+    calibration_mode: Literal["duration", "revolutions"] = "duration",
   ) -> PumpCalibration:
-    """ Load a calibration from a value. Equivalent to PumpCalibration([value] * num_items).
+    """Load a calibration from a value. Equivalent to PumpCalibration([value] * num_items).
 
     Args:
       value: value to load calibration from.

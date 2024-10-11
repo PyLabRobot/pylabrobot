@@ -1,4 +1,4 @@
-""" Tecan tip racks """
+"""Tecan tip racks"""
 
 # pylint: disable=empty-docstring
 # pylint: disable=invalid-name
@@ -73,7 +73,7 @@ from .tip_creators import (
 
 
 class TecanTipRack(TipRack, TecanResource):
-  """ Base class for Tecan tip racks. """
+  """Base class for Tecan tip racks."""
 
   def __init__(
     self,
@@ -88,17 +88,23 @@ class TecanTipRack(TipRack, TecanResource):
     area: float,
     ordered_items: Optional[Dict[str, TipSpot]] = None,
     category: str = "tecan_plate",
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, ordered_items=ordered_items,
-                     category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      ordered_items=ordered_items,
+      category=category,
+      model=model,
+    )
 
     self.z_travel = z_travel
     self.z_start = z_start
     self.z_dispense = z_dispense
     self.z_max = z_max
     self.area = area
-
 
 
 def DiTi_100ul_Te_MO(name: str) -> TecanTipRack:
@@ -113,7 +119,8 @@ def DiTi_100ul_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1280.0,
     z_max=1430.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.0,
@@ -123,7 +130,7 @@ def DiTi_100ul_Te_MO(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_100ul_Te_MO_tip
+      make_tip=DiTi_100ul_Te_MO_tip,
     ),
   )
 
@@ -140,7 +147,8 @@ def DiTi_50ul_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1290.0,
     z_max=1430.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.0,
@@ -150,7 +158,7 @@ def DiTi_50ul_Te_MO(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_50ul_Te_MO_tip
+      make_tip=DiTi_50ul_Te_MO_tip,
     ),
   )
 
@@ -167,7 +175,8 @@ def DiTi_200ul_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1290.0,
     z_max=1430.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.0,
@@ -177,7 +186,7 @@ def DiTi_200ul_Te_MO(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_Te_MO_tip
+      make_tip=DiTi_200ul_Te_MO_tip,
     ),
   )
 
@@ -194,7 +203,8 @@ def DiTi_100ul_Filter_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1290.0,
     z_max=1357.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.0,
@@ -204,7 +214,7 @@ def DiTi_100ul_Filter_Te_MO(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_100ul_Filter_Te_MO_tip
+      make_tip=DiTi_100ul_Filter_Te_MO_tip,
     ),
   )
 
@@ -221,7 +231,8 @@ def DiTi_200ul_Filter_Te_MO(name: str) -> TecanTipRack:
     z_dispense=1290.0,
     z_max=1430.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.0,
@@ -231,13 +242,13 @@ def DiTi_200ul_Filter_Te_MO(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_Filter_Te_MO_tip
+      make_tip=DiTi_200ul_Filter_Te_MO_tip,
     ),
   )
 
 
 def Adapter_96_DiTi_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30032043 or 30032063 - Picks 96 tips, a single row or a single column. Works with MCA384 disposable tips. """
+  """Tecan part no. 30032043 or 30032063 - Picks 96 tips, a single row or a single column. Works with MCA384 disposable tips."""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -249,7 +260,8 @@ def Adapter_96_DiTi_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1461.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -259,13 +271,13 @@ def Adapter_96_DiTi_MCA384(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=Adapter_96_DiTi_MCA384_tip
+      make_tip=Adapter_96_DiTi_MCA384_tip,
     ),
   )
 
 
 def Adapter_DiTi_Combo_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30032060 - Picks 384 tips, a single row of 24 tips, a single column of 16 tips or two columns of 16 tips each. """
+  """Tecan part no. 30032060 - Picks 384 tips, a single row of 24 tips, a single column of 16 tips or two columns of 16 tips each."""
   return TecanTipRack(
     name=name,
     size_x=128.4,
@@ -277,7 +289,8 @@ def Adapter_DiTi_Combo_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1457.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=24,
       num_items_y=16,
       dx=9.95,
@@ -287,13 +300,13 @@ def Adapter_DiTi_Combo_MCA384(name: str) -> TecanTipRack:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
-      make_tip=Adapter_DiTi_Combo_MCA384_tip
+      make_tip=Adapter_DiTi_Combo_MCA384_tip,
     ),
   )
 
 
 def Adapter_DiTi_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30032061 - Picks 384 tips. Works with MCA384 disposable tips (Former Part no. 30032041). """
+  """Tecan part no. 30032061 - Picks 384 tips. Works with MCA384 disposable tips (Former Part no. 30032041)."""
   return TecanTipRack(
     name=name,
     size_x=128.4,
@@ -305,7 +318,8 @@ def Adapter_DiTi_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1461.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=24,
       num_items_y=16,
       dx=9.95,
@@ -315,13 +329,13 @@ def Adapter_DiTi_MCA384(name: str) -> TecanTipRack:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
-      make_tip=Adapter_DiTi_MCA384_tip
+      make_tip=Adapter_DiTi_MCA384_tip,
     ),
   )
 
 
 def DiTi_100ul_Filter_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612347 """
+  """Tecan part no. 10612347"""
   return TecanTipRack(
     name=name,
     size_x=120.6,
@@ -333,7 +347,8 @@ def DiTi_100ul_Filter_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=6.3,
@@ -343,13 +358,13 @@ def DiTi_100ul_Filter_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_100ul_Filter_MCA96_tip
+      make_tip=DiTi_100ul_Filter_MCA96_tip,
     ),
   )
 
 
 def DiTi_100ul_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612345 or 10612346 """
+  """Tecan part no. 10612345 or 10612346"""
   return TecanTipRack(
     name=name,
     size_x=120.6,
@@ -361,7 +376,8 @@ def DiTi_100ul_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=6.3,
@@ -371,13 +387,13 @@ def DiTi_100ul_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_100ul_MCA96_tip
+      make_tip=DiTi_100ul_MCA96_tip,
     ),
   )
 
 
 def DiTi_200ul_Filter_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612342 """
+  """Tecan part no. 10612342"""
   return TecanTipRack(
     name=name,
     size_x=120.6,
@@ -389,7 +405,8 @@ def DiTi_200ul_Filter_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=6.3,
@@ -399,13 +416,13 @@ def DiTi_200ul_Filter_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_Filter_MCA96_tip
+      make_tip=DiTi_200ul_Filter_MCA96_tip,
     ),
   )
 
 
 def DiTi_200ul_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612340 or 10612341 """
+  """Tecan part no. 10612340 or 10612341"""
   return TecanTipRack(
     name=name,
     size_x=120.6,
@@ -417,7 +434,8 @@ def DiTi_200ul_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=6.3,
@@ -427,13 +445,13 @@ def DiTi_200ul_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_MCA96_tip
+      make_tip=DiTi_200ul_MCA96_tip,
     ),
   )
 
 
 def DiTi_50ul_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612343 """
+  """Tecan part no. 10612343"""
   return TecanTipRack(
     name=name,
     size_x=120.6,
@@ -445,7 +463,8 @@ def DiTi_50ul_MCA96(name: str) -> TecanTipRack:
     z_dispense=1531.0,
     z_max=1735.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=6.3,
@@ -455,13 +474,13 @@ def DiTi_50ul_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_50ul_MCA96_tip
+      make_tip=DiTi_50ul_MCA96_tip,
     ),
   )
 
 
 def Base_Nested_DiTi_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 30038609 or 30038614 or 30038619 """
+  """Tecan part no. 30038609 or 30038614 or 30038619"""
   return TecanTipRack(
     name=name,
     size_x=124.8,
@@ -473,7 +492,8 @@ def Base_Nested_DiTi_MCA96(name: str) -> TecanTipRack:
     z_dispense=3282.0,
     z_max=3280.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=4,
       num_items_y=4,
       dx=-3.6,
@@ -483,13 +503,13 @@ def Base_Nested_DiTi_MCA96(name: str) -> TecanTipRack:
       item_dy=33.0,
       size_x=33.0,
       size_y=33.0,
-      make_tip=Base_Nested_DiTi_MCA96_tip
+      make_tip=Base_Nested_DiTi_MCA96_tip,
     ),
   )
 
 
 def DiTi_100ul_Nested_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 30038614 """
+  """Tecan part no. 30038614"""
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -501,7 +521,8 @@ def DiTi_100ul_Nested_MCA96(name: str) -> TecanTipRack:
     z_dispense=1933.0,
     z_max=2099.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -511,7 +532,7 @@ def DiTi_100ul_Nested_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_100ul_Nested_MCA96_tip
+      make_tip=DiTi_100ul_Nested_MCA96_tip,
     ),
   )
 
@@ -528,7 +549,8 @@ def DiTi_100ul_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1738.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -538,7 +560,7 @@ def DiTi_100ul_SBS_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_100ul_SBS_MCA96_tip
+      make_tip=DiTi_100ul_SBS_MCA96_tip,
     ),
   )
 
@@ -555,7 +577,8 @@ def DiTi_200ul_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1738.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -565,7 +588,7 @@ def DiTi_200ul_SBS_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_SBS_MCA96_tip
+      make_tip=DiTi_200ul_SBS_MCA96_tip,
     ),
   )
 
@@ -582,7 +605,8 @@ def DiTi_50ul_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1728.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -592,13 +616,13 @@ def DiTi_50ul_SBS_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_50ul_SBS_MCA96_tip
+      make_tip=DiTi_50ul_SBS_MCA96_tip,
     ),
   )
 
 
 def DiTi_50ul_Nested_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 30038609 """
+  """Tecan part no. 30038609"""
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -610,7 +634,8 @@ def DiTi_50ul_Nested_MCA96(name: str) -> TecanTipRack:
     z_dispense=1933.0,
     z_max=2099.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -620,13 +645,13 @@ def DiTi_50ul_Nested_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_50ul_Nested_MCA96_tip
+      make_tip=DiTi_50ul_Nested_MCA96_tip,
     ),
   )
 
 
 def Adapter_96_DiTi_1to1_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30032048 - Picks 96 tips, single rows/columns. Uses 1channel per tip. Works with MCA96 disposable tips. """
+  """Tecan part no. 30032048 - Picks 96 tips, single rows/columns. Uses 1channel per tip. Works with MCA96 disposable tips."""
   return TecanTipRack(
     name=name,
     size_x=128.4,
@@ -638,7 +663,8 @@ def Adapter_96_DiTi_1to1_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1461.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.45,
@@ -648,13 +674,13 @@ def Adapter_96_DiTi_1to1_MCA384(name: str) -> TecanTipRack:
       item_dy=9.5,
       size_x=9.5,
       size_y=9.5,
-      make_tip=Adapter_96_DiTi_1to1_MCA384_tip
+      make_tip=Adapter_96_DiTi_1to1_MCA384_tip,
     ),
   )
 
 
 def DiTi_200ul_Nested_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 30038619 """
+  """Tecan part no. 30038619"""
   return TecanTipRack(
     name=name,
     size_x=128.0,
@@ -666,7 +692,8 @@ def DiTi_200ul_Nested_MCA96(name: str) -> TecanTipRack:
     z_dispense=1933.0,
     z_max=2099.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.0,
@@ -676,13 +703,13 @@ def DiTi_200ul_Nested_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_Nested_MCA96_tip
+      make_tip=DiTi_200ul_Nested_MCA96_tip,
     ),
   )
 
 
 def DiTi_200ul_w_b_filter_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 30050349, not for volumes under 5ul """
+  """Tecan part no. 30050349, not for volumes under 5ul"""
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -694,7 +721,8 @@ def DiTi_200ul_w_b_filter_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1738.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -704,13 +732,13 @@ def DiTi_200ul_w_b_filter_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_w_b_filter_MCA96_tip
+      make_tip=DiTi_200ul_w_b_filter_MCA96_tip,
     ),
   )
 
 
 def DiTi_200ul_wide_bore_MCA96(name: str) -> TecanTipRack:
-  """ Tecan part no. 30050348, not for volumes under 5ul """
+  """Tecan part no. 30050348, not for volumes under 5ul"""
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -722,7 +750,8 @@ def DiTi_200ul_wide_bore_MCA96(name: str) -> TecanTipRack:
     z_dispense=1478.0,
     z_max=1738.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -732,13 +761,13 @@ def DiTi_200ul_wide_bore_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_wide_bore_MCA96_tip
+      make_tip=DiTi_200ul_wide_bore_MCA96_tip,
     ),
   )
 
 
 def Adapter_96_DiTi_4to1_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30032042 or 30032062 - EVA (Extended Volume Adapter) - Maximum capacity 500 uL. Use with SBS 96 tip box only. """
+  """Tecan part no. 30032042 or 30032062 - EVA (Extended Volume Adapter) - Maximum capacity 500 uL. Use with SBS 96 tip box only."""
   return TecanTipRack(
     name=name,
     size_x=129.2,
@@ -750,7 +779,8 @@ def Adapter_96_DiTi_4to1_MCA384(name: str) -> TecanTipRack:
     z_dispense=1422.0,
     z_max=1461.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.85,
@@ -760,7 +790,7 @@ def Adapter_96_DiTi_4to1_MCA384(name: str) -> TecanTipRack:
       item_dy=9.5,
       size_x=9.5,
       size_y=9.5,
-      make_tip=Adapter_96_DiTi_4to1_MCA384_tip
+      make_tip=Adapter_96_DiTi_4to1_MCA384_tip,
     ),
   )
 
@@ -777,7 +807,8 @@ def DiTi_500ul_Filter_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1410.0,
     z_max=1560.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.8,
@@ -787,7 +818,7 @@ def DiTi_500ul_Filter_SBS_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_500ul_Filter_SBS_MCA96_tip
+      make_tip=DiTi_500ul_Filter_SBS_MCA96_tip,
     ),
   )
 
@@ -804,7 +835,8 @@ def DiTi_500ul_SBS_MCA96(name: str) -> TecanTipRack:
     z_dispense=1438.0,
     z_max=1578.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.6,
@@ -814,13 +846,13 @@ def DiTi_500ul_SBS_MCA96(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_500ul_SBS_MCA96_tip
+      make_tip=DiTi_500ul_SBS_MCA96_tip,
     ),
   )
 
 
 def DiTi_Nested_Waste_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30054549 """
+  """Tecan part no. 30054549"""
   return TecanTipRack(
     name=name,
     size_x=166.0,
@@ -832,7 +864,8 @@ def DiTi_Nested_Waste_MCA384(name: str) -> TecanTipRack:
     z_dispense=1940.0,
     z_max=1940.0,
     area=20385.0,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=29.0,
@@ -842,7 +875,7 @@ def DiTi_Nested_Waste_MCA384(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_Nested_Waste_MCA384_tip
+      make_tip=DiTi_Nested_Waste_MCA384_tip,
     ),
   )
 
@@ -859,7 +892,8 @@ def DiTi_1000ul_SBS_LiHa(name: str) -> TecanTipRack:
     z_dispense=1010.0,
     z_max=1260.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.0,
@@ -869,7 +903,7 @@ def DiTi_1000ul_SBS_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_1000ul_SBS_LiHa_tip
+      make_tip=DiTi_1000ul_SBS_LiHa_tip,
     ),
   )
 
@@ -886,7 +920,8 @@ def DiTi_200ul_SBS_LiHa(name: str) -> TecanTipRack:
     z_dispense=1360.0,
     z_max=1660.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -896,7 +931,7 @@ def DiTi_200ul_SBS_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_SBS_LiHa_tip
+      make_tip=DiTi_200ul_SBS_LiHa_tip,
     ),
   )
 
@@ -913,7 +948,8 @@ def DiTi_50ul_SBS_LiHa(name: str) -> TecanTipRack:
     z_dispense=1360.0,
     z_max=1660.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -923,13 +959,13 @@ def DiTi_50ul_SBS_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_50ul_SBS_LiHa_tip
+      make_tip=DiTi_50ul_SBS_LiHa_tip,
     ),
   )
 
 
 def DiTi_5000ul_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30059897 (Tecan Pure). Tip is usable in a volume range of 300ul to 4850ul. """
+  """Tecan part no. 30059897 (Tecan Pure). Tip is usable in a volume range of 300ul to 4850ul."""
   return TecanTipRack(
     name=name,
     size_x=129.0,
@@ -941,7 +977,8 @@ def DiTi_5000ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=850.0,
     z_max=1150.0,
     area=50.0,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=6,
       num_items_y=4,
       dx=10.5,
@@ -951,13 +988,13 @@ def DiTi_5000ul_LiHa(name: str) -> TecanTipRack:
       item_dy=18.0,
       size_x=18.0,
       size_y=18.0,
-      make_tip=DiTi_5000ul_LiHa_tip
+      make_tip=DiTi_5000ul_LiHa_tip,
     ),
   )
 
 
 def DiTi_5000ul_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30065423 (Tecan Pure), Tip is usable in a volume range of 300ul to 4800ul. """
+  """Tecan part no. 30065423 (Tecan Pure), Tip is usable in a volume range of 300ul to 4800ul."""
   return TecanTipRack(
     name=name,
     size_x=129.0,
@@ -969,7 +1006,8 @@ def DiTi_5000ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=850.0,
     z_max=1150.0,
     area=50.0,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=6,
       num_items_y=4,
       dx=10.5,
@@ -979,13 +1017,13 @@ def DiTi_5000ul_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=18.0,
       size_x=18.0,
       size_y=18.0,
-      make_tip=DiTi_5000ul_Filter_LiHa_tip
+      make_tip=DiTi_5000ul_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_125ul_Filter_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30051810 (Tecan Sterile). Maximum pipetting volume is 110ul. """
+  """Tecan part no. 30051810 (Tecan Sterile). Maximum pipetting volume is 110ul."""
   return TecanTipRack(
     name=name,
     size_x=127.3,
@@ -997,7 +1035,8 @@ def DiTi_125ul_Filter_MCA384(name: str) -> TecanTipRack:
     z_dispense=1490.0,
     z_max=1690.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=24,
       num_items_y=16,
       dx=9.65,
@@ -1007,13 +1046,13 @@ def DiTi_125ul_Filter_MCA384(name: str) -> TecanTipRack:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
-      make_tip=DiTi_125ul_Filter_MCA384_tip
+      make_tip=DiTi_125ul_Filter_MCA384_tip,
     ),
   )
 
 
 def DiTi_125ul_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30051808 (Tecan Pure) or 30051809 (Tecan Sterile) """
+  """Tecan part no. 30051808 (Tecan Pure) or 30051809 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
     size_x=127.7,
@@ -1025,7 +1064,8 @@ def DiTi_125ul_MCA384(name: str) -> TecanTipRack:
     z_dispense=1490.0,
     z_max=1690.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=24,
       num_items_y=16,
       dx=9.85,
@@ -1035,13 +1075,13 @@ def DiTi_125ul_MCA384(name: str) -> TecanTipRack:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
-      make_tip=DiTi_125ul_MCA384_tip
+      make_tip=DiTi_125ul_MCA384_tip,
     ),
   )
 
 
 def DiTi_15ul_Filter_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30051804 (Tecan Sterile). Maximum pipetting volume is 14.5ul. """
+  """Tecan part no. 30051804 (Tecan Sterile). Maximum pipetting volume is 14.5ul."""
   return TecanTipRack(
     name=name,
     size_x=127.9,
@@ -1053,7 +1093,8 @@ def DiTi_15ul_Filter_MCA384(name: str) -> TecanTipRack:
     z_dispense=1676.0,
     z_max=1879.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=24,
       num_items_y=16,
       dx=9.95,
@@ -1063,13 +1104,13 @@ def DiTi_15ul_Filter_MCA384(name: str) -> TecanTipRack:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
-      make_tip=DiTi_15ul_Filter_MCA384_tip
+      make_tip=DiTi_15ul_Filter_MCA384_tip,
     ),
   )
 
 
 def DiTi_15ul_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30051802 (Tecan Pure) or 30051803 (Tecan Sterile) """
+  """Tecan part no. 30051802 (Tecan Pure) or 30051803 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
     size_x=127.9,
@@ -1081,7 +1122,8 @@ def DiTi_15ul_MCA384(name: str) -> TecanTipRack:
     z_dispense=1676.0,
     z_max=1879.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=24,
       num_items_y=16,
       dx=9.95,
@@ -1091,13 +1133,13 @@ def DiTi_15ul_MCA384(name: str) -> TecanTipRack:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
-      make_tip=DiTi_15ul_MCA384_tip
+      make_tip=DiTi_15ul_MCA384_tip,
     ),
   )
 
 
 def DiTi_50ul_Filter_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30051807 (Tecan Sterile). Maximum pipetting volume is 40ul. """
+  """Tecan part no. 30051807 (Tecan Sterile). Maximum pipetting volume is 40ul."""
   return TecanTipRack(
     name=name,
     size_x=127.3,
@@ -1109,7 +1151,8 @@ def DiTi_50ul_Filter_MCA384(name: str) -> TecanTipRack:
     z_dispense=1490.0,
     z_max=1690.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=24,
       num_items_y=16,
       dx=9.65,
@@ -1119,13 +1162,13 @@ def DiTi_50ul_Filter_MCA384(name: str) -> TecanTipRack:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
-      make_tip=DiTi_50ul_Filter_MCA384_tip
+      make_tip=DiTi_50ul_Filter_MCA384_tip,
     ),
   )
 
 
 def DiTi_50ul_MCA384(name: str) -> TecanTipRack:
-  """ Tecan part no. 30051805 (Tecan Pure) or 30051806 (Tecan Sterile) """
+  """Tecan part no. 30051805 (Tecan Pure) or 30051806 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
     size_x=127.3,
@@ -1137,7 +1180,8 @@ def DiTi_50ul_MCA384(name: str) -> TecanTipRack:
     z_dispense=1490.0,
     z_max=1690.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=24,
       num_items_y=16,
       dx=9.65,
@@ -1147,13 +1191,13 @@ def DiTi_50ul_MCA384(name: str) -> TecanTipRack:
       item_dy=4.5,
       size_x=4.5,
       size_y=4.5,
-      make_tip=DiTi_50ul_MCA384_tip
+      make_tip=DiTi_50ul_MCA384_tip,
     ),
   )
 
 
 def DiTi_1000ul_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612513 or 10612555 or 30000631 """
+  """Tecan part no. 10612513 or 10612555 or 30000631"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1165,7 +1209,8 @@ def DiTi_1000ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1175,13 +1220,13 @@ def DiTi_1000ul_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_1000ul_Filter_LiHa_tip
+      make_tip=DiTi_1000ul_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_1000ul_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612554 or 30000630 """
+  """Tecan part no. 10612554 or 30000630"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1193,7 +1238,8 @@ def DiTi_1000ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1203,13 +1249,13 @@ def DiTi_1000ul_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_1000ul_LiHa_tip
+      make_tip=DiTi_1000ul_LiHa_tip,
     ),
   )
 
 
 def DiTi_10ul_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612517 """
+  """Tecan part no. 10612517"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1221,7 +1267,8 @@ def DiTi_10ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1231,13 +1278,13 @@ def DiTi_10ul_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_10ul_Filter_LiHa_tip
+      make_tip=DiTi_10ul_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_10ul_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612516 """
+  """Tecan part no. 10612516"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1249,7 +1296,8 @@ def DiTi_10ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1259,13 +1307,13 @@ def DiTi_10ul_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_10ul_LiHa_tip
+      make_tip=DiTi_10ul_LiHa_tip,
     ),
   )
 
 
 def DiTi_200ul_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612511 or 10612553 or 30000629 """
+  """Tecan part no. 10612511 or 10612553 or 30000629"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1277,7 +1325,8 @@ def DiTi_200ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1287,13 +1336,13 @@ def DiTi_200ul_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_Filter_LiHa_tip
+      make_tip=DiTi_200ul_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_200ul_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 10612552 or 30000627 """
+  """Tecan part no. 10612552 or 30000627"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1305,7 +1354,8 @@ def DiTi_200ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1315,13 +1365,13 @@ def DiTi_200ul_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_LiHa_tip
+      make_tip=DiTi_200ul_LiHa_tip,
     ),
   )
 
 
 def DiTi_50ul_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30032114 """
+  """Tecan part no. 30032114"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1333,7 +1383,8 @@ def DiTi_50ul_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1343,13 +1394,13 @@ def DiTi_50ul_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_50ul_Filter_LiHa_tip
+      make_tip=DiTi_50ul_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_50ul_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30032115 """
+  """Tecan part no. 30032115"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1361,7 +1412,8 @@ def DiTi_50ul_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1371,13 +1423,13 @@ def DiTi_50ul_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_50ul_LiHa_tip
+      make_tip=DiTi_50ul_LiHa_tip,
     ),
   )
 
 
 def DiTi_350ul_Nested_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30083400(Tecan Pure), 30083401 (Tecan Sterile) """
+  """Tecan part no. 30083400(Tecan Pure), 30083401 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
     size_x=130.4,
@@ -1389,7 +1441,8 @@ def DiTi_350ul_Nested_LiHa(name: str) -> TecanTipRack:
     z_dispense=2015.0,
     z_max=2175.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=11.2,
@@ -1399,13 +1452,13 @@ def DiTi_350ul_Nested_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_350ul_Nested_LiHa_tip
+      make_tip=DiTi_350ul_Nested_LiHa_tip,
     ),
   )
 
 
 def DiTi_10ul_Filter_LiHa_L(name: str) -> TecanTipRack:
-  """ Tecan part no. 30104804 """
+  """Tecan part no. 30104804"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1417,7 +1470,8 @@ def DiTi_10ul_Filter_LiHa_L(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1427,13 +1481,13 @@ def DiTi_10ul_Filter_LiHa_L(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_10ul_Filter_LiHa_L_tip
+      make_tip=DiTi_10ul_Filter_LiHa_L_tip,
     ),
   )
 
 
 def DiTi_10ul_Filter_Nested_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30104978 (Tecan Pure), 30104979 (Tecan Sterile) """
+  """Tecan part no. 30104978 (Tecan Pure), 30104979 (Tecan Sterile)"""
   return TecanTipRack(
     name=name,
     size_x=127.6,
@@ -1445,7 +1499,8 @@ def DiTi_10ul_Filter_Nested_LiHa(name: str) -> TecanTipRack:
     z_dispense=2015.0,
     z_max=2175.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=9.8,
@@ -1455,13 +1510,13 @@ def DiTi_10ul_Filter_Nested_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_10ul_Filter_Nested_LiHa_tip
+      make_tip=DiTi_10ul_Filter_Nested_LiHa_tip,
     ),
   )
 
 
 def DiTi_10ul_LiHa_L(name: str) -> TecanTipRack:
-  """ Tecan part no. 30104803 """
+  """Tecan part no. 30104803"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1473,7 +1528,8 @@ def DiTi_10ul_LiHa_L(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1483,13 +1539,13 @@ def DiTi_10ul_LiHa_L(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_10ul_LiHa_L_tip
+      make_tip=DiTi_10ul_LiHa_L_tip,
     ),
   )
 
 
 def DiTi_10ul_Nested_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30104977 (Tecan Pure) """
+  """Tecan part no. 30104977 (Tecan Pure)"""
   return TecanTipRack(
     name=name,
     size_x=127.6,
@@ -1501,7 +1557,8 @@ def DiTi_10ul_Nested_LiHa(name: str) -> TecanTipRack:
     z_dispense=2015.0,
     z_max=2175.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=9.8,
@@ -1511,13 +1568,13 @@ def DiTi_10ul_Nested_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_10ul_Nested_LiHa_tip
+      make_tip=DiTi_10ul_Nested_LiHa_tip,
     ),
   )
 
 
 def DiTi_10ul_SBS_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30104976 (Tecan Sterile), 30104974 (Tecan Pure, Refill) """
+  """Tecan part no. 30104976 (Tecan Sterile), 30104974 (Tecan Pure, Refill)"""
   return TecanTipRack(
     name=name,
     size_x=128.2,
@@ -1529,7 +1586,8 @@ def DiTi_10ul_SBS_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=1360.0,
     z_max=1660.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -1539,13 +1597,13 @@ def DiTi_10ul_SBS_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_10ul_SBS_Filter_LiHa_tip
+      make_tip=DiTi_10ul_SBS_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_10ul_SBS_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30104975 (Tecan Sterile), 30104973 (Tecan Pure, Refill) """
+  """Tecan part no. 30104975 (Tecan Sterile), 30104973 (Tecan Pure, Refill)"""
   return TecanTipRack(
     name=name,
     size_x=129.0,
@@ -1557,7 +1615,8 @@ def DiTi_10ul_SBS_LiHa(name: str) -> TecanTipRack:
     z_dispense=1360.0,
     z_max=1660.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.5,
@@ -1567,13 +1626,13 @@ def DiTi_10ul_SBS_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_10ul_SBS_LiHa_tip
+      make_tip=DiTi_10ul_SBS_LiHa_tip,
     ),
   )
 
 
 def DiTi_1000ul_W_B_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30115239 """
+  """Tecan part no. 30115239"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1585,7 +1644,8 @@ def DiTi_1000ul_W_B_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1595,13 +1655,13 @@ def DiTi_1000ul_W_B_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_1000ul_W_B_Filter_LiHa_tip
+      make_tip=DiTi_1000ul_W_B_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_1000ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30126020 or 30126095 """
+  """Tecan part no. 30126020 or 30126095"""
   return TecanTipRack(
     name=name,
     size_x=127.6,
@@ -1613,7 +1673,8 @@ def DiTi_1000ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=9.8,
@@ -1623,13 +1684,13 @@ def DiTi_1000ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_1000ul_CL_Filter_LiHa_tip
+      make_tip=DiTi_1000ul_CL_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_1000ul_CL_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30126019 or 30126094 """
+  """Tecan part no. 30126019 or 30126094"""
   return TecanTipRack(
     name=name,
     size_x=127.6,
@@ -1641,7 +1702,8 @@ def DiTi_1000ul_CL_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=9.8,
@@ -1651,13 +1713,13 @@ def DiTi_1000ul_CL_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_1000ul_CL_LiHa_tip
+      make_tip=DiTi_1000ul_CL_LiHa_tip,
     ),
   )
 
 
 def DiTi_200ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30126018 or 30126093 """
+  """Tecan part no. 30126018 or 30126093"""
   return TecanTipRack(
     name=name,
     size_x=129.4,
@@ -1669,7 +1731,8 @@ def DiTi_200ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.7,
@@ -1679,13 +1742,13 @@ def DiTi_200ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_CL_Filter_LiHa_tip
+      make_tip=DiTi_200ul_CL_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_200ul_CL_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30126017 or 30126092 """
+  """Tecan part no. 30126017 or 30126092"""
   return TecanTipRack(
     name=name,
     size_x=129.4,
@@ -1697,7 +1760,8 @@ def DiTi_200ul_CL_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=10.7,
@@ -1707,13 +1771,13 @@ def DiTi_200ul_CL_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_200ul_CL_LiHa_tip
+      make_tip=DiTi_200ul_CL_LiHa_tip,
     ),
   )
 
 
 def DiTi_50ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30126097 """
+  """Tecan part no. 30126097"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1725,7 +1789,8 @@ def DiTi_50ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1735,13 +1800,13 @@ def DiTi_50ul_CL_Filter_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_50ul_CL_Filter_LiHa_tip
+      make_tip=DiTi_50ul_CL_Filter_LiHa_tip,
     ),
   )
 
 
 def DiTi_50ul_CL_LiHa(name: str) -> TecanTipRack:
-  """ Tecan part no. 30126096 """
+  """Tecan part no. 30126096"""
   return TecanTipRack(
     name=name,
     size_x=123.4,
@@ -1753,7 +1818,8 @@ def DiTi_50ul_CL_LiHa(name: str) -> TecanTipRack:
     z_dispense=865.0,
     z_max=1087.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(TipSpot,
+    ordered_items=create_ordered_items_2d(
+      TipSpot,
       num_items_x=12,
       num_items_y=8,
       dx=7.7,
@@ -1763,6 +1829,6 @@ def DiTi_50ul_CL_LiHa(name: str) -> TecanTipRack:
       item_dy=9.0,
       size_x=9.0,
       size_y=9.0,
-      make_tip=DiTi_50ul_CL_LiHa_tip
+      make_tip=DiTi_50ul_CL_LiHa_tip,
     ),
   )

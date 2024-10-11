@@ -21,6 +21,9 @@ clean-docs:
 lint:
 	$(BIN)python -m ruff check pylabrobot
 
+format:
+	$(BIN)python -m ruff format pylabrobot
+
 test:
 	$(BIN)python -m pytest -s -v
 

@@ -1,6 +1,3 @@
-
-
-
 # labware manufacturers and suppliers
 from .alpaqua import *
 from .azenta import *

@@ -5,7 +5,7 @@ from opentrons_shared_data.load import get_shared_data_root
 from pylabrobot.resources import Plate, TipRack, TubeRack
 from pylabrobot.resources.opentrons.load import (
   load_shared_opentrons_resource,
-  UnknownResourceType
+  UnknownResourceType,
 )
 
 
@@ -37,7 +37,9 @@ def main(po, to, tro):
 
         try:
           # we don't really care about name
-          resource = load_shared_opentrons_resource(definition, version=version, name=file)
+          resource = load_shared_opentrons_resource(
+            definition, version=version, name=file
+          )
         except UnknownResourceType:
           print(f"[SKIP] {definition} {version}")
           continue
@@ -73,7 +75,7 @@ def main(po, to, tro):
 
 
 if __name__ == "__main__":
-  with open(PLATE_OUT_FILE, "w", encoding="utf-8") as plate_file, \
-       open(TIP_RACK_OUT_FILE, "w", encoding="utf-8") as tip_rack_file, \
-        open(TUBE_RACK_OUT_FILE, "w", encoding="utf-8") as tube_rack_file:
+  with open(PLATE_OUT_FILE, "w", encoding="utf-8") as plate_file, open(
+    TIP_RACK_OUT_FILE, "w", encoding="utf-8"
+  ) as tip_rack_file, open(TUBE_RACK_OUT_FILE, "w", encoding="utf-8") as tube_rack_file:
     main(plate_file, tip_rack_file, tube_rack_file)

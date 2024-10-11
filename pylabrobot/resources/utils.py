@@ -10,12 +10,16 @@ T = TypeVar("T", bound=Resource)
 
 def create_equally_spaced_2d(
   klass: Type[T],
-  num_items_x: int, num_items_y: int,
-  dx: float, dy: float, dz: float,
-  item_dx: float, item_dy: float,
-  **kwargs
+  num_items_x: int,
+  num_items_y: int,
+  dx: float,
+  dy: float,
+  dz: float,
+  item_dx: float,
+  item_dy: float,
+  **kwargs,
 ) -> List[List[T]]:
-  """ Make equally spaced resources in a 2D grid. Also see :meth:`create_equally_spaced_x` and
+  """Make equally spaced resources in a 2D grid. Also see :meth:`create_equally_spaced_x` and
   :meth:`create_equally_spaced_y`.
 
   Args:
@@ -41,11 +45,10 @@ def create_equally_spaced_2d(
     items.append([])
     for j in range(num_items_y):
       name = f"{klass.__name__.lower()}_{i}_{j}"
-      item = klass(
-        name=name,
-        **kwargs
+      item = klass(name=name, **kwargs)
+      item.location = Coordinate(
+        x=dx + i * item_dx, y=dy + (num_items_y - j - 1) * item_dy, z=dz
       )
-      item.location=Coordinate(x=dx + i * item_dx, y=dy + (num_items_y-j-1) * item_dy, z=dz)
       items[i].append(item)
 
   return items
@@ -54,11 +57,13 @@ def create_equally_spaced_2d(
 def create_equally_spaced_x(
   klass: Type[T],
   num_items_x: int,
-  dx: float, dy: float, dz: float,
+  dx: float,
+  dy: float,
+  dz: float,
   item_dx: float,
-  **kwargs
+  **kwargs,
 ) -> List[T]:
-  """ Make equally spaced resources over the x-axis. See :meth:`create_equaly_spaced_2d` for more
+  """Make equally spaced resources over the x-axis. See :meth:`create_equaly_spaced_2d` for more
   details.
 
   Args:
@@ -78,9 +83,12 @@ def create_equally_spaced_x(
     klass=klass,
     num_items_x=num_items_x,
     num_items_y=1,
-    dx=dx, dy=dy, dz=dz,
-    item_dx=item_dx, item_dy=0,
-    **kwargs
+    dx=dx,
+    dy=dy,
+    dz=dz,
+    item_dx=item_dx,
+    item_dy=0,
+    **kwargs,
   )
   return [items[i][0] for i in range(num_items_x)]
 
@@ -88,11 +96,13 @@ def create_equally_spaced_x(
 def create_equally_spaced_y(
   klass: Type[T],
   num_items_y: int,
-  dx: float, dy: float, dz: float,
+  dx: float,
+  dy: float,
+  dz: float,
   item_dy: float,
-  **kwargs
+  **kwargs,
 ) -> List[T]:
-  """ Make equally spaced resources over the y-axis. See :meth:`create_equaly_spaced_2d` for more
+  """Make equally spaced resources over the y-axis. See :meth:`create_equaly_spaced_2d` for more
   details.
 
   Args:
@@ -112,21 +122,28 @@ def create_equally_spaced_y(
     klass=klass,
     num_items_x=1,
     num_items_y=num_items_y,
-    dx=dx, dy=dy, dz=dz,
-    item_dx=0, item_dy=item_dy,
-    **kwargs
+    dx=dx,
+    dy=dy,
+    dz=dz,
+    item_dx=0,
+    item_dy=item_dy,
+    **kwargs,
   )
   return items[0]
 
 
 def create_ordered_items_2d(
   klass: Type[T],
-  num_items_x: int, num_items_y: int,
-  dx: float, dy: float, dz: float,
-  item_dx: float, item_dy: float,
-  **kwargs
+  num_items_x: int,
+  num_items_y: int,
+  dx: float,
+  dy: float,
+  dz: float,
+  item_dx: float,
+  item_dy: float,
+  **kwargs,
 ) -> Dict[str, T]:
-  """ Make ordered resources in a 2D grid, with the keys being the identifiers in transposed
+  """Make ordered resources in a 2D grid, with the keys being the identifiers in transposed
   MS-Excel style. This is useful for initializing `ItemizedResource`.
 
   Args:
@@ -149,24 +166,29 @@ def create_ordered_items_2d(
     klass=klass,
     num_items_x=num_items_x,
     num_items_y=num_items_y,
-    dx=dx, dy=dy, dz=dz,
-    item_dx=item_dx, item_dy=item_dy,
-    **kwargs
+    dx=dx,
+    dy=dy,
+    dz=dz,
+    item_dx=item_dx,
+    item_dy=item_dy,
+    **kwargs,
   )
   keys = [f"{LETTERS[j]}{i+1}" for i in range(num_items_x) for j in range(num_items_y)]
   return dict(zip(keys, [item for sublist in items for item in sublist]))
 
 
 U = TypeVar("U", bound=Resource)
+
+
 def query(
   root: Resource,
-  type_: Type[U] = Resource, # type: ignore
+  type_: Type[U] = Resource,  # type: ignore
   name: Optional[str] = None,
   x: Optional[float] = None,
   y: Optional[float] = None,
   z: Optional[float] = None,
 ) -> List[U]:
-  """ Query resources based on their attributes.
+  """Query resources based on their attributes.
 
   Args:
     root: The root resource to search
@@ -190,12 +212,14 @@ def query(
       continue
     matched.append(resource)
 
-    matched.extend(query(
-      root=resource,
-      type_=type_,
-      name=name,
-      x=x,
-      y=y,
-      z=z,
-    ))
+    matched.extend(
+      query(
+        root=resource,
+        type_=type_,
+        name=name,
+        x=x,
+        y=y,
+        z=z,
+      )
+    )
   return matched

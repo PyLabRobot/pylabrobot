@@ -1,12 +1,12 @@
 from typing import Optional
 
-import serial # type: ignore
+import serial  # type: ignore
 
 from pylabrobot.pumps.backend import PumpBackend
 
 
 class Masterflex(PumpBackend):
-  """ Backend for the Cole Parmer Masterflex L/S 07551-20 pump
+  """Backend for the Cole Parmer Masterflex L/S 07551-20 pump
 
   Documentation available at:
     - https://pim-resources.coleparmer.com/instruction-manual/a-1299-1127b-en.pdf
@@ -25,14 +25,14 @@ class Masterflex(PumpBackend):
       timeout=1,
       parity=serial.PARITY_ODD,
       stopbits=serial.STOPBITS_ONE,
-      bytesize=serial.SEVENBITS
+      bytesize=serial.SEVENBITS,
     )
 
-    self.ser.write(b"\x05") # Enquiry; ready to send.
+    self.ser.write(b"\x05")  # Enquiry; ready to send.
     self.ser.write(b"\x05P02\r")
 
   def serialize(self):
-    return { **super().serialize(), "com_port": self.com_port}
+    return {**super().serialize(), "com_port": self.com_port}
 
   async def stop(self):
     assert self.ser is not None, "Pump not initialized"

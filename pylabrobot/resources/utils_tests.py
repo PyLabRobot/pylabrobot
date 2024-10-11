@@ -18,6 +18,7 @@ def test_query():
   assert query(root, Resource, y=0) == [child1, child2]
   assert query(root, name=r"child\d") == [child1, child2]
 
+
 def test_query_with_type():
   root = Resource(name="root", size_x=10, size_y=10, size_z=10)
   well1 = Well(name="well", size_x=3, size_y=3, size_z=3)
@@ -26,6 +27,7 @@ def test_query_with_type():
   root.assign_child_resource(well2, location=Coordinate(6, 6, 0))
   assert query(root, Well) == [well1, well2]
   assert query(root, Well, x=6) == [well1, well2]
+
 
 def test_deep():
   root = Resource(name="root", size_x=10, size_y=10, size_z=10)

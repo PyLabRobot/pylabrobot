@@ -2,7 +2,7 @@ from pylabrobot.temperature_controlling.backend import TemperatureControllerBack
 
 
 class TemperatureControllerChatterboxBackend(TemperatureControllerBackend):
-  """ Chatter box backend for device-free testing. Prints out all operations. """
+  """Chatter box backend for device-free testing. Prints out all operations."""
 
   def __init__(self, dummy_temperature: float = 0.0) -> None:
     self._dummy_temperature = dummy_temperature

@@ -1,4 +1,4 @@
-""" Tecan plates
+"""Tecan plates
 
 size_z are best approximations, see
 https://forums.pylabrobot.org/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2987
@@ -15,7 +15,7 @@ from pylabrobot.resources.tecan.tecan_resource import TecanResource
 
 
 class TecanPlate(Plate, TecanResource):
-  """ Base class for Tecan plates. """
+  """Base class for Tecan plates."""
 
   def __init__(
     self,
@@ -31,17 +31,24 @@ class TecanPlate(Plate, TecanResource):
     ordered_items: Optional[Dict[str, Well]] = None,
     category: str = "tecan_plate",
     lid: Optional[Lid] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, ordered_items=ordered_items,
-      category=category, lid=lid, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      ordered_items=ordered_items,
+      category=category,
+      lid=lid,
+      model=model,
+    )
 
     self.z_travel = z_travel
     self.z_start = z_start
     self.z_dispense = z_dispense
     self.z_max = z_max
     self.area = area
-
 
 
 def Microplate_96_Well_Lid(name: str) -> Lid:
@@ -58,7 +65,7 @@ def Microplate_96_Well_Lid(name: str) -> Lid:
 
 
 def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
-  """ white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306
+  """white: pn 30122300, black: pn 30122298, cell culture/clear: pn 30122304, cell culture/black with clear bottom: pn 30122306
 
   Coley
 
@@ -104,7 +111,8 @@ def Microplate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1975.0,
     z_max=2005.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=12.5,
@@ -145,7 +153,8 @@ def Microplate_portrait_96_Well(name: str, with_lid: bool = False) -> TecanPlate
     z_dispense=1960.0,
     z_max=2050.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=8,
       num_items_y=12,
       dx=6.7,
@@ -186,7 +195,8 @@ def DeepWell_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1690.0,
     z_max=2060.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=9.9,
@@ -227,7 +237,8 @@ def HalfDeepWell_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1889.0,
     z_max=2057.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=24,
       num_items_y=16,
       dx=9.85,
@@ -268,7 +279,8 @@ def DeepWell_portait_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1690.0,
     z_max=2050.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=8,
       num_items_y=12,
       dx=6.7,
@@ -309,7 +321,8 @@ def Plate_portrait_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1960.0,
     z_max=2050.0,
     area=9.0,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=16,
       num_items_y=24,
       dx=6.75,
@@ -350,7 +363,8 @@ def Macherey_Nagel_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlat
     z_dispense=1578.0,
     z_max=1831.0,
     area=65.0,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=22.25,
@@ -391,7 +405,8 @@ def Qiagen_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1549.0,
     z_max=1807.0,
     area=60.8,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=22.25,
@@ -432,7 +447,8 @@ def AB_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1837.0,
     z_max=2017.0,
     area=26.4,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=11.4,
@@ -473,7 +489,8 @@ def PCR_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1915.0,
     z_max=2095.0,
     area=28.3,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=10.1,
@@ -514,7 +531,8 @@ def DeepWell_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=2004.0,
     z_max=2070.0,
     area=2.7,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=48,
       num_items_y=32,
       dx=9.85,
@@ -555,7 +573,8 @@ def Hibase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=2004.0,
     z_max=2038.0,
     area=2.5,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=48,
       num_items_y=32,
       dx=9.85,
@@ -596,7 +615,8 @@ def Lowbase_Greiner_1536_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=2034.0,
     z_max=2086.0,
     area=2.7,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=48,
       num_items_y=32,
       dx=9.85,
@@ -637,7 +657,8 @@ def Separation_Plate_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1549.0,
     z_max=1807.0,
     area=60.8,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=22.25,
@@ -678,7 +699,8 @@ def DeepWell_square_96_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1690.0,
     z_max=2060.0,
     area=64.0,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=9.9,
@@ -719,7 +741,8 @@ def CaCo2_Plate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=2007.0,
     z_max=2025.0,
     area=50.3,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=6,
       num_items_y=4,
       dx=4.75,
@@ -748,7 +771,7 @@ def Plate_384_Well_Lid(name: str) -> Lid:
 
 
 def Plate_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
-  """ white: pn 30122301, black: pn 30122299, cell culture/clear: pn 30122305, cell culture/black with clear bottom: pn 30122307 """
+  """white: pn 30122301, black: pn 30122299, cell culture/clear: pn 30122305, cell culture/black with clear bottom: pn 30122307"""
   return TecanPlate(
     name=name,
     size_x=127.7,
@@ -761,7 +784,8 @@ def Plate_384_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1960.0,
     z_max=2061.0,
     area=13.7,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=24,
       num_items_y=16,
       dx=9.85,
@@ -790,7 +814,7 @@ def Microplate_24_Well_Lid(name: str) -> Lid:
 
 
 def Microplate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
-  """ cell culture/clear: pn 30122302 """
+  """cell culture/clear: pn 30122302"""
   return TecanPlate(
     name=name,
     size_x=130.9,
@@ -803,7 +827,8 @@ def Microplate_24_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1917.0,
     z_max=2061.0,
     area=193.6,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=6,
       num_items_y=4,
       dx=6.6,
@@ -844,7 +869,8 @@ def TecanExtractionPlate_96_Well(name: str, with_lid: bool = False) -> TecanPlat
     z_dispense=1910.0,
     z_max=2061.0,
     area=33.2,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=12,
       num_items_y=8,
       dx=10.9,
@@ -873,7 +899,7 @@ def Microplate_48_Well_Lid(name: str) -> Lid:
 
 
 def Microplate_48_Well(name: str, with_lid: bool = False) -> TecanPlate:
-  """ cell culture/clear: pn 30122303 """
+  """cell culture/clear: pn 30122303"""
   return TecanPlate(
     name=name,
     size_x=131.1,
@@ -886,7 +912,8 @@ def Microplate_48_Well(name: str, with_lid: bool = False) -> TecanPlate:
     z_dispense=1921.0,
     z_max=2060.0,
     area=102.1,
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=8,
       num_items_y=6,
       dx=13.5,

@@ -3,6 +3,7 @@ from typing import Optional, cast
 
 try:
   import serial
+
   HAS_SERIAL = True
 except ImportError:
   HAS_SERIAL = False
@@ -11,7 +12,7 @@ from pylabrobot.tilting.tilter_backend import TilterBackend, TiltModuleError
 
 
 class HamiltonTiltModuleBackend(TilterBackend):
-  """ Backend for the Hamilton tilt module. """
+  """Backend for the Hamilton tilt module."""
 
   def __init__(self, com_port: str, write_timeout: float = 10, timeout: float = 10):
     self.setup_finished = False
@@ -31,7 +32,8 @@ class HamiltonTiltModuleBackend(TilterBackend):
       parity=serial.PARITY_EVEN,
       stopbits=serial.STOPBITS_ONE,
       write_timeout=self.write_timeout,
-      timeout=self.timeout)
+      timeout=self.timeout,
+    )
 
     await self.tilt_initial_offset(initial_offset)
     await self.send_command("SI")
@@ -45,7 +47,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     self.setup_finished = False
 
   async def send_command(self, command: str, parameter: Optional[str] = None) -> str:
-    """ Send a command to the tilt module. """
+    """Send a command to the tilt module."""
 
     if self.ser is None:
       raise RuntimeError("Tilt module not setup.")
@@ -58,36 +60,40 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
     # Check for error.
     error_matches = re.search("er[0-9]{2}", resp)
-    if error_matches is not  None:
+    if error_matches is not None:
       err_code = int(error_matches.group(0)[2:])
       if 1 <= err_code <= 7:
-        raise TiltModuleError({
-          1: "Init Position not found",
-          2: "**Step** loss",
-          3: "Not initialized",
-          5: "Stepper Motor end stage defective",
-          6: "Parameter out **of** Range",
-          7: "Undefined Command",
-        }[err_code])
+        raise TiltModuleError(
+          {
+            1: "Init Position not found",
+            2: "**Step** loss",
+            3: "Not initialized",
+            5: "Stepper Motor end stage defective",
+            6: "Parameter out **of** Range",
+            7: "Undefined Command",
+          }[err_code]
+        )
       if err_code != 0:
         raise RuntimeError(f"Unexpected error code: {err_code}")
 
-    return cast(str, resp) # must do stupid because mypy will not recognize that pyserial is typed..
+    return cast(
+      str, resp
+    )  # must do stupid because mypy will not recognize that pyserial is typed..
 
   async def set_angle(self, angle: float):
-    """ Set the tilt module to rotate by a given angle. """
+    """Set the tilt module to rotate by a given angle."""
 
     assert 0 <= angle <= 10, "Angle must be between 0 and 10 degrees."
 
     await self.tilt_go_to_position(round(angle))
 
   async def tilt_initialize(self):
-    """ Initialize a daisy chained tilt module. """
+    """Initialize a daisy chained tilt module."""
 
     return await self.send_command("SI")
 
   async def tilt_move_to_absolute_step_position(self, position: float):
-    """ Move the tilt module to an absolute position.
+    """Move the tilt module to an absolute position.
 
     Args:
       position: absolute position (-10...120)
@@ -101,7 +107,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     )
 
   async def tilt_move_to_relative_step_position(self, steps: float):
-    """ Move the tilt module to a relative position.
+    """Move the tilt module to a relative position.
 
     .. warning:: This method has the potential to decalibrate the tilt module.
 
@@ -114,7 +120,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     return await self.send_command(command="SR", parameter=str(steps))
 
   async def tilt_go_to_position(self, position: int):
-    """ Go to position (0...10).
+    """Go to position (0...10).
 
     Args:
       position: 0 = horizontal, 10 = degrees
@@ -125,7 +131,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     return await self.send_command(command="GP", parameter=str(position))
 
   async def tilt_set_speed(self, speed: int):
-    """ Set the speed on the tilt module.
+    """Set the speed on the tilt module.
 
     Args:
       speed: 1 is slow, 9 = fast. Default speed is 1.
@@ -136,12 +142,12 @@ class HamiltonTiltModuleBackend(TilterBackend):
     return await self.send_command(command="SV", parameter=str(speed))
 
   async def tilt_power_off(self):
-    """ Power off the tilt module. """
+    """Power off the tilt module."""
 
     return await self.send_command(command="PO")
 
   async def tilt_request_error(self) -> Optional[str]:
-    """ Request the error of the tilt module.
+    """Request the error of the tilt module.
 
     Returns: the error, if it exists, else `None`
     """
@@ -150,7 +156,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     return await self.send_command("RE")
 
   async def tilt_request_sensor(self) -> Optional[str]:
-    """ It is unclear what this method does. The documentation lists the following map:
+    """It is unclear what this method does. The documentation lists the following map:
 
     0 = LS 1 Input
     1 = LS 2 Input
@@ -182,7 +188,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     raise RuntimeError(f"Unexpected error code: {code}")
 
   async def tilt_request_offset_between_light_barrier_and_init_position(self) -> int:
-    """ Request Offset between Light Barrier and Init Position """
+    """Request Offset between Light Barrier and Init Position"""
 
     resp = await self.send_command(command="RO")
     resp = resp[:-2].split(" ")[1]
@@ -191,7 +197,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
   # Open Collectors
 
   async def tilt_port_set_open_collector(self, open_collector: int):
-    """ Port set open collector
+    """Port set open collector
 
     Args:
       open_collector: 1...8 # TODO: what?
@@ -202,7 +208,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     return await self.send_command(command="PS", parameter=str(open_collector))
 
   async def tilt_port_clear_open_collector(self, open_collector: int):
-    """ Tilt port clear open collector
+    """Tilt port clear open collector
 
     Args:
       open_collector: 1...8 # TODO: what?
@@ -215,7 +221,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
   # Single Commands **with** **Option** “Heating”:
 
   async def tilt_set_temperature(self, temperature: float):
-    """ Tilt set the temperature 10.. 50 Grad C [1/10 Grad C]
+    """Tilt set the temperature 10.. 50 Grad C [1/10 Grad C]
 
     Args:
       temperature: temperature in Celcius, between 10 and 50
@@ -223,10 +229,10 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
     assert 10 <= temperature <= 50, "Temperature must be between 10 and 50."
 
-    return await self.send_command(command="ST", parameter=str(int(temperature*10)))
+    return await self.send_command(command="ST", parameter=str(int(temperature * 10)))
 
   async def tilt_switch_off_temperature_controller(self):
-    """ Switch off the temperature controller on the tilt module. """
+    """Switch off the temperature controller on the tilt module."""
 
     return await self.send_command(
       command="TO",
@@ -235,7 +241,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
   # Single Commands **with** **Option** “Waste Pump (PWM2)”:
 
   async def tilt_set_drain_time(self, drain_time: float):
-    """ Set the drain time on the tilt module.
+    """Set the drain time on the tilt module.
 
     Args:
       drain_time: drain time in seconds, between 5 and 250
@@ -243,17 +249,17 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
     assert 5 <= drain_time <= 250, "Drain time must be between 5 and 250."
 
-    return await self.send_command(command="DT", parameter=str(int(drain_time*10)))
+    return await self.send_command(command="DT", parameter=str(int(drain_time * 10)))
 
   async def tilt_set_waste_pump_on(self):
-    """ Turn the waste pump on the tilt module on """
+    """Turn the waste pump on the tilt module on"""
 
     return await self.send_command(
       command="WP",
     )
 
   async def tilt_set_waste_pump_off(self):
-    """ Turn the waste pump on the tilt module off """
+    """Turn the waste pump on the tilt module off"""
 
     return await self.send_command(
       command="WO",
@@ -262,7 +268,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
   # Adjustment Commands:
 
   async def tilt_set_name(self, name: str):
-    """ Set the tilt module name.
+    """Set the tilt module name.
 
     Args:
       name: the desired name, must be 2 characters long
@@ -270,13 +276,10 @@ class HamiltonTiltModuleBackend(TilterBackend):
 
     assert len(name) == 2, "name must be 2 characters long"
 
-    return await self.send_command(
-      command="MN",
-      parameter=name
-    )
+    return await self.send_command(command="MN", parameter=name)
 
   async def tilt_switch_encoder(self, on: bool):
-    """ Switch the encoder on the tilt module on or off.
+    """Switch the encoder on the tilt module on or off.
 
     Args:
       on: if `True`, the encoder will be turned on, else, it will be turned off.
@@ -285,7 +288,7 @@ class HamiltonTiltModuleBackend(TilterBackend):
     return await self.send_command(command="EN", parameter=str(int(on)))
 
   async def tilt_initial_offset(self, offset: int):
-    """ Set the initial offset on the tilt module
+    """Set the initial offset on the tilt module
 
     Args:
       offset: the initial offset steps, steps between -100 and 100
