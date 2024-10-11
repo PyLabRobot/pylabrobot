@@ -19,7 +19,7 @@ clean-docs:
 	rm -rf docs/user_guide/jupyter_execute
 
 lint:
-	$(BIN)python -m ruff check pylabrobot
+	$(BIN)python -m ruff check pylabrobot && $(BIN)python -m pylint pylabrobot
 
 format:
 	$(BIN)python -m ruff format pylabrobot
