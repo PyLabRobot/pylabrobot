@@ -38,6 +38,7 @@ extensions = [
   'sphinx_copybutton',
   'IPython.sphinxext.ipython_console_highlighting',
   'sphinx_reredirects',
+  'sphinx_sitemap',
 ]
 
 intersphinx_mapping = {
@@ -160,6 +161,8 @@ redirects = {
   "heating-shaking.html": "user_guide/heating_shaking.html",
   "fans.html": "user_guide/fans.html",
 }
+
+html_baseurl="https://docs.pylabrobot.org/"
 
 if tags.has('no-api'):
   exclude_patterns.append('api/**')
