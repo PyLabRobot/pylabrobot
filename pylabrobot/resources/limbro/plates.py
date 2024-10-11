@@ -3,7 +3,11 @@
 # pylint: disable=invalid-name
 
 from pylabrobot.resources.plate import Lid, Plate
-from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
+from pylabrobot.resources.well import (
+  Well,
+  WellBottomType,
+  CrossSectionType,
+)
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 

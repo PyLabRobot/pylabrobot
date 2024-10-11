@@ -14,19 +14,43 @@ class Rotation:
   def get_rotation_matrix(self):
     # Create rotation matrices for each axis
     Rz = [
-      [math.cos(math.radians(self.z)), -math.sin(math.radians(self.z)), 0],
-      [math.sin(math.radians(self.z)), math.cos(math.radians(self.z)), 0],
+      [
+        math.cos(math.radians(self.z)),
+        -math.sin(math.radians(self.z)),
+        0,
+      ],
+      [
+        math.sin(math.radians(self.z)),
+        math.cos(math.radians(self.z)),
+        0,
+      ],
       [0, 0, 1],
     ]
     Ry = [
-      [math.cos(math.radians(self.y)), 0, math.sin(math.radians(self.y))],
+      [
+        math.cos(math.radians(self.y)),
+        0,
+        math.sin(math.radians(self.y)),
+      ],
       [0, 1, 0],
-      [-math.sin(math.radians(self.y)), 0, math.cos(math.radians(self.y))],
+      [
+        -math.sin(math.radians(self.y)),
+        0,
+        math.cos(math.radians(self.y)),
+      ],
     ]
     Rx = [
       [1, 0, 0],
-      [0, math.cos(math.radians(self.x)), -math.sin(math.radians(self.x))],
-      [0, math.sin(math.radians(self.x)), math.cos(math.radians(self.x))],
+      [
+        0,
+        math.cos(math.radians(self.x)),
+        -math.sin(math.radians(self.x)),
+      ],
+      [
+        0,
+        math.sin(math.radians(self.x)),
+        math.cos(math.radians(self.x)),
+      ],
     ]
     # Combine rotations: The order of multiplication matters and defines the behavior significantly.
     # This is a common order: Rz * Ry * Rx

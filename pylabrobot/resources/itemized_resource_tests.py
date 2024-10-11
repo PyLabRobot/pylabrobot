@@ -61,11 +61,26 @@ class TestItemizedResource(unittest.TestCase):
     self.assertEqual(self.plate.get_item((7, 11)).name, "plate_well_11_7")
 
   def test_well_get_absolute_location(self):
-    self.assertEqual(self.plate.get_item(0).get_absolute_location(), Coordinate(0, 63, 0))
-    self.assertEqual(self.plate.get_item(7).get_absolute_location(), Coordinate(0, 0, 0))
-    self.assertEqual(self.plate.get_item(8).get_absolute_location(), Coordinate(9, 63, 0))
-    self.assertEqual(self.plate.get_item(17).get_absolute_location(), Coordinate(18, 54, 0))
-    self.assertEqual(self.plate.get_item(95).get_absolute_location(), Coordinate(99, 0, 0))
+    self.assertEqual(
+      self.plate.get_item(0).get_absolute_location(),
+      Coordinate(0, 63, 0),
+    )
+    self.assertEqual(
+      self.plate.get_item(7).get_absolute_location(),
+      Coordinate(0, 0, 0),
+    )
+    self.assertEqual(
+      self.plate.get_item(8).get_absolute_location(),
+      Coordinate(9, 63, 0),
+    )
+    self.assertEqual(
+      self.plate.get_item(17).get_absolute_location(),
+      Coordinate(18, 54, 0),
+    )
+    self.assertEqual(
+      self.plate.get_item(95).get_absolute_location(),
+      Coordinate(99, 0, 0),
+    )
 
   def test_getitem_int(self):
     self.assertEqual(self.plate[0][0].name, "plate_well_0_0")
@@ -105,7 +120,12 @@ class TestItemizedResource(unittest.TestCase):
   def test_getitem_str_range(self):
     self.assertEqual(
       [w.name for w in self.plate["A1:B2"]],
-      ["plate_well_0_0", "plate_well_1_0", "plate_well_0_1", "plate_well_1_1"],
+      [
+        "plate_well_0_0",
+        "plate_well_1_0",
+        "plate_well_0_1",
+        "plate_well_1_1",
+      ],
     )
 
   def test_getitem_str_error(self):

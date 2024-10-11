@@ -10,7 +10,11 @@ def _height_of_volume_in_spherical_cap(r: float, liquid_volume: float) -> float:
 
 
 def calculate_liquid_height_in_container_2segments_square_vbottom(
-  x: float, y: float, h_pyramid: float, h_cube: float, liquid_volume: float
+  x: float,
+  y: float,
+  h_pyramid: float,
+  h_cube: float,
+  liquid_volume: float,
 ) -> float:
   """
   This function is deprecated. Please use the equivalent function in

@@ -1,6 +1,8 @@
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.tilting.tilter import Tilter
-from pylabrobot.tilting.hamilton_backend import HamiltonTiltModuleBackend
+from pylabrobot.tilting.hamilton_backend import (
+  HamiltonTiltModuleBackend,
+)
 
 
 class HamiltonTiltModule(Tilter):
@@ -31,7 +33,9 @@ class HamiltonTiltModule(Tilter):
       size_y=92.57,
       size_z=85.81,
       backend=HamiltonTiltModuleBackend(
-        com_port=com_port, write_timeout=write_timeout, timeout=timeout
+        com_port=com_port,
+        write_timeout=write_timeout,
+        timeout=timeout,
       ),
       hinge_coordinate=Coordinate(6.18, 0, 72.85),
       child_resource_location=child_resource_location,

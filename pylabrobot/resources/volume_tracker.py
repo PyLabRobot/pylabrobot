@@ -3,7 +3,10 @@ import copy
 import sys
 from typing import Callable, List, Tuple, Optional, cast
 
-from pylabrobot.resources.errors import TooLittleLiquidError, TooLittleVolumeError
+from pylabrobot.resources.errors import (
+  TooLittleLiquidError,
+  TooLittleVolumeError,
+)
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.serializer import serialize, deserialize
 
@@ -25,7 +28,10 @@ def does_volume_tracking() -> bool:
 
 @contextlib.contextmanager
 def no_volume_tracking():
-  vt, ct = this.volume_tracking_enabled, this.cross_contamination_tracking_enabled  # type: ignore
+  vt, ct = (
+    this.volume_tracking_enabled,
+    this.cross_contamination_tracking_enabled,
+  )  # type: ignore
   this.volume_tracking_enabled = False  # type: ignore
   this.cross_contamination_tracking_enabled = False  # type: ignore
   yield
@@ -74,7 +80,9 @@ class VolumeTracker:
     self.liquids: List[Tuple[Optional[Liquid], float]] = liquids or []
     self.pending_liquids: List[Tuple[Optional[Liquid], float]] = pending_liquids or []
 
-    self.liquid_history = {liquid for liquid in (liquid_history or set()) if liquid is not None}
+    self.liquid_history = {
+      liquid for liquid in (liquid_history or set()) if liquid is not None
+    }
 
     self._callback: Optional[VolumeTrackerCallback] = None
 
@@ -156,7 +164,10 @@ class VolumeTracker:
     if len(self.pending_liquids) > 0:
       last_pending_liquid_tuple = self.pending_liquids[-1]
       if last_pending_liquid_tuple[0] == liquid:
-        self.pending_liquids[-1] = (liquid, last_pending_liquid_tuple[1] + volume)
+        self.pending_liquids[-1] = (
+          liquid,
+          last_pending_liquid_tuple[1] + volume,
+        )
       else:
         self.pending_liquids.append((liquid, volume))
     else:

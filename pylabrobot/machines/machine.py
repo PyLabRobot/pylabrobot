@@ -56,7 +56,10 @@ class Machine(Resource, metaclass=ABCMeta):
     return self._setup_finished
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "backend": self.backend.serialize()}
+    return {
+      **super().serialize(),
+      "backend": self.backend.serialize(),
+    }
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):

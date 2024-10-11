@@ -1,4 +1,6 @@
-from pylabrobot.temperature_controlling.backend import TemperatureControllerBackend
+from pylabrobot.temperature_controlling.backend import (
+  TemperatureControllerBackend,
+)
 
 
 class TemperatureControllerChatterboxBackend(TemperatureControllerBackend):

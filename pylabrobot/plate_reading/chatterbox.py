@@ -32,6 +32,9 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
     return self.dummy_absorbance
 
   async def read_fluorescence(
-    self, excitation_wavelength: int, emission_wavelength: int, focal_height: float
+    self,
+    excitation_wavelength: int,
+    emission_wavelength: int,
+    focal_height: float,
   ) -> List[List[float]]:
     return self.dummy_fluorescence

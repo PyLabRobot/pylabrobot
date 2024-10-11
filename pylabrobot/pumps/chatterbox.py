@@ -38,7 +38,9 @@ class PumpArrayChatterboxBackend(PumpArrayBackend):
   def num_channels(self) -> int:
     return self._num_channels
 
-  async def run_revolutions(self, num_revolutions: List[float], use_channels: List[int]):
+  async def run_revolutions(
+    self, num_revolutions: List[float], use_channels: List[int]
+  ):
     print(f"Running {num_revolutions} revolutions on channels {use_channels}.")
 
   async def run_continuously(self, speed: List[float], use_channels: List[int]):

@@ -1,4 +1,8 @@
-from pylabrobot.resources.carrier import CarrierSite, TubeCarrier, create_carrier_sites
+from pylabrobot.resources.carrier import (
+  CarrierSite,
+  TubeCarrier,
+  create_carrier_sites,
+)
 from pylabrobot.resources.coordinate import Coordinate
 
 

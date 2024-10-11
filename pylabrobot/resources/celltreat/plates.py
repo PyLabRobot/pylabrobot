@@ -8,7 +8,11 @@ from pylabrobot.resources.height_volume_functions import (
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
+from pylabrobot.resources.well import (
+  CrossSectionType,
+  Well,
+  WellBottomType,
+)
 
 
 def CellTreat_96_wellplate_350ul_Ub(name: str, lid: Optional[Lid] = None) -> Plate:

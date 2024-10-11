@@ -34,7 +34,15 @@ class TecanPlateCarrier(PlateCarrier, TecanResource):
     category="tecan_plate_carrier",
     model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, sites, category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      sites,
+      category=category,
+      model=model,
+    )
 
     self.off_x = off_x
     self.off_y = off_y

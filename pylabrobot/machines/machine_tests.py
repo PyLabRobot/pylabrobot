@@ -45,7 +45,10 @@ class TestMachine(unittest.TestCase):
         "category": None,
         "parent_name": None,
         "model": None,
-        "backend": {"mock_param": "mock_param", "type": "MockBackend"},
+        "backend": {
+          "mock_param": "mock_param",
+          "type": "MockBackend",
+        },
       },
     )
 

@@ -17,7 +17,12 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
   https://shop.opentrons.com/aluminum-block-set/
   """
 
-  def __init__(self, name: str, opentrons_id: str, child: Optional[ItemizedResource] = None):
+  def __init__(
+    self,
+    name: str,
+    opentrons_id: str,
+    child: Optional[ItemizedResource] = None,
+  ):
     """Create a new Opentrons temperature module v2.
 
     Args:

@@ -6,7 +6,9 @@ import re
 import sys
 from typing import Dict, List, Optional, Sequence, Union, cast
 
-from pylabrobot.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
+from pylabrobot.liquid_handling.backends.hamilton.base import (
+  HamiltonLiquidHandler,
+)
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_vantage_liquid_class,
@@ -24,8 +26,18 @@ from pylabrobot.liquid_handling.standard import (
   DispenseContainer,
   Move,
 )
-from pylabrobot.resources import Coordinate, Liquid, Resource, TipRack, Well
-from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
+from pylabrobot.resources import (
+  Coordinate,
+  Liquid,
+  Resource,
+  TipRack,
+  Well,
+)
+from pylabrobot.resources.ml_star import (
+  HamiltonTip,
+  TipPickupMethod,
+  TipSize,
+)
 
 
 if sys.version_info >= (3, 8):
@@ -260,7 +272,9 @@ class VantageFirmwareError(Exception):
     self.raw_response = raw_response
 
   def __str__(self):
-    return f"VantageFirmwareError(errors={self.errors}, raw_response={self.raw_response})"
+    return (
+      f"VantageFirmwareError(errors={self.errors}, raw_response={self.raw_response})"
+    )
 
   def __eq__(self, __value: object) -> bool:
     return (
@@ -270,7 +284,9 @@ class VantageFirmwareError(Exception):
     )
 
 
-def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
+def vantage_response_string_to_error(
+  string: str,
+) -> VantageFirmwareError:
   """Convert a Vantage firmware response string to a VantageFirmwareError. Assumes that the
   response is an error response."""
 
@@ -285,7 +301,9 @@ def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
       error_code = int(error_code)
       for channel in range(1, num_channels + 1):
         if module == f"P{channel}":
-          errors[f"Pipetting channel {channel}"] = pip_errors.get(error_code, "Unknown error")
+          errors[f"Pipetting channel {channel}"] = pip_errors.get(
+            error_code, "Unknown error"
+          )
         elif module in ("H0", "HM"):
           errors["Core 96"] = core96_errors.get(error_code, "Unknown error")
         elif module == "RM":
@@ -309,7 +327,9 @@ def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
   return VantageFirmwareError(errors, string)
 
 
-def _get_dispense_mode(jet: bool, empty: bool, blow_out: bool) -> Literal[0, 1, 2, 3, 4]:
+def _get_dispense_mode(
+  jet: bool, empty: bool, blow_out: bool
+) -> Literal[0, 1, 2, 3, 4]:
   """from docs:
   0 = part in jet
   1 = blow in jet (called "empty" in VENUS liquid editor)
@@ -410,7 +430,8 @@ class Vantage(HamiltonLiquidHandler):
         y_position=[3891, 3623, 3355, 3087, 2819, 2551, 2283, 2016],
         begin_z_deposit_position=[int(self._traversal_height * 10)] * self.num_channels,
         end_z_deposit_position=[1235] * self.num_channels,
-        minimal_height_at_command_end=[int(self._traversal_height * 10)] * self.num_channels,
+        minimal_height_at_command_end=[int(self._traversal_height * 10)]
+        * self.num_channels,
         tip_pattern=[True] * self.num_channels,
         tip_type=[1] * self.num_channels,
         TODO_DI_2=70,
@@ -476,9 +497,14 @@ class Vantage(HamiltonLiquidHandler):
     max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
     # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
+    if (
+      self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME
+    ):
       max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
+    elif (
+      self._get_hamilton_tip([op.resource for op in ops]).tip_size
+      != TipSize.STANDARD_VOLUME
+    ):
       max_tip_length -= 2
 
     try:
@@ -487,18 +513,23 @@ class Vantage(HamiltonLiquidHandler):
         y_position=y_positions,
         tip_pattern=tip_pattern,
         tip_type=ttti,
-        begin_z_deposit_position=[round((max_z + max_total_tip_length) * 10)] * len(ops),
+        begin_z_deposit_position=[round((max_z + max_total_tip_length) * 10)]
+        * len(ops),
         end_z_deposit_position=[round((max_z + max_tip_length) * 10)] * len(ops),
         minimal_traverse_height_at_begin_of_command=[
           round(th * 10)
-          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
+          for th in minimal_traverse_height_at_begin_of_command
+          or [self._traversal_height]
         ]
         * len(ops),
         minimal_height_at_command_end=[
-          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
+          round(th * 10)
+          for th in minimal_height_at_command_end or [self._traversal_height]
         ]
         * len(ops),
-        tip_handling_method=[1 for _ in tips],  # always appears to be 1 # tip.pickup_method.value
+        tip_handling_method=[
+          1 for _ in tips
+        ],  # always appears to be 1 # tip.pickup_method.value
         blow_out_air_volume=[0] * len(ops),  # Why is this here? Who knows.
       )
     except Exception as e:
@@ -514,7 +545,9 @@ class Vantage(HamiltonLiquidHandler):
   ):
     """Drop tips to a resource."""
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(
+      ops, use_channels
+    )
 
     max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
 
@@ -527,11 +560,13 @@ class Vantage(HamiltonLiquidHandler):
         end_z_deposit_position=[round(max_z * 10)] * len(ops),
         minimal_traverse_height_at_begin_of_command=[
           round(th * 10)
-          for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
+          for th in minimal_traverse_height_at_begin_of_command
+          or [self._traversal_height]
         ]
         * len(ops),
         minimal_height_at_command_end=[
-          round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
+          round(th * 10)
+          for th in minimal_height_at_command_end or [self._traversal_height]
         ]
         * len(ops),
         tip_handling_method=[0 for _ in ops],  # Always appears to be 0, even in trash.
@@ -563,7 +598,9 @@ class Vantage(HamiltonLiquidHandler):
     lld_search_height: Optional[List[float]] = None,
     clot_detection_height: Optional[List[float]] = None,
     liquid_surface_at_function_without_lld: Optional[List[float]] = None,
-    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[float]] = None,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[
+      List[float]
+    ] = None,
     tube_2nd_section_height_measured_from_zm: Optional[List[float]] = None,
     tube_2nd_section_ratio: Optional[List[float]] = None,
     minimum_height: Optional[List[float]] = None,
@@ -606,7 +643,9 @@ class Vantage(HamiltonLiquidHandler):
         determined automatically based on the tip and liquid used.
     """
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(
+      ops, use_channels
+    )
 
     if jet is None:
       jet = [False] * len(ops)
@@ -641,7 +680,9 @@ class Vantage(HamiltonLiquidHandler):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_absolute_location().z
+      + op.offset.z
+      + op.resource.material_z_thickness
       for op in ops
     ]
     liquid_surfaces_no_lld = liquid_surface_at_function_without_lld or [
@@ -660,7 +701,10 @@ class Vantage(HamiltonLiquidHandler):
       for op, hlc in zip(ops, hlcs)
     ]
     blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
+      (
+        op.blow_out_air_volume
+        or (hlc.dispense_blow_out_volume if hlc is not None else 0)
+      )
       for op, hlc in zip(ops, hlcs)
     ]
 
@@ -671,23 +715,30 @@ class Vantage(HamiltonLiquidHandler):
       tip_pattern=channels_involved,
       minimal_traverse_height_at_begin_of_command=[
         round(th * 10)
-        for th in minimal_traverse_height_at_begin_of_command or [self._traversal_height]
+        for th in minimal_traverse_height_at_begin_of_command
+        or [self._traversal_height]
       ]
       * len(ops),
       minimal_height_at_command_end=[
-        round(th * 10) for th in minimal_height_at_command_end or [self._traversal_height]
+        round(th * 10)
+        for th in minimal_height_at_command_end or [self._traversal_height]
       ]
       * len(ops),
       lld_search_height=[round(ls * 10) for ls in lld_search_heights],
-      clot_detection_height=[round(cdh * 10) for cdh in clot_detection_height or [0] * len(ops)],
-      liquid_surface_at_function_without_lld=[round(lsn * 10) for lsn in liquid_surfaces_no_lld],
+      clot_detection_height=[
+        round(cdh * 10) for cdh in clot_detection_height or [0] * len(ops)
+      ],
+      liquid_surface_at_function_without_lld=[
+        round(lsn * 10) for lsn in liquid_surfaces_no_lld
+      ],
       pull_out_distance_to_take_transport_air_in_function_without_lld=[
         round(pod * 10)
         for pod in pull_out_distance_to_take_transport_air_in_function_without_lld
         or [10.9] * len(ops)
       ],
       tube_2nd_section_height_measured_from_zm=[
-        round(t2sh * 10) for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
+        round(t2sh * 10)
+        for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
       ],
       tube_2nd_section_ratio=[
         round(t2sr * 10) for t2sr in tube_2nd_section_ratio or [0] * len(ops)
@@ -702,29 +753,37 @@ class Vantage(HamiltonLiquidHandler):
       transport_air_volume=[
         round(tav * 10)
         for tav in transport_air_volume
-        or [hlc.aspiration_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
+        or [
+          hlc.aspiration_air_transport_volume if hlc is not None else 0 for hlc in hlcs
+        ]
       ],
       blow_out_air_volume=[round(bav * 100) for bav in blow_out_air_volumes],
-      pre_wetting_volume=[round(pwv * 100) for pwv in pre_wetting_volume or [0] * len(ops)],
+      pre_wetting_volume=[
+        round(pwv * 100) for pwv in pre_wetting_volume or [0] * len(ops)
+      ],
       lld_mode=lld_mode or [0] * len(ops),
       lld_sensitivity=lld_sensitivity or [4] * len(ops),
       pressure_lld_sensitivity=pressure_lld_sensitivity or [4] * len(ops),
       aspirate_position_above_z_touch_off=[
-        round(apz * 10) for apz in aspirate_position_above_z_touch_off or [0.5] * len(ops)
+        round(apz * 10)
+        for apz in aspirate_position_above_z_touch_off or [0.5] * len(ops)
       ],
       swap_speed=[round(ss * 10) for ss in swap_speed or [2] * len(ops)],
       settling_time=[round(st * 10) for st in settling_time or [1] * len(ops)],
       mix_volume=[round(mv * 100) for mv in mix_volume or [0] * len(ops)],
       mix_cycles=mix_cycles or [0] * len(ops),
       mix_position_in_z_direction_from_liquid_surface=[
-        round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
+        round(mp)
+        for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
       ],
       mix_speed=[round(ms * 10) for ms in mix_speed or [250] * len(ops)],
       surface_following_distance_during_mixing=[
-        round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
+        round(sfdm * 10)
+        for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
       ],
       TODO_DA_5=TODO_DA_5 or [0] * len(ops),
-      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off or [0] * len(ops),
+      capacitive_mad_supervision_on_off=capacitive_mad_supervision_on_off
+      or [0] * len(ops),
       pressure_mad_supervision_on_off=pressure_mad_supervision_on_off or [0] * len(ops),
       tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
       limit_curve_index=limit_curve_index or [0] * len(ops),
@@ -737,11 +796,15 @@ class Vantage(HamiltonLiquidHandler):
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
-    empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
+    empty: Optional[
+      List[bool]
+    ] = None,  # truly "empty", does not exist in liquid editor, dm4
     hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     type_of_dispensing_mode: Optional[List[int]] = None,
     minimum_height: Optional[List[float]] = None,
-    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[float]] = None,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[
+      List[float]
+    ] = None,
     immersion_depth: Optional[List[float]] = None,
     surface_following_distance: Optional[List[float]] = None,
     tube_2nd_section_height_measured_from_zm: Optional[List[float]] = None,
@@ -792,7 +855,9 @@ class Vantage(HamiltonLiquidHandler):
         documentation. Dispense mode 4.
     """
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(
+      ops, use_channels
+    )
 
     if jet is None:
       jet = [False] * len(ops)
@@ -829,10 +894,14 @@ class Vantage(HamiltonLiquidHandler):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_absolute_location().z
+      + op.offset.z
+      + op.resource.material_z_thickness
       for op in ops
     ]
-    liquid_surfaces_no_lld = [wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)]
+    liquid_surfaces_no_lld = [
+      wb + (op.liquid_height or 0) for wb, op in zip(well_bottoms, ops)
+    ]
     # -1 compared to STAR?
     lld_search_heights = lld_search_height or [
       wb
@@ -847,12 +916,16 @@ class Vantage(HamiltonLiquidHandler):
     ]
 
     blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
+      (
+        op.blow_out_air_volume
+        or (hlc.dispense_blow_out_volume if hlc is not None else 0)
+      )
       for op, hlc in zip(ops, hlcs)
     ]
 
     type_of_dispensing_mode = type_of_dispensing_mode or [
-      _get_dispense_mode(jet=jet[i], empty=empty[i], blow_out=blow_out[i]) for i in range(len(ops))
+      _get_dispense_mode(jet=jet[i], empty=empty[i], blow_out=blow_out[i])
+      for i in range(len(ops))
     ]
 
     return await self.pip_dispense(
@@ -862,7 +935,9 @@ class Vantage(HamiltonLiquidHandler):
       type_of_dispensing_mode=type_of_dispensing_mode,
       minimum_height=[round(wb * 10) for wb in minimum_height or well_bottoms],
       lld_search_height=[round(sh * 10) for sh in lld_search_heights],
-      liquid_surface_at_function_without_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
+      liquid_surface_at_function_without_lld=[
+        round(ls * 10) for ls in liquid_surfaces_no_lld
+      ],
       pull_out_distance_to_take_transport_air_in_function_without_lld=[
         round(pod * 10)
         for pod in pull_out_distance_to_take_transport_air_in_function_without_lld
@@ -873,7 +948,8 @@ class Vantage(HamiltonLiquidHandler):
         round(sfd * 10) for sfd in surface_following_distance or [2.1] * len(ops)
       ],
       tube_2nd_section_height_measured_from_zm=[
-        round(t2sh * 10) for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
+        round(t2sh * 10)
+        for t2sh in tube_2nd_section_height_measured_from_zm or [0] * len(ops)
       ],
       tube_2nd_section_ratio=[
         round(t2sr * 10) for t2sr in tube_2nd_section_ratio or [0] * len(ops)
@@ -900,7 +976,8 @@ class Vantage(HamiltonLiquidHandler):
       lld_mode=lld_mode or [0] * len(ops),
       side_touch_off_distance=round(side_touch_off_distance * 10),
       dispense_position_above_z_touch_off=[
-        round(dpz * 10) for dpz in dispense_position_above_z_touch_off or [0.5] * len(ops)
+        round(dpz * 10)
+        for dpz in dispense_position_above_z_touch_off or [0.5] * len(ops)
       ],
       lld_sensitivity=lld_sensitivity or [1] * len(ops),
       pressure_lld_sensitivity=pressure_lld_sensitivity or [1] * len(ops),
@@ -909,11 +986,13 @@ class Vantage(HamiltonLiquidHandler):
       mix_volume=[round(mv * 100) for mv in mix_volume or [0] * len(ops)],
       mix_cycles=mix_cycles or [0] * len(ops),
       mix_position_in_z_direction_from_liquid_surface=[
-        round(mp) for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
+        round(mp)
+        for mp in mix_position_in_z_direction_from_liquid_surface or [0] * len(ops)
       ],
       mix_speed=[round(ms * 10) for ms in mix_speed or [1] * len(ops)],
       surface_following_distance_during_mixing=[
-        round(sfdm * 10) for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
+        round(sfdm * 10)
+        for sfdm in surface_following_distance_during_mixing or [0] * len(ops)
       ],
       TODO_DD_2=TODO_DD_2 or [0] * len(ops),
       tadm_algorithm_on_off=tadm_algorithm_on_off or 0,
@@ -934,7 +1013,9 @@ class Vantage(HamiltonLiquidHandler):
     tip_a1 = tip_spot_a1.get_tip()
     assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
-    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
+    position = (
+      tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
+    )
     offset_z = pickup.offset.z
 
     return await self.core96_tip_pick_up(
@@ -961,7 +1042,9 @@ class Vantage(HamiltonLiquidHandler):
     # assert self.core96_head_installed, "96 head must be installed"
     if isinstance(drop.resource, TipRack):
       tip_spot_a1 = drop.resource.get_item("A1")
-      position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+      position = (
+        tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
+      )
     else:
       raise NotImplementedError(
         "Only TipRacks are supported for dropping tips on Vantage",
@@ -1063,7 +1146,9 @@ class Vantage(HamiltonLiquidHandler):
       )
 
     volume = (
-      hlc.compute_corrected_volume(aspiration.volume) if hlc is not None else aspiration.volume
+      hlc.compute_corrected_volume(aspiration.volume)
+      if hlc is not None
+      else aspiration.volume
     )
 
     transport_air_volume = transport_air_volume or (
@@ -1072,9 +1157,13 @@ class Vantage(HamiltonLiquidHandler):
     blow_out_air_volume = blow_out_air_volume or (
       hlc.aspiration_blow_out_volume if hlc is not None else 0
     )
-    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
+    flow_rate = aspiration.flow_rate or (
+      hlc.aspiration_flow_rate if hlc is not None else 250
+    )
     swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 5)
+    settling_time = settling_time or (
+      hlc.aspiration_settling_time if hlc is not None else 5
+    )
 
     return await self.core96_aspiration_of_liquid(
       x_position=round(position.x * 10),
@@ -1092,7 +1181,9 @@ class Vantage(HamiltonLiquidHandler):
         pull_out_distance_to_take_transport_air_in_function_without_lld * 10
       ),
       minimum_height=round(well_bottoms * 10),
-      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
+      tube_2nd_section_height_measured_from_zm=round(
+        tube_2nd_section_height_measured_from_zm * 10
+      ),
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       surface_following_distance=round(surface_following_distance * 10),
@@ -1206,7 +1297,11 @@ class Vantage(HamiltonLiquidHandler):
         jet=jet,
         blow_out=blow_out,  # see method docstring
       )
-    volume = hlc.compute_corrected_volume(dispense.volume) if hlc is not None else dispense.volume
+    volume = (
+      hlc.compute_corrected_volume(dispense.volume)
+      if hlc is not None
+      else dispense.volume
+    )
 
     transport_air_volume = transport_air_volume or (
       hlc.dispense_air_transport_volume if hlc is not None else 0
@@ -1214,9 +1309,13 @@ class Vantage(HamiltonLiquidHandler):
     blow_out_air_volume = blow_out_air_volume or (
       hlc.dispense_blow_out_volume if hlc is not None else 0
     )
-    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 250)
+    flow_rate = dispense.flow_rate or (
+      hlc.dispense_flow_rate if hlc is not None else 250
+    )
     swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
+    settling_time = settling_time or (
+      hlc.dispense_settling_time if hlc is not None else 5
+    )
     mix_speed = mix_speed or (hlc.dispense_mix_flow_rate if hlc is not None else 100)
     type_of_dispensing_mode = type_of_dispensing_mode or _get_dispense_mode(
       jet=jet, empty=empty, blow_out=blow_out
@@ -1227,7 +1326,9 @@ class Vantage(HamiltonLiquidHandler):
       y_position=round(position.y * 10),
       type_of_dispensing_mode=type_of_dispensing_mode,
       minimum_height=round(well_bottoms * 10),
-      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
+      tube_2nd_section_height_measured_from_zm=round(
+        tube_2nd_section_height_measured_from_zm * 10
+      ),
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_at_function_without_lld=round(liquid_height * 10),
@@ -1258,7 +1359,9 @@ class Vantage(HamiltonLiquidHandler):
       mix_position_in_z_direction_from_liquid_surface=round(
         mix_position_in_z_direction_from_liquid_surface * 10
       ),
-      surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
+      surface_following_distance_during_mixing=round(
+        surface_following_distance_during_mixing * 10
+      ),
       mix_speed=round(mix_speed * 10),
       limit_curve_index=limit_curve_index,
       tadm_channel_pattern=tadm_channel_pattern,
@@ -1450,7 +1553,9 @@ class Vantage(HamiltonLiquidHandler):
       command="MI",
     )
 
-  async def arm_request_instrument_initialization_status(self) -> bool:
+  async def arm_request_instrument_initialization_status(
+    self,
+  ) -> bool:
     """Request the instrument initialization status.
 
     This command was based on the STAR command (QW) and the VStarTranslator log. A1AM corresponds
@@ -1578,17 +1683,20 @@ class Vantage(HamiltonLiquidHandler):
 
     if not 0 <= tip_type_table_index <= 99:
       raise ValueError(
-        "tip_type_table_index must be between 0 and 99, but is " f"{tip_type_table_index}"
+        "tip_type_table_index must be between 0 and 99, but is "
+        f"{tip_type_table_index}"
       )
     if not 0 <= tip_type_table_index <= 99:
       raise ValueError(
-        "tip_type_table_index must be between 0 and 99, but is " f"{tip_type_table_index}"
+        "tip_type_table_index must be between 0 and 99, but is "
+        f"{tip_type_table_index}"
       )
     if not 1 <= tip_length <= 1999:
       raise ValueError("tip_length must be between 1 and 1999, but is " f"{tip_length}")
     if not 1 <= maximum_tip_volume <= 56000:
       raise ValueError(
-        "maximum_tip_volume must be between 1 and 56000, but is " f"{maximum_tip_volume}"
+        "maximum_tip_volume must be between 1 and 56000, but is "
+        f"{maximum_tip_volume}"
       )
 
     return await self.send_command(
@@ -1613,7 +1721,9 @@ class Vantage(HamiltonLiquidHandler):
     lld_search_height: Optional[List[int]] = None,
     clot_detection_height: Optional[List[int]] = None,
     liquid_surface_at_function_without_lld: Optional[List[int]] = None,
-    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[int]] = None,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[
+      List[int]
+    ] = None,
     tube_2nd_section_height_measured_from_zm: Optional[List[int]] = None,
     tube_2nd_section_ratio: Optional[List[int]] = None,
     minimum_height: Optional[List[int]] = None,
@@ -1712,7 +1822,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
@@ -1732,12 +1844,17 @@ class Vantage(HamiltonLiquidHandler):
     if liquid_surface_at_function_without_lld is None:
       liquid_surface_at_function_without_lld = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3600"
+      )
 
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
-      pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
+      pull_out_distance_to_take_transport_air_in_function_without_lld = [
+        50
+      ] * self.num_channels
     elif not all(
-      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+      0 <= x <= 3600
+      for x in pull_out_distance_to_take_transport_air_in_function_without_lld
     ):
       raise ValueError(
         "pull_out_distance_to_take_transport_air_in_function_without_lld must be "
@@ -1747,7 +1864,9 @@ class Vantage(HamiltonLiquidHandler):
     if tube_2nd_section_height_measured_from_zm is None:
       tube_2nd_section_height_measured_from_zm = [0] * self.num_channels
     elif not all(0 <= x <= 3600 for x in tube_2nd_section_height_measured_from_zm):
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3600")
+      raise ValueError(
+        "tube_2nd_section_height_measured_from_zm must be in range 0 to 3600"
+      )
 
     if tube_2nd_section_ratio is None:
       tube_2nd_section_ratio = [0] * self.num_channels
@@ -1846,8 +1965,12 @@ class Vantage(HamiltonLiquidHandler):
 
     if mix_position_in_z_direction_from_liquid_surface is None:
       mix_position_in_z_direction_from_liquid_surface = [250] * self.num_channels
-    elif not all(0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface):
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 900")
+    elif not all(
+      0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface
+    ):
+      raise ValueError(
+        "mix_position_in_z_direction_from_liquid_surface must be in range 0 to 900"
+      )
 
     if mix_speed is None:
       mix_speed = [500] * self.num_channels
@@ -1857,7 +1980,9 @@ class Vantage(HamiltonLiquidHandler):
     if surface_following_distance_during_mixing is None:
       surface_following_distance_during_mixing = [0] * self.num_channels
     elif not all(0 <= x <= 3600 for x in surface_following_distance_during_mixing):
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 3600")
+      raise ValueError(
+        "surface_following_distance_during_mixing must be in range 0 to 3600"
+      )
 
     if TODO_DA_5 is None:
       TODO_DA_5 = [0] * self.num_channels
@@ -1938,7 +2063,9 @@ class Vantage(HamiltonLiquidHandler):
     minimum_height: Optional[List[int]] = None,
     lld_search_height: Optional[List[int]] = None,
     liquid_surface_at_function_without_lld: Optional[List[int]] = None,
-    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[int]] = None,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[
+      List[int]
+    ] = None,
     immersion_depth: Optional[List[int]] = None,
     surface_following_distance: Optional[List[int]] = None,
     tube_2nd_section_height_measured_from_zm: Optional[List[int]] = None,
@@ -2047,12 +2174,17 @@ class Vantage(HamiltonLiquidHandler):
     if liquid_surface_at_function_without_lld is None:
       liquid_surface_at_function_without_lld = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3600"
+      )
 
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
-      pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
+      pull_out_distance_to_take_transport_air_in_function_without_lld = [
+        50
+      ] * self.num_channels
     elif not all(
-      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+      0 <= x <= 3600
+      for x in pull_out_distance_to_take_transport_air_in_function_without_lld
     ):
       raise ValueError(
         "pull_out_distance_to_take_transport_air_in_function_without_lld must be "
@@ -2072,7 +2204,9 @@ class Vantage(HamiltonLiquidHandler):
     if tube_2nd_section_height_measured_from_zm is None:
       tube_2nd_section_height_measured_from_zm = [0] * self.num_channels
     elif not all(0 <= x <= 3600 for x in tube_2nd_section_height_measured_from_zm):
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3600")
+      raise ValueError(
+        "tube_2nd_section_height_measured_from_zm must be in range 0 to 3600"
+      )
 
     if tube_2nd_section_ratio is None:
       tube_2nd_section_ratio = [0] * self.num_channels
@@ -2082,7 +2216,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
@@ -2164,8 +2300,12 @@ class Vantage(HamiltonLiquidHandler):
 
     if mix_position_in_z_direction_from_liquid_surface is None:
       mix_position_in_z_direction_from_liquid_surface = [250] * self.num_channels
-    elif not all(0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface):
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 900")
+    elif not all(
+      0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface
+    ):
+      raise ValueError(
+        "mix_position_in_z_direction_from_liquid_surface must be in range 0 to 900"
+      )
 
     if mix_speed is None:
       mix_speed = [500] * self.num_channels
@@ -2175,7 +2315,9 @@ class Vantage(HamiltonLiquidHandler):
     if surface_following_distance_during_mixing is None:
       surface_following_distance_during_mixing = [0] * self.num_channels
     elif not all(0 <= x <= 3600 for x in surface_following_distance_during_mixing):
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 3600")
+      raise ValueError(
+        "surface_following_distance_during_mixing must be in range 0 to 3600"
+      )
 
     if TODO_DD_2 is None:
       TODO_DD_2 = [0] * self.num_channels
@@ -2210,7 +2352,9 @@ class Vantage(HamiltonLiquidHandler):
       zr=tube_2nd_section_ratio,
       th=minimal_traverse_height_at_begin_of_command,
       te=minimal_height_at_command_end,
-      dv=[f"{vol:04}" for vol in dispense_volume],  # it appears at least 4 digits are needed
+      dv=[
+        f"{vol:04}" for vol in dispense_volume
+      ],  # it appears at least 4 digits are needed
       ds=dispense_speed,
       ss=cut_off_speed,
       rv=stop_back_volume,
@@ -2247,7 +2391,9 @@ class Vantage(HamiltonLiquidHandler):
     lld_search_height: Optional[List[int]] = None,
     clot_detection_height: Optional[List[int]] = None,
     liquid_surface_at_function_without_lld: Optional[List[int]] = None,
-    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[List[int]] = None,
+    pull_out_distance_to_take_transport_air_in_function_without_lld: Optional[
+      List[int]
+    ] = None,
     minimum_height: Optional[List[int]] = None,
     immersion_depth: Optional[List[int]] = None,
     surface_following_distance: Optional[List[int]] = None,
@@ -2368,7 +2514,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
@@ -2388,12 +2536,17 @@ class Vantage(HamiltonLiquidHandler):
     if liquid_surface_at_function_without_lld is None:
       liquid_surface_at_function_without_lld = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3600"
+      )
 
     if pull_out_distance_to_take_transport_air_in_function_without_lld is None:
-      pull_out_distance_to_take_transport_air_in_function_without_lld = [50] * self.num_channels
+      pull_out_distance_to_take_transport_air_in_function_without_lld = [
+        50
+      ] * self.num_channels
     elif not all(
-      0 <= x <= 3600 for x in pull_out_distance_to_take_transport_air_in_function_without_lld
+      0 <= x <= 3600
+      for x in pull_out_distance_to_take_transport_air_in_function_without_lld
     ):
       raise ValueError(
         "pull_out_distance_to_take_transport_air_in_function_without_lld must be "
@@ -2418,7 +2571,9 @@ class Vantage(HamiltonLiquidHandler):
     if tube_2nd_section_height_measured_from_zm is None:
       tube_2nd_section_height_measured_from_zm = [0] * self.num_channels
     elif not all(0 <= x <= 3600 for x in tube_2nd_section_height_measured_from_zm):
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3600")
+      raise ValueError(
+        "tube_2nd_section_height_measured_from_zm must be in range 0 to 3600"
+      )
 
     if tube_2nd_section_ratio is None:
       tube_2nd_section_ratio = [0] * self.num_channels
@@ -2517,8 +2672,12 @@ class Vantage(HamiltonLiquidHandler):
 
     if mix_position_in_z_direction_from_liquid_surface is None:
       mix_position_in_z_direction_from_liquid_surface = [250] * self.num_channels
-    elif not all(0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface):
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 900")
+    elif not all(
+      0 <= x <= 900 for x in mix_position_in_z_direction_from_liquid_surface
+    ):
+      raise ValueError(
+        "mix_position_in_z_direction_from_liquid_surface must be in range 0 to 900"
+      )
 
     if mix_speed is None:
       mix_speed = [500] * self.num_channels
@@ -2528,7 +2687,9 @@ class Vantage(HamiltonLiquidHandler):
     if surface_following_distance_during_mixing is None:
       surface_following_distance_during_mixing = [0] * self.num_channels
     elif not all(0 <= x <= 3600 for x in surface_following_distance_during_mixing):
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 3600")
+      raise ValueError(
+        "surface_following_distance_during_mixing must be in range 0 to 3600"
+      )
 
     if TODO_DM_5 is None:
       TODO_DM_5 = [0] * self.num_channels
@@ -2662,10 +2823,14 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("first_shoot_x_pos must be in range -50000 to 50000")
 
     if not -50000 <= dispense_on_fly_pos_command_end <= 50000:
-      raise ValueError("dispense_on_fly_pos_command_end must be in range -50000 to 50000")
+      raise ValueError(
+        "dispense_on_fly_pos_command_end must be in range -50000 to 50000"
+      )
 
     if not 0 <= x_acceleration_distance_before_first_shoot <= 900:
-      raise ValueError("x_acceleration_distance_before_first_shoot must be in range 0 to 900")
+      raise ValueError(
+        "x_acceleration_distance_before_first_shoot must be in range 0 to 900"
+      )
 
     if not 1 <= space_between_shoots <= 2500:
       raise ValueError("space_between_shoots must be in range 1 to 2500")
@@ -2679,7 +2844,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
@@ -2694,7 +2861,9 @@ class Vantage(HamiltonLiquidHandler):
     if liquid_surface_at_function_without_lld is None:
       liquid_surface_at_function_without_lld = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3600"
+      )
 
     if dispense_volume is None:
       dispense_volume = [0] * self.num_channels
@@ -2817,12 +2986,16 @@ class Vantage(HamiltonLiquidHandler):
     if liquid_surface_at_function_without_lld is None:
       liquid_surface_at_function_without_lld = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3600"
+      )
 
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
@@ -2961,12 +3134,16 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if liquid_surface_at_function_without_lld is None:
       liquid_surface_at_function_without_lld = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in liquid_surface_at_function_without_lld):
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3600")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3600"
+      )
 
     if aspiration_volume is None:
       aspiration_volume = [0] * self.num_channels
@@ -3077,7 +3254,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
@@ -3157,7 +3336,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
@@ -3349,7 +3530,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if z_position is None:
       z_position = [0] * self.num_channels
@@ -3479,7 +3662,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if not 1 <= first_pip_channel_node_no <= 16:
       raise ValueError("first_pip_channel_node_no must be in range 1 to 16")
@@ -3545,7 +3730,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if not 1 <= first_pip_channel_node_no <= 16:
       raise ValueError("first_pip_channel_node_no must be in range 1 to 16")
@@ -3624,7 +3811,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
@@ -3692,7 +3881,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     if minimal_height_at_command_end is None:
       minimal_height_at_command_end = [3600] * self.num_channels
@@ -3746,7 +3937,9 @@ class Vantage(HamiltonLiquidHandler):
     if minimal_traverse_height_at_begin_of_command is None:
       minimal_traverse_height_at_begin_of_command = [3600] * self.num_channels
     elif not all(0 <= x <= 3600 for x in minimal_traverse_height_at_begin_of_command):
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3600")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3600"
+      )
 
     return await self.send_command(
       module="A1PM",
@@ -3888,7 +4081,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("z_position must be in range 0 to 3900")
 
     if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3900"
+      )
 
     if not 0 <= minimal_height_at_command_end <= 3900:
       raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
@@ -3996,7 +4191,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("y_position must be in range 422 to 5921")
 
     if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3900"
+      )
 
     if not 0 <= minimal_height_at_command_end <= 3900:
       raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
@@ -4005,7 +4202,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("lld_search_height must be in range 0 to 3900")
 
     if not 0 <= liquid_surface_at_function_without_lld <= 3900:
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3900"
+      )
 
     if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
       raise ValueError(
@@ -4017,7 +4216,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("minimum_height must be in range 0 to 3900")
 
     if not 0 <= tube_2nd_section_height_measured_from_zm <= 3900:
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3900")
+      raise ValueError(
+        "tube_2nd_section_height_measured_from_zm must be in range 0 to 3900"
+      )
 
     if not 0 <= tube_2nd_section_ratio <= 10000:
       raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
@@ -4062,10 +4263,14 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("mix_cycles must be in range 0 to 99")
 
     if not 0 <= mix_position_in_z_direction_from_liquid_surface <= 990:
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 990")
+      raise ValueError(
+        "mix_position_in_z_direction_from_liquid_surface must be in range 0 to 990"
+      )
 
     if not 0 <= surface_following_distance_during_mixing <= 990:
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 990")
+      raise ValueError(
+        "surface_following_distance_during_mixing must be in range 0 to 990"
+      )
 
     if not 3 <= mix_speed <= 5000:
       raise ValueError("mix_speed must be in range 3 to 5000")
@@ -4077,9 +4282,12 @@ class Vantage(HamiltonLiquidHandler):
       tadm_channel_pattern = [True] * 96
     elif not len(tadm_channel_pattern) < 24:
       raise ValueError(
-        "tadm_channel_pattern must be of length 24, but is " f"'{len(tadm_channel_pattern)}'"
+        "tadm_channel_pattern must be of length 24, but is "
+        f"'{len(tadm_channel_pattern)}'"
       )
-    tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
+    tadm_channel_pattern_num = sum(
+      2**i if tadm_channel_pattern[i] else 0 for i in range(96)
+    )
 
     if not 0 <= tadm_algorithm_on_off <= 1:
       raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
@@ -4217,7 +4425,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("minimum_height must be in range 0 to 3900")
 
     if not 0 <= tube_2nd_section_height_measured_from_zm <= 3900:
-      raise ValueError("tube_2nd_section_height_measured_from_zm must be in range 0 to 3900")
+      raise ValueError(
+        "tube_2nd_section_height_measured_from_zm must be in range 0 to 3900"
+      )
 
     if not 0 <= tube_2nd_section_ratio <= 10000:
       raise ValueError("tube_2nd_section_ratio must be in range 0 to 10000")
@@ -4226,7 +4436,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("lld_search_height must be in range 0 to 3900")
 
     if not 0 <= liquid_surface_at_function_without_lld <= 3900:
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3900"
+      )
 
     if not 0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3900:
       raise ValueError(
@@ -4241,7 +4453,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("surface_following_distance must be in range 0 to 990")
 
     if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3900"
+      )
 
     if not 0 <= minimal_height_at_command_end <= 3900:
       raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
@@ -4286,10 +4500,14 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("mix_cycles must be in range 0 to 99")
 
     if not 0 <= mix_position_in_z_direction_from_liquid_surface <= 990:
-      raise ValueError("mix_position_in_z_direction_from_liquid_surface must be in range 0 to 990")
+      raise ValueError(
+        "mix_position_in_z_direction_from_liquid_surface must be in range 0 to 990"
+      )
 
     if not 0 <= surface_following_distance_during_mixing <= 990:
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 990")
+      raise ValueError(
+        "surface_following_distance_during_mixing must be in range 0 to 990"
+      )
 
     if not 3 <= mix_speed <= 5000:
       raise ValueError("mix_speed must be in range 3 to 5000")
@@ -4301,9 +4519,12 @@ class Vantage(HamiltonLiquidHandler):
       tadm_channel_pattern = [True] * 96
     elif not len(tadm_channel_pattern) < 24:
       raise ValueError(
-        "tadm_channel_pattern must be of length 24, but is " f"'{len(tadm_channel_pattern)}'"
+        "tadm_channel_pattern must be of length 24, but is "
+        f"'{len(tadm_channel_pattern)}'"
       )
-    tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
+    tadm_channel_pattern_num = sum(
+      2**i if tadm_channel_pattern[i] else 0 for i in range(96)
+    )
 
     if not 0 <= tadm_algorithm_on_off <= 1:
       raise ValueError("tadm_algorithm_on_off must be in range 0 to 1")
@@ -4388,7 +4609,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("z_deposit_position must be in range 0 to 3900")
 
     if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3900"
+      )
 
     if not 0 <= minimal_height_at_command_end <= 3900:
       raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
@@ -4434,7 +4657,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("z_deposit_position must be in range 0 to 3900")
 
     if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3900"
+      )
 
     if not 0 <= minimal_height_at_command_end <= 3900:
       raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
@@ -4476,7 +4701,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("z_position must be in range 0 to 3900")
 
     if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3900"
+      )
 
     return await self.send_command(
       module="A1HM",
@@ -4521,16 +4748,22 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("y_position must be in range 422 to 5921")
 
     if not 0 <= liquid_surface_at_function_without_lld <= 3900:
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3900"
+      )
 
     if not 0 <= minimum_height <= 3900:
       raise ValueError("minimum_height must be in range 0 to 3900")
 
     if not 0 <= surface_following_distance_during_mixing <= 990:
-      raise ValueError("surface_following_distance_during_mixing must be in range 0 to 990")
+      raise ValueError(
+        "surface_following_distance_during_mixing must be in range 0 to 990"
+      )
 
     if not 0 <= minimal_traverse_height_at_begin_of_command <= 3900:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 3900")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 3900"
+      )
 
     if not 0 <= mix_volume <= 11500:
       raise ValueError("mix_volume must be in range 0 to 11500")
@@ -4568,7 +4801,9 @@ class Vantage(HamiltonLiquidHandler):
     """
 
     if not 0 <= liquid_surface_at_function_without_lld <= 3900:
-      raise ValueError("liquid_surface_at_function_without_lld must be in range 0 to 3900")
+      raise ValueError(
+        "liquid_surface_at_function_without_lld must be in range 0 to 3900"
+      )
 
     if not 0 <= minimal_height_at_command_end <= 3900:
       raise ValueError("minimal_height_at_command_end must be in range 0 to 3900")
@@ -4643,9 +4878,12 @@ class Vantage(HamiltonLiquidHandler):
       tadm_channel_pattern = [True] * 96
     elif not len(tadm_channel_pattern) < 24:
       raise ValueError(
-        "tadm_channel_pattern must be of length 24, but is " f"'{len(tadm_channel_pattern)}'"
+        "tadm_channel_pattern must be of length 24, but is "
+        f"'{len(tadm_channel_pattern)}'"
       )
-    tadm_channel_pattern_num = sum(2**i if tadm_channel_pattern[i] else 0 for i in range(96))
+    tadm_channel_pattern_num = sum(
+      2**i if tadm_channel_pattern[i] else 0 for i in range(96)
+    )
 
     return await self.send_command(
       module="A1HM",
@@ -4880,7 +5118,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("grip_orientation must be in range 1 to 44")
 
     if not 0 <= minimal_traverse_height_at_begin_of_command <= 4000:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 4000")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 4000"
+      )
 
     return await self.send_command(
       module="A1RM",
@@ -4916,7 +5156,9 @@ class Vantage(HamiltonLiquidHandler):
       raise ValueError("z_position must be in range 0 to 4000")
 
     if not 0 <= minimal_traverse_height_at_begin_of_command <= 4000:
-      raise ValueError("minimal_traverse_height_at_begin_of_command must be in range 0 to 4000")
+      raise ValueError(
+        "minimal_traverse_height_at_begin_of_command must be in range 0 to 4000"
+      )
 
     return await self.send_command(
       module="A1RM",
@@ -5024,7 +5266,9 @@ class Vantage(HamiltonLiquidHandler):
     if not 1 <= TODO_XI_1 <= 25000:
       raise ValueError("TODO_XI_1 must be in range 1 to 25000")
 
-    return await self.send_command(module="A1XM", command="XP", xp=x_position, xv=x_speed)
+    return await self.send_command(
+      module="A1XM", command="XP", xp=x_position, xv=x_speed
+    )
 
   async def x_arm_move_to_x_position_with_all_attached_components_in_z_safety_position(
     self,
@@ -5212,7 +5456,9 @@ class Vantage(HamiltonLiquidHandler):
         random.randint(30, 100),
         random.randint(30, 100),
       )
-      await self.set_led_color("on", intensity=100, white=0, red=r, green=g, blue=b, uv=0)
+      await self.set_led_color(
+        "on", intensity=100, white=0, red=r, green=g, blue=b, uv=0
+      )
       await asyncio.sleep(0.1)
 
   async def russian_roulette(self):
@@ -5226,11 +5472,29 @@ class Vantage(HamiltonLiquidHandler):
       return
 
     if random.randint(1, 6) == 6:
-      await self.set_led_color("on", intensity=100, white=100, red=100, green=0, blue=0, uv=100)
+      await self.set_led_color(
+        "on",
+        intensity=100,
+        white=100,
+        red=100,
+        green=0,
+        blue=0,
+        uv=100,
+      )
       print("You lost.")
     else:
-      await self.set_led_color("on", intensity=100, white=100, red=0, green=100, blue=0, uv=0)
+      await self.set_led_color(
+        "on", intensity=100, white=100, red=0, green=100, blue=0, uv=0
+      )
       print("You won.")
 
     await asyncio.sleep(5)
-    await self.set_led_color("on", intensity=100, white=100, red=100, green=100, blue=100, uv=0)
+    await self.set_led_color(
+      "on",
+      intensity=100,
+      white=100,
+      red=100,
+      green=100,
+      blue=100,
+      uv=0,
+    )

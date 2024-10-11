@@ -74,7 +74,9 @@ class Container(Resource):
     bottom of the container."""
 
     if self._compute_volume_from_height is None:
-      raise NotImplementedError(f"compute_volume_from_height not implemented for {self.name}.")
+      raise NotImplementedError(
+        f"compute_volume_from_height not implemented for {self.name}."
+      )
 
     return self._compute_volume_from_height(height)
 
@@ -83,7 +85,9 @@ class Container(Resource):
     from the volume of the liquid."""
 
     if self._compute_height_from_volume is None:
-      raise NotImplementedError(f"compute_height_from_volume not implemented for {self.name}.")
+      raise NotImplementedError(
+        f"compute_height_from_volume not implemented for {self.name}."
+      )
 
     return self._compute_height_from_volume(liquid_volume)
 

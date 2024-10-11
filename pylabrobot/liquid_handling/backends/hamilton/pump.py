@@ -10,10 +10,18 @@ class Pump(Resource):
     self.backend = backend
 
     # assign two chambers to the pump
-    self.chamber_1 = Resource("chamber_1", size_x=121, size_y=85, size_z=2, category="chamber")
-    self.assign_child_resource(self.chamber_1, location=Coordinate(18.05, 371.500 - 63, 99))
-    self.chamber_2 = Resource("chamber_2", size_x=121, size_y=85, size_z=2, category="chamber")
-    self.assign_child_resource(self.chamber_2, location=Coordinate(18.05, 241.500 - 63, 100))
+    self.chamber_1 = Resource(
+      "chamber_1", size_x=121, size_y=85, size_z=2, category="chamber"
+    )
+    self.assign_child_resource(
+      self.chamber_1, location=Coordinate(18.05, 371.500 - 63, 99)
+    )
+    self.chamber_2 = Resource(
+      "chamber_2", size_x=121, size_y=85, size_z=2, category="chamber"
+    )
+    self.assign_child_resource(
+      self.chamber_2, location=Coordinate(18.05, 241.500 - 63, 100)
+    )
 
   async def refill(self):
     await self.backend.drain_dual_chamber_system(pump_station=1)

@@ -37,7 +37,10 @@ class Pump(Machine):
   def serialize(self) -> dict:
     if self.calibration is None:
       return super().serialize()
-    return {**super().serialize(), "calibration": self.calibration.serialize()}
+    return {
+      **super().serialize(),
+      "calibration": self.calibration.serialize(),
+    }
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False):
@@ -70,7 +73,9 @@ class Pump(Machine):
 
     self.backend.run_continuously(speed=speed)
 
-  async def run_for_duration(self, speed: Union[float, int], duration: Union[float, int]):
+  async def run_for_duration(
+    self, speed: Union[float, int], duration: Union[float, int]
+  ):
     """Run the pump at specified speed for the specified duration.
 
     Args:

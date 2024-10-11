@@ -45,14 +45,25 @@ class HamiltonTip(Tip):
     total_tip_length: float,
     maximal_volume: float,
     tip_size: Union[TipSize, str],  # union for deserialization, will probably refactor
-    pickup_method: Union[TipPickupMethod, str],  # union for deserialization, will probably refactor
+    pickup_method: Union[
+      TipPickupMethod, str
+    ],  # union for deserialization, will probably refactor
   ):
     if isinstance(tip_size, str):
       tip_size = TipSize[tip_size]
     if isinstance(pickup_method, str):
       pickup_method = TipPickupMethod[pickup_method]
 
-    fitting_depth = {None: 0, 0: 0, 1: 8, 2: 8, 3: 8, 4: 7.55, 5: 10, 6: 8}[tip_size.value]
+    fitting_depth = {
+      None: 0,
+      0: 0,
+      1: 8,
+      2: 8,
+      3: 8,
+      4: 7.55,
+      5: 10,
+      6: 8,
+    }[tip_size.value]
 
     super().__init__(
       total_tip_length=total_tip_length,

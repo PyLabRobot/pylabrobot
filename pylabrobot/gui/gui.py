@@ -6,7 +6,13 @@ import traceback
 from flask import Flask, jsonify, render_template, request
 
 import pylabrobot.resources as resources_module
-from pylabrobot.resources import Resource, STARDeck, STARLetDeck, OTDeck, Deck
+from pylabrobot.resources import (
+  Resource,
+  STARDeck,
+  STARLetDeck,
+  OTDeck,
+  Deck,
+)
 
 print("!" * 80)
 print(
@@ -275,7 +281,12 @@ def create():
     elif deck_type == "opentrons-ot2":
       deck = OTDeck()
     else:
-      return jsonify({"error": f"Unknown deck type '{deck_type}'.", "success": False}), 400
+      return jsonify(
+        {
+          "error": f"Unknown deck type '{deck_type}'.",
+          "success": False,
+        }
+      ), 400
   else:
     return jsonify({"error": f"Unknown type '{data['type']}'.", "success": False}), 400
 

@@ -80,7 +80,9 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
         (specified by the `write_timeout` attribute).
     """
 
-    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
+    assert (
+      self.dev is not None and self.read_endpoint is not None
+    ), "Device not connected."
 
     if timeout is None:
       timeout = self.write_timeout
@@ -96,7 +98,9 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
       A string containing the decoded packet, or None if no packet was received.
     """
 
-    assert self.dev is not None and self.read_endpoint is not None, "Device not connected."
+    assert (
+      self.dev is not None and self.read_endpoint is not None
+    ), "Device not connected."
 
     try:
       res = self.dev.read(
@@ -153,7 +157,9 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     number and device_address if specified."""
 
     found_devices = libusb_package.find(
-      idVendor=self.id_vendor, idProduct=self.id_product, find_all=True
+      idVendor=self.id_vendor,
+      idProduct=self.id_product,
+      find_all=True,
     )
     devices: List["usb.core.Device"] = []
     for dev in found_devices:
@@ -170,7 +176,8 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
       if self.serial_number is not None:
         if dev.serial_number is None:
           raise RuntimeError(
-            "A serial number was specified, but the device does not have a serial " "number."
+            "A serial number was specified, but the device does not have a serial "
+            "number."
           )
 
         if dev.serial_number != self.serial_number:

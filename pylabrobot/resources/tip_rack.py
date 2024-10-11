@@ -5,7 +5,10 @@ from typing import Any, Dict, List, Union, Optional, Sequence, cast
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tip import Tip, TipCreator
-from pylabrobot.resources.tip_tracker import TipTracker, does_tip_tracking
+from pylabrobot.resources.tip_tracker import (
+  TipTracker,
+  does_tip_tracking,
+)
 from pylabrobot.serializer import deserialize
 
 from .itemized_resource import ItemizedResource
@@ -35,7 +38,13 @@ class TipSpot(Resource):
       category: the category of the tip spot.
     """
 
-    super().__init__(name, size_x=size_y, size_y=size_x, size_z=size_z, category=category)
+    super().__init__(
+      name,
+      size_x=size_y,
+      size_y=size_x,
+      size_z=size_z,
+      category=category,
+    )
     self.tracker = TipTracker(thing="Tip spot")
     self.parent: Optional["TipRack"] = None
 
@@ -172,7 +181,9 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
     for identifier, should_have_tip in should_have.items():
       if should_have_tip and not self.get_item(identifier).has_tip():
-        self.get_item(identifier).tracker.add_tip(self.get_item(identifier).make_tip(), commit=True)
+        self.get_item(identifier).tracker.add_tip(
+          self.get_item(identifier).make_tip(), commit=True
+        )
       elif not should_have_tip and self.get_item(identifier).has_tip():
         self.get_item(identifier).tracker.remove_tip(commit=True)
 

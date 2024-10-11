@@ -20,4 +20,6 @@ class PowderDispenserChatterboxBackend(PowderDispenserBackend):
     self, dispense_parameters: List[PowderDispense], **backend_kwargs
   ) -> List[DispenseResults]:
     print(f"Dispensing {len(dispense_parameters)} powders.")
-    return [DispenseResults(actual_amount=dispense.amount) for dispense in dispense_parameters]
+    return [
+      DispenseResults(actual_amount=dispense.amount) for dispense in dispense_parameters
+    ]

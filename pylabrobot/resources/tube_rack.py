@@ -96,11 +96,17 @@ class TubeRack(ItemizedResource[Tube]):
 
     if isinstance(liquids, tuple):
       liquids = [liquids] * self.num_items
-    elif isinstance(liquids, list) and all(isinstance(column, list) for column in liquids):
+    elif isinstance(liquids, list) and all(
+      isinstance(column, list) for column in liquids
+    ):
       # mypy doesn't know that all() checks the type
       liquids = cast(List[List[Tuple[Optional["Liquid"], float]]], liquids)
-      liquids = [list(column) for column in zip(*liquids)]  # transpose the list of lists
-      liquids = [volume for column in liquids for volume in column]  # flatten the list of lists
+      liquids = [
+        list(column) for column in zip(*liquids)
+      ]  # transpose the list of lists
+      liquids = [
+        volume for column in liquids for volume in column
+      ]  # flatten the list of lists
 
     if len(liquids) != self.num_items:
       raise ValueError(

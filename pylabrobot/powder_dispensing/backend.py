@@ -31,7 +31,9 @@ class PowderDispense:
   A class for input parameters for powder dispensing.
   """
 
-  def __init__(self, resource: Resource, powder: Powder, amount: float, **kwargs) -> None:
+  def __init__(
+    self, resource: Resource, powder: Powder, amount: float, **kwargs
+  ) -> None:
     self.resource = resource
     self.powder = powder
     self.amount = amount

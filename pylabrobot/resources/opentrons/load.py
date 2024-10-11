@@ -19,7 +19,9 @@ from pylabrobot.resources.well import Well, CrossSectionType
 
 
 if TYPE_CHECKING:
-  from opentrons_shared_data.labware.dev_types import LabwareDefinition
+  from opentrons_shared_data.labware.dev_types import (
+    LabwareDefinition,
+  )
 
 
 class UnknownResourceType(Exception):
@@ -33,7 +35,8 @@ def ot_definition_to_resource(
 
   if not USE_OT:
     raise ImportError(
-      "opentrons_shared_data is not installed. " "run `pip install opentrons_shared_data`"
+      "opentrons_shared_data is not installed. "
+      "run `pip install opentrons_shared_data`"
     )
 
   display_category = data["metadata"]["displayCategory"]

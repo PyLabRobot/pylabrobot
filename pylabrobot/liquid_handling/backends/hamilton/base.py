@@ -4,13 +4,28 @@ import datetime
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Optional, Sequence, Tuple, TypeVar, cast
+from typing import (
+  Any,
+  Dict,
+  List,
+  Optional,
+  Sequence,
+  Tuple,
+  TypeVar,
+  cast,
+)
 
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import (
+  LiquidHandlerBackend,
+)
 from pylabrobot.liquid_handling.standard import PipettingOp
 from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import TipSpot
-from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
+from pylabrobot.resources.ml_star import (
+  HamiltonTip,
+  TipPickupMethod,
+  TipSize,
+)
 
 T = TypeVar("T")
 
@@ -60,7 +75,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
 
     self._reading_thread: Optional[threading.Thread] = None
     self._waiting_tasks: Dict[
-      int, Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, float]
+      int,
+      Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, float],
     ] = {}
     self._tth2tti: dict[int, int] = {}  # hash to tip type index
 
@@ -131,7 +147,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     return result
 
   def _assemble_command(
-    self, module: str, command: str, tip_pattern: Optional[List[bool]], **kwargs
+    self,
+    module: str,
+    command: str,
+    tip_pattern: Optional[List[bool]],
+    **kwargs,
   ) -> Tuple[str, int]:
     """Assemble a firmware command to the Hamilton machine.
 
@@ -205,7 +225,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     """
 
     cmd, id_ = self._assemble_command(
-      module=module, command=command, tip_pattern=tip_pattern, **kwargs
+      module=module,
+      command=command,
+      tip_pattern=tip_pattern,
+      **kwargs,
     )
     resp = await self._write_and_read_command(
       id_=id_,
@@ -240,7 +263,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     fut = loop.create_future()
     self._start_reading(id_, loop, fut, cmd, read_timeout)
     result = await fut
-    return cast(str, result)  # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
+    return cast(
+      str, result
+    )  # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
 
   def _start_reading(
     self,
@@ -287,7 +312,12 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     logger.debug("Starting reading thread...")
 
     while len(self._waiting_tasks) > 0:
-      for id_, (loop, fut, cmd, timeout_time) in self._waiting_tasks.items():
+      for id_, (
+        loop,
+        fut,
+        cmd,
+        timeout_time,
+      ) in self._waiting_tasks.items():
         if time.time() > timeout_time:
           logger.warning("Timeout while waiting for response to command %s.", cmd)
           loop.call_soon_threadsafe(
@@ -314,7 +344,12 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         logger.warning("Could not parse response: %s (%s)", resp, e)
         continue
 
-      for id_, (loop, fut, cmd, timeout_time) in self._waiting_tasks.items():
+      for id_, (
+        loop,
+        fut,
+        cmd,
+        timeout_time,
+      ) in self._waiting_tasks.items():
         if response_id == id_:
           try:
             self.check_fw_string_error(resp)
@@ -345,10 +380,14 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         y_positions.append(0)
       channels_involved.append(True)
 
-      x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
+      x_pos = (
+        ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
+      )
       x_positions.append(round(x_pos * 10))
 
-      y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
+      y_pos = (
+        ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
+      )
       y_positions.append(round(y_pos * 10))
 
     # check that the minimum d between any two y positions is >9mm
@@ -359,7 +398,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
           continue
         if not channels_involved[channel_idx1] or not channels_involved[channel_idx2]:
           continue
-        if x1 != x2:  # channels not on the same column -> will be two operations on the machine
+        if (
+          x1 != x2
+        ):  # channels not on the same column -> will be two operations on the machine
           continue
         if not (self.allow_firmware_planning and y1 == y2) and abs(y1 - y2) < 90:
           raise ValueError(

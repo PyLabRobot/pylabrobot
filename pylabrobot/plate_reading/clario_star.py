@@ -35,7 +35,9 @@ class CLARIOStar(PlateReaderBackend):
 
   async def setup(self):
     if not USE_FTDI:
-      raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
+      raise RuntimeError(
+        "pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`."
+      )
 
     self.dev = Device()
     self.dev.open()
@@ -130,7 +132,8 @@ class CLARIOStar(PlateReaderBackend):
 
       if len(command_status) != 24:
         logger.warning(
-          "unexpected response %s. I think a command status response is always 24 " "bytes",
+          "unexpected response %s. I think a command status response is always 24 "
+          "bytes",
           command_status,
         )
         continue
@@ -141,13 +144,21 @@ class CLARIOStar(PlateReaderBackend):
       else:
         continue
 
-      if command_status[2] != 0x18 or command_status[3] != 0x0C or command_status[4] != 0x01:
+      if (
+        command_status[2] != 0x18
+        or command_status[3] != 0x0C
+        or command_status[4] != 0x01
+      ):
         logger.warning(
-          "unexpected response %s. I think 18 0c 01 indicates a command status " "response",
+          "unexpected response %s. I think 18 0c 01 indicates a command status "
+          "response",
           command_status,
         )
 
-      if command_status[5] not in {0x25, 0x05}:  # 25 is busy, 05 is ready. probably.
+      if command_status[5] not in {
+        0x25,
+        0x05,
+      }:  # 25 is busy, 05 is ready. probably.
         logger.warning("unexpected response %s.", command_status)
 
       if command_status[5] == 0x05:
@@ -163,7 +174,9 @@ class CLARIOStar(PlateReaderBackend):
     return await self._wait_for_ready_and_return(command_response)
 
   async def request_eeprom_data(self):
-    eeprom_response = await self.send(b"\x02\x00\x0f\x0c\x05\x07\x00\x00\x00\x00\x00\x00")
+    eeprom_response = await self.send(
+      b"\x02\x00\x0f\x0c\x05\x07\x00\x00\x00\x00\x00\x00"
+    )
     return await self._wait_for_ready_and_return(eeprom_response)
 
   async def open(self):
@@ -192,7 +205,9 @@ class CLARIOStar(PlateReaderBackend):
       b"\x1d\x06\x0c\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00\x00\x00\x00"
       b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
       b"\x00\x00\x00\x00\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x00\x00\x00\x20\x04\x00\x1e\x27"
-      b"\x0f\x27\x0f\x01" + focal_height_data + b"\x00\x00\x01\x00\x00\x0e\x10\x00\x01\x00\x01\x00"
+      b"\x0f\x27\x0f\x01"
+      + focal_height_data
+      + b"\x00\x00\x01\x00\x00\x0e\x10\x00\x01\x00\x01\x00"
       b"\x01\x00\x01\x00\x01\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x01"
       b"\x00\x00\x00\x01\x00\x64\x00\x20\x00\x00"
     )
@@ -224,7 +239,9 @@ class CLARIOStar(PlateReaderBackend):
       b"\x0c\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00"
       b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
       b"\x00\x00\x00\x00\x00\x00\x82\x02\x00\x00\x00\x00\x00\x00\x00\x20\x04\x00\x1e\x27\x0f\x27"
-      b"\x0f\x19\x01" + wavelength_data + b"\x00\x00\x00\x64\x00\x00\x00\x00\x00\x00\x00\x64\x00"
+      b"\x0f\x19\x01"
+      + wavelength_data
+      + b"\x00\x00\x00\x64\x00\x00\x00\x00\x00\x00\x00\x64\x00"
       b"\x00\x00\x00\x00\x02\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00\x16\x00\x01\x00\x00"
     )
     run_response = await self.send(absorbance_command)
@@ -272,7 +289,9 @@ class CLARIOStar(PlateReaderBackend):
     # All 96 values are 32 bit integers. The header is variable length, so we need to find the
     # start of the data. In the future, when we understand the protocol better, this can be
     # replaced with a more robust solution.
-    start_idx = vals.index(b"\x00\x00\x00\x00\x00\x00") + len(b"\x00\x00\x00\x00\x00\x00")
+    start_idx = vals.index(b"\x00\x00\x00\x00\x00\x00") + len(
+      b"\x00\x00\x00\x00\x00\x00"
+    )
     data = list(vals)[start_idx : start_idx + 96 * 4]
 
     # group bytes by 4
@@ -282,12 +301,16 @@ class CLARIOStar(PlateReaderBackend):
     ints = [struct.unpack(">i", bytes(int_data))[0] for int_data in int_bytes]
 
     # for backend conformity, convert to float, and reshape to 2d array
-    floats = [[float(int_) for int_ in ints[i : i + 12]] for i in range(0, len(ints), 12)]
+    floats = [
+      [float(int_) for int_ in ints[i : i + 12]] for i in range(0, len(ints), 12)
+    ]
 
     return floats
 
   async def read_absorbance(
-    self, wavelength: int, report: Literal["OD", "transmittance"] = "OD"
+    self,
+    wavelength: int,
+    report: Literal["OD", "transmittance"] = "OD",
   ) -> List[List[float]]:
     """Read absorbance values from the device.
 
@@ -313,7 +336,9 @@ class CLARIOStar(PlateReaderBackend):
     start_idx = vals.index(div) + len(div)
     chromatic_data = vals[start_idx : start_idx + 96 * 4]
     ref_data = vals[start_idx + 96 * 4 : start_idx + (96 * 2) * 4]
-    chromatic_bytes = [bytes(chromatic_data[i : i + 4]) for i in range(0, len(chromatic_data), 4)]
+    chromatic_bytes = [
+      bytes(chromatic_data[i : i + 4]) for i in range(0, len(chromatic_data), 4)
+    ]
     ref_bytes = [bytes(ref_data[i : i + 4]) for i in range(0, len(ref_data), 4)]
     chromatic_reading = [struct.unpack(">i", x)[0] for x in chromatic_bytes]
     reference_reading = [struct.unpack(">i", x)[0] for x in ref_bytes]
@@ -323,7 +348,9 @@ class CLARIOStar(PlateReaderBackend):
     # r100 is the value of the reference at 100% intensity
     # r0 is the value of the reference at 0% intensity (black reading)
     after_values_idx = start_idx + (96 * 2) * 4
-    c100, c0, r100, r0 = struct.unpack(">iiii", vals[after_values_idx : after_values_idx + 4 * 4])
+    c100, c0, r100, r0 = struct.unpack(
+      ">iiii", vals[after_values_idx : after_values_idx + 4 * 4]
+    )
 
     # a bit much, but numpy should not be a dependency
     real_chromatic_reading = []
@@ -347,6 +374,9 @@ class CLARIOStar(PlateReaderBackend):
       return utils.reshape_2d(transmittance, (8, 12))
 
   async def read_fluorescence(
-    self, excitation_wavelength: int, emission_wavelength: int, focal_height: float
+    self,
+    excitation_wavelength: int,
+    emission_wavelength: int,
+    focal_height: float,
   ) -> List[List[float]]:
     raise NotImplementedError("Not implemented yet")

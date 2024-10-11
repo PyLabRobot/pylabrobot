@@ -3,7 +3,11 @@
 # pylint: skip-file
 
 from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.tip_rack import TipSpot, TipRack, NestedTipRack
+from pylabrobot.resources.tip_rack import (
+  TipSpot,
+  TipRack,
+  NestedTipRack,
+)
 from .tip_creators import (
   low_volume_tip_no_filter,
   low_volume_tip_with_filter,

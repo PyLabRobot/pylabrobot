@@ -3,7 +3,11 @@
 # pylint: disable=invalid-name
 
 from pylabrobot.resources.plate import Lid, Plate
-from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
+from pylabrobot.resources.well import (
+  Well,
+  WellBottomType,
+  CrossSectionType,
+)
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 from pylabrobot.resources.height_volume_functions import (
@@ -14,7 +18,9 @@ from pylabrobot.resources.height_volume_functions import (
 # # # # # # # # # # Revvity_384_wellplate_28ul_Ub_Lid # # # # # # # # # #
 
 
-def _compute_volume_from_height_Revvity_384_wellplate_28ul_Ub(h: float):
+def _compute_volume_from_height_Revvity_384_wellplate_28ul_Ub(
+  h: float,
+):
   """Simplification: instead of 3 segment (hemisphere-frustum of cone-cylinder)
   -> 2 segment (cone-cylinder)
   """

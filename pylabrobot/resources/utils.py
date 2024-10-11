@@ -46,7 +46,11 @@ def create_equally_spaced_2d(
     for j in range(num_items_y):
       name = f"{klass.__name__.lower()}_{i}_{j}"
       item = klass(name=name, **kwargs)
-      item.location = Coordinate(x=dx + i * item_dx, y=dy + (num_items_y - j - 1) * item_dy, z=dz)
+      item.location = Coordinate(
+        x=dx + i * item_dx,
+        y=dy + (num_items_y - j - 1) * item_dy,
+        z=dz,
+      )
       items[i].append(item)
 
   return items

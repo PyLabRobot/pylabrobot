@@ -84,7 +84,9 @@ class TestCalibration(unittest.TestCase):
     calibration = PumpCalibration([1.0, 2.0], calibration_mode="revolutions")
     self.assertEqual(calibration.calibration_mode, "revolutions")
 
-    calibration = PumpCalibration.load_calibration({0: 1.0, 1: 2.0}, calibration_mode="revolutions")
+    calibration = PumpCalibration.load_calibration(
+      {0: 1.0, 1: 2.0}, calibration_mode="revolutions"
+    )
     self.assertEqual(calibration.calibration_mode, "revolutions")
 
     calibration = PumpCalibration.load_calibration(1.0, 2)
@@ -94,13 +96,13 @@ class TestCalibration(unittest.TestCase):
     with self.assertRaises(ValueError):
       PumpCalibration.load_calibration(
         [1.0, 2.0],
-        calibration_mode="invalid"  # type: ignore[arg-type]
+        calibration_mode="invalid",  # type: ignore[arg-type]
       )
 
     with self.assertRaises(ValueError):
       PumpCalibration.load_calibration(
         {0: 1.0, 1: 2.0},
-        calibration_mode="invalid"  # type: ignore[arg-type]
+        calibration_mode="invalid",  # type: ignore[arg-type]
       )
 
     with self.assertRaises(ValueError):

@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import AsyncMock
-from pylabrobot.powder_dispensing.powder_dispenser import PowderDispenser
+from pylabrobot.powder_dispensing.powder_dispenser import (
+  PowderDispenser,
+)
 from pylabrobot.powder_dispensing.backend import (
   PowderDispenserBackend,
   PowderDispense,
@@ -20,7 +22,9 @@ class MockPowderDispenserBackend(PowderDispenserBackend):
     pass
 
   async def dispense(
-    self, dispense_parameters: List[PowderDispense], **backend_kwargs: None
+    self,
+    dispense_parameters: List[PowderDispense],
+    **backend_kwargs: None,
   ) -> List[DispenseResults]:
     results = []
 
@@ -37,7 +41,9 @@ class TestPowderDispenser(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self) -> None:
     self.backend = AsyncMock(spec=MockPowderDispenserBackend)
-    self.dispenser = PowderDispenser(name="pd", backend=self.backend, size_x=1, size_y=1, size_z=1)
+    self.dispenser = PowderDispenser(
+      name="pd", backend=self.backend, size_x=1, size_y=1, size_z=1
+    )
     await self.dispenser.setup()
 
   async def test_dispense_single_resource(self):
@@ -59,7 +65,10 @@ class TestPowderDispenser(unittest.IsolatedAsyncioTestCase):
     powder = Powder("salt")
     dispense_parameters = {"param1": "value1"}
     await self.dispenser.dispense(
-      plate["A1"], powder, 0.005, dispense_parameters=dispense_parameters
+      plate["A1"],
+      powder,
+      0.005,
+      dispense_parameters=dispense_parameters,
     )
     self.backend.dispense.assert_called_once()
 

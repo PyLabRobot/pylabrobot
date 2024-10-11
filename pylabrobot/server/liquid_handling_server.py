@@ -7,15 +7,29 @@ import os
 import threading
 from typing import Any, Coroutine, List, Tuple, Optional, cast
 
-from flask import Blueprint, Flask, request, jsonify, current_app, Request
+from flask import (
+  Blueprint,
+  Flask,
+  request,
+  jsonify,
+  current_app,
+  Request,
+)
 import werkzeug
 
 from pylabrobot import configure, Config
 from pylabrobot.config.io import ConfigReader
 from pylabrobot.config.formats.json_config import JsonLoader
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
-from pylabrobot.liquid_handling.standard import Pickup, Aspiration, Dispense, Drop
+from pylabrobot.liquid_handling.backends.backend import (
+  LiquidHandlerBackend,
+)
+from pylabrobot.liquid_handling.standard import (
+  Pickup,
+  Aspiration,
+  Dispense,
+  Drop,
+)
 from pylabrobot.resources import Coordinate, Deck, Tip, Liquid
 from pylabrobot.serializer import deserialize
 
@@ -133,7 +147,8 @@ async def pick_up_tips():
         resource = current_app.lh.deck.get_resource(sc["resource_name"])
       except ValueError as exc:
         raise ErrorResponse(
-          {"error": f"resource with name '{sc['resource_name']}' not found"}, 404
+          {"error": f"resource with name '{sc['resource_name']}' not found"},
+          404,
         ) from exc
       if "tip" not in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
@@ -167,7 +182,8 @@ async def drop_tips():
         resource = current_app.lh.deck.get_resource(sc["resource_name"])
       except ValueError as exc:
         raise ErrorResponse(
-          {"error": f"resource with name '{sc['resource_name']}' not found"}, 404
+          {"error": f"resource with name '{sc['resource_name']}' not found"},
+          404,
         ) from exc
       if "tip" not in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
@@ -201,7 +217,8 @@ async def aspirate():
         resource = current_app.lh.deck.get_resource(sc["resource_name"])
       except ValueError as exc:
         raise ErrorResponse(
-          {"error": f"resource with name '{sc['resource_name']}' not found"}, 404
+          {"error": f"resource with name '{sc['resource_name']}' not found"},
+          404,
         ) from exc
       if "tip" not in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
@@ -213,7 +230,10 @@ async def aspirate():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquids = cast(List[Tuple[Optional[Liquid], float]], deserialize(sc["liquids"]))
+      liquids = cast(
+        List[Tuple[Optional[Liquid], float]],
+        deserialize(sc["liquids"]),
+      )
       aspirations.append(
         Aspiration(
           resource=resource,
@@ -253,7 +273,8 @@ async def dispense():
         resource = current_app.lh.deck.get_resource(sc["resource_name"])
       except ValueError as exc:
         raise ErrorResponse(
-          {"error": f"resource with name '{sc['resource_name']}' not found"}, 404
+          {"error": f"resource with name '{sc['resource_name']}' not found"},
+          404,
         ) from exc
       if "tip" not in sc:
         raise ErrorResponse({"error": "missing key in json data: tip"}, 400)
@@ -265,7 +286,10 @@ async def dispense():
       flow_rate = sc["flow_rate"]
       liquid_height = sc["liquid_height"]
       blow_out_air_volume = sc["blow_out_air_volume"]
-      liquids = cast(List[Tuple[Optional[Liquid], float]], deserialize(sc["liquids"]))
+      liquids = cast(
+        List[Tuple[Optional[Liquid], float]],
+        deserialize(sc["liquids"]),
+      )
       dispenses.append(
         Dispense(
           resource=resource,

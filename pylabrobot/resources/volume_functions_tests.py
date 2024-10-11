@@ -12,7 +12,9 @@ from pylabrobot.resources.height_volume_functions import (
 class TestVolumeFunctions(unittest.TestCase):
   """Tests for the volume functions"""
 
-  def test_calculate_liquid_volume_container_2segments_square_vbottom(self):
+  def test_calculate_liquid_volume_container_2segments_square_vbottom(
+    self,
+  ):
     # Exactly the full pyramid
     self.assertAlmostEqual(
       calculate_liquid_volume_container_2segments_square_vbottom(
@@ -37,7 +39,9 @@ class TestVolumeFunctions(unittest.TestCase):
       (10 * 10 * 10) / 3 + 10 * 10 * 5,
     )
 
-  def test_calculate_liquid_volume_container_2segments_round_vbottom(self):
+  def test_calculate_liquid_volume_container_2segments_round_vbottom(
+    self,
+  ):
     # Exactly the full cone
     self.assertAlmostEqual(
       calculate_liquid_volume_container_2segments_round_vbottom(
@@ -62,7 +66,9 @@ class TestVolumeFunctions(unittest.TestCase):
       math.pi * (10 / 2) ** 2 * 10 / 3 + math.pi * (10 / 2) ** 2 * 5,
     )
 
-  def test_calculate_liquid_volume_container_2segments_round_ubottom(self):
+  def test_calculate_liquid_volume_container_2segments_round_ubottom(
+    self,
+  ):
     # Exactly half the sphere
     self.assertAlmostEqual(
       calculate_liquid_volume_container_2segments_round_ubottom(
@@ -87,7 +93,9 @@ class TestVolumeFunctions(unittest.TestCase):
       (2 / 3) * math.pi * 5**3 + math.pi * (10 / 2) ** 2 * 10,
     )
 
-  def test_calculate_liquid_volume_container_2segments_square_ubottom(self):
+  def test_calculate_liquid_volume_container_2segments_square_ubottom(
+    self,
+  ):
     # Exactly the full hemisphere
     self.assertAlmostEqual(
       calculate_liquid_volume_container_2segments_square_ubottom(

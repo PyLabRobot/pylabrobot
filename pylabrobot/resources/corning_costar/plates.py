@@ -4,9 +4,15 @@
 # pylint: disable=unreachable
 
 from typing import Optional
-from pylabrobot.resources.errors import ResourceDefinitionIncompleteError
+from pylabrobot.resources.errors import (
+  ResourceDefinitionIncompleteError,
+)
 from pylabrobot.resources.plate import Lid, Plate
-from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
+from pylabrobot.resources.well import (
+  Well,
+  WellBottomType,
+  CrossSectionType,
+)
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 from pylabrobot.resources.height_volume_functions import (
@@ -540,7 +546,9 @@ def Cos_96_EZWash_Lid(name: str) -> Lid:
 
 
 def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
-  raise ValueError("Deprecated. You probably want to use Cor_96_wellplate_360ul_Fb instead.")
+  raise ValueError(
+    "Deprecated. You probably want to use Cor_96_wellplate_360ul_Fb instead."
+  )
 
 
 def Cos_96_EZWash_L(name: str, with_lid: bool = False) -> Plate:
@@ -1133,9 +1141,13 @@ def _compute_volume_from_height_Cos_6_wellplate_16800ul_Fb(h: float):
   )
 
 
-def _compute_height_from_volume_Cos_6_wellplate_16800ul_Fb(liquid_volume: float):
+def _compute_height_from_volume_Cos_6_wellplate_16800ul_Fb(
+  liquid_volume: float,
+):
   if liquid_volume > 17_640:  # 5% tolerance
-    raise ValueError(f"Volume {liquid_volume} is too large for Cos_6_wellplate_16800ul_Fb")
+    raise ValueError(
+      f"Volume {liquid_volume} is too large for Cos_6_wellplate_16800ul_Fb"
+    )
   return calculate_liquid_height_container_1segment_round_fbottom(
     d=35.0, h_cylinder=18.2, liquid_volume=liquid_volume
   )
@@ -1189,7 +1201,9 @@ def Cos_6_wellplate_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
 # # # # # # # # # # Cos_96_wellplate_2mL_Vb # # # # # # # # # #
 
 
-def _compute_volume_from_height_Cos_96_wellplate_2mL_Vb(h: float) -> float:
+def _compute_volume_from_height_Cos_96_wellplate_2mL_Vb(
+  h: float,
+) -> float:
   if h > 44.1:  # 5% tolerance
     raise ValueError(f"Height {h} is too large for Cos_96_DWP_2mL_Vb")
   return calculate_liquid_volume_container_2segments_square_vbottom(
@@ -1197,12 +1211,18 @@ def _compute_volume_from_height_Cos_96_wellplate_2mL_Vb(h: float) -> float:
   )
 
 
-def _compute_height_from_volume_Cos_96_wellplate_2mL_Vb(liquid_volume: float):
+def _compute_height_from_volume_Cos_96_wellplate_2mL_Vb(
+  liquid_volume: float,
+):
   if liquid_volume > 2_100:  # 5% tolerance
     raise ValueError(f"Volume {liquid_volume} is too large for Cos_96_wellpate_2mL_Vb")
   return round(
     calculate_liquid_height_in_container_2segments_square_vbottom(
-      x=7.8, y=7.8, h_pyramid=4.0, h_cube=38.0, liquid_volume=liquid_volume
+      x=7.8,
+      y=7.8,
+      h_pyramid=4.0,
+      h_cube=38.0,
+      liquid_volume=liquid_volume,
     ),
     3,
   )

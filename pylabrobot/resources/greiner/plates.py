@@ -113,7 +113,9 @@ def Gre_1536_Sq_P(name: str, with_lid: bool = False) -> Plate:
   return Gre_1536_Sq(name=name, with_lid=with_lid).rotated(z=90)
 
 
-def _compute_volume_from_height_Greiner96Well_655_101(h: float) -> float:
+def _compute_volume_from_height_Greiner96Well_655_101(
+  h: float,
+) -> float:
   volume = min(h, 10.9) * 35.0152
   if h > 10.9:
     raise ValueError(f"Height {h} is too large for Greiner96Well_655_101")
@@ -165,7 +167,9 @@ def Greiner96Well_655_101(name: str, with_lid: bool = False) -> Plate:
   )
 
 
-def _compute_volume_from_height_Greiner96Well_650_201_RB(h: float) -> float:
+def _compute_volume_from_height_Greiner96Well_650_201_RB(
+  h: float,
+) -> float:
   volume = min(h, 2.36) * min(h, 2.36) * (10.9327 - 1.0472 * min(h, 2.36))
   if h <= 10.9:
     volume += (h - 2.36) * 38.0459

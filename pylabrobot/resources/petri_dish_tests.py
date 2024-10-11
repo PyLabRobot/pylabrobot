@@ -1,7 +1,11 @@
 from typing import cast
 import unittest
 
-from pylabrobot.resources import Coordinate, PetriDish, PetriDishHolder
+from pylabrobot.resources import (
+  Coordinate,
+  PetriDish,
+  PetriDishHolder,
+)
 
 
 class TestPetriDish(unittest.TestCase):

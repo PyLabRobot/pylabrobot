@@ -122,7 +122,12 @@ class Carrier(Resource, Generic[S]):
   def capacity(self):
     return len(self.sites)
 
-  def assign_child_resource(self, resource: Resource, location: Coordinate, reassign: bool = True):
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Coordinate,
+    reassign: bool = True,
+  ):
     """Assign a resource to this carrier.
 
     For a carrier, the only valid resource is a :class:`CarrierSite`.
@@ -156,7 +161,9 @@ class Carrier(Resource, Generic[S]):
       ValueError: If the resource is not assigned to this carrier.
     """
 
-    if not isinstance(resource.parent, CarrierSite) or not resource.parent.parent == self:
+    if (
+      not isinstance(resource.parent, CarrierSite) or not resource.parent.parent == self
+    ):
       raise ValueError(f"Resource {resource} is not assigned to this carrier")
     resource.unassign()
 
@@ -205,7 +212,15 @@ class TipCarrier(Carrier):
     category="tip_carrier",
     model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, sites, category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      sites,
+      category=category,
+      model=model,
+    )
 
 
 class PlateCarrierSite(CarrierSite):
@@ -241,7 +256,9 @@ class PlateCarrierSite(CarrierSite):
   ):
     if isinstance(resource, ResourceStack):
       if not resource.direction == "z":
-        raise ValueError("ResourceStack assigned to PlateCarrierSite must have direction 'z'")
+        raise ValueError(
+          "ResourceStack assigned to PlateCarrierSite must have direction 'z'"
+        )
       if not all(isinstance(c, Plate) for c in resource.children):
         raise TypeError(
           "If a ResourceStack is assigned to a PlateCarrierSite, the items "
@@ -278,12 +295,18 @@ class PlateCarrierSite(CarrierSite):
         z_sinking_depth = get_plate_sinking_depth(first_child)
 
       # TODO #246 - _get_sinking_depth should not handle callbacks
-      resource.register_did_assign_resource_callback(self._update_resource_stack_location)
-      self.register_did_unassign_resource_callback(self._deregister_resource_stack_callback)
+      resource.register_did_assign_resource_callback(
+        self._update_resource_stack_location
+      )
+      self.register_did_unassign_resource_callback(
+        self._deregister_resource_stack_callback
+      )
     return -Coordinate(z=z_sinking_depth)
 
   def get_default_child_location(self, resource: Resource) -> Coordinate:
-    return super().get_default_child_location(resource) + self._get_sinking_depth(resource)
+    return super().get_default_child_location(resource) + self._get_sinking_depth(
+      resource
+    )
 
   def _update_resource_stack_location(self, resource: Resource):
     """Callback called when the lowest resource on a ResourceStack changes. Since the location of
@@ -301,7 +324,9 @@ class PlateCarrierSite(CarrierSite):
   def _deregister_resource_stack_callback(self, resource: Resource):
     """Callback called when a ResourceStack (or child) is unassigned from this PlateCarrierSite."""
     if isinstance(resource, ResourceStack):  # the ResourceStack itself is unassigned
-      resource.deregister_did_assign_resource_callback(self._update_resource_stack_location)
+      resource.deregister_did_assign_resource_callback(
+        self._update_resource_stack_location
+      )
 
   def serialize(self) -> dict:
     return {
@@ -325,7 +350,15 @@ class PlateCarrier(Carrier):
     category="plate_carrier",
     model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, sites, category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      sites,
+      category=category,
+      model=model,
+    )
 
 
 class MFXCarrier(Carrier):
@@ -343,7 +376,15 @@ class MFXCarrier(Carrier):
     category="mfx_carrier",
     model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, sites, category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      sites,
+      category=category,
+      model=model,
+    )
 
 
 class TubeCarrier(Carrier):
@@ -361,7 +402,15 @@ class TubeCarrier(Carrier):
     category="tube_carrier",
     model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, sites, category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      sites,
+      category=category,
+      model=model,
+    )
 
 
 class TroughCarrier(Carrier):
@@ -379,7 +428,15 @@ class TroughCarrier(Carrier):
     category="trough_carrier",
     model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, sites, category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      sites,
+      category=category,
+      model=model,
+    )
 
 
 T = TypeVar("T", bound=CarrierSite)
@@ -396,7 +453,13 @@ def create_carrier_sites(
 
   sites = []
   for spot, (location, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
-    site = klass(name=f"carrier-site-{spot}", size_x=x, size_y=y, size_z=0, **kwargs)
+    site = klass(
+      name=f"carrier-site-{spot}",
+      size_x=x,
+      size_y=y,
+      size_z=0,
+      **kwargs,
+    )
     site.location = location
     sites.append(site)
   return sites

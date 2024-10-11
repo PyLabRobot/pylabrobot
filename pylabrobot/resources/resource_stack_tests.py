@@ -93,7 +93,10 @@ class ResourceStackTests(unittest.TestCase):
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.location = Coordinate.zero()
     stacking_area.assign_child_resource(lid)
-    self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
+    self.assertEqual(
+      stacking_area.get_top_item().get_absolute_location(),
+      Coordinate(0, 0, 0),
+    )
 
   def test_get_absolute_location_stack_height(self):
     lid = Lid(name="lid", size_x=1, size_y=1, size_z=1, nesting_z_height=0)

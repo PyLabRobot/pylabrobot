@@ -92,7 +92,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         raise ValueError("Cannot specify both `ordered_items` and `ordering`.")
       for item in ordered_items.values():
         if item.location is None:
-          raise ValueError("Item location must be specified if supplied at initialization.")
+          raise ValueError(
+            "Item location must be specified if supplied at initialization."
+          )
         item.name = f"{self.name}_{item.name}"  # prefix item name with resource name
         self.assign_child_resource(item, location=item.location)
       self._ordering = list(ordered_items.keys())
@@ -104,10 +106,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     # validate that ordering is in the transposed Excel style notation
     for identifier in self._ordering:
       if identifier[0] not in LETTERS or not identifier[1:].isdigit():
-        raise ValueError("Ordering must be in the transposed Excel style notation, e.g. 'A1'.")
+        raise ValueError(
+          "Ordering must be in the transposed Excel style notation, e.g. 'A1'."
+        )
 
   def __getitem__(
-    self, identifier: Union[str, int, Sequence[int], Sequence[str], slice, range]
+    self,
+    identifier: Union[str, int, Sequence[int], Sequence[str], slice, range],
   ) -> List[T]:
     """Get the items with the given identifier.
 
@@ -143,7 +148,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
     """
 
     if isinstance(identifier, str):
-      if ":" in identifier:  # multiple # TODO: deprecate this, use `"A1":"E1"` instead (slice)
+      if (
+        ":" in identifier
+      ):  # multiple # TODO: deprecate this, use `"A1":"E1"` instead (slice)
         return self.get_items(identifier)
 
       return [self.get_item(identifier)]  # single
@@ -180,18 +187,22 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     if isinstance(identifier, tuple):
       row, column = identifier
-      identifier = LETTERS[row] + str(column + 1)  # standard transposed-Excel style notation
+      identifier = LETTERS[row] + str(
+        column + 1
+      )  # standard transposed-Excel style notation
     if isinstance(identifier, str):
       try:
         identifier = self._ordering.index(identifier)
       except ValueError as e:
         raise IndexError(
-          f"Item with identifier '{identifier}' does not exist on " f"resource '{self.name}'."
+          f"Item with identifier '{identifier}' does not exist on "
+          f"resource '{self.name}'."
         ) from e
 
     if not 0 <= identifier < self.num_items:
       raise IndexError(
-        f"Item with identifier '{identifier}' does not exist on " f"resource '{self.name}'."
+        f"Item with identifier '{identifier}' does not exist on "
+        f"resource '{self.name}'."
       )
 
     # Cast child to item type. Children will always be `T`, but the type checker doesn't know that.
@@ -401,7 +412,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
 
     # Create the header row with numbers aligned to the columns.
     # Use right-alignment specifier.
-    header_row = "    " + " ".join(f"{i+1:<{max_digits}}" for i in range(self.num_items_x))
+    header_row = "    " + " ".join(
+      f"{i+1:<{max_digits}}" for i in range(self.num_items_x)
+    )
 
     # Create the item grid with resource absence/presence information.
     item_grid = [
@@ -409,7 +422,9 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       for i in range(self.num_items_y)
     ]
     spacer = " " * max(1, max_digits)
-    item_list = [LETTERS[i] + ":  " + spacer.join(row) for i, row in enumerate(item_grid)]
+    item_list = [
+      LETTERS[i] + ":  " + spacer.join(row) for i, row in enumerate(item_grid)
+    ]
     item_text = "\n".join(item_list)
 
     # Simple footer with dimensions.
@@ -446,7 +461,10 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       rows_set.add(identifier[0])
       columns_set.add(identifier[1:])
 
-    rows, columns = sorted(list(rows_set)), sorted(list(columns_set), key=int)
+    rows, columns = (
+      sorted(list(rows_set)),
+      sorted(list(columns_set), key=int),
+    )
 
     expected_identifiers = sorted([c + r for c in rows for r in columns])
     if sorted(identifiers) != expected_identifiers:

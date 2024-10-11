@@ -2,7 +2,9 @@ from abc import ABCMeta, abstractmethod
 import sys
 from typing import Any, Dict, Optional, List, Union
 
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import (
+  LiquidHandlerBackend,
+)
 from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
   Pickup,
@@ -89,7 +91,8 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       for op in ops
     ]
     await self.send_command(
-      command="drop_tips", data={"channels": serialized, "use_channels": use_channels}
+      command="drop_tips",
+      data={"channels": serialized, "use_channels": use_channels},
     )
 
   async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
@@ -107,7 +110,8 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       for op in ops
     ]
     await self.send_command(
-      command="aspirate", data={"channels": serialized, "use_channels": use_channels}
+      command="aspirate",
+      data={"channels": serialized, "use_channels": use_channels},
     )
 
   async def dispense(self, ops: List[Dispense], use_channels: List[int]):
@@ -125,19 +129,26 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       for op in ops
     ]
     await self.send_command(
-      command="dispense", data={"channels": serialized, "use_channels": use_channels}
+      command="dispense",
+      data={"channels": serialized, "use_channels": use_channels},
     )
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
     await self.send_command(
       command="pick_up_tips96",
-      data={"resource_name": pickup.resource.name, "offset": serialize(pickup.offset)},
+      data={
+        "resource_name": pickup.resource.name,
+        "offset": serialize(pickup.offset),
+      },
     )
 
   async def drop_tips96(self, drop: DropTipRack):
     await self.send_command(
       command="drop_tips96",
-      data={"resource_name": drop.resource.name, "offset": serialize(drop.offset)},
+      data={
+        "resource_name": drop.resource.name,
+        "offset": serialize(drop.offset),
+      },
     )
 
   async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
@@ -183,7 +194,9 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "move": {
           "resource_name": move.resource.name,
           "to": serialize(move.destination),
-          "intermediate_locations": [serialize(loc) for loc in move.intermediate_locations],
+          "intermediate_locations": [
+            serialize(loc) for loc in move.intermediate_locations
+          ],
           "resource_offset": serialize(move.resource_offset),
           "destination_offset": serialize(move.destination_offset),
           "pickup_distance_from_top": move.pickup_distance_from_top,
@@ -196,7 +209,8 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
 
   async def prepare_for_manual_channel_operation(self, channel: int):
     await self.send_command(
-      command="prepare_for_manual_channel_operation", data={"channel": channel}
+      command="prepare_for_manual_channel_operation",
+      data={"channel": channel},
     )
 
   async def move_channel_x(self, channel: int, x: float):

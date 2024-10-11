@@ -8,10 +8,21 @@ from typing import Any, Dict, List, Optional, Union, cast
 import unittest
 import unittest.mock
 
-from pylabrobot.liquid_handling.strictness import Strictness, set_strictness
-from pylabrobot.resources import no_tip_tracking, set_tip_tracking, Liquid
+from pylabrobot.liquid_handling.strictness import (
+  Strictness,
+  set_strictness,
+)
+from pylabrobot.resources import (
+  no_tip_tracking,
+  set_tip_tracking,
+  Liquid,
+)
 from pylabrobot.resources.carrier import PlateCarrierSite
-from pylabrobot.resources.errors import HasTipError, NoTipError, CrossContaminationError
+from pylabrobot.resources.errors import (
+  HasTipError,
+  NoTipError,
+  CrossContaminationError,
+)
 from pylabrobot.resources.volume_tracker import (
   set_volume_tracking,
   set_cross_contamination_tracking,
@@ -49,7 +60,10 @@ from .standard import (
 
 
 def _make_asp(
-  r: Container, vol: float, tip: Any, offset: Coordinate = Coordinate.zero()
+  r: Container,
+  vol: float,
+  tip: Any,
+  offset: Coordinate = Coordinate.zero(),
 ) -> Aspiration:
   return Aspiration(
     resource=r,
@@ -64,7 +78,10 @@ def _make_asp(
 
 
 def _make_disp(
-  r: Container, vol: float, tip: Any, offset: Coordinate = Coordinate.zero()
+  r: Container,
+  vol: float,
+  tip: Any,
+  offset: Coordinate = Coordinate.zero(),
 ) -> Dispense:
   return Dispense(
     resource=r,
@@ -132,7 +149,10 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
     # Get subresource.
     self.assertEqual(self.lh.deck.get_resource("tip_rack_01").name, "tip_rack_01")
-    self.assertEqual(self.lh.deck.get_resource("aspiration plate").name, "aspiration plate")
+    self.assertEqual(
+      self.lh.deck.get_resource("aspiration plate").name,
+      "aspiration plate",
+    )
 
     # Get unknown resource.
     with self.assertRaises(ResourceNotFoundError):
@@ -167,12 +187,16 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
     # Subresources.
     self.assertEqual(
-      cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_item("A1").get_absolute_location()
+      cast(TipRack, self.lh.deck.get_resource("tip_rack_01"))
+      .get_item("A1")
+      .get_absolute_location()
       + cast(TipRack, self.lh.deck.get_resource("tip_rack_01")).get_item("A1").center(),
       Coordinate(117.900, 145.800, 164.450),
     )
     self.assertEqual(
-      cast(TipRack, self.lh.deck.get_resource("tip_rack_04")).get_item("A1").get_absolute_location()
+      cast(TipRack, self.lh.deck.get_resource("tip_rack_04"))
+      .get_item("A1")
+      .get_absolute_location()
       + cast(TipRack, self.lh.deck.get_resource("tip_rack_04")).get_item("A1").center(),
       Coordinate(117.900, 433.800, 131.450),
     )
@@ -181,7 +205,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       cast(Plate, self.lh.deck.get_resource("aspiration plate"))
       .get_item("A1")
       .get_absolute_location()
-      + cast(Plate, self.lh.deck.get_resource("aspiration plate")).get_item("A1").center(),
+      + cast(Plate, self.lh.deck.get_resource("aspiration plate"))
+      .get_item("A1")
+      .center(),
       Coordinate(x=320.8, y=145.7, z=186.15),
     )
 
@@ -307,7 +333,13 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     ]
     sites: List[Union[ResourceStack, PlateCarrierSite]] = [
       ResourceStack(name="stack", direction="z"),
-      PlateCarrierSite(name="site", size_x=100, size_y=100, size_z=15, pedestal_size_z=1),
+      PlateCarrierSite(
+        name="site",
+        size_x=100,
+        size_y=100,
+        size_z=15,
+        pedestal_size_z=1,
+      ),
     ]
 
     test_cases = itertools.product(sites, rotations, grip_directions)
@@ -344,7 +376,10 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         site.assign_child_resource(plate)
         original_center = plate.get_absolute_location(x="c", y="c", z="c")
         await self.lh.move_plate(
-          plate, site, get_direction=get_direction, put_direction=put_direction
+          plate,
+          site,
+          get_direction=get_direction,
+          put_direction=put_direction,
         )
         new_center = plate.get_absolute_location(x="c", y="c", z="c")
 
@@ -377,11 +412,20 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     )
     self.deck.assign_child_resource(plate, location=Coordinate(100, 100, 0))
     for rot, (get_direction, put_direction) in test_cases:
-      with self.subTest(rotation=rot, get_direction=get_direction, put_direction=put_direction):
+      with self.subTest(
+        rotation=rot,
+        get_direction=get_direction,
+        put_direction=put_direction,
+      ):
         plate.rotate(z=rot)
         plate.assign_child_resource(lid)
         original_center = lid.get_absolute_location(x="c", y="c", z="c")
-        await self.lh.move_lid(lid, plate, get_direction=get_direction, put_direction=put_direction)
+        await self.lh.move_lid(
+          lid,
+          plate,
+          get_direction=get_direction,
+          put_direction=put_direction,
+        )
         new_center = lid.get_absolute_location(x="c", y="c", z="c")
         self.assertEqual(
           new_center,
@@ -399,7 +443,10 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     deserialized = LiquidHandler.deserialize(serialized)
 
     self.assertEqual(deserialized.deck, self.lh.deck)
-    self.assertEqual(deserialized.backend.__class__.__name__, self.lh.backend.__class__.__name__)
+    self.assertEqual(
+      deserialized.backend.__class__.__name__,
+      self.lh.backend.__class__.__name__,
+    )
 
 
 class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
@@ -548,7 +595,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       {
         "command": "drop_tips96",
         "args": (),
-        "kwargs": {"drop": DropTipRack(resource=self.tip_rack, offset=Coordinate.zero())},
+        "kwargs": {
+          "drop": DropTipRack(resource=self.tip_rack, offset=Coordinate.zero())
+        },
       },
     )
 
@@ -600,7 +649,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     # Transfer to multiple wells
     self.plate.get_item("A1").tracker.set_liquids([(None, 80)])
-    await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80)
+    await self.lh.transfer(
+      self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80
+    )
     self.assertEqual(
       self.get_first_command("aspirate"),
       {
@@ -613,14 +664,22 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       },
     )
 
-    dispenses = list(filter(lambda x: x["command"] == "dispense", self.backend.commands_received))
+    dispenses = list(
+      filter(
+        lambda x: x["command"] == "dispense",
+        self.backend.commands_received,
+      )
+    )
     self.assertEqual(
       dispenses,
       [
         {
           "command": "dispense",
           "args": (),
-          "kwargs": {"use_channels": [0], "ops": [_make_disp(well, vol=10.0, tip=t)]},
+          "kwargs": {
+            "use_channels": [0],
+            "ops": [_make_disp(well, vol=10.0, tip=t)],
+          },
         }
         for well in self.plate["A1:H1"]
       ],
@@ -630,7 +689,10 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # Transfer with ratios
     self.plate.get_item("A1").tracker.set_liquids([(None, 60)])
     await self.lh.transfer(
-      self.plate.get_well("A1"), self.plate["B1:C1"], source_vol=60, ratios=[2, 1]
+      self.plate.get_well("A1"),
+      self.plate["B1:C1"],
+      source_vol=60,
+      ratios=[2, 1],
     )
     self.assertEqual(
       self.get_first_command("aspirate"),
@@ -643,14 +705,22 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         },
       },
     )
-    dispenses = list(filter(lambda x: x["command"] == "dispense", self.backend.commands_received))
+    dispenses = list(
+      filter(
+        lambda x: x["command"] == "dispense",
+        self.backend.commands_received,
+      )
+    )
     self.assertEqual(
       dispenses,
       [
         {
           "command": "dispense",
           "args": (),
-          "kwargs": {"use_channels": [0], "ops": [_make_disp(well, vol=vol, tip=t)]},
+          "kwargs": {
+            "use_channels": [0],
+            "ops": [_make_disp(well, vol=vol, tip=t)],
+          },
         }
         for well, vol in zip(self.plate["B1:C1"], [40, 20])
       ],
@@ -660,7 +730,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # Transfer with target_vols
     vols: List[float] = [3, 1, 4, 1, 5, 9, 6, 2]
     self.plate.get_item("A1").tracker.set_liquids([(None, sum(vols))])
-    await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols)
+    await self.lh.transfer(
+      self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols
+    )
     self.assertEqual(
       self.get_first_command("aspirate"),
       {
@@ -672,14 +744,22 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         },
       },
     )
-    dispenses = list(filter(lambda x: x["command"] == "dispense", self.backend.commands_received))
+    dispenses = list(
+      filter(
+        lambda x: x["command"] == "dispense",
+        self.backend.commands_received,
+      )
+    )
     self.assertEqual(
       dispenses,
       [
         {
           "command": "dispense",
           "args": (),
-          "kwargs": {"use_channels": [0], "ops": [_make_disp(well, vol=vol, tip=t)]},
+          "kwargs": {
+            "use_channels": [0],
+            "ops": [_make_disp(well, vol=vol, tip=t)],
+          },
         }
         for well, vol in zip(self.plate["A1:H1"], vols)
       ],
@@ -689,13 +769,19 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # target_vols and source_vol specified
     with self.assertRaises(TypeError):
       await self.lh.transfer(
-        self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=100, target_vols=vols
+        self.plate.get_well("A1"),
+        self.plate["A1:H1"],
+        source_vol=100,
+        target_vols=vols,
       )
 
     # target_vols and ratios specified
     with self.assertRaises(TypeError):
       await self.lh.transfer(
-        self.plate.get_well("A1"), self.plate["A1:H1"], ratios=[1] * 8, target_vols=vols
+        self.plate.get_well("A1"),
+        self.plate["A1:H1"],
+        ratios=[1] * 8,
+        target_vols=vols,
       )
 
   async def test_stamp(self):
@@ -792,7 +878,9 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_discard_tips(self):
     tips = self.tip_rack.get_tips("A1:D1")
-    await self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1", "D1"], use_channels=[0, 1, 3, 4])
+    await self.lh.pick_up_tips(
+      self.tip_rack["A1", "B1", "C1", "D1"], use_channels=[0, 1, 3, 4]
+    )
     await self.lh.discard_tips()
     trash = self.deck.get_trash_area()
     offsets = list(reversed(trash.centers(yn=4)))
@@ -806,10 +894,26 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         "kwargs": {
           "use_channels": [0, 1, 3, 4],
           "ops": [
-            Drop(self.deck.get_trash_area(), tip=tips[3], offset=offsets[0]),
-            Drop(self.deck.get_trash_area(), tip=tips[2], offset=offsets[1]),
-            Drop(self.deck.get_trash_area(), tip=tips[1], offset=offsets[2]),
-            Drop(self.deck.get_trash_area(), tip=tips[0], offset=offsets[3]),
+            Drop(
+              self.deck.get_trash_area(),
+              tip=tips[3],
+              offset=offsets[0],
+            ),
+            Drop(
+              self.deck.get_trash_area(),
+              tip=tips[2],
+              offset=offsets[1],
+            ),
+            Drop(
+              self.deck.get_trash_area(),
+              tip=tips[1],
+              offset=offsets[2],
+            ),
+            Drop(
+              self.deck.get_trash_area(),
+              tip=tips[0],
+              offset=offsets[3],
+            ),
           ],
         },
       },
@@ -852,16 +956,24 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       set_strictness(Strictness.IGNORE)
       await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True)
       await self.lh.pick_up_tips(
-        self.tip_rack["A1"], use_channels=[1], non_default=True, does_not_exist=True
+        self.tip_rack["A1"],
+        use_channels=[1],
+        non_default=True,
+        does_not_exist=True,
       )
       with self.assertRaises(TypeError):  # missing non_default
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[2])
 
       set_strictness(Strictness.WARN)
-      await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, use_channels=[3])
+      await self.lh.pick_up_tips(
+        self.tip_rack["A1"], non_default=True, use_channels=[3]
+      )
       with self.assertWarns(UserWarning):  # extra kwargs should warn
         await self.lh.pick_up_tips(
-          self.tip_rack["A1"], use_channels=[4], non_default=True, does_not_exist=True
+          self.tip_rack["A1"],
+          use_channels=[4],
+          non_default=True,
+          does_not_exist=True,
         )
       self.lh.clear_head_state()
       # We override default to False, so this should raise an assertion error. To test whether
@@ -879,10 +991,15 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
       set_strictness(Strictness.STRICT)
       self.lh.clear_head_state()
-      await self.lh.pick_up_tips(self.tip_rack["A1"], non_default=True, use_channels=[6])
+      await self.lh.pick_up_tips(
+        self.tip_rack["A1"], non_default=True, use_channels=[6]
+      )
       with self.assertRaises(TypeError):  # cannot have extra kwargs
         await self.lh.pick_up_tips(
-          self.tip_rack["A1"], use_channels=[7], non_default=True, does_not_exist=True
+          self.tip_rack["A1"],
+          use_channels=[7],
+          non_default=True,
+          does_not_exist=True,
         )
       with self.assertRaises(TypeError):  # missing non_default
         await self.lh.pick_up_tips(self.tip_rack["A1"], use_channels=[8])
@@ -1008,7 +1125,8 @@ class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCa
     await self.lh.aspirate([pure_blood_well], vols=[10])
     await self.lh.dispense([mix_well], vols=[10])
     self.assertEqual(
-      mix_well.tracker.liquids, [(Liquid.ETHANOL, 20), (Liquid.BLOOD, 10)]
+      mix_well.tracker.liquids,
+      [(Liquid.ETHANOL, 20), (Liquid.BLOOD, 10)],
     )  # order matters
     with self.assertRaises(CrossContaminationError):
       await self.lh.aspirate([pure_blood_well], vols=[10])

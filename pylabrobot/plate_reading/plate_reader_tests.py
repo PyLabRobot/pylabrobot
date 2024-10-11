@@ -27,7 +27,10 @@ class MockPlateReaderBackend(PlateReaderBackend):
     return [[1, 2, 3], [4, 5, 6]]
 
   async def read_fluorescence(
-    self, excitation_wavelength: int, emission_wavelength: int, focal_height: float
+    self,
+    excitation_wavelength: int,
+    emission_wavelength: int,
+    focal_height: float,
   ):
     raise NotImplementedError
 
@@ -37,7 +40,13 @@ class TestPlateReaderResource(unittest.TestCase):
 
   def setUp(self) -> None:
     super().setUp()
-    self.pr = PlateReader(name="pr", backend=MockPlateReaderBackend(), size_x=1, size_y=1, size_z=1)
+    self.pr = PlateReader(
+      name="pr",
+      backend=MockPlateReaderBackend(),
+      size_x=1,
+      size_y=1,
+      size_z=1,
+    )
 
   def test_add_plate(self):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
@@ -47,7 +56,9 @@ class TestPlateReaderResource(unittest.TestCase):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     self.pr.assign_child_resource(plate)
 
-    another_plate = Plate("another_plate", size_x=1, size_y=1, size_z=1, ordered_items={})
+    another_plate = Plate(
+      "another_plate", size_x=1, size_y=1, size_z=1, ordered_items={}
+    )
     with self.assertRaises(ValueError):
       self.pr.assign_child_resource(another_plate)
 
@@ -65,4 +76,6 @@ class TestPlateReaderResource(unittest.TestCase):
         "type": "MockPlateReaderBackend",
       },
     )
-    self.assertIsInstance(backend.deserialize(backend.serialize()), MockPlateReaderBackend)
+    self.assertIsInstance(
+      backend.deserialize(backend.serialize()), MockPlateReaderBackend
+    )

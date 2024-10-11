@@ -29,7 +29,13 @@ class Deck(Resource):
   ):
     """Initialize a new deck."""
 
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category=category,
+    )
     self.location = origin
     self.resources: Dict[str, Resource] = {}
 
@@ -123,7 +129,9 @@ class Deck(Resource):
 
   def summary(self) -> str:
     """Returns a summary of the deck layout."""
-    summary_ = f"Deck: {self.get_absolute_size_x()} x {self.get_absolute_size_y()} mm\n\n"
+    summary_ = (
+      f"Deck: {self.get_absolute_size_x()} x {self.get_absolute_size_y()} mm\n\n"
+    )
     for resource in self.children:
       summary_ += f"{resource.name}: {resource}\n"
     return summary_

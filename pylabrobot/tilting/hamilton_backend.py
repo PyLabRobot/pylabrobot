@@ -8,13 +8,21 @@ try:
 except ImportError:
   HAS_SERIAL = False
 
-from pylabrobot.tilting.tilter_backend import TilterBackend, TiltModuleError
+from pylabrobot.tilting.tilter_backend import (
+  TilterBackend,
+  TiltModuleError,
+)
 
 
 class HamiltonTiltModuleBackend(TilterBackend):
   """Backend for the Hamilton tilt module."""
 
-  def __init__(self, com_port: str, write_timeout: float = 10, timeout: float = 10):
+  def __init__(
+    self,
+    com_port: str,
+    write_timeout: float = 10,
+    timeout: float = 10,
+  ):
     self.setup_finished = False
     self.com_port = com_port
     self.serial: Optional[serial.Serial] = None
@@ -187,7 +195,9 @@ class HamiltonTiltModuleBackend(TilterBackend):
       }[code]
     raise RuntimeError(f"Unexpected error code: {code}")
 
-  async def tilt_request_offset_between_light_barrier_and_init_position(self) -> int:
+  async def tilt_request_offset_between_light_barrier_and_init_position(
+    self,
+  ) -> int:
     """Request Offset between Light Barrier and Init Position"""
 
     resp = await self.send_command(command="RO")

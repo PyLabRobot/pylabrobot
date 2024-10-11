@@ -65,7 +65,9 @@ class TemperatureController(ResourceHolderMixin, Machine):
       if abs(temperature - self.target_temperature) < tolerance:
         return
       await asyncio.sleep(1.0)
-    raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
+    raise TimeoutError(
+      f"Temperature did not reach target temperature within {timeout} seconds."
+    )
 
   async def deactivate(self):
     """Deactivate the temperature controller. This will stop the heating or cooling, and return

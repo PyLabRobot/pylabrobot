@@ -19,7 +19,9 @@ class HamiltonHepaFan(FanBackend):
 
   async def setup(self):
     if not USE_FTDI:
-      raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
+      raise RuntimeError(
+        "pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`."
+      )
 
     self.dev = Device()  # Adjust if needed for specific device
     self.dev.open()

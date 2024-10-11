@@ -151,7 +151,10 @@ class CarrierTests(unittest.TestCase):
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
     carrier.assign_resource_to_site(plate, spot=0)
 
-    self.assertEqual(carrier.get_resource("plate").get_absolute_location(), Coordinate(15, 15, 15))
+    self.assertEqual(
+      carrier.get_resource("plate").get_absolute_location(),
+      Coordinate(15, 15, 15),
+    )
 
   def test_capacity(self):
     self.assertEqual(self.tip_car.capacity, 5)
@@ -228,7 +231,12 @@ class CarrierTests(unittest.TestCase):
             "size_x": 10,
             "size_y": 10,
             "size_z": 0,
-            "location": {"type": "Coordinate", "x": 10, "y": 20, "z": 30},
+            "location": {
+              "type": "Coordinate",
+              "x": 10,
+              "y": 20,
+              "z": 30,
+            },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "carrier_site",
             "children": [],
@@ -241,7 +249,12 @@ class CarrierTests(unittest.TestCase):
             "size_x": 10,
             "size_y": 10,
             "size_z": 0,
-            "location": {"type": "Coordinate", "x": 10, "y": 50, "z": 30},
+            "location": {
+              "type": "Coordinate",
+              "x": 10,
+              "y": 50,
+              "z": 30,
+            },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "carrier_site",
             "children": [],
@@ -254,7 +267,12 @@ class CarrierTests(unittest.TestCase):
             "size_x": 10,
             "size_y": 10,
             "size_z": 0,
-            "location": {"type": "Coordinate", "x": 10, "y": 80, "z": 30},
+            "location": {
+              "type": "Coordinate",
+              "x": 10,
+              "y": 80,
+              "z": 30,
+            },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "carrier_site",
             "children": [],
@@ -267,7 +285,12 @@ class CarrierTests(unittest.TestCase):
             "size_x": 10,
             "size_y": 10,
             "size_z": 0,
-            "location": {"type": "Coordinate", "x": 10, "y": 130, "z": 30},
+            "location": {
+              "type": "Coordinate",
+              "x": 10,
+              "y": 130,
+              "z": 30,
+            },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "carrier_site",
             "children": [],
@@ -280,7 +303,12 @@ class CarrierTests(unittest.TestCase):
             "size_x": 10,
             "size_y": 10,
             "size_z": 0,
-            "location": {"type": "Coordinate", "x": 10, "y": 160, "z": 30},
+            "location": {
+              "type": "Coordinate",
+              "x": 10,
+              "y": 160,
+              "z": 30,
+            },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "carrier_site",
             "children": [],
@@ -349,7 +377,9 @@ class CarrierTests(unittest.TestCase):
         pedestal_size_z=10,
       ),
     )
-    resource_stack = ResourceStack(name="resource_stack", direction="z", resources=[plate2, plate1])
+    resource_stack = ResourceStack(
+      name="resource_stack", direction="z", resources=[plate2, plate1]
+    )
     carrier[0] = resource_stack
     self.assertEqual(resource_stack.location, Coordinate(0, 0, -5))
     self.assertEqual(plate1.location, Coordinate(0, 0, 0))
@@ -366,9 +396,11 @@ class CarrierTests(unittest.TestCase):
     pcs = carrier[0]
     assert isinstance(pcs, PlateCarrierSite)
     self.assertIn(
-      pcs._update_resource_stack_location, resource_stack._did_assign_resource_callbacks
+      pcs._update_resource_stack_location,
+      resource_stack._did_assign_resource_callbacks,
     )
     resource_stack.unassign()
     self.assertNotIn(
-      pcs._update_resource_stack_location, resource_stack._did_assign_resource_callbacks
+      pcs._update_resource_stack_location,
+      resource_stack._did_assign_resource_callbacks,
     )

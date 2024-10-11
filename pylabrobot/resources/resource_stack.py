@@ -56,7 +56,11 @@ class ResourceStack(ResourceHolderMixin, Resource):
     resources: Optional[List[Resource]] = None,
   ):
     super().__init__(name, size_x=0, size_y=0, size_z=0, category="resource_group")
-    assert direction in ["x", "y", "z"], "Direction must be one of 'x', 'y', or 'z'"
+    assert direction in [
+      "x",
+      "y",
+      "z",
+    ], "Direction must be one of 'x', 'y', or 'z'"
     self.direction = direction
     resources = resources or []
     if direction == "z":  # top to bottom
@@ -90,7 +94,11 @@ class ResourceStack(ResourceHolderMixin, Resource):
       """Helper function to get the actual height of a resource, accounting for the lid nesting
       height if the resource is a plate with a lid."""
       if isinstance(resource, Plate) and resource.lid is not None:
-        return resource.get_size_z() + resource.lid.get_size_z() - resource.lid.nesting_z_height
+        return (
+          resource.get_size_z()
+          + resource.lid.get_size_z()
+          - resource.lid.nesting_z_height
+        )
       return resource.get_size_z()
 
     if len(self.children) == 0:
@@ -117,7 +125,9 @@ class ResourceStack(ResourceHolderMixin, Resource):
 
   def unassign_child_resource(self, resource: Resource):
     if self.direction == "z" and resource != self.children[-1]:  # no floating resources
-      raise ValueError("Resource is not the top item in this z-growing stack, cannot unassign")
+      raise ValueError(
+        "Resource is not the top item in this z-growing stack, cannot unassign"
+      )
     return super().unassign_child_resource(resource)
 
   def get_top_item(self) -> Resource:

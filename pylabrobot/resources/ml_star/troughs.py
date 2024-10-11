@@ -20,11 +20,18 @@ def _compute_volume_from_height_Hamilton_1_trough_200ml_Vb(h: float):
   return round(polynomial_fit_of_empirical_data, 3)
 
 
-def _compute_height_from_volume_Hamilton_1_trough_200ml_Vb(liquid_volume: float):
+def _compute_height_from_volume_Hamilton_1_trough_200ml_Vb(
+  liquid_volume: float,
+):
   """Function to compute height of liquid in trough,
   based on poylonmial fit of z-probed, empirical data.
   """
-  a, b, c, d = 3.59536348e-16, -2.59979679e-10, 0.000331809032, 2.70090777
+  a, b, c, d = (
+    3.59536348e-16,
+    -2.59979679e-10,
+    0.000331809032,
+    2.70090777,
+  )
   polynomial_fit_of_empirical_data = (
     a * liquid_volume**3 + b * liquid_volume**2 + c * liquid_volume + d
   )

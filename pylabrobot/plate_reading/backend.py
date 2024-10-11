@@ -38,7 +38,10 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def read_fluorescence(
-    self, excitation_wavelength: int, emission_wavelength: int, focal_height: float
+    self,
+    excitation_wavelength: int,
+    emission_wavelength: int,
+    focal_height: float,
   ) -> List[List[float]]:
     """Read the fluorescence from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""

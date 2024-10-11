@@ -6,7 +6,9 @@ import unittest
 
 from pylabrobot import Config
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends import SerializingSavingBackend
+from pylabrobot.liquid_handling.backends import (
+  SerializingSavingBackend,
+)
 from pylabrobot.resources import (
   Plate,
   TipRack,
@@ -103,7 +105,8 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
     with self.app.test_client() as client:
       # Post with no data
       response = client.post(
-        self.base_url + "/labware", headers={"Content-Type": "application/json"}
+        self.base_url + "/labware",
+        headers={"Content-Type": "application/json"},
       )
       self.assertEqual(response.status_code, 400)
       self.assertEqual(response.json, {"error": "json data must be a dict"})
@@ -115,7 +118,9 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
 
       # Post with valid data
       deck = build_layout()
-      response = client.post(self.base_url + "/labware", json={"deck": deck.serialize()})
+      response = client.post(
+        self.base_url + "/labware", json={"deck": deck.serialize()}
+      )
       self.assertEqual(response.json, {"status": "ok"})
       self.assertEqual(response.status_code, 200)
       self.assertEqual(self.lh.deck, deck)
@@ -131,7 +136,9 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
 
     deck = build_layout()
     with self.app.test_client() as client:
-      response = client.post(self.base_url + "/labware", json={"deck": deck.serialize()})
+      response = client.post(
+        self.base_url + "/labware", json={"deck": deck.serialize()}
+      )
       assert response.status_code == 200
       assert self.lh.deck == deck
       assert self.lh.deck.resources == deck.resources
@@ -202,7 +209,12 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
               "resource_name": well.name,
               "volume": 10,
               "tip": serialize(tip),
-              "offset": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
+              "offset": {
+                "type": "Coordinate",
+                "x": 0,
+                "y": 0,
+                "z": 0,
+              },
               "liquids": [[None, 10]],
               "flow_rate": None,
               "liquid_height": None,
@@ -230,7 +242,12 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
               "resource_name": well.name,
               "volume": 10,
               "tip": serialize(tip),
-              "offset": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
+              "offset": {
+                "type": "Coordinate",
+                "x": 0,
+                "y": 0,
+                "z": 0,
+              },
               "liquids": [[None, 10]],
               "flow_rate": None,
               "liquid_height": None,

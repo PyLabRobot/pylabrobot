@@ -170,14 +170,19 @@ class TestVantageResponseParsing(unittest.TestCase):
     error = vantage_response_string_to_error(resp)
     self.assertEqual(
       error,
-      VantageFirmwareError(errors={"Cover": "S-Drive: Drive not initialized"}, raw_response=resp),
+      VantageFirmwareError(
+        errors={"Cover": "S-Drive: Drive not initialized"},
+        raw_response=resp,
+      ),
     )
 
     resp = 'A1HMDAid239er99es"H070"'
     error = vantage_response_string_to_error(resp)
     self.assertEqual(
       error,
-      VantageFirmwareError(errors={"Core 96": "No liquid level found"}, raw_response=resp),
+      VantageFirmwareError(
+        errors={"Core 96": "No liquid level found"}, raw_response=resp
+      ),
     )
 
     resp = 'A1PMDAid262er99es"P170 P270 P370 P470 P570 P670 P770 P870"'
@@ -303,9 +308,13 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         # similar != parsed_cmd, but assertEqual gives a better error message than `fail`.
         self.assertEqual(similar, parsed_cmd)
       else:
-        self.fail(f"Command {cmd} not found in sent commands: {self.mockVantage.commands}")
+        self.fail(
+          f"Command {cmd} not found in sent commands: {self.mockVantage.commands}"
+        )
     elif not should_be and found:
-      self.fail(f"Command {cmd} was found in sent commands: {self.mockVantage.commands}")
+      self.fail(
+        f"Command {cmd} was found in sent commands: {self.mockVantage.commands}"
+      )
 
   def test_ops_to_fw_positions(self):
     """Convert channel positions to firmware positions."""
@@ -328,7 +337,11 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(
       self.mockVantage._ops_to_fw_positions((op1, op2), use_channels=[1, 2]),
-      ([0, 4329, 4329, 0], [0, 1458, 1008, 0], [False, True, True, False]),
+      (
+        [0, 4329, 4329, 0],
+        [0, 1458, 1008, 0],
+        [False, True, True, False],
+      ),
     )
 
   def _assert_command_sent_once(self, cmd: str, fmt: dict):
@@ -387,7 +400,11 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips(self.tip_rack["A1"])  # pick up tips first
     await self.lh.aspirate(self.plate["A1"], vols=[100])
     await self.lh.dispense(
-      self.plate["A2"], vols=[100], liquid_height=[5], jet=[False], blow_out=[True]
+      self.plate["A2"],
+      vols=[100],
+      liquid_height=[5],
+      jet=[False],
+      blow_out=[True],
     )
 
     self._assert_command_sent_once(
@@ -423,7 +440,13 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.drop_tips96(self.tip_rack)
     self._assert_command_sent_once(
       "A1HMTRid0284xp04329yp1458tz2164th2450te2450",
-      {"xp": "int", "yp": "int", "tz": "int", "th": "int", "te": "int"},
+      {
+        "xp": "int",
+        "yp": "int",
+        "tz": "int",
+        "th": "int",
+        "te": "int",
+      },
     )
 
   async def test_aspirate96(self):
@@ -517,7 +540,9 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.dispense96(self.plate, volume=0)
 
   async def test_move_plate(self):
-    await self.lh.move_plate(self.plate, self.plt_car[1], pickup_distance_from_top=5.2 - 3.33)
+    await self.lh.move_plate(
+      self.plate, self.plt_car[1], pickup_distance_from_top=5.2 - 3.33
+    )
 
     # pickup
     self._assert_command_sent_once(

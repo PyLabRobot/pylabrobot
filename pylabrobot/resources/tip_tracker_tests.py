@@ -1,7 +1,11 @@
 import unittest
 
 from pylabrobot.resources.tip import Tip
-from pylabrobot.resources.tip_tracker import TipTracker, HasTipError, NoTipError
+from pylabrobot.resources.tip_tracker import (
+  TipTracker,
+  HasTipError,
+  NoTipError,
+)
 
 
 class TestTipTracker(unittest.TestCase):
@@ -9,7 +13,12 @@ class TestTipTracker(unittest.TestCase):
 
   def setUp(self) -> None:
     super().setUp()
-    self.tip = Tip(has_filter=False, total_tip_length=10, maximal_volume=10, fitting_depth=10)
+    self.tip = Tip(
+      has_filter=False,
+      total_tip_length=10,
+      maximal_volume=10,
+      fitting_depth=10,
+    )
 
   def test_init(self):
     tracker = TipTracker(thing="tester")

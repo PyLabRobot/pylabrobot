@@ -77,7 +77,9 @@ class PumpCalibration:
       if num_items is None:
         raise ValueError("num_items must be specified if calibration is a value.")
       return PumpCalibration.load_from_value(
-        value=calibration, num_items=num_items, calibration_mode=calibration_mode
+        value=calibration,
+        num_items=num_items,
+        calibration_mode=calibration_mode,
       )
     if isinstance(calibration, str):
       if calibration.endswith(".json"):
@@ -92,11 +94,17 @@ class PumpCalibration:
     raise NotImplementedError("Calibration format not supported.")
 
   def serialize(self) -> dict:
-    return {"calibration": self.calibration, "calibration_mode": self.calibration_mode}
+    return {
+      "calibration": self.calibration,
+      "calibration_mode": self.calibration_mode,
+    }
 
   @classmethod
   def deserialize(cls, data: dict) -> PumpCalibration:
-    return cls(calibration=data["calibration"], calibration_mode=data["calibration_mode"])
+    return cls(
+      calibration=data["calibration"],
+      calibration_mode=data["calibration_mode"],
+    )
 
   @classmethod
   def load_from_json(

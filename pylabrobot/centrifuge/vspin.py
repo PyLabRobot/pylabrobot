@@ -95,13 +95,17 @@ class VSpin(CentrifugeBackend):
 
     await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+    await self.send(
+      b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07"
+    )
     await self.send(b"\xaa\x01\x17\x04\x1c")
     await self.send(b"\xaa\x01\x17\x01\x19")
 
     await self.send(b"\xaa\x01\x0b\x0c")
     await self.send(b"\xaa\x01\x00\x01")
-    await self.send(b"\xaa\x01\xe6\x05\x00\x64\x00\x00\x00\x00\x00\x32\x00\xe8\x03\x01\x00\x6e")
+    await self.send(
+      b"\xaa\x01\xe6\x05\x00\x64\x00\x00\x00\x00\x00\x32\x00\xe8\x03\x01\x00\x6e"
+    )
     await self.send(b"\xaa\x01\x94\xb6\x12\x83\x00\x00\x12\x01\x00\x00\xf3")
     await self.send(b"\xaa\x01\x19\x28\x42")
     await self.send(b"\xaa\x01\x0e\x0f")
@@ -117,15 +121,21 @@ class VSpin(CentrifugeBackend):
 
     await self.send(b"\xaa\x01\x17\x02\x1a")
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+    await self.send(
+      b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07"
+    )
     await self.send(b"\xaa\x01\x17\x04\x1c")
     await self.send(b"\xaa\x01\x17\x01\x19")
 
     await self.send(b"\xaa\x01\x0b\x0c")
     await self.send(b"\xaa\x01\x0e\x0f")
-    await self.send(b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07")
+    await self.send(
+      b"\xaa\x01\xe6\xc8\x00\xb0\x04\x96\x00\x0f\x00\x4b\x00\xa0\x0f\x05\x00\x07"
+    )
     new_position = (self.homing_position + 8000).to_bytes(4, byteorder="little")
-    await self.send(b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49")
+    await self.send(
+      b"\xaa\x01\xd4\x97" + new_position + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00\x49"
+    )
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x0e\x0f")
 
@@ -288,7 +298,9 @@ class VSpin(CentrifugeBackend):
     await self.lock_door()
 
     position_bytes = position.to_bytes(4, byteorder="little")
-    byte_string = b"\xaa\x01\xd4\x97" + position_bytes + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
+    byte_string = (
+      b"\xaa\x01\xd4\x97" + position_bytes + b"\xc3\xf5\x28\x00\xd7\x1a\x00\x00"
+    )
     sum_byte = (sum(byte_string) - 0xAA) & 0xFF
     byte_string += sum_byte.to_bytes(1, byteorder="little")
     move_bucket = [
@@ -343,7 +355,10 @@ class VSpin(CentrifugeBackend):
     base = int(107007 - 328 * rpm + 1.13 * (rpm**2))
     rpm_b = (int(4481 * rpm + 10852)).to_bytes(4, byteorder="little")
     acc = (int(915 * acceleration / 100)).to_bytes(2, byteorder="little")
-    maxp = min((await self.get_position() + base + 4000 * rpm // 30 * duration), 4294967294)
+    maxp = min(
+      (await self.get_position() + base + 4000 * rpm // 30 * duration),
+      4294967294,
+    )
     position = maxp.to_bytes(4, byteorder="little")
 
     byte_string = b"\xaa\x01\xd4\x97" + position + rpm_b + acc + b"\x00\x00"

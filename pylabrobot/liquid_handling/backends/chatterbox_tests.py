@@ -4,7 +4,11 @@ from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.chatterbox import (
   LiquidHandlerChatterboxBackend,
 )
-from pylabrobot.resources import Cor_96_wellplate_360ul_Fb, HTF_L, Coordinate
+from pylabrobot.resources import (
+  Cor_96_wellplate_360ul_Fb,
+  HTF_L,
+  Coordinate,
+)
 from pylabrobot.resources.hamilton import STARLetDeck
 
 

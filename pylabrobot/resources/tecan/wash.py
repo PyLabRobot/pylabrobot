@@ -5,7 +5,11 @@
 # pylint: disable=line-too-long
 
 from typing import List, Optional
-from pylabrobot.resources.carrier import Carrier, CarrierSite, create_carrier_sites
+from pylabrobot.resources.carrier import (
+  Carrier,
+  CarrierSite,
+  create_carrier_sites,
+)
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
@@ -26,7 +30,15 @@ class TecanWashStation(Carrier, TecanResource):
     category="tecan_wash_station",
     model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, sites, category=category, model=model)
+    super().__init__(
+      name,
+      size_x,
+      size_y,
+      size_z,
+      sites,
+      category=category,
+      model=model,
+    )
 
     self.off_x: float = off_x
     self.off_y: float = off_y

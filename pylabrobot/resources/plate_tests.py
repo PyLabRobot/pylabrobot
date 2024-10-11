@@ -11,7 +11,14 @@ from .well import Well
 class TestLid(unittest.TestCase):
   def test_initialize_with_lid(self):
     lid = Lid("plate_lid", size_x=1, size_y=1, size_z=10, nesting_z_height=10)
-    plate = Plate("plate", size_x=1, size_y=1, size_z=15, ordered_items={}, lid=lid)
+    plate = Plate(
+      "plate",
+      size_x=1,
+      size_y=1,
+      size_z=15,
+      ordered_items={},
+      lid=lid,
+    )
     plate.location = Coordinate.zero()
 
     assert plate.lid is not None

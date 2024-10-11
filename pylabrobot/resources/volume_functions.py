@@ -1,5 +1,9 @@
 def calculate_liquid_volume_container_2segments_square_vbottom(
-  x: float, y: float, h_pyramid: float, h_cube: float, liquid_height: float
+  x: float,
+  y: float,
+  h_pyramid: float,
+  h_cube: float,
+  liquid_height: float,
 ) -> float:
   """
   This function is deprecated. Please use the equivalent function in

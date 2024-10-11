@@ -24,7 +24,9 @@ class Cytation5Backend(PlateReaderBackend):
     super().__init__()
     self.timeout = timeout
     if not USE_FTDI:
-      raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
+      raise RuntimeError(
+        "pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`."
+      )
 
     self.dev = Device(lazy_open=True)
 
@@ -252,7 +254,9 @@ class Cytation5Backend(PlateReaderBackend):
       shaking has started."""
       resp = await self.send_command("y", wait_for_char=b"\x06")
       assert resp == b"\x06"
-      await self.send_command(b"08120112207434014351135308559127881422\x03", purge=False)
+      await self.send_command(
+        b"08120112207434014351135308559127881422\x03", purge=False
+      )
 
       resp = await self.send_command("D", wait_for_char=b"\x06")
       assert resp == b"\x06"

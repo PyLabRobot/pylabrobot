@@ -40,7 +40,11 @@ class PetriDish(Container):
     for key in ["size_x", "size_y", "size_z"]:
       del super_serialized[key]
 
-    return {**super_serialized, "diameter": self.diameter, "height": self.height}
+    return {
+      **super_serialized,
+      "diameter": self.diameter,
+      "height": self.height,
+    }
 
 
 class PetriDishHolder(Resource):
@@ -64,7 +68,12 @@ class PetriDishHolder(Resource):
       model=model,
     )
 
-  def assign_child_resource(self, resource: Resource, location: Coordinate, reassign: bool = True):
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Coordinate,
+    reassign: bool = True,
+  ):
     """Can only assign a single PetriDish"""
     if not isinstance(resource, PetriDish):
       raise TypeError("Can only assign PetriDish to PetriDishHolder")

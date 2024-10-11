@@ -3,10 +3,15 @@
 from typing import Dict, Tuple, Optional
 
 from pylabrobot.resources.liquid import Liquid
-from pylabrobot.liquid_handling.liquid_classes.hamilton.base import HamiltonLiquidClass
+from pylabrobot.liquid_handling.liquid_classes.hamilton.base import (
+  HamiltonLiquidClass,
+)
 
 
-vantage_mapping: Dict[Tuple[int, bool, bool, bool, Liquid, bool, bool], HamiltonLiquidClass] = {}
+vantage_mapping: Dict[
+  Tuple[int, bool, bool, bool, Liquid, bool, bool],
+  HamiltonLiquidClass,
+] = {}
 
 
 def get_vantage_liquid_class(
@@ -46,7 +51,10 @@ def get_vantage_liquid_class(
     }.get(tip_volume, tip_volume)
   )
 
-  return vantage_mapping.get((tip_volume, is_core, is_tip, has_filter, liquid, jet, blow_out), None)
+  return vantage_mapping.get(
+    (tip_volume, is_core, is_tip, has_filter, liquid, jet, blow_out),
+    None,
+  )
 
 
 vantage_mapping[(1000, False, False, False, Liquid.WATER, True, True)] = (
@@ -85,7 +93,14 @@ vantage_mapping[(1000, False, False, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(1000, False, False, False, Liquid.WATER, True, False)] = (
   _1000ulNeedleCRWater_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={500.0: 520.0, 50.0: 62.2, 0.0: 0.0, 20.0: 32.0, 100.0: 115.5, 1000.0: 1032.0},
+  curve={
+    500.0: 520.0,
+    50.0: 62.2,
+    0.0: 0.0,
+    20.0: 32.0,
+    100.0: 115.5,
+    1000.0: 1032.0,
+  },
   aspiration_flow_rate=500.0,
   aspiration_mix_flow_rate=500.0,
   aspiration_air_transport_volume=0.0,
@@ -110,7 +125,13 @@ vantage_mapping[(1000, False, False, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(1000, False, False, False, Liquid.WATER, False, True)] = (
   _1000ulNeedleCRWater_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={50.0: 59.0, 0.0: 0.0, 20.0: 25.9, 10.0: 12.9, 1000.0: 1000.0},
+  curve={
+    50.0: 59.0,
+    0.0: 0.0,
+    20.0: 25.9,
+    10.0: 12.9,
+    1000.0: 1000.0,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=1.0,
@@ -135,7 +156,13 @@ vantage_mapping[(1000, False, False, False, Liquid.WATER, False, True)] = (
 vantage_mapping[(1000, False, False, False, Liquid.WATER, False, False)] = (
   _1000ulNeedleCRWater_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={50.0: 55.0, 0.0: 0.0, 20.0: 25.9, 10.0: 12.9, 1000.0: 1000.0},
+  curve={
+    50.0: 55.0,
+    0.0: 0.0,
+    20.0: 25.9,
+    10.0: 12.9,
+    1000.0: 1000.0,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=1.0,
@@ -244,7 +271,14 @@ vantage_mapping[(1000, False, False, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(10, False, False, False, Liquid.WATER, False, True)] = (
   _10ulNeedleCRWater_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.7, 0.5: 0.5, 0.0: 0.0, 1.0: 1.2, 2.0: 2.4, 10.0: 11.4},
+  curve={
+    5.0: 5.7,
+    0.5: 0.5,
+    0.0: 0.0,
+    1.0: 1.2,
+    2.0: 2.4,
+    10.0: 11.4,
+  },
   aspiration_flow_rate=60.0,
   aspiration_mix_flow_rate=60.0,
   aspiration_air_transport_volume=1.0,
@@ -268,7 +302,14 @@ vantage_mapping[(10, False, False, False, Liquid.WATER, False, True)] = (
 vantage_mapping[(10, False, False, False, Liquid.WATER, False, False)] = (
   _10ulNeedleCRWater_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.7, 0.5: 0.5, 0.0: 0.0, 1.0: 1.2, 2.0: 2.4, 10.0: 11.4},
+  curve={
+    5.0: 5.7,
+    0.5: 0.5,
+    0.0: 0.0,
+    1.0: 1.2,
+    2.0: 2.4,
+    10.0: 11.4,
+  },
   aspiration_flow_rate=60.0,
   aspiration_mix_flow_rate=60.0,
   aspiration_air_transport_volume=1.0,
@@ -340,7 +381,15 @@ vantage_mapping[(50, False, True, True, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, False, True, True, Liquid.DMSO, False, True)] = (
   _150ul_Piercing_Tip_Filter_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={3.0: 4.5, 5.0: 6.5, 150.0: 155.0, 50.0: 53.7, 0.0: 0.0, 10.0: 12.0, 2.0: 3.0},
+  curve={
+    3.0: 4.5,
+    5.0: 6.5,
+    150.0: 155.0,
+    50.0: 53.7,
+    0.0: 0.0,
+    10.0: 12.0,
+    2.0: 3.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -423,7 +472,15 @@ vantage_mapping[(50, False, True, True, Liquid.ETHANOL, True, True)] = (
 vantage_mapping[(50, False, True, True, Liquid.ETHANOL, False, True)] = (
   _150ul_Piercing_Tip_Filter_Ethanol_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={3.0: 5.0, 5.0: 7.6, 150.0: 165.0, 50.0: 56.9, 0.0: 0.0, 10.0: 13.2, 2.0: 3.3},
+  curve={
+    3.0: 5.0,
+    5.0: 7.6,
+    150.0: 165.0,
+    50.0: 56.9,
+    0.0: 0.0,
+    10.0: 13.2,
+    2.0: 3.3,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=7.0,
@@ -558,7 +615,15 @@ vantage_mapping[(50, False, True, True, Liquid.SERUM, True, True)] = (
 vantage_mapping[(50, False, True, True, Liquid.SERUM, False, True)] = (
   _150ul_Piercing_Tip_Filter_Serum_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={3.0: 3.4, 5.0: 5.9, 150.0: 161.5, 50.0: 56.2, 0.0: 0.0, 10.0: 11.6, 2.0: 2.2},
+  curve={
+    3.0: 3.4,
+    5.0: 5.9,
+    150.0: 161.5,
+    50.0: 56.2,
+    0.0: 0.0,
+    10.0: 11.6,
+    2.0: 2.2,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=0.0,
@@ -696,7 +761,15 @@ vantage_mapping[(50, False, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, False, True, False, Liquid.DMSO, False, True)] = (
   _250ul_Piercing_Tip_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={3.0: 4.2, 5.0: 6.5, 250.0: 256.0, 50.0: 53.7, 0.0: 0.0, 10.0: 12.0, 2.0: 3.0},
+  curve={
+    3.0: 4.2,
+    5.0: 6.5,
+    250.0: 256.0,
+    50.0: 53.7,
+    0.0: 0.0,
+    10.0: 12.0,
+    2.0: 3.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -779,7 +852,14 @@ vantage_mapping[(50, False, True, False, Liquid.ETHANOL, True, True)] = (
 vantage_mapping[(50, False, True, False, Liquid.ETHANOL, False, True)] = (
   _250ul_Piercing_Tip_Ethanol_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={3.0: 5.0, 5.0: 9.6, 250.0: 270.5, 50.0: 58.0, 0.0: 0.0, 10.0: 14.8},
+  curve={
+    3.0: 5.0,
+    5.0: 9.6,
+    250.0: 270.5,
+    50.0: 58.0,
+    0.0: 0.0,
+    10.0: 14.8,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=10.0,
@@ -822,7 +902,15 @@ vantage_mapping[(50, False, True, False, Liquid.ETHANOL, False, True)] = (
 vantage_mapping[(50, False, True, False, Liquid.GLYCERIN80, False, True)] = (
   _250ul_Piercing_Tip_Glycerin80_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={3.0: 4.5, 5.0: 7.2, 250.0: 289.0, 50.0: 65.0, 0.0: 0.0, 1.0: 2.7, 10.0: 13.9},
+  curve={
+    3.0: 4.5,
+    5.0: 7.2,
+    250.0: 289.0,
+    50.0: 65.0,
+    0.0: 0.0,
+    1.0: 2.7,
+    10.0: 13.9,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=0.0,
@@ -905,7 +993,14 @@ vantage_mapping[(50, False, True, False, Liquid.SERUM, True, True)] = (
 vantage_mapping[(50, False, True, False, Liquid.SERUM, False, True)] = (
   _250ul_Piercing_Tip_Serum_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={3.0: 3.4, 5.0: 5.9, 250.0: 264.2, 50.0: 56.2, 0.0: 0.0, 10.0: 11.6},
+  curve={
+    3.0: 3.4,
+    5.0: 5.9,
+    250.0: 264.2,
+    50.0: 56.2,
+    0.0: 0.0,
+    10.0: 11.6,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=0.0,
@@ -1009,10 +1104,17 @@ vantage_mapping[(50, False, True, False, Liquid.WATER, False, True)] = (
 #     100                       1.04                   0.05
 #     300                       0.63                  -0.07
 #
-vantage_mapping[(300, False, False, False, Liquid.ACETONITRIL80WATER20, True, False)] = (
-  _300ulNeedleAcetonitril80Water20DispenseJet
-) = HamiltonLiquidClass(
-  curve={300.0: 310.0, 50.0: 57.8, 0.0: 0.0, 100.0: 106.5, 20.0: 26.8, 10.0: 16.5},
+vantage_mapping[
+  (300, False, False, False, Liquid.ACETONITRIL80WATER20, True, False)
+] = _300ulNeedleAcetonitril80Water20DispenseJet = HamiltonLiquidClass(
+  curve={
+    300.0: 310.0,
+    50.0: 57.8,
+    0.0: 0.0,
+    100.0: 106.5,
+    20.0: 26.8,
+    10.0: 16.5,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=15.0,
@@ -1036,7 +1138,13 @@ vantage_mapping[(300, False, False, False, Liquid.ACETONITRIL80WATER20, True, Fa
 vantage_mapping[(300, False, False, False, Liquid.WATER, True, True)] = (
   _300ulNeedleCRWater_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.0, 50.0: 53.5, 0.0: 0.0, 100.0: 104.0, 20.0: 22.3},
+  curve={
+    300.0: 313.0,
+    50.0: 53.5,
+    0.0: 0.0,
+    100.0: 104.0,
+    20.0: 22.3,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -1060,7 +1168,13 @@ vantage_mapping[(300, False, False, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, False, False, False, Liquid.WATER, True, False)] = (
   _300ulNeedleCRWater_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.0, 50.0: 59.5, 0.0: 0.0, 100.0: 109.0, 20.0: 29.3},
+  curve={
+    300.0: 313.0,
+    50.0: 59.5,
+    0.0: 0.0,
+    100.0: 109.0,
+    20.0: 29.3,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -1170,7 +1284,13 @@ vantage_mapping[(300, False, False, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(300, False, False, False, Liquid.DIMETHYLSULFOXID, True, False)] = (
   _300ulNeedleDMSODispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 317.0, 50.0: 53.5, 0.0: 0.0, 100.0: 106.5, 20.0: 21.3},
+  curve={
+    300.0: 317.0,
+    50.0: 53.5,
+    0.0: 0.0,
+    100.0: 106.5,
+    20.0: 21.3,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -1211,7 +1331,14 @@ vantage_mapping[(300, False, False, False, Liquid.DIMETHYLSULFOXID, True, False)
 vantage_mapping[(300, False, False, False, Liquid.DIMETHYLSULFOXID, False, False)] = (
   _300ulNeedleDMSODispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.0, 50.0: 52.3, 0.0: 0.0, 20.0: 22.3, 10.0: 11.4, 2.0: 2.5},
+  curve={
+    5.0: 6.0,
+    50.0: 52.3,
+    0.0: 0.0,
+    20.0: 22.3,
+    10.0: 11.4,
+    2.0: 2.5,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=5.0,
@@ -1252,7 +1379,13 @@ vantage_mapping[(300, False, False, False, Liquid.DIMETHYLSULFOXID, False, False
 vantage_mapping[(300, False, False, False, Liquid.ETHANOL, True, False)] = (
   _300ulNeedleEtOHDispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 317.0, 50.0: 57.8, 0.0: 0.0, 100.0: 109.0, 20.0: 25.3},
+  curve={
+    300.0: 317.0,
+    50.0: 57.8,
+    0.0: 0.0,
+    100.0: 109.0,
+    20.0: 25.3,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=15.0,
@@ -1387,7 +1520,13 @@ vantage_mapping[(300, False, False, False, Liquid.GLYCERIN80, False, False)] = (
 vantage_mapping[(300, False, False, False, Liquid.SERUM, True, False)] = (
   _300ulNeedleSerumDispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.0, 50.0: 53.5, 0.0: 0.0, 100.0: 105.0, 20.0: 21.3},
+  curve={
+    300.0: 313.0,
+    50.0: 53.5,
+    0.0: 0.0,
+    100.0: 105.0,
+    20.0: 21.3,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -1430,7 +1569,15 @@ vantage_mapping[(300, False, False, False, Liquid.SERUM, True, False)] = (
 vantage_mapping[(300, False, False, False, Liquid.SERUM, False, False)] = (
   _300ulNeedleSerumDispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.0, 50.0: 52.3, 0.0: 0.0, 20.0: 22.3, 1.0: 2.2, 10.0: 11.9, 2.0: 3.2},
+  curve={
+    5.0: 6.0,
+    50.0: 52.3,
+    0.0: 0.0,
+    20.0: 22.3,
+    1.0: 2.2,
+    10.0: 11.9,
+    2.0: 3.2,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=0.0,
@@ -1470,7 +1617,13 @@ vantage_mapping[(300, False, False, False, Liquid.SERUM, False, False)] = (
 vantage_mapping[(300, False, False, False, Liquid.SERUM, True, False)] = (
   _300ulNeedle_Serum_DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.0, 50.0: 53.5, 0.0: 0.0, 100.0: 105.0, 20.0: 21.3},
+  curve={
+    300.0: 313.0,
+    50.0: 53.5,
+    0.0: 0.0,
+    100.0: 105.0,
+    20.0: 21.3,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -1563,7 +1716,13 @@ vantage_mapping[(300, False, False, False, Liquid.SERUM, False, False)] = (
 vantage_mapping[(300, False, False, False, Liquid.WATER, True, False)] = (
   _300ulNeedle_Water_DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.0, 50.0: 53.5, 0.0: 0.0, 100.0: 105.0, 20.0: 22.3},
+  curve={
+    300.0: 313.0,
+    50.0: 53.5,
+    0.0: 0.0,
+    100.0: 105.0,
+    20.0: 22.3,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -1641,7 +1800,14 @@ vantage_mapping[(300, False, False, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
   _300ul_RocketTip_384COREHead_DMSO_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 150.0: 150.0, 50.0: 50.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    150.0: 150.0,
+    50.0: 50.0,
+    0.0: 0.0,
+    100.0: 100.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -1666,7 +1832,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = (
   _300ul_RocketTip_384COREHead_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 303.5, 0.0: 0.0, 100.0: 105.8, 200.0: 209.5, 10.0: 11.4},
+  curve={
+    300.0: 303.5,
+    0.0: 0.0,
+    100.0: 105.8,
+    200.0: 209.5,
+    10.0: 11.4,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -1691,7 +1863,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, False, True)] = (
   _300ul_RocketTip_384COREHead_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 308.0, 0.0: 0.0, 100.0: 105.5, 200.0: 209.0, 10.0: 12.0},
+  curve={
+    300.0: 308.0,
+    0.0: 0.0,
+    100.0: 105.5,
+    200.0: 209.0,
+    10.0: 12.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -1716,7 +1894,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
   _300ul_RocketTip_384COREHead_Water_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.0, 0.0: 0.0, 100.0: 106.5, 20.0: 22.3, 200.0: 207.0},
+  curve={
+    300.0: 309.0,
+    0.0: 0.0,
+    100.0: 106.5,
+    20.0: 22.3,
+    200.0: 207.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -1741,7 +1925,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
   _300ul_RocketTip_384COREHead_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.0, 0.0: 0.0, 100.0: 106.5, 20.0: 22.3, 200.0: 207.0},
+  curve={
+    300.0: 309.0,
+    0.0: 0.0,
+    100.0: 106.5,
+    20.0: 22.3,
+    200.0: 207.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -1766,7 +1956,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, False, True)] = (
   _300ul_RocketTip_384COREHead_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 314.3, 0.0: 0.0, 100.0: 109.0, 200.0: 214.7, 10.0: 12.7},
+  curve={
+    300.0: 314.3,
+    0.0: 0.0,
+    100.0: 109.0,
+    200.0: 214.7,
+    10.0: 12.7,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -2395,7 +2591,14 @@ vantage_mapping[(50, True, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.DMSO, False, True)] = (
   _50ulTip_384COREHead_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.0, 50.0: 51.1, 30.0: 30.7, 0.0: 0.0, 1.0: 0.9, 10.0: 10.1},
+  curve={
+    5.0: 5.0,
+    50.0: 51.1,
+    30.0: 30.7,
+    0.0: 0.0,
+    1.0: 0.9,
+    10.0: 10.1,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -2419,7 +2622,14 @@ vantage_mapping[(50, True, True, False, Liquid.DMSO, False, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.ETHANOL, True, True)] = (
   _50ulTip_384COREHead_EtOH_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.54, 15.0: 18.36, 50.0: 53.0, 30.0: 33.8, 0.0: 0.0, 1.0: 1.8},
+  curve={
+    5.0: 6.54,
+    15.0: 18.36,
+    50.0: 53.0,
+    30.0: 33.8,
+    0.0: 0.0,
+    1.0: 1.8,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=1.0,
@@ -2443,7 +2653,15 @@ vantage_mapping[(50, True, True, False, Liquid.ETHANOL, True, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.ETHANOL, False, True)] = (
   _50ulTip_384COREHead_EtOH_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.2, 15.0: 16.9, 0.5: 1.0, 50.0: 54.0, 30.0: 33.1, 0.0: 0.0, 1.0: 1.5},
+  curve={
+    5.0: 6.2,
+    15.0: 16.9,
+    0.5: 1.0,
+    50.0: 54.0,
+    30.0: 33.1,
+    0.0: 0.0,
+    1.0: 1.5,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=2.0,
@@ -2467,7 +2685,15 @@ vantage_mapping[(50, True, True, False, Liquid.ETHANOL, False, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.GLYCERIN80, False, True)] = (
   _50ulTip_384COREHead_Glycerin80_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 0.5: 0.65, 50.0: 55.0, 0.0: 0.0, 30.0: 31.5, 1.0: 1.2, 10.0: 10.9},
+  curve={
+    5.0: 5.6,
+    0.5: 0.65,
+    50.0: 55.0,
+    0.0: 0.0,
+    30.0: 31.5,
+    1.0: 1.2,
+    10.0: 10.9,
+  },
   aspiration_flow_rate=30.0,
   aspiration_mix_flow_rate=30.0,
   aspiration_air_transport_volume=0.0,
@@ -2515,7 +2741,14 @@ vantage_mapping[(50, True, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.WATER, False, True)] = (
   _50ulTip_384COREHead_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.5, 50.0: 52.2, 30.0: 31.5, 0.0: 0.0, 1.0: 1.2, 10.0: 11.3},
+  curve={
+    5.0: 5.5,
+    50.0: 52.2,
+    30.0: 31.5,
+    0.0: 0.0,
+    1.0: 1.2,
+    10.0: 11.3,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -2573,7 +2806,15 @@ vantage_mapping[(50, True, True, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(50, True, True, False, Liquid.DMSO, True, True)] = (
   _50ulTip_conductive_384COREHead_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.2, 50.0: 50.6, 30.0: 30.4, 0.0: 0.0, 1.0: 0.9, 20.0: 21.1, 10.0: 9.3},
+  curve={
+    5.0: 5.2,
+    50.0: 50.6,
+    30.0: 30.4,
+    0.0: 0.0,
+    1.0: 0.9,
+    20.0: 21.1,
+    10.0: 9.3,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -2597,7 +2838,15 @@ vantage_mapping[(50, True, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.DMSO, True, True)] = (
   _50ulTip_conductive_384COREHead_DMSO_DispenseJet_Empty_below5ul
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.2, 50.0: 50.6, 30.0: 30.4, 0.0: 0.0, 1.0: 0.9, 20.0: 21.1, 10.0: 9.3},
+  curve={
+    5.0: 5.2,
+    50.0: 50.6,
+    30.0: 30.4,
+    0.0: 0.0,
+    1.0: 0.9,
+    20.0: 21.1,
+    10.0: 9.3,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -3478,7 +3727,13 @@ vantage_mapping[(1000, False, False, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(1000, False, False, False, Liquid.WATER, False, False)] = (
   HighNeedle_Water_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={50.0: 53.1, 0.0: 0.0, 20.0: 22.3, 1000.0: 1000.0, 10.0: 10.8},
+  curve={
+    50.0: 53.1,
+    0.0: 0.0,
+    20.0: 22.3,
+    1000.0: 1000.0,
+    10.0: 10.8,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=5.0,
@@ -3502,7 +3757,13 @@ vantage_mapping[(1000, False, False, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(1000, False, False, False, Liquid.WATER, False, True)] = (
   HighNeedle_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={50.0: 53.1, 0.0: 0.0, 20.0: 22.3, 1000.0: 1000.0, 10.0: 10.8},
+  curve={
+    50.0: 53.1,
+    0.0: 0.0,
+    20.0: 22.3,
+    1000.0: 1000.0,
+    10.0: 10.8,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=5.0,
@@ -3526,7 +3787,13 @@ vantage_mapping[(1000, False, False, False, Liquid.WATER, False, True)] = (
 vantage_mapping[(1000, False, False, False, Liquid.WATER, False, False)] = (
   HighNeedle_Water_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={50.0: 53.1, 0.0: 0.0, 20.0: 22.3, 1000.0: 1000.0, 10.0: 10.8},
+  curve={
+    50.0: 53.1,
+    0.0: 0.0,
+    20.0: 22.3,
+    1000.0: 1000.0,
+    10.0: 10.8,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=5.0,
@@ -3715,7 +3982,13 @@ vantage_mapping[(1000, False, True, False, Liquid.BLOOD, True, False)] = (
 vantage_mapping[(1000, True, True, True, Liquid.DMSO, True, True)] = (
   HighVolumeFilter_96COREHead1000ul_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 508.2, 0.0: 0.0, 20.0: 21.7, 100.0: 101.7, 1000.0: 1017.0},
+  curve={
+    500.0: 508.2,
+    0.0: 0.0,
+    20.0: 21.7,
+    100.0: 101.7,
+    1000.0: 1017.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -3739,7 +4012,13 @@ vantage_mapping[(1000, True, True, True, Liquid.DMSO, True, True)] = (
 vantage_mapping[(1000, True, True, True, Liquid.DMSO, False, True)] = (
   HighVolumeFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 512.5, 0.0: 0.0, 100.0: 105.8, 10.0: 12.7, 1000.0: 1024.5},
+  curve={
+    500.0: 512.5,
+    0.0: 0.0,
+    100.0: 105.8,
+    10.0: 12.7,
+    1000.0: 1024.5,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=0.0,
@@ -3763,7 +4042,13 @@ vantage_mapping[(1000, True, True, True, Liquid.DMSO, False, True)] = (
 vantage_mapping[(1000, True, True, True, Liquid.WATER, True, True)] = (
   HighVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 524.0, 0.0: 0.0, 20.0: 24.0, 100.0: 109.2, 1000.0: 1040.0},
+  curve={
+    500.0: 524.0,
+    0.0: 0.0,
+    20.0: 24.0,
+    100.0: 109.2,
+    1000.0: 1040.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -3787,7 +4072,13 @@ vantage_mapping[(1000, True, True, True, Liquid.WATER, True, True)] = (
 vantage_mapping[(1000, True, True, True, Liquid.WATER, False, True)] = (
   HighVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 522.0, 0.0: 0.0, 100.0: 108.3, 1000.0: 1034.0, 10.0: 12.5},
+  curve={
+    500.0: 522.0,
+    0.0: 0.0,
+    100.0: 108.3,
+    1000.0: 1034.0,
+    10.0: 12.5,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=5.0,
@@ -3931,7 +4222,13 @@ vantage_mapping[(1000, False, True, True, Liquid.DMSO, True, True)] = (
 vantage_mapping[(1000, False, True, True, Liquid.DMSO, True, False)] = (
   HighVolumeFilter_DMSO_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={500.0: 517.2, 0.0: 0.0, 100.0: 109.5, 20.0: 27.0, 1000.0: 1027.0},
+  curve={
+    500.0: 517.2,
+    0.0: 0.0,
+    100.0: 109.5,
+    20.0: 27.0,
+    1000.0: 1027.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -4560,7 +4857,13 @@ vantage_mapping[(1000, False, True, True, Liquid.SERUM, True, True)] = (
 vantage_mapping[(1000, False, True, True, Liquid.SERUM, True, False)] = (
   HighVolumeFilter_Serum_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={500.0: 525.3, 0.0: 0.0, 100.0: 111.3, 20.0: 27.3, 1000.0: 1046.6},
+  curve={
+    500.0: 525.3,
+    0.0: 0.0,
+    100.0: 111.3,
+    20.0: 27.3,
+    1000.0: 1046.6,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -4651,7 +4954,14 @@ vantage_mapping[(1000, False, True, True, Liquid.SERUM, False, True)] = (
 vantage_mapping[(1000, False, True, True, Liquid.SERUM, False, False)] = (
   HighVolumeFilter_Serum_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={500.0: 523.5, 0.0: 0.0, 100.0: 111.2, 20.0: 23.2, 1000.0: 1038.7, 10.0: 11.8},
+  curve={
+    500.0: 523.5,
+    0.0: 0.0,
+    100.0: 111.2,
+    20.0: 23.2,
+    1000.0: 1038.7,
+    10.0: 11.8,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=5.0,
@@ -4944,7 +5254,13 @@ vantage_mapping[(1000, False, True, True, Liquid.WATER, False, False)] = (
 vantage_mapping[(1000, True, True, False, Liquid.DMSO, True, False)] = (
   HighVolume_96COREHead1000ul_DMSO_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={500.0: 524.0, 0.0: 0.0, 100.0: 107.2, 20.0: 24.0, 1000.0: 1025.0},
+  curve={
+    500.0: 524.0,
+    0.0: 0.0,
+    100.0: 107.2,
+    20.0: 24.0,
+    1000.0: 1025.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -4968,7 +5284,13 @@ vantage_mapping[(1000, True, True, False, Liquid.DMSO, True, False)] = (
 vantage_mapping[(1000, True, True, False, Liquid.DMSO, True, True)] = (
   HighVolume_96COREHead1000ul_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 508.2, 0.0: 0.0, 100.0: 101.7, 20.0: 21.7, 1000.0: 1017.0},
+  curve={
+    500.0: 508.2,
+    0.0: 0.0,
+    100.0: 101.7,
+    20.0: 21.7,
+    1000.0: 1017.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -4992,7 +5314,13 @@ vantage_mapping[(1000, True, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(1000, True, True, False, Liquid.DMSO, False, True)] = (
   HighVolume_96COREHead1000ul_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 512.5, 0.0: 0.0, 100.0: 105.8, 1000.0: 1024.5, 10.0: 12.7},
+  curve={
+    500.0: 512.5,
+    0.0: 0.0,
+    100.0: 105.8,
+    1000.0: 1024.5,
+    10.0: 12.7,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=0.0,
@@ -5048,7 +5376,13 @@ vantage_mapping[(1000, True, True, False, Liquid.ETHANOL, True, False)] = (
 vantage_mapping[(1000, True, True, False, Liquid.ETHANOL, True, True)] = (
   HighVolume_96COREHead1000ul_EtOH_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 516.5, 0.0: 0.0, 100.0: 108.3, 20.0: 24.0, 1000.0: 1027.0},
+  curve={
+    500.0: 516.5,
+    0.0: 0.0,
+    100.0: 108.3,
+    20.0: 24.0,
+    1000.0: 1027.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -5073,7 +5407,13 @@ vantage_mapping[(1000, True, True, False, Liquid.ETHANOL, True, True)] = (
 vantage_mapping[(1000, True, True, False, Liquid.ETHANOL, False, True)] = (
   HighVolume_96COREHead1000ul_EtOH_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 516.5, 0.0: 0.0, 100.0: 107.0, 1000.0: 1027.0, 10.0: 14.0},
+  curve={
+    500.0: 516.5,
+    0.0: 0.0,
+    100.0: 107.0,
+    1000.0: 1027.0,
+    10.0: 14.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=150.0,
   aspiration_air_transport_volume=5.0,
@@ -5097,7 +5437,13 @@ vantage_mapping[(1000, True, True, False, Liquid.ETHANOL, False, True)] = (
 vantage_mapping[(1000, True, True, False, Liquid.GLYCERIN80, False, True)] = (
   HighVolume_96COREHead1000ul_Glycerin80_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 522.0, 0.0: 0.0, 100.0: 115.3, 1000.0: 1034.0, 10.0: 12.5},
+  curve={
+    500.0: 522.0,
+    0.0: 0.0,
+    100.0: 115.3,
+    1000.0: 1034.0,
+    10.0: 12.5,
+  },
   aspiration_flow_rate=150.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=0.0,
@@ -5121,7 +5467,13 @@ vantage_mapping[(1000, True, True, False, Liquid.GLYCERIN80, False, True)] = (
 vantage_mapping[(1000, True, True, False, Liquid.WATER, True, False)] = (
   HighVolume_96COREHead1000ul_Water_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={500.0: 524.0, 0.0: 0.0, 100.0: 107.2, 20.0: 24.0, 1000.0: 1025.0},
+  curve={
+    500.0: 524.0,
+    0.0: 0.0,
+    100.0: 107.2,
+    20.0: 24.0,
+    1000.0: 1025.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -5145,7 +5497,13 @@ vantage_mapping[(1000, True, True, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(1000, True, True, False, Liquid.WATER, True, True)] = (
   HighVolume_96COREHead1000ul_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 524.0, 0.0: 0.0, 100.0: 107.2, 20.0: 24.0, 1000.0: 1025.0},
+  curve={
+    500.0: 524.0,
+    0.0: 0.0,
+    100.0: 107.2,
+    20.0: 24.0,
+    1000.0: 1025.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -5169,7 +5527,13 @@ vantage_mapping[(1000, True, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(1000, True, True, False, Liquid.WATER, False, True)] = (
   HighVolume_96COREHead1000ul_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={500.0: 522.0, 0.0: 0.0, 100.0: 108.3, 1000.0: 1034.0, 10.0: 12.5},
+  curve={
+    500.0: 522.0,
+    0.0: 0.0,
+    100.0: 108.3,
+    1000.0: 1034.0,
+    10.0: 12.5,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=5.0,
@@ -5312,7 +5676,13 @@ vantage_mapping[(1000, False, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(1000, False, True, False, Liquid.DMSO, True, False)] = (
   HighVolume_DMSO_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={500.0: 520.2, 0.0: 0.0, 100.0: 112.0, 20.0: 27.0, 1000.0: 1031.0},
+  curve={
+    500.0: 520.2,
+    0.0: 0.0,
+    100.0: 112.0,
+    20.0: 27.0,
+    1000.0: 1031.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -5435,7 +5805,14 @@ vantage_mapping[(1000, False, True, False, Liquid.ETHANOL, True, True)] = (
 vantage_mapping[(1000, False, True, False, Liquid.ETHANOL, True, False)] = (
   HighVolume_EtOH_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={500.0: 529.0, 50.0: 62.9, 0.0: 0.0, 100.0: 114.5, 20.0: 27.8, 1000.0: 1053.9},
+  curve={
+    500.0: 529.0,
+    50.0: 62.9,
+    0.0: 0.0,
+    100.0: 114.5,
+    20.0: 27.8,
+    1000.0: 1053.9,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=5.0,
@@ -5692,7 +6069,13 @@ vantage_mapping[(1000, False, True, False, Liquid.SERUM, True, True)] = (
 vantage_mapping[(1000, False, True, False, Liquid.SERUM, True, False)] = (
   HighVolume_Serum_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={500.0: 525.3, 0.0: 0.0, 100.0: 111.3, 20.0: 27.3, 1000.0: 1046.6},
+  curve={
+    500.0: 525.3,
+    0.0: 0.0,
+    100.0: 111.3,
+    20.0: 27.3,
+    1000.0: 1046.6,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -5749,7 +6132,14 @@ vantage_mapping[(1000, False, True, False, Liquid.SERUM, False, True)] = (
 vantage_mapping[(1000, False, True, False, Liquid.SERUM, False, False)] = (
   HighVolume_Serum_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={50.0: 55.9, 0.0: 0.0, 100.0: 108.2, 20.0: 23.2, 1000.0: 1037.7, 10.0: 11.8},
+  curve={
+    50.0: 55.9,
+    0.0: 0.0,
+    100.0: 108.2,
+    20.0: 23.2,
+    1000.0: 1037.7,
+    10.0: 11.8,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=120.0,
   aspiration_air_transport_volume=5.0,
@@ -5841,7 +6231,13 @@ vantage_mapping[(1000, False, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(1000, False, True, False, Liquid.WATER, True, False)] = (
   HighVolume_Water_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={500.0: 521.7, 0.0: 0.0, 100.0: 109.6, 20.0: 26.9, 1000.0: 1040.0},
+  curve={
+    500.0: 521.7,
+    0.0: 0.0,
+    100.0: 109.6,
+    20.0: 26.9,
+    1000.0: 1040.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -6066,7 +6462,14 @@ vantage_mapping[(10, False, False, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(10, False, False, False, Liquid.WATER, True, True)] = (
   LowNeedle_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={70.0: 70.0, 50.0: 52.7, 30.0: 31.7, 0.0: 0.0, 20.0: 20.5, 10.0: 10.3},
+  curve={
+    70.0: 70.0,
+    50.0: 52.7,
+    30.0: 31.7,
+    0.0: 0.0,
+    20.0: 20.5,
+    10.0: 10.3,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=15.0,
@@ -6090,7 +6493,14 @@ vantage_mapping[(10, False, False, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(10, False, False, False, Liquid.WATER, True, False)] = (
   LowNeedle_Water_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={70.0: 70.0, 50.0: 52.7, 30.0: 31.7, 0.0: 0.0, 20.0: 20.5, 10.0: 10.3},
+  curve={
+    70.0: 70.0,
+    50.0: 52.7,
+    30.0: 31.7,
+    0.0: 0.0,
+    20.0: 20.5,
+    10.0: 10.3,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=15.0,
@@ -6313,7 +6723,15 @@ vantage_mapping[(10, True, True, True, Liquid.WATER, False, False)] = (
 vantage_mapping[(10, False, True, True, Liquid.DMSO, False, False)] = (
   LowVolumeFilter_DMSO_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.9, 0.5: 0.8, 15.0: 16.4, 0.0: 0.0, 1.0: 1.4, 2.0: 2.6, 10.0: 11.2},
+  curve={
+    5.0: 5.9,
+    0.5: 0.8,
+    15.0: 16.4,
+    0.0: 0.0,
+    1.0: 1.4,
+    2.0: 2.6,
+    10.0: 11.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -6337,7 +6755,14 @@ vantage_mapping[(10, False, True, True, Liquid.DMSO, False, False)] = (
 vantage_mapping[(10, False, True, True, Liquid.DMSO, False, True)] = (
   LowVolumeFilter_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.9, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 10.0, 2.0: 2.6},
+  curve={
+    5.0: 5.9,
+    0.5: 0.8,
+    0.0: 0.0,
+    1.0: 1.4,
+    10.0: 10.0,
+    2.0: 2.6,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -6386,7 +6811,14 @@ vantage_mapping[(10, False, True, True, Liquid.DMSO, False, False)] = (
 vantage_mapping[(10, False, True, True, Liquid.ETHANOL, False, False)] = (
   LowVolumeFilter_EtOH_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 8.4, 0.5: 1.9, 0.0: 0.0, 1.0: 2.7, 2.0: 4.1, 10.0: 13.0},
+  curve={
+    5.0: 8.4,
+    0.5: 1.9,
+    0.0: 0.0,
+    1.0: 2.7,
+    2.0: 4.1,
+    10.0: 13.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=2.0,
@@ -6459,7 +6891,15 @@ vantage_mapping[(10, False, True, True, Liquid.ETHANOL, False, False)] = (
 vantage_mapping[(10, False, True, True, Liquid.GLYCERIN, False, False)] = (
   LowVolumeFilter_Glycerin_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.5, 0.5: 1.4, 15.0: 17.0, 0.0: 0.0, 1.0: 2.0, 2.0: 3.2, 10.0: 11.8},
+  curve={
+    5.0: 6.5,
+    0.5: 1.4,
+    15.0: 17.0,
+    0.0: 0.0,
+    1.0: 2.0,
+    2.0: 3.2,
+    10.0: 11.8,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=10.0,
   aspiration_air_transport_volume=0.0,
@@ -6508,7 +6948,15 @@ vantage_mapping[(10, False, True, True, Liquid.GLYCERIN80, False, True)] = (
 vantage_mapping[(10, False, True, True, Liquid.WATER, False, False)] = (
   LowVolumeFilter_Water_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.0, 0.5: 0.8, 15.0: 16.7, 0.0: 0.0, 1.0: 1.4, 2.0: 2.6, 10.0: 11.5},
+  curve={
+    5.0: 6.0,
+    0.5: 0.8,
+    15.0: 16.7,
+    0.0: 0.0,
+    1.0: 1.4,
+    2.0: 2.6,
+    10.0: 11.5,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -6532,7 +6980,14 @@ vantage_mapping[(10, False, True, True, Liquid.WATER, False, False)] = (
 vantage_mapping[(10, False, True, True, Liquid.WATER, False, True)] = (
   LowVolumeFilter_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.0, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 10.0, 2.0: 2.6},
+  curve={
+    5.0: 6.0,
+    0.5: 0.8,
+    0.0: 0.0,
+    1.0: 1.4,
+    10.0: 10.0,
+    2.0: 2.6,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -6597,7 +7052,14 @@ vantage_mapping[(10, False, True, True, Liquid.WATER, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.PLASMA, False, False)] = (
   LowVolumePlasmaDispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.9, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.5, 2.0: 2.6},
+  curve={
+    5.0: 5.9,
+    0.5: 0.8,
+    0.0: 0.0,
+    1.0: 1.4,
+    10.0: 11.5,
+    2.0: 2.6,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -6621,7 +7083,14 @@ vantage_mapping[(10, False, True, False, Liquid.PLASMA, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.PLASMA, False, True)] = (
   LowVolumePlasmaDispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 0.5: 0.2, 0.0: 0.0, 1.0: 0.9, 10.0: 11.3, 2.0: 2.2},
+  curve={
+    5.0: 5.6,
+    0.5: 0.2,
+    0.0: 0.0,
+    1.0: 0.9,
+    10.0: 11.3,
+    2.0: 2.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -6686,7 +7155,14 @@ vantage_mapping[(10, False, True, False, Liquid.PLASMA, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.SERUM, False, False)] = (
   LowVolumeSerumDispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 0.5: 0.2, 0.0: 0.0, 1.0: 0.9, 10.0: 11.3, 2.0: 2.2},
+  curve={
+    5.0: 5.6,
+    0.5: 0.2,
+    0.0: 0.0,
+    1.0: 0.9,
+    10.0: 11.3,
+    2.0: 2.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -6710,7 +7186,14 @@ vantage_mapping[(10, False, True, False, Liquid.SERUM, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.SERUM, False, True)] = (
   LowVolumeSerumDispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 0.5: 0.2, 0.0: 0.0, 1.0: 0.9, 10.0: 11.3, 2.0: 2.2},
+  curve={
+    5.0: 5.6,
+    0.5: 0.2,
+    0.0: 0.0,
+    1.0: 0.9,
+    10.0: 11.3,
+    2.0: 2.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -6903,7 +7386,14 @@ vantage_mapping[(10, True, True, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(10, True, True, False, Liquid.WATER, False, False)] = (
   LowVolume_Core96Washer_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.0, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 15.0, 2.0: 2.6},
+  curve={
+    5.0: 6.0,
+    0.5: 0.8,
+    0.0: 0.0,
+    1.0: 1.4,
+    10.0: 15.0,
+    2.0: 2.6,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=150.0,
   aspiration_air_transport_volume=0.0,
@@ -6928,7 +7418,15 @@ vantage_mapping[(10, True, True, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.DMSO, False, False)] = (
   LowVolume_DMSO_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.9, 15.0: 16.4, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.2, 2.0: 2.6},
+  curve={
+    5.0: 5.9,
+    15.0: 16.4,
+    0.5: 0.8,
+    0.0: 0.0,
+    1.0: 1.4,
+    10.0: 11.2,
+    2.0: 2.6,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -6952,7 +7450,14 @@ vantage_mapping[(10, False, True, False, Liquid.DMSO, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.DMSO, False, True)] = (
   LowVolume_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.9, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.2, 2.0: 2.6},
+  curve={
+    5.0: 5.9,
+    0.5: 0.8,
+    0.0: 0.0,
+    1.0: 1.4,
+    10.0: 11.2,
+    2.0: 2.6,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -7001,7 +7506,14 @@ vantage_mapping[(10, False, True, False, Liquid.DMSO, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.ETHANOL, False, False)] = (
   LowVolume_EtOH_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 8.4, 0.5: 1.9, 0.0: 0.0, 1.0: 2.7, 10.0: 13.0, 2.0: 4.1},
+  curve={
+    5.0: 8.4,
+    0.5: 1.9,
+    0.0: 0.0,
+    1.0: 2.7,
+    10.0: 13.0,
+    2.0: 4.1,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=2.0,
@@ -7074,7 +7586,15 @@ vantage_mapping[(10, False, True, False, Liquid.ETHANOL, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.GLYCERIN, False, False)] = (
   LowVolume_Glycerin_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.5, 15.0: 17.0, 0.5: 1.4, 0.0: 0.0, 1.0: 2.0, 10.0: 11.8, 2.0: 3.2},
+  curve={
+    5.0: 6.5,
+    15.0: 17.0,
+    0.5: 1.4,
+    0.0: 0.0,
+    1.0: 2.0,
+    10.0: 11.8,
+    2.0: 3.2,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=10.0,
   aspiration_air_transport_volume=0.0,
@@ -7099,7 +7619,15 @@ vantage_mapping[(10, False, True, False, Liquid.GLYCERIN, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.WATER, False, False)] = (
   LowVolume_Water_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.0, 15.0: 16.7, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.5, 2.0: 2.6},
+  curve={
+    5.0: 6.0,
+    15.0: 16.7,
+    0.5: 0.8,
+    0.0: 0.0,
+    1.0: 1.4,
+    10.0: 11.5,
+    2.0: 2.6,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -7195,7 +7723,14 @@ vantage_mapping[(10, True, True, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(10, False, True, False, Liquid.WATER, False, True)] = (
   LowVolume_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.0, 0.5: 0.8, 0.0: 0.0, 1.0: 1.4, 10.0: 11.5, 2.0: 2.6},
+  curve={
+    5.0: 6.0,
+    0.5: 0.8,
+    0.0: 0.0,
+    1.0: 1.4,
+    10.0: 11.5,
+    2.0: 2.6,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -7279,7 +7814,14 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, True, True, True, Liquid.DMSO, True, True)] = (
   SlimTipFilter_96COREHead1000ul_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 312.3, 50.0: 55.3, 0.0: 0.0, 100.0: 107.7, 20.0: 22.4, 200.0: 210.5},
+  curve={
+    300.0: 312.3,
+    50.0: 55.3,
+    0.0: 0.0,
+    100.0: 107.7,
+    20.0: 22.4,
+    200.0: 210.5,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=10.0,
@@ -7348,7 +7890,14 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, False, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, True, False)] = (
   SlimTipFilter_96COREHead1000ul_Water_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    50.0: 50.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    100.0: 100.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=200.0,
   aspiration_mix_flow_rate=200.0,
   aspiration_air_transport_volume=5.0,
@@ -7372,7 +7921,14 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, True, True)] = (
   SlimTipFilter_96COREHead1000ul_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 317.0, 50.0: 55.8, 0.0: 0.0, 100.0: 109.4, 20.0: 22.7, 200.0: 213.7},
+  curve={
+    300.0: 317.0,
+    50.0: 55.8,
+    0.0: 0.0,
+    100.0: 109.4,
+    20.0: 22.7,
+    200.0: 213.7,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=10.0,
@@ -7396,7 +7952,14 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, False, True)] = (
   SlimTipFilter_96COREHead1000ul_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 318.7, 50.0: 54.9, 0.0: 0.0, 100.0: 110.4, 10.0: 11.7, 200.0: 210.5},
+  curve={
+    300.0: 318.7,
+    50.0: 54.9,
+    0.0: 0.0,
+    100.0: 110.4,
+    10.0: 11.7,
+    200.0: 210.5,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -7457,7 +8020,14 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, True, True, True, Liquid.DMSO, True, True)] = (
   SlimTipFilter_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.5, 50.0: 54.4, 0.0: 0.0, 100.0: 106.4, 20.0: 22.1, 200.0: 208.2},
+  curve={
+    300.0: 309.5,
+    50.0: 54.4,
+    0.0: 0.0,
+    100.0: 106.4,
+    20.0: 22.1,
+    200.0: 208.2,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -7526,7 +8096,13 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, False, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.ETHANOL, True, False)] = (
   SlimTipFilter_EtOH_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 50.0: 50.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    50.0: 50.0,
+    0.0: 0.0,
+    100.0: 100.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -7550,7 +8126,14 @@ vantage_mapping[(300, True, True, True, Liquid.ETHANOL, True, False)] = (
 vantage_mapping[(300, True, True, True, Liquid.ETHANOL, True, True)] = (
   SlimTipFilter_EtOH_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 320.4, 50.0: 57.2, 0.0: 0.0, 100.0: 110.5, 20.0: 24.5, 200.0: 215.0},
+  curve={
+    300.0: 320.4,
+    50.0: 57.2,
+    0.0: 0.0,
+    100.0: 110.5,
+    20.0: 24.5,
+    200.0: 215.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -7650,7 +8233,14 @@ vantage_mapping[(300, True, True, True, Liquid.GLYCERIN80, False, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, True, False)] = (
   SlimTipFilter_Water_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    50.0: 50.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    100.0: 100.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=200.0,
   aspiration_mix_flow_rate=200.0,
   aspiration_air_transport_volume=3.0,
@@ -7674,7 +8264,14 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, True, True)] = (
   SlimTipFilter_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 317.2, 50.0: 55.6, 0.0: 0.0, 100.0: 108.6, 20.0: 22.6, 200.0: 212.8},
+  curve={
+    300.0: 317.2,
+    50.0: 55.6,
+    0.0: 0.0,
+    100.0: 108.6,
+    20.0: 22.6,
+    200.0: 212.8,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=10.0,
@@ -7743,7 +8340,13 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
   SlimTip_96COREHead1000ul_DMSO_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    50.0: 50.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=200.0,
   aspiration_mix_flow_rate=200.0,
   aspiration_air_transport_volume=5.0,
@@ -7767,7 +8370,14 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = (
   SlimTip_96COREHead1000ul_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.8, 50.0: 55.8, 0.0: 0.0, 100.0: 109.2, 20.0: 23.1, 200.0: 212.7},
+  curve={
+    300.0: 313.8,
+    50.0: 55.8,
+    0.0: 0.0,
+    100.0: 109.2,
+    20.0: 23.1,
+    200.0: 212.7,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=10.0,
@@ -7835,7 +8445,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.ETHANOL, True, False)] = (
   SlimTip_96COREHead1000ul_EtOH_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 50.0: 50.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    50.0: 50.0,
+    0.0: 0.0,
+    100.0: 100.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -7859,7 +8475,14 @@ vantage_mapping[(300, True, True, False, Liquid.ETHANOL, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.ETHANOL, True, True)] = (
   SlimTip_96COREHead1000ul_EtOH_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 326.2, 50.0: 58.8, 0.0: 0.0, 100.0: 112.7, 20.0: 25.0, 200.0: 218.2},
+  curve={
+    300.0: 326.2,
+    50.0: 58.8,
+    0.0: 0.0,
+    100.0: 112.7,
+    20.0: 25.0,
+    200.0: 218.2,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -7883,7 +8506,14 @@ vantage_mapping[(300, True, True, False, Liquid.ETHANOL, True, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.ETHANOL, False, True)] = (
   SlimTip_96COREHead1000ul_EtOH_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 320.3, 50.0: 56.7, 0.0: 0.0, 100.0: 109.5, 10.0: 12.4, 200.0: 213.9},
+  curve={
+    300.0: 320.3,
+    50.0: 56.7,
+    0.0: 0.0,
+    100.0: 109.5,
+    10.0: 12.4,
+    200.0: 213.9,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=2.0,
@@ -7952,7 +8582,14 @@ vantage_mapping[(300, True, True, False, Liquid.GLYCERIN80, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
   SlimTip_96COREHead1000ul_Water_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    50.0: 50.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    100.0: 100.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=200.0,
   aspiration_mix_flow_rate=200.0,
   aspiration_air_transport_volume=5.0,
@@ -7976,7 +8613,14 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
   SlimTip_96COREHead1000ul_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 315.0, 50.0: 55.5, 0.0: 0.0, 100.0: 107.2, 20.0: 22.8, 200.0: 211.0},
+  curve={
+    300.0: 315.0,
+    50.0: 55.5,
+    0.0: 0.0,
+    100.0: 107.2,
+    20.0: 22.8,
+    200.0: 211.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=10.0,
@@ -8000,7 +8644,14 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, False, True)] = (
   SlimTip_96COREHead1000ul_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 322.7, 50.0: 56.4, 0.0: 0.0, 100.0: 110.4, 10.0: 11.9, 200.0: 215.5},
+  curve={
+    300.0: 322.7,
+    50.0: 56.4,
+    0.0: 0.0,
+    100.0: 110.4,
+    10.0: 11.9,
+    200.0: 215.5,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -8061,7 +8712,14 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = (
   SlimTip_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.5, 50.0: 54.7, 0.0: 0.0, 100.0: 107.2, 20.0: 22.5, 200.0: 209.7},
+  curve={
+    300.0: 309.5,
+    50.0: 54.7,
+    0.0: 0.0,
+    100.0: 107.2,
+    20.0: 22.5,
+    200.0: 209.7,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -8130,7 +8788,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.ETHANOL, True, False)] = (
   SlimTip_EtOH_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 50.0: 50.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    50.0: 50.0,
+    0.0: 0.0,
+    100.0: 100.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=0.0,
@@ -8154,7 +8818,14 @@ vantage_mapping[(300, True, True, False, Liquid.ETHANOL, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.ETHANOL, True, True)] = (
   SlimTip_EtOH_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 323.4, 50.0: 57.2, 0.0: 0.0, 100.0: 110.5, 20.0: 24.7, 200.0: 211.9},
+  curve={
+    300.0: 323.4,
+    50.0: 57.2,
+    0.0: 0.0,
+    100.0: 110.5,
+    20.0: 24.7,
+    200.0: 211.9,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -8280,7 +8951,14 @@ vantage_mapping[(300, True, True, False, Liquid.SERUM, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.SERUM, True, True)] = (
   SlimTip_Serum_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 321.5, 50.0: 56.0, 0.0: 0.0, 100.0: 109.7, 20.0: 22.8, 200.0: 215.7},
+  curve={
+    300.0: 321.5,
+    50.0: 56.0,
+    0.0: 0.0,
+    100.0: 109.7,
+    20.0: 22.8,
+    200.0: 215.7,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=5.0,
@@ -8349,7 +9027,14 @@ vantage_mapping[(300, True, True, False, Liquid.SERUM, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
   SlimTip_Water_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 50.0: 50.0, 30.0: 30.0, 0.0: 0.0, 100.0: 100.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    50.0: 50.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    100.0: 100.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=200.0,
   aspiration_mix_flow_rate=200.0,
   aspiration_air_transport_volume=3.0,
@@ -8373,7 +9058,14 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
   SlimTip_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 317.2, 50.0: 55.6, 0.0: 0.0, 20.0: 22.6, 100.0: 108.6, 200.0: 212.8},
+  curve={
+    300.0: 317.2,
+    50.0: 55.6,
+    0.0: 0.0,
+    20.0: 22.6,
+    100.0: 108.6,
+    200.0: 212.8,
+  },
   aspiration_flow_rate=250.0,
   aspiration_mix_flow_rate=250.0,
   aspiration_air_transport_volume=10.0,
@@ -8432,7 +9124,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, False, True)] = (
 vantage_mapping[(300, False, False, False, Liquid.WATER, True, False)] = (
   StandardNeedle_Water_DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 311.2, 50.0: 51.3, 0.0: 0.0, 100.0: 103.4, 20.0: 19.5},
+  curve={
+    300.0: 311.2,
+    50.0: 51.3,
+    0.0: 0.0,
+    100.0: 103.4,
+    20.0: 19.5,
+  },
   aspiration_flow_rate=80.0,
   aspiration_mix_flow_rate=80.0,
   aspiration_air_transport_volume=10.0,
@@ -8456,7 +9154,13 @@ vantage_mapping[(300, False, False, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, False, False, False, Liquid.WATER, True, True)] = (
   StandardNeedle_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 311.2, 50.0: 51.3, 0.0: 0.0, 100.0: 103.4, 20.0: 19.5},
+  curve={
+    300.0: 311.2,
+    50.0: 51.3,
+    0.0: 0.0,
+    100.0: 103.4,
+    20.0: 19.5,
+  },
   aspiration_flow_rate=80.0,
   aspiration_mix_flow_rate=80.0,
   aspiration_air_transport_volume=10.0,
@@ -8480,7 +9184,13 @@ vantage_mapping[(300, False, False, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, False, False, False, Liquid.WATER, True, False)] = (
   StandardNeedle_Water_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 311.2, 50.0: 51.3, 0.0: 0.0, 100.0: 103.4, 20.0: 19.5},
+  curve={
+    300.0: 311.2,
+    50.0: 51.3,
+    0.0: 0.0,
+    100.0: 103.4,
+    20.0: 19.5,
+  },
   aspiration_flow_rate=80.0,
   aspiration_mix_flow_rate=80.0,
   aspiration_air_transport_volume=10.0,
@@ -8629,7 +9339,14 @@ vantage_mapping[(300, False, False, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.ACETONITRILE, True, False)] = (
   StandardVolumeAcetonitrilDispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 326.2, 50.0: 57.3, 0.0: 0.0, 100.0: 111.5, 20.0: 24.6, 200.0: 217.0},
+  curve={
+    300.0: 326.2,
+    50.0: 57.3,
+    0.0: 0.0,
+    100.0: 111.5,
+    20.0: 24.6,
+    200.0: 217.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=25.0,
@@ -8653,7 +9370,14 @@ vantage_mapping[(300, False, True, False, Liquid.ACETONITRILE, True, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.ACETONITRILE, True, True)] = (
   StandardVolumeAcetonitrilDispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 326.2, 50.0: 57.3, 0.0: 0.0, 100.0: 111.5, 20.0: 24.6, 200.0: 217.0},
+  curve={
+    300.0: 326.2,
+    50.0: 57.3,
+    0.0: 0.0,
+    100.0: 111.5,
+    20.0: 24.6,
+    200.0: 217.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=25.0,
@@ -8791,7 +9515,13 @@ vantage_mapping[(300, False, True, False, Liquid.ACETONITRILE, False, True)] = (
 vantage_mapping[(300, False, True, False, Liquid.ACETONITRILE, False, False)] = (
   StandardVolumeAcetonitrilDispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 328.0, 5.0: 7.3, 0.0: 0.0, 100.0: 112.7, 10.0: 13.5},
+  curve={
+    300.0: 328.0,
+    5.0: 7.3,
+    0.0: 0.0,
+    100.0: 112.7,
+    10.0: 13.5,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=10.0,
@@ -8872,7 +9602,14 @@ vantage_mapping[(300, False, True, False, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.ETHANOL, False, False)] = (
   StandardVolumeEtOHDispenseSurface
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.2, 50.0: 54.8, 0.0: 0.0, 100.0: 106.5, 20.0: 23.7, 200.0: 208.2},
+  curve={
+    300.0: 309.2,
+    50.0: 54.8,
+    0.0: 0.0,
+    100.0: 106.5,
+    20.0: 23.7,
+    200.0: 208.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=3.0,
@@ -8896,7 +9633,14 @@ vantage_mapping[(300, False, True, False, Liquid.ETHANOL, False, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.ETHANOL, False, True)] = (
   StandardVolumeEtOHDispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.2, 50.0: 54.8, 0.0: 0.0, 100.0: 106.5, 20.0: 23.7, 200.0: 208.2},
+  curve={
+    300.0: 309.2,
+    50.0: 54.8,
+    0.0: 0.0,
+    100.0: 106.5,
+    20.0: 23.7,
+    200.0: 208.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=3.0,
@@ -8944,7 +9688,13 @@ vantage_mapping[(300, False, True, False, Liquid.ETHANOL, False, False)] = (
 vantage_mapping[(300, True, True, True, Liquid.DMSO, True, True)] = (
   StandardVolumeFilter_96COREHead1000ul_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 302.5, 0.0: 0.0, 100.0: 101.0, 20.0: 20.4, 200.0: 201.5},
+  curve={
+    300.0: 302.5,
+    0.0: 0.0,
+    100.0: 101.0,
+    20.0: 20.4,
+    200.0: 201.5,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -8968,7 +9718,13 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, True, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.DMSO, False, True)] = (
   StandardVolumeFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 306.0, 0.0: 0.0, 100.0: 104.3, 200.0: 205.0, 10.0: 12.2},
+  curve={
+    300.0: 306.0,
+    0.0: 0.0,
+    100.0: 104.3,
+    200.0: 205.0,
+    10.0: 12.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -8992,7 +9748,13 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, False, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, True, True)] = (
   StandardVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 200.0: 211.0},
+  curve={
+    300.0: 313.5,
+    0.0: 0.0,
+    100.0: 107.2,
+    20.0: 23.2,
+    200.0: 211.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9016,7 +9778,13 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, False, True)] = (
   StandardVolumeFilter_96COREHead1000ul_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 210.0, 10.0: 11.9},
+  curve={
+    300.0: 313.5,
+    0.0: 0.0,
+    100.0: 107.2,
+    200.0: 210.0,
+    10.0: 11.9,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9040,7 +9808,13 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, False, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.DMSO, True, True)] = (
   StandardVolumeFilter_96COREHead_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 303.5, 0.0: 0.0, 100.0: 101.8, 10.0: 10.2, 200.0: 200.5},
+  curve={
+    300.0: 303.5,
+    0.0: 0.0,
+    100.0: 101.8,
+    10.0: 10.2,
+    200.0: 200.5,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9064,7 +9838,13 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, True, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.DMSO, True, False)] = (
   StandardVolumeFilter_96COREHead_DMSO_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 305.0, 0.0: 0.0, 100.0: 103.6, 10.0: 11.5, 200.0: 206.0},
+  curve={
+    300.0: 305.0,
+    0.0: 0.0,
+    100.0: 103.6,
+    10.0: 11.5,
+    200.0: 206.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9088,7 +9868,13 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, True, True, True, Liquid.DMSO, False, True)] = (
   StandardVolumeFilter_96COREHead_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 303.0, 0.0: 0.0, 100.0: 101.3, 10.0: 10.6, 200.0: 202.0},
+  curve={
+    300.0: 303.0,
+    0.0: 0.0,
+    100.0: 101.3,
+    10.0: 10.6,
+    200.0: 202.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9112,7 +9898,13 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, False, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.DMSO, False, False)] = (
   StandardVolumeFilter_96COREHead_DMSO_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 303.0, 0.0: 0.0, 100.0: 101.3, 10.0: 10.1, 200.0: 202.0},
+  curve={
+    300.0: 303.0,
+    0.0: 0.0,
+    100.0: 101.3,
+    10.0: 10.1,
+    200.0: 202.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9136,7 +9928,14 @@ vantage_mapping[(300, True, True, True, Liquid.DMSO, False, False)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, True, True)] = (
   StandardVolumeFilter_96COREHead_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.0, 0.0: 0.0, 20.0: 22.3, 100.0: 104.2, 10.0: 11.9, 200.0: 207.0},
+  curve={
+    300.0: 309.0,
+    0.0: 0.0,
+    20.0: 22.3,
+    100.0: 104.2,
+    10.0: 11.9,
+    200.0: 207.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9160,7 +9959,14 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, True, False)] = (
   StandardVolumeFilter_96COREHead_Water_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.0, 0.0: 0.0, 20.0: 22.3, 100.0: 104.2, 10.0: 11.9, 200.0: 207.0},
+  curve={
+    300.0: 309.0,
+    0.0: 0.0,
+    20.0: 22.3,
+    100.0: 104.2,
+    10.0: 11.9,
+    200.0: 207.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9184,7 +9990,13 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, False, True)] = (
   StandardVolumeFilter_96COREHead_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 306.3, 0.0: 0.0, 100.0: 104.5, 10.0: 11.9, 200.0: 205.7},
+  curve={
+    300.0: 306.3,
+    0.0: 0.0,
+    100.0: 104.5,
+    10.0: 11.9,
+    200.0: 205.7,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9208,7 +10020,13 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, False, True)] = (
 vantage_mapping[(300, True, True, True, Liquid.WATER, False, False)] = (
   StandardVolumeFilter_96COREHead_Water_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 304.0, 0.0: 0.0, 100.0: 105.3, 10.0: 11.9, 200.0: 205.7},
+  curve={
+    300.0: 304.0,
+    0.0: 0.0,
+    100.0: 105.3,
+    10.0: 11.9,
+    200.0: 205.7,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -9248,7 +10066,13 @@ vantage_mapping[(300, True, True, True, Liquid.WATER, False, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.DMSO, True, False)] = (
   StandardVolumeFilter_DMSO_AliquotDispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
+  curve={
+    300.0: 300.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    20.0: 20.0,
+    10.0: 10.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -9273,7 +10097,14 @@ vantage_mapping[(300, False, True, True, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.DMSO, True, False)] = (
   StandardVolumeFilter_DMSO_DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 304.6, 50.0: 51.1, 0.0: 0.0, 20.0: 20.7, 100.0: 101.8, 200.0: 203.0},
+  curve={
+    300.0: 304.6,
+    50.0: 51.1,
+    0.0: 0.0,
+    20.0: 20.7,
+    100.0: 101.8,
+    200.0: 203.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9297,7 +10128,14 @@ vantage_mapping[(300, False, True, True, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.DMSO, True, True)] = (
   StandardVolumeFilter_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 304.6, 50.0: 51.1, 0.0: 0.0, 100.0: 101.8, 20.0: 20.7, 200.0: 203.0},
+  curve={
+    300.0: 304.6,
+    50.0: 51.1,
+    0.0: 0.0,
+    100.0: 101.8,
+    20.0: 20.7,
+    200.0: 203.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9448,7 +10286,14 @@ vantage_mapping[(300, False, True, True, Liquid.DMSO, False, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.ETHANOL, True, False)] = (
   StandardVolumeFilter_EtOH_DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 310.2, 50.0: 55.8, 0.0: 0.0, 20.0: 24.6, 100.0: 107.5, 200.0: 209.2},
+  curve={
+    300.0: 310.2,
+    50.0: 55.8,
+    0.0: 0.0,
+    20.0: 24.6,
+    100.0: 107.5,
+    200.0: 209.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9472,7 +10317,14 @@ vantage_mapping[(300, False, True, True, Liquid.ETHANOL, True, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.ETHANOL, True, True)] = (
   StandardVolumeFilter_EtOH_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 310.2, 50.0: 55.8, 0.0: 0.0, 100.0: 107.5, 20.0: 24.6, 200.0: 209.2},
+  curve={
+    300.0: 310.2,
+    50.0: 55.8,
+    0.0: 0.0,
+    100.0: 107.5,
+    20.0: 24.6,
+    200.0: 209.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9521,7 +10373,14 @@ vantage_mapping[(300, False, True, True, Liquid.ETHANOL, True, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.GLYCERIN, True, False)] = (
   StandardVolumeFilter_Glycerin_DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.0, 50.0: 53.6, 0.0: 0.0, 20.0: 22.3, 100.0: 104.9, 200.0: 207.2},
+  curve={
+    300.0: 309.0,
+    50.0: 53.6,
+    0.0: 0.0,
+    20.0: 22.3,
+    100.0: 104.9,
+    200.0: 207.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=20.0,
   aspiration_air_transport_volume=5.0,
@@ -9546,7 +10405,14 @@ vantage_mapping[(300, False, True, True, Liquid.GLYCERIN, True, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.GLYCERIN80, True, True)] = (
   StandardVolumeFilter_Glycerin_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.0, 50.0: 53.6, 0.0: 0.0, 100.0: 104.9, 20.0: 22.3, 200.0: 207.2},
+  curve={
+    300.0: 309.0,
+    50.0: 53.6,
+    0.0: 0.0,
+    100.0: 104.9,
+    20.0: 22.3,
+    200.0: 207.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=20.0,
   aspiration_air_transport_volume=5.0,
@@ -9639,7 +10505,14 @@ vantage_mapping[(300, False, True, True, Liquid.GLYCERIN80, False, True)] = (
 vantage_mapping[(300, False, True, True, Liquid.GLYCERIN80, False, False)] = (
   StandardVolumeFilter_Glycerin_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 307.9, 5.0: 6.1, 0.0: 0.0, 100.0: 104.7, 200.0: 207.0, 10.0: 11.5},
+  curve={
+    300.0: 307.9,
+    5.0: 6.1,
+    0.0: 0.0,
+    100.0: 104.7,
+    200.0: 207.0,
+    10.0: 11.5,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=10.0,
   aspiration_air_transport_volume=0.0,
@@ -9664,7 +10537,13 @@ vantage_mapping[(300, False, True, True, Liquid.GLYCERIN80, False, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.SERUM, True, False)] = (
   StandardVolumeFilter_Serum_AliquotDispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
+  curve={
+    300.0: 300.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    20.0: 20.0,
+    10.0: 10.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -9714,7 +10593,14 @@ vantage_mapping[(300, False, True, True, Liquid.SERUM, True, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.SERUM, True, False)] = (
   StandardVolumeFilter_Serum_DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 20.0: 23.2, 100.0: 108.1, 200.0: 212.1},
+  curve={
+    300.0: 315.2,
+    50.0: 55.6,
+    0.0: 0.0,
+    20.0: 23.2,
+    100.0: 108.1,
+    200.0: 212.1,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9738,7 +10624,14 @@ vantage_mapping[(300, False, True, True, Liquid.SERUM, True, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.SERUM, True, True)] = (
   StandardVolumeFilter_Serum_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 100.0: 108.1, 20.0: 23.2, 200.0: 212.1},
+  curve={
+    300.0: 315.2,
+    50.0: 55.6,
+    0.0: 0.0,
+    100.0: 108.1,
+    20.0: 23.2,
+    200.0: 212.1,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9845,7 +10738,13 @@ vantage_mapping[(300, False, True, True, Liquid.SERUM, False, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.WATER, True, False)] = (
   StandardVolumeFilter_Water_AliquotDispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
+  curve={
+    300.0: 300.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    20.0: 20.0,
+    10.0: 10.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -9895,7 +10794,14 @@ vantage_mapping[(300, False, True, True, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.WATER, True, False)] = (
   StandardVolumeFilter_Water_DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 50.0: 55.1, 0.0: 0.0, 20.0: 23.2, 100.0: 107.2, 200.0: 211.0},
+  curve={
+    300.0: 313.5,
+    50.0: 55.1,
+    0.0: 0.0,
+    20.0: 23.2,
+    100.0: 107.2,
+    200.0: 211.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -9919,7 +10825,14 @@ vantage_mapping[(300, False, True, True, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, False, True, True, Liquid.WATER, True, True)] = (
   StandardVolumeFilter_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 50.0: 55.1, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 200.0: 211.0},
+  curve={
+    300.0: 313.5,
+    50.0: 55.1,
+    0.0: 0.0,
+    100.0: 107.2,
+    20.0: 23.2,
+    200.0: 211.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10094,7 +11007,14 @@ vantage_mapping[(300, False, True, True, Liquid.WATER, False, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.METHANOL, True, False)] = (
   StandardVolumeMeOHDispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 336.0, 50.0: 63.0, 0.0: 0.0, 100.0: 119.5, 20.0: 28.3, 200.0: 230.0},
+  curve={
+    300.0: 336.0,
+    50.0: 63.0,
+    0.0: 0.0,
+    100.0: 119.5,
+    20.0: 28.3,
+    200.0: 230.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=30.0,
   aspiration_air_transport_volume=5.0,
@@ -10191,7 +11111,14 @@ vantage_mapping[(300, False, True, False, Liquid.METHANOL, False, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.OCTANOL, True, False)] = (
   StandardVolumeOctanol100DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 319.3, 50.0: 56.6, 0.0: 0.0, 100.0: 109.9, 20.0: 23.8, 200.0: 216.2},
+  curve={
+    300.0: 319.3,
+    50.0: 56.6,
+    0.0: 0.0,
+    100.0: 109.9,
+    20.0: 23.8,
+    200.0: 216.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10368,7 +11295,14 @@ vantage_mapping[(300, False, True, False, Liquid.PLASMA, True, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.PLASMA, True, True)] = (
   StandardVolumePlasmaDispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 20.0: 23.2, 100.0: 108.1, 200.0: 212.1},
+  curve={
+    300.0: 315.2,
+    50.0: 55.6,
+    0.0: 0.0,
+    20.0: 23.2,
+    100.0: 108.1,
+    200.0: 212.1,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10525,7 +11459,13 @@ vantage_mapping[(300, False, True, False, Liquid.PLASMA, False, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
   StandardVolume_96COREHead1000ul_DMSO_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 150.0: 150.0, 50.0: 50.0, 0.0: 0.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    150.0: 150.0,
+    50.0: 50.0,
+    0.0: 0.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -10549,7 +11489,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = (
   StandardVolume_96COREHead1000ul_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 302.5, 0.0: 0.0, 100.0: 101.0, 20.0: 20.4, 200.0: 201.5},
+  curve={
+    300.0: 302.5,
+    0.0: 0.0,
+    100.0: 101.0,
+    20.0: 20.4,
+    200.0: 201.5,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10573,7 +11519,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, False, True)] = (
   StandardVolume_96COREHead1000ul_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 306.0, 0.0: 0.0, 100.0: 104.3, 200.0: 205.0, 10.0: 12.2},
+  curve={
+    300.0: 306.0,
+    0.0: 0.0,
+    100.0: 104.3,
+    200.0: 205.0,
+    10.0: 12.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10597,7 +11549,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
   StandardVolume_96COREHead1000ul_Water_DispenseJet_Aliquot
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 150.0: 150.0, 50.0: 50.0, 0.0: 0.0, 20.0: 20.0},
+  curve={
+    300.0: 300.0,
+    150.0: 150.0,
+    50.0: 50.0,
+    0.0: 0.0,
+    20.0: 20.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -10621,7 +11579,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
   StandardVolume_96COREHead1000ul_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 20.0: 23.2, 200.0: 207.5},
+  curve={
+    300.0: 313.5,
+    0.0: 0.0,
+    100.0: 107.2,
+    20.0: 23.2,
+    200.0: 207.5,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10645,7 +11609,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, False, True)] = (
   StandardVolume_96COREHead1000ul_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 210.0, 10.0: 11.9},
+  curve={
+    300.0: 313.5,
+    0.0: 0.0,
+    100.0: 107.2,
+    200.0: 210.0,
+    10.0: 11.9,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10669,7 +11639,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = (
   StandardVolume_96COREHead_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 303.5, 0.0: 0.0, 100.0: 101.8, 10.0: 10.2, 200.0: 200.5},
+  curve={
+    300.0: 303.5,
+    0.0: 0.0,
+    100.0: 101.8,
+    10.0: 10.2,
+    200.0: 200.5,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10693,7 +11669,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
   StandardVolume_96COREHead_DMSO_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 306.0, 0.0: 0.0, 100.0: 105.6, 10.0: 12.2, 200.0: 207.0},
+  curve={
+    300.0: 306.0,
+    0.0: 0.0,
+    100.0: 105.6,
+    10.0: 12.2,
+    200.0: 207.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10717,7 +11699,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, False, True)] = (
   StandardVolume_96COREHead_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 303.0, 0.0: 0.0, 100.0: 101.3, 10.0: 10.6, 200.0: 202.0},
+  curve={
+    300.0: 303.0,
+    0.0: 0.0,
+    100.0: 101.3,
+    10.0: 10.6,
+    200.0: 202.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10741,7 +11729,13 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.DMSO, False, False)] = (
   StandardVolume_96COREHead_DMSO_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 303.0, 0.0: 0.0, 100.0: 101.3, 10.0: 10.1, 200.0: 202.0},
+  curve={
+    300.0: 303.0,
+    0.0: 0.0,
+    100.0: 101.3,
+    10.0: 10.1,
+    200.0: 202.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10765,7 +11759,14 @@ vantage_mapping[(300, True, True, False, Liquid.DMSO, False, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
   StandardVolume_96COREHead_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.0, 0.0: 0.0, 20.0: 22.3, 100.0: 104.2, 10.0: 11.9, 200.0: 207.0},
+  curve={
+    300.0: 309.0,
+    0.0: 0.0,
+    20.0: 22.3,
+    100.0: 104.2,
+    10.0: 11.9,
+    200.0: 207.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10789,7 +11790,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
   StandardVolume_96COREHead_Water_DispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.0, 0.0: 0.0, 20.0: 22.3, 100.0: 104.2, 10.0: 11.9},
+  curve={
+    300.0: 309.0,
+    0.0: 0.0,
+    20.0: 22.3,
+    100.0: 104.2,
+    10.0: 11.9,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10813,7 +11820,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, False, True)] = (
   StandardVolume_96COREHead_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 306.3, 0.0: 0.0, 100.0: 104.5, 10.0: 11.9, 200.0: 205.7},
+  curve={
+    300.0: 306.3,
+    0.0: 0.0,
+    100.0: 104.5,
+    10.0: 11.9,
+    200.0: 205.7,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -10837,7 +11850,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, False, False)] = (
   StandardVolume_96COREHead_Water_DispenseSurface_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 304.0, 0.0: 0.0, 100.0: 105.3, 10.0: 11.9, 200.0: 205.7},
+  curve={
+    300.0: 304.0,
+    0.0: 0.0,
+    100.0: 105.3,
+    10.0: 11.9,
+    200.0: 205.7,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -10971,7 +11990,14 @@ vantage_mapping[(300, False, True, False, Liquid.DMSO, True, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.DMSO, True, True)] = (
   StandardVolume_DMSO_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 304.6, 50.0: 51.1, 0.0: 0.0, 20.0: 20.7, 100.0: 101.8, 200.0: 203.0},
+  curve={
+    300.0: 304.6,
+    50.0: 51.1,
+    0.0: 0.0,
+    20.0: 20.7,
+    100.0: 101.8,
+    200.0: 203.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -11156,7 +12182,14 @@ vantage_mapping[(300, False, True, False, Liquid.ETHANOL, True, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.ETHANOL, True, True)] = (
   StandardVolume_EtOH_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 310.2, 50.0: 55.8, 0.0: 0.0, 20.0: 24.6, 100.0: 107.5, 200.0: 209.2},
+  curve={
+    300.0: 310.2,
+    50.0: 55.8,
+    0.0: 0.0,
+    20.0: 24.6,
+    100.0: 107.5,
+    200.0: 209.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -11238,7 +12271,14 @@ vantage_mapping[(300, False, True, False, Liquid.GLYCERIN, True, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.GLYCERIN80, True, True)] = (
   StandardVolume_Glycerin_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 309.0, 50.0: 53.6, 0.0: 0.0, 100.0: 104.9, 20.0: 22.3, 200.0: 207.2},
+  curve={
+    300.0: 309.0,
+    50.0: 53.6,
+    0.0: 0.0,
+    100.0: 104.9,
+    20.0: 22.3,
+    200.0: 207.2,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=20.0,
   aspiration_air_transport_volume=5.0,
@@ -11366,7 +12406,13 @@ vantage_mapping[(300, False, True, False, Liquid.GLYCERIN80, False, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.SERUM, True, False)] = (
   StandardVolume_Serum_AliquotDispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
+  curve={
+    300.0: 300.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    20.0: 20.0,
+    10.0: 10.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -11416,7 +12462,14 @@ vantage_mapping[(300, False, True, False, Liquid.SERUM, True, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.SERUM, True, False)] = (
   StandardVolume_Serum_DispenseJet
 ) = HamiltonLiquidClass(
-  curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 100.0: 108.1, 20.0: 23.2, 200.0: 212.1},
+  curve={
+    300.0: 315.2,
+    50.0: 55.6,
+    0.0: 0.0,
+    100.0: 108.1,
+    20.0: 23.2,
+    200.0: 212.1,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -11440,7 +12493,14 @@ vantage_mapping[(300, False, True, False, Liquid.SERUM, True, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.SERUM, True, True)] = (
   StandardVolume_Serum_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 315.2, 50.0: 55.6, 0.0: 0.0, 20.0: 23.2, 100.0: 108.1, 200.0: 212.1},
+  curve={
+    300.0: 315.2,
+    50.0: 55.6,
+    0.0: 0.0,
+    20.0: 23.2,
+    100.0: 108.1,
+    200.0: 212.1,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -11581,7 +12641,13 @@ vantage_mapping[(300, False, True, False, Liquid.SERUM, False, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.WATER, True, False)] = (
   StandardVolume_Water_AliquotDispenseJet_Part
 ) = HamiltonLiquidClass(
-  curve={300.0: 300.0, 30.0: 30.0, 0.0: 0.0, 20.0: 20.0, 10.0: 10.0},
+  curve={
+    300.0: 300.0,
+    30.0: 30.0,
+    0.0: 0.0,
+    20.0: 20.0,
+    10.0: 10.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=0.0,
@@ -11663,7 +12729,13 @@ vantage_mapping[(300, False, True, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
   StandardVolume_Water_DispenseJetEmpty96Head
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 205.3, 10.0: 11.9},
+  curve={
+    300.0: 313.5,
+    0.0: 0.0,
+    100.0: 107.2,
+    200.0: 205.3,
+    10.0: 11.9,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -11687,7 +12759,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
   StandardVolume_Water_DispenseJetPart96Head
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 205.3, 10.0: 11.9},
+  curve={
+    300.0: 313.5,
+    0.0: 0.0,
+    100.0: 107.2,
+    200.0: 205.3,
+    10.0: 11.9,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -11711,7 +12789,14 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, True, False)] = (
 vantage_mapping[(300, False, True, False, Liquid.WATER, True, True)] = (
   StandardVolume_Water_DispenseJet_Empty
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 50.0: 55.1, 0.0: 0.0, 20.0: 23.2, 100.0: 107.2, 200.0: 211.0},
+  curve={
+    300.0: 313.5,
+    50.0: 55.1,
+    0.0: 0.0,
+    20.0: 23.2,
+    100.0: 107.2,
+    200.0: 211.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -11821,7 +12906,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, False, False)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, False, True)] = (
   StandardVolume_Water_DispenseSurfaceEmpty96Head
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 205.7, 10.0: 11.9},
+  curve={
+    300.0: 313.5,
+    0.0: 0.0,
+    100.0: 107.2,
+    200.0: 205.7,
+    10.0: 11.9,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -11845,7 +12936,13 @@ vantage_mapping[(300, True, True, False, Liquid.WATER, False, True)] = (
 vantage_mapping[(300, True, True, False, Liquid.WATER, False, False)] = (
   StandardVolume_Water_DispenseSurfacePart96Head
 ) = HamiltonLiquidClass(
-  curve={300.0: 313.5, 0.0: 0.0, 100.0: 107.2, 200.0: 205.7, 10.0: 11.9},
+  curve={
+    300.0: 313.5,
+    0.0: 0.0,
+    100.0: 107.2,
+    200.0: 205.7,
+    10.0: 11.9,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=100.0,
   aspiration_air_transport_volume=5.0,
@@ -11962,7 +13059,14 @@ vantage_mapping[(50, True, True, True, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, True, True, True, Liquid.DMSO, False, True)] = (
   Tip_50ulFilter_96COREHead1000ul_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.4, 50.0: 52.1, 30.0: 31.5, 0.0: 0.0, 1.0: 0.7, 10.0: 10.8},
+  curve={
+    5.0: 5.4,
+    50.0: 52.1,
+    30.0: 31.5,
+    0.0: 0.0,
+    1.0: 0.7,
+    10.0: 10.8,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12010,7 +13114,14 @@ vantage_mapping[(50, True, True, True, Liquid.WATER, True, True)] = (
 vantage_mapping[(50, True, True, True, Liquid.WATER, False, True)] = (
   Tip_50ulFilter_96COREHead1000ul_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 50.0: 53.6, 30.0: 32.6, 0.0: 0.0, 1.0: 0.8, 10.0: 11.3},
+  curve={
+    5.0: 5.6,
+    50.0: 53.6,
+    30.0: 32.6,
+    0.0: 0.0,
+    1.0: 0.8,
+    10.0: 11.3,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12058,7 +13169,14 @@ vantage_mapping[(50, True, True, True, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, True, True, True, Liquid.DMSO, False, True)] = (
   Tip_50ulFilter_96COREHead_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 50.0: 51.1, 0.0: 0.0, 30.0: 31.0, 1.0: 0.8, 10.0: 10.7},
+  curve={
+    5.0: 5.6,
+    50.0: 51.1,
+    0.0: 0.0,
+    30.0: 31.0,
+    1.0: 0.8,
+    10.0: 10.7,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12106,7 +13224,14 @@ vantage_mapping[(50, True, True, True, Liquid.WATER, True, True)] = (
 vantage_mapping[(50, True, True, True, Liquid.WATER, False, True)] = (
   Tip_50ulFilter_96COREHead_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 50.0: 53.5, 30.0: 32.9, 0.0: 0.0, 1.0: 0.8, 10.0: 11.4},
+  curve={
+    5.0: 5.6,
+    50.0: 53.5,
+    30.0: 32.9,
+    0.0: 0.0,
+    1.0: 0.8,
+    10.0: 11.4,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12154,7 +13279,14 @@ vantage_mapping[(50, False, True, True, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, False, True, True, Liquid.DMSO, False, True)] = (
   Tip_50ulFilter_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.5, 50.0: 52.6, 0.0: 0.0, 30.0: 32.0, 1.0: 0.7, 10.0: 11.0},
+  curve={
+    5.0: 5.5,
+    50.0: 52.6,
+    0.0: 0.0,
+    30.0: 32.0,
+    1.0: 0.7,
+    10.0: 11.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12202,7 +13334,14 @@ vantage_mapping[(50, False, True, True, Liquid.ETHANOL, True, True)] = (
 vantage_mapping[(50, False, True, True, Liquid.ETHANOL, False, True)] = (
   Tip_50ulFilter_EtOH_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.5, 50.0: 54.1, 0.0: 0.0, 30.0: 33.8, 1.0: 1.9, 10.0: 12.0},
+  curve={
+    5.0: 6.5,
+    50.0: 54.1,
+    0.0: 0.0,
+    30.0: 33.8,
+    1.0: 1.9,
+    10.0: 12.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=2.0,
@@ -12226,7 +13365,14 @@ vantage_mapping[(50, False, True, True, Liquid.ETHANOL, False, True)] = (
 vantage_mapping[(50, False, True, True, Liquid.GLYCERIN80, False, True)] = (
   Tip_50ulFilter_Glycerin80_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.5, 50.0: 57.0, 0.0: 0.0, 30.0: 35.9, 1.0: 0.6, 10.0: 12.0},
+  curve={
+    5.0: 5.5,
+    50.0: 57.0,
+    0.0: 0.0,
+    30.0: 35.9,
+    1.0: 0.6,
+    10.0: 12.0,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=0.0,
@@ -12274,7 +13420,14 @@ vantage_mapping[(50, False, True, True, Liquid.SERUM, True, True)] = (
 vantage_mapping[(50, False, True, True, Liquid.SERUM, False, True)] = (
   Tip_50ulFilter_Serum_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.7, 50.0: 54.9, 30.0: 33.0, 0.0: 0.0, 1.0: 0.7, 10.0: 11.3},
+  curve={
+    5.0: 5.7,
+    50.0: 54.9,
+    30.0: 33.0,
+    0.0: 0.0,
+    1.0: 0.7,
+    10.0: 11.3,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12322,7 +13475,14 @@ vantage_mapping[(50, False, True, True, Liquid.WATER, True, True)] = (
 vantage_mapping[(50, False, True, True, Liquid.WATER, False, True)] = (
   Tip_50ulFilter_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.7, 50.0: 54.2, 30.0: 33.1, 0.0: 0.0, 1.0: 0.65, 10.0: 11.4},
+  curve={
+    5.0: 5.7,
+    50.0: 54.2,
+    30.0: 33.1,
+    0.0: 0.0,
+    1.0: 0.65,
+    10.0: 11.4,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12370,7 +13530,14 @@ vantage_mapping[(50, True, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.DMSO, False, True)] = (
   Tip_50ul_96COREHead1000ul_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.4, 50.0: 52.1, 30.0: 31.5, 0.0: 0.0, 1.0: 0.7, 10.0: 10.8},
+  curve={
+    5.0: 5.4,
+    50.0: 52.1,
+    30.0: 31.5,
+    0.0: 0.0,
+    1.0: 0.7,
+    10.0: 10.8,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12418,7 +13585,14 @@ vantage_mapping[(50, True, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.WATER, False, True)] = (
   Tip_50ul_96COREHead1000ul_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.8, 50.0: 53.6, 30.0: 32.6, 0.0: 0.0, 1.0: 0.8, 10.0: 11.3},
+  curve={
+    5.0: 5.8,
+    50.0: 53.6,
+    30.0: 32.6,
+    0.0: 0.0,
+    1.0: 0.8,
+    10.0: 11.3,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12466,7 +13640,14 @@ vantage_mapping[(50, True, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.DMSO, False, True)] = (
   Tip_50ul_96COREHead_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 50.0: 52.1, 30.0: 31.6, 0.0: 0.0, 1.0: 0.8, 10.0: 11.0},
+  curve={
+    5.0: 5.6,
+    50.0: 52.1,
+    30.0: 31.6,
+    0.0: 0.0,
+    1.0: 0.8,
+    10.0: 11.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12514,7 +13695,14 @@ vantage_mapping[(50, True, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.WATER, False, True)] = (
   Tip_50ul_96COREHead_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 50.0: 53.6, 30.0: 32.9, 0.0: 0.0, 1.0: 0.7, 10.0: 11.4},
+  curve={
+    5.0: 5.6,
+    50.0: 53.6,
+    30.0: 32.9,
+    0.0: 0.0,
+    1.0: 0.7,
+    10.0: 11.4,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12539,7 +13727,14 @@ vantage_mapping[(50, True, True, False, Liquid.WATER, False, True)] = (
 vantage_mapping[(50, True, True, False, Liquid.WATER, False, False)] = (
   Tip_50ul_Core96Washer_DispenseSurface
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.7, 50.0: 54.2, 30.0: 33.2, 0.0: 0.0, 1.0: 0.5, 10.0: 11.4},
+  curve={
+    5.0: 5.7,
+    50.0: 54.2,
+    30.0: 33.2,
+    0.0: 0.0,
+    1.0: 0.5,
+    10.0: 11.4,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12587,7 +13782,14 @@ vantage_mapping[(50, False, True, False, Liquid.DMSO, True, True)] = (
 vantage_mapping[(50, False, True, False, Liquid.DMSO, False, True)] = (
   Tip_50ul_DMSO_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.6, 50.0: 52.6, 30.0: 32.1, 0.0: 0.0, 1.0: 0.7, 10.0: 11.0},
+  curve={
+    5.0: 5.6,
+    50.0: 52.6,
+    30.0: 32.1,
+    0.0: 0.0,
+    1.0: 0.7,
+    10.0: 11.0,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12635,7 +13837,14 @@ vantage_mapping[(50, False, True, False, Liquid.ETHANOL, True, True)] = (
 vantage_mapping[(50, False, True, False, Liquid.ETHANOL, False, True)] = (
   Tip_50ul_EtOH_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 6.7, 50.0: 54.1, 0.0: 0.0, 30.0: 33.7, 1.0: 2.1, 10.0: 12.1},
+  curve={
+    5.0: 6.7,
+    50.0: 54.1,
+    0.0: 0.0,
+    30.0: 33.7,
+    1.0: 2.1,
+    10.0: 12.1,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=2.0,
@@ -12659,7 +13868,14 @@ vantage_mapping[(50, False, True, False, Liquid.ETHANOL, False, True)] = (
 vantage_mapping[(50, False, True, False, Liquid.GLYCERIN80, False, True)] = (
   Tip_50ul_Glycerin80_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.7, 50.0: 59.4, 0.0: 0.0, 30.0: 36.0, 1.0: 0.3, 10.0: 11.8},
+  curve={
+    5.0: 5.7,
+    50.0: 59.4,
+    0.0: 0.0,
+    30.0: 36.0,
+    1.0: 0.3,
+    10.0: 11.8,
+  },
   aspiration_flow_rate=50.0,
   aspiration_mix_flow_rate=50.0,
   aspiration_air_transport_volume=0.0,
@@ -12707,7 +13923,14 @@ vantage_mapping[(50, False, True, False, Liquid.SERUM, True, True)] = (
 vantage_mapping[(50, False, True, False, Liquid.SERUM, False, True)] = (
   Tip_50ul_Serum_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.7, 50.0: 54.9, 30.0: 33.0, 0.0: 0.0, 1.0: 0.7, 10.0: 11.3},
+  curve={
+    5.0: 5.7,
+    50.0: 54.9,
+    30.0: 33.0,
+    0.0: 0.0,
+    1.0: 0.7,
+    10.0: 11.3,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,
@@ -12755,7 +13978,14 @@ vantage_mapping[(50, False, True, False, Liquid.WATER, True, True)] = (
 vantage_mapping[(50, False, True, False, Liquid.WATER, False, True)] = (
   Tip_50ul_Water_DispenseSurface_Empty
 ) = HamiltonLiquidClass(
-  curve={5.0: 5.7, 50.0: 54.2, 30.0: 33.2, 0.0: 0.0, 1.0: 0.7, 10.0: 11.4},
+  curve={
+    5.0: 5.7,
+    50.0: 54.2,
+    30.0: 33.2,
+    0.0: 0.0,
+    1.0: 0.7,
+    10.0: 11.4,
+  },
   aspiration_flow_rate=100.0,
   aspiration_mix_flow_rate=75.0,
   aspiration_air_transport_volume=0.0,

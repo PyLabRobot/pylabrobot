@@ -23,7 +23,9 @@ from typing import (
 )
 
 from pylabrobot import audio
-from pylabrobot.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
+from pylabrobot.liquid_handling.backends.hamilton.base import (
+  HamiltonLiquidHandler,
+)
 from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
@@ -43,14 +45,24 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Move,
 )
-from pylabrobot.resources import Carrier, Coordinate, Resource, TipRack, TipSpot, Well
+from pylabrobot.resources import (
+  Carrier,
+  Coordinate,
+  Resource,
+  TipRack,
+  TipSpot,
+  Well,
+)
 from pylabrobot.resources.errors import (
   TooLittleVolumeError,
   TooLittleLiquidError,
   HasTipError,
   NoTipError,
 )
-from pylabrobot.resources.hamilton.hamilton_decks import STAR_SIZE_X, STARLET_SIZE_X
+from pylabrobot.resources.hamilton.hamilton_decks import (
+  STAR_SIZE_X,
+  STARLET_SIZE_X,
+)
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.ml_star import (
   HamiltonTip,
@@ -78,7 +90,9 @@ def need_iswap_parked(method: Callable):
     if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
         # pylint: disable=protected-access
-        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10)
+        minimum_traverse_height_at_beginning_of_a_command=int(
+          self._traversal_height * 10
+        )
       )
 
     result = await method(self, *args, **kwargs)  # pylint: disable=not-callable
@@ -99,7 +113,9 @@ def _fill_in_defaults(val: Optional[List[T]], default: List[T]) -> List[T]:
     return [val] * len(default)
   # if the val is a list, it must be of the correct length.
   if len(val) != len(default):
-    raise ValueError(f"Value length must equal num operations ({len(default)}), but is {val}")
+    raise ValueError(
+      f"Value length must equal num operations ({len(default)}), but is {val}"
+    )
   # replace None values in list with default values.
   val = [v if v is not None else d for v, d in zip(val, default)]
   # the values must be of the right type. automatically handle int and float.
@@ -1014,7 +1030,10 @@ def star_firmware_string_to_error(
     if "/" in error:
       # C0 module: error code / trace information
       error_code_str, trace_information_str = error.split("/")
-      error_code, trace_information = int(error_code_str), int(trace_information_str)
+      error_code, trace_information = (
+        int(error_code_str),
+        int(trace_information_str),
+      )
       if error_code == 0:  # No error
         continue
       error_class = error_code_to_exception(error_code)
@@ -1079,7 +1098,8 @@ def convert_star_firmware_error_to_plr_error(
       return int(channel.split(" ")[-1]) - 1  # star is 1-indexed, plr is 0-indexed
 
     errors = {
-      _channel_to_int(module_name): convert_star_module_error_to_plr_error(error) or error
+      _channel_to_int(module_name): convert_star_module_error_to_plr_error(error)
+      or error
       for module_name, error in error.errors.items()
     }
     return ChannelizedError(errors=errors, raw_response=error.raw_response)
@@ -1288,7 +1308,12 @@ class STAR(HamiltonLiquidHandler):
     """Parse a response from the machine."""
     return parse_star_fw_string(resp, fmt)
 
-  async def setup(self, skip_autoload=False, skip_iswap=False, skip_core96_head=False):
+  async def setup(
+    self,
+    skip_autoload=False,
+    skip_iswap=False,
+    skip_core96_head=False,
+  ):
     """Creates a USB connection and finds read/write interfaces.
 
     Args:
@@ -1353,7 +1378,9 @@ class STAR(HamiltonLiquidHandler):
         await self.initialize_iswap()
 
       await self.park_iswap(
-        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10)
+        minimum_traverse_height_at_beginning_of_a_command=int(
+          self._traversal_height * 10
+        )
       )
 
     if self.core96_head_installed and not skip_core96_head:
@@ -1380,7 +1407,9 @@ class STAR(HamiltonLiquidHandler):
   ):
     """Pick up tips from a resource."""
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(
+      ops, use_channels
+    )
 
     tip_spots = [op.resource for op in ops]
     tips = set(cast(HamiltonTip, tip_spot.get_tip()) for tip_spot in tip_spots)
@@ -1393,9 +1422,14 @@ class STAR(HamiltonLiquidHandler):
     max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
 
     # not sure why this is necessary, but it is according to log files and experiments
-    if self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME:
+    if (
+      self._get_hamilton_tip([op.resource for op in ops]).tip_size == TipSize.LOW_VOLUME
+    ):
       max_tip_length += 2
-    elif self._get_hamilton_tip([op.resource for op in ops]).tip_size != TipSize.STANDARD_VOLUME:
+    elif (
+      self._get_hamilton_tip([op.resource for op in ops]).tip_size
+      != TipSize.STANDARD_VOLUME
+    ):
       max_tip_length -= 2
 
     tip = ops[0].tip
@@ -1427,8 +1461,7 @@ class STAR(HamiltonLiquidHandler):
         tip_type_idx=ttti,
         begin_tip_pick_up_process=begin_tip_pick_up_process,
         end_tip_pick_up_process=end_tip_pick_up_process,
-        minimum_traverse_height_at_beginning_of_a_command=
-          minimum_traverse_height_at_beginning_of_a_command,
+        minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
         pickup_method=pickup_method,
       )
     except STARFirmwareError as e:
@@ -1460,7 +1493,9 @@ class STAR(HamiltonLiquidHandler):
       else:
         drop_method = TipDropMethod.DROP
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(
+      ops, use_channels
+    )
 
     # get highest z position
     max_z = max(op.resource.get_absolute_location().z + op.offset.z for op in ops)
@@ -1478,7 +1513,9 @@ class STAR(HamiltonLiquidHandler):
       )
     else:
       max_total_tip_length = max(op.tip.total_tip_length for op in ops)
-      max_tip_length = max((op.tip.total_tip_length - op.tip.fitting_depth) for op in ops)
+      max_tip_length = max(
+        (op.tip.total_tip_length - op.tip.fitting_depth) for op in ops
+      )
       begin_tip_deposit_process = (
         round((max_z + max_total_tip_length) * 10)
         if begin_tip_deposit_process is None
@@ -1508,8 +1545,7 @@ class STAR(HamiltonLiquidHandler):
         tip_pattern=channels_involved,
         begin_tip_deposit_process=begin_tip_deposit_process,
         end_tip_deposit_process=end_tip_deposit_process,
-        minimum_traverse_height_at_beginning_of_a_command=
-          minimum_traverse_height_at_beginning_of_a_command,
+        minimum_traverse_height_at_beginning_of_a_command=minimum_traverse_height_at_beginning_of_a_command,
         z_position_at_end_of_a_command=z_position_at_end_of_a_command,
         discarding_method=drop_method,
       )
@@ -1644,7 +1680,9 @@ class STAR(HamiltonLiquidHandler):
           and 360. Defaults to well bottom + liquid height. Should use absolute z.
     """
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(
+      ops, use_channels
+    )
 
     n = len(ops)
 
@@ -1682,7 +1720,9 @@ class STAR(HamiltonLiquidHandler):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_absolute_location().z
+      + op.offset.z
+      + op.resource.material_z_thickness
       for op in ops
     ]
     liquid_surfaces_no_lld = liquid_surfaces_no_lld or [
@@ -1691,7 +1731,9 @@ class STAR(HamiltonLiquidHandler):
     if lld_search_height is None:
       lld_search_height = [
         (
-          wb + op.resource.get_absolute_size_z() + (2.7 if isinstance(op.resource, Well) else 5)
+          wb
+          + op.resource.get_absolute_size_z()
+          + (2.7 if isinstance(op.resource, Well) else 5)
         )  # ?
         for wb, op in zip(well_bottoms, ops)
       ]
@@ -1704,7 +1746,9 @@ class STAR(HamiltonLiquidHandler):
         for hlc in hamilton_liquid_classes
       ],
     )
-    pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10] * n)
+    pull_out_distance_transport_air = _fill_in_defaults(
+      pull_out_distance_transport_air, [10] * n
+    )
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
@@ -1724,7 +1768,10 @@ class STAR(HamiltonLiquidHandler):
       ],
     )
     blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0))
+      (
+        op.blow_out_air_volume
+        or (hlc.aspiration_blow_out_volume if hlc is not None else 0)
+      )
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
     pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0] * n)
@@ -1740,28 +1787,37 @@ class STAR(HamiltonLiquidHandler):
     swap_speed = _fill_in_defaults(
       swap_speed,
       default=[
-        hlc.aspiration_swap_speed if hlc is not None else 100 for hlc in hamilton_liquid_classes
+        hlc.aspiration_swap_speed if hlc is not None else 100
+        for hlc in hamilton_liquid_classes
       ],
     )
     settling_time = _fill_in_defaults(
       settling_time,
       default=[
-        hlc.aspiration_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
+        hlc.aspiration_settling_time if hlc is not None else 0
+        for hlc in hamilton_liquid_classes
       ],
     )
     mix_volume = _fill_in_defaults(mix_volume, [0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
-    mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
+    mix_position_from_liquid_surface = _fill_in_defaults(
+      mix_position_from_liquid_surface, [0] * n
+    )
     mix_speed = _fill_in_defaults(
       mix_speed,
       default=[
-        hlc.aspiration_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
+        hlc.aspiration_mix_flow_rate if hlc is not None else 50.0
+        for hlc in hamilton_liquid_classes
       ],
     )
-    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
+    mix_surface_following_distance = _fill_in_defaults(
+      mix_surface_following_distance, [0] * n
+    )
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
-    use_2nd_section_aspiration = _fill_in_defaults(use_2nd_section_aspiration, [False] * n)
+    use_2nd_section_aspiration = _fill_in_defaults(
+      use_2nd_section_aspiration, [False] * n
+    )
     retract_height_over_2nd_section_to_empty_tip = _fill_in_defaults(
       retract_height_over_2nd_section_to_empty_tip, [0] * n
     )
@@ -1775,8 +1831,12 @@ class STAR(HamiltonLiquidHandler):
       z_drive_speed_during_2nd_section_search, [30.0] * n
     )
     cup_upper_edge = _fill_in_defaults(cup_upper_edge, [0] * n)
-    ratio_liquid_rise_to_tip_deep_in = _fill_in_defaults(ratio_liquid_rise_to_tip_deep_in, [0] * n)
-    immersion_depth_2nd_section = _fill_in_defaults(immersion_depth_2nd_section, [0] * n)
+    ratio_liquid_rise_to_tip_deep_in = _fill_in_defaults(
+      ratio_liquid_rise_to_tip_deep_in, [0] * n
+    )
+    immersion_depth_2nd_section = _fill_in_defaults(
+      immersion_depth_2nd_section, [0] * n
+    )
 
     try:
       return await self.aspirate_pip(
@@ -1788,13 +1848,17 @@ class STAR(HamiltonLiquidHandler):
         lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
         clot_detection_height=[round(cd * 10) for cd in clot_detection_height],
         liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
-        pull_out_distance_transport_air=[round(po * 10) for po in pull_out_distance_transport_air],
+        pull_out_distance_transport_air=[
+          round(po * 10) for po in pull_out_distance_transport_air
+        ],
         second_section_height=[round(sh * 10) for sh in second_section_height],
         second_section_ratio=[round(sr * 10) for sr in second_section_ratio],
         minimum_height=[round(mh * 10) for mh in minimum_height],
         immersion_depth=[round(id_ * 10) for id_ in immersion_depth],
         immersion_depth_direction=immersion_depth_direction,
-        surface_following_distance=[round(sfd * 10) for sfd in surface_following_distance],
+        surface_following_distance=[
+          round(sfd * 10) for sfd in surface_following_distance
+        ],
         aspiration_speed=[round(fr * 10) for fr in flow_rates],
         transport_air_volume=[round(tav * 10) for tav in transport_air_volume],
         blow_out_air_volume=[round(boa * 10) for boa in blow_out_air_volumes],
@@ -1816,7 +1880,9 @@ class STAR(HamiltonLiquidHandler):
           round(hp * 10) for hp in mix_position_from_liquid_surface
         ],
         mix_speed=[round(hs * 10) for hs in mix_speed],
-        mix_surface_following_distance=[round(hsd * 10) for hsd in mix_surface_following_distance],
+        mix_surface_following_distance=[
+          round(hsd * 10) for hsd in mix_surface_following_distance
+        ],
         limit_curve_index=limit_curve_index,
         use_2nd_section_aspiration=use_2nd_section_aspiration,
         retract_height_over_2nd_section_to_empty_tip=[
@@ -1833,9 +1899,12 @@ class STAR(HamiltonLiquidHandler):
         ],
         cup_upper_edge=[round(cue * 10) for cue in cup_upper_edge],
         ratio_liquid_rise_to_tip_deep_in=ratio_liquid_rise_to_tip_deep_in,
-        immersion_depth_2nd_section=[round(id_ * 10) for id_ in immersion_depth_2nd_section],
+        immersion_depth_2nd_section=[
+          round(id_ * 10) for id_ in immersion_depth_2nd_section
+        ],
         minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+          (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)
+          * 10
         ),
         min_z_endpos=round((min_z_endpos or self._traversal_height) * 10),
       )
@@ -1879,7 +1948,9 @@ class STAR(HamiltonLiquidHandler):
     hamilton_liquid_classes: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
-    empty: Optional[List[bool]] = None,  # truly "empty", does not exist in liquid editor, dm4
+    empty: Optional[
+      List[bool]
+    ] = None,  # truly "empty", does not exist in liquid editor, dm4
   ):
     """Dispense liquid from the specified channels.
 
@@ -1937,7 +2008,9 @@ class STAR(HamiltonLiquidHandler):
         documentation. Dispense mode 4.
     """
 
-    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
+    x_positions, y_positions, channels_involved = self._ops_to_fw_positions(
+      ops, use_channels
+    )
 
     n = len(ops)
 
@@ -1975,7 +2048,9 @@ class STAR(HamiltonLiquidHandler):
     ]
 
     well_bottoms = [
-      op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
+      op.resource.get_absolute_location().z
+      + op.offset.z
+      + op.resource.material_z_thickness
       for op in ops
     ]
     liquid_surfaces_no_lld = liquid_surface_no_lld or [
@@ -1984,7 +2059,9 @@ class STAR(HamiltonLiquidHandler):
     if lld_search_height is None:
       lld_search_height = [
         (
-          wb + op.resource.get_absolute_size_z() + (2.7 if isinstance(op.resource, Well) else 5)
+          wb
+          + op.resource.get_absolute_size_z()
+          + (2.7 if isinstance(op.resource, Well) else 5)
         )  # ?
         for wb, op in zip(well_bottoms, ops)
       ]
@@ -1996,7 +2073,9 @@ class STAR(HamiltonLiquidHandler):
       for i in range(len(ops))
     ]
 
-    pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10.0] * n)
+    pull_out_distance_transport_air = _fill_in_defaults(
+      pull_out_distance_transport_air, [10.0] * n
+    )
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
     minimum_height = _fill_in_defaults(minimum_height, well_bottoms)
@@ -2011,7 +2090,8 @@ class STAR(HamiltonLiquidHandler):
     stop_back_volume = _fill_in_defaults(
       stop_back_volume,
       default=[
-        hlc.dispense_stop_back_volume if hlc is not None else 0 for hlc in hamilton_liquid_classes
+        hlc.dispense_stop_back_volume if hlc is not None else 0
+        for hlc in hamilton_liquid_classes
       ],
     )
     transport_air_volume = _fill_in_defaults(
@@ -2022,7 +2102,10 @@ class STAR(HamiltonLiquidHandler):
       ],
     )
     blow_out_air_volumes = [
-      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
+      (
+        op.blow_out_air_volume
+        or (hlc.dispense_blow_out_volume if hlc is not None else 0)
+      )
       for op, hlc in zip(ops, hamilton_liquid_classes)
     ]
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
@@ -2034,25 +2117,32 @@ class STAR(HamiltonLiquidHandler):
     swap_speed = _fill_in_defaults(
       swap_speed,
       default=[
-        hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hamilton_liquid_classes
+        hlc.dispense_swap_speed if hlc is not None else 10.0
+        for hlc in hamilton_liquid_classes
       ],
     )
     settling_time = _fill_in_defaults(
       settling_time,
       default=[
-        hlc.dispense_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
+        hlc.dispense_settling_time if hlc is not None else 0
+        for hlc in hamilton_liquid_classes
       ],
     )
     mix_volume = _fill_in_defaults(mix_volume, [0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
-    mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
+    mix_position_from_liquid_surface = _fill_in_defaults(
+      mix_position_from_liquid_surface, [0] * n
+    )
     mix_speed = _fill_in_defaults(
       mix_speed,
       default=[
-        hlc.dispense_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
+        hlc.dispense_mix_flow_rate if hlc is not None else 50.0
+        for hlc in hamilton_liquid_classes
       ],
     )
-    mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
+    mix_surface_following_distance = _fill_in_defaults(
+      mix_surface_following_distance, [0] * n
+    )
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
     try:
@@ -2064,13 +2154,17 @@ class STAR(HamiltonLiquidHandler):
         dispense_volumes=[round(vol * 10) for vol in volumes],
         lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
         liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
-        pull_out_distance_transport_air=[round(po * 10) for po in pull_out_distance_transport_air],
+        pull_out_distance_transport_air=[
+          round(po * 10) for po in pull_out_distance_transport_air
+        ],
         second_section_height=[round(sh * 10) for sh in second_section_height],
         second_section_ratio=[round(sr * 10) for sr in second_section_ratio],
         minimum_height=[round(mh * 10) for mh in minimum_height],
         immersion_depth=[round(id_ * 10) for id_ in immersion_depth],  # [0, 0]
         immersion_depth_direction=immersion_depth_direction,
-        surface_following_distance=[round(sfd * 10) for sfd in surface_following_distance],
+        surface_following_distance=[
+          round(sfd * 10) for sfd in surface_following_distance
+        ],
         dispense_speed=[round(fr * 10) for fr in flow_rates],
         cut_off_speed=[round(cs * 10) for cs in cut_off_speed],
         stop_back_volume=[round(sbv * 10) for sbv in stop_back_volume],
@@ -2095,7 +2189,8 @@ class STAR(HamiltonLiquidHandler):
         ],
         limit_curve_index=limit_curve_index,
         minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+          (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)
+          * 10
         ),
         min_z_endpos=round((min_z_endpos or self._traversal_height) * 10),
         side_touch_off_distance=side_touch_off_distance,
@@ -2121,7 +2216,9 @@ class STAR(HamiltonLiquidHandler):
     tip_a1 = tip_spot_a1.get_tip()
     assert isinstance(tip_a1, HamiltonTip), "Tip type must be HamiltonTip."
     ttti = await self.get_or_assign_tip_type_index(tip_a1)
-    position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
+    position = (
+      tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + pickup.offset
+    )
     z_deposit_position += round(pickup.offset.z * 10)
 
     x_direction = 0 if position.x > 0 else 1
@@ -2133,9 +2230,12 @@ class STAR(HamiltonLiquidHandler):
       tip_pickup_method=tip_pickup_method,
       z_deposit_position=round(z_deposit_position * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)
+        * 10
       ),
-      minimum_height_command_end=round((minimum_height_command_end or self._traversal_height) * 10),
+      minimum_height_command_end=round(
+        (minimum_height_command_end or self._traversal_height) * 10
+      ),
     )
 
   async def drop_tips96(
@@ -2160,9 +2260,12 @@ class STAR(HamiltonLiquidHandler):
       y_position=round(position.y * 10),
       z_deposit_position=round(z_deposit_position * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)
+        * 10
       ),
-      minimum_height_command_end=round((minimum_height_command_end or self._traversal_height) * 10),
+      minimum_height_command_end=round(
+        (minimum_height_command_end or self._traversal_height) * 10
+      ),
     )
 
   async def aspirate96(
@@ -2285,10 +2388,16 @@ class STAR(HamiltonLiquidHandler):
     blow_out_air_volume = aspiration.blow_out_air_volume or (
       hlc.aspiration_blow_out_volume if hlc is not None else 0
     )
-    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
+    flow_rate = aspiration.flow_rate or (
+      hlc.aspiration_flow_rate if hlc is not None else 250
+    )
     swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 0.5)
-    speed_of_mix = speed_of_mix or (hlc.aspiration_mix_flow_rate if hlc is not None else 10.0)
+    settling_time = settling_time or (
+      hlc.aspiration_settling_time if hlc is not None else 0.5
+    )
+    speed_of_mix = speed_of_mix or (
+      hlc.aspiration_mix_flow_rate if hlc is not None else 10.0
+    )
 
     channel_pattern = [True] * 12 * 8
 
@@ -2311,7 +2420,8 @@ class STAR(HamiltonLiquidHandler):
       y_positions=round(position.y * 10),
       aspiration_type=aspiration_type,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)
+        * 10
       ),
       minimal_end_height=round((minimal_end_height or self._traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
@@ -2320,7 +2430,9 @@ class STAR(HamiltonLiquidHandler):
         air_transport_retract_dist * 10
       ),
       maximum_immersion_depth=round((maximum_immersion_depth or position.z) * 10),
-      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
+      tube_2nd_section_height_measured_from_zm=round(
+        tube_2nd_section_height_measured_from_zm * 10
+      ),
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       immersion_depth_direction=immersion_depth_direction,
@@ -2339,7 +2451,9 @@ class STAR(HamiltonLiquidHandler):
       mix_volume=round(mix_volume * 10),
       mix_cycles=mix_cycles,
       mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
-      surface_following_distance_during_mix=round(surface_following_distance_during_mix * 10),
+      surface_following_distance_during_mix=round(
+        surface_following_distance_during_mix * 10
+      ),
       speed_of_mix=round(speed_of_mix * 10),
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
@@ -2462,10 +2576,16 @@ class STAR(HamiltonLiquidHandler):
     blow_out_air_volume = dispense.blow_out_air_volume or (
       hlc.dispense_blow_out_volume if hlc is not None else 0
     )
-    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
+    flow_rate = dispense.flow_rate or (
+      hlc.dispense_flow_rate if hlc is not None else 120
+    )
     swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
-    settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
-    speed_of_mixing = speed_of_mixing or (hlc.dispense_mix_flow_rate if hlc is not None else 100)
+    settling_time = settling_time or (
+      hlc.dispense_settling_time if hlc is not None else 5
+    )
+    speed_of_mixing = speed_of_mixing or (
+      hlc.dispense_mix_flow_rate if hlc is not None else 100
+    )
 
     channel_pattern = [True] * 12 * 8
 
@@ -2475,7 +2595,8 @@ class STAR(HamiltonLiquidHandler):
       x_direction=0,
       y_position=round(position.y * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)
+        * 10
       ),
       minimal_end_height=round((minimal_end_height or self._traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
@@ -2484,7 +2605,9 @@ class STAR(HamiltonLiquidHandler):
         air_transport_retract_dist * 10
       ),
       maximum_immersion_depth=maximum_immersion_depth or round(position.z * 10),
-      tube_2nd_section_height_measured_from_zm=round(tube_2nd_section_height_measured_from_zm * 10),
+      tube_2nd_section_height_measured_from_zm=round(
+        tube_2nd_section_height_measured_from_zm * 10
+      ),
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       immersion_depth_direction=immersion_depth_direction,
@@ -2501,8 +2624,12 @@ class STAR(HamiltonLiquidHandler):
       settling_time=round(settling_time * 10),
       mixing_volume=round(mixing_volume * 10),
       mixing_cycles=mixing_cycles,
-      mixing_position_from_liquid_surface=round(mixing_position_from_liquid_surface * 10),
-      surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
+      mixing_position_from_liquid_surface=round(
+        mixing_position_from_liquid_surface * 10
+      ),
+      surface_following_distance_during_mixing=round(
+        surface_following_distance_during_mixing * 10
+      ),
       speed_of_mixing=round(speed_of_mixing * 10),
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
@@ -2743,7 +2870,8 @@ class STAR(HamiltonLiquidHandler):
       plate_width=round(grip_width * 10) - 30,
       grip_strength=grip_strength,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)
+        * 10
       ),
       minimum_z_position_at_the_command_end=round(
         (minimum_z_position_at_the_command_end or self._traversal_height) * 10
@@ -2783,7 +2911,8 @@ class STAR(HamiltonLiquidHandler):
       z_position=round(center.z * 10),
       z_speed=round(z_speed * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)
+        * 10
       ),
     )
 
@@ -2826,7 +2955,8 @@ class STAR(HamiltonLiquidHandler):
       z_speed=500,
       open_gripper_position=round(grip_width * 10) + 30,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height)
+        * 10
       ),
       z_position_at_the_command_end=round(
         (z_position_at_the_command_end or self._traversal_height) * 10
@@ -2882,7 +3012,9 @@ class STAR(HamiltonLiquidHandler):
 
     previous_location = move.resource.get_absolute_location() + move.resource_offset
     minimum_traverse_height = 284.0
-    previous_location.z = minimum_traverse_height - move.resource.get_absolute_size_z() / 2
+    previous_location.z = (
+      minimum_traverse_height - move.resource.get_absolute_size_z() / 2
+    )
 
     for location in move.intermediate_locations:
       if use_arm == "iswap":
@@ -3018,7 +3150,9 @@ class STAR(HamiltonLiquidHandler):
           minimum_traverse_height_at_beginning_of_a_command=round(
             minimum_traverse_height_at_beginning_of_a_command * 10
           ),
-          minimum_z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
+          minimum_z_position_at_the_command_end=round(
+            z_position_at_the_command_end * 10
+          ),
         )
       except STARFirmwareError as exc:
         for module_error in exc.errors.values():
@@ -3089,10 +3223,16 @@ class STAR(HamiltonLiquidHandler):
 
     # pylint: disable=redefined-builtin
 
-    assert 0 <= tip_type_table_index <= 99, "tip_type_table_index must be between 0 and 99"
-    assert 0 <= tip_type_table_index <= 99, "tip_type_table_index must be between 0 and 99"
+    assert (
+      0 <= tip_type_table_index <= 99
+    ), "tip_type_table_index must be between 0 and 99"
+    assert (
+      0 <= tip_type_table_index <= 99
+    ), "tip_type_table_index must be between 0 and 99"
     assert 1 <= tip_length <= 1999, "tip_length must be between 1 and 1999"
-    assert 1 <= maximum_tip_volume <= 56000, "maximum_tip_volume must be between 1 and 56000"
+    assert (
+      1 <= maximum_tip_volume <= 56000
+    ), "maximum_tip_volume must be between 1 and 56000"
 
     return await self.send_command(
       module="C0",
@@ -3276,7 +3416,9 @@ class STAR(HamiltonLiquidHandler):
   # -------------- 3.3.2 Non volatile settings (stored in EEPROM) --------------
 
   async def store_installation_data(
-    self, date: datetime.datetime = datetime.datetime.now(), serial_number: str = "0000"
+    self,
+    date: datetime.datetime = datetime.datetime.now(),
+    serial_number: str = "0000",
   ):
     """Store installation data
 
@@ -3302,7 +3444,9 @@ class STAR(HamiltonLiquidHandler):
       verification_status: verification status.
     """
 
-    assert 0 <= verification_subject <= 24, "verification_subject must be between 0 and 24"
+    assert (
+      0 <= verification_subject <= 24
+    ), "verification_subject must be between 0 and 24"
 
     return await self.send_command(
       module="C0",
@@ -3357,7 +3501,9 @@ class STAR(HamiltonLiquidHandler):
       ao=date,
     )
 
-  async def save_technical_status_of_assemblies(self, processor_board: str, power_supply: str):
+  async def save_technical_status_of_assemblies(
+    self, processor_board: str, power_supply: str
+  ):
     """Save technical status of assemblies
 
     Args:
@@ -3439,8 +3585,12 @@ class STAR(HamiltonLiquidHandler):
     assert (
       1 <= instrument_size_in_slots_x_range <= 9
     ), "instrument_size_in_slots_x_range must be between 1 and 99"
-    assert 1 <= auto_load_size_in_slots <= 54, "auto_load_size_in_slots must be between 1 and 54"
-    assert 1000 <= tip_waste_x_position <= 25000, "tip_waste_x_position must be between 1 and 25000"
+    assert (
+      1 <= auto_load_size_in_slots <= 54
+    ), "auto_load_size_in_slots must be between 1 and 54"
+    assert (
+      1000 <= tip_waste_x_position <= 25000
+    ), "tip_waste_x_position must be between 1 and 25000"
     assert (
       0 <= right_x_drive_configuration_byte_1 <= 1
     ), "right_x_drive_configuration_byte_1 must be between 0 and 1"
@@ -3454,10 +3604,14 @@ class STAR(HamiltonLiquidHandler):
       0 <= maximal_iswap_collision_free_position <= 30000
     ), "maximal_iswap_collision_free_position must be between 0 and 30000"
     assert 0 <= left_x_arm_width <= 9999, "left_x_arm_width must be between 0 and 9999"
-    assert 0 <= right_x_arm_width <= 9999, "right_x_arm_width must be between 0 and 9999"
+    assert (
+      0 <= right_x_arm_width <= 9999
+    ), "right_x_arm_width must be between 0 and 9999"
     assert 0 <= num_pip_channels <= 16, "num_pip_channels must be between 0 and 16"
     assert 0 <= num_xl_channels <= 8, "num_xl_channels must be between 0 and 8"
-    assert 0 <= num_robotic_channels <= 8, "num_robotic_channels must be between 0 and 8"
+    assert (
+      0 <= num_robotic_channels <= 8
+    ), "num_robotic_channels must be between 0 and 8"
     assert (
       0 <= minimal_raster_pitch_of_pip_channels <= 999
     ), "minimal_raster_pitch_of_pip_channels must be between 0 and 999"
@@ -3467,7 +3621,9 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= minimal_raster_pitch_of_robotic_channels <= 999
     ), "minimal_raster_pitch_of_robotic_channels must be between 0 and 999"
-    assert 0 <= pip_maximal_y_position <= 9999, "pip_maximal_y_position must be between 0 and 9999"
+    assert (
+      0 <= pip_maximal_y_position <= 9999
+    ), "pip_maximal_y_position must be between 0 and 9999"
     assert (
       0 <= left_arm_minimal_y_position <= 9999
     ), "left_arm_minimal_y_position must be between 0 and 9999"
@@ -3578,7 +3734,9 @@ class STAR(HamiltonLiquidHandler):
       verification_subject: verification subject. Must be between 0 and 24. Default 0.
     """
 
-    assert 0 <= verification_subject <= 24, "verification_subject must be between 0 and 24"
+    assert (
+      0 <= verification_subject <= 24
+    ), "verification_subject must be between 0 and 24"
 
     # TODO: parse results.
     return await self.send_command(module="C0", command="RO", vo=verification_subject)
@@ -3727,7 +3885,9 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= taken_area_identification_number <= 9999
     ), "taken_area_identification_number must be between 0 and 9999"
-    assert 0 <= taken_area_left_margin <= 99, "taken_area_left_margin must be between 0 and 99"
+    assert (
+      0 <= taken_area_left_margin <= 99
+    ), "taken_area_left_margin must be between 0 and 99"
     assert (
       0 <= taken_area_left_margin_direction <= 1
     ), "taken_area_left_margin_direction must be between 0 and 1"
@@ -3848,8 +4008,12 @@ class STAR(HamiltonLiquidHandler):
         drop (no shift) (tp/ tz = stop disk height). Must be between 0 and 1. Default 1.
     """
 
-    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
-    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
+    assert all(
+      0 <= xp <= 25000 for xp in x_positions
+    ), "x_positions must be between 0 and 25000"
+    assert all(
+      0 <= yp <= 6500 for yp in y_positions
+    ), "y_positions must be between 0 and 6500"
     assert (
       0 <= begin_of_tip_deposit_process <= 3600
     ), "begin_of_tip_deposit_process must be between 0 and 3600"
@@ -3907,8 +4071,12 @@ class STAR(HamiltonLiquidHandler):
       pickup_method: Pick up method.
     """
 
-    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
-    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
+    assert all(
+      0 <= xp <= 25000 for xp in x_positions
+    ), "x_positions must be between 0 and 25000"
+    assert all(
+      0 <= yp <= 6500 for yp in y_positions
+    ), "y_positions must be between 0 and 6500"
     assert (
       0 <= begin_tip_pick_up_process <= 3600
     ), "begin_tip_pick_up_process must be between 0 and 3600"
@@ -3969,8 +4137,12 @@ class STAR(HamiltonLiquidHandler):
     Otherwise, tp/ tz = stop disk height.
     """
 
-    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
-    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
+    assert all(
+      0 <= xp <= 25000 for xp in x_positions
+    ), "x_positions must be between 0 and 25000"
+    assert all(
+      0 <= yp <= 6500 for yp in y_positions
+    ), "y_positions must be between 0 and 6500"
     assert (
       0 <= begin_tip_deposit_process <= 3600
     ), "begin_tip_deposit_process must be between 0 and 3600"
@@ -4141,9 +4313,15 @@ class STAR(HamiltonLiquidHandler):
           3600. Default 30.
     """
 
-    assert all(0 <= x <= 2 for x in aspiration_type), "aspiration_type must be between 0 and 2"
-    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
-    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
+    assert all(
+      0 <= x <= 2 for x in aspiration_type
+    ), "aspiration_type must be between 0 and 2"
+    assert all(
+      0 <= xp <= 25000 for xp in x_positions
+    ), "x_positions must be between 0 and 25000"
+    assert all(
+      0 <= yp <= 6500 for yp in y_positions
+    ), "y_positions must be between 0 and 6500"
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
@@ -4166,7 +4344,9 @@ class STAR(HamiltonLiquidHandler):
     assert all(
       0 <= x <= 10000 for x in second_section_ratio
     ), "second_section_ratio must be between 0 and 10000"
-    assert all(0 <= x <= 3600 for x in minimum_height), "minimum_height must be between 0 and 3600"
+    assert all(
+      0 <= x <= 3600 for x in minimum_height
+    ), "minimum_height must be between 0 and 3600"
     assert all(
       0 <= x <= 3600 for x in immersion_depth
     ), "immersion_depth must be between 0 and 3600"
@@ -4204,14 +4384,22 @@ class STAR(HamiltonLiquidHandler):
     assert all(
       0 <= x <= 99 for x in detection_height_difference_for_dual_lld
     ), "detection_height_difference_for_dual_lld must be between 0 and 99"
-    assert all(3 <= x <= 1600 for x in swap_speed), "swap_speed must be between 3 and 1600"
-    assert all(0 <= x <= 99 for x in settling_time), "settling_time must be between 0 and 99"
-    assert all(0 <= x <= 12500 for x in mix_volume), "mix_volume must be between 0 and 12500"
+    assert all(
+      3 <= x <= 1600 for x in swap_speed
+    ), "swap_speed must be between 3 and 1600"
+    assert all(
+      0 <= x <= 99 for x in settling_time
+    ), "settling_time must be between 0 and 99"
+    assert all(
+      0 <= x <= 12500 for x in mix_volume
+    ), "mix_volume must be between 0 and 12500"
     assert all(0 <= x <= 99 for x in mix_cycles), "mix_cycles must be between 0 and 99"
     assert all(
       0 <= x <= 900 for x in mix_position_from_liquid_surface
     ), "mix_position_from_liquid_surface must be between 0 and 900"
-    assert all(4 <= x <= 5000 for x in mix_speed), "mix_speed must be between 4 and 5000"
+    assert all(
+      4 <= x <= 5000 for x in mix_speed
+    ), "mix_speed must be between 4 and 5000"
     assert all(
       0 <= x <= 3600 for x in mix_surface_following_distance
     ), "mix_surface_following_distance must be between 0 and 3600"
@@ -4231,7 +4419,9 @@ class STAR(HamiltonLiquidHandler):
     assert all(
       3 <= x <= 1600 for x in z_drive_speed_during_2nd_section_search
     ), "z_drive_speed_during_2nd_section_search must be between 3 and 1600"
-    assert all(0 <= x <= 3600 for x in cup_upper_edge), "cup_upper_edge must be between 0 and 3600"
+    assert all(
+      0 <= x <= 3600 for x in cup_upper_edge
+    ), "cup_upper_edge must be between 0 and 3600"
     assert all(
       0 <= x <= 5000 for x in ratio_liquid_rise_to_tip_deep_in
     ), "ratio_liquid_rise_to_tip_deep_in must be between 0 and 50000"
@@ -4400,10 +4590,18 @@ class STAR(HamiltonLiquidHandler):
         be between 0 and 2. Default 0.
     """
 
-    assert all(0 <= x <= 4 for x in dispensing_mode), "dispensing_mode must be between 0 and 4"
-    assert all(0 <= xp <= 25000 for xp in x_positions), "x_positions must be between 0 and 25000"
-    assert all(0 <= yp <= 6500 for yp in y_positions), "y_positions must be between 0 and 6500"
-    assert any(0 <= x <= 3600 for x in minimum_height), "minimum_height must be between 0 and 3600"
+    assert all(
+      0 <= x <= 4 for x in dispensing_mode
+    ), "dispensing_mode must be between 0 and 4"
+    assert all(
+      0 <= xp <= 25000 for xp in x_positions
+    ), "x_positions must be between 0 and 25000"
+    assert all(
+      0 <= yp <= 6500 for yp in y_positions
+    ), "y_positions must be between 0 and 6500"
+    assert any(
+      0 <= x <= 3600 for x in minimum_height
+    ), "minimum_height must be between 0 and 3600"
     assert any(
       0 <= x <= 3600 for x in lld_search_height
     ), "lld_search_height must be between 0 and 3600"
@@ -4435,8 +4633,12 @@ class STAR(HamiltonLiquidHandler):
     assert any(
       0 <= x <= 12500 for x in dispense_volumes
     ), "dispense_volume must be between 0 and 12500"
-    assert any(4 <= x <= 5000 for x in dispense_speed), "dispense_speed must be between 4 and 5000"
-    assert any(4 <= x <= 5000 for x in cut_off_speed), "cut_off_speed must be between 4 and 5000"
+    assert any(
+      4 <= x <= 5000 for x in dispense_speed
+    ), "dispense_speed must be between 4 and 5000"
+    assert any(
+      4 <= x <= 5000 for x in cut_off_speed
+    ), "cut_off_speed must be between 4 and 5000"
     assert any(
       0 <= x <= 180 for x in stop_back_volume
     ), "stop_back_volume must be between 0 and 180"
@@ -4447,7 +4649,9 @@ class STAR(HamiltonLiquidHandler):
       0 <= x <= 9999 for x in blow_out_air_volume
     ), "blow_out_air_volume must be between 0 and 9999"
     assert any(0 <= x <= 4 for x in lld_mode), "lld_mode must be between 0 and 4"
-    assert 0 <= side_touch_off_distance <= 45, "side_touch_off_distance must be between 0 and 45"
+    assert (
+      0 <= side_touch_off_distance <= 45
+    ), "side_touch_off_distance must be between 0 and 45"
     assert any(
       0 <= x <= 100 for x in dispense_position_above_z_touch_off
     ), "dispense_position_above_z_touch_off must be between 0 and 100"
@@ -4457,14 +4661,22 @@ class STAR(HamiltonLiquidHandler):
     assert any(
       1 <= x <= 4 for x in dp_lld_sensitivity
     ), "dp_lld_sensitivity must be between 1 and 4"
-    assert any(3 <= x <= 1600 for x in swap_speed), "swap_speed must be between 3 and 1600"
-    assert any(0 <= x <= 99 for x in settling_time), "settling_time must be between 0 and 99"
-    assert any(0 <= x <= 12500 for x in mix_volume), "mix_volume must be between 0 and 12500"
+    assert any(
+      3 <= x <= 1600 for x in swap_speed
+    ), "swap_speed must be between 3 and 1600"
+    assert any(
+      0 <= x <= 99 for x in settling_time
+    ), "settling_time must be between 0 and 99"
+    assert any(
+      0 <= x <= 12500 for x in mix_volume
+    ), "mix_volume must be between 0 and 12500"
     assert any(0 <= x <= 99 for x in mix_cycles), "mix_cycles must be between 0 and 99"
     assert any(
       0 <= x <= 900 for x in mix_position_from_liquid_surface
     ), "mix_position_from_liquid_surface must be between 0 and 900"
-    assert any(4 <= x <= 5000 for x in mix_speed), "mix_speed must be between 4 and 5000"
+    assert any(
+      4 <= x <= 5000 for x in mix_speed
+    ), "mix_speed must be between 4 and 5000"
     assert any(
       0 <= x <= 3600 for x in mix_surface_following_distance
     ), "mix_surface_following_distance must be between 0 and 3600"
@@ -4613,7 +4825,9 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= y_gripping_speed <= 3700, "y_gripping_speed must be between 0 and 3700"
     assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
     assert 0 <= z_speed <= 1287, "z_speed must be between 0 and 1287"
-    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
+    assert (
+      0 <= open_gripper_position <= 9999
+    ), "open_gripper_position must be between 0 and 9999"
     assert 0 <= plate_width <= 9999, "plate_width must be between 0 and 9999"
     assert 0 <= grip_strength <= 99, "grip_strength must be between 0 and 99"
     assert (
@@ -4661,9 +4875,13 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
     assert 0 <= y_position <= 6500, "y_position must be between 0 and 6500"
     assert 0 <= z_position <= 3600, "z_position must be between 0 and 3600"
-    assert 0 <= z_press_on_distance <= 50, "z_press_on_distance must be between 0 and 999"
+    assert (
+      0 <= z_press_on_distance <= 50
+    ), "z_press_on_distance must be between 0 and 999"
     assert 0 <= z_speed <= 1600, "z_speed must be between 0 and 1600"
-    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
+    assert (
+      0 <= open_gripper_position <= 9999
+    ), "open_gripper_position must be between 0 and 9999"
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
@@ -4873,7 +5091,9 @@ class STAR(HamiltonLiquidHandler):
       pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
     """
 
-    assert 1 <= pipetting_channel_index <= 16, "pipetting_channel_index must be between 1 and 16"
+    assert (
+      1 <= pipetting_channel_index <= 16
+    ), "pipetting_channel_index must be between 1 and 16"
 
     return await self.send_command(
       module="C0",
@@ -4894,7 +5114,9 @@ class STAR(HamiltonLiquidHandler):
       Z-Position of channel n [0.1mm]. Taking into account tip presence and length.
     """
 
-    assert 1 <= pipetting_channel_index <= 16, "pipetting_channel_index must be between 1 and 16"
+    assert (
+      1 <= pipetting_channel_index <= 16
+    ), "pipetting_channel_index must be between 1 and 16"
 
     return await self.send_command(
       module="C0",
@@ -5088,7 +5310,9 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
     assert 1054 <= y_position <= 5743, "y_position must be between 1054 and 5743"
-    assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
+    assert (
+      0 <= z_deposit_position <= 3425
+    ), "z_deposit_position must be between 0 and 3425"
     assert (
       0 <= z_position_at_the_command_end <= 3425
     ), "z_position_at_the_command_end must be between 0 and 3425"
@@ -5146,7 +5370,9 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
     assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
-    assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
+    assert (
+      0 <= z_deposit_position <= 3425
+    ), "z_deposit_position must be between 0 and 3425"
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
@@ -5196,7 +5422,9 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
     assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
     assert 1080 <= y_position <= 5600, "y_position must be between 1080 and 5600"
-    assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
+    assert (
+      0 <= z_deposit_position <= 3425
+    ), "z_deposit_position must be between 0 and 3425"
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
@@ -5318,8 +5546,12 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
-    assert 0 <= minimal_end_height <= 3425, "minimal_end_height must be between 0 and 3425"
-    assert 0 <= lld_search_height <= 3425, "lld_search_height must be between 0 and 3425"
+    assert (
+      0 <= minimal_end_height <= 3425
+    ), "minimal_end_height must be between 0 and 3425"
+    assert (
+      0 <= lld_search_height <= 3425
+    ), "lld_search_height must be between 0 and 3425"
     assert (
       0 <= liquid_surface_at_function_without_lld <= 3425
     ), "liquid_surface_at_function_without_lld must be between 0 and 3425"
@@ -5336,17 +5568,29 @@ class STAR(HamiltonLiquidHandler):
       0 <= tube_2nd_section_ratio <= 10000
     ), "tube_2nd_section_ratio must be between 0 and 10000"
     assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
-    assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
+    assert (
+      0 <= immersion_depth_direction <= 1
+    ), "immersion_depth_direction must be between 0 and 1"
     assert (
       0 <= liquid_surface_sink_distance_at_the_end_of_aspiration <= 990
     ), "liquid_surface_sink_distance_at_the_end_of_aspiration must be between 0 and 990"
-    assert 0 <= aspiration_volumes <= 11500, "aspiration_volumes must be between 0 and 11500"
+    assert (
+      0 <= aspiration_volumes <= 11500
+    ), "aspiration_volumes must be between 0 and 11500"
     assert 3 <= aspiration_speed <= 5000, "aspiration_speed must be between 3 and 5000"
-    assert 0 <= transport_air_volume <= 500, "transport_air_volume must be between 0 and 500"
-    assert 0 <= blow_out_air_volume <= 11500, "blow_out_air_volume must be between 0 and 11500"
-    assert 0 <= pre_wetting_volume <= 11500, "pre_wetting_volume must be between 0 and 11500"
+    assert (
+      0 <= transport_air_volume <= 500
+    ), "transport_air_volume must be between 0 and 500"
+    assert (
+      0 <= blow_out_air_volume <= 11500
+    ), "blow_out_air_volume must be between 0 and 11500"
+    assert (
+      0 <= pre_wetting_volume <= 11500
+    ), "pre_wetting_volume must be between 0 and 11500"
     assert 0 <= lld_mode <= 4, "lld_mode must be between 0 and 4"
-    assert 1 <= gamma_lld_sensitivity <= 4, "gamma_lld_sensitivity must be between 1 and 4"
+    assert (
+      1 <= gamma_lld_sensitivity <= 4
+    ), "gamma_lld_sensitivity must be between 1 and 4"
     assert 3 <= swap_speed <= 1000, "swap_speed must be between 3 and 1000"
     assert 0 <= settling_time <= 99, "settling_time must be between 0 and 99"
     assert 0 <= mix_volume <= 11500, "mix_volume must be between 0 and 11500"
@@ -5363,7 +5607,9 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
     # Convert bool list to hex string
-    assert len(channel_pattern) == 96, "channel_pattern must be a list of 96 boolean values"
+    assert (
+      len(channel_pattern) == 96
+    ), "channel_pattern must be a list of 96 boolean values"
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
@@ -5516,7 +5762,9 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= tube_2nd_section_ratio <= 10000
     ), "tube_2nd_section_ratio must be between 0 and 10000"
-    assert 0 <= lld_search_height <= 3425, "lld_search_height must be between 0 and 3425"
+    assert (
+      0 <= lld_search_height <= 3425
+    ), "lld_search_height must be between 0 and 3425"
     assert (
       0 <= liquid_surface_at_function_without_lld <= 3425
     ), "liquid_surface_at_function_without_lld must be between 0 and 3425"
@@ -5524,23 +5772,35 @@ class STAR(HamiltonLiquidHandler):
       0 <= pull_out_distance_to_take_transport_air_in_function_without_lld <= 3425
     ), "pull_out_distance_to_take_transport_air_in_function_without_lld must be between 0 and 3425"
     assert 0 <= immersion_depth <= 3600, "immersion_depth must be between 0 and 3600"
-    assert 0 <= immersion_depth_direction <= 1, "immersion_depth_direction must be between 0 and 1"
+    assert (
+      0 <= immersion_depth_direction <= 1
+    ), "immersion_depth_direction must be between 0 and 1"
     assert (
       0 <= liquid_surface_sink_distance_at_the_end_of_dispense <= 990
     ), "liquid_surface_sink_distance_at_the_end_of_dispense must be between 0 and 990"
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3425
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3425"
-    assert 0 <= minimal_end_height <= 3425, "minimal_end_height must be between 0 and 3425"
+    assert (
+      0 <= minimal_end_height <= 3425
+    ), "minimal_end_height must be between 0 and 3425"
     assert 0 <= dispense_volume <= 11500, "dispense_volume must be between 0 and 11500"
     assert 3 <= dispense_speed <= 5000, "dispense_speed must be between 3 and 5000"
     assert 3 <= cut_off_speed <= 5000, "cut_off_speed must be between 3 and 5000"
     assert 0 <= stop_back_volume <= 999, "stop_back_volume must be between 0 and 999"
-    assert 0 <= transport_air_volume <= 500, "transport_air_volume must be between 0 and 500"
-    assert 0 <= blow_out_air_volume <= 11500, "blow_out_air_volume must be between 0 and 11500"
+    assert (
+      0 <= transport_air_volume <= 500
+    ), "transport_air_volume must be between 0 and 500"
+    assert (
+      0 <= blow_out_air_volume <= 11500
+    ), "blow_out_air_volume must be between 0 and 11500"
     assert 0 <= lld_mode <= 4, "lld_mode must be between 0 and 4"
-    assert 1 <= gamma_lld_sensitivity <= 4, "gamma_lld_sensitivity must be between 1 and 4"
-    assert 0 <= side_touch_off_distance <= 45, "side_touch_off_distance must be between 0 and 45"
+    assert (
+      1 <= gamma_lld_sensitivity <= 4
+    ), "gamma_lld_sensitivity must be between 1 and 4"
+    assert (
+      0 <= side_touch_off_distance <= 45
+    ), "side_touch_off_distance must be between 0 and 45"
     assert 3 <= swap_speed <= 1000, "swap_speed must be between 3 and 1000"
     assert 0 <= settling_time <= 99, "settling_time must be between 0 and 99"
     assert 0 <= mixing_volume <= 11500, "mixing_volume must be between 0 and 11500"
@@ -5556,7 +5816,9 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
     # Convert bool list to hex string
-    assert len(channel_pattern) == 96, "channel_pattern must be a list of 96 boolean values"
+    assert (
+      len(channel_pattern) == 96
+    ), "channel_pattern must be a list of 96 boolean values"
     channel_pattern_bin_str = reversed(["1" if x else "0" for x in channel_pattern])
     channel_pattern_hex = hex(int("".join(channel_pattern_bin_str), 2)).upper()[2:]
 
@@ -5672,7 +5934,9 @@ class STAR(HamiltonLiquidHandler):
       za: Z height [0.1mm]
     """
 
-    return await self.send_command(module="C0", command="QI", fmt="xs#####xd#hy####za####")
+    return await self.send_command(
+      module="C0", command="QI", fmt="xs#####xd#hy####za####"
+    )
 
   async def request_core_96_head_channel_tadm_status(self):
     """Request CoRe 96 Head channel TADM Status
@@ -5807,7 +6071,9 @@ class STAR(HamiltonLiquidHandler):
     """Use autoload to unload carrier."""
     # Identify carrier end rail
     track_width = 22.5
-    carrier_width = carrier.get_absolute_location().x - 100 + carrier.get_absolute_size_x()
+    carrier_width = (
+      carrier.get_absolute_location().x - 100 + carrier.get_absolute_size_x()
+    )
     carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
@@ -5854,7 +6120,10 @@ class STAR(HamiltonLiquidHandler):
       park_autoload_after: Whether to park autoload after loading. Default True.
     """
 
-    barcode_reading_direction_dict = {"vertical": "0", "horizontal": "1"}
+    barcode_reading_direction_dict = {
+      "vertical": "0",
+      "horizontal": "1",
+    }
     barcode_symbology_dict = {
       "ISBT Standard": "70",
       "Code 128 (Subset B and C)": "71",
@@ -5867,7 +6136,9 @@ class STAR(HamiltonLiquidHandler):
     }
     # Identify carrier end rail
     track_width = 22.5
-    carrier_width = carrier.get_absolute_location().x - 100 + carrier.get_absolute_size_x()
+    carrier_width = (
+      carrier.get_absolute_location().x - 100 + carrier.get_absolute_size_x()
+    )
     carrier_end_rail = int(carrier_width / track_width)
     assert 1 <= carrier_end_rail <= 54, "carrier loading rail must be between 1 and 54"
 
@@ -5889,7 +6160,9 @@ class STAR(HamiltonLiquidHandler):
     if barcode_reading:
       # Choose barcode symbology
       await self.send_command(
-        module="C0", command="CB", bt=barcode_symbology_dict[barcode_symbology]
+        module="C0",
+        command="CB",
+        bt=barcode_symbology_dict[barcode_symbology],
       )
       # Load and read out barcodes
       resp = await self.send_command(
@@ -5900,7 +6173,9 @@ class STAR(HamiltonLiquidHandler):
         co="0960",  # Distance between containers (pattern) [0.1 mm]
         cf="380",  # Width of reading window [0.1 mm]
         cv="1281",  # Carrier reading speed [0.1 mm]/s
-        cn=str(no_container_per_carrier).zfill(2),  # No of containers (cups, plates) in a carrier
+        cn=str(no_container_per_carrier).zfill(
+          2
+        ),  # No of containers (cups, plates) in a carrier
       )
     else:  # without barcoding
       resp = await self.send_command(module="C0", command="CL", cn="00")
@@ -5909,7 +6184,9 @@ class STAR(HamiltonLiquidHandler):
       await self.park_autoload()
     return resp
 
-  async def set_loading_indicators(self, bit_pattern: List[bool], blink_pattern: List[bool]):
+  async def set_loading_indicators(
+    self, bit_pattern: List[bool], blink_pattern: List[bool]
+  ):
     """Set loading indicators (LEDs)
 
     The docs here are a little weird because 2^54 < 7FFFFFFFFFFFFF.
@@ -5930,7 +6207,10 @@ class STAR(HamiltonLiquidHandler):
     blink_pattern_hex = pattern2hex(blink_pattern)
 
     return await self.send_command(
-      module="C0", command="CP", cl=bit_pattern_hex, cb=blink_pattern_hex
+      module="C0",
+      command="CP",
+      cl=bit_pattern_hex,
+      cb=blink_pattern_hex,
     )
 
   # TODO:(command:CS) Check for presence of carriers on loading tray
@@ -5961,7 +6241,16 @@ class STAR(HamiltonLiquidHandler):
 
     # Encode values into bit pattern. Last bit is always one.
     bt = ""
-    for t in [ISBT_Standard, code128, code39, codebar, code2_5, UPC_AE, EAN8, True]:
+    for t in [
+      ISBT_Standard,
+      code128,
+      code39,
+      codebar,
+      code2_5,
+      UPC_AE,
+      EAN8,
+      True,
+    ]:
       bt += "1" if t else "0"
 
     # Convert bit pattern to hex.
@@ -6030,7 +6319,9 @@ class STAR(HamiltonLiquidHandler):
 
     assert 1 <= pump_station <= 3, "pump_station must be between 1 and 3"
 
-    return await self.send_command(module="C0", command="ET", fmt="et#", ep=pump_station)
+    return await self.send_command(
+      module="C0", command="ET", fmt="et#", ep=pump_station
+    )
 
   # -------------- 3.15.1 DC Wash commands (only for revision up to 01) --------------
 
@@ -6150,7 +6441,9 @@ class STAR(HamiltonLiquidHandler):
       direction: X direction. 0 = positive 1 = negative
     """
 
-    return await self.send_command(module="C0", command="GX", gx=step_size, xd=direction)
+    return await self.send_command(
+      module="C0", command="GX", gx=step_size, xd=direction
+    )
 
   async def move_iswap_y_direction(self, step_size: int = 0, direction: int = 0):
     """Move iSWAP in Y-direction
@@ -6160,7 +6453,9 @@ class STAR(HamiltonLiquidHandler):
       direction: Y direction. 0 = positive 1 = negative
     """
 
-    return await self.send_command(module="C0", command="GY", gx=step_size, xd=direction)
+    return await self.send_command(
+      module="C0", command="GY", gx=step_size, xd=direction
+    )
 
   async def move_iswap_z_direction(self, step_size: int = 0, direction: int = 0):
     """Move iSWAP in Z-direction
@@ -6170,7 +6465,9 @@ class STAR(HamiltonLiquidHandler):
       direction: Z direction. 0 = positive 1 = negative
     """
 
-    return await self.send_command(module="C0", command="GZ", gx=step_size, xd=direction)
+    return await self.send_command(
+      module="C0", command="GZ", gx=step_size, xd=direction
+    )
 
   async def open_not_initialized_gripper(self):
     """Open not initialized gripper"""
@@ -6190,7 +6487,10 @@ class STAR(HamiltonLiquidHandler):
     return await self.send_command(module="C0", command="GF", go=f"{open_position:04}")
 
   async def iswap_close_gripper(
-    self, grip_strength: int = 5, plate_width: int = 0, plate_width_tolerance: int = 0
+    self,
+    grip_strength: int = 5,
+    plate_width: int = 0,
+    plate_width_tolerance: int = 0,
   ):
     """Close gripper
 
@@ -6213,7 +6513,10 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.17.2 Stack handling commands CP --------------
 
-  async def park_iswap(self, minimum_traverse_height_at_beginning_of_a_command: int = 2840):
+  async def park_iswap(
+    self,
+    minimum_traverse_height_at_beginning_of_a_command: int = 2840,
+  ):
     """Close gripper
 
     The gripper should be at the position gb+gt+20 before sending this command.
@@ -6228,7 +6531,9 @@ class STAR(HamiltonLiquidHandler):
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
 
     command_output = await self.send_command(
-      module="C0", command="PG", th=minimum_traverse_height_at_beginning_of_a_command
+      module="C0",
+      command="PG",
+      th=minimum_traverse_height_at_beginning_of_a_command,
     )
 
     # Once the command has completed successfully, set _iswap_parked to True
@@ -6296,10 +6601,16 @@ class STAR(HamiltonLiquidHandler):
       0 <= z_position_at_the_command_end <= 3600
     ), "z_position_at_the_command_end must be between 0 and 3600"
     assert 1 <= grip_strength <= 9, "grip_strength must be between 1 and 9"
-    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
+    assert (
+      0 <= open_gripper_position <= 9999
+    ), "open_gripper_position must be between 0 and 9999"
     assert 0 <= plate_width <= 9999, "plate_width must be between 0 and 9999"
-    assert 0 <= plate_width_tolerance <= 99, "plate_width_tolerance must be between 0 and 99"
-    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
+    assert (
+      0 <= plate_width_tolerance <= 99
+    ), "plate_width_tolerance must be between 0 and 99"
+    assert (
+      0 <= collision_control_level <= 1
+    ), "collision_control_level must be between 0 and 1"
     assert (
       0 <= acceleration_index_high_acc <= 4
     ), "acceleration_index_high_acc must be between 0 and 4"
@@ -6386,8 +6697,12 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= z_position_at_the_command_end <= 3600
     ), "z_position_at_the_command_end must be between 0 and 3600"
-    assert 0 <= open_gripper_position <= 9999, "open_gripper_position must be between 0 and 9999"
-    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
+    assert (
+      0 <= open_gripper_position <= 9999
+    ), "open_gripper_position must be between 0 and 9999"
+    assert (
+      0 <= collision_control_level <= 1
+    ), "collision_control_level must be between 0 and 1"
     assert (
       0 <= acceleration_index_high_acc <= 4
     ), "acceleration_index_high_acc must be between 0 and 4"
@@ -6492,7 +6807,9 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
+    assert (
+      0 <= collision_control_level <= 1
+    ), "collision_control_level must be between 0 and 1"
     assert (
       0 <= acceleration_index_high_acc <= 4
     ), "acceleration_index_high_acc must be between 0 and 4"
@@ -6601,7 +6918,9 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= minimum_traverse_height_at_beginning_of_a_command <= 3600
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
-    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
+    assert (
+      0 <= collision_control_level <= 1
+    ), "collision_control_level must be between 0 and 1"
     assert (
       0 <= acceleration_index_high_acc <= 4
     ), "acceleration_index_high_acc must be between 0 and 4"
@@ -6665,7 +6984,9 @@ class STAR(HamiltonLiquidHandler):
     assert 0 <= location <= 1, "location must be between 0 and 1"
     assert 0 <= hotel_depth <= 3000, "hotel_depth must be between 0 and 3000"
     assert 1 <= grip_direction <= 4, "grip_direction must be between 1 and 4"
-    assert 0 <= collision_control_level <= 1, "collision_control_level must be between 0 and 1"
+    assert (
+      0 <= collision_control_level <= 1
+    ), "collision_control_level must be between 0 and 1"
 
     return await self.send_command(
       module="C0",
@@ -6716,7 +7037,9 @@ class STAR(HamiltonLiquidHandler):
       zd: Z direction 0 = positive 1 = negative
     """
 
-    return await self.send_command(module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#")
+    return await self.send_command(
+      module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#"
+    )
 
   async def request_iswap_initialization_status(self) -> bool:
     """Request iSWAP initialization status
@@ -6825,7 +7148,9 @@ class STAR(HamiltonLiquidHandler):
     await self.check_type_is_hhs(device_number)
 
     # Request module configuration
-    hhs_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
+    hhs_init_status = await self.send_command(
+      module=module_pointer, command="QW", fmt="qw#"
+    )
     hhs_init_status = hhs_init_status["qw"]
 
     # Initializing HHS if necessary
@@ -6931,10 +7256,15 @@ class STAR(HamiltonLiquidHandler):
 
     await self.check_type_is_hhs(device_number)
 
-    request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
+    request_temperature = await self.send_command(
+      module=f"T{device_number}", command="RT"
+    )
     processed_t_info = [int(x) / 10 for x in request_temperature.split("+")[-2:]]
 
-    return {"middle_T": processed_t_info[0], "edge_T": processed_t_info[-1]}
+    return {
+      "middle_T": processed_t_info[0],
+      "edge_T": processed_t_info[-1],
+    }
 
   async def stop_temperature_control_at_hhs(self, device_number: int):
     """Stop temperature regulation of specified HHS"""
@@ -6981,7 +7311,9 @@ class STAR(HamiltonLiquidHandler):
     await self.check_type_is_hhc(device_number)
 
     # Request module configuration
-    hhc_init_status = await self.send_command(module=module_pointer, command="QW", fmt="qw#")
+    hhc_init_status = await self.send_command(
+      module=module_pointer, command="QW", fmt="qw#"
+    )
     hhc_init_status = hhc_init_status["qw"]
 
     info = "HHC already initialized"
@@ -7022,10 +7354,15 @@ class STAR(HamiltonLiquidHandler):
 
     await self.check_type_is_hhc(device_number)
 
-    request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
+    request_temperature = await self.send_command(
+      module=f"T{device_number}", command="RT"
+    )
     processed_t_info = [int(x) / 10 for x in request_temperature.split("+")[-2:]]
 
-    return {"middle_T": processed_t_info[0], "edge_T": processed_t_info[-1]}
+    return {
+      "middle_T": processed_t_info[0],
+      "edge_T": processed_t_info[-1],
+    }
 
   async def query_whether_temperature_reached_at_hhc(self, device_number: int):
     """Stop temperature regulation of specified HHC"""

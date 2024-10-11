@@ -2,7 +2,11 @@
 
 # pylint: disable=invalid-name
 
-from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
+from pylabrobot.resources.well import (
+  Well,
+  WellBottomType,
+  CrossSectionType,
+)
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.plate import Lid, Plate
 
@@ -10,18 +14,28 @@ from pylabrobot.resources.plate import Lid, Plate
 # # # # # # # # # # Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate # # # # # # # # # #
 
 
-def _compute_volume_from_height_Eppendorf_96_wellplate_250ul_Vb(h: float):
+def _compute_volume_from_height_Eppendorf_96_wellplate_250ul_Vb(
+  h: float,
+):
   if h > 20.3:
     raise ValueError(f"Height {h} is too large for" + "Eppendorf_96_wellplate_250ul_Vb")
   return max(
-    0.89486648 + 2.92455131 * h + 2.03472797 * h**2 + -0.16509371 * h**3 + 0.00675759 * h**4,
+    0.89486648
+    + 2.92455131 * h
+    + 2.03472797 * h**2
+    + -0.16509371 * h**3
+    + 0.00675759 * h**4,
     0,
   )
 
 
-def _compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb(liquid_volume: float):
+def _compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb(
+  liquid_volume: float,
+):
   if liquid_volume > 262.5:  # 5% tolerance
-    raise ValueError(f"Volume {liquid_volume} is too large for" + "Eppendorf_96_wellplate_250ul_Vb")
+    raise ValueError(
+      f"Volume {liquid_volume} is too large for" + "Eppendorf_96_wellplate_250ul_Vb"
+    )
   return max(
     0.118078503
     + 0.133333914 * liquid_volume
@@ -91,8 +105,12 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
       bottom_type=WellBottomType.V,
       material_z_thickness=1.2,  # engineering_diagram says 0.8 but could not replicate
       cross_section_type=CrossSectionType.CIRCLE,
-      compute_volume_from_height=(_compute_volume_from_height_Eppendorf_96_wellplate_250ul_Vb),
-      compute_height_from_volume=(_compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb),
+      compute_volume_from_height=(
+        _compute_volume_from_height_Eppendorf_96_wellplate_250ul_Vb
+      ),
+      compute_height_from_volume=(
+        _compute_height_from_volume_Eppendorf_96_wellplate_250ul_Vb
+      ),
     ),
   )
 

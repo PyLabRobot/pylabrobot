@@ -10,7 +10,11 @@ import websockets.client
 
 from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.visualizer import Visualizer
-from pylabrobot.resources import Coordinate, Resource, Cor_96_wellplate_360ul_Fb
+from pylabrobot.resources import (
+  Coordinate,
+  Resource,
+  Cor_96_wellplate_360ul_Fb,
+)
 
 
 class VisualizerSetupStopTests(unittest.IsolatedAsyncioTestCase):
@@ -58,7 +62,10 @@ class VisualizerServerTests(unittest.IsolatedAsyncioTestCase):
     """Test that the index.html file is returned."""
     r = requests.get("http://localhost:1337/", timeout=10)
     self.assertEqual(r.status_code, 200)
-    self.assertIn(r.headers["Content-Type"], ["text/html", "text/html; charset=utf-8"])
+    self.assertIn(
+      r.headers["Content-Type"],
+      ["text/html", "text/html; charset=utf-8"],
+    )
 
   async def test_connect(self):
     await self.client.send('{"event": "ready"}')
@@ -138,4 +145,7 @@ class VisualizerCommandTests(unittest.IsolatedAsyncioTestCase):
     self.vis.send_command.assert_called()  # type: ignore[attr-defined]
     call_args = self.vis.send_command.call_args[1]  # type: ignore[attr-defined]
     self.assertEqual(call_args["event"], "set_state")
-    self.assertEqual(call_args["data"]["plate_01_well_11_7"]["liquids"], [[None, 500]])
+    self.assertEqual(
+      call_args["data"]["plate_01_well_11_7"]["liquids"],
+      [[None, 500]],
+    )

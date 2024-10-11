@@ -1,7 +1,9 @@
 import sys
 from typing import cast
 
-from pylabrobot.temperature_controlling.backend import TemperatureControllerBackend
+from pylabrobot.temperature_controlling.backend import (
+  TemperatureControllerBackend,
+)
 
 PYTHON_VERSION = sys.version_info[:2]
 

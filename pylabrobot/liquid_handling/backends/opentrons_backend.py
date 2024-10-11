@@ -1,7 +1,9 @@
 import sys
 from typing import Dict, Optional, List, cast, Union
 
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import (
+  LiquidHandlerBackend,
+)
 from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.liquid_handling.standard import (
   Pickup,
@@ -86,7 +88,11 @@ class OpentronsBackend(LiquidHandlerBackend):
     self.right_pipette: Optional[Dict[str, str]] = None
 
   def serialize(self) -> dict:
-    return {**super().serialize(), "host": self.host, "port": self.port}
+    return {
+      **super().serialize(),
+      "host": self.host,
+      "port": self.port,
+    }
 
   async def setup(self):
     # pylint: disable=possibly-used-before-assignment
@@ -166,12 +172,16 @@ class OpentronsBackend(LiquidHandlerBackend):
       if hasattr(resource, "child") and resource.child is not None:
         await self.assigned_resource_callback(resource.child)
       else:
-        raise RuntimeError(f"Module {resource.name} must have a child when it assigned.")
+        raise RuntimeError(
+          f"Module {resource.name} must have a child when it assigned."
+        )
       return
 
     well_names = [well.name for well in resource.children]
     if isinstance(resource, ItemizedResource):
-      ordering = utils.reshape_2d(well_names, (resource.num_items_x, resource.num_items_y))
+      ordering = utils.reshape_2d(
+        well_names, (resource.num_items_x, resource.num_items_y)
+      )
     else:
       ordering = [well_names]
 
@@ -204,7 +214,9 @@ class OpentronsBackend(LiquidHandlerBackend):
       for child in resource.children
     }
 
-    format_ = "irregular"  # Property to determine compatibility with multichannel pipette
+    format_ = (
+      "irregular"  # Property to determine compatibility with multichannel pipette
+    )
     if isinstance(resource, ItemizedResource):
       if resource.num_items_x * resource.num_items_y == 96:
         format_ = "96Standard"
@@ -265,7 +277,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     # assign labware to robot
     labware_uuid = resource.name
 
-    ot_api.labware.add( # pylint: disable=E1120
+    ot_api.labware.add(  # pylint: disable=E1120
       load_name=definition,
       namespace=namespace,
       ot_location=ot_location,
@@ -327,7 +339,11 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with no tip available.")
 
-    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
+    offset_x, offset_y, offset_z = (
+      op.offset.x,
+      op.offset.y,
+      op.offset.z,
+    )
 
     # ad-hoc offset adjustment that makes it smoother.
     offset_z += 50
@@ -371,14 +387,21 @@ class OpentronsBackend(LiquidHandlerBackend):
     if not pipette_id:
       raise NoChannelError("No pipette channel of right type with tip available.")
 
-    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
+    offset_x, offset_y, offset_z = (
+      op.offset.x,
+      op.offset.y,
+      op.offset.z,
+    )
 
     # ad-hoc offset adjustment that makes it smoother.
     offset_z += 10
 
     if use_fixed_trash:
       ot_api.lh.move_to_addressable_area_for_drop_tip(
-        pipette_id=pipette_id, offset_x=offset_x, offset_y=offset_y, offset_z=offset_z
+        pipette_id=pipette_id,
+        offset_x=offset_x,
+        offset_y=offset_y,
+        offset_z=offset_z,
       )
       ot_api.lh.drop_tip_in_place(pipette_id=pipette_id)
     else:
@@ -476,7 +499,11 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
-    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
+    offset_x, offset_y, offset_z = (
+      op.offset.x,
+      op.offset.y,
+      op.offset.z,
+    )
 
     ot_api.lh.aspirate(
       labware_id,
@@ -533,7 +560,11 @@ class OpentronsBackend(LiquidHandlerBackend):
 
     labware_id = self.defined_labware[op.resource.parent.name]
 
-    offset_x, offset_y, offset_z = op.offset.x, op.offset.y, op.offset.z
+    offset_x, offset_y, offset_z = (
+      op.offset.x,
+      op.offset.y,
+      op.offset.z,
+    )
 
     ot_api.lh.dispense(
       labware_id,

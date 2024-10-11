@@ -7,7 +7,10 @@ from pylabrobot.config.config import Config
 from pylabrobot.config.io.file import FileReader, FileWriter
 from pylabrobot.config.formats import ConfigLoader, ConfigSaver
 from pylabrobot.config.formats.ini_config import IniLoader, IniSaver
-from pylabrobot.config.formats.json_config import JsonLoader, JsonSaver
+from pylabrobot.config.formats.json_config import (
+  JsonLoader,
+  JsonSaver,
+)
 
 
 class ConfigTests(unittest.TestCase):

@@ -9,7 +9,9 @@ class Liquid(enum.Enum):
   liquid classes are simply groups of parameters passed to lh.
   """
 
-  ACETONITRIL80WATER20 = "Acetonitril/Water 80:20"  # TODO: need a better way to represent this.
+  ACETONITRIL80WATER20 = (
+    "Acetonitril/Water 80:20"  # TODO: need a better way to represent this.
+  )
   WATER = "Water"
   ETHANOL = "Ethanol 100%"
   GLYCERIN = "Glycerin"
@@ -24,9 +26,13 @@ class Liquid(enum.Enum):
   CHLOROFORM = "Chloroform 100%"
   METHANOL = "Methanol 100%"
   OCTANOL = "Octanol 100%"
-  DNA_TRIS_EDTA = "100µg/ml DNA in Tris-EDTA Puffer"  # TODO: need a better way to represent this.
+  DNA_TRIS_EDTA = (
+    "100µg/ml DNA in Tris-EDTA Puffer"  # TODO: need a better way to represent this.
+  )
   PBS_BUFFER = "PBS Buffer"
-  METHANOL70WATER030 = "Methanol/Water 70:30"  # TODO: need a better way to represent this.
+  METHANOL70WATER030 = (
+    "Methanol/Water 70:30"  # TODO: need a better way to represent this.
+  )
 
   @staticmethod
   def from_str(s: str) -> "Liquid":

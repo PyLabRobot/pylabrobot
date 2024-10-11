@@ -76,8 +76,12 @@ class Tilter(ResourceHolderMixin, Machine):
     x_prime = rotation_arm_x * math.cos(theta) - rotation_arm_z * math.sin(theta)
     z_prime = rotation_arm_x * math.sin(theta) + rotation_arm_z * math.cos(theta)
 
-    new_x = x_prime + (self._hinge_coordinate.x + self.get_absolute_location("l", "f", "b").x)
-    new_z = z_prime + (self._hinge_coordinate.z + self.get_absolute_location("l", "f", "b").z)
+    new_x = x_prime + (
+      self._hinge_coordinate.x + self.get_absolute_location("l", "f", "b").x
+    )
+    new_z = z_prime + (
+      self._hinge_coordinate.z + self.get_absolute_location("l", "f", "b").z
+    )
 
     return Coordinate(new_x, absolute_coordinate.y, new_z)
 
@@ -96,25 +100,35 @@ class Tilter(ResourceHolderMixin, Machine):
       absolute_angle = self._absolute_angle
     assert absolute_angle is not None  # mypy
     # pylint: disable=invalid-unary-operand-type
-    angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
+    angle = (
+      absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
+    )
 
     _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
 
     well_drain_offsets = []
     for well in plate.children:
-      level_absolute_well_drain_coordinate = well.get_absolute_location(_hinge_side, "c", "b")
-      rotated_absolute_well_drain_coordinate = self.experimental_rotate_coordinate_around_hinge(
-        level_absolute_well_drain_coordinate, angle
+      level_absolute_well_drain_coordinate = well.get_absolute_location(
+        _hinge_side, "c", "b"
       )
-      well_drain_offset = rotated_absolute_well_drain_coordinate - well.get_absolute_location(
-        "c", "c", "b"
+      rotated_absolute_well_drain_coordinate = (
+        self.experimental_rotate_coordinate_around_hinge(
+          level_absolute_well_drain_coordinate, angle
+        )
+      )
+      well_drain_offset = (
+        rotated_absolute_well_drain_coordinate
+        - well.get_absolute_location("c", "c", "b")
       )
       well_drain_offsets.append(well_drain_offset)
 
     return well_drain_offsets
 
   def experimental_get_well_drain_offsets(
-    self, wells: List[Well], n_tips: int = 1, absolute_angle: Optional[float] = None
+    self,
+    wells: List[Well],
+    n_tips: int = 1,
+    absolute_angle: Optional[float] = None,
   ) -> List[Coordinate]:
     """Get the drain edge offsets for the given wells, tilted around the hinge at a
     given absolute angle, for multiple tips.
@@ -151,7 +165,8 @@ class Tilter(ResourceHolderMixin, Machine):
         ), f"Cannot fit {n_tips} tips in a well with diameter {diameter} mm"
 
         y_offsets = [
-          ((n_tips - 1) / 2 - tip_index) * min_tip_distance for tip_index in range(n_tips)
+          ((n_tips - 1) / 2 - tip_index) * min_tip_distance
+          for tip_index in range(n_tips)
         ]
 
         x_offset = math.sqrt(radius**2 - max(y_offsets) ** 2)
@@ -166,7 +181,8 @@ class Tilter(ResourceHolderMixin, Machine):
       offsets = []
       for tip_coord in tip_coords:
         rotated_tip = self.experimental_rotate_coordinate_around_hinge(
-          well.get_absolute_location("c", "c", "b") + tip_coord, angle
+          well.get_absolute_location("c", "c", "b") + tip_coord,
+          angle,
         )
         offset = rotated_tip - well.get_absolute_location("c", "c", "b")
         offsets.append(offset)

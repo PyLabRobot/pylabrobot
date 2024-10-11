@@ -1,5 +1,7 @@
 from pylabrobot.shaking.backend import ShakerBackend
-from pylabrobot.temperature_controlling.backend import TemperatureControllerBackend
+from pylabrobot.temperature_controlling.backend import (
+  TemperatureControllerBackend,
+)
 
 
 class HeaterShakerBackend(ShakerBackend, TemperatureControllerBackend):
