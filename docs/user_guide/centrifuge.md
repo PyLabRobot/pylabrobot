@@ -15,7 +15,7 @@ await pr.setup()
 
 The {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.setup` method is used to initialize the centrifuge. This is where the backend will connect to the centrifuge and perform any necessary initialization.
 
-The {class}`~pylabrobot.centrifuge.centrifuge.Centrifuge` class has a number of methods for controlling the plate reader. These are:
+The {class}`~pylabrobot.centrifuge.centrifuge.Centrifuge` class has a number of methods for controlling the centrifuge. These are:
 
 - {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.open_door`: Open the centrifuge door.
 - {meth}`~pylabrobot.centrifuge.centrifuge.Centrifuge.close_door`: Close the centrifuge door.
