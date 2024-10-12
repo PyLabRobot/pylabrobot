@@ -38,7 +38,9 @@ class VSpin(CentrifugeBackend):
     self.dev = Device()
     self.dev.open()
     logger.debug("open")
-    # TODO: add functionality where if robot has been intialized before nothing needs to happen
+    # If robot has not been intialized before status_check will raise an error
+    # Error will trigger except which completes setup process
+    # If no error is raised, no setup is needed
     try:
       for _ in range(3):
         await self.configure_and_initialize()
