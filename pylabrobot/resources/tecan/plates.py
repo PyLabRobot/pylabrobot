@@ -4,9 +4,7 @@ size_z are best approximations, see
 https://forums.pylabrobot.org/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2987
 """
 
-# pylint: disable=empty-docstring
-# pylint: disable=invalid-name
-# pylint: disable=line-too-long
+
 
 from typing import Dict, Optional
 from pylabrobot.resources.plate import Lid, Plate, Well

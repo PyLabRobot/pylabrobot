@@ -12,12 +12,10 @@ if sys.version_info >= (3, 10):
 else:
   from typing_extensions import TypeAlias
 
-# pylint: disable=invalid-name
 JSON: TypeAlias = Union[Dict[str, "JSON"], List["JSON"], str, int, float, bool, None]
 
 
 def get_plr_class_from_string(klass_type: str):
-  # pylint: disable=import-outside-toplevel, cyclic-import
   import pylabrobot.resources as resource_module
   import pylabrobot.liquid_handling as lh_module
 

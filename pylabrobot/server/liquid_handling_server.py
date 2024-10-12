@@ -54,7 +54,7 @@ class Task:
       asyncio.set_event_loop(loop)
       try:
         loop.run_until_complete(self.co)
-      except Exception as e:  # pylint: disable=broad-except
+      except Exception as e:
         self.error = str(e)
         self.status = "error"
       else:

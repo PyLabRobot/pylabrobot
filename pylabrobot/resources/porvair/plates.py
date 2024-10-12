@@ -1,6 +1,6 @@
 """Porvair plates"""
 
-# pylint: disable=invalid-name
+
 
 from typing import Optional
 from pylabrobot.resources.plate import Lid, Plate

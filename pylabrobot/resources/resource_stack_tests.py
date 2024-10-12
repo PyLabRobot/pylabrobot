@@ -1,5 +1,4 @@
 """Tests for ResourceStack resource"""
-# pylint: disable=missing-class-docstring
 
 import unittest
 

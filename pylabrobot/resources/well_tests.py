@@ -1,4 +1,4 @@
-# pylint: disable=missing-class-docstring
+
 
 import unittest
 

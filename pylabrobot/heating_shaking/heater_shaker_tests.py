@@ -1,6 +1,6 @@
 import unittest
 
-from pylabrobot.heating_shaking.heater_shaker import HeaterShaker  # pylint: disable=unused-import  # noqa: F401
+from pylabrobot.heating_shaking.heater_shaker import HeaterShaker
 
 
 class HeaterShakerTest(unittest.TestCase):

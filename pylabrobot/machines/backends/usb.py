@@ -1,4 +1,3 @@
-# pylint: disable=invalid-name
 
 from abc import ABCMeta, abstractmethod
 import logging

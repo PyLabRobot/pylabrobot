@@ -350,7 +350,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     return summary_
 
 
-class HamiltonSTARDeck(HamiltonDeck):  # pylint: disable=invalid-name
+class HamiltonSTARDeck(HamiltonDeck):
   """Base class for a Hamilton STAR(let) deck."""
 
   def __init__(
@@ -404,7 +404,7 @@ class HamiltonSTARDeck(HamiltonDeck):  # pylint: disable=invalid-name
     return self._trash96
 
 
-def STARLetDeck(  # pylint: disable=invalid-name
+def STARLetDeck(
   origin: Coordinate = Coordinate.zero(),
 ) -> HamiltonSTARDeck:
   """Create a new STARLet deck.
@@ -421,7 +421,7 @@ def STARLetDeck(  # pylint: disable=invalid-name
   )
 
 
-def STARDeck(  # pylint: disable=invalid-name
+def STARDeck(
   origin: Coordinate = Coordinate.zero(),
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck.

@@ -1,7 +1,6 @@
 """Corning Costar plates"""
 
-# pylint: disable=invalid-name
-# pylint: disable=unreachable
+
 
 from typing import Optional
 from pylabrobot.resources.errors import (

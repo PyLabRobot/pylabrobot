@@ -1,6 +1,6 @@
 """Revvity plates"""
 
-# pylint: disable=invalid-name
+
 
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import (

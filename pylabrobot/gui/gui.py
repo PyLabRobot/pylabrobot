@@ -269,7 +269,7 @@ def create():
     deck_data = data["deck"]
     try:
       deck = Resource.deserialize(deck_data)
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e: 
       traceback.print_exc()
       return jsonify({"error": str(e), "success": False}), 400
   elif data["type"] == "new_deck":

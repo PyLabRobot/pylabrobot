@@ -1,7 +1,7 @@
 from pylabrobot.resources.tube import Tube
 
 
-def falcon_tube_50mL(name: str) -> Tube:  # pylint: disable=invalid-name
+def falcon_tube_50mL(name: str) -> Tube:
   """50 mL Falcon tube.
 
   https://www.fishersci.com/shop/products/falcon-50ml-conical-centrifuge-tubes-2/1495949A
@@ -19,7 +19,7 @@ def falcon_tube_50mL(name: str) -> Tube:  # pylint: disable=invalid-name
   )
 
 
-def falcon_tube_15mL(name: str) -> Tube:  # pylint: disable=invalid-name
+def falcon_tube_15mL(name: str) -> Tube:
   """15 mL Falcon tube.
 
   https://www.fishersci.com/shop/products/falcon-15ml-conical-centrifuge-tubes-5/p-193301

@@ -22,7 +22,6 @@ TUBE_RACK_OUT_FILE = "tube_racks.py"
 
 
 def main(po, to, tro):
-  # pylint: disable=f-string-without-interpolation
 
   p = os.path.join(OT_PATH, "labware", "definitions", "2")
   p = os.path.expanduser(p)

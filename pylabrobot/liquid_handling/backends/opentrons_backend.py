@@ -78,7 +78,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     self.host = host
     self.port = port
 
-    # pylint: disable=possibly-used-before-assignment
     ot_api.set_host(host)
     ot_api.set_port(port)
 
@@ -95,7 +94,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     }
 
   async def setup(self):
-    # pylint: disable=possibly-used-before-assignment
 
     # create run
     run_id = ot_api.runs.create()
@@ -159,7 +157,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     # check if resource is actually a Module
     if isinstance(resource, OTModule):
       assert isinstance(ot_location, int)
-      # pylint: disable=possibly-used-before-assignment
       ot_api.modules.load_module(
         slot=ot_location,
         model=resource.model,
@@ -277,7 +274,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     # assign labware to robot
     labware_uuid = resource.name
 
-    ot_api.labware.add(  # pylint: disable=E1120
+    ot_api.labware.add(
       load_name=definition,
       namespace=namespace,
       ot_location=ot_location,

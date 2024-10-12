@@ -1,5 +1,4 @@
 """Tests for LiquidHandler"""
-# pylint: disable=missing-class-docstring
 
 import itertools
 import pytest
@@ -945,7 +944,6 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       """Override pick_up_tips for testing."""
 
       async def pick_up_tips(self, ops, use_channels, non_default, default=True):  # type: ignore
-        # pylint: disable=unused-argument
         assert non_default == default
 
     self.backend = TestBackend(num_channels=16)

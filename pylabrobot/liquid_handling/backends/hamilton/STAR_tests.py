@@ -88,10 +88,10 @@ class TestSTARResponseParsing(unittest.TestCase):
       self.assertEqual(parsed, "")
 
     with self.assertRaises(ValueError):
-      parse_star_fw_string("C0QM", "id####")  # pylint: disable=expression-not-assigned
+      parse_star_fw_string("C0QM", "id####")
 
     with self.assertRaises(ValueError):
-      parse_star_fw_string("C0RV", "")  # pylint: disable=expression-not-assigned
+      parse_star_fw_string("C0RV", "")
 
   def test_parse_response_no_errors(self):
     parsed = parse_star_fw_string("C0QMid1111", "")
@@ -218,7 +218,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   """Test STAR backend for liquid handling."""
 
   async def asyncSetUp(self):
-    # pylint: disable=invalid-name
     self.mockSTAR = STARCommandCatcher()
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(self.mockSTAR, deck=self.deck)
@@ -333,7 +332,6 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   def test_ops_to_fw_positions(self):
     """Convert channel positions to firmware positions."""
-    # pylint: disable=protected-access
     tip_a1 = self.tip_rack.get_item("A1")
     tip_f1 = self.tip_rack.get_item("F1")
     tip = self.tip_rack.get_tip("A1")

@@ -353,7 +353,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         if response_id == id_:
           try:
             self.check_fw_string_error(resp)
-          except Exception as e:  # pylint: disable=broad-exception-caught
+          except Exception as e:
             loop.call_soon_threadsafe(fut.set_exception, e)
           else:
             loop.call_soon_threadsafe(fut.set_result, resp)

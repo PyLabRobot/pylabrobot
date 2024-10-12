@@ -1,8 +1,6 @@
 """ML Star MultiFleX (MFX) carriers"""
 
-# pylint: disable=empty-docstring
-# pylint: disable=invalid-name
-# pylint: disable=line-too-long
+
 
 from pylabrobot.resources.carrier import (
   Coordinate,

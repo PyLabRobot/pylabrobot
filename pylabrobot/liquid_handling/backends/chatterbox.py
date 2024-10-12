@@ -1,4 +1,3 @@
-# pylint: disable=unused-argument, inconsistent-quotes
 
 from typing import List, Union
 

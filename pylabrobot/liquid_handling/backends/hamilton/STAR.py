@@ -1,7 +1,6 @@
 """
 This file defines interfaces for all supported Hamilton liquid handling robots.
 """
-# pylint: disable=invalid-sequence-index, dangerous-default-value
 
 from abc import ABCMeta
 import datetime
@@ -89,13 +88,12 @@ def need_iswap_parked(method: Callable):
   async def wrapper(self: "STAR", *args, **kwargs):
     if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
-        # pylint: disable=protected-access
         minimum_traverse_height_at_beginning_of_a_command=int(
           self._traversal_height * 10
         )
       )
 
-    result = await method(self, *args, **kwargs)  # pylint: disable=not-callable
+    result = await method(self, *args, **kwargs)
 
     return result
 
@@ -1295,9 +1293,8 @@ class STAR(HamiltonLiquidHandler):
           # temp. disabled until we figure out how to handle async in parse response (the
           # background thread does not have an event loop, and I'm not sure if it should.)
           # vp = await self.send_command(module=error.raw_module, command="VP", fmt="vp&&")["vp"]
-          # he[module_name].message += f" ({vp})" # pylint: disable=unnecessary-dict-index-lookup
+          # he[module_name].message += f" ({vp})"
 
-          # pylint: disable=unnecessary-dict-index-lookup
           he.errors[
             module_name
           ].message += " (call lh.backend.request_name_of_last_faulty_parameter)"
@@ -3067,7 +3064,7 @@ class STAR(HamiltonLiquidHandler):
 
     await self.position_max_free_y_for_n(pipetting_channel_index=channel + 1)
 
-  async def move_channel_x(self, channel: int, x: float):  # pylint: disable=unused-argument
+  async def move_channel_x(self, channel: int, x: float):
     """Move a channel in the x direction."""
     await self.position_left_x_arm_(round(x * 10))
 
@@ -3221,7 +3218,6 @@ class STAR(HamiltonLiquidHandler):
                       power OFF or RESET. After power ON the default values apply. (see Table 3)
     """
 
-    # pylint: disable=redefined-builtin
 
     assert (
       0 <= tip_type_table_index <= 99
@@ -3291,7 +3287,6 @@ class STAR(HamiltonLiquidHandler):
       The board type.
     """
 
-    # pylint: disable=undefined-variable
 
     resp = await self.send_command(module="C0", command="QB")
     try:
@@ -6237,7 +6232,6 @@ class STAR(HamiltonLiquidHandler):
       EAN8: EAN8. Default True.
     """
 
-    # pylint: disable=invalid-name
 
     # Encode values into bit pattern. Last bit is always one.
     bt = ""

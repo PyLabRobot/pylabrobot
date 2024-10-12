@@ -91,8 +91,7 @@ class OTDeck(Deck):
       self.assign_child_at_slot(resource, slot)
 
   def assign_child_at_slot(self, resource: Resource, slot: int):
-    # pylint: disable=arguments-renamed
-    if slot not in range(1, 13):
+        if slot not in range(1, 13):
       raise ValueError("slot must be between 1 and 12")
 
     if self.slots[slot - 1] is not None:

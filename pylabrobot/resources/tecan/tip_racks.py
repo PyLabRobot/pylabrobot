@@ -1,8 +1,6 @@
 """Tecan tip racks"""
 
-# pylint: disable=empty-docstring
-# pylint: disable=invalid-name
-# pylint: disable=line-too-long
+
 
 from typing import Dict, Optional
 from pylabrobot.resources.tip_rack import TipRack, TipSpot

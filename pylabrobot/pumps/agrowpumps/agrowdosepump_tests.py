@@ -16,7 +16,6 @@ class SimulatedModbusClient(AsyncModbusSerialClient):
   """
 
   def __init__(self, connected: bool = False):
-    # pylint: disable=super-init-not-called
     self._connected = connected
 
   async def connect(self):
@@ -27,7 +26,6 @@ class SimulatedModbusClient(AsyncModbusSerialClient):
     return self._connected
 
   async def read_holding_registers(self, address: int, count: int, **kwargs):  # type: ignore
-    # pylint: disable=invalid-overridden-method
     """Simulates reading holding registers from the AgrowPumpArray."""
     if "unit" not in kwargs:
       raise ValueError("unit must be specified")
@@ -50,10 +48,8 @@ class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
     self.agrow_backend = AgrowPumpArray(port="simulated", address=1)
 
     async def _mock_setup_modbus():
-      # pylint: disable=protected-access
       self.agrow_backend._modbus = SimulatedModbusClient()
 
-    # pylint: disable=protected-access
     self.agrow_backend._setup_modbus = _mock_setup_modbus  # type: ignore[method-assign]
 
     self.pump_array = PumpArray(
@@ -73,7 +69,7 @@ class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.agrow_backend.port, "simulated")
     self.assertEqual(self.agrow_backend.address, 1)
     self.assertEqual(
-      self.agrow_backend._pump_index_to_address,  # pylint: disable=protected-access
+      self.agrow_backend._pump_index_to_address, 
       {pump: pump + 100 for pump in range(0, 6)},
     )
 

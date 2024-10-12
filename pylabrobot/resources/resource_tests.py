@@ -1,5 +1,4 @@
 """Tests for Resource"""
-# pylint: disable=missing-class-docstring
 
 import math
 import unittest
@@ -389,7 +388,6 @@ class TestResourceCallback(unittest.TestCase):
     self.r.assign_child_resource(self.child, location=Coordinate.zero())
     self.child.unassign()
 
-    # pylint: disable=protected-access
     self.assertEqual(self.child._did_assign_resource_callbacks, [])
     self.assertEqual(self.child._did_unassign_resource_callbacks, [])
     self.assertEqual(self.child._will_assign_resource_callbacks, [])

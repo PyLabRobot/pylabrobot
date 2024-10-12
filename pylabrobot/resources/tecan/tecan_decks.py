@@ -179,7 +179,7 @@ class TecanDeck(Deck):
     )
     summary_ += "=" * 95 + "\n"
 
-    def parse_resource(resource):  # pylint: disable=invalid-name
+    def parse_resource(resource):
       # TODO: print something else if resource is not assigned to a rails.
       rails = self._rails_for_x_coordinate(resource.location.x)
       rail_label = f"({rails})" if rails is not None else "     "
@@ -222,7 +222,7 @@ class TecanDeck(Deck):
     return summary_
 
 
-# pylint: disable=invalid-name
+
 def EVO100Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
   """EVO100 deck.
 
@@ -238,7 +238,7 @@ def EVO100Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
   )
 
 
-# pylint: disable=invalid-name
+
 def EVO150Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
   """EVO150 deck.
 
@@ -254,7 +254,7 @@ def EVO150Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
   )
 
 
-# pylint: disable=invalid-name
+
 def EVO200Deck(origin: Coordinate = Coordinate(0, 0, 0)) -> TecanDeck:
   """EVO200 deck.
 

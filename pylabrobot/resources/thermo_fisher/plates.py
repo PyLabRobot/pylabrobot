@@ -1,6 +1,6 @@
 """Thermo Fisher Scientific  Inc. (and all its brand) plates"""
 
-# pylint: disable=invalid-name
+
 
 from pylabrobot.resources.well import (
   Well,

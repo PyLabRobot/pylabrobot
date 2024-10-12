@@ -37,6 +37,6 @@ class MultiLoader(ConfigLoader):
     for loader in self.loaders:
       try:
         return loader.load(r)
-      except Exception:  # pylint: disable=broad-except
+      except Exception:
         pass
     raise ValueError("No loader could load file.")

@@ -25,7 +25,6 @@ def _mock_define(lw):
 
 
 def _mock_add(load_name, namespace, ot_location, version, labware_id, display_name):
-  # pylint: disable=unused-argument
   return labware_id
 
 
@@ -161,7 +160,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
   async def test_tip_pick_up(self, mock_pick_up_tip=None):
     assert (
       mock_pick_up_tip is not None
-    )  # just the default for pylint, provided by @patch
+    )
 
     def assert_parameters(
       labware_id, well_name, pipette_id, offset_x, offset_y, offset_z
@@ -196,7 +195,7 @@ class OpentronsBackendCommandTests(unittest.IsolatedAsyncioTestCase):
 
   @patch("ot_api.lh.aspirate")
   async def test_aspirate(self, mock_aspirate=None):
-    assert mock_aspirate is not None  # just the default for pylint, provided by @patch
+    assert mock_aspirate is not None 
 
     def assert_parameters(
       labware_id,

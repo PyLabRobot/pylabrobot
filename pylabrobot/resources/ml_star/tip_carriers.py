@@ -1,7 +1,6 @@
 """ML Star tip carriers"""
 
-# pylint: disable=invalid-name
-# pylint: disable=line-too-long
+
 
 from pylabrobot.resources.carrier import (
   CarrierSite,

@@ -1,5 +1,4 @@
 """Tests for Coordinate"""
-# pylint: disable=missing-class-docstring
 
 import unittest
 

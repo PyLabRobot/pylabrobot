@@ -1,4 +1,3 @@
-# pylint: disable=missing-class-docstring
 
 import unittest
 
@@ -23,7 +22,6 @@ from .well import Well
 
 class CarrierTests(unittest.TestCase):
   def setUp(self):
-    # pylint: disable=invalid-name
     self.A = TipRack(name="A", size_x=5, size_y=5, size_z=5, ordered_items={})
     self.B = TipRack(name="B", size_x=5, size_y=5, size_z=5, ordered_items={})
     self.alsoB = TipRack(name="B", size_x=100, size_y=100, size_z=100, ordered_items={})
@@ -191,9 +189,9 @@ class CarrierTests(unittest.TestCase):
 
   def test_illegal_get(self):
     with self.assertRaises(IndexError):
-      self.tip_car[-1]  # pylint: disable=pointless-statement
+      self.tip_car[-1]
     with self.assertRaises(IndexError):
-      self.tip_car[99999]  # pylint: disable=pointless-statement
+      self.tip_car[99999]
 
   def test_nonnone_to_none_assignment(self):
     self.tip_car[0] = self.A
@@ -210,7 +208,7 @@ class CarrierTests(unittest.TestCase):
       self.tip_car[0] = self.B
 
   def test_serialization(self):
-    self.maxDiff = None  # pylint: disable=invalid-name
+    self.maxDiff = None
     self.assertEqual(
       self.tip_car.serialize(),
       {
@@ -392,7 +390,6 @@ class CarrierTests(unittest.TestCase):
     self.assertEqual(resource_stack.location, Coordinate(0, 0, -6))
     self.assertEqual(plate2.location, Coordinate(0, 0, 0))
 
-    # pylint: disable=protected-access
     pcs = carrier[0]
     assert isinstance(pcs, PlateCarrierSite)
     self.assertIn(

@@ -450,7 +450,7 @@ class LiquidHandler(Machine):
       await self.backend.pick_up_tips(
         ops=pickups, use_channels=use_channels, **backend_kwargs
       )
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:
       error = e
 
     # determine which channels were successful
@@ -585,7 +585,7 @@ class LiquidHandler(Machine):
       await self.backend.drop_tips(
         ops=drops, use_channels=use_channels, **backend_kwargs
       )
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:
       error = e
 
     # determine which channels were successful
@@ -878,7 +878,7 @@ class LiquidHandler(Machine):
       await self.backend.aspirate(
         ops=aspirations, use_channels=use_channels, **backend_kwargs
       )
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except Exception as e:
       error = e
 
     # determine which channels were successful
@@ -1090,7 +1090,7 @@ class LiquidHandler(Machine):
       await self.backend.dispense(
         ops=dispenses, use_channels=use_channels, **backend_kwargs
       )
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:
       error = e
 
     # determine which channels were successful
@@ -1270,7 +1270,7 @@ class LiquidHandler(Machine):
     pickup_operation = PickupTipRack(resource=tip_rack, offset=offset)
     try:
       await self.backend.pick_up_tips96(pickup=pickup_operation, **backend_kwargs)
-    except Exception as error:  # pylint: disable=broad-except
+    except Exception as error:
       for i, tip_spot in enumerate(tip_rack.get_all_items()):
         if does_tip_tracking() and not tip_spot.tracker.is_disabled:
           tip_spot.tracker.rollback()
@@ -1350,7 +1350,7 @@ class LiquidHandler(Machine):
     drop_operation = DropTipRack(resource=resource, offset=offset)
     try:
       await self.backend.drop_tips96(drop=drop_operation, **backend_kwargs)
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:
       for i in range(96):
         if isinstance(resource, TipRack):
           tip_spot = resource.get_item(i)
@@ -1575,7 +1575,7 @@ class LiquidHandler(Machine):
 
     try:
       await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
-    except Exception as error:  # pylint: disable=broad-except
+    except Exception as error:
       for channel, well in zip(self.head96.values(), wells):
         if does_volume_tracking() and not well.tracker.is_disabled:
           well.tracker.rollback()
@@ -1723,7 +1723,7 @@ class LiquidHandler(Machine):
 
     try:
       await self.backend.dispense96(dispense=dispense, **backend_kwargs)
-    except Exception as error:  # pylint: disable=broad-except
+    except Exception as error:
       for channel, well in zip(self.head96.values(), wells):
         if does_volume_tracking() and not well.tracker.is_disabled:
           well.tracker.rollback()

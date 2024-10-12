@@ -1,8 +1,6 @@
 """Tecan plate carriers"""
 
-# pylint: disable=empty-docstring
-# pylint: disable=invalid-name
-# pylint: disable=line-too-long
+
 
 from typing import List, Optional
 from pylabrobot.resources.carrier import (

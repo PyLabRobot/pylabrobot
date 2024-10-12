@@ -1,6 +1,5 @@
 """ML Star tips"""
 
-# pylint: skip-file
 
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.tip_rack import (

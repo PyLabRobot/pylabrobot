@@ -100,7 +100,7 @@ class AgrowPumpArray(PumpArrayBackend):
         asyncio.set_event_loop(loop)
         loop.run_until_complete(keep_alive())
         loop.close()
-      except Exception as e:  # pylint: disable=broad-except
+      except Exception as e:
         logger.error("Error in keep alive thread: %s", e)
 
     self._keep_alive_thread_active = True

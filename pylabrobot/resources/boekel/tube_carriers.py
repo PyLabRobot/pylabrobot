@@ -6,7 +6,7 @@ from pylabrobot.resources.carrier import (
 from pylabrobot.resources.coordinate import Coordinate
 
 
-def boekel_50mL_falcon_carrier(name: str) -> TubeCarrier:  # pylint: disable=invalid-name
+def boekel_50mL_falcon_carrier(name: str) -> TubeCarrier:
   """50 mL Falcon tube carrier orientation.
 
   https://www.boekelsci.com/multi-tube-rack-for-50ml-conical-15ml-conical-and-
@@ -32,7 +32,7 @@ def boekel_50mL_falcon_carrier(name: str) -> TubeCarrier:  # pylint: disable=inv
   )
 
 
-def boekel_15mL_falcon_carrier(name: str) -> TubeCarrier:  # pylint: disable=invalid-name
+def boekel_15mL_falcon_carrier(name: str) -> TubeCarrier:
   """15 mL Falcon tube carrier orientation.
 
   https://www.boekelsci.com/multi-tube-rack-for-50ml-conical-15ml-conical-and-
@@ -59,7 +59,7 @@ def boekel_15mL_falcon_carrier(name: str) -> TubeCarrier:  # pylint: disable=inv
   )
 
 
-def boekel_1_5mL_microcentrifuge_carrier(name: str) -> TubeCarrier:  # pylint: disable=invalid-name
+def boekel_1_5mL_microcentrifuge_carrier(name: str) -> TubeCarrier:
   """1.5 mL microcentrifuge tube carrier orientation.
 
   https://www.boekelsci.com/multi-tube-rack-for-50ml-conical-15ml-conical-and-
@@ -90,7 +90,7 @@ def boekel_1_5mL_microcentrifuge_carrier(name: str) -> TubeCarrier:  # pylint: d
   )
 
 
-def boekel_mini_microcentrifuge_carrier(name: str) -> TubeCarrier:  # pylint: disable=invalid-name
+def boekel_mini_microcentrifuge_carrier(name: str) -> TubeCarrier:
   """The tiniest microcentrifuge tube carrier orientation.
 
   https://www.boekelsci.com/multi-tube-rack-for-50ml-conical-15ml-conical-and-

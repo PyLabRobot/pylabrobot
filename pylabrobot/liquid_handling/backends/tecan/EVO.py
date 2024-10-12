@@ -2,7 +2,6 @@
 This file defines interfaces for all supported Tecan liquid handling robots.
 """
 
-# pylint: disable=invalid-name
 
 from abc import ABCMeta, abstractmethod
 from typing import (

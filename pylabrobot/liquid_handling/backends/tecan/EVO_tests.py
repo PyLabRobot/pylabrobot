@@ -35,7 +35,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     self.evo = EVO(diti_count=8)
     self.evo.send_command = unittest.mock.AsyncMock()  # type: ignore[method-assign]
 
-    async def send_command(module, command, params=None):  # pylint: disable=unused-argument
+    async def send_command(module, command, params=None):
       if command == "RPX":  # report_x_param
         return {"data": [9000]}  # park position roma
       if command == "RPY":  # report_y_param
@@ -51,7 +51,6 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
 
     # setup
     self.evo.setup = unittest.mock.AsyncMock()  # type: ignore[method-assign]
-    # pylint: disable=protected-access
     self.evo._num_channels = 8
     self.evo._x_range = 2000  # TODO: override report_x_param
     self.evo._y_range = 2000

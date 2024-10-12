@@ -48,7 +48,6 @@ extras_dev = (
     "mypy",
     "responses",
     "sphinx-reredirects",
-    "pylint",
     "ruff==0.2.1",
     "nbconvert",
     "sphinx-sitemap",

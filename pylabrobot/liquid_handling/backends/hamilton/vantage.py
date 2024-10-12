@@ -1,4 +1,3 @@
-# pylint: disable=invalid-name
 
 import asyncio
 import random
@@ -1466,7 +1465,7 @@ class Vantage(HamiltonLiquidHandler):
 
     return await self.expose_channel_n(channel_index=channel + 1)  # ?
 
-  async def move_channel_x(self, channel: int, x: float):  # pylint: disable=unused-argument
+  async def move_channel_x(self, channel: int, x: float):
     """Move the specified channel to the specified x coordinate."""
 
     return await self.x_arm_move_to_x_position(round(x * 10))

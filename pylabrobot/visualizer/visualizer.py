@@ -146,7 +146,6 @@ class Visualizer:
       data: The event data, deserialized from JSON.
     """
 
-    # pylint: disable=unused-argument
 
     if event == "ping":
       await self.websocket.send(json.dumps({"event": "pong"}))
@@ -311,7 +310,7 @@ class Visualizer:
 
     # Acquire a lock to prevent setup from returning until the server is running.
     lock = threading.Lock()
-    lock.acquire()  # pylint: disable=consider-using-with
+    lock.acquire()
     self._loop = asyncio.new_event_loop()
     self._t = threading.Thread(target=start_loop, daemon=True)
     self.t.start()
@@ -346,7 +345,6 @@ class Visualizer:
           super().__init__(*args, directory=path, **kwargs)
 
         def log_message(self, format, *args):
-          # pylint: disable=redefined-builtin
           pass
 
         def do_GET(self) -> None:
@@ -386,7 +384,7 @@ class Visualizer:
       self.httpd.serve_forever()
 
     lock = threading.Lock()
-    lock.acquire()  # pylint: disable=consider-using-with
+    lock.acquire()
     self._fst = threading.Thread(
       name="visualizer_fs",
       target=start_server,

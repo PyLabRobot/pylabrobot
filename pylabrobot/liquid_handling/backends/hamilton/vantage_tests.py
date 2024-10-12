@@ -241,7 +241,6 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   """Test Vantage backend for liquid handling."""
 
   async def asyncSetUp(self):
-    # pylint: disable=invalid-name
     self.mockVantage = VantageCommandCatcher()
     self.deck = VantageDeck(size=1.3)
     self.lh = LiquidHandler(self.mockVantage, deck=self.deck)
@@ -318,7 +317,6 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   def test_ops_to_fw_positions(self):
     """Convert channel positions to firmware positions."""
-    # pylint: disable=protected-access
     tip_a1 = self.tip_rack.get_item("A1")
     tip_f1 = self.tip_rack.get_item("F1")
     tip = self.tip_rack.get_tip("A1")
