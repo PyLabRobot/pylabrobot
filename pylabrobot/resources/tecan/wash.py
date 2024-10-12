@@ -1,7 +1,5 @@
 """Tecan wash station"""
 
-
-
 from typing import List, Optional
 from pylabrobot.resources.carrier import (
   Carrier,

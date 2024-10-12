@@ -185,8 +185,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
           "flow_rate": None,
           "liquid_height": None,
           "blow_out_air_volume": None,
-          "liquids": [[[None, 10]]]
-          * 96,  # tuple, list of liquids per well, list of wells
+          "liquids": [[[None, 10]]] * 96,  # tuple, list of liquids per well, list of wells
           "tips": [serialize(tip) for tip in tips],
         }
       },
@@ -211,8 +210,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
           "flow_rate": None,
           "liquid_height": None,
           "blow_out_air_volume": None,
-          "liquids": [[[None, 10]]]
-          * 96,  # tuple, list of liquids per well, list of wells
+          "liquids": [[[None, 10]]] * 96,  # tuple, list of liquids per well, list of wells
           "tips": [serialize(tip) for tip in tips],
         }
       },
@@ -221,9 +219,7 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_move(self):
     to = Coordinate(600, 200, 200)
     await self.lh.move_plate(self.plate, to=to)
-    self.assertEqual(
-      len(self.backend.sent_commands), 3
-    )  # move + resource unassign + assign
+    self.assertEqual(len(self.backend.sent_commands), 3)  # move + resource unassign + assign
     self.assertEqual(self.backend.sent_commands[0]["command"], "move")
     self.assertEqual(
       self.backend.get_first_data_for_command("move"),

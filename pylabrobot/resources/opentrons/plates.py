@@ -31,9 +31,7 @@ def corning_96_wellplate_360ul_flat(name: str) -> Plate:
 def nest_96_wellplate_2ml_deep(name: str) -> Plate:
   return cast(
     Plate,
-    load_shared_opentrons_resource(
-      definition="nest_96_wellplate_2ml_deep", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="nest_96_wellplate_2ml_deep", name=name, version=1),
   )
 
 
@@ -95,9 +93,7 @@ def thermoscientificnunc_96_wellplate_1300ul(name: str) -> Plate:
 def nest_96_wellplate_200ul_flat(name: str) -> Plate:
   return cast(
     Plate,
-    load_shared_opentrons_resource(
-      definition="nest_96_wellplate_200ul_flat", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="nest_96_wellplate_200ul_flat", name=name, version=1),
   )
 
 
@@ -157,7 +153,5 @@ def corning_48_wellplate_1point6ml_flat(name: str) -> Plate:
 def biorad_384_wellplate_50ul(name: str) -> Plate:
   return cast(
     Plate,
-    load_shared_opentrons_resource(
-      definition="biorad_384_wellplate_50ul", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="biorad_384_wellplate_50ul", name=name, version=1),
   )

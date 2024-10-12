@@ -1,7 +1,5 @@
 """Tecan tip racks"""
 
-
-
 from typing import Dict, Optional
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.utils import create_ordered_items_2d

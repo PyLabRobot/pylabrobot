@@ -1,7 +1,5 @@
 """Limbro plates"""
 
-
-
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import (
   Well,

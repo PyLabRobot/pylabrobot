@@ -25,9 +25,7 @@ class MettlerToledoError(Exception):
 
   @staticmethod
   def unknown_error() -> "MettlerToledoError":
-    return MettlerToledoError(
-      title="Unknown error", message="An unknown error occurred"
-    )
+    return MettlerToledoError(title="Unknown error", message="An unknown error occurred")
 
   @staticmethod
   def executing_another_command() -> "MettlerToledoError":
@@ -179,9 +177,7 @@ class MettlerToledoWXS205SDU(ScaleBackend):
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.port}
 
-  async def send_command(
-    self, command: str, timeout: int = 60
-  ) -> MettlerToledoResponse:
+  async def send_command(self, command: str, timeout: int = 60) -> MettlerToledoResponse:
     """Send a command to the scale and receive the response.
 
     Args:
@@ -265,9 +261,7 @@ class MettlerToledoWXS205SDU(ScaleBackend):
       if code == "12":
         raise MettlerToledoError.hot_plug_out(from_terminal=from_terminal)
       if code == "14":
-        raise MettlerToledoError.weight_module_electronic_mismatch(
-          from_terminal=from_terminal
-        )
+        raise MettlerToledoError.weight_module_electronic_mismatch(from_terminal=from_terminal)
       if code == "15":
         raise MettlerToledoError.adjustment_needed(from_terminal=from_terminal)
 
@@ -374,9 +368,7 @@ class MettlerToledoWXS205SDU(ScaleBackend):
     assert response[3] == "g"  # this is the format we expect
     return weight
 
-  async def get_weight(
-    self, timeout: Union[Literal["stable"], float, int] = "stable"
-  ) -> float:
+  async def get_weight(self, timeout: Union[Literal["stable"], float, int] = "stable") -> float:
     """High level function to get a weight value from the scale.
 
     Args:

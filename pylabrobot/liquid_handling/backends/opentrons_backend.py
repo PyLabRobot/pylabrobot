@@ -94,7 +94,6 @@ class OpentronsBackend(LiquidHandlerBackend):
     }
 
   async def setup(self):
-
     # create run
     run_id = ot_api.runs.create()
     ot_api.set_run(run_id)
@@ -169,16 +168,12 @@ class OpentronsBackend(LiquidHandlerBackend):
       if hasattr(resource, "child") and resource.child is not None:
         await self.assigned_resource_callback(resource.child)
       else:
-        raise RuntimeError(
-          f"Module {resource.name} must have a child when it assigned."
-        )
+        raise RuntimeError(f"Module {resource.name} must have a child when it assigned.")
       return
 
     well_names = [well.name for well in resource.children]
     if isinstance(resource, ItemizedResource):
-      ordering = utils.reshape_2d(
-        well_names, (resource.num_items_x, resource.num_items_y)
-      )
+      ordering = utils.reshape_2d(well_names, (resource.num_items_x, resource.num_items_y))
     else:
       ordering = [well_names]
 
@@ -211,9 +206,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       for child in resource.children
     }
 
-    format_ = (
-      "irregular"  # Property to determine compatibility with multichannel pipette
-    )
+    format_ = "irregular"  # Property to determine compatibility with multichannel pipette
     if isinstance(resource, ItemizedResource):
       if resource.num_items_x * resource.num_items_y == 96:
         format_ = "96Standard"

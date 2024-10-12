@@ -1,5 +1,3 @@
-
-
 from pylabrobot.resources.carrier import (
   Coordinate,
   CarrierSite,

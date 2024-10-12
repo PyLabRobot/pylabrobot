@@ -75,9 +75,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
   async def test_run_continuously(self):
     # valid
     await self.pump_array.run_continuously(speed=1, use_channels=[0])
-    self.mock_backend.run_continuously.assert_called_once_with(
-      speed=[1.0], use_channels=[0]
-    )
+    self.mock_backend.run_continuously.assert_called_once_with(speed=[1.0], use_channels=[0])
 
     # invalid: speed incorrect length for use_channels
     with self.assertRaises(ValueError):
@@ -90,21 +88,15 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
   async def test_invalid_channels(self):
     # invalid: max index is n-1=5
     with self.assertRaises(ValueError):
-      await self.pump_array.run_continuously(
-        speed=[1] * 6, use_channels=[2, 3, 4, 5, 6, 7]
-      )
+      await self.pump_array.run_continuously(speed=[1] * 6, use_channels=[2, 3, 4, 5, 6, 7])
 
     # invalid: channels must be unique
     with self.assertRaises(ValueError):
-      await self.pump_array.run_continuously(
-        speed=[1] * 6, use_channels=[1, 1, 1, 1, 1, 1]
-      )
+      await self.pump_array.run_continuously(speed=[1] * 6, use_channels=[1, 1, 1, 1, 1, 1])
 
     # invalid: too many channels
     with self.assertRaises(ValueError):
-      await self.pump_array.run_continuously(
-        speed=[1] * 7, use_channels=[1, 2, 3, 4, 5, 6, 7]
-      )
+      await self.pump_array.run_continuously(speed=[1] * 7, use_channels=[1, 2, 3, 4, 5, 6, 7])
 
   async def test_halt(self):
     await self.pump_array.halt()
@@ -113,9 +105,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
   async def test_run_for_duration(self):
     # can use an int or float
     await self.pump_array.run_for_duration(speed=1, use_channels=[0], duration=1)
-    self.mock_backend.run_continuously.assert_called_with(
-      speed=[0.0], use_channels=[0]
-    )  # 2nd call
+    self.mock_backend.run_continuously.assert_called_with(speed=[0.0], use_channels=[0])  # 2nd call
     self.mock_backend.run_continuously.call_count = 2
     await self.pump_array.run_for_duration(speed=1, use_channels=[0], duration=1.0)
 
@@ -133,9 +123,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
     # valid: can use an int or float
     self.pump_array.run_for_duration = AsyncMock()  # type: ignore[method-assign]
     await self.pump_array.pump_volume(speed=1, use_channels=[0], volume=1)
-    self.pump_array.run_for_duration.assert_called_once_with(
-      speed=1, use_channels=0, duration=1.0
-    )
+    self.pump_array.run_for_duration.assert_called_once_with(speed=1, use_channels=0, duration=1.0)
 
   async def test_volume_pump_revolutions(self):
     self.pump_array.calibration = self.test_calibration
@@ -144,9 +132,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
     # valid: can use an int or float
     self.pump_array.run_revolutions = AsyncMock()  # type: ignore[method-assign]
     await self.pump_array.pump_volume(speed=1, use_channels=[0], volume=1)
-    self.pump_array.run_revolutions.assert_called_once_with(
-      num_revolutions=1.0, use_channels=0
-    )
+    self.pump_array.run_revolutions.assert_called_once_with(num_revolutions=1.0, use_channels=0)
 
   async def test_calibration_missing(self):
     # invalid: no calibration

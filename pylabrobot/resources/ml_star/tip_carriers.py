@@ -1,7 +1,5 @@
 """ML Star tip carriers"""
 
-
-
 from pylabrobot.resources.carrier import (
   CarrierSite,
   TipCarrier,

@@ -81,8 +81,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       if z_top > Z_MOVEMENT_LIMIT:
         logger.warning(
-          "Resource '%s' is very high on the deck: %s mm. Be careful when "
-          "traversing the deck.",
+          "Resource '%s' is very high on the deck: %s mm. Be careful when " "traversing the deck.",
           resource.name,
           z_top,
         )
@@ -164,8 +163,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         and rails is not None
       ):
         raise ValueError(
-          f"Resource with width {resource.get_absolute_size_x()} does not "
-          f"fit at rails {rails}."
+          f"Resource with width {resource.get_absolute_size_x()} does not " f"fit at rails {rails}."
         )
 
       # Check if there is space for this new resource.
@@ -195,9 +193,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
             f"'{og_resource.name}'."
           )
 
-    return super().assign_child_resource(
-      resource, location=resource_location, reassign=reassign
-    )
+    return super().assign_child_resource(resource, location=resource_location, reassign=reassign)
 
   def summary(self) -> str:
     """Return a summary of the deck.
@@ -230,9 +226,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     def find_longest_child_name(resource: Resource, depth=0, depth_weight=4):
       """DFS to find longest child name, and depth of that child, excluding excluded categories"""
       longest, longest_depth = (
-        (len(resource.name), depth)
-        if resource.category not in exclude_categories
-        else (0, 0)
+        (len(resource.name), depth) if resource.category not in exclude_categories else (0, 0)
       )
       new_depth = depth + 1 if resource.category not in exclude_categories else depth
       return max(
@@ -243,13 +237,9 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     def find_longest_type_name(resource: Resource):
       """DFS to find the longest type name"""
       longest = (
-        len(resource.__class__.__name__)
-        if resource.category not in exclude_categories
-        else 0
+        len(resource.__class__.__name__) if resource.category not in exclude_categories else 0
       )
-      return max(
-        [longest] + [find_longest_type_name(child) for child in resource.children]
-      )
+      return max([longest] + [find_longest_type_name(child) for child in resource.children])
 
     # Calculate the maximum lengths of the resource name and type for proper alignment
     max_name_length = find_longest_child_name(self)
@@ -272,10 +262,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       + "\n"
     )
     total_length = (
-      rail_column_length
-      + name_column_length
-      + type_column_length
-      + location_column_length
+      rail_column_length + name_column_length + type_column_length + location_column_length
     )
     summary_ += "=" * total_length + "\n"
 
@@ -388,9 +375,7 @@ class HamiltonSTARDeck(HamiltonDeck):
       )  # z I am not sure about
 
       # got this location from a .lay file, but will probably need to be adjusted by the user.
-      self._trash96 = Trash(
-        "trash_core96", size_x=82.6, size_y=122.4, size_z=0
-      )  # size of tiprack
+      self._trash96 = Trash("trash_core96", size_x=82.6, size_y=122.4, size_z=0)  # size of tiprack
       self.assign_child_resource(
         resource=self._trash96,
         location=Coordinate(x=-232.1, y=110.3, z=189.0),

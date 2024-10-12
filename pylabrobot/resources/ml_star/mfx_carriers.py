@@ -1,7 +1,5 @@
 """ML Star MultiFleX (MFX) carriers"""
 
-
-
 from pylabrobot.resources.carrier import (
   Coordinate,
   CarrierSite,

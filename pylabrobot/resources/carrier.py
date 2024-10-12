@@ -161,9 +161,7 @@ class Carrier(Resource, Generic[S]):
       ValueError: If the resource is not assigned to this carrier.
     """
 
-    if (
-      not isinstance(resource.parent, CarrierSite) or not resource.parent.parent == self
-    ):
+    if not isinstance(resource.parent, CarrierSite) or not resource.parent.parent == self:
       raise ValueError(f"Resource {resource} is not assigned to this carrier")
     resource.unassign()
 
@@ -256,9 +254,7 @@ class PlateCarrierSite(CarrierSite):
   ):
     if isinstance(resource, ResourceStack):
       if not resource.direction == "z":
-        raise ValueError(
-          "ResourceStack assigned to PlateCarrierSite must have direction 'z'"
-        )
+        raise ValueError("ResourceStack assigned to PlateCarrierSite must have direction 'z'")
       if not all(isinstance(c, Plate) for c in resource.children):
         raise TypeError(
           "If a ResourceStack is assigned to a PlateCarrierSite, the items "
@@ -295,18 +291,12 @@ class PlateCarrierSite(CarrierSite):
         z_sinking_depth = get_plate_sinking_depth(first_child)
 
       # TODO #246 - _get_sinking_depth should not handle callbacks
-      resource.register_did_assign_resource_callback(
-        self._update_resource_stack_location
-      )
-      self.register_did_unassign_resource_callback(
-        self._deregister_resource_stack_callback
-      )
+      resource.register_did_assign_resource_callback(self._update_resource_stack_location)
+      self.register_did_unassign_resource_callback(self._deregister_resource_stack_callback)
     return -Coordinate(z=z_sinking_depth)
 
   def get_default_child_location(self, resource: Resource) -> Coordinate:
-    return super().get_default_child_location(resource) + self._get_sinking_depth(
-      resource
-    )
+    return super().get_default_child_location(resource) + self._get_sinking_depth(resource)
 
   def _update_resource_stack_location(self, resource: Resource):
     """Callback called when the lowest resource on a ResourceStack changes. Since the location of
@@ -324,9 +314,7 @@ class PlateCarrierSite(CarrierSite):
   def _deregister_resource_stack_callback(self, resource: Resource):
     """Callback called when a ResourceStack (or child) is unassigned from this PlateCarrierSite."""
     if isinstance(resource, ResourceStack):  # the ResourceStack itself is unassigned
-      resource.deregister_did_assign_resource_callback(
-        self._update_resource_stack_location
-      )
+      resource.deregister_did_assign_resource_callback(self._update_resource_stack_location)
 
   def serialize(self) -> dict:
     return {

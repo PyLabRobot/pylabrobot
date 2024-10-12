@@ -1,4 +1,3 @@
-
 from typing import Dict, Tuple, Optional
 
 from pylabrobot.resources.liquid import Liquid
@@ -1103,9 +1102,9 @@ vantage_mapping[(50, False, True, False, Liquid.WATER, False, True)] = (
 #     100                       1.04                   0.05
 #     300                       0.63                  -0.07
 #
-vantage_mapping[
-  (300, False, False, False, Liquid.ACETONITRIL80WATER20, True, False)
-] = _300ulNeedleAcetonitril80Water20DispenseJet = HamiltonLiquidClass(
+vantage_mapping[(300, False, False, False, Liquid.ACETONITRIL80WATER20, True, False)] = (
+  _300ulNeedleAcetonitril80Water20DispenseJet
+) = HamiltonLiquidClass(
   curve={
     300.0: 310.0,
     50.0: 57.8,

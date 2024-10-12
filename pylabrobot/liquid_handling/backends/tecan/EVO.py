@@ -2,7 +2,6 @@
 This file defines interfaces for all supported Tecan liquid handling robots.
 """
 
-
 from abc import ABCMeta, abstractmethod
 from typing import (
   Dict,
@@ -84,9 +83,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
 
     self._cache: Dict[str, List[Optional[int]]] = {}
 
-  def _assemble_command(
-    self, module: str, command: str, params: List[Optional[int]]
-  ) -> str:
+  def _assemble_command(self, module: str, command: str, params: List[Optional[int]]) -> str:
     """Assemble a firmware command to the Tecan machine.
 
     Args:
@@ -280,17 +277,13 @@ class EVO(TecanLiquidHandler):
     # Initialize plungers. Assumes wash station assigned at rail 1.
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
     await self.liha.position_absolute_all_axis(45, 1031, 90, [1200] * self.num_channels)
-    await self.liha.initialize_plunger(
-      self._bin_use_channels(list(range(self.num_channels)))
-    )
+    await self.liha.initialize_plunger(self._bin_use_channels(list(range(self.num_channels))))
     await self.liha.position_valve_logical([1] * self.num_channels)
     await self.liha.move_plunger_relative([100] * self.num_channels)
     await self.liha.position_valve_logical([0] * self.num_channels)
     await self.liha.set_end_speed_plunger([1800] * self.num_channels)
     await self.liha.move_plunger_relative([-100] * self.num_channels)
-    await self.liha.position_absolute_all_axis(
-      45, 1031, 90, [self._z_range] * self.num_channels
-    )
+    await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
 
   async def setup_arm(self, module):
     try:
@@ -305,14 +298,10 @@ class EVO(TecanLiquidHandler):
 
   async def _park_liha(self):
     await self.liha.set_z_travel_height([self._z_range] * self.num_channels)
-    await self.liha.position_absolute_all_axis(
-      45, 1031, 90, [self._z_range] * self.num_channels
-    )
+    await self.liha.position_absolute_all_axis(45, 1031, 90, [self._z_range] * self.num_channels)
 
   async def _park_roma(self):
-    await self.roma.set_vector_coordinate_position(
-      1, 9000, 2000, 2464, 1800, None, 1, 0
-    )
+    await self.roma.set_vector_coordinate_position(1, 9000, 2000, 2464, 1800, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
 
   # ============== LiquidHandlerBackend methods ==============
@@ -373,9 +362,7 @@ class EVO(TecanLiquidHandler):
 
     # perform liquid level detection
     # TODO: verify for other liquid detection modes
-    if any(
-      tlc.aspirate_lld if tlc is not None else None for tlc in tecan_liquid_classes
-    ):
+    if any(tlc.aspirate_lld if tlc is not None else None for tlc in tecan_liquid_classes):
       tlc, _ = self._first_valid(tecan_liquid_classes)
       assert tlc is not None
       detproc = tlc.lld_mode  # must be same for all channels?
@@ -385,9 +372,7 @@ class EVO(TecanLiquidHandler):
       await self.liha.set_search_speed(ssl)
       await self.liha.set_search_retract_distance(sdl)
       await self.liha.set_search_z_start(z_positions["start"])
-      await self.liha.set_search_z_max(
-        list(z if z else self._z_range for z in z_positions["max"])
-      )
+      await self.liha.set_search_z_max(list(z if z else self._z_range for z in z_positions["max"]))
       await self.liha.set_search_submerge(sbl)
       shz = [min(z for z in z_positions["travel"] if z)] * self.num_channels
       await self.liha.set_z_travel_height(shz)
@@ -397,17 +382,13 @@ class EVO(TecanLiquidHandler):
     # aspirate + retract
     # SSZ: z_add / (vol / asp_speed)
     zadd = [min(z, 32) if z else None for z in zadd]
-    ssz, sep, stz, mtr, ssz_r = self._aspirate_action(
-      ops, use_channels, tecan_liquid_classes, zadd
-    )
+    ssz, sep, stz, mtr, ssz_r = self._aspirate_action(ops, use_channels, tecan_liquid_classes, zadd)
     await self.liha.set_slow_speed_z(ssz)
     await self.liha.set_end_speed_plunger(sep)
     await self.liha.set_tracking_distance_z(stz)
     await self.liha.move_tracking_relative(mtr)
     await self.liha.set_slow_speed_z(ssz_r)
-    await self.liha.move_absolute_z(
-      z_positions["start"]
-    )  # TODO: use retract_position and offset
+    await self.liha.move_absolute_z(z_positions["start"])  # TODO: use retract_position and offset
 
     # aspirate airgap
     pvl, sep, ppr = self._aspirate_airgap(use_channels, tecan_liquid_classes, "tag")
@@ -440,9 +421,7 @@ class EVO(TecanLiquidHandler):
     x, _ = self._first_valid(x_positions)
     y, yi = self._first_valid(y_positions)
     assert x is not None and y is not None
-    await self.liha.set_z_travel_height(
-      z if z else self._z_range for z in z_positions["travel"]
-    )
+    await self.liha.set_z_travel_height(z if z else self._z_range for z in z_positions["travel"])
     await self.liha.position_absolute_all_axis(
       x,
       y - yi * ys,
@@ -507,9 +486,7 @@ class EVO(TecanLiquidHandler):
     assert (
       min(use_channels) >= self.num_channels - self.diti_count
     ), f"DiTis can only be configured for the last {self.diti_count} channels"
-    assert all(
-      isinstance(op.resource, Trash) for op in ops
-    ), "Must drop in waste container"
+    assert all(isinstance(op.resource, Trash) for op in ops), "Must drop in waste container"
 
     x_positions, y_positions, _ = self._liha_positions(ops, use_channels)
 
@@ -545,9 +522,7 @@ class EVO(TecanLiquidHandler):
     assert self.roma_connected
 
     z_range = await self.roma.report_z_param(5)
-    x, y, z = self._roma_positions(
-      move.resource, move.resource.get_absolute_location(), z_range
-    )
+    x, y, z = self._roma_positions(move.resource, move.resource.get_absolute_location(), z_range)
     h = int(move.resource.get_absolute_size_y() * 10)
     xt, yt, zt = self._roma_positions(move.resource, move.destination, z_range)
 
@@ -564,9 +539,7 @@ class EVO(TecanLiquidHandler):
     # pick up resource
     await self.roma.position_absolute_g(900)  # TODO: verify
     await self.roma.set_target_window_class(1, 0, 0, 0, 135, 0)
-    await self.roma.set_vector_coordinate_position(
-      1, x, y, z["travel"], 900, None, 1, 1
-    )
+    await self.roma.set_vector_coordinate_position(1, x, y, z["travel"], 900, None, 1, 1)
     # TODO verify z param
     await self.roma.set_vector_coordinate_position(1, x, y, z["end"], 900, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
@@ -581,34 +554,20 @@ class EVO(TecanLiquidHandler):
     await self.roma.set_target_window_class(3, 0, 0, 0, 55, 0)
     await self.roma.set_target_window_class(4, 45, 0, 0, 0, 0)
     await self.roma.set_vector_coordinate_position(1, x, y, z["end"], 900, None, 1, 1)
-    await self.roma.set_vector_coordinate_position(
-      2, x, y, z["travel"], 900, None, 1, 2
-    )
+    await self.roma.set_vector_coordinate_position(2, x, y, z["travel"], 900, None, 1, 2)
     await self.roma.set_vector_coordinate_position(3, x, y, z["safe"], 900, None, 1, 3)
-    await self.roma.set_vector_coordinate_position(
-      4, xt, yt, zt["safe"], 900, None, 1, 4
-    )
-    await self.roma.set_vector_coordinate_position(
-      5, xt, yt, zt["travel"], 900, None, 1, 3
-    )
-    await self.roma.set_vector_coordinate_position(
-      6, xt, yt, zt["end"], 900, None, 1, 0
-    )
+    await self.roma.set_vector_coordinate_position(4, xt, yt, zt["safe"], 900, None, 1, 4)
+    await self.roma.set_vector_coordinate_position(5, xt, yt, zt["travel"], 900, None, 1, 3)
+    await self.roma.set_vector_coordinate_position(6, xt, yt, zt["end"], 900, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
 
     # release resource
     await self.roma.position_absolute_g(900)
     await self.roma.set_fast_speed_y(5000, 1500)
     await self.roma.set_fast_speed_r(5000, 1500)
-    await self.roma.set_vector_coordinate_position(
-      1, xt, yt, zt["end"], 900, None, 1, 1
-    )
-    await self.roma.set_vector_coordinate_position(
-      2, xt, yt, zt["travel"], 900, None, 1, 2
-    )
-    await self.roma.set_vector_coordinate_position(
-      3, xt, yt, zt["safe"], 900, None, 1, 0
-    )
+    await self.roma.set_vector_coordinate_position(1, xt, yt, zt["end"], 900, None, 1, 1)
+    await self.roma.set_vector_coordinate_position(2, xt, yt, zt["travel"], 900, None, 1, 2)
+    await self.roma.set_vector_coordinate_position(3, xt, yt, zt["safe"], 900, None, 1, 0)
     await self.roma.action_move_vector_coordinate_position()
     await self.roma.set_fast_speed_y(3500, 1000)
     await self.roma.set_fast_speed_r(2000, 600)
@@ -765,9 +724,7 @@ class EVO(TecanLiquidHandler):
 
     ssz: List[Optional[int]] = [None] * self.num_channels
     sep: List[Optional[int]] = [None] * self.num_channels
-    stz: List[Optional[int]] = [
-      -z if z else None for z in zadd
-    ]  # TODO: verify max cutoff
+    stz: List[Optional[int]] = [-z if z else None for z in zadd]  # TODO: verify max cutoff
     mtr: List[Optional[int]] = [None] * self.num_channels
     ssz_r: List[Optional[int]] = [None] * self.num_channels
 
@@ -844,9 +801,7 @@ class EVO(TecanLiquidHandler):
     ):
       raise ValueError(f"Operation is not supported by resource {par}.")
     x_position = int((offset.x - 100) * 10 + par.roma_x)
-    y_position = int(
-      (347.1 - (offset.y + resource.get_absolute_size_y())) * 10 + par.roma_y
-    )
+    y_position = int((347.1 - (offset.y + resource.get_absolute_size_y())) * 10 + par.roma_y)
     z_positions = {
       "safe": z_range - int(par.roma_z_safe),
       "travel": z_range - int(par.roma_z_travel - offset.z * 10),
@@ -955,9 +910,7 @@ class LiHa(EVOArm):
       if abs(pos - x) < 1500:
         raise TecanError("Invalid command (collision)", self.module, 2)
 
-    await self.backend.send_command(
-      module=self.module, command="PAA", params=list([x, y, ys] + z)
-    )
+    await self.backend.send_command(module=self.module, command="PAA", params=list([x, y, ys] + z))
 
     EVOArm._pos_cache[self.module] = x
 
@@ -999,9 +952,7 @@ class LiHa(EVOArm):
       sense: conductivity (1 for high)
     """
 
-    await self.backend.send_command(
-      module=self.module, command="SDM", params=[proc, sense]
-    )
+    await self.backend.send_command(module=self.module, command="SDM", params=[proc, sense])
 
   async def set_search_speed(self, speed: List[Optional[int]]):
     """Set search speed for liquid search commands.
@@ -1207,9 +1158,7 @@ class RoMa(EVOArm):
       accel: acceleration in 1/10 mm/s^2
     """
 
-    await self.backend.send_command(
-      module=self.module, command="SFX", params=[speed, accel]
-    )
+    await self.backend.send_command(module=self.module, command="SFX", params=[speed, accel])
 
   async def set_fast_speed_y(self, speed: Optional[int], accel: Optional[int] = None):
     """Set fast speed and acceleration for Y-axis.
@@ -1219,9 +1168,7 @@ class RoMa(EVOArm):
       accel: acceleration in 1/10 mm/s^2
     """
 
-    await self.backend.send_command(
-      module=self.module, command="SFY", params=[speed, accel]
-    )
+    await self.backend.send_command(module=self.module, command="SFY", params=[speed, accel])
 
   async def set_fast_speed_z(self, speed: Optional[int], accel: Optional[int] = None):
     """Set fast speed and acceleration for Z-axis.
@@ -1231,9 +1178,7 @@ class RoMa(EVOArm):
       accel: acceleration in 1/10 mm/s^2
     """
 
-    await self.backend.send_command(
-      module=self.module, command="SFZ", params=[speed, accel]
-    )
+    await self.backend.send_command(module=self.module, command="SFZ", params=[speed, accel])
 
   async def set_fast_speed_r(self, speed: Optional[int], accel: Optional[int] = None):
     """Set fast speed and acceleration for R-axis.
@@ -1243,9 +1188,7 @@ class RoMa(EVOArm):
       accel: acceleration in 1/10 dg/s^2
     """
 
-    await self.backend.send_command(
-      module=self.module, command="SFR", params=[speed, accel]
-    )
+    await self.backend.send_command(module=self.module, command="SFR", params=[speed, accel])
 
   async def set_vector_coordinate_position(
     self,
@@ -1316,9 +1259,7 @@ class RoMa(EVOArm):
       cur: maximal allowed current
     """
 
-    await self.backend.send_command(
-      module=self.module, command="SGG", params=[speed, pwm, cur]
-    )
+    await self.backend.send_command(module=self.module, command="SGG", params=[speed, pwm, cur])
 
   async def grip_plate(self, pos: int):
     """Grips plate at current X/Y/Z/R-position
@@ -1329,9 +1270,7 @@ class RoMa(EVOArm):
 
     await self.backend.send_command(module=self.module, command="AGR", params=[pos])
 
-  async def set_target_window_class(
-    self, wc: int, x: int, y: int, z: int, r: int, g: int
-  ):
+  async def set_target_window_class(self, wc: int, x: int, y: int, z: int, r: int, g: int):
     """Sets drive parameters for the AAC command.
 
     Args:
@@ -1343,6 +1282,4 @@ class RoMa(EVOArm):
       g: target window for g-axis in 1/10 mm
     """
 
-    await self.backend.send_command(
-      module=self.module, command="STW", params=[wc, x, y, z, r, g]
-    )
+    await self.backend.send_command(module=self.module, command="STW", params=[wc, x, y, z, r, g])

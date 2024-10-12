@@ -45,9 +45,7 @@ class HamiltonTip(Tip):
     total_tip_length: float,
     maximal_volume: float,
     tip_size: Union[TipSize, str],  # union for deserialization, will probably refactor
-    pickup_method: Union[
-      TipPickupMethod, str
-    ],  # union for deserialization, will probably refactor
+    pickup_method: Union[TipPickupMethod, str],  # union for deserialization, will probably refactor
   ):
     if isinstance(tip_size, str):
       tip_size = TipSize[tip_size]

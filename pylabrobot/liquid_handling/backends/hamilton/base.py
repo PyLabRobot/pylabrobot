@@ -263,9 +263,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     fut = loop.create_future()
     self._start_reading(id_, loop, fut, cmd, read_timeout)
     result = await fut
-    return cast(
-      str, result
-    )  # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
+    return cast(str, result)  # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
 
   def _start_reading(
     self,
@@ -380,14 +378,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         y_positions.append(0)
       channels_involved.append(True)
 
-      x_pos = (
-        ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
-      )
+      x_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").x + ops[i].offset.x
       x_positions.append(round(x_pos * 10))
 
-      y_pos = (
-        ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
-      )
+      y_pos = ops[i].resource.get_absolute_location(x="c", y="c", z="b").y + ops[i].offset.y
       y_positions.append(round(y_pos * 10))
 
     # check that the minimum d between any two y positions is >9mm
@@ -398,9 +392,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
           continue
         if not channels_involved[channel_idx1] or not channels_involved[channel_idx2]:
           continue
-        if (
-          x1 != x2
-        ):  # channels not on the same column -> will be two operations on the machine
+        if x1 != x2:  # channels not on the same column -> will be two operations on the machine
           continue
         if not (self.allow_firmware_planning and y1 == y2) and abs(y1 - y2) < 90:
           raise ValueError(

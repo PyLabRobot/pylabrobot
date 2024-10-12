@@ -181,9 +181,7 @@ class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
 
     for identifier, should_have_tip in should_have.items():
       if should_have_tip and not self.get_item(identifier).has_tip():
-        self.get_item(identifier).tracker.add_tip(
-          self.get_item(identifier).make_tip(), commit=True
-        )
+        self.get_item(identifier).tracker.add_tip(self.get_item(identifier).make_tip(), commit=True)
       elif not should_have_tip and self.get_item(identifier).has_tip():
         self.get_item(identifier).tracker.remove_tip(commit=True)
 

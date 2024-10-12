@@ -42,9 +42,7 @@ class TipTracker:
     self._is_disabled = False
     self._tip: Optional["Tip"] = None
     self._pending_tip: Optional["Tip"] = None
-    self._tip_origin: Optional["TipSpot"] = (
-      None  # not currently in a transaction, do we need that?
-    )
+    self._tip_origin: Optional["TipSpot"] = None  # not currently in a transaction, do we need that?
 
     self._callback: Optional[TrackerCallback] = None
 
@@ -132,9 +130,7 @@ class TipTracker:
     return {
       "tip": self._tip.serialize() if self._tip is not None else None,
       "tip_state": self._tip.tracker.serialize() if self._tip is not None else None,
-      "pending_tip": self._pending_tip.serialize()
-      if self._pending_tip is not None
-      else None,
+      "pending_tip": self._pending_tip.serialize() if self._pending_tip is not None else None,
     }
 
   def load_state(self, state: dict) -> None:

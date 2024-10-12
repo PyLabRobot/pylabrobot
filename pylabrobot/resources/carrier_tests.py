@@ -1,4 +1,3 @@
-
 import unittest
 
 from .carrier import (
@@ -375,9 +374,7 @@ class CarrierTests(unittest.TestCase):
         pedestal_size_z=10,
       ),
     )
-    resource_stack = ResourceStack(
-      name="resource_stack", direction="z", resources=[plate2, plate1]
-    )
+    resource_stack = ResourceStack(name="resource_stack", direction="z", resources=[plate2, plate1])
     carrier[0] = resource_stack
     self.assertEqual(resource_stack.location, Coordinate(0, 0, -5))
     self.assertEqual(plate1.location, Coordinate(0, 0, 0))

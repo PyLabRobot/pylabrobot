@@ -20,27 +20,21 @@ def eppendorf_96_tiprack_1000ul_eptips(name: str) -> TipRack:
 def tipone_96_tiprack_200ul(name: str) -> TipRack:
   return cast(
     TipRack,
-    load_shared_opentrons_resource(
-      definition="tipone_96_tiprack_200ul", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="tipone_96_tiprack_200ul", name=name, version=1),
   )
 
 
 def opentrons_96_tiprack_300ul(name: str) -> TipRack:
   return cast(
     TipRack,
-    load_shared_opentrons_resource(
-      definition="opentrons_96_tiprack_300ul", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="opentrons_96_tiprack_300ul", name=name, version=1),
   )
 
 
 def opentrons_96_tiprack_10ul(name: str) -> TipRack:
   return cast(
     TipRack,
-    load_shared_opentrons_resource(
-      definition="opentrons_96_tiprack_10ul", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="opentrons_96_tiprack_10ul", name=name, version=1),
   )
 
 
@@ -58,9 +52,7 @@ def opentrons_96_filtertiprack_10ul(name: str) -> TipRack:
 def geb_96_tiprack_10ul(name: str) -> TipRack:
   return cast(
     TipRack,
-    load_shared_opentrons_resource(
-      definition="geb_96_tiprack_10ul", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="geb_96_tiprack_10ul", name=name, version=1),
   )
 
 
@@ -89,18 +81,14 @@ def eppendorf_96_tiprack_10ul_eptips(name: str) -> TipRack:
 def opentrons_96_tiprack_1000ul(name: str) -> TipRack:
   return cast(
     TipRack,
-    load_shared_opentrons_resource(
-      definition="opentrons_96_tiprack_1000ul", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="opentrons_96_tiprack_1000ul", name=name, version=1),
   )
 
 
 def opentrons_96_tiprack_20ul(name: str) -> TipRack:
   return cast(
     TipRack,
-    load_shared_opentrons_resource(
-      definition="opentrons_96_tiprack_20ul", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="opentrons_96_tiprack_20ul", name=name, version=1),
   )
 
 
@@ -129,7 +117,5 @@ def opentrons_96_filtertiprack_20ul(name: str) -> TipRack:
 def geb_96_tiprack_1000ul(name: str) -> TipRack:
   return cast(
     TipRack,
-    load_shared_opentrons_resource(
-      definition="geb_96_tiprack_1000ul", name=name, version=1
-    ),
+    load_shared_opentrons_resource(definition="geb_96_tiprack_1000ul", name=name, version=1),
   )

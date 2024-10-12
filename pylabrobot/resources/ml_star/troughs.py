@@ -1,7 +1,5 @@
 """Definitions for Hamilton-manufactured Troughs"""
 
-
-
 from pylabrobot.resources.trough import Trough, TroughBottomType
 
 # # # # # # # # # # Hamilton_1_trough_200ml_Vb # # # # # # # # # #

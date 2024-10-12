@@ -84,9 +84,7 @@ class PumpArray(Machine):
       use_channels = [use_channels]
     if isinstance(num_revolutions, float):
       num_revolutions = [num_revolutions] * len(use_channels)
-    await self.backend.run_revolutions(
-      num_revolutions=num_revolutions, use_channels=use_channels
-    )
+    await self.backend.run_revolutions(num_revolutions=num_revolutions, use_channels=use_channels)
 
   async def run_continuously(
     self,
@@ -167,8 +165,7 @@ class PumpArray(Machine):
 
     if self.calibration is None:
       raise NotCalibratedError(
-        "Pump is not calibrated. Volume based pumping and related functions "
-        "unavailable."
+        "Pump is not calibrated. Volume based pumping and related functions " "unavailable."
       )
     if isinstance(use_channels, int):
       use_channels = [use_channels]

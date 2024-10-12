@@ -56,9 +56,7 @@ class TestPlateReaderResource(unittest.TestCase):
     plate = Plate("plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     self.pr.assign_child_resource(plate)
 
-    another_plate = Plate(
-      "another_plate", size_x=1, size_y=1, size_z=1, ordered_items={}
-    )
+    another_plate = Plate("another_plate", size_x=1, size_y=1, size_z=1, ordered_items={})
     with self.assertRaises(ValueError):
       self.pr.assign_child_resource(another_plate)
 
@@ -76,6 +74,4 @@ class TestPlateReaderResource(unittest.TestCase):
         "type": "MockPlateReaderBackend",
       },
     )
-    self.assertIsInstance(
-      backend.deserialize(backend.serialize()), MockPlateReaderBackend
-    )
+    self.assertIsInstance(backend.deserialize(backend.serialize()), MockPlateReaderBackend)

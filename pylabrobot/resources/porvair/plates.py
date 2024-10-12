@@ -1,7 +1,5 @@
 """Porvair plates"""
 
-
-
 from typing import Optional
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import (
@@ -31,9 +29,7 @@ def _compute_height_from_volume_Porvair_6_reservoir_47ml_Vb(
   liquid_volume: float,
 ):
   if liquid_volume > 49_350.0:  # 5% tolerance
-    raise ValueError(
-      f"Volume {liquid_volume} is too large for Porvair_6_reservoir_47ml_Vb"
-    )
+    raise ValueError(f"Volume {liquid_volume} is too large for Porvair_6_reservoir_47ml_Vb")
   return round(
     calculate_liquid_height_in_container_2segments_square_vbottom(
       x=17,

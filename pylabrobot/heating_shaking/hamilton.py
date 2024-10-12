@@ -79,9 +79,7 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     assert direction in [0, 1], "Direction must be 0 or 1"
     assert 500 <= acceleration <= 10_000, "Acceleration must be between 500 and 10_000"
 
-    await self._start_shaking(
-      direction=direction, speed=int_speed, acceleration=acceleration
-    )
+    await self._start_shaking(direction=direction, speed=int_speed, acceleration=acceleration)
 
   async def stop_shaking(self):
     """Shaker `stop_shaking` implementation."""

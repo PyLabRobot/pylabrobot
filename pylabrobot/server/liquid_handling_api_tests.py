@@ -118,9 +118,7 @@ class LiquidHandlingApiGeneralTests(unittest.IsolatedAsyncioTestCase):
 
       # Post with valid data
       deck = build_layout()
-      response = client.post(
-        self.base_url + "/labware", json={"deck": deck.serialize()}
-      )
+      response = client.post(self.base_url + "/labware", json={"deck": deck.serialize()})
       self.assertEqual(response.json, {"status": "ok"})
       self.assertEqual(response.status_code, 200)
       self.assertEqual(self.lh.deck, deck)
@@ -136,9 +134,7 @@ class LiquidHandlingApiOpsTests(unittest.TestCase):
 
     deck = build_layout()
     with self.app.test_client() as client:
-      response = client.post(
-        self.base_url + "/labware", json={"deck": deck.serialize()}
-      )
+      response = client.post(self.base_url + "/labware", json={"deck": deck.serialize()})
       assert response.status_code == 200
       assert self.lh.deck == deck
       assert self.lh.deck.resources == deck.resources

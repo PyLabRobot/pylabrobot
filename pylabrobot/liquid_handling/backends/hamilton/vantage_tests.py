@@ -180,9 +180,7 @@ class TestVantageResponseParsing(unittest.TestCase):
     error = vantage_response_string_to_error(resp)
     self.assertEqual(
       error,
-      VantageFirmwareError(
-        errors={"Core 96": "No liquid level found"}, raw_response=resp
-      ),
+      VantageFirmwareError(errors={"Core 96": "No liquid level found"}, raw_response=resp),
     )
 
     resp = 'A1PMDAid262er99es"P170 P270 P370 P470 P570 P670 P770 P870"'
@@ -307,13 +305,9 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         # similar != parsed_cmd, but assertEqual gives a better error message than `fail`.
         self.assertEqual(similar, parsed_cmd)
       else:
-        self.fail(
-          f"Command {cmd} not found in sent commands: {self.mockVantage.commands}"
-        )
+        self.fail(f"Command {cmd} not found in sent commands: {self.mockVantage.commands}")
     elif not should_be and found:
-      self.fail(
-        f"Command {cmd} was found in sent commands: {self.mockVantage.commands}"
-      )
+      self.fail(f"Command {cmd} was found in sent commands: {self.mockVantage.commands}")
 
   def test_ops_to_fw_positions(self):
     """Convert channel positions to firmware positions."""
@@ -538,9 +532,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.dispense96(self.plate, volume=0)
 
   async def test_move_plate(self):
-    await self.lh.move_plate(
-      self.plate, self.plt_car[1], pickup_distance_from_top=5.2 - 3.33
-    )
+    await self.lh.move_plate(self.plate, self.plt_car[1], pickup_distance_from_top=5.2 - 3.33)
 
     # pickup
     self._assert_command_sent_once(

@@ -43,9 +43,7 @@ class PumpArrayBackend(MachineBackend, metaclass=ABCMeta):
   def num_channels(self) -> int:
     """The number of channels that the pump array has."""
 
-  async def run_revolutions(
-    self, num_revolutions: List[float], use_channels: List[int]
-  ):
+  async def run_revolutions(self, num_revolutions: List[float], use_channels: List[int]):
     """Run the specified channels at the speed selected.
     If speed is 0, the pump will be halted.
 

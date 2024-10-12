@@ -1,7 +1,5 @@
 """Corning Costar plates"""
 
-
-
 from typing import Optional
 from pylabrobot.resources.errors import (
   ResourceDefinitionIncompleteError,
@@ -545,9 +543,7 @@ def Cos_96_EZWash_Lid(name: str) -> Lid:
 
 
 def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
-  raise ValueError(
-    "Deprecated. You probably want to use Cor_96_wellplate_360ul_Fb instead."
-  )
+  raise ValueError("Deprecated. You probably want to use Cor_96_wellplate_360ul_Fb instead.")
 
 
 def Cos_96_EZWash_L(name: str, with_lid: bool = False) -> Plate:
@@ -1144,9 +1140,7 @@ def _compute_height_from_volume_Cos_6_wellplate_16800ul_Fb(
   liquid_volume: float,
 ):
   if liquid_volume > 17_640:  # 5% tolerance
-    raise ValueError(
-      f"Volume {liquid_volume} is too large for Cos_6_wellplate_16800ul_Fb"
-    )
+    raise ValueError(f"Volume {liquid_volume} is too large for Cos_6_wellplate_16800ul_Fb")
   return calculate_liquid_height_container_1segment_round_fbottom(
     d=35.0, h_cylinder=18.2, liquid_volume=liquid_volume
   )

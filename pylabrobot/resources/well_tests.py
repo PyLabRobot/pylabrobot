@@ -1,5 +1,3 @@
-
-
 import unittest
 
 from .well import Well, WellBottomType

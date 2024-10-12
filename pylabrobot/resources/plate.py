@@ -54,9 +54,7 @@ class Lid(Resource):
     )
     self.nesting_z_height = nesting_z_height
     if nesting_z_height == 0:
-      print(
-        f"{self.name}: Are you certain that the lid nests 0 mm with its parent plate?"
-      )
+      print(f"{self.name}: Are you certain that the lid nests 0 mm with its parent plate?")
 
   def serialize(self) -> dict:
     return {
@@ -139,9 +137,7 @@ class Plate(ResourceHolderMixin, ItemizedResource[Well]):
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self._lid = resource
     else:
-      assert (
-        location is not None
-      ), "Location must be specified for if resource is not a lid."
+      assert location is not None, "Location must be specified for if resource is not a lid."
     return super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def unassign_child_resource(self, resource):
@@ -201,17 +197,11 @@ class Plate(ResourceHolderMixin, ItemizedResource[Well]):
 
     if isinstance(liquids, tuple):
       liquids = [liquids] * self.num_items
-    elif isinstance(liquids, list) and all(
-      isinstance(column, list) for column in liquids
-    ):
+    elif isinstance(liquids, list) and all(isinstance(column, list) for column in liquids):
       # mypy doesn't know that all() checks the type
       liquids = cast(List[List[Tuple[Optional["Liquid"], float]]], liquids)
-      liquids = [
-        list(column) for column in zip(*liquids)
-      ]  # transpose the list of lists
-      liquids = [
-        volume for column in liquids for volume in column
-      ]  # flatten the list of lists
+      liquids = [list(column) for column in zip(*liquids)]  # transpose the list of lists
+      liquids = [volume for column in liquids for volume in column]  # flatten the list of lists
 
     if len(liquids) != self.num_items:
       raise ValueError(
@@ -267,6 +257,4 @@ class Plate(ResourceHolderMixin, ItemizedResource[Well]):
         for column in range(1, self.num_items_x, 2)
       ]
     else:
-      raise ValueError(
-        f"Invalid quadrant number: {quadrant}. Quadrant must be 1, 2, 3, or 4."
-      )
+      raise ValueError(f"Invalid quadrant number: {quadrant}. Quadrant must be 1, 2, 3, or 4.")

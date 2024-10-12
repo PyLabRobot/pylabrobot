@@ -66,12 +66,8 @@ class Visualizer:
     # Hook into the resource (un)assigned callbacks so we can send the appropriate events to the
     # browser.
     self._root_resource = resource
-    resource.register_did_assign_resource_callback(
-      self._handle_resource_assigned_callback
-    )
-    resource.register_did_unassign_resource_callback(
-      self._handle_resource_unassigned_callback
-    )
+    resource.register_did_assign_resource_callback(self._handle_resource_assigned_callback)
+    resource.register_did_unassign_resource_callback(self._handle_resource_unassigned_callback)
 
     # register for callbacks
     def register_state_update(resource):
@@ -145,7 +141,6 @@ class Visualizer:
       event: The event identifier.
       data: The event data, deserialized from JSON.
     """
-
 
     if event == "ping":
       await self.websocket.send(json.dumps({"event": "pong"}))
@@ -229,9 +224,7 @@ class Visualizer:
 
     # Run and save if the websocket connection has been established, otherwise just save.
     if wait_for_response and not self.has_connection():
-      raise RuntimeError(
-        "Cannot wait for response when no websocket connection is established."
-      )
+      raise RuntimeError("Cannot wait for response when no websocket connection is established.")
 
     if self.has_connection():
       await self.websocket.send(serialized_data)
@@ -292,9 +285,7 @@ class Visualizer:
       self._stop_ = self.loop.create_future()
       while True:
         try:
-          async with websockets.server.serve(
-            self._socket_handler, self.ws_host, self.ws_port
-          ):
+          async with websockets.server.serve(self._socket_handler, self.ws_host, self.ws_port):
             print(f"Websocket server started at http://{self.ws_host}:{self.ws_port}")
             lock.release()
             await self.stop_
@@ -325,8 +316,7 @@ class Visualizer:
     path = os.path.join(dirname, ".")
     if not os.path.exists(path):
       raise RuntimeError(
-        "Could not find Visualizer files. Please run from the root of the "
-        "repository."
+        "Could not find Visualizer files. Please run from the root of the " "repository."
       )
 
     def start_server(lock):
@@ -481,9 +471,7 @@ class Visualizer:
       "state": resource.serialize_all_state(),
       "parent_name": (resource.parent.name if resource.parent else None),
     }
-    fut = self.send_command(
-      event="resource_assigned", data=data, wait_for_response=False
-    )
+    fut = self.send_command(event="resource_assigned", data=data, wait_for_response=False)
     asyncio.run_coroutine_threadsafe(fut, self.loop)
 
   def _handle_resource_unassigned_callback(self, resource: Resource) -> None:
@@ -492,9 +480,7 @@ class Visualizer:
 
     # Send a `resource_unassigned` event to the browser.
     data = {"resource_name": resource.name}
-    fut = self.send_command(
-      event="resource_unassigned", data=data, wait_for_response=False
-    )
+    fut = self.send_command(event="resource_unassigned", data=data, wait_for_response=False)
     asyncio.run_coroutine_threadsafe(fut, self.loop)
 
   def _handle_state_update_callback(self, resource: Resource) -> None:

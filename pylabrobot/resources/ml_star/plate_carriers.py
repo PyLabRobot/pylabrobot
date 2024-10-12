@@ -1,7 +1,5 @@
 """ML Star plate carriers"""
 
-
-
 from pylabrobot.resources.carrier import (
   Coordinate,
   PlateCarrierSite,

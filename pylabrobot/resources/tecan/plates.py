@@ -4,8 +4,6 @@ size_z are best approximations, see
 https://forums.pylabrobot.org/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2987
 """
 
-
-
 from typing import Dict, Optional
 from pylabrobot.resources.plate import Lid, Plate, Well
 from pylabrobot.resources.utils import create_ordered_items_2d

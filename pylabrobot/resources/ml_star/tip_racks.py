@@ -1,6 +1,5 @@
 """ML Star tips"""
 
-
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.tip_rack import (
   TipSpot,

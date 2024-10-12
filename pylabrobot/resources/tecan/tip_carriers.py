@@ -1,7 +1,5 @@
 """Tecan tip carriers"""
 
-
-
 from typing import List, Optional
 from pylabrobot.resources.carrier import (
   TipCarrier,

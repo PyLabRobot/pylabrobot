@@ -1,5 +1,3 @@
-
-
 import enum
 
 from pylabrobot.resources.tip import Tip

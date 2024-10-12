@@ -51,9 +51,7 @@ class InhecoThermoShake(HeaterShakerBackend):
     report_buffer = [0] * 9
     crc = 161
     for i, char in enumerate(msg):
-      ch_array1[i] = (
-        char if ord(char) <= ord("`") or char == "#" else chr(ord(char) - 32)
-      )
+      ch_array1[i] = char if ord(char) <= ord("`") or char == "#" else chr(ord(char) - 32)
       if ch_array1[i] != "#":
         crc = self._crc8(ord(ch_array1[i]), crc=crc)
     ch_array1[len(msg)] = "w" if crc in (35, 0) else chr(crc)

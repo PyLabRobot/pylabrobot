@@ -1,7 +1,5 @@
 """Thermo Fisher Scientific  Inc. (and all its brand) plates"""
 
-
-
 from pylabrobot.resources.well import (
   Well,
   WellBottomType,
@@ -42,9 +40,7 @@ def _compute_volume_from_height_Thermo_TS_96_wellplate_1200ul_Rb(
   h: float,
 ):
   if h > 20.5:
-    raise ValueError(
-      f"Height {h} is too large for" + "Thermo_TS_96_wellplate_1200ul_Rb"
-    )
+    raise ValueError(f"Height {h} is too large for" + "Thermo_TS_96_wellplate_1200ul_Rb")
   return calculate_liquid_volume_container_2segments_square_ubottom(
     x=8.15, h_cuboid=16.45, liquid_height=h
   )
@@ -130,12 +126,8 @@ def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate
       bottom_type=WellBottomType.U,
       material_z_thickness=1.15,
       cross_section_type=CrossSectionType.RECTANGLE,
-      compute_volume_from_height=(
-        _compute_volume_from_height_Thermo_TS_96_wellplate_1200ul_Rb
-      ),
-      compute_height_from_volume=(
-        _compute_height_from_volume_Thermo_TS_96_wellplate_1200ul_Rb
-      ),
+      compute_volume_from_height=(_compute_volume_from_height_Thermo_TS_96_wellplate_1200ul_Rb),
+      compute_height_from_volume=(_compute_height_from_volume_Thermo_TS_96_wellplate_1200ul_Rb),
     ),
   )
 
@@ -155,9 +147,7 @@ def _compute_volume_from_height_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
   h: float,
 ):
   if h > 21.1:
-    raise ValueError(
-      f"Height {h} is too large for" + "ThermoScientific_96_wellplate_1200ul_Rd"
-    )
+    raise ValueError(f"Height {h} is too large for" + "ThermoScientific_96_wellplate_1200ul_Rd")
   return max(
     0.9617 + 10.2590 * h - 1.3069 * h**2 + 0.26799 * h**3 - 0.01003 * h**4,
     0,
@@ -169,8 +159,7 @@ def _compute_height_from_volume_Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
 ):
   if liquid_volume > 315:  # 5% tolerance
     raise ValueError(
-      f"Volume {liquid_volume} is too large for"
-      + "ThermoScientific_96_wellplate_1200ul_Rd"
+      f"Volume {liquid_volume} is too large for" + "ThermoScientific_96_wellplate_1200ul_Rd"
     )
   return max(
     -0.1823
@@ -203,9 +192,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name: str) -> Lid:
   # )
 
 
-def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
-  name: str, with_lid: bool = False
-) -> Plate:
+def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = False) -> Plate:
   """Thermo Fisher Scientific/Fisher Scientific cat. no.: 4483354/15273005 (= with barcode)
   - Part no.: 16698853 (FS) (= **without** barcode).
   - See `./engineering_diagrams/` directory for more part numbers (different colours).
@@ -223,12 +210,8 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
     name=name,
     size_x=127.76,
     size_y=85.48,
-    size_z=20.1
-    + 1.6
-    - 0.5,  # cavity_depth + material_z_thickness - well_extruding_over_plate
-    lid=Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name + "_lid")
-    if with_lid
-    else None,
+    size_z=20.1 + 1.6 - 0.5,  # cavity_depth + material_z_thickness - well_extruding_over_plate
+    lid=Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_Lid(name + "_lid") if with_lid else None,
     model="Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate",
     plate_type="semi-skirted",
     ordered_items=create_ordered_items_2d(
@@ -256,15 +239,9 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
   )
 
 
-def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_L(
-  name: str, with_lid: bool = False
-) -> Plate:
+def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_L(name: str, with_lid: bool = False) -> Plate:
   return Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name=name, with_lid=with_lid)
 
 
-def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_P(
-  name: str, with_lid: bool = False
-) -> Plate:
-  return Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(
-    name=name, with_lid=with_lid
-  ).rotated(90)
+def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_P(name: str, with_lid: bool = False) -> Plate:
+  return Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name=name, with_lid=with_lid).rotated(90)

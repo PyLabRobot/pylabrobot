@@ -200,9 +200,7 @@ class Resource:
       return self.rotation
     return self.parent.get_absolute_rotation() + self.rotation
 
-  def get_absolute_location(
-    self, x: str = "l", y: str = "f", z: str = "b"
-  ) -> Coordinate:
+  def get_absolute_location(self, x: str = "l", y: str = "f", z: str = "b") -> Coordinate:
     """Get the absolute location of this resource, probably within the
     :class:`pylabrobot.resources.Deck`. The `x`, `y`, and `z` arguments specify the anchor point
     within the resource. The default is the left front bottom corner.
@@ -299,18 +297,10 @@ class Resource:
     self.children.append(resource)
 
     # Register callbacks on the new child resource so that they can be propagated up the tree.
-    resource.register_will_assign_resource_callback(
-      self._call_will_assign_resource_callbacks
-    )
-    resource.register_did_assign_resource_callback(
-      self._call_did_assign_resource_callbacks
-    )
-    resource.register_will_unassign_resource_callback(
-      self._call_will_unassign_resource_callbacks
-    )
-    resource.register_did_unassign_resource_callback(
-      self._call_did_unassign_resource_callbacks
-    )
+    resource.register_will_assign_resource_callback(self._call_will_assign_resource_callbacks)
+    resource.register_did_assign_resource_callback(self._call_did_assign_resource_callbacks)
+    resource.register_will_unassign_resource_callback(self._call_will_unassign_resource_callbacks)
+    resource.register_did_unassign_resource_callback(self._call_did_unassign_resource_callbacks)
 
     # Call "did assign" callbacks
     for callback in self._did_assign_resource_callbacks:
@@ -380,8 +370,7 @@ class Resource:
 
     if resource not in self.children:
       raise ValueError(
-        f"Resource with name '{resource.name}' is not a child of this resource "
-        f"('{self.name}')."
+        f"Resource with name '{resource.name}' is not a child of this resource " f"('{self.name}')."
       )
 
     # Call "will unassign" callbacks
@@ -393,18 +382,10 @@ class Resource:
     self.children.remove(resource)
 
     # Delete callbacks on the child resource so that they are not propagated up the tree.
-    resource.deregister_will_assign_resource_callback(
-      self._call_will_assign_resource_callbacks
-    )
-    resource.deregister_did_assign_resource_callback(
-      self._call_did_assign_resource_callbacks
-    )
-    resource.deregister_will_unassign_resource_callback(
-      self._call_will_unassign_resource_callbacks
-    )
-    resource.deregister_did_unassign_resource_callback(
-      self._call_did_unassign_resource_callbacks
-    )
+    resource.deregister_will_assign_resource_callback(self._call_will_assign_resource_callbacks)
+    resource.deregister_did_assign_resource_callback(self._call_did_assign_resource_callbacks)
+    resource.deregister_will_unassign_resource_callback(self._call_will_unassign_resource_callbacks)
+    resource.deregister_did_unassign_resource_callback(self._call_did_unassign_resource_callbacks)
 
     # Call "did unassign" callbacks
     for callback in self._did_unassign_resource_callbacks:
@@ -590,9 +571,7 @@ class Resource:
     subclass = find_subclass(data["type"], cls=Resource)
     if subclass is None:
       raise ValueError(f'Could not find subclass with name "{data["type"]}"')
-    assert issubclass(
-      subclass, cls
-    )  # mypy does not know the type after the None check...
+    assert issubclass(subclass, cls)  # mypy does not know the type after the None check...
 
     for key in [
       "type",
@@ -603,9 +582,7 @@ class Resource:
     children_data = data_copy.pop("children")
     rotation = data_copy.pop("rotation")
     resource = subclass(**deserialize(data_copy, allow_marshal=allow_marshal))
-    resource.rotation = Rotation.deserialize(
-      rotation
-    )  # not pretty, should be done in init.
+    resource.rotation = Rotation.deserialize(rotation)  # not pretty, should be done in init.
 
     for child_data in children_data:
       child_cls = find_subclass(child_data["type"], cls=Resource)
@@ -640,9 +617,7 @@ class Resource:
 
     return cls.deserialize(content)
 
-  def register_will_assign_resource_callback(
-    self, callback: WillAssignResourceCallback
-  ):
+  def register_will_assign_resource_callback(self, callback: WillAssignResourceCallback):
     """Add a callback that will be called before a resource is assigned to this resource. These
     callbacks can raise errors in case the proposed assignment is invalid."""
     self._will_assign_resource_callbacks.append(callback)
@@ -651,39 +626,27 @@ class Resource:
     """Add a callback that will be called after a resource is assigned to this resource."""
     self._did_assign_resource_callbacks.append(callback)
 
-  def register_will_unassign_resource_callback(
-    self, callback: WillUnassignResourceCallback
-  ):
+  def register_will_unassign_resource_callback(self, callback: WillUnassignResourceCallback):
     """Add a callback that will be called before a resource is unassigned from this resource."""
     self._will_unassign_resource_callbacks.append(callback)
 
-  def register_did_unassign_resource_callback(
-    self, callback: DidUnassignResourceCallback
-  ):
+  def register_did_unassign_resource_callback(self, callback: DidUnassignResourceCallback):
     """Add a callback that will be called after a resource is unassigned from this resource."""
     self._did_unassign_resource_callbacks.append(callback)
 
-  def deregister_will_assign_resource_callback(
-    self, callback: WillAssignResourceCallback
-  ):
+  def deregister_will_assign_resource_callback(self, callback: WillAssignResourceCallback):
     """Remove a callback that will be called before a resource is assigned to this resource."""
     self._will_assign_resource_callbacks.remove(callback)
 
-  def deregister_did_assign_resource_callback(
-    self, callback: DidAssignResourceCallback
-  ):
+  def deregister_did_assign_resource_callback(self, callback: DidAssignResourceCallback):
     """Remove a callback that will be called after a resource is assigned to this resource."""
     self._did_assign_resource_callbacks.remove(callback)
 
-  def deregister_will_unassign_resource_callback(
-    self, callback: WillUnassignResourceCallback
-  ):
+  def deregister_will_unassign_resource_callback(self, callback: WillUnassignResourceCallback):
     """Remove a callback that will be called before a resource is unassigned from this resource."""
     self._will_unassign_resource_callbacks.remove(callback)
 
-  def deregister_did_unassign_resource_callback(
-    self, callback: DidUnassignResourceCallback
-  ):
+  def deregister_did_unassign_resource_callback(self, callback: DidUnassignResourceCallback):
     """Remove a callback that will be called after a resource is unassigned from this resource."""
     self._did_unassign_resource_callbacks.remove(callback)
 

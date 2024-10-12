@@ -1,4 +1,3 @@
-
 import unittest
 
 from .coordinate import Coordinate

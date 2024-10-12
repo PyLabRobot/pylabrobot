@@ -173,9 +173,7 @@ class Move:
       (GripDirection.FRONT, GripDirection.LEFT),
     ):
       return 270
-    raise ValueError(
-      f"Invalid grip directions: {self.get_direction}, {self.put_direction}"
-    )
+    raise ValueError(f"Invalid grip directions: {self.get_direction}, {self.put_direction}")
 
 
 PipettingOp = Union[Pickup, Drop, Aspiration, Dispense]

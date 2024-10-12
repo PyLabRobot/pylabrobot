@@ -1,5 +1,6 @@
 import unittest
 
+# ruff: noqa: F401
 from pylabrobot.heating_shaking.heater_shaker import HeaterShaker
 
 

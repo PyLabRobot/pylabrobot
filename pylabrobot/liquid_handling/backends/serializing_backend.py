@@ -194,9 +194,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "move": {
           "resource_name": move.resource.name,
           "to": serialize(move.destination),
-          "intermediate_locations": [
-            serialize(loc) for loc in move.intermediate_locations
-          ],
+          "intermediate_locations": [serialize(loc) for loc in move.intermediate_locations],
           "resource_offset": serialize(move.resource_offset),
           "destination_offset": serialize(move.destination_offset),
           "pickup_distance_from_top": move.pickup_distance_from_top,

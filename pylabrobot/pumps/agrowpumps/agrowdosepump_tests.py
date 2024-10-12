@@ -69,7 +69,7 @@ class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(self.agrow_backend.port, "simulated")
     self.assertEqual(self.agrow_backend.address, 1)
     self.assertEqual(
-      self.agrow_backend._pump_index_to_address, 
+      self.agrow_backend._pump_index_to_address,
       {pump: pump + 100 for pump in range(0, 6)},
     )
 

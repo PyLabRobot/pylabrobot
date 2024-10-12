@@ -1,4 +1,3 @@
-
 from typing import List, Union
 
 from pylabrobot.liquid_handling.backends.backend import (
@@ -63,9 +62,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
   async def unassigned_resource_callback(self, name: str):
     print(f"Resource {name} was unassigned from the liquid handler.")
 
-  async def pick_up_tips(
-    self, ops: List[Pickup], use_channels: List[int], **backend_kwargs
-  ):
+  async def pick_up_tips(self, ops: List[Pickup], use_channels: List[int], **backend_kwargs):
     print("Picking up tips:")
     header = (
       f"{'pip#':<{LiquidHandlerChatterboxBackend._pip_length}} "
@@ -81,9 +78,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
     print(header)
 
     for op, channel in zip(ops, use_channels):
-      offset = (
-        f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
-      )
+      offset = f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
       row = (
         f"  p{channel}: "
         f"{op.resource.name[-30:]:<{LiquidHandlerChatterboxBackend._resource_length}} "
@@ -113,9 +108,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
     print(header)
 
     for op, channel in zip(ops, use_channels):
-      offset = (
-        f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
-      )
+      offset = f"{round(op.offset.x, 1)},{round(op.offset.y, 1)},{round(op.offset.z, 1)}"
       row = (
         f"  p{channel}: "
         f"{op.resource.name[-30:]:<{LiquidHandlerChatterboxBackend._resource_length}} "
