@@ -79,8 +79,8 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     )
     await self.evo.pick_up_tips([op], use_channels=[0])
 
-    self.evo.send_command.assert_has_calls(
-      [  # type: ignore[attr-defined]
+    self.evo.send_command.assert_has_calls(  # type: ignore[attr-defined]
+      [
         call(
           module="C5",
           command="SHZ",
@@ -145,8 +145,8 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       liquids=[(None, 100)],
     )
     await self.evo.aspirate([op], use_channels=[0])
-    self.evo.send_command.assert_has_calls(
-      [  # type: ignore[attr-defined]
+    self.evo.send_command.assert_has_calls(  # type: ignore[attr-defined]
+      [
         call(
           module="C5",
           command="SHZ",
@@ -286,8 +286,8 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       liquids=[(None, 100)],
     )
     await self.evo.dispense([op], use_channels=[0])
-    self.evo.send_command.assert_has_calls(
-      [  # type: ignore[attr-defined]
+    self.evo.send_command.assert_has_calls(  # type: ignore[attr-defined]
+      [
         call(module="C5", command="RPX", params=[0]),
         call(
           module="C5",
@@ -340,8 +340,8 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
       put_direction=GripDirection.FRONT,
     )
     await self.evo.move_resource(op)
-    self.evo.send_command.assert_has_calls(
-      [  # type: ignore[attr-defined]
+    self.evo.send_command.assert_has_calls(  # type: ignore[attr-defined]
+      [
         call(module="C1", command="RPZ", params=[5]),
         call(module="C1", command="SSM", params=[1]),
         call(module="C1", command="SFX", params=[10000, None]),

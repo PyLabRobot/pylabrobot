@@ -195,12 +195,12 @@ class STARCommandCatcher(STAR):
     self.core96_head_installed = True
     self._core_parked = True
 
-  async def send_command(
+  async def send_command(  # type: ignore
     self,
     module,
     command,
     tip_pattern=None,
-    fmt="",  # type: ignore
+    fmt="",
     read_timeout=0,
     write_timeout=0,
     **kwargs,
