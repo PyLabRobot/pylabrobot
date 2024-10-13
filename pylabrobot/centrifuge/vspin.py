@@ -41,21 +41,19 @@ class VSpin(CentrifugeBackend):
     # If robot has not been intialized before status_check will raise an error
     # Error will trigger except which completes setup process
     # If no error is raised, no setup is needed
-    try:
-      for _ in range(3):
-        await self.configure_and_initialize()
-        await self.send(b"\xaa\x00\x21\x01\xff\x21")
+    for _ in range(3):
+      await self.configure_and_initialize()
       await self.send(b"\xaa\x00\x21\x01\xff\x21")
-      await self.send(b"\xaa\x01\x13\x20\x34")
-      await self.send(b"\xaa\x00\x21\x02\xff\x22")
-      await self.send(b"\xaa\x02\x13\x20\x35")
-      await self.send(b"\xaa\x00\x21\x03\xff\x23")
-      await self.send(b"\xaa\xff\x1a\x14\x2d")
-      self.dev.baudrate = 57600
-      self.dev.ftdi_fn.ftdi_setrts(1)
-      self.dev.ftdi_fn.ftdi_setdtr(1)
-      self.get_status()
-    except:
+    await self.send(b"\xaa\x00\x21\x01\xff\x21")
+    await self.send(b"\xaa\x01\x13\x20\x34")
+    await self.send(b"\xaa\x00\x21\x02\xff\x22")
+    await self.send(b"\xaa\x02\x13\x20\x35")
+    await self.send(b"\xaa\x00\x21\x03\xff\x23")
+    await self.send(b"\xaa\xff\x1a\x14\x2d")
+    self.dev.baudrate = 57600
+    self.dev.ftdi_fn.ftdi_setrts(1)
+    self.dev.ftdi_fn.ftdi_setdtr(1)
+    if self.get_status() == 0x00:
       await self.send(b"\xaa\x01\x0e\x0f")
       await self.send(b"\xaa\x01\x12\x1f\x32")
       for _ in range(8):
@@ -170,10 +168,7 @@ class VSpin(CentrifugeBackend):
      Last byte (index 13) = checksum
 
     """
-    resp = await self.send(b"\xaa\x01\x0e\x0f")
-    if len(resp) == 0:
-      raise IOError("Empty status from centrifuge")
-    return resp
+    return await self.send(b"\xaa\x01\x0e\x0f")
 
   async def get_position(self):
     resp = await self.get_status()
