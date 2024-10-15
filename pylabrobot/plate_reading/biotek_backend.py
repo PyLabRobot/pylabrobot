@@ -13,7 +13,6 @@ except ImportError:
 try:
   import PySpin # can be downloaded from 
   # https://www.teledynevisionsolutions.com/products/spinnaker-sdk/
-  import numpy as np
   USE_PYSPIN = True
 except ImportError:
   USE_PYSPIN = False 
@@ -23,6 +22,12 @@ from pylabrobot.plate_reading.standard import Exposure, FocalHeight, Gain, Imagi
 
 
 logger = logging.getLogger("pylabrobot.plate_reading.biotek")
+
+
+
+SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR = PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR if USE_PYSPIN else -1
+PixelFormat_Mono8 = PySpin.PixelFormat_Mono8 if USE_PYSPIN else -1
+
 
 
 class Cytation5Backend(ImageReaderBackend):
@@ -583,8 +588,8 @@ class Cytation5Backend(ImageReaderBackend):
 
   async def _acquire_image(
     self,
-    color_processing_algorithm: int = PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
-    pixel_format: int = PySpin.PixelFormat_Mono8,
+    color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
+    pixel_format: int = PixelFormat_Mono8,
   ) -> List[List[float]]:
     nodemap = self.cam.GetNodeMap()
 
@@ -631,8 +636,8 @@ class Cytation5Backend(ImageReaderBackend):
     exposure_time: Exposure,
     focal_height: FocalHeight,
     gain: Gain,
-    color_processing_algorithm: int = PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
-    pixel_format: int = PySpin.PixelFormat_Mono8,
+    color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
+    pixel_format: int = PixelFormat_Mono8,
   ) -> List[List[float]]:
     """Capture image using the microscope
 
