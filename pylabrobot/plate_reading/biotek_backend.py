@@ -185,6 +185,7 @@ class Cytation5Backend(ImageReaderBackend):
     logger.debug("[cytation5] sent %s", command)
     response: Optional[bytes] = None
     if wait_for_response or parameter is not None:
+      # print("reading until", b"\x06" if parameter is not None else b"\x03")
       response = await self._read_until(b"\x06" if parameter is not None else b"\x03")
 
     if parameter is not None:
@@ -239,25 +240,19 @@ class Cytation5Backend(ImageReaderBackend):
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
-    resp = await self.send_command("y", wait_for_char=b"\x06")
-    assert resp == b"\x06"
-    await self.send_command(b"08120112207434014351135308559127881772\x03", purge=False)
+    await self.send_command("y", "08120112207434014351135308559127881772\x03")
 
-    resp = await self.send_command("D", wait_for_char=b"\x06")
-    assert resp == b"\x06"
     wavelength_str = str(wavelength).zfill(4)
-    cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1".encode()
-    checksum = str(sum(cmd) % 100).encode()
-    cmd = cmd + checksum + b"\x03"
-    await self.send_command(cmd, purge=False)
+    cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
+    checksum = str(sum(cmd.encode()) % 100)
+    cmd = cmd + checksum + "\x03"
+    await self.send_command("D", cmd)
 
-    resp1 = await self.send_command("O", wait_for_char=b"\x06")
-    assert resp1 == b"\x06"
-    resp2 = await self._read_until(b"\x03")
-    assert resp2 == b"0000\x03"
+    resp = await self.send_command("O")
+    assert resp == b"\x060000\x03"
 
     # read data
-    body = await self._read_until(b"\x03")
+    body = await self._read_until(b"\x03", timeout=60*3)
     assert resp is not None
     return self._parse_body(body)
 
@@ -265,26 +260,17 @@ class Cytation5Backend(ImageReaderBackend):
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
 
-    resp = await self.send_command("t", wait_for_char=b"\x06")
-    assert resp == b"\x06"
+    cmd = f"3{14220 + int(1000*focal_height)}\x03"
+    await self.send_command("t", cmd)
 
-    cmd = f"3{14220 + int(1000*focal_height)}\x03".encode()
-    await self.send_command(cmd, purge=False)
+    await self.send_command("y", "08120112207434014351135308559127881772\x03")
 
-    resp = await self.send_command("y", wait_for_char=b"\x06")
-    assert resp == b"\x06"
-    await self.send_command(b"08120112207434014351135308559127881772\x03", purge=False)
+    cmd = ("008401010108120001200100001100100000123000500200200"
+           "-001000-00300000000000000000001351092")
+    await self.send_command("D", cmd)
 
-    resp = await self.send_command("D", wait_for_char=b"\x06")
-    assert resp == b"\x06"
-    cmd = (b"008401010108120001200100001100100000123000500200200"
-           b"-001000-00300000000000000000001351092")
-    await self.send_command(cmd, purge=False)
-
-    resp1 = await self.send_command("O", wait_for_char=b"\x06")
-    assert resp1 == b"\x06"
-    resp2 = await self._read_until(b"\x03")
-    assert resp2 == b"0000\x03"
+    resp = await self.send_command("O")
+    assert resp == b"\x060000\x03"
 
     body = await self._read_until(b"\x03", timeout=60*3)
     assert body is not None
@@ -303,37 +289,28 @@ class Cytation5Backend(ImageReaderBackend):
     if not 250 <= emission_wavelength <= 700:
       raise ValueError("Emission wavelength must be between 250 and 700")
 
-    resp = await self.send_command("t", wait_for_char=b"\x06")
-    assert resp == b"\x06"
+    cmd = f"{614220 + int(1000*focal_height)}\x03"
+    await self.send_command("t", cmd)
 
-    cmd = f"{614220 + int(1000*focal_height)}\x03".encode()
-    await self.send_command(cmd, purge=False)
+    await self.send_command("y", "08120112207434014351135308559127881772\x03")
 
-    resp = await self.send_command("y", wait_for_char=b"\x06")
-    assert resp == b"\x06"
-    await self.send_command(b"08120112207434014351135308559127881772\x03", purge=False)
-
-    resp = await self.send_command("D", wait_for_char=b"\x06")
-    assert resp == b"\x06"
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
     cmd = (f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
-      f"{emission_wavelength_str}000000000000000000210011").encode()
-    checksum = str((sum(cmd)+7) % 100).encode() # don't know why +7
-    cmd = cmd + checksum + b"\x03"
-    await self.send_command(cmd, purge=False)
+      f"{emission_wavelength_str}000000000000000000210011")
+    checksum = str((sum(cmd.encode())+7) % 100)  # don't know why +7
+    cmd = cmd + checksum + "\x03"
+    resp = await self.send_command("D", cmd)
 
-    resp1 = await self.send_command("O", wait_for_char=b"\x06")
-    assert resp1 == b"\x06"
-    resp2 = await self._read_until(b"\x03")
-    assert resp2 == b"0000\x03"
+    resp = await self.send_command("O")
+    assert resp == b"\x060000\x03"
 
     body = await self._read_until(b"\x03", timeout=60*2)
     assert body is not None
     return self._parse_body(body)
 
   async def _abort(self) -> None:
-    await self.send_command("x", wait_for_char=None)
+    await self.send_command("x", wait_for_response=False)
 
   class ShakeType(enum.IntEnum):
     LINEAR = 0
@@ -348,24 +325,17 @@ class Cytation5Backend(ImageReaderBackend):
     async def shake_maximal_duration():
       """ This method will start the shaking, but returns immediately after
       shaking has started. """
-      resp = await self.send_command("y", wait_for_char=b"\x06")
-      assert resp == b"\x06"
-      await self.send_command(b"08120112207434014351135308559127881422\x03", purge=False)
+      resp = await self.send_command("y", "08120112207434014351135308559127881422\x03")
 
-      resp = await self.send_command("D", wait_for_char=b"\x06")
-      assert resp == b"\x06"
       shake_type_bit = str(shake_type.value)
-
       duration = str(max_duration).zfill(3)
-      cmd = f"0033010101010100002000000013{duration}{shake_type_bit}301".encode()
-      checksum = str((sum(cmd)+73) % 100).encode() # don't know why +73
+      cmd = f"0033010101010100002000000013{duration}{shake_type_bit}301"
+      checksum = str((sum(cmd.encode())+73) % 100)  # don't know why +73
       cmd = cmd + checksum + b"\x03"
-      await self.send_command(cmd, purge=False)
+      await self.send_command("D", cmd)
 
-      resp = await self.send_command("O", wait_for_char=b"\x06")
-      assert resp == b"\x06"
-      resp = await self._read_until(b"\x03")
-      assert resp == b"0000\x03"
+      resp = await self.send_command("O")
+      assert resp == b"\x060000\x03"
 
     async def shake_continuous():
       while self._shaking:
@@ -528,8 +498,8 @@ class Cytation5Backend(ImageReaderBackend):
     if row == self._row and column == self._column:
       logger.debug("Already selected %s, %s", row, column)
       return
-    row_str, column_str = str(row).zfill(2), str(column).zfill(2)
     await self.send_command("Y", "Z1260101000000000000")
+    row_str, column_str = str(row).zfill(2), str(column).zfill(2)
     await self.send_command("Y", f"W6{row_str}{column_str}")
     self._row, self._column = row, column
 
@@ -619,13 +589,13 @@ class Cytation5Backend(ImageReaderBackend):
     nodemap = self.cam.GetNodeMap()
 
     # Start acquisition mode (continuous)
-    node_acquisition_mode = PySpin.CEnumerationPtr(nodemap.GetNode("AcquisitionMode"))
-    if not PySpin.IsReadable(node_acquisition_mode) or not PySpin.IsWritable(node_acquisition_mode):
-      raise Exception("unable to set acquisition mode to continuous (enum retrieval)")
-    node_acquisition_mode_single_frame = node_acquisition_mode.GetEntryByName("Continuous")
-    if not PySpin.IsReadable(node_acquisition_mode_single_frame):
-      raise Exception("unable to set acquisition mode to single frame (entry retrieval)")
-    node_acquisition_mode.SetIntValue(node_acquisition_mode_single_frame.GetValue())
+    # node_acquisition_mode = PySpin.CEnumerationPtr(nodemap.GetNode("AcquisitionMode"))
+    # if not PySpin.IsReadable(node_acquisition_mode) or not PySpin.IsWritable(node_acquisition_mode):
+    #   raise Exception("unable to set acquisition mode to continuous (enum retrieval)")
+    # node_acquisition_mode_single_frame = node_acquisition_mode.GetEntryByName("Continuous")
+    # if not PySpin.IsReadable(node_acquisition_mode_single_frame):
+    #   raise Exception("unable to set acquisition mode to single frame (entry retrieval)")
+    # node_acquisition_mode.SetIntValue(node_acquisition_mode_single_frame.GetValue())
 
     self.cam.BeginAcquisition()
     try:
