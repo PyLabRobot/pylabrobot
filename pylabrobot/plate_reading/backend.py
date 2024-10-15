@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod
 from typing import List
 
 from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode
 
 
 class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
@@ -45,3 +46,21 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
   ) -> List[List[float]]:
     """Read the fluorescence from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""
+
+
+class ImagerBackend(MachineBackend, metaclass=ABCMeta):
+  @abstractmethod
+  async def capture(
+    self,
+    row: int,
+    column: int,
+    mode: ImagingMode,
+    exposure_time: Exposure,
+    focal_height: FocalPosition,
+    gain: Gain,
+  ) -> List[List[float]]:
+    """Capture an image of the plate in the specified mode."""
+
+
+class ImageReaderBackend(PlateReaderBackend, ImagerBackend):
+  pass
