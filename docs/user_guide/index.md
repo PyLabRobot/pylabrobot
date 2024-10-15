@@ -18,7 +18,7 @@ writing-robot-agnostic-methods
 hamilton-star/hamilton-star
 ```
 
-````{toctree}
+```{toctree}
 :maxdepth: 1
 :caption: Centrifuge
 
