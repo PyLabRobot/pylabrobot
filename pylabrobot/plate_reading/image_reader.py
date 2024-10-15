@@ -6,6 +6,7 @@ from pylabrobot.plate_reading.imager import Imager
 
 
 class ImageReader(PlateReader, Imager):
+  """Microscope which is also a plate reader"""
   def __init__(
     self,
     name: str,

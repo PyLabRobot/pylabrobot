@@ -11,5 +11,5 @@ class ImagingMode(enum.Enum):
 
 
 Exposure = Union[float, Literal["auto"]]
-FocalHeight = Union[float, Literal["auto"]]
+FocalPosition = Union[float, Literal["auto"]]
 Gain = Union[float, Literal["auto"]]

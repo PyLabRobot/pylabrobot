@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 from typing import List
 
 from pylabrobot.machines.backends import MachineBackend
-from pylabrobot.plate_reading.standard import Exposure, FocalHeight, Gain, ImagingMode
+from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode
 
 
 class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
@@ -55,10 +55,10 @@ class ImagerBackend(MachineBackend, metaclass=ABCMeta):
     row: int,
     column: int,
     mode: ImagingMode,
-    exposure_time: Exposure = "auto",
-    focal_height: FocalHeight = "auto",
-    gain: Gain = "auto",
-  ):
+    exposure_time: Exposure,
+    focal_height: FocalPosition,
+    gain: Gain,
+  ) -> List[List[float]]:
     """Capture an image of the plate in the specified mode."""
 
 
