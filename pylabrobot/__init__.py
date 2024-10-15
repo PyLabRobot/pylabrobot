@@ -31,7 +31,6 @@ def setup_logger(log_dir: Union[Path, str], level: int):
   Args:
     log_dir: The directory to store the log files.
     level: The logging level.
-
   """
   # Create a logger
   if isinstance(log_dir, str):
@@ -52,7 +51,7 @@ def setup_logger(log_dir: Union[Path, str], level: int):
 
   # Add a file handler
   fh = logging.FileHandler(log_dir / f"pylabrobot-{now}.log")
-  fh.setLevel(level)
+  fh.setLevel(logging.NOTSET)  # logs everything it receives, but the logger level can filter
   fh.setFormatter(
     logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
   logger.addHandler(fh)
