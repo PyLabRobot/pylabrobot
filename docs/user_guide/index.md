@@ -20,6 +20,13 @@ hamilton-star/hamilton-star
 
 ```{toctree}
 :maxdepth: 1
+:caption: Centrifuge
+
+centrifuge
+```
+
+```{toctree}
+:maxdepth: 1
 :caption: Plate reading
 
 plate_reading
