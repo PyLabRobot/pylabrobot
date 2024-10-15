@@ -53,7 +53,8 @@ class VSpin(CentrifugeBackend):
     self.dev.baudrate = 57600
     self.dev.ftdi_fn.ftdi_setrts(1)
     self.dev.ftdi_fn.ftdi_setdtr(1)
-    if self.get_status() == 0x00:
+    status = await self.get_status()
+    if status == b"":
       await self.send(b"\xaa\x01\x0e\x0f")
       await self.send(b"\xaa\x01\x12\x1f\x32")
       for _ in range(8):
