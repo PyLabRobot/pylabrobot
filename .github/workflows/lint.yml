@@ -25,4 +25,4 @@ jobs:
       - name: Run linting check
         run: make lint
       - name: Check formatting
-        run: make format --check
+        run: make format-check
