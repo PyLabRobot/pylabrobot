@@ -2022,6 +2022,5 @@ class LiquidHandler(Resource, Machine):
 
 
 class OperationCallback(Protocol):
-  def __call__(
-    self, handler: "LiquidHandler", *args: Any, **kwargs: Any
-  ) -> None: ...  # pragma: no cover
+  def __call__(self, handler: "LiquidHandler", *args: Any, **kwargs: Any) -> None:
+    ...  # pragma: no cover
