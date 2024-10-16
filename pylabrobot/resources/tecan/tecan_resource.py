@@ -4,7 +4,7 @@ from pylabrobot.resources.resource import Resource
 
 
 class TecanResource(Resource):
-  """ Base class for Tecan deck resources.
+  """Base class for Tecan deck resources.
 
   Args:
     name: The name of the resource.
@@ -25,10 +25,16 @@ class TecanResource(Resource):
     off_x: float = 0,
     off_y: float = 0,
     category: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
-      model=model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category=category,
+      model=model,
+    )
 
     self.off_x = off_x
     self.off_y = off_y

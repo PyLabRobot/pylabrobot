@@ -2,12 +2,11 @@ from typing import Any, Dict
 
 
 class HamiltonLiquidClass:
-  """ A liquid class like used in VENUS / Venus on Vantage. """
+  """A liquid class like used in VENUS / Venus on Vantage."""
 
   def __init__(
     self,
     curve: Dict[float, float],
-
     aspiration_flow_rate: float,
     aspiration_mix_flow_rate: float,
     aspiration_air_transport_volume: float,
@@ -16,7 +15,6 @@ class HamiltonLiquidClass:
     aspiration_settling_time: float,
     aspiration_over_aspirate_volume: float,
     aspiration_clot_retract_height: float,
-
     dispense_flow_rate: float,
     dispense_mode: float,
     dispense_mix_flow_rate: float,
@@ -49,7 +47,7 @@ class HamiltonLiquidClass:
     self.dispense_stop_back_volume = dispense_stop_back_volume
 
   def compute_corrected_volume(self, target_volume: float) -> float:
-    """ Compute corrected volume using the correction curve.
+    """Compute corrected volume using the correction curve.
 
     Uses the correction curve data point if an exact match is
     available. If the volume is bigger or smaller than the
@@ -74,24 +72,24 @@ class HamiltonLiquidClass:
 
     # use min non-zero value, so second index (if len(targets)>0,
     # then 0 was automatically added at initialization).
-    if target_volume < targets[1]: # smaller than min
-      return self.curve[targets[1]]/targets[1] * target_volume
-    if target_volume > targets[-1]: # larger than max
-      return self.curve[targets[-1]]/targets[-1] * target_volume
+    if target_volume < targets[1]:  # smaller than min
+      return self.curve[targets[1]] / targets[1] * target_volume
+    if target_volume > targets[-1]:  # larger than max
+      return self.curve[targets[-1]] / targets[-1] * target_volume
 
     # interpolate between two nearest points.
     for pt, t in zip(targets[:-1], targets[1:]):
       if pt < target_volume < t:
-        return (self.curve[t]-self.curve[pt])/(t-pt) * \
-               (target_volume - t) + self.curve[t] # (y = slope * (x-x1) + y1)
+        return (self.curve[t] - self.curve[pt]) / (t - pt) * (target_volume - t) + self.curve[
+          t
+        ]  # (y = slope * (x-x1) + y1)
 
     assert False, "Should never reach this point. Please file an issue."
 
   def serialize(self) -> Dict[str, Any]:
-    """ Serialize the liquid class to a dictionary. """
+    """Serialize the liquid class to a dictionary."""
     return {
-     "curve": self.curve,
-
+      "curve": self.curve,
       "aspiration_flow_rate": self.aspiration_flow_rate,
       "aspiration_mix_flow_rate": self.aspiration_mix_flow_rate,
       "aspiration_air_transport_volume": self.aspiration_air_transport_volume,
@@ -100,7 +98,6 @@ class HamiltonLiquidClass:
       "aspiration_settling_time": self.aspiration_settling_time,
       "aspiration_over_aspirate_volume": self.aspiration_over_aspirate_volume,
       "aspiration_clot_retract_height": self.aspiration_clot_retract_height,
-
       "dispense_mode": self.dispense_mode,
       "dispense_flow_rate": self.dispense_flow_rate,
       "dispense_mix_flow_rate": self.dispense_mix_flow_rate,

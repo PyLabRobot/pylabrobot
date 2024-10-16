@@ -20,6 +20,7 @@ class Config:
   @dataclass
   class Logging:
     """The logging configuration."""
+
     level: int = logging.INFO
     log_dir: Path = Path(".")
 

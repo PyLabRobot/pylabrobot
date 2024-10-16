@@ -8,6 +8,7 @@ from pylabrobot.resources import Plate, Resource, Well
 
 class Imager(Machine):
   """Microscope"""
+
   def __init__(
     self,
     name: str,
@@ -18,8 +19,15 @@ class Imager(Machine):
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
-                     category=category, model=model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      backend=backend,
+      category=category,
+      model=model,
+    )
     self.backend: ImagerBackend = backend  # fix type
     self.plate: Optional[Plate] = None
 
@@ -29,8 +37,9 @@ class Imager(Machine):
 
   def _will_assign_resource(self, resource: Resource):
     if self.plate is not None:
-      raise ValueError(f"Imager {self} already has a plate assigned "
-                      f"(attemping to assign {resource})")
+      raise ValueError(
+        f"Imager {self} already has a plate assigned " f"(attemping to assign {resource})"
+      )
 
   def _did_assign_resource(self, resource: Resource):
     if isinstance(resource, Plate):
@@ -59,6 +68,12 @@ class Imager(Machine):
         raise ValueError(f"Well {well} not in plate {self.plate}")
       row, column = divmod(idx, cast(Plate, well.parent).num_items_x)
 
-    return await self.backend.capture(row=row, column=column, mode=mode,
-                                      exposure_time=exposure_time, focal_height=focal_height,
-                                      gain=gain, **backend_kwargs)
+    return await self.backend.capture(
+      row=row,
+      column=column,
+      mode=mode,
+      exposure_time=exposure_time,
+      focal_height=focal_height,
+      gain=gain,
+      **backend_kwargs,
+    )

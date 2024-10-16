@@ -11,7 +11,7 @@ class NoPlateError(Exception):
 
 
 class PlateReader(ResourceHolderMixin, Machine):
-  """ The front end for plate readers. Plate readers are devices that can read luminescence,
+  """The front end for plate readers. Plate readers are devices that can read luminescence,
   absorbance, or fluorescence from a plate.
 
   Plate readers are asynchronous, meaning that their methods will return immediately and
@@ -36,12 +36,23 @@ class PlateReader(ResourceHolderMixin, Machine):
     category: Optional[str] = None,
     model: Optional[str] = None,
   ) -> None:
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
-                      category=category, model=model)
-    self.backend: PlateReaderBackend = backend # fix type
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      backend=backend,
+      category=category,
+      model=model,
+    )
+    self.backend: PlateReaderBackend = backend  # fix type
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate]=None,
-                            reassign: bool = True):
+  def assign_child_resource(
+    self,
+    resource: Resource,
+    location: Optional[Coordinate] = None,
+    reassign: bool = True,
+  ):
     if len(self.children) >= 1:
       raise ValueError("There already is a plate in the plate reader.")
     if not isinstance(resource, Plate):
@@ -62,7 +73,7 @@ class PlateReader(ResourceHolderMixin, Machine):
 
   @need_setup_finished
   async def read_luminescence(self, focal_height: float) -> List[List[float]]:
-    """ Read the luminescence from the plate.
+    """Read the luminescence from the plate.
 
     Args:
       focal_height: The focal height to read the luminescence at, in micrometers.
@@ -72,7 +83,7 @@ class PlateReader(ResourceHolderMixin, Machine):
 
   @need_setup_finished
   async def read_absorbance(self, wavelength: int) -> List[List[float]]:
-    """ Read the absorbance from the plate in OD, unless otherwise specified by the backend.
+    """Read the absorbance from the plate in OD, unless otherwise specified by the backend.
 
     Args:
       wavelength: The wavelength to read the absorbance at, in nanometers.
@@ -85,7 +96,7 @@ class PlateReader(ResourceHolderMixin, Machine):
     self,
     excitation_wavelength: int,
     emission_wavelength: int,
-    focal_height: float
+    focal_height: float,
   ) -> List[List[float]]:
     """
 
@@ -95,6 +106,8 @@ class PlateReader(ResourceHolderMixin, Machine):
       focal_height: The focal height to read the fluorescence at, in micrometers.
     """
 
-    return await self.backend.read_fluorescence(excitation_wavelength=excitation_wavelength,
-                                                emission_wavelength=emission_wavelength,
-                                                focal_height=focal_height)
+    return await self.backend.read_fluorescence(
+      excitation_wavelength=excitation_wavelength,
+      emission_wavelength=emission_wavelength,
+      focal_height=focal_height,
+    )

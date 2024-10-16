@@ -2,6 +2,7 @@ from typing import Optional
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 
+
 def get_child_location(resource: Resource) -> Coordinate:
   """
   If a resource is rotated, its rotated around its local origin. This does not always
@@ -20,6 +21,7 @@ def get_child_location(resource: Resource) -> Coordinate:
   }[resource.rotation.z % 360]
   return location
 
+
 class ResourceHolderMixin:
   """
   A mixin class for resources that can hold other resources, like a plate or a lid.
@@ -34,8 +36,8 @@ class ResourceHolderMixin:
     self,
     resource: Resource,
     location: Optional[Coordinate] = None,
-    reassign: bool = True
+    reassign: bool = True,
   ):
     location = location or self.get_default_child_location(resource)
     # mypy doesn't play well with the Mixin pattern
-    return super().assign_child_resource(resource, location, reassign) # type: ignore
+    return super().assign_child_resource(resource, location, reassign)  # type: ignore

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 @dataclass
 class Coordinate:
-  """ Represents coordinates. This is often used to represent the location of a :class:`~Resource`,
+  """Represents coordinates. This is often used to represent the location of a :class:`~Resource`,
   relative to its parent resource.
   """
 
@@ -26,14 +26,14 @@ class Coordinate:
     return Coordinate(
       x=(self.x or 0) + (other.x or 0),
       y=(self.y or 0) + (other.y or 0),
-      z=(self.z or 0) + (other.z or 0)
+      z=(self.z or 0) + (other.z or 0),
     )
 
   def __sub__(self, other) -> Coordinate:
     return Coordinate(
       x=(self.x or 0) - (other.x or 0),
       y=(self.y or 0) - (other.y or 0),
-      z=(self.z or 0) - (other.z or 0)
+      z=(self.z or 0) - (other.z or 0),
     )
 
   def __str__(self) -> str:

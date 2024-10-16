@@ -1,4 +1,4 @@
-""" PlateAdapter """
+"""PlateAdapter"""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ logger = logging.getLogger("pylabrobot")
 
 
 class PlateAdapter(Resource):
-  """ Abstract base resource for a PlateAdapter, a resource which has a standardized
+  """Abstract base resource for a PlateAdapter, a resource which has a standardized
   well-grid onto which a plate (skirted, sem-, and non-skirted) is placed.
 
   As a result of the PlateAdapter well_holes having a different dx & dy than the plates,
@@ -62,8 +62,12 @@ class PlateAdapter(Resource):
   def __init__(
     self,
     name: str,
-    size_x: float, size_y: float, size_z: float,
-    dx: float, dy: float, dz: float,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    dx: float,
+    dy: float,
+    dz: float,
     adapter_hole_size_x: float,
     adapter_hole_size_y: float,
     adapter_hole_size_z: float,
@@ -72,10 +76,16 @@ class PlateAdapter(Resource):
     adapter_hole_dy: float = 9.0,
     plate_z_offset: float = 0.0,
     category: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
-      category=category or "plate_adapter", model=model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category=category or "plate_adapter",
+      model=model,
+    )
 
     self._child_resource: Optional[Resource] = None
     self.dx = dx
@@ -91,19 +101,21 @@ class PlateAdapter(Resource):
     self.site_pedestal_z = site_pedestal_z
 
   def compute_plate_location(self, resource: Plate) -> Coordinate:
-    """ Compute the location of the `Plate` child resource in relationship to the `PlateAdapter` to
-    align the `Plate` well-grid with the adapter's hole grid. """
+    """Compute the location of the `Plate` child resource in relationship to the `PlateAdapter` to
+    align the `Plate` well-grid with the adapter's hole grid."""
 
     # Calculate Plate information (which is not directly accessible from the Plate class)
     # Child locations are never None, so we can safely ignore the type error
-    x_locations = sorted(set(well_n.location.x for well_n in resource.children)) # type: ignore
-    y_locations = sorted(set(well_n.location.y for well_n in resource.children)) # type: ignore
+    x_locations = sorted(set(well_n.location.x for well_n in resource.children))  # type: ignore
+    y_locations = sorted(set(well_n.location.y for well_n in resource.children))  # type: ignore
 
     def calculate_well_spacing(float_list: List[float]):
-      """ Calculate the difference between every x and x+1 element in the list of floats. """
+      """Calculate the difference between every x and x+1 element in the list of floats."""
       if len(float_list) < 2:
         return None
-      differences = [round(float_list[i+1] - float_list[i],2) for i in range(len(float_list) - 1)]
+      differences = [
+        round(float_list[i + 1] - float_list[i], 2) for i in range(len(float_list) - 1)
+      ]
       if len(set(differences)) == 1:
         return differences[0]
       raise ValueError("well spacing has to be uniform")
@@ -116,12 +128,14 @@ class PlateAdapter(Resource):
     # true_dz = resource.get_size_z() - resource.children[0].get_size_z()
 
     # Well-grid to hole-grid compatibility check
-    assert (plate_item_dx, plate_item_dy) == (self.adapter_hole_dx, self.adapter_hole_dy), \
-        "Plate well spacing must be equivalent to adapter hole spacing"
+    assert (plate_item_dx, plate_item_dy) == (
+      self.adapter_hole_dx,
+      self.adapter_hole_dy,
+    ), "Plate well spacing must be equivalent to adapter hole spacing"
 
     # Calculate adjustment to place center of H1_plate on top of center of H1_adapter
-    plate_x_adjustment = self.dx - plate_dx + self.adapter_hole_size_x/2 - well_size_x/2
-    plate_y_adjustment = self.dy - plate_dy + self.adapter_hole_size_x/2 - well_size_y/2
+    plate_x_adjustment = self.dx - plate_dx + self.adapter_hole_size_x / 2 - well_size_x / 2
+    plate_y_adjustment = self.dy - plate_dy + self.adapter_hole_size_x / 2 - well_size_y / 2
     # basic plate_z_adjustment ability
     plate_z_adjustment = self.dz + self.plate_z_offset
     # TODO: create more sophisticated plate_z_adjustment based on
@@ -135,10 +149,10 @@ class PlateAdapter(Resource):
     self,
     resource: Resource,
     location: Optional[Coordinate] = None,
-    reassign: bool = True
+    reassign: bool = True,
   ):
     """Assign a Plate to a PlateAdapter. If `location` is not provided, the resource will autoadjust
-    the placement location based on the PlateAdapter-Plate relationship. """
+    the placement location based on the PlateAdapter-Plate relationship."""
 
     if not isinstance(resource, Plate):
       raise TypeError("Only plates can be assigned to plate adapters")
@@ -153,5 +167,6 @@ class PlateAdapter(Resource):
     super().assign_child_resource(
       resource=resource,
       location=location or self.compute_plate_location(resource),
-      reassign=reassign)
+      reassign=reassign,
+    )
     self._child_resource = resource

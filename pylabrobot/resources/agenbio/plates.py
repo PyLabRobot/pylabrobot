@@ -2,10 +2,15 @@ from typing import Optional
 
 from pylabrobot.resources.height_volume_functions import (
   compute_height_from_volume_rectangle,
-  compute_volume_from_height_rectangle)
+  compute_volume_from_height_rectangle,
+)
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
+from pylabrobot.resources.well import (
+  CrossSectionType,
+  Well,
+  WellBottomType,
+)
 
 
 def AGenBio_4_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
@@ -38,7 +43,7 @@ def AGenBio_4_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
 
   return Plate(
     name=name,
-    size_x=127.76, # from spec
+    size_x=127.76,  # from spec
     size_y=85.48,  # from spec
     size_z=43.80,  # measured
     lid=lid,

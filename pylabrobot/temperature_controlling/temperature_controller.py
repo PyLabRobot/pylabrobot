@@ -8,7 +8,7 @@ from .backend import TemperatureControllerBackend
 
 
 class TemperatureController(ResourceHolderMixin, Machine):
-  """ Temperature controller, for heating or for cooling. """
+  """Temperature controller, for heating or for cooling."""
 
   def __init__(
     self,
@@ -18,15 +18,22 @@ class TemperatureController(ResourceHolderMixin, Machine):
     size_z: float,
     backend: TemperatureControllerBackend,
     category: str = "temperature_controller",
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z,
-                     backend=backend, category=category, model=model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      backend=backend,
+      category=category,
+      model=model,
+    )
     self.backend: TemperatureControllerBackend = backend  # fix type
     self.target_temperature: Optional[float] = None
 
   async def set_temperature(self, temperature: float):
-    """ Set the temperature of the temperature controller.
+    """Set the temperature of the temperature controller.
 
     Args:
       temperature: Temperature in Celsius.
@@ -35,7 +42,7 @@ class TemperatureController(ResourceHolderMixin, Machine):
     return await self.backend.set_temperature(temperature)
 
   async def get_temperature(self) -> float:
-    """ Get the current temperature of the temperature controller.
+    """Get the current temperature of the temperature controller.
 
     Returns:
       Temperature in Celsius.
@@ -43,7 +50,7 @@ class TemperatureController(ResourceHolderMixin, Machine):
     return await self.backend.get_current_temperature()
 
   async def wait_for_temperature(self, timeout: float = 300.0, tolerance: float = 0.5):
-    """ Wait for the temperature to reach the target temperature. The target temperature must be
+    """Wait for the temperature to reach the target temperature. The target temperature must be
     set by `set_temperature()`.
 
     Args:
@@ -61,7 +68,7 @@ class TemperatureController(ResourceHolderMixin, Machine):
     raise TimeoutError(f"Temperature did not reach target temperature within {timeout} seconds.")
 
   async def deactivate(self):
-    """ Deactivate the temperature controller. This will stop the heating or cooling, and return
+    """Deactivate the temperature controller. This will stop the heating or cooling, and return
     the temperature to ambient temperature. The target temperature will be reset to `None`.
     """
     self.target_temperature = None

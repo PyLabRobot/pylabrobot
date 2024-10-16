@@ -1,4 +1,4 @@
-""" Tests for positions """
+"""Tests for positions"""
 
 import unittest
 
@@ -6,7 +6,7 @@ from pylabrobot.utils import assert_shape, reshape_2d
 
 
 class TestListUtils(unittest.TestCase):
-  """ Tests for list utilities. """
+  """Tests for list utilities."""
 
   def test_assert_shape(self):
     assert_shape([[1, 2, 3]], (1, 3))
