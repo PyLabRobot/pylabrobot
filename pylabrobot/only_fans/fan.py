@@ -11,7 +11,7 @@ class Fan(Machine):
   """
 
   def __init__(self, backend: FanBackend, name):
-    """ Initialize a Fan.
+    """Initialize a Fan.
 
     Args:
       backend: Backend to use.
@@ -26,15 +26,15 @@ class Fan(Machine):
       category="fan",
     )
 
-    self.backend: FanBackend = backend # fix type
+    self.backend: FanBackend = backend  # fix type
 
   async def stop(self):
-    """ Stop the fan and close the connection. """
+    """Stop the fan and close the connection."""
     await self.backend.turn_off()
     await self.backend.stop()
 
   async def turn_on(self, intensity: int, duration=None):
-    """ Run the fan
+    """Run the fan
 
     Args:
       intensity: integer percent between 0 and 100
@@ -48,5 +48,5 @@ class Fan(Machine):
       await self.backend.turn_off()
 
   async def turn_off(self):
-    """ Turn the fan off, but do not close the connection. """
+    """Turn the fan off, but do not close the connection."""
     await self.backend.turn_off()
