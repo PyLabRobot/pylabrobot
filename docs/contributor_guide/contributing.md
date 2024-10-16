@@ -20,7 +20,7 @@ Some VSCode Extensions I'd recommend:
 - [Code Spell Checker](https://marketplace.visualstudio.com/items?itemName=streetsidesoftware.code-spell-checker)
 - [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
 
-## Testing
+## Testing, linting, formatting
 
 PyLabRobot uses `pytest` to run unit tests. Please make sure tests pass when you submit a PR. You can run tests as follows.
 
@@ -28,10 +28,17 @@ PyLabRobot uses `pytest` to run unit tests. Please make sure tests pass when you
 make test # run test on the latest version
 ```
 
-`ruff` is used to enforce code style. The rc file is `/pyproject.toml`. As mentioned above, it is very helpful to have an editor do style checking as you're writing code.
+`ruff` is used to lint and to enforce code style. The rc file is `/pyproject.toml`.
 
 ```bash
 make lint
+make format-check
+```
+
+Running the auto formatter:
+
+```bash
+make format
 ```
 
 `mypy` is used to enforce type checking.
