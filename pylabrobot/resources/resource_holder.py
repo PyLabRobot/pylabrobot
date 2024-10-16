@@ -39,17 +39,12 @@ class ResourceHolder(Resource):
     reassign: bool = True,
   ):
     location = location or self.get_default_child_location(resource)
-    # mypy doesn't play well with the Mixin pattern
-    if self.has_resource:
+    if len(self.children) > 0:
       raise ValueError("ResourceHolders can only take one child at a time.")
-    return super().assign_child_resource(resource, location, reassign)  # type: ignore
-  
+    return super().assign_child_resource(resource, location, reassign)
+
   @property
-  def has_resource(self) -> bool:
-    return len(self.children) > 0  # type: ignore
-  
-  @property
-  def resource(self) -> Resource:
-    if self.has_resource:
-      raise ValueError(f"Resource holder {self.name} does not have a child resource")
+  def resource(self) -> Optional[Resource]:
+    if len(self.children) == 0:
+      return None
     return self.children[0]

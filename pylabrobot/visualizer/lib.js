@@ -59,7 +59,7 @@ function getSnappingResourceAndLocationAndSnappingBox(resourceToSnap, x, y) {
     };
   }
 
-  // Check if the resource is in a CarrierSite.
+  // Check if the resource is in a ResourceHolder.
   let deck = resources["deck"];
   for (let resource_name in deck.children) {
     const resource = deck.children[resource_name];
@@ -876,7 +876,7 @@ class Carrier extends Resource {}
 class PlateCarrier extends Carrier {}
 class TipCarrier extends Carrier {}
 
-class CarrierSite extends Resource {
+class ResourceHolder extends Resource {
   constructor(resourceData, parent) {
     super(resourceData, parent);
     const { spot } = resourceData;
@@ -981,8 +981,8 @@ function classForResourceType(type) {
       return TipRack;
     case "TipSpot":
       return TipSpot;
-    case "CarrierSite":
-      return CarrierSite;
+    case "ResourceHolder":
+      return ResourceHolder;
     case "Carrier":
       return Carrier;
     case "PlateCarrier":

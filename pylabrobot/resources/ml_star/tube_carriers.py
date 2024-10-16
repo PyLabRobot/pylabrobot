@@ -1,8 +1,8 @@
 from pylabrobot.resources.carrier import (
   Coordinate,
-  CarrierSite,
+  ResourceHolder,
   TubeCarrier,
-  create_homogeneous_carrier_sites,
+  create_homogeneous_resources,
 )
 
 
@@ -17,13 +17,13 @@ def Tube_CAR_24_A00(name: str) -> TubeCarrier:
     size_x=22.5,
     size_y=497.0,
     size_z=71.5,
-    sites=create_homogeneous_carrier_sites(
-      klass=CarrierSite,
+    sites=create_homogeneous_resources(
+      klass=ResourceHolder,
       locations=[
         Coordinate(3.0, 9.0 + x * 20, 10.0 + 1.2) for x in range(24)
       ],  # TODO: +1.2 to account for the Tube.material_z_thickness, fix container
-      site_size_x=18.0,
-      site_size_y=18.0,
+      resource_size_x=18.0,
+      resource_size_y=18.0,
     ),
     model="Tube_CAR_24_A00",
   )
@@ -40,14 +40,14 @@ def Tube_CAR_32_A00(name: str) -> TubeCarrier:
     size_x=22.5,
     size_y=497.0,
     size_z=71.5,
-    sites=create_homogeneous_carrier_sites(
-      klass=CarrierSite,
+    sites=create_homogeneous_resources(
+      klass=ResourceHolder,
       locations=[
         Coordinate(5, 6.5 + x * 15, 24.0 + 2.8) for x in range(32)
       ],  # TODO: +2.8 to account for the Tube.material_z_thickness of a 1.5ml eppendorf tube,
       # should fix container
-      site_size_x=13.0,
-      site_size_y=13.0,
+      resource_size_x=13.0,
+      resource_size_y=13.0,
     ),
     model="Tube_CAR_32_A00",
   )

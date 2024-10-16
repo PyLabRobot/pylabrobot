@@ -532,6 +532,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.dispense96(self.plate, volume=0)
 
   async def test_move_plate(self):
+    self.plt_car[1].resource.unassign()
     await self.lh.move_plate(self.plate, self.plt_car[1], pickup_distance_from_top=5.2 - 3.33)
 
     # pickup
