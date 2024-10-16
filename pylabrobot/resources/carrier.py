@@ -152,7 +152,7 @@ class PlateHolder(ResourceHolder):
     size_y: float,
     size_z: float,
     pedestal_size_z: float = None,  # type: ignore
-    category="plate_carrier_site",
+    category="plate_holder",
     model: Optional[str] = None,
   ):
     super().__init__(name, size_x, size_y, size_z, category=category, model=model)

@@ -29,6 +29,11 @@ class ResourceHolder(Resource):
   This applies a linear transformation after the rotation to correctly place the child resource.
   """
 
+  def __init__(
+    self, name, size_x, size_y, size_z, rotation=None, category="resource_holder", model=None
+  ):
+    super().__init__(name, size_x, size_y, size_z, rotation, category, model)
+
   def get_default_child_location(self, resource: Resource) -> Coordinate:
     return get_child_location(resource)
 

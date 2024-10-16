@@ -219,8 +219,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       "well",
       "tube",
       "tip_spot",
-      "carrier_site",
-      "plate_carrier_site",
+      "resource_holder",
+      "plate_holder",
     }
 
     def find_longest_child_name(resource: Resource, depth=0, depth_weight=4):
