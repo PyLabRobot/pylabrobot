@@ -20,26 +20,13 @@ class TestPump(unittest.IsolatedAsyncioTestCase):
 
   async def test_setup(self):
     """Test that the Pump class can be initialized."""
-    async with Pump(
-      backend=self.mock_backend,
-      size_x=0,
-      size_y=0,
-      size_z=0,
-      name="pump",
-    ) as pump:
+    async with Pump(backend=self.mock_backend) as pump:
       self.assertIsNone(pump.calibration)
       self.assertEqual(pump.backend, self.mock_backend)
 
   async def test_run_revolutions(self):
     """Test that the Pump class can run for a specified number of revolutions."""
-    async with Pump(
-      backend=self.mock_backend,
-      calibration=self.test_calibration,
-      size_x=0,
-      size_y=0,
-      size_z=0,
-      name="pump",
-    ) as pump:
+    async with Pump(backend=self.mock_backend) as pump:
       await pump.run_revolutions(num_revolutions=1)
 
 
@@ -53,14 +40,7 @@ class TestPumpArray(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self) -> None:
     await super().asyncSetUp()
-    self.pump_array = PumpArray(
-      backend=self.mock_backend,
-      calibration=None,
-      size_x=0,
-      size_y=0,
-      size_z=0,
-      name="pump_array",
-    )
+    self.pump_array = PumpArray(backend=self.mock_backend, calibration=None)
     await self.pump_array.setup()
 
   async def asyncTearDown(self) -> None:

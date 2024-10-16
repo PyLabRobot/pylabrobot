@@ -6,7 +6,7 @@ from pylabrobot.machines import Machine
 from pylabrobot.resources import Plate, Resource, Well
 
 
-class Imager(Machine):
+class Imager(Resource, Machine):
   """Microscope"""
 
   def __init__(
@@ -19,15 +19,16 @@ class Imager(Machine):
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
-    super().__init__(
+    Resource.__init__(
+      self,
       name=name,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
-      backend=backend,
       category=category,
       model=model,
     )
+    Machine.__init__(self, backend=backend)
     self.backend: ImagerBackend = backend  # fix type
     self.plate: Optional[Plate] = None
 

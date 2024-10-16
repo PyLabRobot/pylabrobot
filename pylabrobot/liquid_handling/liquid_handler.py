@@ -97,7 +97,7 @@ class BlowOutVolumeError(Exception):
   pass
 
 
-class LiquidHandler(Machine):
+class LiquidHandler(Resource, Machine):
   """
   Front end for liquid handlers.
 
@@ -126,14 +126,15 @@ class LiquidHandler(Machine):
       deck: Deck to use.
     """
 
-    super().__init__(
+    Resource.__init__(
+      self,
       name=f"lh_{deck.name}",
       size_x=deck._size_x,
       size_y=deck._size_y,
       size_z=deck._size_z,
-      backend=backend,
       category="liquid_handler",
     )
+    Machine.__init__(self, backend=backend)
 
     self.backend: LiquidHandlerBackend = backend  # fix type
     self._callbacks: Dict[str, OperationCallback] = {}
@@ -1978,6 +1979,9 @@ class LiquidHandler(Machine):
   def callbacks(self):
     return self._callbacks
 
+  def serialize(self):
+    return {**Resource.serialize(self), **Machine.serialize(self)}
+
   @classmethod
   def deserialize(cls, data: dict, allow_marshal: bool = False) -> LiquidHandler:
     """Deserialize a liquid handler from a dictionary.
@@ -2018,5 +2022,6 @@ class LiquidHandler(Machine):
 
 
 class OperationCallback(Protocol):
-  def __call__(self, handler: "LiquidHandler", *args: Any, **kwargs: Any) -> None:
-    ...  # pragma: no cover
+  def __call__(
+    self, handler: "LiquidHandler", *args: Any, **kwargs: Any
+  ) -> None: ...  # pragma: no cover

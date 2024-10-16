@@ -3,14 +3,14 @@ from typing import List, Optional, cast
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.resources import Coordinate, Plate, Resource
 from pylabrobot.plate_reading.backend import PlateReaderBackend
-from pylabrobot.resources.resource_holder import ResourceHolderMixin
+from pylabrobot.resources.resource_holder import ResourceHolder
 
 
 class NoPlateError(Exception):
   pass
 
 
-class PlateReader(ResourceHolderMixin, Machine):
+class PlateReader(ResourceHolder, Machine):
   """The front end for plate readers. Plate readers are devices that can read luminescence,
   absorbance, or fluorescence from a plate.
 
@@ -36,15 +36,16 @@ class PlateReader(ResourceHolderMixin, Machine):
     category: Optional[str] = None,
     model: Optional[str] = None,
   ) -> None:
-    super().__init__(
+    ResourceHolder.__init__(
+      self,
       name=name,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
-      backend=backend,
       category=category,
       model=model,
     )
+    Machine.__init__(self, backend=backend)
     self.backend: PlateReaderBackend = backend  # fix type
 
   def assign_child_resource(

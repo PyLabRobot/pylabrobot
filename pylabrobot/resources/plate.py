@@ -13,7 +13,7 @@ from typing import (
   Literal,
 )
 
-from pylabrobot.resources.resource_holder import ResourceHolderMixin
+from pylabrobot.resources.resource_holder import ResourceHolder
 
 
 from .liquid import Liquid
@@ -63,7 +63,7 @@ class Lid(Resource):
     }
 
 
-class Plate(ResourceHolderMixin, ItemizedResource[Well]):
+class Plate(ResourceHolder, ItemizedResource[Well]):
   """Base class for Plate resources."""
 
   def __init__(
