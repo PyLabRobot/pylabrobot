@@ -4,11 +4,11 @@ Thank you for your interest in contributing to PyLabRobot! This document will he
 
 ## Getting Started
 
-See the installation instructions [here](/user_guide/installation.md). For contributing, you should install PyLabRobot from source.
+See the installation instructions [here](docs/installation.md). For contributing, you should install PyLabRobot from source.
 
-If this is your first time contributing to open source, check out [How to Open Source](/contributor_guide/how-to-open-source.md) for an easy introduction.
+If this is your first time contributing to open source, check out [How to Open Source](./docs/how-to-open-source.md) for an easy introduction.
 
-It's highly appreciated by the PyLabRobot developers if you communicate what you want to work on, to minimize any duplicate work. You can do this on [discuss.pylabrobot.org](https://discuss.pylabrobot.org).
+It's highly appreciated by the PyLabRobot developers if you communicate what you want to work on, to minimize any duplicate work. You can do this on the [forum](https://discuss.pylabrobot.org).
 
 ## Development Tips
 
@@ -17,7 +17,6 @@ It is recommend that you use VSCode, as we provide a workspace config in `/.vsco
 Some VSCode Extensions I'd recommend:
 
 - [Python](https://marketplace.visualstudio.com/items?itemName=ms-python.python)
-- [Pylint](https://github.com/microsoft/vscode-pylint)
 - [Code Spell Checker](https://marketplace.visualstudio.com/items?itemName=streetsidesoftware.code-spell-checker)
 - [mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
 
@@ -29,10 +28,11 @@ PyLabRobot uses `pytest` to run unit tests. Please make sure tests pass when you
 make test # run test on the latest version
 ```
 
-`pylint` is used to enforce code style. The rc file is `/.pylintrc`. As mentioned above, it is very helpful to have an editor do style checking as you're writing code.
+`ruff` is used to enforce code style. The rc file is `/pyproject.toml`. As mentioned above, it is very helpful to have an editor do style checking as you're writing code.
 
 ```bash
 make lint
+make format-check
 ```
 
 `mypy` is used to enforce type checking.
