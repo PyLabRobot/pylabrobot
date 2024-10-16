@@ -41,7 +41,7 @@ class TestPowderDispenser(unittest.IsolatedAsyncioTestCase):
 
   async def asyncSetUp(self) -> None:
     self.backend = AsyncMock(spec=MockPowderDispenserBackend)
-    self.dispenser = PowderDispenser(name="pd", backend=self.backend, size_x=1, size_y=1, size_z=1)
+    self.dispenser = PowderDispenser(backend=self.backend)
     await self.dispenser.setup()
 
   async def test_dispense_single_resource(self):

@@ -3,11 +3,11 @@ import time
 from typing import Optional
 
 from pylabrobot.machines.machine import Machine
-from pylabrobot.resources.resource_holder import ResourceHolderMixin
+from pylabrobot.resources.resource_holder import ResourceHolder
 from .backend import TemperatureControllerBackend
 
 
-class TemperatureController(ResourceHolderMixin, Machine):
+class TemperatureController(ResourceHolder, Machine):
   """Temperature controller, for heating or for cooling."""
 
   def __init__(
@@ -20,15 +20,16 @@ class TemperatureController(ResourceHolderMixin, Machine):
     category: str = "temperature_controller",
     model: Optional[str] = None,
   ):
-    super().__init__(
+    ResourceHolder.__init__(
+      self,
       name=name,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
-      backend=backend,
       category=category,
       model=model,
     )
+    Machine.__init__(self, backend=backend)
     self.backend: TemperatureControllerBackend = backend  # fix type
     self.target_temperature: Optional[float] = None
 

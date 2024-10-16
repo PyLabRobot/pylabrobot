@@ -22,7 +22,7 @@ def get_child_location(resource: Resource) -> Coordinate:
   return location
 
 
-class ResourceHolderMixin:
+class ResourceHolder(Resource):
   """
   A mixin class for resources that can hold other resources, like a plate or a lid.
 
