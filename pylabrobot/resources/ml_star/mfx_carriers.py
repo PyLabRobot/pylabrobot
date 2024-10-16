@@ -1,6 +1,4 @@
-"""ML Star MultiFleX (MFX) carriers"""
-
-from typing import Dict, List
+from typing import Dict
 from pylabrobot.resources.carrier import (
   Coordinate,
   MFXCarrier,
