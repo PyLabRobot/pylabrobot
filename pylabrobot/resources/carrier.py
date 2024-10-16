@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union
 
-from pylabrobot.resources.resource_holder import ResourceHolderMixin
+from pylabrobot.resources.resource_holder import ResourceHolder
 
 from .coordinate import Coordinate
 from .plate import Plate
@@ -14,7 +14,7 @@ from .plate_adapter import PlateAdapter
 logger = logging.getLogger("pylabrobot")
 
 
-class CarrierSite(ResourceHolderMixin, Resource):
+class CarrierSite(ResourceHolder, Resource):
   """A single site within a carrier."""
 
   def __init__(

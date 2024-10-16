@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 
-from pylabrobot.resources.resource_holder import ResourceHolderMixin
+from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.plate import Plate
@@ -9,7 +9,7 @@ from pylabrobot.resources.plate import Plate
 logger = logging.getLogger("pylabrobot")
 
 
-class ResourceStack(ResourceHolderMixin, Resource):
+class ResourceStack(ResourceHolder, Resource):
   """ResourceStack represent a group of resources that are stacked together and act as a single
   unit. Stacks can grow be configured to be able to grow in x, y, or z direction. Stacks growing
   in the x direction are from left to right. Stacks growing in the y direction are from front to

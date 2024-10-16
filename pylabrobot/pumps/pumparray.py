@@ -20,24 +20,10 @@ class PumpArray(Machine):
 
   def __init__(
     self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
     backend: PumpArrayBackend,
-    category: Optional[str] = None,
-    model: Optional[str] = None,
     calibration: Optional[PumpCalibration] = None,
   ):
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      backend=backend,
-      category=category,
-      model=model,
-    )
+    super().__init__(backend=backend)
     self.backend: PumpArrayBackend = backend  # fix type
     self.calibration = calibration
 
@@ -60,13 +46,13 @@ class PumpArray(Machine):
     }
 
   @classmethod
-  def deserialize(cls, data: dict, allow_marshal: bool = False):
+  def deserialize(cls, data: dict):
     data_copy = data.copy()
     calibration_data = data_copy.pop("calibration", None)
     if calibration_data is not None:
       calibration = PumpCalibration.deserialize(calibration_data)
       data_copy["calibration"] = calibration
-    return super().deserialize(data_copy, allow_marshal=allow_marshal)
+    return super().deserialize(data_copy)
 
   async def run_revolutions(
     self,
