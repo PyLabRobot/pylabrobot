@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Generic, List, Optional, Type, TypeVar, Union
+from typing import Dict, Generic, List, Optional, Type, TypeVar, Union
 
 from pylabrobot.resources.resource_holder import ResourceHolderMixin
 
@@ -34,61 +34,13 @@ class CarrierSite(ResourceHolderMixin, Resource):
       category=category,
       model=model,
     )
-    self.resource: Optional[Resource] = None
-
-  def assign_child_resource(
-    self,
-    resource: Resource,
-    location: Optional[Coordinate] = None,
-    reassign: bool = True,
-  ):
-    self.resource = resource
-    return super().assign_child_resource(resource, location, reassign)
-
-  def unassign_child_resource(self, resource):
-    self.resource = None
-    return super().unassign_child_resource(resource)
-
-  def __eq__(self, other):
-    return super().__eq__(other) and self.resource == other.resource
 
 
 S = TypeVar("S", bound=Resource)
 
 
 class Carrier(Resource, Generic[S]):
-  """Abstract base resource for carriers.
-
-  It is recommended to always use a resource carrier to store resources, because this ensures the
-  location of the resources can be calculated precisely.
-
-  It is important to use the `__getitem__` and `__setitem__` methods to access the resources,
-  because this ensures that the location of the resources is updated to be within the carrier and
-  that the appropriate callbacks are called.
-
-  Examples:
-    Creating a `TipCarrier` and assigning one set of tips at location 0 (the bottom):
-
-    >>> tip_car = TIP_CAR_480_A00(name='tip carrier')
-    >>> tip_car[0] = STF_L(name='tips_1')
-
-    Getting the tips:
-
-    >>> tip_car[0]
-
-    STF_L(name='tips_1')
-
-    Deleting the tips:
-
-    >>> del tip_car[0]
-
-    Alternative way to delete the tips:
-
-    >>> tip_car[0] = None
-
-  Attributes:
-    capacity: The maximum number of items that can be stored in this carrier.
-  """
+  """Base class for all carriers."""
 
   def __init__(
     self,
@@ -96,7 +48,7 @@ class Carrier(Resource, Generic[S]):
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Optional[List[S]] = None,
+    sites: Optional[Dict[int, S]] = None,
     category: Optional[str] = "carrier",
     model: Optional[str] = None,
   ):
@@ -109,10 +61,10 @@ class Carrier(Resource, Generic[S]):
       model=model,
     )
 
-    sites = sites or []
+    sites = sites or {}
 
-    self.sites: List[CarrierSite] = []
-    for spot, site in enumerate(sites):
+    self.sites: Dict[int, S] = {}
+    for spot, site in sites.items():
       site.name = f"carrier-{self.name}-spot-{spot}"
       if site.location is None:
         raise ValueError(f"site {site} has no location")
@@ -120,6 +72,7 @@ class Carrier(Resource, Generic[S]):
 
   @property
   def capacity(self):
+    """The number of sites on this carrier."""
     return len(self.sites)
 
   def assign_child_resource(
@@ -128,19 +81,14 @@ class Carrier(Resource, Generic[S]):
     location: Coordinate,
     reassign: bool = True,
   ):
-    """Assign a resource to this carrier.
+    # FIXME: type
+    # if not isinstance(resource, CarrierSite):
+    #   raise TypeError(f"Invalid resource {resource}")
 
-    For a carrier, the only valid resource is a :class:`CarrierSite`.
+    # add in order
+    idx = len(self.sites)
+    self.sites[idx] = resource
 
-    Also see :meth:`~Resource.assign_child_resource`.
-
-    Raises:
-      TypeError: If the resource is not a :class:`CarrierSite`.
-    """
-
-    if not isinstance(resource, CarrierSite):
-      raise TypeError(f"Invalid resource {resource}")
-    self.sites.append(resource)
     super().assign_child_resource(resource, location=location)
 
   def assign_resource_to_site(self, resource: Resource, spot: int):
@@ -150,7 +98,7 @@ class Carrier(Resource, Generic[S]):
       raise ValueError(f"spot {spot} already has a resource")
     self.sites[spot].assign_child_resource(resource)
 
-  def unassign_child_resource(self, resource):
+  def unassign_child_resource(self, resource: Resource):
     """Unassign a resource from this carrier, checked by name.
     Also see :meth:`~Resource.assign_child_resource`
 
@@ -165,13 +113,13 @@ class Carrier(Resource, Generic[S]):
       raise ValueError(f"Resource {resource} is not assigned to this carrier")
     resource.unassign()
 
-  def __getitem__(self, idx: int) -> CarrierSite:
+  def __getitem__(self, idx: int) -> S:
     """Get a site by index."""
     if not 0 <= idx < self.capacity:
       raise IndexError(f"Invalid index {idx}")
     return self.sites[idx]
 
-  def __setitem__(self, idx, resource: Optional[Resource]):
+  def __setitem__(self, idx: int, resource: Optional[Resource]):
     """Assign a resource to this carrier. See :meth:`~Carrier.assign_child_resource`"""
     if resource is None:
       if self[idx].resource is not None:
@@ -179,17 +127,13 @@ class Carrier(Resource, Generic[S]):
     else:
       self.assign_resource_to_site(resource, spot=idx)
 
-  def __delitem__(self, idx):
+  def __delitem__(self, idx: int):
     """Unassign a resource from this carrier. See :meth:`~Carrier.unassign_child_resource`"""
     self.unassign_child_resource(self[idx].resource)
 
   def get_resources(self) -> List[Resource]:
     """Get all resources, using self.__getitem__ (so that the location is within this carrier)."""
     return [site.resource for site in self.sites if site.resource is not None]
-
-  def get_sites(self) -> List[CarrierSite]:
-    """Get all sites."""
-    return self.sites
 
   def __eq__(self, other):
     return super().__eq__(other) and self.sites == other.sites
@@ -206,7 +150,7 @@ class TipCarrier(Carrier):
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Optional[List[CarrierSite]] = None,
+    sites: Optional[Dict[int, CarrierSite]] = None,
     category="tip_carrier",
     model: Optional[str] = None,
   ):
@@ -334,7 +278,7 @@ class PlateCarrier(Carrier):
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Optional[List[PlateCarrierSite]] = None,
+    sites: Optional[Dict[int, PlateCarrierSite]] = None,
     category="plate_carrier",
     model: Optional[str] = None,
   ):
@@ -349,27 +293,23 @@ class PlateCarrier(Carrier):
     )
 
 
-class MFXCarrier(Carrier):
-  r"""Base class for multiflex carriers (i.e. carriers with mixed-use and/or specialized sites).
-  Name prefix: 'MFX\_'
-  """
-
+class MFXCarrier(Carrier[ResourceHolderMixin]):
   def __init__(
     self,
     name: str,
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Optional[List[CarrierSite]] = None,
+    sites: Dict[int, ResourceHolderMixin],
     category="mfx_carrier",
     model: Optional[str] = None,
   ):
     super().__init__(
-      name,
-      size_x,
-      size_y,
-      size_z,
-      sites,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      sites=sites,
       category=category,
       model=model,
     )
@@ -386,7 +326,7 @@ class TubeCarrier(Carrier):
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Optional[List[CarrierSite]] = None,
+    sites: Optional[Dict[int, CarrierSite]] = None,
     category="tube_carrier",
     model: Optional[str] = None,
   ):
@@ -412,7 +352,7 @@ class TroughCarrier(Carrier):
     size_x: float,
     size_y: float,
     size_z: float,
-    sites: Optional[List[CarrierSite]] = None,
+    sites: Optional[Dict[int, CarrierSite]] = None,
     category="trough_carrier",
     model: Optional[str] = None,
   ):
@@ -436,10 +376,10 @@ def create_carrier_sites(
   site_size_x: List[Union[float, int]],
   site_size_y: List[Union[float, int]],
   **kwargs,
-) -> List[T]:
+) -> Dict[int, T]:
   """Create a list of carrier sites with the given sizes."""
 
-  sites = []
+  sites = {}
   for spot, (location, x, y) in enumerate(zip(locations, site_size_x, site_size_y)):
     site = klass(
       name=f"carrier-site-{spot}",
@@ -449,7 +389,7 @@ def create_carrier_sites(
       **kwargs,
     )
     site.location = location
-    sites.append(site)
+    sites[spot] = site
   return sites
 
 
@@ -459,7 +399,7 @@ def create_homogeneous_carrier_sites(
   site_size_x: float,
   site_size_y: float,
   **kwargs,
-) -> List[T]:
+) -> Dict[int, T]:
   """Create a list of carrier sites with the same size."""
 
   n = len(locations)

@@ -1,6 +1,4 @@
-"""Tecan tip carriers"""
-
-from typing import List, Optional
+from typing import Dict, Optional
 from pylabrobot.resources.carrier import (
   TipCarrier,
   CarrierSite,
@@ -22,7 +20,7 @@ class TecanTipCarrier(TipCarrier, TecanResource):
     size_z: float,
     off_x: float,
     off_y: float,
-    sites: Optional[List[CarrierSite]] = None,
+    sites: Optional[Dict[int, CarrierSite]] = None,
     category="tecan_tip_carrier",
     model: Optional[str] = None,
   ):

@@ -1,6 +1,4 @@
-"""Tecan plate carriers"""
-
-from typing import List, Optional
+from typing import Dict, Optional
 from pylabrobot.resources.carrier import (
   PlateCarrier,
   PlateCarrierSite,
@@ -26,7 +24,7 @@ class TecanPlateCarrier(PlateCarrier, TecanResource):
     roma_z_safe: Optional[float] = None,
     roma_z_travel: Optional[float] = None,
     roma_z_end: Optional[float] = None,
-    sites: Optional[List[PlateCarrierSite]] = None,
+    sites: Optional[Dict[int, PlateCarrierSite]] = None,
     category="tecan_plate_carrier",
     model: Optional[str] = None,
   ):
