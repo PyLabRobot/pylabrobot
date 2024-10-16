@@ -2,12 +2,12 @@ import asyncio
 from typing import Optional
 
 from pylabrobot.machines.machine import Machine
-from pylabrobot.resources.resource_holder import ResourceHolderMixin
+from pylabrobot.resources.resource_holder import ResourceHolder
 
 from .backend import ShakerBackend
 
 
-class Shaker(ResourceHolderMixin, Machine):
+class Shaker(ResourceHolder, Machine):
   """A shaker machine"""
 
   def __init__(
@@ -20,15 +20,16 @@ class Shaker(ResourceHolderMixin, Machine):
     category: str = "shaker",
     model: Optional[str] = None,
   ):
-    super().__init__(
+    ResourceHolder.__init__(
+      self,
       name=name,
       size_x=size_x,
       size_y=size_y,
       size_z=size_z,
-      backend=backend,
       category=category,
       model=model,
     )
+    Machine.__init__(self, backend=backend)
     self.backend: ShakerBackend = backend  # fix type
 
   async def shake(self, speed: float, duration: Optional[float] = None):
@@ -49,5 +50,4 @@ class Shaker(ResourceHolderMixin, Machine):
 
   async def stop_shaking(self):
     """Stop shaking the shaker"""
-
     await self.backend.stop_shaking()

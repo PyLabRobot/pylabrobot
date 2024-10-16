@@ -52,14 +52,7 @@ class TestAgrowPumps(unittest.IsolatedAsyncioTestCase):
 
     self.agrow_backend._setup_modbus = _mock_setup_modbus  # type: ignore[method-assign]
 
-    self.pump_array = PumpArray(
-      backend=self.agrow_backend,
-      name="test_pump_array",
-      size_x=0,
-      size_y=0,
-      size_z=0,
-      calibration=None,
-    )
+    self.pump_array = PumpArray(backend=self.agrow_backend, calibration=None)
     await self.pump_array.setup()
 
   async def asyncTearDown(self):

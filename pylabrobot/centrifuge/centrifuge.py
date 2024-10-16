@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pylabrobot.machines.machine import Machine
 from pylabrobot.centrifuge.backend import CentrifugeBackend
 
@@ -8,29 +6,9 @@ class Centrifuge(Machine):
   """The front end for centrifuges.
   Centrifuges are devices that can spin samples at high speeds."""
 
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    backend: CentrifugeBackend,
-    category: Optional[str] = None,
-    model: Optional[str] = None,
-  ) -> None:
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      backend=backend,
-      category=category,
-      model=model,
-    )
+  def __init__(self, backend: CentrifugeBackend) -> None:
+    super().__init__(backend=backend)
     self.backend: CentrifugeBackend = backend  # fix type
-
-  async def stop(self) -> None:
-    await self.backend.stop()
 
   async def open_door(self) -> None:
     await self.backend.open_door()

@@ -1,21 +1,19 @@
 from __future__ import annotations
 
-from abc import ABCMeta
-from typing import Optional, Callable
+from abc import ABC
+import functools
+from typing import Callable
 
 from pylabrobot.machines.backends import MachineBackend
-from pylabrobot.resources import Resource
-
-import functools
 
 
 def need_setup_finished(func: Callable):
-  """Decorator for methods that require the liquid handler to be set up.
+  """Decorator for methods that require the machine to be set up.
 
   Checked by verifying `self.setup_finished` is `True`.
 
   Raises:
-    RuntimeError: If the liquid handler is not set up.
+    RuntimeError: If the machine is not set up.
   """
 
   @functools.wraps(func)
@@ -27,27 +25,10 @@ def need_setup_finished(func: Callable):
   return wrapper
 
 
-class Machine(Resource, metaclass=ABCMeta):
-  """Abstract class for machine frontends. All Machines are Resources."""
+class Machine(ABC):
+  """Abstract base class for machine frontends."""
 
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    backend: MachineBackend,
-    category: Optional[str] = None,
-    model: Optional[str] = None,
-  ):
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      category=category,
-      model=model,
-    )
+  def __init__(self, backend: MachineBackend):
     self.backend = backend
     self._setup_finished = False
 
@@ -56,18 +37,15 @@ class Machine(Resource, metaclass=ABCMeta):
     return self._setup_finished
 
   def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "backend": self.backend.serialize(),
-    }
+    return {"backend": self.backend.serialize()}
 
   @classmethod
-  def deserialize(cls, data: dict, allow_marshal: bool = False):
+  def deserialize(cls, data: dict):
     data_copy = data.copy()  # copy data because we will be modifying it
     backend_data = data_copy.pop("backend")
     backend = MachineBackend.deserialize(backend_data)
     data_copy["backend"] = backend
-    return super().deserialize(data_copy, allow_marshal=allow_marshal)
+    return cls(**data_copy)
 
   async def setup(self, **backend_kwargs):
     await self.backend.setup(**backend_kwargs)
