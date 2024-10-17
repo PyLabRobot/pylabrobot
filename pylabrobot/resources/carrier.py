@@ -238,7 +238,7 @@ class PlateCarrierSite(CarrierSite):
     if pedestal_size_z is None:
       raise ValueError(
         "pedestal_size_z must be provided. See "
-        "https://docs.pylabrobot.org/plate_carriers.html#pedestal_size_z for more "
+        "https://docs.pylabrobot.org/resources/plate_carriers.html#pedestal_size_z for more "
         "information."
       )
 
