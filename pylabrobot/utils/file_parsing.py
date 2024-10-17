@@ -1,4 +1,4 @@
-""" Utilities for parsing Hamilton files (.lay, .tml, .ctr, .rck).
+"""Utilities for parsing Hamilton files (.lay, .tml, .ctr, .rck).
 
 All are based on the seemingly arbitrary use of ascii escape characters.
 """
@@ -7,7 +7,7 @@ import itertools
 
 
 def find_int(key, c):
-  for i, j, k in itertools.product(range(16*2), range(16*2), range(16*2)):
+  for i, j, k in itertools.product(range(16 * 2), range(16 * 2), range(16 * 2)):
     try:
       return int(c.split(chr(i) + key + chr(j))[1].split(chr(k))[0])
     except (IndexError, ValueError):
@@ -16,7 +16,7 @@ def find_int(key, c):
 
 
 def find_float(key, c):
-  for i, j, k in itertools.product(range(16*2), range(16*2), range(16*2)):
+  for i, j, k in itertools.product(range(16 * 2), range(16 * 2), range(16 * 2)):
     try:
       return float(c.split(chr(i) + key + chr(j))[1].split(chr(k))[0])
     except (IndexError, ValueError):

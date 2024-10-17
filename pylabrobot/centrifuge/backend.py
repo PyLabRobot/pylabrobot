@@ -4,15 +4,17 @@ from abc import ABCMeta, abstractmethod
 
 from pylabrobot.machines.backends import MachineBackend
 
+
 class CentrifugeBackend(MachineBackend, metaclass=ABCMeta):
-  """ An abstract class for a centrifuge"""
+  """An abstract class for a centrifuge"""
+
   @abstractmethod
   async def setup(self) -> None:
-    """ Set up the centrifuge. This should be called before any other methods. """
+    """Set up the centrifuge. This should be called before any other methods."""
 
   @abstractmethod
   async def stop(self) -> None:
-    """Close all connections to the centrifuge. """
+    """Close all connections to the centrifuge."""
 
   @abstractmethod
   async def open_door(self) -> None:

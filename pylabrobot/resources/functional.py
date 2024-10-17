@@ -16,11 +16,11 @@ def get_all_tip_spots(tip_racks: List[TipRack]) -> List[TipSpot]:
 
 async def linear_tip_spot_generator(
   tip_spots: List[TipSpot],
-  cache_file_path: Optional[str]=None,
-  repeat: bool=False
+  cache_file_path: Optional[str] = None,
+  repeat: bool = False,
 ) -> AsyncGenerator[TipSpot, None]:
-  """ Tip spot generator with disk caching. Linearly iterate through all tip spots and
-  raise StopIteration when all spots have been used. """
+  """Tip spot generator with disk caching. Linearly iterate through all tip spots and
+  raise StopIteration when all spots have been used."""
   tip_spot_idx = 0
   if cache_file_path is not None and os.path.exists(cache_file_path):
     with open(cache_file_path, "r", encoding="utf-8") as f:
@@ -43,10 +43,11 @@ async def linear_tip_spot_generator(
 
 async def randomized_tip_spot_generator(
   tip_spots: List[TipSpot],
-  K: int, cache_file_path: Optional[str]=None
+  K: int,
+  cache_file_path: Optional[str] = None,
 ) -> AsyncGenerator[TipSpot, None]:
-  """ Randomized tip spot generator with disk caching. Don't return tip spots that have been
-  sampled in the last K samples. """
+  """Randomized tip spot generator with disk caching. Don't return tip spots that have been
+  sampled in the last K samples."""
 
   recently_sampled: Deque[str] = deque(maxlen=K)
 
@@ -54,7 +55,10 @@ async def randomized_tip_spot_generator(
     with open(cache_file_path, "r", encoding="utf-8") as f:
       data = json.load(f)
       recently_sampled = deque(data["recently_sampled"], maxlen=K)
-      logger.info("loaded recently sampled tip spots from disk: %s", recently_sampled)
+      logger.info(
+        "loaded recently sampled tip spots from disk: %s",
+        recently_sampled,
+      )
 
   while True:
     available_tips = [ts for ts in tip_spots if ts.name not in recently_sampled]

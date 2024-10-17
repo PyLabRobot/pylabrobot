@@ -4,12 +4,12 @@ from typing import List, Optional
 from pylabrobot.machines import Machine
 from pylabrobot.resources import Coordinate, Plate
 from pylabrobot.resources.well import CrossSectionType, Well
-from pylabrobot.resources.resource_holder import ResourceHolderMixin
+from pylabrobot.resources.resource_holder import ResourceHolder
 from .tilter_backend import TilterBackend
 
 
-class Tilter(ResourceHolderMixin, Machine):
-  """ Resources that tilt plates. """
+class Tilter(ResourceHolder, Machine):
+  """Resources that tilt plates."""
 
   def __init__(
     self,
@@ -23,10 +23,16 @@ class Tilter(ResourceHolderMixin, Machine):
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
-    super().__init__(
+    ResourceHolder.__init__(
+      self,
       name=name,
-      size_x=size_x, size_y=size_y, size_z=size_z, backend=backend,
-      category=category, model=model)
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category=category,
+      model=model,
+    )
+    Machine.__init__(self, backend=backend)
     self.backend: TilterBackend = backend  # fix type
     self._absolute_angle: float = 0
     self._hinge_coordinate = hinge_coordinate
@@ -37,7 +43,7 @@ class Tilter(ResourceHolderMixin, Machine):
     return self._absolute_angle
 
   async def set_angle(self, absolute_angle: float):
-    """ Set the tilt module to rotate to a given angle.
+    """Set the tilt module to rotate to a given angle.
 
     Args:
       absolute_angle: The absolute (unsigned) angle to set rotation to, in degrees, measured from
@@ -48,8 +54,9 @@ class Tilter(ResourceHolderMixin, Machine):
     self._absolute_angle = absolute_angle
 
   def experimental_rotate_coordinate_around_hinge(
-      self, absolute_coordinate: Coordinate, angle: float) -> Coordinate:
-    """ Rotate an absolute coordinate around the hinge of the tilter by a given angle.
+    self, absolute_coordinate: Coordinate, angle: float
+  ) -> Coordinate:
+    """Rotate an absolute coordinate around the hinge of the tilter by a given angle.
 
     Args:
       absolute_coordinate: The coordinate to rotate.
@@ -76,8 +83,9 @@ class Tilter(ResourceHolderMixin, Machine):
     return Coordinate(new_x, absolute_coordinate.y, new_z)
 
   def experimental_get_plate_drain_offsets(
-      self, plate: Plate, absolute_angle: Optional[float] = None) -> List[Coordinate]:
-    """ Get the drain edge offsets for all wells in the given plate, tilted around the hinge at a
+    self, plate: Plate, absolute_angle: Optional[float] = None
+  ) -> List[Coordinate]:
+    """Get the drain edge offsets for all wells in the given plate, tilted around the hinge at a
     given absolute angle.
 
     Args:
@@ -87,8 +95,7 @@ class Tilter(ResourceHolderMixin, Machine):
 
     if absolute_angle is None:
       absolute_angle = self._absolute_angle
-    assert absolute_angle is not None # mypy
-    # pylint: disable=invalid-unary-operand-type
+    assert absolute_angle is not None  # mypy
     angle = absolute_angle if self._hinge_coordinate.x < self._size_x / 2 else -absolute_angle
 
     _hinge_side = "l" if self._hinge_coordinate.x < self._size_x / 2 else "r"
@@ -99,20 +106,20 @@ class Tilter(ResourceHolderMixin, Machine):
       rotated_absolute_well_drain_coordinate = self.experimental_rotate_coordinate_around_hinge(
         level_absolute_well_drain_coordinate, angle
       )
-      well_drain_offset = (rotated_absolute_well_drain_coordinate -
-                           well.get_absolute_location("c", "c", "b"))
+      well_drain_offset = rotated_absolute_well_drain_coordinate - well.get_absolute_location(
+        "c", "c", "b"
+      )
       well_drain_offsets.append(well_drain_offset)
 
     return well_drain_offsets
 
-
   def experimental_get_well_drain_offsets(
-      self,
-      wells: List[Well],
-      n_tips: int = 1,
-      absolute_angle: Optional[float] = None
+    self,
+    wells: List[Well],
+    n_tips: int = 1,
+    absolute_angle: Optional[float] = None,
   ) -> List[Coordinate]:
-    """ Get the drain edge offsets for the given wells, tilted around the hinge at a
+    """Get the drain edge offsets for the given wells, tilted around the hinge at a
     given absolute angle, for multiple tips.
 
     Args:
@@ -126,7 +133,7 @@ class Tilter(ResourceHolderMixin, Machine):
 
     if absolute_angle is None:
       absolute_angle = self._absolute_angle
-    assert absolute_angle is not None # mypy
+    assert absolute_angle is not None  # mypy
     angle = absolute_angle * (-1 if self._hinge_coordinate.x >= self._size_x / 2 else 1)
 
     hinge_on_left = self._hinge_coordinate.x < self._size_x / 2
@@ -134,22 +141,23 @@ class Tilter(ResourceHolderMixin, Machine):
 
     well_drain_offsets = []
     for well in wells:
-      assert well.cross_section_type == CrossSectionType.CIRCLE, \
-          "Wells must have circular cross-section"
+      assert (
+        well.cross_section_type == CrossSectionType.CIRCLE
+      ), "Wells must have circular cross-section"
 
-      diameter = well.get_absolute_size_x() # assuming circular well
+      diameter = well.get_absolute_size_x()  # assuming circular well
       radius = diameter / 2
 
       if n_tips > 1:
-        assert (n_tips - 1) * min_tip_distance <= diameter, \
-          f"Cannot fit {n_tips} tips in a well with diameter {diameter} mm"
+        assert (
+          (n_tips - 1) * min_tip_distance <= diameter
+        ), f"Cannot fit {n_tips} tips in a well with diameter {diameter} mm"
 
         y_offsets = [
-          ((n_tips - 1) / 2 - tip_index) * min_tip_distance
-          for tip_index in range(n_tips)
+          ((n_tips - 1) / 2 - tip_index) * min_tip_distance for tip_index in range(n_tips)
         ]
 
-        x_offset = math.sqrt(radius**2 - max(y_offsets)**2)
+        x_offset = math.sqrt(radius**2 - max(y_offsets) ** 2)
         x_offset = -x_offset if hinge_on_left else x_offset
 
         tip_coords = [Coordinate(x_offset, y, 0) for y in y_offsets]
@@ -161,7 +169,8 @@ class Tilter(ResourceHolderMixin, Machine):
       offsets = []
       for tip_coord in tip_coords:
         rotated_tip = self.experimental_rotate_coordinate_around_hinge(
-          well.get_absolute_location("c", "c", "b") + tip_coord, angle
+          well.get_absolute_location("c", "c", "b") + tip_coord,
+          angle,
         )
         offset = rotated_tip - well.get_absolute_location("c", "c", "b")
         offsets.append(offset)
@@ -171,7 +180,7 @@ class Tilter(ResourceHolderMixin, Machine):
     return [offset for well_offsets in well_drain_offsets for offset in well_offsets]
 
   async def tilt(self, relative_angle: float):
-    """ Tilt the plate contained in the tilt module by a given angle relative to the current angle.
+    """Tilt the plate contained in the tilt module by a given angle relative to the current angle.
 
     Args:
       relative_angle: The angle to rotate by, in degrees. Clockwise. 0 is horizontal.

@@ -1,5 +1,4 @@
-""" Tests for ResourceStack resource """
-# pylint: disable=missing-class-docstring
+"""Tests for ResourceStack resource"""
 
 import unittest
 
@@ -9,17 +8,25 @@ from .resource_stack import ResourceStack
 
 class ResourceStackTests(unittest.TestCase):
   def test_create(self):
-    stack = ResourceStack("stack", "z", [
-      Resource("A", size_x=10, size_y=10, size_z=10),
-      Resource("B", size_x=10, size_y=10, size_z=10),
-    ])
+    stack = ResourceStack(
+      "stack",
+      "z",
+      [
+        Resource("A", size_x=10, size_y=10, size_z=10),
+        Resource("B", size_x=10, size_y=10, size_z=10),
+      ],
+    )
     self.assertEqual(len(stack.children), 2)
 
   def test_create_x(self):
-    stack = ResourceStack("stack", "x", [
-      Resource("A", size_x=10, size_y=10, size_z=10),
-      Resource("B", size_x=10, size_y=10, size_z=10),
-    ])
+    stack = ResourceStack(
+      "stack",
+      "x",
+      [
+        Resource("A", size_x=10, size_y=10, size_z=10),
+        Resource("B", size_x=10, size_y=10, size_z=10),
+      ],
+    )
     self.assertEqual(stack.get_resource("A").location, Coordinate(0, 0, 0))
     self.assertEqual(stack.get_resource("B").location, Coordinate(10, 0, 0))
 
@@ -28,10 +35,14 @@ class ResourceStackTests(unittest.TestCase):
     self.assertEqual(stack.get_absolute_size_z(), 10)
 
   def test_create_y(self):
-    stack = ResourceStack("stack", "y", [
-      Resource("A", size_x=10, size_y=10, size_z=10),
-      Resource("B", size_x=10, size_y=10, size_z=10),
-    ])
+    stack = ResourceStack(
+      "stack",
+      "y",
+      [
+        Resource("A", size_x=10, size_y=10, size_z=10),
+        Resource("B", size_x=10, size_y=10, size_z=10),
+      ],
+    )
     self.assertEqual(stack.get_resource("A").location, Coordinate(0, 0, 0))
     self.assertEqual(stack.get_resource("B").location, Coordinate(0, 10, 0))
 
@@ -40,10 +51,14 @@ class ResourceStackTests(unittest.TestCase):
     self.assertEqual(stack.get_absolute_size_z(), 10)
 
   def test_create_z(self):
-    stack = ResourceStack("stack", "z", [
-      Resource("A", size_x=10, size_y=10, size_z=10),
-      Resource("B", size_x=10, size_y=10, size_z=10),
-    ])
+    stack = ResourceStack(
+      "stack",
+      "z",
+      [
+        Resource("A", size_x=10, size_y=10, size_z=10),
+        Resource("B", size_x=10, size_y=10, size_z=10),
+      ],
+    )
     self.assertEqual(stack.get_resource("A").location, Coordinate(0, 0, 10))
     self.assertEqual(stack.get_resource("B").location, Coordinate(0, 0, 0))
 
@@ -77,7 +92,10 @@ class ResourceStackTests(unittest.TestCase):
     stacking_area = ResourceStack("stacking_area", "z")
     stacking_area.location = Coordinate.zero()
     stacking_area.assign_child_resource(lid)
-    self.assertEqual(stacking_area.get_top_item().get_absolute_location(), Coordinate(0, 0, 0))
+    self.assertEqual(
+      stacking_area.get_top_item().get_absolute_location(),
+      Coordinate(0, 0, 0),
+    )
 
   def test_get_absolute_location_stack_height(self):
     lid = Lid(name="lid", size_x=1, size_y=1, size_z=1, nesting_z_height=0)

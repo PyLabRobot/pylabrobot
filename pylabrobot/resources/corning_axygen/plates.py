@@ -1,23 +1,24 @@
-""" Corning Axygen plates """
-
-# pylint: disable=invalid-name
+"""Corning Axygen plates"""
 
 from pylabrobot.resources.plate import Lid, Plate
-from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
+from pylabrobot.resources.well import (
+  Well,
+  WellBottomType,
+  CrossSectionType,
+)
 from pylabrobot.resources.utils import create_ordered_items_2d
 
-from pylabrobot.resources.height_volume_functions import calculate_liquid_volume_container_2segments_square_vbottom
+from pylabrobot.resources.height_volume_functions import (
+  calculate_liquid_volume_container_2segments_square_vbottom,
+)
 
 
 def _compute_volume_from_height_Axy_24_DW_10ML(h: float):
   if h > 42.1:
     raise ValueError(f"Height {h} is too large for Cos_96_Vb")
   return calculate_liquid_volume_container_2segments_square_vbottom(
-    x=17,
-    y=17,
-    h_pyramid=5,
-    h_cube=37,
-    liquid_height=h)
+    x=17, y=17, h_pyramid=5, h_cube=37, liquid_height=h
+  )
 
 
 def Axy_24_DW_10ML_Lid(name: str) -> Lid:
@@ -42,20 +43,21 @@ def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
     size_z=44.24,
     lid=Axy_24_DW_10ML_Lid(name + "_lid") if with_lid else None,
     model="Axy_24_DW_10ML",
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=6,
       num_items_y=4,
       dx=9.8,
       dy=7.2,
       dz=1.2,
-      item_dx= 18,
+      item_dx=18,
       item_dy=18,
       size_x=17.0,
       size_y=17.0,
       size_z=42,
       bottom_type=WellBottomType.V,
       compute_volume_from_height=_compute_volume_from_height_Axy_24_DW_10ML,
-      cross_section_type=CrossSectionType.RECTANGLE
+      cross_section_type=CrossSectionType.RECTANGLE,
     ),
   )
 

@@ -39,6 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Changed `pedestal_size_z=-5` to `pedestal_size_z=-4.74` for `PLT_CAR_L5AC_A00` (https://github.com/PyLabRobot/pylabrobot/pull/255)
 - rename `homogenization_` parameters in `STAR` to `mix_` (https://github.com/PyLabRobot/pylabrobot/pull/261)
 - Lids no longer get special treatment when assigned to a ResourceStack. Assign them to a plate directly (https://github.com/PyLabRobot/pylabrobot/pull/267)
+- `Machine` no longer inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
+- `ResourceHolderMixin` is renamed to `ResourceHolder` and now inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
 
 ### Added
 
@@ -66,6 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `HTF_L_ULTRAWIDE`, `ultrawide_high_volume_tip_with_filter` (https://github.com/PyLabRobot/pylabrobot/pull/229/)
 - `get_absolute_size_x`, `get_absolute_size_y`, `get_absolute_size_z` for `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/235)
 - `Cytation5Backend` for plate reading on BioTek Cytation 5 (https://github.com/PyLabRobot/pylabrobot/pull/238)
+  - imaging (https://github.com/PyLabRobot/pylabrobot/pull/277)
 - More chatterboxes (https://github.com/PyLabRobot/pylabrobot/pull/242)
   - `FanChatterboxBackend`
   - `PlateReaderChatterboxBackend`
@@ -106,6 +109,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - use local sizes in computing anchor (https://github.com/PyLabRobot/pylabrobot/pull/233)
 - don't raise a blow out air volume error when requesting 0, or when volume tracking is disabled (https://github.com/PyLabRobot/pylabrobot/pull/262)
 - fix get_child_location for resources rotated by 180 degrees (https://github.com/PyLabRobot/pylabrobot/pull/269)
+- volume tracking on channel 1-n (https://github.com/PyLabRobot/pylabrobot/pull/273)
 
 ### Removed
 
