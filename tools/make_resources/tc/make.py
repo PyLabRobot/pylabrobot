@@ -33,8 +33,8 @@ def main(pc, tc, p, tr, tcr):
       size_z = float(dim[1][2]) / 10
 
       locations = []
-      site_size_x = []
-      site_size_y = []
+      resource_size_x = []
+      resource_size_y = []
       desc = ""
       while i + 1 < len(c) and not RES.match(c[i + 1]):
         i += 1
@@ -47,8 +47,8 @@ def main(pc, tc, p, tr, tcr):
           y = size_y - h - float(site_dim[1][1]) / 10
           z = float(site_dim[1][2]) / 10 + size_z
           locations = [Coordinate(x, y, z)] + locations
-          site_size_x = [w] + site_size_x
-          site_size_y = [h] + site_size_y
+          resource_size_x = [w] + resource_size_x
+          resource_size_y = [h] + resource_size_y
 
         if d := DESC.match(c[i]):
           desc = d.group(1)
@@ -76,27 +76,27 @@ def main(pc, tc, p, tr, tcr):
         o.write(f"    size_z={size_z},\n")
         o.write(f"    off_x={off_x},\n")
         o.write(f"    off_y={off_y},\n")
-        if all(x == site_size_x[0] for x in site_size_x) and all(
-          y == site_size_y[0] for y in site_size_y
+        if all(x == resource_size_x[0] for x in resource_size_x) and all(
+          y == resource_size_y[0] for y in resource_size_y
         ):
           o.write(
-            f"    sites=create_homogeneous_carrier_sites(klass=CarrierSite, locations=[\n"
+            f"    sites=create_homogeneous_resources(klass=ResourceHolder, locations=[\n"
           )
           for l in locations:
             o.write(f"        {repr(l)},\n")
           o.write(f"      ],\n")
-          o.write(f"      site_size_x={site_size_x[0]},\n")
-          o.write(f"      site_size_y={site_size_y[0]},\n")
+          o.write(f"      resource_size_x={resource_size_x[0]},\n")
+          o.write(f"      resource_size_y={resource_size_y[0]},\n")
           o.write(f"    ),\n")
         else:
-          o.write(f"    sites=create_carrier_sites(CarrierSite, locations=[\n")
+          o.write(f"    sites=create_resources(ResourceHolder, locations=[\n")
           for l in locations:
             o.write(f"        {repr(l)},\n")
-          o.write(f"      ], site_size_x=[\n")
-          for x in site_size_x:
+          o.write(f"      ], resource_size_x=[\n")
+          for x in resource_size_x:
             o.write(f"        {x},\n")
-          o.write(f"      ], site_size_y=[\n")
-          for y in site_size_y:
+          o.write(f"      ], resource_size_y=[\n")
+          for y in resource_size_y:
             o.write(f"        {y},\n")
           o.write(f"    ]),\n")
         o.write(f'    model="{name}"\n')
