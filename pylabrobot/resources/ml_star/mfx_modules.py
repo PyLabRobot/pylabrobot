@@ -1,16 +1,10 @@
-"""MFX modules (including machine definitions placed on a MFX carrier)"""
-
 from __future__ import annotations
 
-import logging
 from typing import Optional
 
-from pylabrobot.resources.carrier import Coordinate
+from pylabrobot.resources.carrier import Coordinate, PlateHolder
 from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import serialize
-
-
-logger = logging.getLogger("pylabrobot")
 
 
 class MFXModule(Resource):
@@ -121,7 +115,7 @@ def MFX_TIP_module(name: str) -> MFXModule:
   )
 
 
-def MFX_DWP_rackbased_module(name: str) -> MFXModule:
+def MFX_DWP_rackbased_module(name: str) -> PlateHolder:
   """Hamilton cat. no.: 188229
   Module to position a Deep Well Plate / tube racks (MATRIX or MICRONICS) / NUNC reagent trough.
   """
@@ -129,12 +123,12 @@ def MFX_DWP_rackbased_module(name: str) -> MFXModule:
   # resource_size_x=127.76,
   # resource_size_y=85.48,
 
-  return MFXModule(
+  return PlateHolder(
     name=name,
     size_x=135.0,
     size_y=94.0,
     size_z=178.0 - 18.195 - 100,
     # probe height - carrier_height - deck_height
-    child_resource_location=Coordinate(4.0, 3.5, 178.0 - 18.195 - 100),
-    model="MFX_TIP_module",
+    child_location=Coordinate(4.0, 3.5, 178.0 - 18.195 - 100),
+    model=MFX_DWP_rackbased_module.__name__,
   )

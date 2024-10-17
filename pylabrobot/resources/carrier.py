@@ -152,6 +152,7 @@ class PlateHolder(ResourceHolder):
     size_y: float,
     size_z: float,
     pedestal_size_z: float = None,  # type: ignore
+    child_location=Coordinate.zero(),
     category="plate_holder",
     model: Optional[str] = None,
   ):
@@ -164,7 +165,7 @@ class PlateHolder(ResourceHolder):
       )
 
     self.pedestal_size_z = pedestal_size_z
-    # self.resource: Optional[Plate] = None  # fix type
+    self.child_location = child_location
     # TODO: add self.pedestal_2D_offset if necessary in the future
 
   def assign_child_resource(

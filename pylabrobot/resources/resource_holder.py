@@ -1,6 +1,7 @@
 from typing import Optional
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
+from pylabrobot.serializer import serialize
 
 
 def get_child_location(resource: Resource) -> Coordinate:
@@ -30,12 +31,21 @@ class ResourceHolder(Resource):
   """
 
   def __init__(
-    self, name, size_x, size_y, size_z, rotation=None, category="resource_holder", model=None
+    self,
+    name,
+    size_x,
+    size_y,
+    size_z,
+    rotation=None,
+    category="resource_holder",
+    model=None,
+    child_location: Coordinate = Coordinate.zero(),
   ):
     super().__init__(name, size_x, size_y, size_z, rotation, category, model)
+    self.child_location = child_location
 
   def get_default_child_location(self, resource: Resource) -> Coordinate:
-    return get_child_location(resource)
+    return get_child_location(resource) + self.child_location
 
   def assign_child_resource(
     self,
@@ -53,3 +63,6 @@ class ResourceHolder(Resource):
     if len(self.children) == 0:
       return None
     return self.children[0]
+
+  def serialize(self):
+    return {**super().serialize(), "child_location": serialize(self.child_location)}
