@@ -41,7 +41,6 @@ from pylabrobot.resources import (
   ResourceHolder,
   PlateHolder,
   Lid,
-  MFXModule,
   Plate,
   PlateAdapter,
   Tip,
@@ -1889,7 +1888,7 @@ class LiquidHandler(Resource, Machine):
       to_location = to.get_absolute_location(z="top")
     elif isinstance(to, Coordinate):
       to_location = to
-    elif isinstance(to, (MFXModule, Tilter)):
+    elif isinstance(to, Tilter):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateHolder):
       if to.resource is not None and to.resource is not plate:
@@ -1944,7 +1943,7 @@ class LiquidHandler(Resource, Machine):
       if isinstance(to, ResourceStack) and to.direction != "z":
         raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       to.assign_child_resource(plate)
-    elif isinstance(to, (MFXModule, Tilter)):
+    elif isinstance(to, Tilter):
       to.assign_child_resource(plate, location=to.child_resource_location)
     elif isinstance(to, PlateAdapter):
       to.assign_child_resource(plate, location=to.compute_plate_location(plate))

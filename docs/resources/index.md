@@ -35,8 +35,7 @@ Resource
 │   ├── TipRack
 │   └── TubeRack
 ├── Lid
-├── PlateAdapter
-└── MFXModule
+└── PlateAdapter
 ```
 
 See more detailed documentatino below (WIP).

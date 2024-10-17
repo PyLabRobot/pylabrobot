@@ -9,7 +9,6 @@ from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.trash import Trash
-from pylabrobot.resources.ml_star.mfx_modules import MFXModule
 
 
 logger = logging.getLogger("pylabrobot")
@@ -303,10 +302,6 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     def print_tree(resource: Resource, depth=0):
       r_summary = print_resource_line(resource, depth=depth)
-
-      if isinstance(resource, MFXModule) and len(resource.children) == 0:
-        r_summary += "\n"
-        r_summary += print_empty_spot_line(depth=depth + 1)
 
       for child in resource.children:
         if isinstance(child, ResourceHolder):
