@@ -1,0 +1,6 @@
+pylabrobot.resources.Carrier.get\_absolute\_size\_z
+===================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Carrier.get_absolute_size_z
