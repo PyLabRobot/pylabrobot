@@ -1,5 +1,3 @@
-"""Base classes for Plate and Lid resources."""
-
 from __future__ import annotations
 
 from typing import (
@@ -13,9 +11,7 @@ from typing import (
   Literal,
 )
 
-from pylabrobot.resources.resource_holder import ResourceHolder
-
-
+from pylabrobot.resources.resource_holder import get_child_location
 from .liquid import Liquid
 from .itemized_resource import ItemizedResource
 from .resource import Resource, Coordinate
@@ -63,7 +59,7 @@ class Lid(Resource):
     }
 
 
-class Plate(ResourceHolder, ItemizedResource[Well]):
+class Plate(ItemizedResource[Well]):
   """Base class for Plate resources."""
 
   def __init__(
@@ -120,12 +116,6 @@ class Plate(ResourceHolder, ItemizedResource[Well]):
   def _get_lid_location(self, lid: Lid) -> Coordinate:
     return Coordinate(0, 0, self.get_size_z() - lid.nesting_z_height)
 
-  def get_default_child_location(self, resource: Resource) -> Coordinate:
-    child_location = super().get_default_child_location(resource)
-    if isinstance(resource, Lid):
-      child_location += self._get_lid_location(resource)
-    return child_location
-
   def assign_child_resource(
     self,
     resource: Resource,
@@ -136,6 +126,8 @@ class Plate(ResourceHolder, ItemizedResource[Well]):
       if self.has_lid():
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self._lid = resource
+      default_location = get_child_location(resource) + self._get_lid_location(resource)
+      location = location or default_location
     else:
       assert location is not None, "Location must be specified for if resource is not a lid."
     return super().assign_child_resource(resource, location=location, reassign=reassign)

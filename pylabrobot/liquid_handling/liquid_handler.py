@@ -38,10 +38,9 @@ from pylabrobot.resources import (
   Resource,
   ResourceStack,
   Coordinate,
-  CarrierSite,
-  PlateCarrierSite,
+  ResourceHolder,
+  PlateHolder,
   Lid,
-  MFXModule,
   Plate,
   PlateAdapter,
   Tip,
@@ -1843,7 +1842,7 @@ class LiquidHandler(Resource, Machine):
   async def move_plate(
     self,
     plate: Plate,
-    to: Union[ResourceStack, CarrierSite, Resource, Coordinate],
+    to: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
     resource_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
@@ -1878,8 +1877,8 @@ class LiquidHandler(Resource, Machine):
       ... ])
 
     Args:
-      plate: The plate to move. Can be either a Plate object or a CarrierSite object.
-      to: The location to move the plate to, either a plate, CarrierSite or a Coordinate.
+      plate: The plate to move. Can be either a Plate object or a ResourceHolder object.
+      to: The location to move the plate to, either a plate, ResourceHolder or a Coordinate.
       resource_offset: The offset from the resource's origin, optional (rarely necessary).
       destination_offset: The offset from the location's origin, optional (rarely necessary).
     """
@@ -1889,9 +1888,11 @@ class LiquidHandler(Resource, Machine):
       to_location = to.get_absolute_location(z="top")
     elif isinstance(to, Coordinate):
       to_location = to
-    elif isinstance(to, (MFXModule, Tilter)):
+    elif isinstance(to, Tilter):
       to_location = to.get_absolute_location() + to.child_resource_location
-    elif isinstance(to, PlateCarrierSite):
+    elif isinstance(to, PlateHolder):
+      if to.resource is not None and to.resource is not plate:
+        raise RuntimeError("Destination already has a plate")
       to_location = to.get_absolute_location()
       # Sanity check for equal well clearances / dz
       well_dz_set = {
@@ -1934,15 +1935,15 @@ class LiquidHandler(Resource, Machine):
     if isinstance(to, Coordinate):
       to_location -= self.deck.location  # passed as an absolute location, but stored as relative
       self.deck.assign_child_resource(plate, location=to_location)
-    elif isinstance(to, PlateCarrierSite):  # .zero() resources
+    elif isinstance(to, PlateHolder):  # .zero() resources
       to.assign_child_resource(plate)
-    elif isinstance(to, CarrierSite):  # .zero() resources
+    elif isinstance(to, ResourceHolder):  # .zero() resources
       to.assign_child_resource(plate)
     elif isinstance(to, (ResourceStack, PlateReader)):  # manage its own resources
       if isinstance(to, ResourceStack) and to.direction != "z":
         raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       to.assign_child_resource(plate)
-    elif isinstance(to, (MFXModule, Tilter)):
+    elif isinstance(to, Tilter):
       to.assign_child_resource(plate, location=to.child_resource_location)
     elif isinstance(to, PlateAdapter):
       to.assign_child_resource(plate, location=to.compute_plate_location(plate))
