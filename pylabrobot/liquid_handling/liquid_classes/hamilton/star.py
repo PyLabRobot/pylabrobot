@@ -1,10 +1,6 @@
-<<<<<<< HEAD
-from typing import Dict, Tuple, Optional
-=======
 # pylint: skip-file
 
 from typing import Dict, Tuple
->>>>>>> origin/liq-class-kwargs
 
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.liquid_handling.liquid_classes.hamilton.base import (
