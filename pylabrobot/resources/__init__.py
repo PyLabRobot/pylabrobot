@@ -18,6 +18,7 @@ from .plate import Plate, Lid, Well
 from .plate_adapter import PlateAdapter
 from .powder import Powder
 from .resource import Resource
+from .rotation import Rotation
 from .tip_rack import TipRack, TipSpot
 from .trash import Trash
 from .trough import Trough
