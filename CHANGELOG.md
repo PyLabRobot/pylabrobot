@@ -41,6 +41,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Lids no longer get special treatment when assigned to a ResourceStack. Assign them to a plate directly (https://github.com/PyLabRobot/pylabrobot/pull/267)
 - `Machine` no longer inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
 - `ResourceHolderMixin` is renamed to `ResourceHolder` and now inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
+- Hamilton liquid classes are no longer automatically inferred on the backends (`STAR`/`Vantage`). Instead, they create kwargs with `make_(asp|disp)(96)?_kwargs` (https://github.com/PyLabRobot/pylabrobot/pull/248)
+  - This also applies to volume correction curves, which are now the users' responsibility.
 
 ### Added
 
