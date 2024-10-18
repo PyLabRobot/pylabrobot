@@ -50,6 +50,7 @@ from .volume_tracker import (
 from .resource_stack import ResourceStack
 
 # labware manufacturers and suppliers
+from .agenbio import *
 from .alpaqua import *
 from .azenta import *
 from .boekel import *
