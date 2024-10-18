@@ -1,5 +1,4 @@
 import logging
-import threading
 import time
 import asyncio
 from typing import Optional, List, Dict, Union
@@ -35,11 +34,9 @@ class AgrowPumpArray(PumpArrayBackend):
     if address not in range(0, 256):
       raise ValueError("Pump address out of range")
     self.address = int(address)
-    self._keep_alive_thread: Optional[threading.Thread] = None
     self._pump_index_to_address: Optional[Dict[int, int]] = None
     self._modbus: Optional[AsyncModbusSerialClient] = None
     self._num_channels: Optional[int] = None
-    self._keep_alive_thread_active = False
 
   @property
   def modbus(self) -> AsyncModbusSerialClient:
@@ -76,37 +73,6 @@ class AgrowPumpArray(PumpArrayBackend):
       raise RuntimeError("Number of channels not established")
     return self._num_channels
 
-  def start_keep_alive_thread(self):
-    """Creates a daemon thread that sends a Modbus request
-    every 25 seconds to keep the connection alive.
-    """
-
-    async def keep_alive():
-      """Sends a Modbus request every 25 seconds to keep the connection alive.
-      Sleep for 0.1 seconds so we can respond to `stop` events fast.
-      """
-      i = 0
-      while self._keep_alive_thread_active:
-        time.sleep(0.1)
-        i += 1
-        if i == 250:
-          await self.modbus.read_holding_registers(0, 1, unit=self.address)
-          i = 0
-
-    def manage_async_keep_alive():
-      """Manages the keep alive thread."""
-      try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(keep_alive())
-        loop.close()
-      except Exception as e:
-        logger.error("Error in keep alive thread: %s", e)
-
-    self._keep_alive_thread_active = True
-    self._keep_alive_thread = threading.Thread(target=manage_async_keep_alive, daemon=True)
-    self._keep_alive_thread.start()
-
   async def setup(self):
     """Sets up the Modbus connection to the AgrowPumpArray and creates the
     pump mappings needed to issue commands.
@@ -116,7 +82,6 @@ class AgrowPumpArray(PumpArrayBackend):
     self._num_channels = int(
       "".join(chr(r // 256) + chr(r % 256) for r in register_return.registers)[2]
     )
-    self.start_keep_alive_thread()
     self._pump_index_to_address = {pump: pump + 100 for pump in range(0, self.num_channels)}
 
   async def _setup_modbus(self):
@@ -190,8 +155,5 @@ class AgrowPumpArray(PumpArrayBackend):
     """Close the connection to the pump array."""
     await self.halt()
     assert self.modbus is not None, "Modbus connection not established"
-    if self._keep_alive_thread is not None:
-      self._keep_alive_thread_active = False
-      self._keep_alive_thread.join()
     self.modbus.close()
     assert not self.modbus.connected, "Modbus failing to disconnect"

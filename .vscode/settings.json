@@ -11,6 +11,7 @@
     "frontmost",
     "hepa",
     "Inheco",
+    "interp",
     "iswap",
     "jsonify",
     "klass",
@@ -23,20 +24,32 @@
     "tadm",
     "tiprack",
     "usascientific",
-    "websockets"
+    "Waveshare",
+    "websockets",
+    "xyzt"
   ],
   "python.linting.mypyEnabled": true,
   "python.linting.enabled": true,
-  "python.testing.pytestArgs": ["."],
+  "python.testing.pytestArgs": [
+    "."
+  ],
   "python.testing.unittestEnabled": false,
   "python.testing.pytestEnabled": true,
   "python.testing.autoTestDiscoverOnSaveEnabled": true,
-  "editor.rulers": [100],
+  "editor.rulers": [
+    100
+  ],
   "editor.formatOnSave": true,
   "files.exclude": {
     "**/__pycache__": true
   },
-  "python.testing.unittestArgs": ["-v", "-s", ".", "-p", "*_test.py"],
+  "python.testing.unittestArgs": [
+    "-v",
+    "-s",
+    ".",
+    "-p",
+    "*_test.py"
+  ],
   "[markdown]": {
     "editor.wordWrap": "bounded",
     "editor.wordWrapColumn": 100
