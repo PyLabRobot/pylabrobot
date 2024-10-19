@@ -180,7 +180,7 @@ class TecanDeck(Deck):
       )
 
       if isinstance(resource, Carrier):
-        for site in resource.get_sites():
+        for site in resource.sites.values():
           if site.resource is None:
             r_summary += "     │   ├── <empty>\n"
           else:
