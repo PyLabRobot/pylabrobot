@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ResourceHolderMixin` is renamed to `ResourceHolder` and now inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
 - Hamilton liquid classes are no longer automatically inferred on the backends (`STAR`/`Vantage`). Instead, they create kwargs with `make_(asp|disp)(96)?_kwargs` (https://github.com/PyLabRobot/pylabrobot/pull/248)
   - This also applies to volume correction curves, which are now the users' responsibility.
+- You can now place resources on 'rail' 0 on Hamilton decks (left support doesn't touch rail)
 
 ### Added
 
@@ -112,6 +113,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - don't raise a blow out air volume error when requesting 0, or when volume tracking is disabled (https://github.com/PyLabRobot/pylabrobot/pull/262)
 - fix get_child_location for resources rotated by 180 degrees (https://github.com/PyLabRobot/pylabrobot/pull/269)
 - volume tracking on channel 1-n (https://github.com/PyLabRobot/pylabrobot/pull/273)
+- correct trash location on Vantage (https://github.com/PyLabRobot/pylabrobot/pull/285)
 
 ### Removed
 
