@@ -111,6 +111,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - don't raise a blow out air volume error when requesting 0, or when volume tracking is disabled (https://github.com/PyLabRobot/pylabrobot/pull/262)
 - fix get_child_location for resources rotated by 180 degrees (https://github.com/PyLabRobot/pylabrobot/pull/269)
 - volume tracking on channel 1-n (https://github.com/PyLabRobot/pylabrobot/pull/273)
+- correct trash location on Vantage (https://github.com/PyLabRobot/pylabrobot/pull/285)
 
 ### Removed
 
