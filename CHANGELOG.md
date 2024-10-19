@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Lids no longer get special treatment when assigned to a ResourceStack. Assign them to a plate directly (https://github.com/PyLabRobot/pylabrobot/pull/267)
 - `Machine` no longer inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
 - `ResourceHolderMixin` is renamed to `ResourceHolder` and now inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
+- You can now place resources on 'rail' 0 on Hamilton decks (left support doesn't touch rail)
 
 ### Added
 
