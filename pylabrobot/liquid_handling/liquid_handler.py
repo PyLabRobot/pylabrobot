@@ -2006,9 +2006,9 @@ class LiquidHandler(Resource, Machine):
     with open(path, "r", encoding="utf-8") as f:
       return cls.deserialize(json.load(f))
 
-  def prepare_for_manual_channel_operation(self, channel: int):
+  async def prepare_for_manual_channel_operation(self, channel: int):
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
-    self.backend.prepare_for_manual_channel_operation(channel=channel)
+    await self.backend.prepare_for_manual_channel_operation(channel=channel)
 
   async def move_channel_x(self, channel: int, x: float):
     """Move channel to absolute x position"""
