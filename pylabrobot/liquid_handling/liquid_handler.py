@@ -2006,6 +2006,25 @@ class LiquidHandler(Resource, Machine):
     with open(path, "r", encoding="utf-8") as f:
       return cls.deserialize(json.load(f))
 
+  async def prepare_for_manual_channel_operation(self, channel: int):
+    assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
+    await self.backend.prepare_for_manual_channel_operation(channel=channel)
+
+  async def move_channel_x(self, channel: int, x: float):
+    """Move channel to absolute x position"""
+    assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
+    await self.backend.move_channel_x(channel=channel, x=x)
+
+  async def move_channel_y(self, channel: int, y: float):
+    """Move channel to absolute y position"""
+    assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
+    await self.backend.move_channel_y(channel=channel, y=y)
+
+  async def move_channel_z(self, channel: int, z: float):
+    """Move channel to absolute z position"""
+    assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
+    await self.backend.move_channel_z(channel=channel, z=z)
+
   # -- Resource methods --
 
   def assign_child_resource(
