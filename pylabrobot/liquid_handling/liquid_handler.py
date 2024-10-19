@@ -2010,20 +2010,20 @@ class LiquidHandler(Resource, Machine):
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
     self.backend.prepare_for_manual_channel_operation(channel=channel)
 
-  def move_channel_x(self, channel: int, x: float):
+  async def move_channel_x(self, channel: int, x: float):
     """Move channel to absolute x position"""
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
-    self.backend.move_channel_x(channel=channel, x=x)
+    await self.backend.move_channel_x(channel=channel, x=x)
 
-  def move_channel_y(self, channel: int, y: float):
+  async def move_channel_y(self, channel: int, y: float):
     """Move channel to absolute y position"""
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
-    self.backend.move_channel_y(channel=channel, y=y)
+    await self.backend.move_channel_y(channel=channel, y=y)
 
-  def move_channel_z(self, channel: int, z: float):
+  async def move_channel_z(self, channel: int, z: float):
     """Move channel to absolute z position"""
     assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
-    self.backend.move_channel_z(channel=channel, z=z)
+    await self.backend.move_channel_z(channel=channel, z=z)
 
   # -- Resource methods --
 
