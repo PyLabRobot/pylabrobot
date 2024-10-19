@@ -124,8 +124,10 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         location must be `None`, but not both.
       reassign: If True, reassign the resource if it is already assigned. If False, raise a
         `ValueError` if the resource is already assigned.
-      rails: The left most real (inclusive) of the deck resource (between and 1-30 for STARLet,
-        max 55 for STAR.) Either rails or location must be None, but not both.
+      rails: The left most real (inclusive) of the deck resource (between and 0-30 for STARLet,
+        max 55 for STAR.) Either rails or location must be None, but not both. 1-index similar to
+        markings on the device, but you can place carriers on 0 as well (left support will not
+        touch a support rail).
       location: The location of the resource relative to the liquid handler. Either rails or
         location must be None, but not both.
       replace: Replace the resource with the same name that was previously assigned, if it exists.
@@ -138,8 +140,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
     # TODO: many things here should be moved to Resource and Deck, instead of just STARLetDeck
 
-    if rails is not None and not 1 <= rails <= self.num_rails:
-      raise ValueError(f"Rails must be between 1 and {self.num_rails}.")
+    if rails is not None and not 0 <= rails <= self.num_rails:
+      raise ValueError(f"Rails must be between 0 and {self.num_rails}.")
 
     # Check if resource exists.
     if self.has_resource(resource.name):
