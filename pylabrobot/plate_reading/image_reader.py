@@ -7,6 +7,7 @@ from pylabrobot.plate_reading.imager import Imager
 
 class ImageReader(PlateReader, Imager):
   """Microscope which is also a plate reader"""
+
   def __init__(
     self,
     name: str,
@@ -15,7 +16,7 @@ class ImageReader(PlateReader, Imager):
     size_z: float,
     backend: ImageReaderBackend,
     category: str = "heating_shaking",
-    model: Optional[str] = None
+    model: Optional[str] = None,
   ):
     super().__init__(
       name=name,
@@ -24,6 +25,6 @@ class ImageReader(PlateReader, Imager):
       size_z=size_z,
       backend=backend,
       category=category,
-      model=model
+      model=model,
     )
     self.backend: ImageReaderBackend = backend  # fix type

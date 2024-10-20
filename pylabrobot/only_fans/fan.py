@@ -1,7 +1,6 @@
 import asyncio
 
 from pylabrobot.machines.machine import Machine
-
 from .backend import FanBackend
 
 
@@ -10,31 +9,17 @@ class Fan(Machine):
   Front end for Fans.
   """
 
-  def __init__(self, backend: FanBackend, name):
-    """ Initialize a Fan.
-
-    Args:
-      backend: Backend to use.
-    """
-
-    super().__init__(
-      name=name,
-      size_x=1830,
-      size_y=900,
-      size_z=400,
-      backend=backend,
-      category="fan",
-    )
-
-    self.backend: FanBackend = backend # fix type
+  def __init__(self, backend: FanBackend):
+    super().__init__(backend=backend)
+    self.backend: FanBackend = backend  # fix type
 
   async def stop(self):
-    """ Stop the fan and close the connection. """
+    await super().stop()
     await self.backend.turn_off()
     await self.backend.stop()
 
   async def turn_on(self, intensity: int, duration=None):
-    """ Run the fan
+    """Run the fan
 
     Args:
       intensity: integer percent between 0 and 100
@@ -48,5 +33,5 @@ class Fan(Machine):
       await self.backend.turn_off()
 
   async def turn_off(self):
-    """ Turn the fan off, but do not close the connection. """
+    """Turn the fan off, but do not close the connection."""
     await self.backend.turn_off()

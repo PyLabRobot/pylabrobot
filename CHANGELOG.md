@@ -39,6 +39,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Changed `pedestal_size_z=-5` to `pedestal_size_z=-4.74` for `PLT_CAR_L5AC_A00` (https://github.com/PyLabRobot/pylabrobot/pull/255)
 - rename `homogenization_` parameters in `STAR` to `mix_` (https://github.com/PyLabRobot/pylabrobot/pull/261)
 - Lids no longer get special treatment when assigned to a ResourceStack. Assign them to a plate directly (https://github.com/PyLabRobot/pylabrobot/pull/267)
+- `Machine` no longer inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
+- `ResourceHolderMixin` is renamed to `ResourceHolder` and now inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
+- You can now place resources on 'rail' 0 on Hamilton decks (left support doesn't touch rail)
 
 ### Added
 
@@ -80,6 +83,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Add `F.linear_tip_spot_generator` and `F.randomized_tip_spot_generator` for looping over tip spots, with caching (https://github.com/PyLabRobot/pylabrobot/pull/256)
 - Add `skip_autoload`, `skip_iswap`, and `skip_core96_head` flags to `STAR.setup` (https://github.com/PyLabRobot/pylabrobot/pull/263)
 - Add `skip_autoload`, `skip_iswap`, and `skip_core96_head` flags to `Vantage.setup` (https://github.com/PyLabRobot/pylabrobot/pull/263)
+- `Resource.get_highest_known_point` (https://github.com/PyLabRobot/pylabrobot/pull/284)
 
 ### Deprecated
 
@@ -108,6 +112,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - don't raise a blow out air volume error when requesting 0, or when volume tracking is disabled (https://github.com/PyLabRobot/pylabrobot/pull/262)
 - fix get_child_location for resources rotated by 180 degrees (https://github.com/PyLabRobot/pylabrobot/pull/269)
 - volume tracking on channel 1-n (https://github.com/PyLabRobot/pylabrobot/pull/273)
+- correct trash location on Vantage (https://github.com/PyLabRobot/pylabrobot/pull/285)
 
 ### Removed
 

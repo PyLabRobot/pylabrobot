@@ -6,12 +6,14 @@ from typing import List, Literal, Optional
 
 try:
   from pylibftdi import Device
+
   USE_FTDI = True
 except ImportError:
   USE_FTDI = False
 
 try:
   import PySpin  # type: ignore
+
   # can be downloaded from https://www.teledynevisionsolutions.com/products/spinnaker-sdk/
   USE_PYSPIN = True
 except ImportError:
@@ -24,9 +26,9 @@ from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, Ima
 logger = logging.getLogger("pylabrobot.plate_reading.biotek")
 
 
-
-SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR = \
+SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR = (
   PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR if USE_PYSPIN else -1
+)
 PixelFormat_Mono8 = PySpin.PixelFormat_Mono8 if USE_PYSPIN else -1
 SpinnakerException = PySpin.SpinnakerException if USE_PYSPIN else Exception
 
@@ -65,7 +67,7 @@ class Cytation5Backend(ImageReaderBackend):
     self.dev.open()
     # self.dev.baudrate = 9600 # worked in the past
     self.dev.baudrate = 38400
-    self.dev.ftdi_fn.ftdi_set_line_property(8, 2, 0) # 8 bits, 2 stop bits, no parity
+    self.dev.ftdi_fn.ftdi_set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
     SIO_RTS_CTS_HS = 0x1 << 8
     self.dev.ftdi_fn.ftdi_setflowctrl(SIO_RTS_CTS_HS)
     self.dev.ftdi_fn.ftdi_setrts(1)
@@ -82,8 +84,13 @@ class Cytation5Backend(ImageReaderBackend):
       # -- Retrieve singleton reference to system object (Spinnaker) --
       self.spinnaker_system = PySpin.System.GetInstance()
       version = self.spinnaker_system.GetLibraryVersion()
-      logger.debug("[cytation5] Library version: %d.%d.%d.%d",
-                  version.major, version.minor, version.type, version.build)
+      logger.debug(
+        "[cytation5] Library version: %d.%d.%d.%d",
+        version.major,
+        version.minor,
+        version.type,
+        version.build,
+      )
 
       # -- Get the camera by serial number, or the first. --
       cam_list = self.spinnaker_system.GetCameras()
@@ -99,16 +106,18 @@ class Cytation5Backend(ImageReaderBackend):
           self.cam = cam
           logger.info("[cytation5] using camera with serial number %s", serial_number)
           break
-      else: # if no specific camera was found by serial number so use the first one
+      else:  # if no specific camera was found by serial number so use the first one
         if num_cameras > 0:
           self.cam = cam_list.GetByIndex(0)
-          logger.info("[cytation5] using first camera with serial number %s",
-                      info["DeviceSerialNumber"])
+          logger.info(
+            "[cytation5] using first camera with serial number %s", info["DeviceSerialNumber"]
+          )
       cam_list.Clear()
 
       if self.cam is None:
-        raise RuntimeError("No camera found. Make sure the camera is connected and the serial "
-                           "number is correct.")
+        raise RuntimeError(
+          "No camera found. Make sure the camera is connected and the serial " "number is correct."
+        )
 
       # -- Initialize camera --
       self.cam.Init()
@@ -119,8 +128,9 @@ class Cytation5Backend(ImageReaderBackend):
       # 1. Set trigger selector to frame start
       ptr_trigger_selector = PySpin.CEnumerationPtr(nodemap.GetNode("TriggerSelector"))
       if not PySpin.IsReadable(ptr_trigger_selector) or not PySpin.IsWritable(ptr_trigger_selector):
-        raise RuntimeError("unable to configure TriggerSelector "
-                           "(can't read or write TriggerSelector)")
+        raise RuntimeError(
+          "unable to configure TriggerSelector " "(can't read or write TriggerSelector)"
+        )
       ptr_frame_start = PySpin.CEnumEntryPtr(ptr_trigger_selector.GetEntryByName("FrameStart"))
       if not PySpin.IsReadable(ptr_frame_start):
         raise RuntimeError("unable to configure TriggerSelector (can't read FrameStart)")
@@ -156,13 +166,13 @@ class Cytation5Backend(ImageReaderBackend):
       self.spinnaker_system.ReleaseInstance()
 
   async def _purge_buffers(self) -> None:
-    """ Purge the RX and TX buffers, as implemented in Gen5.exe """
+    """Purge the RX and TX buffers, as implemented in Gen5.exe"""
     for _ in range(6):
       self.dev.ftdi_fn.ftdi_usb_purge_rx_buffer()
     self.dev.ftdi_fn.ftdi_usb_purge_tx_buffer()
 
   async def _read_until(self, char: bytes, timeout: Optional[float] = None) -> bytes:
-    """ If timeout is None, use self.timeout """
+    """If timeout is None, use self.timeout"""
     if timeout is None:
       timeout = self.timeout
     x = None
@@ -183,10 +193,7 @@ class Cytation5Backend(ImageReaderBackend):
     return res
 
   async def send_command(
-    self,
-    command: str,
-    parameter: Optional[str] = None,
-    wait_for_response=True
+    self, command: str, parameter: Optional[str] = None, wait_for_response=True
   ) -> Optional[bytes]:
     await self._purge_buffers()
     self.dev.write(command.encode())
@@ -221,7 +228,7 @@ class Cytation5Backend(ImageReaderBackend):
     return await self.send_command("A")
 
   async def get_current_temperature(self) -> float:
-    """ Get current temperature in degrees Celsius. """
+    """Get current temperature in degrees Celsius."""
     resp = await self.send_command("h")
     assert resp is not None
     return int(resp[1:-1]) / 100000
@@ -236,7 +243,7 @@ class Cytation5Backend(ImageReaderBackend):
     for row_idx, row in enumerate(rows):
       parsed_data.append([])
       values = row.split(b",")
-      grouped_values = [values[i:i+3] for i in range(0, len(values), 3)]
+      grouped_values = [values[i : i + 3] for i in range(0, len(values), 3)]
 
       for group in grouped_values:
         assert len(group) == 3
@@ -260,7 +267,7 @@ class Cytation5Backend(ImageReaderBackend):
     assert resp == b"\x060000\x03"
 
     # read data
-    body = await self._read_until(b"\x03", timeout=60*3)
+    body = await self._read_until(b"\x03", timeout=60 * 3)
     assert resp is not None
     return self._parse_body(body)
 
@@ -273,14 +280,13 @@ class Cytation5Backend(ImageReaderBackend):
 
     await self.send_command("y", "08120112207434014351135308559127881772\x03")
 
-    cmd = ("008401010108120001200100001100100000123000500200200"
-           "-001000-00300000000000000000001351092")
+    cmd = "008401010108120001200100001100100000123000500200200-001000-00300000000000000000001351092"
     await self.send_command("D", cmd)
 
     resp = await self.send_command("O")
     assert resp == b"\x060000\x03"
 
-    body = await self._read_until(b"\x03", timeout=60*3)
+    body = await self._read_until(b"\x03", timeout=60 * 3)
     assert body is not None
     return self._parse_body(body)
 
@@ -304,16 +310,18 @@ class Cytation5Backend(ImageReaderBackend):
 
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
-    cmd = (f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
-      f"{emission_wavelength_str}000000000000000000210011")
-    checksum = str((sum(cmd.encode())+7) % 100)  # don't know why +7
+    cmd = (
+      f"008401010108120001200100001100100000135000100200200{excitation_wavelength_str}000"
+      f"{emission_wavelength_str}000000000000000000210011"
+    )
+    checksum = str((sum(cmd.encode()) + 7) % 100)  # don't know why +7
     cmd = cmd + checksum + "\x03"
     resp = await self.send_command("D", cmd)
 
     resp = await self.send_command("O")
     assert resp == b"\x060000\x03"
 
-    body = await self._read_until(b"\x03", timeout=60*2)
+    body = await self._read_until(b"\x03", timeout=60 * 2)
     assert body is not None
     return self._parse_body(body)
 
@@ -325,20 +333,20 @@ class Cytation5Backend(ImageReaderBackend):
     ORBITAL = 1
 
   async def shake(self, shake_type: ShakeType) -> None:
-    """ Warning: the duration for shaking has to be specified on the machine, and the maximum is
+    """Warning: the duration for shaking has to be specified on the machine, and the maximum is
     16 minutes. As a hack, we start shaking for the maximum duration every time as long as stop
-    is not called. """
-    max_duration = 16*60 # 16 minutes
+    is not called."""
+    max_duration = 16 * 60  # 16 minutes
 
     async def shake_maximal_duration():
-      """ This method will start the shaking, but returns immediately after
-      shaking has started. """
+      """This method will start the shaking, but returns immediately after
+      shaking has started."""
       resp = await self.send_command("y", "08120112207434014351135308559127881422\x03")
 
       shake_type_bit = str(shake_type.value)
       duration = str(max_duration).zfill(3)
       cmd = f"0033010101010100002000000013{duration}{shake_type_bit}301"
-      checksum = str((sum(cmd.encode())+73) % 100)  # don't know why +73
+      checksum = str((sum(cmd.encode()) + 73) % 100)  # don't know why +73
       cmd = cmd + checksum + "\x03"
       await self.send_command("D", cmd)
 
@@ -372,7 +380,7 @@ class Cytation5Backend(ImageReaderBackend):
       self._shaking_task = None
 
   def _get_device_info(self, cam):
-    """ Get device info for cameras. """
+    """Get device info for cameras."""
     # should have keys:
     # - DeviceID
     # - DeviceSerialNumber
@@ -430,7 +438,7 @@ class Cytation5Backend(ImageReaderBackend):
     await self.send_command("i", "L0001")
 
   async def set_focus(self, focal_position: FocalPosition):
-    """ focus position in mm """
+    """focus position in mm"""
 
     if focal_position == self._focal_height:
       logger.debug("Focus position is already set to %s", focal_position)
@@ -462,14 +470,16 @@ class Cytation5Backend(ImageReaderBackend):
 
     if self.cam.ExposureAuto.GetAccessMode() != PySpin.RW:
       raise RuntimeError("unable to write ExposureAuto")
-    self.cam.ExposureAuto.SetValue({
-      "off": PySpin.ExposureAuto_Off,
-      "once": PySpin.ExposureAuto_Once,
-      "continuous": PySpin.ExposureAuto_Continuous,
-    }[auto_exposure])
+    self.cam.ExposureAuto.SetValue(
+      {
+        "off": PySpin.ExposureAuto_Off,
+        "once": PySpin.ExposureAuto_Once,
+        "continuous": PySpin.ExposureAuto_Continuous,
+      }[auto_exposure]
+    )
 
   async def set_exposure(self, exposure: Exposure):
-    """ exposure (integration time) in ms, or "auto" """
+    """exposure (integration time) in ms, or "auto" """
 
     if exposure == self._exposure:
       logger.debug("Exposure time is already set to %s", exposure)
@@ -510,7 +520,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._row, self._column = row, column
 
   async def set_gain(self, gain: Gain):
-    """ gain of unknown units, or "auto" """
+    """gain of unknown units, or "auto" """
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
@@ -528,16 +538,21 @@ class Cytation5Backend(ImageReaderBackend):
     if not PySpin.IsReadable(node_gain_auto) or not PySpin.IsWritable(node_gain_auto):
       raise RuntimeError("unable to set automatic gain")
     node = (
-      PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Continuous")) if gain == "auto"
-      else PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Off")))
+      PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Continuous"))
+      if gain == "auto"
+      else PySpin.CEnumEntryPtr(node_gain_auto.GetEntryByName("Off"))
+    )
     if not PySpin.IsReadable(node):
       raise RuntimeError("unable to set automatic gain (enum entry retrieval)")
     node_gain_auto.SetIntValue(node.GetValue())
 
     if not gain == "auto":
       node_gain = PySpin.CFloatPtr(nodemap.GetNode("Gain"))
-      if not PySpin.IsReadable(node_gain) or not PySpin.IsWritable(node_gain) or \
-        node_gain.GetMax() == 0:
+      if (
+        not PySpin.IsReadable(node_gain)
+        or not PySpin.IsWritable(node_gain)
+        or node_gain.GetMax() == 0
+      ):
         raise RuntimeError("unable to set gain")
       min_gain = node_gain.GetMin()
       if gain < min_gain:
@@ -664,5 +679,6 @@ class Cytation5Backend(ImageReaderBackend):
     await self.set_exposure(exposure_time)
     await self.set_focus(focal_height)
     await self.set_gain(gain)
-    return await self._acquire_image(color_processing_algorithm=color_processing_algorithm,
-                                     pixel_format=pixel_format)
+    return await self._acquire_image(
+      color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
+    )

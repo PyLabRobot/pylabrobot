@@ -3,16 +3,18 @@ from typing import Callable, Optional, Union
 
 from .container import Container
 
+
 class TroughBottomType(enum.Enum):
-  """ Enum for the type of bottom of a trough. """
+  """Enum for the type of bottom of a trough."""
 
   FLAT = "flat"
   U = "U"
   V = "V"
   UNKNOWN = "unknown"
 
+
 class Trough(Container):
-  """ A trough is a container, particularly useful for multichannel liquid handling operations. """
+  """A trough is a container, particularly useful for multichannel liquid handling operations."""
 
   def __init__(
     self,
@@ -29,7 +31,6 @@ class Trough(Container):
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
   ):
-
     if isinstance(bottom_type, str):
       bottom_type = TroughBottomType(bottom_type)
 
@@ -43,7 +44,7 @@ class Trough(Container):
       category=category,
       model=model,
       compute_volume_from_height=compute_volume_from_height,
-      compute_height_from_volume=compute_height_from_volume
+      compute_height_from_volume=compute_height_from_volume,
     )
     self.through_base_to_container_base = through_base_to_container_base
     self.bottom_type = bottom_type

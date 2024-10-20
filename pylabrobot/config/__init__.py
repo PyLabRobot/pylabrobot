@@ -6,6 +6,7 @@ config file. If the config file does not exist, a default Config object will be
 created and written to the project directory containing the .git directory. If
 this does not exist, the current directory will be used.
 """
+
 from pathlib import Path
 from typing import Optional, Union
 
@@ -34,10 +35,7 @@ def get_file(base_name: str, _dir: Path) -> Optional[Path]:
   return None
 
 
-def get_config_file(
-  base_name: str,
-  cur_dir: Optional[Union[str, Path]] = None
-) -> Optional[Path]:
+def get_config_file(base_name: str, cur_dir: Optional[Union[str, Path]] = None) -> Optional[Path]:
   """Get the path to the config file.
 
   Args:
@@ -69,8 +67,11 @@ def get_dir_to_create_config_file_in() -> Path:
   return cur_dir
 
 
-def load_config(base_file_name: str, create_default: bool = False,
-                create_module_level: bool = True) -> Config:
+def load_config(
+  base_file_name: str,
+  create_default: bool = False,
+  create_module_level: bool = True,
+) -> Config:
   """Load a Config object from a file.
 
   Args:

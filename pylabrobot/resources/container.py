@@ -8,7 +8,7 @@ from pylabrobot.serializer import serialize
 
 
 class Container(Resource):
-  """ A container is an abstract base class for a resource that can hold liquid. """
+  """A container is an abstract base class for a resource that can hold liquid."""
 
   def __init__(
     self,
@@ -23,7 +23,7 @@ class Container(Resource):
     compute_volume_from_height: Optional[Callable[[float], float]] = None,
     compute_height_from_volume: Optional[Callable[[float], float]] = None,
   ):
-    """ Create a new container.
+    """Create a new container.
 
     Args:
       material_z_thickness: Container cavity base to the (outer) base of the container object. If
@@ -31,8 +31,14 @@ class Container(Resource):
       max_volume: Maximum volume of the container. If `None`, will be inferred from resource size.
     """
 
-    super().__init__(name=name, size_x=size_x, size_y=size_y, size_z=size_z, category=category,
-      model=model)
+    super().__init__(
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      category=category,
+      model=model,
+    )
     self._material_z_thickness = material_z_thickness
     self.max_volume = max_volume or (size_x * size_y * size_z)
     self.tracker = VolumeTracker(max_volume=self.max_volume)
@@ -44,7 +50,8 @@ class Container(Resource):
     if self._material_z_thickness is None:
       raise NotImplementedError(
         f"The current operation is not supported for resource named '{self.name}' of type "
-        f"'{self.__class__.__name__}' because material_z_thickness is not defined.")
+        f"'{self.__class__.__name__}' because material_z_thickness is not defined."
+      )
     return self._material_z_thickness
 
   def serialize(self) -> dict:
@@ -63,8 +70,8 @@ class Container(Resource):
     self.tracker.load_state(state)
 
   def compute_volume_from_height(self, height: float) -> float:
-    """ Compute the volume of liquid in a container from the height of the liquid relative to the
-    bottom of the container. """
+    """Compute the volume of liquid in a container from the height of the liquid relative to the
+    bottom of the container."""
 
     if self._compute_volume_from_height is None:
       raise NotImplementedError(f"compute_volume_from_height not implemented for {self.name}.")
@@ -72,8 +79,8 @@ class Container(Resource):
     return self._compute_volume_from_height(height)
 
   def compute_height_from_volume(self, liquid_volume: float) -> float:
-    """ Compute the height of liquid in a container relative to the container's bottom
-    from the volume of the liquid.  """
+    """Compute the height of liquid in a container relative to the container's bottom
+    from the volume of the liquid."""
 
     if self._compute_height_from_volume is None:
       raise NotImplementedError(f"compute_height_from_volume not implemented for {self.name}.")
@@ -81,7 +88,7 @@ class Container(Resource):
     return self._compute_height_from_volume(liquid_volume)
 
   def get_anchor(self, x: str, y: str, z: str) -> Coordinate:
-    """ Get a relative location within the container. (Update to Resource superclass to
+    """Get a relative location within the container. (Update to Resource superclass to
       include cavity_bottom)
 
     Args:
@@ -100,11 +107,12 @@ class Container(Resource):
       x_, y_ = coordinate.x, coordinate.y
 
       if self._material_z_thickness is None:
-        raise ValueError("Cavity bottom only implemented for containers with a defined" + \
-                         f" material_z_thickness; you used {self.category}")
+        raise ValueError(
+          "Cavity bottom only implemented for containers with a defined"
+          + f" material_z_thickness; you used {self.category}"
+        )
       z_ = self._material_z_thickness
 
       return Coordinate(x_, y_, z_)
     else:
       return super().get_anchor(x, y, z)
-
