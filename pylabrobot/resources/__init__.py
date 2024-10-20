@@ -1,11 +1,11 @@
 from .carrier import (
   Carrier,
-  CarrierSite,
+  PlateHolder,
   PlateCarrier,
   TipCarrier,
   MFXCarrier,
-  create_homogeneous_carrier_sites,
-  create_carrier_sites,
+  create_homogeneous_resources,
+  create_resources,
 )
 from .container import Container
 from .coordinate import Coordinate

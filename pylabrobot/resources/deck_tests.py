@@ -3,12 +3,12 @@ import os
 import unittest
 
 from pylabrobot.resources import (
-  CarrierSite,
+  ResourceHolder,
   Coordinate,
   Deck,
   Plate,
   PlateCarrier,
-  PlateCarrierSite,
+  PlateHolder,
   Resource,
   TipCarrier,
   TipRack,
@@ -17,7 +17,7 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   create_ordered_items_2d,
   standard_volume_tip_with_filter,
-  create_homogeneous_carrier_sites,
+  create_homogeneous_resources,
 )
 
 
@@ -60,11 +60,11 @@ class DeckTests(unittest.TestCase):
       200,
       200,
       200,
-      sites=create_homogeneous_carrier_sites(
-        klass=CarrierSite,
+      sites=create_homogeneous_resources(
+        klass=ResourceHolder,
         locations=[Coordinate(10, 20, 30)],
-        site_size_x=10,
-        site_size_y=10,
+        resource_size_x=10,
+        resource_size_y=10,
       ),
     )
 
@@ -92,11 +92,11 @@ class DeckTests(unittest.TestCase):
       100,
       100,
       100,
-      sites=create_homogeneous_carrier_sites(
-        klass=PlateCarrierSite,
+      sites=create_homogeneous_resources(
+        klass=PlateHolder,
         locations=[Coordinate(10, 20, 30)],
-        site_size_x=10,
-        site_size_y=10,
+        resource_size_x=10,
+        resource_size_y=10,
         pedestal_size_z=0,
       ),
     )
