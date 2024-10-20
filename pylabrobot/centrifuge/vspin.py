@@ -369,7 +369,7 @@ class VSpin(CentrifugeBackend):
     status_resp = await self.get_status()
     status = status_resp[0]
     while status == 0x08:
-      await asyncio.sleep(1)
+      await asyncio.sleep(2)
       status_resp = await self.get_status()
       status = status_resp[0]
 
