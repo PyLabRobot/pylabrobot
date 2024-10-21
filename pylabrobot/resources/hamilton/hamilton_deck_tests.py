@@ -8,33 +8,30 @@ from pylabrobot.resources.ml_star import STF_L, HTF_L, TIP_CAR_480_A00, PLT_CAR_
 
 
 class HamiltonDeckTests(unittest.TestCase):
-    """Tests for the HamiltonDeck class."""
+  """ Tests for the HamiltonDeck class. """
 
-    def build_layout(self):
-        """Build a deck layout for testing"""
-        deck = STARLetDeck()
+  def build_layout(self):
+    """ Build a deck layout for testing """
+    deck = STARLetDeck()
 
-        tip_car = TIP_CAR_480_A00(name="tip_carrier")
-        tip_car[0] = STF_L(name="tip_rack_01")
-        tip_car[1] = STF_L(name="tip_rack_02")
-        tip_car[3] = HTF_L(name="tip_rack_04")
+    tip_car = TIP_CAR_480_A00(name="tip_carrier")
+    tip_car[0] = STF_L(name="tip_rack_01")
+    tip_car[1] = STF_L(name="tip_rack_02")
+    tip_car[3] = HTF_L(name="tip_rack_04")
 
-        plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
-        plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
-        plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
+    plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
+    plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
+    plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
 
-        deck.assign_child_resource(tip_car, rails=1)
-        deck.assign_child_resource(plt_car, rails=21)
+    deck.assign_child_resource(tip_car, rails=1)
+    deck.assign_child_resource(plt_car, rails=21)
 
-        return deck
+    return deck
 
-    def test_summary(self):
-        self.maxDiff = None
-        deck = self.build_layout()
-        self.assertEqual(
-            deck.summary(),
-            textwrap.dedent(
-                """
+  def test_summary(self):
+    self.maxDiff = None
+    deck = self.build_layout()
+    self.assertEqual(deck.summary(), textwrap.dedent("""
     Rail  Resource                      Type           Coordinates (mm)
     =================================================================================
     (-13) ├── trash_core96              Trash          (-232.100, 110.300, 189.000)
@@ -54,21 +51,15 @@ class HamiltonDeckTests(unittest.TestCase):
           │   ├── <empty>
           │
     (32)  ├── trash                     Trash          (800.000, 190.600, 137.100)
-    """[1:]
-            ),
-        )
+    """[1:]))
 
-    def test_assign_gigantic_resource(self):
-        stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
-        deck = STARLetDeck()
-        with self.assertLogs() as log:
-            deck.assign_child_resource(stanley_cup, rails=1)
-        self.assertEqual(
-            log.output,
-            [
-                "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
-                "careful when traversing the deck.",
-                "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
-                "careful when grabbing this resource.",
-            ],
-        )
+  def test_assign_gigantic_resource(self):
+    stanley_cup = StanleyCup_QUENCHER_FLOWSTATE_TUMBLER(name="HUGE")
+    deck = STARLetDeck()
+    with self.assertLogs() as log:
+      deck.assign_child_resource(stanley_cup, rails=1)
+    self.assertEqual(log.output,
+      ["WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+       "careful when traversing the deck.",
+       "WARNING:pylabrobot:Resource 'HUGE' is very high on the deck: 412.42 mm. Be "
+       "careful when grabbing this resource."])

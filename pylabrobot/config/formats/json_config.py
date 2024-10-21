@@ -6,21 +6,21 @@ from pylabrobot.config.formats import ConfigLoader, ConfigSaver
 
 
 class JsonLoader(ConfigLoader):
-    """A ConfigLoader that loads from an IO stream that is JSON formatted."""
+  """ A ConfigLoader that loads from an IO stream that is JSON formatted. """
 
-    extension = "json"
+  extension = "json"
 
-    def load(self, r: IO) -> Config:
-        """Load a Config object from an opened IO stream that is JSON formatted."""
-        config_dict = json.loads(r.read())
-        return Config.from_dict(config_dict)
+  def load(self, r: IO) -> Config:
+    """Load a Config object from an opened IO stream that is JSON formatted."""
+    config_dict = json.loads(r.read())
+    return Config.from_dict(config_dict)
 
 
 class JsonSaver(ConfigSaver):
-    """A ConfigSaver that saves to an IO stream in JSON format."""
+  """ A ConfigSaver that saves to an IO stream in JSON format. """
 
-    extension = "json"
+  extension = "json"
 
-    def save(self, w: IO, cfg: Config):
-        """Save a Config object to an IO stream in JSON format."""
-        json.dump(cfg.as_dict, w)
+  def save(self, w: IO, cfg: Config):
+    """ Save a Config object to an IO stream in JSON format. """
+    json.dump(cfg.as_dict, w)

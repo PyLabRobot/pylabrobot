@@ -1,11 +1,11 @@
 from .carrier import (
-    Carrier,
-    CarrierSite,
-    PlateCarrier,
-    TipCarrier,
-    MFXCarrier,
-    create_homogeneous_carrier_sites,
-    create_carrier_sites,
+  Carrier,
+  CarrierSite,
+  PlateCarrier,
+  TipCarrier,
+  MFXCarrier,
+  create_homogeneous_carrier_sites,
+  create_carrier_sites
 )
 from .container import Container
 from .coordinate import Coordinate
@@ -24,27 +24,13 @@ from .trough import Trough
 from .tube import Tube
 from .tube_rack import TubeRack
 from .utils import (
-    create_equally_spaced_x,
-    create_equally_spaced_y,
-    create_equally_spaced_2d,
-    create_ordered_items_2d,
-)
+  create_equally_spaced_x,
+  create_equally_spaced_y,
+  create_equally_spaced_2d,
+  create_ordered_items_2d)
 
-from .tip_tracker import (
-    TipTracker,
-    does_tip_tracking,
-    no_tip_tracking,
-    set_tip_tracking,
-)
-from .volume_tracker import (
-    VolumeTracker,
-    does_volume_tracking,
-    no_volume_tracking,
-    set_volume_tracking,
-    does_cross_contamination_tracking,
-    no_cross_contamination_tracking,
-    set_cross_contamination_tracking,
-)
+from .tip_tracker import TipTracker, does_tip_tracking, no_tip_tracking, set_tip_tracking
+from .volume_tracker import VolumeTracker, does_volume_tracking, no_volume_tracking, set_volume_tracking, does_cross_contamination_tracking, no_cross_contamination_tracking, set_cross_contamination_tracking
 
 from .resource_stack import ResourceStack
 

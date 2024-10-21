@@ -7,23 +7,19 @@ from pylabrobot.resources.corning_costar.plates import Cor_96_wellplate_360ul_Fb
 
 
 class TestOTDeck(unittest.TestCase):
-    """Tests for the Opentrons deck."""
+  """ Tests for the Opentrons deck. """
+  def setUp(self) -> None:
+    self.maxDiff = None
 
-    def setUp(self) -> None:
-        self.maxDiff = None
+    self.deck = OTDeck()
+    self.deck.assign_child_at_slot(opentrons_96_tiprack_300ul("tip_rack_1"), 7)
+    self.deck.assign_child_at_slot(opentrons_96_tiprack_300ul("tip_rack_2"), 8)
+    self.deck.assign_child_at_slot(opentrons_96_tiprack_300ul("tip_rack_3"), 9)
+    self.deck.assign_child_at_slot(Cor_96_wellplate_360ul_Fb("my_plate"), 4)
+    self.deck.assign_child_at_slot(Cor_96_wellplate_360ul_Fb("my_other_plate"), 5)
 
-        self.deck = OTDeck()
-        self.deck.assign_child_at_slot(opentrons_96_tiprack_300ul("tip_rack_1"), 7)
-        self.deck.assign_child_at_slot(opentrons_96_tiprack_300ul("tip_rack_2"), 8)
-        self.deck.assign_child_at_slot(opentrons_96_tiprack_300ul("tip_rack_3"), 9)
-        self.deck.assign_child_at_slot(Cor_96_wellplate_360ul_Fb("my_plate"), 4)
-        self.deck.assign_child_at_slot(Cor_96_wellplate_360ul_Fb("my_other_plate"), 5)
-
-    def test_summary(self):
-        self.assertEqual(
-            self.deck.summary(),
-            textwrap.dedent(
-                """
+  def test_summary(self):
+    self.assertEqual(self.deck.summary(), textwrap.dedent("""
       Deck: 624.3mm x 565.2mm
 
       +-----------------+-----------------+-----------------+
@@ -43,6 +39,4 @@ class TestOTDeck(unittest.TestCase):
       |  1: Empty       |  2: Empty       |  3: Empty       |
       |                 |                 |                 |
       +-----------------+-----------------+-----------------+
-    """
-            ),
-        )
+    """))

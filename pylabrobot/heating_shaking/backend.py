@@ -3,4 +3,4 @@ from pylabrobot.temperature_controlling.backend import TemperatureControllerBack
 
 
 class HeaterShakerBackend(ShakerBackend, TemperatureControllerBackend):
-    """Heater shaker backend: a union of ShakerBackend and TemperatureControllerBackend"""
+  """ Heater shaker backend: a union of ShakerBackend and TemperatureControllerBackend """
