@@ -9,11 +9,11 @@ from pylabrobot.liquid_handling.backends import WebSocketBackend
 
 
 class WebSocketBackendSetupStopTests(unittest.IsolatedAsyncioTestCase):
-  """ Tests for the setup and stop methods of the websocket backend. """
+  """Tests for the setup and stop methods of the websocket backend."""
 
   @pytest.mark.timeout(20)
   async def test_setup_stop(self):
-    """ Test that the thread is started and stopped correctly. """
+    """Test that the thread is started and stopped correctly."""
 
     backend = WebSocketBackend(num_channels=8)
 
@@ -29,7 +29,7 @@ class WebSocketBackendSetupStopTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WebSocketBackendServerTests(unittest.IsolatedAsyncioTestCase):
-  """ Tests for servers (ws/fs). """
+  """Tests for servers (ws/fs)."""
 
   async def asyncSetUp(self):
     await super().asyncSetUp()
@@ -37,7 +37,7 @@ class WebSocketBackendServerTests(unittest.IsolatedAsyncioTestCase):
     self.backend = WebSocketBackend(num_channels=8)
     await self.backend.setup()
 
-    ws_port = self.backend.ws_port # port may change if port is already in use
+    ws_port = self.backend.ws_port  # port may change if port is already in use
     self.uri = f"ws://localhost:{ws_port}"
     self.client = await websockets.client.connect(self.uri)
 

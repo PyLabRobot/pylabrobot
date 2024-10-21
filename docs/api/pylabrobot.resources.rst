@@ -23,6 +23,7 @@ Resources represent on-deck liquid handling equipment, including tip racks, plat
     PlateCarrier
     Resource
     ResourceStack
+    Rotation
     tip.Tip
     TipCarrier
     TipRack

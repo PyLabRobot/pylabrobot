@@ -1,4 +1,4 @@
-""" A simple JSON serializer. """
+"""A simple JSON serializer."""
 
 import enum
 import inspect
@@ -12,14 +12,13 @@ if sys.version_info >= (3, 10):
 else:
   from typing_extensions import TypeAlias
 
-# pylint: disable=invalid-name
 JSON: TypeAlias = Union[Dict[str, "JSON"], List["JSON"], str, int, float, bool, None]
 
 
 def get_plr_class_from_string(klass_type: str):
-  # pylint: disable=import-outside-toplevel, cyclic-import
   import pylabrobot.resources as resource_module
   import pylabrobot.liquid_handling as lh_module
+
   for name, obj in inspect.getmembers(resource_module) + inspect.getmembers(lh_module):
     if inspect.isclass(obj) and name == klass_type:
       return obj
@@ -27,7 +26,7 @@ def get_plr_class_from_string(klass_type: str):
 
 
 def serialize(obj: Any) -> JSON:
-  """ Serialize an object. """
+  """Serialize an object."""
 
   if isinstance(obj, (int, float, str, bool, type(None))):
     return obj
@@ -41,15 +40,12 @@ def serialize(obj: Any) -> JSON:
     return {
       "type": "function",
       "code": marshal.dumps(obj.__code__).hex(),
-      "closure": serialize(obj.__closure__) if obj.__closure__ else None
+      "closure": serialize(obj.__closure__) if obj.__closure__ else None,
     }
   if isinstance(obj, types.CellType):
-    return {
-      "type": "cell",
-      "contents": serialize(obj.cell_contents)
-    }
+    return {"type": "cell", "contents": serialize(obj.cell_contents)}
   if isinstance(obj, object):
-    if hasattr(obj, "serialize"): # if the object has a custom serialize method
+    if hasattr(obj, "serialize"):  # if the object has a custom serialize method
       return cast(JSON, obj.serialize())
     else:
       data: Dict[str, Any] = {}
@@ -63,21 +59,24 @@ def serialize(obj: Any) -> JSON:
 
 
 def deserialize(data: JSON, allow_marshal: bool = False) -> Any:
-  """ Deserialize an object. """
+  """Deserialize an object."""
 
   if isinstance(data, (int, float, str, bool, type(None))):
     return data
   if isinstance(data, list):
     return [deserialize(item, allow_marshal=allow_marshal) for item in data]
   if isinstance(data, dict):
-    if "type" in data: # deserialize a class
+    if "type" in data:  # deserialize a class
       data = data.copy()
       klass_type = cast(str, data.pop("type"))
       if klass_type == "function" and allow_marshal:
         assert isinstance(data["code"], str)
         code = marshal.loads(bytes.fromhex(data["code"]))
-        closure = tuple(deserialize(data["closure"], allow_marshal=allow_marshal)) \
-            if data["closure"] else None
+        closure = (
+          tuple(deserialize(data["closure"], allow_marshal=allow_marshal))
+          if data["closure"]
+          else None
+        )
         return types.FunctionType(code, globals(), closure=closure)
       if klass_type == "cell":
         return types.CellType(deserialize(data["contents"], allow_marshal=allow_marshal))

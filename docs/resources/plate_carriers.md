@@ -4,7 +4,7 @@ Plate carriers slide into rails on railed-decks like Hamilton STAR(let) and Teca
 
 ## Pedestal z height
 
-> ValueError("pedestal_size_z must be provided. See https://docs.pylabrobot.org/plate_carriers.html#pedestal_size_z for more information.")
+> ValueError("pedestal_size_z must be provided. See https://docs.pylabrobot.org/resources/plate_carriers.html#pedestal_size_z for more information.")
 
 Many plate carriers feature a "pedestal" or "platform" on the sites. Plates can sit on this pedestal, or directly on the bottom of the site. This depends on the pedestal _and_ plate geometry, so it is important that we know the height of the pedestal.
 

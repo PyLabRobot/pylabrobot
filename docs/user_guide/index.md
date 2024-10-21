@@ -16,6 +16,14 @@ using-the-visualizer
 using-trackers
 writing-robot-agnostic-methods
 hamilton-star/hamilton-star
+moving-channels-around
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Centrifuge
+
+centrifuge
 ```
 
 ```{toctree}

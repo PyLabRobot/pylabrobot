@@ -10,6 +10,7 @@ Subpackages
     :maxdepth: 1
 
     pylabrobot.config
+    pylabrobot.centrifuge
     pylabrobot.machine
     pylabrobot.heating_shaking
     pylabrobot.liquid_handling

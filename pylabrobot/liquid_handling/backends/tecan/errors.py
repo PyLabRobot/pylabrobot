@@ -1,8 +1,8 @@
-""" Tecan backend errors """
+"""Tecan backend errors"""
 
 
 class TecanError(Exception):
-  """ Tecan backend errors, raised by a single module. """
+  """Tecan backend errors, raised by a single module."""
 
   def __init__(
     self,
@@ -19,7 +19,7 @@ class TecanError(Exception):
 
 
 def error_code_to_exception(module: str, error_code: int) -> TecanError:
-  """ Convert an error code to an exception """
+  """Convert an error code to an exception"""
   table = None
 
   if module == "C5":
@@ -52,7 +52,7 @@ def error_code_to_exception(module: str, error_code: int) -> TecanError:
       28: "Subdevice error",
       29: "Application switch and axes mismatch",
       30: "Wrong DC-Servo type",
-      31: "Virtual Drive"
+      31: "Virtual Drive",
     }
   elif module == "C1":
     table = {
@@ -74,7 +74,7 @@ def error_code_to_exception(module: str, error_code: int) -> TecanError:
       21: "BCS communication error",
       25: "Download Error",
       28: "Sub device error",
-      30: "Invalid servo version"
+      30: "Invalid servo version",
     }
 
   if table is not None and error_code in table:

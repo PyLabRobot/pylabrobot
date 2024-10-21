@@ -12,14 +12,15 @@ from pylabrobot.resources import (
   HTF_L,
   Cor_96_wellplate_360ul_Fb,
   no_tip_tracking,
-  no_volume_tracking
+  no_volume_tracking,
 )
 
 header_match = matchers.header_matcher({"User-Agent": "pylabrobot/0.1.0"})
 
 
 class TestHTTPBackendCom(unittest.IsolatedAsyncioTestCase):
-  """ Tests for setup and stop """
+  """Tests for setup and stop"""
+
   def setUp(self) -> None:
     self.deck = STARLetDeck()
     self.backend = HTTPBackend("localhost", 8080, num_channels=8)
@@ -53,10 +54,10 @@ class TestHTTPBackendCom(unittest.IsolatedAsyncioTestCase):
 
 
 class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
-  """ Tests for liquid handling ops. """
+  """Tests for liquid handling ops."""
 
   @responses.activate
-  async def asyncSetUp(self) -> None: # type: ignore
+  async def asyncSetUp(self) -> None:  # type: ignore
     responses.add(
       responses.POST,
       "http://localhost:8080/events/setup",
@@ -85,7 +86,7 @@ class TestHTTPBackendOps(unittest.IsolatedAsyncioTestCase):
     await self.lh.setup()
 
   @responses.activate
-  async def asyncTearDown(self) -> None: # type: ignore
+  async def asyncTearDown(self) -> None:  # type: ignore
     await super().asyncTearDown()
     responses.add(
       responses.POST,

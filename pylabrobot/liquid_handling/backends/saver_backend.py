@@ -1,10 +1,12 @@
 from typing import Any, Dict, List
 
-from pylabrobot.liquid_handling.backends.backend import LiquidHandlerBackend
+from pylabrobot.liquid_handling.backends.backend import (
+  LiquidHandlerBackend,
+)
 
 
 class SaverBackend(LiquidHandlerBackend):
-  """ A backend that saves all commands received in a list, for testing purposes. """
+  """A backend that saves all commands received in a list, for testing purposes."""
 
   def __init__(self, num_channels: int, *args, **kwargs):
     super().__init__(*args, **kwargs)
@@ -30,11 +32,21 @@ class SaverBackend(LiquidHandlerBackend):
 
   async def assigned_resource_callback(self, *args, **kwargs):
     self.commands_received.append(
-      {"command": "assigned_resource_callback", "args": args, "kwargs": kwargs})
+      {
+        "command": "assigned_resource_callback",
+        "args": args,
+        "kwargs": kwargs,
+      }
+    )
 
   async def unassigned_resource_callback(self, *args, **kwargs):
     self.commands_received.append(
-      {"command": "unassigned_resource_callback", "args": args, "kwargs": kwargs})
+      {
+        "command": "unassigned_resource_callback",
+        "args": args,
+        "kwargs": kwargs,
+      }
+    )
 
   async def pick_up_tips(self, *args, **kwargs):
     self.commands_received.append({"command": "pick_up_tips", "args": args, "kwargs": kwargs})

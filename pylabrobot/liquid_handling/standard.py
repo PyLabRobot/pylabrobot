@@ -1,4 +1,4 @@
-""" Data structures for the standard form of liquid handling. """
+"""Data structures for the standard form of liquid handling."""
 
 from __future__ import annotations
 
@@ -8,8 +8,15 @@ from typing import List, Optional, Union, Tuple, TYPE_CHECKING
 
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.coordinate import Coordinate
+
 if TYPE_CHECKING:
-  from pylabrobot.resources import Container, Resource, TipRack, Trash, Well
+  from pylabrobot.resources import (
+    Container,
+    Resource,
+    TipRack,
+    Trash,
+    Well,
+  )
   from pylabrobot.resources.tip import Tip
   from pylabrobot.resources.tip_rack import TipSpot
 
@@ -18,7 +25,7 @@ if TYPE_CHECKING:
 class Pickup:
   resource: TipSpot
   offset: Coordinate
-  tip: Tip # TODO: perhaps we can remove this, because the tip spot has the tip?
+  tip: Tip  # TODO: perhaps we can remove this, because the tip spot has the tip?
 
 
 @dataclass(frozen=True)
@@ -87,6 +94,7 @@ class DispensePlate:
   blow_out_air_volume: Optional[float]
   liquids: List[List[Tuple[Optional[Liquid], float]]]
 
+
 @dataclass(frozen=True)
 class AspirationContainer:
   container: Container
@@ -145,26 +153,27 @@ class Move:
     if self.get_direction == self.put_direction:
       return 0
     if (self.get_direction, self.put_direction) in (
-        (GripDirection.FRONT, GripDirection.RIGHT),
-        (GripDirection.RIGHT, GripDirection.BACK),
-        (GripDirection.BACK, GripDirection.LEFT),
-        (GripDirection.LEFT, GripDirection.FRONT),
+      (GripDirection.FRONT, GripDirection.RIGHT),
+      (GripDirection.RIGHT, GripDirection.BACK),
+      (GripDirection.BACK, GripDirection.LEFT),
+      (GripDirection.LEFT, GripDirection.FRONT),
     ):
       return 90
     if (self.get_direction, self.put_direction) in (
-        (GripDirection.FRONT, GripDirection.BACK),
-        (GripDirection.BACK, GripDirection.FRONT),
-        (GripDirection.LEFT, GripDirection.RIGHT),
-        (GripDirection.RIGHT, GripDirection.LEFT),
+      (GripDirection.FRONT, GripDirection.BACK),
+      (GripDirection.BACK, GripDirection.FRONT),
+      (GripDirection.LEFT, GripDirection.RIGHT),
+      (GripDirection.RIGHT, GripDirection.LEFT),
     ):
       return 180
     if (self.get_direction, self.put_direction) in (
-        (GripDirection.RIGHT, GripDirection.FRONT),
-        (GripDirection.BACK, GripDirection.RIGHT),
-        (GripDirection.LEFT, GripDirection.BACK),
-        (GripDirection.FRONT, GripDirection.LEFT),
+      (GripDirection.RIGHT, GripDirection.FRONT),
+      (GripDirection.BACK, GripDirection.RIGHT),
+      (GripDirection.LEFT, GripDirection.BACK),
+      (GripDirection.FRONT, GripDirection.LEFT),
     ):
       return 270
     raise ValueError(f"Invalid grip directions: {self.get_direction}, {self.put_direction}")
+
 
 PipettingOp = Union[Pickup, Drop, Aspiration, Dispense]

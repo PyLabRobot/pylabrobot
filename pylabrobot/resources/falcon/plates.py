@@ -1,12 +1,16 @@
-
 from typing import Optional
 
 from pylabrobot.resources.height_volume_functions import (
   compute_height_from_volume_conical_frustum,
-  compute_volume_from_height_conical_frustum)
+  compute_volume_from_height_conical_frustum,
+)
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.well import CrossSectionType, Well, WellBottomType
+from pylabrobot.resources.well import (
+  CrossSectionType,
+  Well,
+  WellBottomType,
+)
 
 
 def Falcon_96_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
@@ -28,7 +32,7 @@ def Falcon_96_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
       Well,
       num_items_x=12,
       num_items_y=8,
-      dx=11.05, # measured
+      dx=11.05,  # measured
       dy=7.75,  # measured
       dz=1.11,  # from reference manual
       item_dx=8.99,
@@ -45,6 +49,7 @@ def Falcon_96_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
       ),
     ),
   )
+
 
 def Falcon_96_wellplate_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -77,12 +82,13 @@ def Falcon_96_wellplate_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
       num_items_y=8,
       dx=14.38 - TOP_INNER_WELL_RADIUS,  # from spec
       dy=11.39 - TOP_INNER_WELL_RADIUS,  # from spec
-      dz=1.80,      # calibrated manually by z-stepping down using a pipette.
-      item_dx=8.99, # measured
-      item_dy=8.99, # measured
+      dz=1.80,  # calibrated manually by z-stepping down using a pipette.
+      item_dx=8.99,  # measured
+      item_dy=8.99,  # measured
       **well_kwargs,
     ),
   )
+
 
 def Falcon_96_wellplate_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -118,8 +124,8 @@ def Falcon_96_wellplate_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
       num_items_x=12,
       num_items_y=8,
       dx=10.7,  # calculated from spec, manually calibrated
-      dy=7.7,   # calculated from spec, manually calibrated
-      dz=6.7,   # calculated from spec, manually calibrated
+      dy=7.7,  # calculated from spec, manually calibrated
+      dz=6.7,  # calculated from spec, manually calibrated
       item_dx=9,
       item_dy=9,
       **well_kwargs,

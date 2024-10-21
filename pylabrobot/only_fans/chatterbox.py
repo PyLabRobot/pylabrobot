@@ -2,7 +2,7 @@ from pylabrobot.only_fans import FanBackend
 
 
 class FanChatterboxBackend(FanBackend):
-  """ Chatter box backend for device-free testing. Prints out all operations. """
+  """Chatter box backend for device-free testing. Prints out all operations."""
 
   async def setup(self) -> None:
     print("Setting up the fan.")

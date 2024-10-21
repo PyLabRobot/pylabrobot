@@ -1,4 +1,4 @@
-""" Utilities for working with lists. """
+"""Utilities for working with lists."""
 
 from typing import List, Tuple, TypeVar
 
@@ -22,7 +22,7 @@ def assert_shape(list_: List[List[T]], shape: Tuple[int, int]):
 
 
 def reshape_2d(list_: List[T], shape: Tuple[int, int]) -> List[List[T]]:
-  """ Reshape a list into a 2d list.
+  """Reshape a list into a 2d list.
 
   Args:
     list_: The list to reshape.

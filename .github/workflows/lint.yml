@@ -22,5 +22,7 @@ jobs:
           python-version: 3.9
       - name: Install Dependencies
         run: pip install -e '.[dev]'
-      - name: Run Pytest
+      - name: Run linting check
         run: make lint
+      - name: Check formatting
+        run: make format-check

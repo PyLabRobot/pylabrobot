@@ -40,6 +40,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - rename `homogenization_` parameters in `STAR` to `mix_` (https://github.com/PyLabRobot/pylabrobot/pull/261)
 - Hamilton liquid classes are no longer automatically inferred on the backends (`STAR`/`Vantage`). Instead, they create kwargs with `make_(asp|disp)(96)?_kwargs` (https://github.com/PyLabRobot/pylabrobot/pull/248)
   - This also applies to volume correction curves, which are now the users' responsibility.
+- Lids no longer get special treatment when assigned to a ResourceStack. Assign them to a plate directly (https://github.com/PyLabRobot/pylabrobot/pull/267)
+- `Machine` no longer inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
+- `ResourceHolderMixin` is renamed to `ResourceHolder` and now inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
+- You can now place resources on 'rail' 0 on Hamilton decks (left support doesn't touch rail)
 
 ### Added
 
@@ -67,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `HTF_L_ULTRAWIDE`, `ultrawide_high_volume_tip_with_filter` (https://github.com/PyLabRobot/pylabrobot/pull/229/)
 - `get_absolute_size_x`, `get_absolute_size_y`, `get_absolute_size_z` for `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/235)
 - `Cytation5Backend` for plate reading on BioTek Cytation 5 (https://github.com/PyLabRobot/pylabrobot/pull/238)
+  - imaging (https://github.com/PyLabRobot/pylabrobot/pull/277)
 - More chatterboxes (https://github.com/PyLabRobot/pylabrobot/pull/242)
   - `FanChatterboxBackend`
   - `PlateReaderChatterboxBackend`
@@ -80,6 +85,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Add `F.linear_tip_spot_generator` and `F.randomized_tip_spot_generator` for looping over tip spots, with caching (https://github.com/PyLabRobot/pylabrobot/pull/256)
 - Add `skip_autoload`, `skip_iswap`, and `skip_core96_head` flags to `STAR.setup` (https://github.com/PyLabRobot/pylabrobot/pull/263)
 - Add `skip_autoload`, `skip_iswap`, and `skip_core96_head` flags to `Vantage.setup` (https://github.com/PyLabRobot/pylabrobot/pull/263)
+- `Resource.get_highest_known_point` (https://github.com/PyLabRobot/pylabrobot/pull/284)
 
 ### Deprecated
 
@@ -102,9 +108,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `aspirate96` and `dispense96` type check
 - fix angles computed by grip directions (https://github.com/PyLabRobot/pylabrobot/pull/234)
 - picking up rotated resources in `STAR` (https://github.com/PyLabRobot/pylabrobot/pull/233)
+- picking up rotated resources in `Vantage` (https://github.com/PyLabRobot/pylabrobot/pull/268)
 - assigning rotated resources to `PlateReader` now have the correct location (https://github.com/PyLabRobot/pylabrobot/pull/233)
 - use local sizes in computing anchor (https://github.com/PyLabRobot/pylabrobot/pull/233)
 - don't raise a blow out air volume error when requesting 0, or when volume tracking is disabled (https://github.com/PyLabRobot/pylabrobot/pull/262)
+- fix get_child_location for resources rotated by 180 degrees (https://github.com/PyLabRobot/pylabrobot/pull/269)
+- volume tracking on channel 1-n (https://github.com/PyLabRobot/pylabrobot/pull/273)
+- correct trash location on Vantage (https://github.com/PyLabRobot/pylabrobot/pull/285)
 
 ### Removed
 

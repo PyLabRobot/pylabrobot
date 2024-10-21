@@ -13,7 +13,6 @@ class PowderDispenserBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def setup(self) -> None:
-
     """Set up the powder dispenser."""
 
   @abstractmethod
@@ -22,9 +21,7 @@ class PowderDispenserBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def dispense(
-    self,
-    dispense_parameters: List[PowderDispense],
-    **backend_kwargs
+    self, dispense_parameters: List[PowderDispense], **backend_kwargs
   ) -> List[DispenseResults]:
     """Dispense powders with set of dispense parameters."""
 
@@ -34,13 +31,7 @@ class PowderDispense:
   A class for input parameters for powder dispensing.
   """
 
-  def __init__(
-    self,
-    resource: Resource,
-    powder: Powder,
-    amount: float,
-    **kwargs
-  ) -> None:
+  def __init__(self, resource: Resource, powder: Powder, amount: float, **kwargs) -> None:
     self.resource = resource
     self.powder = powder
     self.amount = amount
