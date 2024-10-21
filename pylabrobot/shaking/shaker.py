@@ -8,46 +8,46 @@ from .backend import ShakerBackend
 
 
 class Shaker(ResourceHolderMixin, Machine):
-  """ A shaker machine """
+    """A shaker machine"""
 
-  def __init__(
-    self,
-    name: str,
-    size_x: float,
-    size_y: float,
-    size_z: float,
-    backend: ShakerBackend,
-    category: str = "shaker",
-    model: Optional[str] = None
-  ):
-    super().__init__(
-      name=name,
-      size_x=size_x,
-      size_y=size_y,
-      size_z=size_z,
-      backend=backend,
-      category=category,
-      model=model
-    )
-    self.backend: ShakerBackend = backend  # fix type
+    def __init__(
+        self,
+        name: str,
+        size_x: float,
+        size_y: float,
+        size_z: float,
+        backend: ShakerBackend,
+        category: str = "shaker",
+        model: Optional[str] = None,
+    ):
+        super().__init__(
+            name=name,
+            size_x=size_x,
+            size_y=size_y,
+            size_z=size_z,
+            backend=backend,
+            category=category,
+            model=model,
+        )
+        self.backend: ShakerBackend = backend  # fix type
 
-  async def shake(self, speed: float, duration: Optional[float] = None):
-    """ Shake the shaker at the given speed
+    async def shake(self, speed: float, duration: Optional[float] = None):
+        """Shake the shaker at the given speed
 
-    Args:
-      speed: Speed of shaking in revolutions per minute (RPM)
-      duration: Duration of shaking in seconds. If None, shake indefinitely.
-    """
+        Args:
+          speed: Speed of shaking in revolutions per minute (RPM)
+          duration: Duration of shaking in seconds. If None, shake indefinitely.
+        """
 
-    await self.backend.shake(speed=speed)
+        await self.backend.shake(speed=speed)
 
-    if duration is None:
-      return
+        if duration is None:
+            return
 
-    await asyncio.sleep(duration)
-    await self.backend.stop_shaking()
+        await asyncio.sleep(duration)
+        await self.backend.stop_shaking()
 
-  async def stop_shaking(self):
-    """ Stop shaking the shaker """
+    async def stop_shaking(self):
+        """Stop shaking the shaker"""
 
-    await self.backend.stop_shaking()
+        await self.backend.stop_shaking()

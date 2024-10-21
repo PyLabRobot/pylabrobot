@@ -4,6 +4,6 @@ from pylabrobot.heating_shaking.heater_shaker import HeaterShaker  # pylint: dis
 
 
 class HeaterShakerTest(unittest.TestCase):
-  def test_it(self) -> None:
-    # This is actually needed to test GitHub Actions imports
-    pass
+    def test_it(self) -> None:
+        # This is actually needed to test GitHub Actions imports
+        pass
