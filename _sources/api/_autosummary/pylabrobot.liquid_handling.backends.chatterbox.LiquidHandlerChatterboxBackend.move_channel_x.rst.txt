@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.chatterbox.LiquidHandlerChatterboxBackend.move\_channel\_x
+===============================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.chatterbox
+
+.. automethod:: LiquidHandlerChatterboxBackend.move_channel_x

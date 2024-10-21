@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin.VSpin.read\_resp
+============================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin
+
+.. automethod:: VSpin.read_resp

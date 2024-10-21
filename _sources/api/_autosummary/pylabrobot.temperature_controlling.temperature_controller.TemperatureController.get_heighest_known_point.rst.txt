@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.temperature\_controller.TemperatureController.get\_heighest\_known\_point
+=============================================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.temperature_controller
+
+.. automethod:: TemperatureController.get_heighest_known_point
