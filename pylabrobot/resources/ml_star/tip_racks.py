@@ -1,5 +1,3 @@
-"""ML Star tips"""
-
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.tip_rack import (
   TipSpot,
@@ -23,7 +21,7 @@ from .tip_creators import (
 )
 
 
-def FourmlTF_L(name: str, with_tips: bool = True) -> TipRack:
+def FourmlTF(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack 24x 4ml Tip with Filter landscape oriented"""
   return TipRack(
     name=name,
@@ -48,12 +46,19 @@ def FourmlTF_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def FourmlTF_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "FourmlTF instead.")
+
+
 def FourmlTF_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack 24x 4ml Tip with Filter portrait oriented"""
-  return FourmlTF_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "FourmlTF().rotated(z=90) instead.")
 
 
-def FivemlT_L(name: str, with_tips: bool = True) -> TipRack:
+def FivemlT(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack 24x 5ml Tip landscape oriented"""
   return TipRack(
     name=name,
@@ -78,12 +83,19 @@ def FivemlT_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def FivemlT_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "FivemlT instead.")
+
+
 def FivemlT_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack 24x 5ml Tip portrait oriented"""
-  return FivemlT_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "FivemlT().rotated(z=90) instead.")
 
 
-def HTF_L(name: str, with_tips: bool = True) -> TipRack:
+def HTF(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 1000ul High Volume Tip with filter"""
   return TipRack(
     name=name,
@@ -106,6 +118,18 @@ def HTF_L(name: str, with_tips: bool = True) -> TipRack:
     ),
     with_tips=with_tips,
   )
+
+
+def HTF_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "HTF instead.")
+
+
+def HTF_P(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "HTF().rotated(z=90) instead.")
 
 
 def HTF_L_WIDE(name: str, with_tips: bool = True) -> TipRack:
@@ -158,12 +182,7 @@ def HTF_L_ULTRAWIDE(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-def HTF_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack with 96 1000ul High Volume Tip with filter (portrait)"""
-  return HTF_L(name=name, with_tips=with_tips).rotated(z=90)
-
-
-def HT_L(name: str, with_tips: bool = True) -> TipRack:
+def HT(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 1000ul High Volume Tip"""
   return TipRack(
     name=name,
@@ -188,12 +207,19 @@ def HT_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def HT_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "HT instead.")
+
+
 def HT_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack with 96 1000ul High Volume Tip (portrait)"""
-  return HT_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "HT().rotated(z=90) instead.")
 
 
-def LTF_L(name: str, with_tips: bool = True) -> TipRack:
+def LTF(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 10ul Low Volume Tip with filter"""
   return TipRack(
     name=name,
@@ -218,12 +244,19 @@ def LTF_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def LTF_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "LTF instead.")
+
+
 def LTF_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack with 96 10ul Low Volume Tip with filter (portrait)"""
-  return LTF_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "LTF().rotated(z=90) instead.")
 
 
-def LT_L(name: str, with_tips: bool = True) -> TipRack:
+def LT(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 10ul Low Volume Tip"""
   return TipRack(
     name=name,
@@ -248,12 +281,19 @@ def LT_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def LT_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "LT instead.")
+
+
 def LT_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack with 96 10ul Low Volume Tip (portrait)"""
-  return LT_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "LT().rotated(z=90) instead.")
 
 
-def STF_L(name: str, with_tips: bool = True) -> TipRack:
+def STF(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 300ul Standard Volume Tip with filter"""
   return TipRack(
     name=name,
@@ -278,12 +318,19 @@ def STF_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def STF_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "STF instead.")
+
+
 def STF_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack with 96 300ul Standard Volume Tip with filter (portrait)"""
-  return STF_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "STF().rotated(z=90) instead.")
 
 
-def STF_Slim_L(name: str, with_tips: bool = True) -> TipRack:
+def STF_Slim(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 300ul Slim Standard Volume Tip with filter"""
   return TipRack(
     name=name,
@@ -308,12 +355,19 @@ def STF_Slim_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def STF_Slim_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "STF_Slim instead.")
+
+
 def STF_Slim_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack with 96 300ul Slim Standard Volume Tip with filter (portrait)"""
-  return STF_Slim_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "STF_Slim().rotated(z=90) instead.")
 
 
-def ST_L(name: str, with_tips: bool = True) -> TipRack:
+def ST(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 300ul Standard Volume Tip"""
   return TipRack(
     name=name,
@@ -338,12 +392,19 @@ def ST_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def ST_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "ST instead.")
+
+
 def ST_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack with 96 300ul Standard Volume Tip (portrait)"""
-  return ST_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "ST().rotated(z=90) instead.")
 
 
-def TIP_50ul_w_filter_L(name: str, with_tips: bool = True) -> TipRack:
+def TIP_50ul_w_filter(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 50ul Tip with filter"""
   return TipRack(
     name=name,
@@ -368,12 +429,19 @@ def TIP_50ul_w_filter_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def TIP_50ul_w_filter_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "TIP_50ul_w_filter instead.")
+
+
 def TIP_50ul_w_filter_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack with 96 50ul Tip with filter (portrait)"""
-  return TIP_50ul_w_filter_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "TIP_50ul_w_filter().rotated(z=90) instead.")
 
 
-def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
+def TIP_50ul(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 50ul Tip"""
   return TipRack(
     name=name,
@@ -398,9 +466,16 @@ def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def TIP_50ul_L(name: str, with_tips: bool = True) -> TipRack:
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "TIP_50ul instead.")
+
+
 def TIP_50ul_P(name: str, with_tips: bool = True) -> TipRack:
-  """Tip Rack with 96 50ul Tip (portrait)"""
-  return TIP_50ul_L(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "TIP_50ul().rotated(z=90) instead.")
 
 
 def Hamilton_96_tiprack_50ul_NTR(name: str, with_tips: bool = True) -> NestedTipRack:
@@ -431,10 +506,12 @@ def Hamilton_96_tiprack_50ul_NTR(name: str, with_tips: bool = True) -> NestedTip
 
 
 def Hamilton_96_tiprack_50ul_NTR_L(name: str, with_tips: bool = True) -> NestedTipRack:
-  """Nested Tip Rack with 96 50ul Tip (landscape, i.e. default)"""
-  return Hamilton_96_tiprack_50ul_NTR(name=name, with_tips=with_tips)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "Hamilton_96_tiprack_50ul_NTR instead.")
 
 
 def Hamilton_96_tiprack_50ul_NTR_P(name: str, with_tips: bool = True) -> NestedTipRack:
-  """Nested Tip Rack with 96 50ul Tip (portrait)"""
-  return Hamilton_96_tiprack_50ul_NTR(name=name, with_tips=with_tips).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use "
+                            "Hamilton_96_tiprack_50ul_NTR().rotated(z=90) instead.")
