@@ -1,5 +1,3 @@
-"""Porvair plates"""
-
 from typing import Optional
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import (
