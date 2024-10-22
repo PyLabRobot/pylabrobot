@@ -28,7 +28,7 @@ def FourmlTF(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=7.0,
-    model="FourmlTF_L",
+    model="FourmlTF",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=6,
@@ -65,7 +65,7 @@ def FivemlT(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=7.0,
-    model="FivemlT_L",
+    model="FivemlT",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=6,
@@ -102,7 +102,7 @@ def HTF(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="HTF_L",
+    model="HTF",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -132,14 +132,14 @@ def HTF_P(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-def HTF_L_WIDE(name: str, with_tips: bool = True) -> TipRack:
+def HTF_WIDE(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 1000ul High Volume Tip with filter"""
   return TipRack(
     name=name,
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model=HTF_L_WIDE.__name__,
+    model=HTF_WIDE.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -157,14 +157,18 @@ def HTF_L_WIDE(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
-def HTF_L_ULTRAWIDE(name: str, with_tips: bool = True) -> TipRack:
+def HTF_L_WIDE(name: str, with_tips: bool = True) -> TipRack:
+  raise NotImplementedError("_L and _P definitions are deprecated. Use " "HTF_WIDE instead.")
+
+
+def HTF_ULTRAWIDE(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 1000ul High Volume Tip with filter"""
   return TipRack(
     name=name,
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model=HTF_L_ULTRAWIDE.__name__,
+    model=HTF_ULTRAWIDE.__name__,
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -182,6 +186,10 @@ def HTF_L_ULTRAWIDE(name: str, with_tips: bool = True) -> TipRack:
   )
 
 
+def HTF_L_ULTRAWIDE(name: str, with_tips: bool = True) -> TipRack:
+  raise NotImplementedError("_L and _P definitions are deprecated. Use " "HTF_ULTRAWIDE instead.")
+
+
 def HT(name: str, with_tips: bool = True) -> TipRack:
   """Tip Rack with 96 1000ul High Volume Tip"""
   return TipRack(
@@ -189,7 +197,7 @@ def HT(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="HT_L",
+    model="HT",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -226,7 +234,7 @@ def LTF(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="LTF_L",
+    model="LTF",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -263,7 +271,7 @@ def LT(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="LT_L",
+    model="LT",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -300,7 +308,7 @@ def STF(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="STF_L",
+    model="STF",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,
@@ -374,7 +382,7 @@ def ST(name: str, with_tips: bool = True) -> TipRack:
     size_x=122.4,
     size_y=82.6,
     size_z=20.0,
-    model="ST_L",
+    model="ST",
     ordered_items=create_ordered_items_2d(
       TipSpot,
       num_items_x=12,

@@ -6,8 +6,8 @@ from pylabrobot.resources import (
   Coordinate,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
-  HT_L,
-  LT_L,
+  HT,
+  LT,
   Cor_96_wellplate_360ul_Fb,
 )
 from pylabrobot.resources.hamilton import VantageDeck
@@ -244,8 +244,8 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(self.mockVantage, deck=self.deck)
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
-    self.tip_car[0] = self.tip_rack = HT_L(name="tip_rack_01")
-    self.tip_car[1] = self.small_tip_rack = LT_L(name="tip_rack_02")
+    self.tip_car[0] = self.tip_rack = HT(name="tip_rack_01")
+    self.tip_car[1] = self.small_tip_rack = LT(name="tip_rack_02")
     self.deck.assign_child_resource(self.tip_car, rails=18)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
