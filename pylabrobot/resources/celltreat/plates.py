@@ -45,7 +45,7 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, lid: Optional[Lid] = None) -> Pla
     "max_volume": 300,
   }
 
-  # in 229590, which is the same.
+  # in 229590, which should be the same.
   # dx=10.7,  # measured
   # dy=8.75,  # measured
   # dz=2.6,  # calibrated manually
@@ -143,5 +143,7 @@ def CellTreat_6_wellplate_16300ul_Fb_Lid(name: str) -> Lid:
 
 
 def CellTreat_96_wellplate_U(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError("This plate is the same as CellTreat_96_wellplate_350ul_Ub. This "
-                          "function will be removed in the future.")
+  raise NotImplementedError(
+    "This plate is the same as CellTreat_96_wellplate_350ul_Ub. This "
+    "function will be removed in the future."
+  )
