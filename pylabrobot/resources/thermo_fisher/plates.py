@@ -74,20 +74,6 @@ def Thermo_TS_96_wellplate_1200ul_Rb_Lid(name: str) -> Lid:
   # )
 
 
-def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
-  raise NotImplementedError(
-    "This function is deprecated and will be removed in a future version."
-    " Use 'Thermo_TS_96_wellplate_1200ul_Rb' instead."
-  )
-
-
-def ThermoScientific_96_wellplate_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
-  raise NotImplementedError(
-    "This function is deprecated and will be removed in a future version."
-    " Use 'Thermo_TS_96_wellplate_1200ul_Rb' instead."
-  )
-
-
 def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate:
   """Thermo Fisher Scientific/Fisher Scientific cat. no.: AB1127/10243223.
   - Material: Polypropylene (AB-1068, polystyrene).
