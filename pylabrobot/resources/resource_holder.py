@@ -29,6 +29,11 @@ class ResourceHolder(Resource):
   This applies a linear transformation after the rotation to correctly place the child resource.
   """
 
+  def __init__(
+    self, name, size_x, size_y, size_z, rotation=None, category="resource_holder", model=None
+  ):
+    super().__init__(name, size_x, size_y, size_z, rotation, category, model)
+
   def get_default_child_location(self, resource: Resource) -> Coordinate:
     return get_child_location(resource)
 
@@ -39,5 +44,12 @@ class ResourceHolder(Resource):
     reassign: bool = True,
   ):
     location = location or self.get_default_child_location(resource)
-    # mypy doesn't play well with the Mixin pattern
-    return super().assign_child_resource(resource, location, reassign)  # type: ignore
+    if len(self.children) > 0:
+      raise ValueError("ResourceHolders can only take one child at a time.")
+    return super().assign_child_resource(resource, location, reassign)
+
+  @property
+  def resource(self) -> Optional[Resource]:
+    if len(self.children) == 0:
+      return None
+    return self.children[0]

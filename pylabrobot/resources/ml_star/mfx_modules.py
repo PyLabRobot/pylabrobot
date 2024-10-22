@@ -107,8 +107,8 @@ def MFX_TIP_module(name: str) -> MFXModule:
   Module to position a high-, standard-, low volume or 5ml tip rack (but not a 384 tip rack).
   """
 
-  # site_size_x=122.4,
-  # site_size_y=82.6,
+  # resource_size_x=122.4,
+  # resource_size_y=82.6,
 
   return MFXModule(
     name=name,
@@ -126,8 +126,8 @@ def MFX_DWP_rackbased_module(name: str) -> MFXModule:
   Module to position a Deep Well Plate / tube racks (MATRIX or MICRONICS) / NUNC reagent trough.
   """
 
-  # site_size_x=127.76,
-  # site_size_y=85.48,
+  # resource_size_x=127.76,
+  # resource_size_y=85.48,
 
   return MFXModule(
     name=name,
