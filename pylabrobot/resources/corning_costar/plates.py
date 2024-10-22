@@ -1,7 +1,4 @@
 from typing import Optional
-from pylabrobot.resources.errors import (
-  ResourceDefinitionIncompleteError,
-)
 from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.well import (
   Well,
