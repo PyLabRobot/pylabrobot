@@ -1,0 +1,6 @@
+pylabrobot.resources.PlateCarrier.get\_absolute\_size\_y
+========================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: PlateCarrier.get_absolute_size_y

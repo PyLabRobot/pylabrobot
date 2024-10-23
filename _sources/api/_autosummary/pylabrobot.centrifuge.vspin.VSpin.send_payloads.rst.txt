@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin.VSpin.send\_payloads
+================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin
+
+.. automethod:: VSpin.send_payloads

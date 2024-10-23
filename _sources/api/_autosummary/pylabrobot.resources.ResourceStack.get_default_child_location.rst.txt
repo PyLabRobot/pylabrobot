@@ -1,0 +1,6 @@
+pylabrobot.resources.ResourceStack.get\_default\_child\_location
+================================================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ResourceStack.get_default_child_location
