@@ -535,13 +535,17 @@ class Cytation5Backend(ImageReaderBackend):
     self._focal_height = focal_position
 
   async def auto_focus(self, timeout: float = 30):
-    if self._imaging_mode is None:
+    imaging_mode = self._imaging_mode
+    if imaging_mode is None:
       raise RuntimeError("Imaging mode not set. Run set_imaging_mode() first.")
-    if self._exposure is None:
+    exposure = self._exposure
+    if exposure is None:
       raise RuntimeError("Exposure time not set. Run set_exposure() first.")
-    if self._gain is None:
+    gain = self._gain
+    if gain is None:
       raise RuntimeError("Gain not set. Run set_gain() first.")
-    if self._row is None or self._column is None:
+    row, column = self._row, self._column
+    if row is None or column is None:
       raise RuntimeError("Row and column not set. Run select() first.")
     if not USE_NUMPY:
       # This is strange, because Spinnaker requires numpy
@@ -554,15 +558,14 @@ class Cytation5Backend(ImageReaderBackend):
     # objective function: variance of laplacian
     async def evaluate_focus(focus_value):
       image = await self.capture(
-        row=self._row,
-        column=self._column,
-        mode=self._imaging_mode,
+        row=row,
+        column=column,
+        mode=imaging_mode,
         focal_height=focus_value,
-        exposure_time=self._exposure,
-        gain=self._gain,
+        exposure_time=exposure,
+        gain=gain,
       )
-      image = np.asarray(image)
-      laplacian = _laplacian_2d(image)
+      laplacian = _laplacian_2d(np.asarray(image))
       return np.var(laplacian)
 
     # Use golden ratio search to find the best focus value
