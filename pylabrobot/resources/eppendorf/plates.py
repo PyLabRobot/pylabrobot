@@ -102,8 +102,15 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
 
 
 def Eppendorf_96_wellplate_250ul_Vb_L(name: str, with_lid: bool = False) -> Plate:
-  return Eppendorf_96_wellplate_250ul_Vb(name=name, with_lid=with_lid)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use " "Eppendorf_96_wellplate_250ul_Vb instead."
+  )
 
 
 def Eppendorf_96_wellplate_250ul_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  return Eppendorf_96_wellplate_250ul_Vb(name=name, with_lid=with_lid).rotated(90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use "
+    "Eppendorf_96_wellplate_250ul_Vb.rotated(90) instead."
+  )

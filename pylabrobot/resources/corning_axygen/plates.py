@@ -62,9 +62,13 @@ def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
 
 #: Axy_24_DW_10ML_L
 def Axy_24_DW_10ML_L(name: str, with_lid: bool = False) -> Plate:
-  return Axy_24_DW_10ML(name=name, with_lid=with_lid)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError("_L and _P definitions are deprecated. Use " "Axy_24_DW_10ML instead.")
 
 
 #: Axy_24_DW_10ML_P
 def Axy_24_DW_10ML_P(name: str, with_lid: bool = False) -> Plate:
-  return Axy_24_DW_10ML(name=name, with_lid=with_lid).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use " "Axy_24_DW_10ML().rotated(z=90) instead."
+  )

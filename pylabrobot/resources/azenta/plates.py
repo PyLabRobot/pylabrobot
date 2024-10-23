@@ -89,9 +89,17 @@ def Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name: str, with_lid: bool = Fal
 
 #: Azenta4titudeFrameStar_96_wellplate_Vb_L
 def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_L(name: str, with_lid: bool = False) -> Plate:
-  return Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name=name, with_lid=with_lid)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use "
+    "Azenta4titudeFrameStar_96_wellplate_200ul_Vb instead."
+  )
 
 
 #: Azenta4titudeFrameStar_96_wellplate_Vb_P
 def Azenta4titudeFrameStar_96_wellplate_200ul_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  return Azenta4titudeFrameStar_96_wellplate_200ul_Vb(name=name, with_lid=with_lid).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. For portrait, use "
+    "Azenta4titudeFrameStar_96_wellplate_200ul_Vb().rotated(z=90) instead."
+  )
