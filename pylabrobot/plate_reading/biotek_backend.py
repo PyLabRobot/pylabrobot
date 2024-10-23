@@ -6,12 +6,14 @@ from typing import List, Literal, Optional
 
 try:
   from pylibftdi import Device
+
   USE_FTDI = True
 except ImportError:
   USE_FTDI = False
 
 try:
   import numpy as np  # type: ignore
+
   USE_NUMPY = True
 except ImportError:
   USE_NUMPY = False
@@ -47,27 +49,34 @@ def _laplacian_2d(u):
   laplacian = np.zeros_like(u)
 
   # Applying the finite difference approximation for interior points
-  laplacian[1:-1, 1:-1] = (u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[:-2, 1:-1]) + \
-                          (u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, :-2])
+  laplacian[1:-1, 1:-1] = (u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[:-2, 1:-1]) + (
+    u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, :-2]
+  )
 
   # Handle the edges using reflection
-  laplacian[0, 1:-1] = (u[1, 1:-1] - 2 * u[0, 1:-1] + u[0, 1:-1]) + \
-                        (u[0, 2:] - 2 * u[0, 1:-1] + u[0, :-2])
+  laplacian[0, 1:-1] = (u[1, 1:-1] - 2 * u[0, 1:-1] + u[0, 1:-1]) + (
+    u[0, 2:] - 2 * u[0, 1:-1] + u[0, :-2]
+  )
 
-  laplacian[-1, 1:-1] = (u[-2, 1:-1] - 2 * u[-1, 1:-1] + u[-1, 1:-1]) + \
-                        (u[-1, 2:] - 2 * u[-1, 1:-1] + u[-1, :-2])
+  laplacian[-1, 1:-1] = (u[-2, 1:-1] - 2 * u[-1, 1:-1] + u[-1, 1:-1]) + (
+    u[-1, 2:] - 2 * u[-1, 1:-1] + u[-1, :-2]
+  )
 
-  laplacian[1:-1, 0] = (u[2:, 0] - 2 * u[1:-1, 0] + u[:-2, 0]) + \
-                        (u[1:-1, 1] - 2 * u[1:-1, 0] + u[1:-1, 0])
+  laplacian[1:-1, 0] = (u[2:, 0] - 2 * u[1:-1, 0] + u[:-2, 0]) + (
+    u[1:-1, 1] - 2 * u[1:-1, 0] + u[1:-1, 0]
+  )
 
-  laplacian[1:-1, -1] = (u[2:, -1] - 2 * u[1:-1, -1] + u[:-2, -1]) + \
-                        (u[1:-1, -2] - 2 * u[1:-1, -1] + u[1:-1, -1])
+  laplacian[1:-1, -1] = (u[2:, -1] - 2 * u[1:-1, -1] + u[:-2, -1]) + (
+    u[1:-1, -2] - 2 * u[1:-1, -1] + u[1:-1, -1]
+  )
 
   # Handle the corners (reflection)
   laplacian[0, 0] = (u[1, 0] - 2 * u[0, 0] + u[0, 0]) + (u[0, 1] - 2 * u[0, 0] + u[0, 0])
   laplacian[0, -1] = (u[1, -1] - 2 * u[0, -1] + u[0, -1]) + (u[0, -2] - 2 * u[0, -1] + u[0, -1])
   laplacian[-1, 0] = (u[-2, 0] - 2 * u[-1, 0] + u[-1, 0]) + (u[-1, 1] - 2 * u[-1, 0] + u[-1, 0])
-  laplacian[-1, -1] = (u[-2, -1] - 2 * u[-1, -1] + u[-1, -1]) + (u[-1, -2] - 2 * u[-1, -1] + u[-1, -1])
+  laplacian[-1, -1] = (u[-2, -1] - 2 * u[-1, -1] + u[-1, -1]) + (
+    u[-1, -2] - 2 * u[-1, -1] + u[-1, -1]
+  )
 
   return laplacian
 
@@ -550,7 +559,7 @@ class Cytation5Backend(ImageReaderBackend):
         mode=self._imaging_mode,
         focal_height=focus_value,
         exposure_time=self._exposure,
-        gain=self._gain
+        gain=self._gain,
       )
       image = np.asarray(image)
       laplacian = _laplacian_2d(image)
