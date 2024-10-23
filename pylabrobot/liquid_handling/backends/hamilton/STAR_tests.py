@@ -17,13 +17,13 @@ from pylabrobot.resources import (
   TIP_CAR_480_A00,
   TIP_CAR_288_C00,
   PLT_CAR_L5AC_A00,
-  HT_P,
-  HTF_L,
+  HT,
+  HTF,
   Cor_96_wellplate_360ul_Fb,
   no_volume_tracking,
 )
 from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import STF_L
+from pylabrobot.resources.ml_star import STF
 
 from tests.usb import MockDev, MockEndpoint
 
@@ -221,8 +221,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(self.mockSTAR, deck=self.deck)
 
     self.tip_car = TIP_CAR_480_A00(name="tip carrier")
-    self.tip_car[1] = self.tip_rack = STF_L(name="tip_rack_01")
-    self.tip_car[2] = self.tip_rack2 = HTF_L(name="tip_rack_02")
+    self.tip_car[1] = self.tip_rack = STF(name="tip_rack_01")
+    self.tip_car[2] = self.tip_rack2 = HTF(name="tip_rack_02")
     self.deck.assign_child_resource(self.tip_car, rails=1)
 
     self.plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
@@ -900,12 +900,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_portrait_tip_rack_handling(self):
-    # Test with an alternative setup.
-
     deck = STARLetDeck()
     lh = LiquidHandler(self.mockSTAR, deck=deck)
     tip_car = TIP_CAR_288_C00(name="tip carrier")
-    tip_car[0] = tr = HT_P(name="tips_01")
+    tip_car[0] = tr = HT(name="tips_01").rotated(z=90)
     assert tr.rotation.z == 90
     assert tr.location == Coordinate(82.6, 0, 0)
     deck.assign_child_resource(tip_car, rails=2)
