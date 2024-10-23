@@ -70,6 +70,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `get_absolute_size_x`, `get_absolute_size_y`, `get_absolute_size_z` for `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/235)
 - `Cytation5Backend` for plate reading on BioTek Cytation 5 (https://github.com/PyLabRobot/pylabrobot/pull/238)
   - imaging (https://github.com/PyLabRobot/pylabrobot/pull/277)
+    - autofocus (https://github.com/PyLabRobot/pylabrobot/pull/289)
 - More chatterboxes (https://github.com/PyLabRobot/pylabrobot/pull/242)
   - `FanChatterboxBackend`
   - `PlateReaderChatterboxBackend`

@@ -63,6 +63,7 @@ This standard is similar to the [Opentrons API labware naming standard](https://
 ```{toctree}
 :caption: Library
 
+library/agenbio
 library/alpaqua
 library/azenta
 library/boekel
@@ -76,4 +77,5 @@ library/opentrons
 library/porvair
 library/revvity
 library/thermo_fisher
+library/vwr
 ```
