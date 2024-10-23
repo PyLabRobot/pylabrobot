@@ -6,10 +6,15 @@ from typing import List, Literal, Optional
 
 try:
   from pylibftdi import Device
-
   USE_FTDI = True
 except ImportError:
   USE_FTDI = False
+
+try:
+  import numpy as np  # type: ignore
+  USE_NUMPY = True
+except ImportError:
+  USE_NUMPY = False
 
 try:
   import PySpin  # type: ignore
@@ -31,6 +36,65 @@ SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR = (
 )
 PixelFormat_Mono8 = PySpin.PixelFormat_Mono8 if USE_PYSPIN else -1
 SpinnakerException = PySpin.SpinnakerException if USE_PYSPIN else Exception
+
+
+def _laplacian_2d(u):
+  # thanks chat (one shotted this)
+  # verified to be the same as scipy.ndimage.laplace
+  # 6.09 ms ± 40.5 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+
+  # Assumes u is a 2D numpy array and that dx = dy = 1
+  laplacian = np.zeros_like(u)
+
+  # Applying the finite difference approximation for interior points
+  laplacian[1:-1, 1:-1] = (u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[:-2, 1:-1]) + \
+                          (u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, :-2])
+
+  # Handle the edges using reflection
+  laplacian[0, 1:-1] = (u[1, 1:-1] - 2 * u[0, 1:-1] + u[0, 1:-1]) + \
+                        (u[0, 2:] - 2 * u[0, 1:-1] + u[0, :-2])
+
+  laplacian[-1, 1:-1] = (u[-2, 1:-1] - 2 * u[-1, 1:-1] + u[-1, 1:-1]) + \
+                        (u[-1, 2:] - 2 * u[-1, 1:-1] + u[-1, :-2])
+
+  laplacian[1:-1, 0] = (u[2:, 0] - 2 * u[1:-1, 0] + u[:-2, 0]) + \
+                        (u[1:-1, 1] - 2 * u[1:-1, 0] + u[1:-1, 0])
+
+  laplacian[1:-1, -1] = (u[2:, -1] - 2 * u[1:-1, -1] + u[:-2, -1]) + \
+                        (u[1:-1, -2] - 2 * u[1:-1, -1] + u[1:-1, -1])
+
+  # Handle the corners (reflection)
+  laplacian[0, 0] = (u[1, 0] - 2 * u[0, 0] + u[0, 0]) + (u[0, 1] - 2 * u[0, 0] + u[0, 0])
+  laplacian[0, -1] = (u[1, -1] - 2 * u[0, -1] + u[0, -1]) + (u[0, -2] - 2 * u[0, -1] + u[0, -1])
+  laplacian[-1, 0] = (u[-2, 0] - 2 * u[-1, 0] + u[-1, 0]) + (u[-1, 1] - 2 * u[-1, 0] + u[-1, 0])
+  laplacian[-1, -1] = (u[-2, -1] - 2 * u[-1, -1] + u[-1, -1]) + (u[-1, -2] - 2 * u[-1, -1] + u[-1, -1])
+
+  return laplacian
+
+
+async def _golden_ratio_search(func, a, b, tol, timeout):
+  """Golden ratio search to maximize a unimodal function `func` over the interval [a, b]."""
+  # thanks chat
+  phi = (1 + np.sqrt(5)) / 2  # Golden ratio
+
+  c = b - (b - a) / phi
+  d = a + (b - a) / phi
+
+  t0 = time.time()
+  iteration = 0
+  while abs(b - a) > tol:
+    if (await func(c)) > (await func(d)):
+      b = d
+    else:
+      a = c
+    c = b - (b - a) / phi
+    d = a + (b - a) / phi
+    if time.time() - t0 > timeout:
+      raise TimeoutError("Timeout while searching for optimal focus position")
+    iteration += 1
+    logger.debug("Golden ratio search (autofocus) iteration %d, a=%s, b=%s", iteration, a, b)
+
+  return (b + a) / 2
 
 
 class Cytation5Backend(ImageReaderBackend):
@@ -461,8 +525,47 @@ class Cytation5Backend(ImageReaderBackend):
 
     self._focal_height = focal_position
 
-  async def auto_focus(self):
-    raise NotImplementedError("auto_focus not implemented yet")
+  async def auto_focus(self, timeout: float = 30):
+    if self._imaging_mode is None:
+      raise RuntimeError("Imaging mode not set. Run set_imaging_mode() first.")
+    if self._exposure is None:
+      raise RuntimeError("Exposure time not set. Run set_exposure() first.")
+    if self._gain is None:
+      raise RuntimeError("Gain not set. Run set_gain() first.")
+    if self._row is None or self._column is None:
+      raise RuntimeError("Row and column not set. Run select() first.")
+    if not USE_NUMPY:
+      # This is strange, because Spinnaker requires numpy
+      raise RuntimeError("numpy is not installed. See Cytation5 installation instructions.")
+
+    # these seem reasonable, but might need to be adjusted in the future
+    focus_min = 2
+    focus_max = 5
+
+    # objective function: variance of laplacian
+    async def evaluate_focus(focus_value):
+      image = await self.capture(
+        row=self._row,
+        column=self._column,
+        mode=self._imaging_mode,
+        focal_height=focus_value,
+        exposure_time=self._exposure,
+        gain=self._gain
+      )
+      image = np.asarray(image)
+      laplacian = _laplacian_2d(image)
+      return np.var(laplacian)
+
+    # Use golden ratio search to find the best focus value
+    best_focus_value = await _golden_ratio_search(
+      func=evaluate_focus,
+      a=focus_min,
+      b=focus_max,
+      tol=0.01,
+      timeout=timeout,
+    )
+
+    return best_focus_value
 
   async def set_auto_exposure(self, auto_exposure: Literal["off", "once", "continuous"]):
     if self.cam is None:
@@ -677,8 +780,8 @@ class Cytation5Backend(ImageReaderBackend):
     await self.select(row, column)
     await self.set_imaging_mode(mode)
     await self.set_exposure(exposure_time)
-    await self.set_focus(focal_height)
     await self.set_gain(gain)
+    await self.set_focus(focal_height)
     return await self._acquire_image(
       color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
     )
