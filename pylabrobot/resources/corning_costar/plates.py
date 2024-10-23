@@ -88,11 +88,18 @@ def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
 
 
 def Cos_6_wellplate_16800ul_Fb_L(name: str, with_lid: bool = True) -> Plate:
-  return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use " "Cos_6_wellplate_16800ul_Fb instead."
+  )
 
 
 def Cos_6_wellplate_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
-  return Cos_6_wellplate_16800ul_Fb(name=name, with_lid=with_lid).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use "
+    "Cos_6_wellplate_16800ul_Fb().rotated(z=90) instead."
+  )
 
 
 # # # # # # # # # # Cos_96_wellplate_2mL_Vb # # # # # # # # # #
@@ -182,13 +189,17 @@ def Cos_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
 
 
 def Cos_96_wellplate_2mL_Vb_L(name: str, with_lid: bool = False) -> Plate:
-  """Cos_96_wellplate_2mL_Vb"""
-  return Cos_96_wellplate_2mL_Vb(name=name, with_lid=with_lid)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use " "Cos_96_wellplate_2mL_Vb instead."
+  )
 
 
 def Cos_96_wellplate_2mL_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  """Cos_96_wellplate_2mL_Vb"""
-  return Cos_96_wellplate_2mL_Vb(name=name, with_lid=with_lid).rotated(z=90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use " "Cos_96_wellplate_2mL_Vb().rotated(z=90) instead."
+  )
 
 
 # # # # # # # # # # Cor_96_wellplate_360ul_Fb # # # # # # # # # #

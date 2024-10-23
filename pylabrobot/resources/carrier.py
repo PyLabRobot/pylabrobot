@@ -70,13 +70,13 @@ class Carrier(Resource, Generic[S]):
     Creating a `TipCarrier` and assigning one set of tips at location 0 (the bottom):
 
     >>> tip_car = TIP_CAR_480_A00(name='tip carrier')
-    >>> tip_car[0] = STF_L(name='tips_1')
+    >>> tip_car[0] = STF(name='tips_1')
 
     Getting the tips:
 
     >>> tip_car[0]
 
-    STF_L(name='tips_1')
+    STF(name='tips_1')
 
     Deleting the tips:
 

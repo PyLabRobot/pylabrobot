@@ -147,17 +147,7 @@ class TecanDeck(Deck):
     return round((x + _RAILS_WIDTH - 101) / _RAILS_WIDTH) + 1
 
   def summary(self) -> str:
-    """Return a summary of the deck.
-
-    Example:
-      Printing a summary of the deck layout:
-
-      >>> print(deck.summary())
-      Rail     Resource                   Type                Coordinates (mm)
-      ==============================================================================================
-      (1) ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
-          │   ├── tip_rack_01            STF_L               (x: 117.900, y: 240.000, z: 100.000)
-    """
+    """Return a summary of the deck."""
 
     if len(self.get_all_resources()) == 0:
       raise ValueError(
