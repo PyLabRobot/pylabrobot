@@ -61,17 +61,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Thermo_TS_96_wellplate_1200ul_Rb` (https://github.com/PyLabRobot/pylabrobot/pull/215)
 - `Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate` (https://github.com/PyLabRobot/pylabrobot/pull/215)
 - `adapter_hole_size_z` and `plate_z_offset` parameters to `PlateAdapter` (https://github.com/PyLabRobot/pylabrobot/pull/215)
-- `wide_high_volume_tip_with_filter` and `HTF_L_WIDE` (https://github.com/PyLabRobot/pylabrobot/pull/222)
+- `wide_high_volume_tip_with_filter` and `HTF_WIDE` (https://github.com/PyLabRobot/pylabrobot/pull/222)
 - Serialize code cells and closures (https://github.com/PyLabRobot/pylabrobot/pull/220)
 - `Container.get_anchor()` now supports `"cavity_bottom"` as an argument for `z` (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - `pylabrobot.resources.utils.query` for basic querying (https://github.com/PyLabRobot/pylabrobot/commit/4a07f6a32a9a33d0370eb9c29015567c98aea002)
 - `HamiltonLiquidHandler.allow_firmware_planning` to allow STAR/Vantage to plan complex liquid handling operations automatically (may break hardware agnosticity unexpectedly) (https://github.com/PyLabRobot/pylabrobot/pull/224)
 - `size_z` and `nesting_z_height` for `Cor_96_wellplate_360ul_Fb_Lid` (https://github.com/PyLabRobot/pylabrobot/pull/226)
 - `NestedTipRack` (https://github.com/PyLabRobot/pylabrobot/pull/228)
-- `HTF_L_ULTRAWIDE`, `ultrawide_high_volume_tip_with_filter` (https://github.com/PyLabRobot/pylabrobot/pull/229/)
+- `HTF_ULTRAWIDE`, `ultrawide_high_volume_tip_with_filter` (https://github.com/PyLabRobot/pylabrobot/pull/229/)
 - `get_absolute_size_x`, `get_absolute_size_y`, `get_absolute_size_z` for `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/235)
 - `Cytation5Backend` for plate reading on BioTek Cytation 5 (https://github.com/PyLabRobot/pylabrobot/pull/238)
   - imaging (https://github.com/PyLabRobot/pylabrobot/pull/277)
+    - autofocus (https://github.com/PyLabRobot/pylabrobot/pull/289)
 - More chatterboxes (https://github.com/PyLabRobot/pylabrobot/pull/242)
   - `FanChatterboxBackend`
   - `PlateReaderChatterboxBackend`
@@ -95,6 +96,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ThermoScientific_96_DWP_1200ul_Rd` in favor of `Thermo_TS_96_wellplate_1200ul_Rb` (https://github.com/PyLabRobot/pylabrobot/pull/215)
 - `Azenta4titudeFrameStar_96_wellplate_skirted` in favor of `Azenta4titudeFrameStar_96_wellplate_200ul_Vb` (https://github.com/PyLabRobot/pylabrobot/pull/205/)
 - `Cos_96_DWP_2mL_Vb` in favor of `Cos_96_wellplate_2mL_Vb (https://github.com/PyLabRobot/pylabrobot/pull/205/)`
+- Resource definitions with `_L` and `_P`, it is easy enough to use the stem and `.rotated(z=90)` for `_P` (https://github.com/PyLabRobot/pylabrobot/pull/288)
 
 ### Fixed
 

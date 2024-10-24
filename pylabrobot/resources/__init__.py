@@ -58,9 +58,7 @@ from .corning_costar import *
 from .corning_axygen import *
 from .eppendorf import *
 from .falcon import *
-from .greiner import *
 from .hamilton import *
-from .limbro import *
 from .ml_star import *
 from .opentrons import *
 from .porvair import *

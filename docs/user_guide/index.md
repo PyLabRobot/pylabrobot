@@ -17,6 +17,7 @@ using-trackers
 writing-robot-agnostic-methods
 hamilton-star/hamilton-star
 moving-channels-around
+tip-spot-generators
 ```
 
 ```{toctree}

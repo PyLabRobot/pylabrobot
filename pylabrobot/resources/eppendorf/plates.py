@@ -1,5 +1,3 @@
-"""Thermo Fisher & Thermo Fisher Scientific plates"""
-
 from pylabrobot.resources.well import (
   Well,
   WellBottomType,
@@ -9,7 +7,7 @@ from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.plate import Lid, Plate
 
 
-# # # # # # # # # # Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate # # # # # # # # # #
+# # # # # # # # # # Eppendorf_96_wellplate_250ul_Vb # # # # # # # # # #
 
 
 def _compute_volume_from_height_Eppendorf_96_wellplate_250ul_Vb(
@@ -104,8 +102,15 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
 
 
 def Eppendorf_96_wellplate_250ul_Vb_L(name: str, with_lid: bool = False) -> Plate:
-  return Eppendorf_96_wellplate_250ul_Vb(name=name, with_lid=with_lid)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use " "Eppendorf_96_wellplate_250ul_Vb instead."
+  )
 
 
 def Eppendorf_96_wellplate_250ul_Vb_P(name: str, with_lid: bool = False) -> Plate:
-  return Eppendorf_96_wellplate_250ul_Vb(name=name, with_lid=with_lid).rotated(90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use "
+    "Eppendorf_96_wellplate_250ul_Vb.rotated(90) instead."
+  )

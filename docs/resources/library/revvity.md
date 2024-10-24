@@ -8,4 +8,4 @@ Company wikipedia: [Revvity, Inc. (formerly PerkinElmer, Inc.)](https://en.wikip
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
-| 'Revvity_ProxiPlate_384Plus'<br>Part no.: 6008280<br>[manufacturer website](https://www.perkinelmer.com/uk/Product/proxiplate-384-plus-50w-6008280) | ![](img/revvity/revvity_ProxiPlate-384-Plus-White-384-shallow-well-Microplate.jpg) | `Revvity_ProxiPlate_384Plus`
+| 'Revvity_384_wellplate_28ul_Ub'<br>Part no.: 6008280<br>[manufacturer website](https://www.revvity.com/product/proxiplate-384-plus-50w-6008280) | ![](img/revvity/Revvity_384_wellplate_28ul_Ub.jpg) | `Revvity_384_wellplate_28ul_Ub`
