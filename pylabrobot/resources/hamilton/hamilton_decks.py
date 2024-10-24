@@ -207,7 +207,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       Rail     Resource                   Type                Coordinates (mm)
       =============================================================================================
       (1)  ├── tip_car                    TIP_CAR_480_A00     (x: 100.000, y: 240.800, z: 164.450)
-           │   ├── tip_rack_01            STF_L               (x: 117.900, y: 240.000, z: 100.000)
+           │   ├── tip_rack_01            STF                 (x: 117.900, y: 240.000, z: 100.000)
     """
 
     if len(self.get_all_resources()) == 0:

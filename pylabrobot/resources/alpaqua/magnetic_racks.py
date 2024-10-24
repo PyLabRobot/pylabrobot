@@ -1,4 +1,3 @@
-"""Alpaqua magnetic racks"""
 # currently implemented as PlateAdapter to enable simple and fast assignment
 # of plates to them, with self-correcting location placement
 
