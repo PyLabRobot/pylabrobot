@@ -45,6 +45,17 @@ Azenta
     corning_axygen.plates
 
 
+Biorad
+------
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+    biorad.plates
+
+
 Boekel
 ------
 

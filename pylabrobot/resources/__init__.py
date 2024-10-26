@@ -53,6 +53,7 @@ from .resource_stack import ResourceStack
 from .agenbio import *
 from .alpaqua import *
 from .azenta import *
+from .biorad import *
 from .boekel import *
 from .corning_costar import *
 from .corning_axygen import *
