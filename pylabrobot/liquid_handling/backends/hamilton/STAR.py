@@ -5109,6 +5109,7 @@ class STAR(HamiltonLiquidHandler):
     return await self.send_command(
       module="C0",
       command="EI",
+      read_timeout=60,
       xs=f"{x_position:05}",
       xd=x_direction,
       yh=f"{y_position}",
