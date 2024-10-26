@@ -66,6 +66,7 @@ This standard is similar to the [Opentrons API labware naming standard](https://
 library/agenbio
 library/alpaqua
 library/azenta
+library/biorad
 library/boekel
 library/celltreat
 library/corning_axygen
