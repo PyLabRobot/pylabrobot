@@ -7,14 +7,14 @@ from pylabrobot.resources.well import (
 from pylabrobot.resources.utils import create_ordered_items_2d
 
 
-def BioRad_384_DWP_50uL_Vb(name: str) -> Plate:
+def BioRad_384_wellplate_50uL_Vb(name: str) -> Plate:
   return Plate(
     name=name,
     size_x=127.76,
     size_y=85.48,
     size_z=10.40,
     lid=None,
-    model="BioRad_384_DWP_50uL_Vb",
+    model="BioRad_384_wellplate_50uL_Vb",
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=24,
