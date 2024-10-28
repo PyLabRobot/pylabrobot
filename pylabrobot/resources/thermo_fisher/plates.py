@@ -70,7 +70,7 @@ def Thermo_TS_96_wellplate_1200ul_Rb_Lid(name: str) -> Lid:
   #   size_y=85.48,
   #   size_z=5,
   #   nesting_z_height=None, # measure overlap between lid and plate
-  #   model="ThermoScientific_96_DWP_1200ul_Rd_Lid",
+  #   model="Thermo_TS_96_wellplate_1200ul_Rb_Lid",
   # )
 
 
