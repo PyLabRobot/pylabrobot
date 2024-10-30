@@ -5,18 +5,19 @@ from pylabrobot.heating_shaking.backend import HeaterShakerBackend
 
 try:
   import hid  # type: ignore
+
   USE_IDE = True
 except ImportError:
   USE_IDE = False
 
 
 class InhecoThermoShake(HeaterShakerBackend):
-  """ Backend for Inheco Thermoshake devices
+  """Backend for Inheco Thermoshake devices
 
   https://www.inheco.com/thermoshake-ac.html
   """
 
-  def __init__(self, vid=0x03eb, pid=0x2023, serial_number=None):
+  def __init__(self, vid=0x03EB, pid=0x2023, serial_number=None):
     self.vid = vid
     self.pid = pid
     self.serial_number = serial_number
@@ -36,12 +37,12 @@ class InhecoThermoShake(HeaterShakerBackend):
       **super().serialize(),
       "vid": self.vid,
       "pid": self.pid,
-      "serial_number": self.serial_number
+      "serial_number": self.serial_number,
     }
 
   @typing.no_type_check
   def _generate_packets(self, msg):
-    """ Generate packets for the given message.
+    """Generate packets for the given message.
 
     Splits the message into packets of 7 bytes each. The last packet contains the checksum.
     """
@@ -62,7 +63,7 @@ class InhecoThermoShake(HeaterShakerBackend):
         report_buffer[i + 1] = ord(ch_array1[i])
       return [report_buffer]
     else:
-      num2 = (num1 - 1) // 7 # number of packets
+      num2 = (num1 - 1) // 7  # number of packets
       command = []
       for index1 in range(num2 + 1):
         for index2 in range(7):
@@ -83,7 +84,7 @@ class InhecoThermoShake(HeaterShakerBackend):
       return command
 
   def _crc8(self, data, crc: int) -> int:
-    """ Meme crc8 implementation """
+    """Meme crc8 implementation"""
     num = 8
     while num > 0:
       if ((data ^ crc) & 1) == 1:
@@ -97,14 +98,14 @@ class InhecoThermoShake(HeaterShakerBackend):
     return crc
 
   def _read_until_end(self, timeout: int) -> str:
-    """ Read until a packet ends with a \\x00 byte. May read multiple packets. """
+    """Read until a packet ends with a \\x00 byte. May read multiple packets."""
     start = time.time()
     response = b""
     while time.time() - start < timeout:
       packet = self.device.read(64, timeout=timeout)
       if packet is not None and packet != b"":
         if packet.endswith(b"\x00"):
-          response += packet.rstrip(b"\x00") # strip trailing \x00's
+          response += packet.rstrip(b"\x00")  # strip trailing \x00's
           break
         elif packet.endswith(b"#"):
           response += packet[:-1]
@@ -117,7 +118,7 @@ class InhecoThermoShake(HeaterShakerBackend):
     return response.decode("unicode_escape")
 
   def _read_response(self, command: str, timeout: int = 60) -> str:
-    """ Read the response for a given command.
+    """Read the response for a given command.
 
     "The MTC/STC replies to the first four characters of every command with a modified echo. The
     modification changes the capitals of the commands to small letters. i.e. the reply to 5ASE1
@@ -135,7 +136,7 @@ class InhecoThermoShake(HeaterShakerBackend):
     raise TimeoutError("Timeout while waiting for response from device.")
 
   async def send_command(self, command: str, timeout: int = 3):
-    """ Send a command to the device and return the response """
+    """Send a command to the device and return the response"""
     packets = self._generate_packets(command)
     for packet in packets:
       self.device.write(bytes(packet))
@@ -145,12 +146,12 @@ class InhecoThermoShake(HeaterShakerBackend):
     if response[4] != "0":
       raise RuntimeError(f"Error response from device: {response}")
 
-    return response[5:-1] # cut off command, error status, and final checksum byte
+    return response[5:-1]  # cut off command, error status, and final checksum byte
 
   # -- shaker
 
   async def shake(self, speed: float, shape: int = 0):
-    """ Shake the shaker at the given speed
+    """Shake the shaker at the given speed
 
     Args:
       speed: Speed of shaking in revolutions per minute (RPM)
@@ -161,7 +162,7 @@ class InhecoThermoShake(HeaterShakerBackend):
     await self.start_shaking()
 
   async def stop_shaking(self):
-    """ Stop shaking the device """
+    """Stop shaking the device"""
 
     return await self.send_command("1ASE0")
 
@@ -183,7 +184,7 @@ class InhecoThermoShake(HeaterShakerBackend):
   # --- firmware shaking
 
   async def set_shaker_speed(self, speed: float):
-    """ Set the shaker speed on the device, but do not start shaking yet. Use `start_shaking` for
+    """Set the shaker speed on the device, but do not start shaking yet. Use `start_shaking` for
     that.
     """
 
@@ -198,12 +199,12 @@ class InhecoThermoShake(HeaterShakerBackend):
     return await self.send_command(f"1SSR{speed}")
 
   async def start_shaking(self):
-    """ Start shaking the device at the speed set by `set_shaker_speed` """
+    """Start shaking the device at the speed set by `set_shaker_speed`"""
 
     return await self.send_command("1ASE1")
 
   async def set_shaker_shape(self, shape: int):
-    """ Set the shape of the figure that should be shaked.
+    """Set the shape of the figure that should be shaked.
 
     Args:
       shape: 0 = Circle anticlockwise, 1 = Circle clockwise, 2 = Up left down right, 3 = Up right
@@ -221,19 +222,19 @@ class InhecoThermoShake(HeaterShakerBackend):
     await self.send_command(f"1STT{temperature}")
 
   async def start_temperature_control(self):
-    """ Start the temperature control """
+    """Start the temperature control"""
 
     return await self.send_command("1ATE1")
 
   async def stop_temperature_control(self):
-    """ Stop the temperature control """
+    """Stop the temperature control"""
 
     return await self.send_command("1ATE0")
 
   # --- firmware misc
 
   async def get_device_info(self, info_type: int):
-    """ Get device information
+    """Get device information
 
     - 0 Bootstrap Version
     - 1 Application Version
@@ -249,12 +250,12 @@ class InhecoThermoShake(HeaterShakerBackend):
     return await self.send_command("1ASD")
 
   async def activate_touchscreen(self):
-    """ De/activate the touchscreen """
+    """De/activate the touchscreen"""
 
     await self.send_command("0ADD1")
     await self.reset_action_display()
 
   async def deactivate_touchscreen(self):
-    """ De/activate the touchscreen """
+    """De/activate the touchscreen"""
 
     return await self.send_command("0ADD0")

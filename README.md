@@ -1,9 +1,13 @@
 <div style="text-align: center" align="center">
 <img width="400" src=".github/img/logo.png" />
-<h1>PyLabRobot</h1>
 </div>
 
-[**Docs**](https://docs.pylabrobot.org) | [**Forum**](https://forums.pylabrobot.org) | [**Installation**](https://docs.pylabrobot.org/installation.html) | [**Getting started**](https://docs.pylabrobot.org/basic.html)
+<div style="text-align: center" align="center">
+<a href="https://docs.pylabrobot.org"><strong>Docs</strong></a> | 
+<a href="https://discuss.pylabrobot.org"><strong>Forum</strong></a> | 
+<a href="https://docs.pylabrobot.org/installation.html"><strong>Installation</strong></a> | 
+<a href="https://docs.pylabrobot.org/basic.html"><strong>Getting started</strong></a>
+</div>
 
 ## What is PyLabRobot?
 
@@ -17,7 +21,7 @@ Advantages over proprietary software:
 - **Open-source**: PyLabRobot is open-source and free to use.
 - **Control**: With Python, you have ultimate flexibility to control your lab automation equipment. You can write Turing-complete protocols that include feedback loops.
 - **Modern**: PyLabRobot is built on modern Python 3.8+ features and async/await syntax.
-- **Fast support**: PyLabRobot has [an active community forum](https://labautomation.io/c/pylabrobot-user-discussion/26) for support and discussion, and most pull requests are merged within a day.
+- **Fast support**: PyLabRobot has [an active community forum](https://discuss.pylabrobot.org) for support and discussion, and most pull requests are merged within a day.
 
 ### Liquid handling robots ([docs](https://docs.pylabrobot.org/basic.html))
 
@@ -62,7 +66,7 @@ We also provide a browser-based Visualizer which can visualize the state of the 
 
 ### Plate readers ([docs](https://docs.pylabrobot.org/plate_reading.html))
 
-PyLabRobot also provides a layer of general-purpose abstractions for plate readers, currently with just a driver for the ClarioStar. This driver works on Windows, macOS and Linux. Here's a quick example showing how to read a plate using the ClarioStar:
+Moving a plate to a ClarioStar using a liquid handler, and reading luminescence:
 
 ```python
 from pylabrobot.plate_reading import PlateReader, ClarioStar
@@ -75,6 +79,20 @@ lh.assign_child_resource(pr, location=Coordinate(x, y, z))
 lh.move_plate(lh.deck.get_resource("plate"), pr)
 
 data = await pr.read_luminescence()
+```
+
+For Cytation5, use the `Cytation5` backend.
+
+### Centrifuges
+
+Centrifugation at 800g for 60 seconds:
+
+```python
+from pylabrobot.centrifuge import Centrifuge, VSpin
+cf = Centrifuge(name = 'centrifuge', backend = VSpin(bucket_1_position=0), size_x= 1, size_y=1, size_z=1)
+await cf.setup()
+
+await cf.start_spin_cycle(g = 800, duration = 60)
 ```
 
 ### Pumps ([docs](https://docs.pylabrobot.org/pumps.html))
@@ -145,7 +163,7 @@ await fan.turn_on(intensity=100, duration=60)
 
 ### Support
 
-- [forums.pylabrobot.org](https://forums.pylabrobot.org) for questions and discussions.
+- [discuss.pylabrobot.org](https://discuss.pylabrobot.org) for questions and discussions.
 - [GitHub Issues](https://github.com/pylabrobot/pylabrobot/issues) for bug reports and feature requests.
 
 ## Citing

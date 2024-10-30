@@ -1,15 +1,16 @@
 import logging
 from typing import List, Optional
 
-from pylabrobot.resources.resource_holder import ResourceHolderMixin, get_child_location
+from pylabrobot.resources.resource_holder import ResourceHolder
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.plate import Lid, Plate
+from pylabrobot.resources.plate import Plate
 
 logger = logging.getLogger("pylabrobot")
 
-class ResourceStack(ResourceHolderMixin, Resource):
-  """ ResourceStack represent a group of resources that are stacked together and act as a single
+
+class ResourceStack(ResourceHolder, Resource):
+  """ResourceStack represent a group of resources that are stacked together and act as a single
   unit. Stacks can grow be configured to be able to grow in x, y, or z direction. Stacks growing
   in the x direction are from left to right. Stacks growing in the y direction are from front to
   back. Stacks growing in the z direction are from bottom to top, and function as the
@@ -55,10 +56,14 @@ class ResourceStack(ResourceHolderMixin, Resource):
     resources: Optional[List[Resource]] = None,
   ):
     super().__init__(name, size_x=0, size_y=0, size_z=0, category="resource_group")
-    assert direction in ["x", "y", "z"], "Direction must be one of 'x', 'y', or 'z'"
+    assert direction in [
+      "x",
+      "y",
+      "z",
+    ], "Direction must be one of 'x', 'y', or 'z'"
     self.direction = direction
     resources = resources or []
-    if direction == "z": # top to bottom
+    if direction == "z":  # top to bottom
       resources = list(reversed(resources))
     for resource in resources:
       self.assign_child_resource(resource)
@@ -67,7 +72,7 @@ class ResourceStack(ResourceHolderMixin, Resource):
     return f"ResourceGroup({self.name})"
 
   def get_size_x(self) -> float:
-    """ Get local size in the x direction. """
+    """Get local size in the x direction."""
     if len(self.children) == 0:
       return 0
     if self.direction == "x":
@@ -75,7 +80,7 @@ class ResourceStack(ResourceHolderMixin, Resource):
     return max(resource.get_size_x() for resource in self.children)
 
   def get_size_y(self) -> float:
-    """ Get local size in the y direction. """
+    """Get local size in the y direction."""
     if len(self.children) == 0:
       return 0
     if self.direction == "y":
@@ -83,10 +88,11 @@ class ResourceStack(ResourceHolderMixin, Resource):
     return max(resource.get_size_y() for resource in self.children)
 
   def get_size_z(self) -> float:
-    """ Get local size in the z direction. """
+    """Get local size in the z direction."""
+
     def get_actual_resource_height(resource: Resource) -> float:
-      """ Helper function to get the actual height of a resource, accounting for the lid nesting
-      height if the resource is a plate with a lid. """
+      """Helper function to get the actual height of a resource, accounting for the lid nesting
+      height if the resource is a plate with a lid."""
       if isinstance(resource, Plate) and resource.lid is not None:
         return resource.get_size_z() + resource.lid.get_size_z() - resource.lid.nesting_z_height
       return resource.get_size_z()
@@ -97,7 +103,6 @@ class ResourceStack(ResourceHolderMixin, Resource):
     if self.direction != "z":
       return max(get_actual_resource_height(child) for child in self.children)
     return sum(get_actual_resource_height(child) for child in self.children)
-
 
   def get_resource_stack_edge(self) -> Coordinate:
     if self.direction == "x":
@@ -114,37 +119,13 @@ class ResourceStack(ResourceHolderMixin, Resource):
   def get_default_child_location(self, resource: Resource) -> Coordinate:
     return super().get_default_child_location(resource) + self.get_resource_stack_edge()
 
-  def assign_child_resource(self, resource: Resource, location: Optional[Coordinate] = None,
-    reassign: bool = False):
-
-    # special handling for putting a lid on a plate
-    # TODO #247 - Remove special case assignment of a lid to a resource stack
-    if len(self.children) > 0:
-      top_item = self.get_top_item()
-      if isinstance(resource, Lid) and isinstance(top_item, Plate):
-        logger.warning("Assigning a lid to a resource stack is deprecated and will be "
-                       "removed in a future version. Assign the lid to the plate directly instead.")
-        resource_location = self.get_resource_stack_edge()
-        resource_location.z -= resource.nesting_z_height
-        top_item.assign_child_resource(
-          resource,
-          location=get_child_location(resource) + resource_location
-        )
-        return
-
-    super().assign_child_resource(
-      resource,
-      location=location,
-      reassign=reassign
-    )
-
   def unassign_child_resource(self, resource: Resource):
-    if self.direction == "z" and resource != self.children[-1]: # no floating resources
+    if self.direction == "z" and resource != self.children[-1]:  # no floating resources
       raise ValueError("Resource is not the top item in this z-growing stack, cannot unassign")
     return super().unassign_child_resource(resource)
 
   def get_top_item(self) -> Resource:
-    """ Get the top item in the stack.
+    """Get the top item in the stack.
 
     For stacks growing in the x, y or z direction, this is the rightmost, frontmost, or topmost
     item in the stack, respectively.

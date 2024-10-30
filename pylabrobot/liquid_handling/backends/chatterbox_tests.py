@@ -1,18 +1,25 @@
 import unittest
 
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.backends.chatterbox import LiquidHandlerChatterboxBackend
-from pylabrobot.resources import Cor_96_wellplate_360ul_Fb, HTF_L, Coordinate
+from pylabrobot.liquid_handling.backends.chatterbox import (
+  LiquidHandlerChatterboxBackend,
+)
+from pylabrobot.resources import (
+  Cor_96_wellplate_360ul_Fb,
+  HTF,
+  Coordinate,
+)
 from pylabrobot.resources.hamilton import STARLetDeck
 
 
 class ChatterboxBackendTests(unittest.IsolatedAsyncioTestCase):
-  """ Tests for chatterbox backend """
+  """Tests for chatterbox backend"""
+
   def setUp(self) -> None:
     self.deck = STARLetDeck()
     self.backend = LiquidHandlerChatterboxBackend(num_channels=8)
     self.lh = LiquidHandler(self.backend, deck=self.deck)
-    self.tip_rack = HTF_L(name="tip_rack")
+    self.tip_rack = HTF(name="tip_rack")
     self.deck.assign_child_resource(self.tip_rack, rails=3)
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.plate, rails=9)

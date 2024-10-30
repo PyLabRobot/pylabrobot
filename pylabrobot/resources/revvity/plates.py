@@ -1,27 +1,29 @@
-""" Revvity plates """
-
-# pylint: disable=invalid-name
-
 from pylabrobot.resources.plate import Lid, Plate
-from pylabrobot.resources.well import Well, WellBottomType, CrossSectionType
+from pylabrobot.resources.well import (
+  Well,
+  WellBottomType,
+  CrossSectionType,
+)
 from pylabrobot.resources.utils import create_ordered_items_2d
 
-from pylabrobot.resources.height_volume_functions import calculate_liquid_volume_container_2segments_round_vbottom
+from pylabrobot.resources.height_volume_functions import (
+  calculate_liquid_volume_container_2segments_round_vbottom,
+)
 
 
-# # # # # # # # # # Revvity_384_wellplate_28ul_Ub_Lid # # # # # # # # # #
+# # # # # # # # # # Revvity_384_wellplate_28ul_Ub # # # # # # # # # #
 
-def _compute_volume_from_height_Revvity_384_wellplate_28ul_Ub(h: float):
-  """ Simplification: instead of 3 segment (hemisphere-frustum of cone-cylinder)
+
+def _compute_volume_from_height_Revvity_384_wellplate_28ul_Ub(
+  h: float,
+):
+  """Simplification: instead of 3 segment (hemisphere-frustum of cone-cylinder)
   -> 2 segment (cone-cylinder)
   """
   if h > 77:
     raise ValueError(f"Height {h} is too large for Revvity_384_wellplate_28ul_Ub")
   return calculate_liquid_volume_container_2segments_round_vbottom(
-    d=3.3,
-    h_cone = 3,
-    h_cylinder = 2.3,
-    liquid_height=h
+    d=3.3, h_cone=3, h_cylinder=2.3, liquid_height=h
   )
 
 
@@ -40,7 +42,7 @@ def Revvity_384_wellplate_28ul_Ub_Lid(name: str) -> Lid:
 
 #: Revvity_384_wellplate_28ul_Ub
 def Revvity_384_wellplate_28ul_Ub(name: str, with_lid: bool = False) -> Plate:
-  """ Revvity cat. no.: 6008280. nickname "ProxiPlate-384 Plus"
+  """Revvity cat. no.: 6008280. nickname "ProxiPlate-384 Plus"
   - Material: Polystyrene
   - Colour: white
   - "shallow-well"
@@ -60,7 +62,8 @@ def Revvity_384_wellplate_28ul_Ub(name: str, with_lid: bool = False) -> Plate:
     size_z=14.35,
     lid=Revvity_384_wellplate_28ul_Ub_Lid(name + "_lid") if with_lid else None,
     model="Revvity_384_wellplate_28ul_Ub",
-    ordered_items=create_ordered_items_2d(Well,
+    ordered_items=create_ordered_items_2d(
+      Well,
       num_items_x=24,
       num_items_y=16,
       dx=8.83,

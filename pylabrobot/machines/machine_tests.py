@@ -1,5 +1,3 @@
-# pylint: disable=missing-class-docstring
-
 import unittest
 import unittest.mock
 
@@ -24,33 +22,17 @@ class TestMachine(unittest.TestCase):
     pass
 
   def test_serialize(self):
-    m = self.MockMachine(name="test",
-                         size_x=10,
-                         size_y=10,
-                         size_z=10,
-                         backend=self.MockBackend("mock_param"))
-    self.assertEqual(m.serialize(), {
-      "name": "test",
-      "size_x": 10,
-      "size_y": 10,
-      "size_z": 10,
-      "location": None,
-      "rotation": {
-        "type": "Rotation",
-        "x": 0, "y": 0, "z": 0
+    m = self.MockMachine(backend=self.MockBackend("mock_param"))
+    self.assertEqual(
+      m.serialize(),
+      {
+        "backend": {
+          "mock_param": "mock_param",
+          "type": "MockBackend",
+        },
       },
-      "type": "MockMachine",
-      "children": [],
-      "category": None,
-      "parent_name": None,
-      "model": None,
-      "backend": {"mock_param": "mock_param", "type": "MockBackend"}
-    })
+    )
 
   def test_deserialize(self):
-    m = self.MockMachine(name="test",
-                         size_x=10,
-                         size_y=10,
-                         size_z=10,
-                         backend=self.MockBackend("mock_param"))
-    self.assertEqual(Machine.deserialize(m.serialize()), m)
+    m = self.MockMachine(backend=self.MockBackend("mock_param"))
+    Machine.deserialize(m.serialize())  # shouldn't raise
