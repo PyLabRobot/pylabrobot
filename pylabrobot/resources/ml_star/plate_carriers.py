@@ -348,6 +348,7 @@ def PLT_CAR_P3AC_A01(name: str) -> PlateCarrier:
       ],
       site_size_x=86.0,
       site_size_y=127.0,
+      pedestal_size_z=6.55,  # same as PLT_CAR_L5MD_A00
     ),
     model="PLT_CAR_P3AC_A01",
   )
