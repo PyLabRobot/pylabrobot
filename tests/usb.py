@@ -1,8 +1,10 @@
-class MockDev():
+class MockDev:
   def __init__(self, send_response=None):
     self.send_response = send_response
     # split into chunks of 64 bytes
-    self.read_chunks = [self.send_response[i:i+64] for i in range(0, len(self.send_response), 64)]
+    self.read_chunks = [
+      self.send_response[i : i + 64] for i in range(0, len(self.send_response), 64)
+    ]
     self.chunk = 0
 
   def read(self, endpoint, size, timeout=None):
@@ -16,6 +18,6 @@ class MockDev():
     return len(data)
 
 
-class MockEndpoint():
+class MockEndpoint:
   def __init__(self):
     self.wMaxPacketSize = 64

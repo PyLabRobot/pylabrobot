@@ -8,7 +8,7 @@ from pylabrobot.resources.volume_tracker import VolumeTracker
 
 @dataclass
 class Tip:
-  """ A single tip.
+  """A single tip.
 
   Attributes:
     has_filter: whether the tip type has a filter

@@ -5,17 +5,17 @@ from pylabrobot.machines.backends import MachineBackend
 
 
 class PumpBackend(MachineBackend, metaclass=ABCMeta):
-  """ Abstract base class for pump backends. """
+  """Abstract base class for pump backends."""
 
   def run_revolutions(self, num_revolutions: float):
-    """ Run for a given number of revolutions.
+    """Run for a given number of revolutions.
 
     Args:
       num_revolutions: number of revolutions to run.
     """
 
   def run_continuously(self, speed: float):
-    """ Run continuously at a given speed.
+    """Run continuously at a given speed.
 
     If speed is 0, the pump will be halted.
 
@@ -24,10 +24,10 @@ class PumpBackend(MachineBackend, metaclass=ABCMeta):
     """
 
   def halt(self):
-    """ Halt the pump. """
+    """Halt the pump."""
 
   async def stop(self):
-    """ Close the connection to the pump. """
+    """Close the connection to the pump."""
 
 
 class PumpArrayBackend(MachineBackend, metaclass=ABCMeta):
@@ -41,7 +41,7 @@ class PumpArrayBackend(MachineBackend, metaclass=ABCMeta):
   @property
   @abstractmethod
   def num_channels(self) -> int:
-    """ The number of channels that the pump array has. """
+    """The number of channels that the pump array has."""
 
   async def run_revolutions(self, num_revolutions: List[float], use_channels: List[int]):
     """Run the specified channels at the speed selected.
@@ -60,7 +60,7 @@ class PumpArrayBackend(MachineBackend, metaclass=ABCMeta):
     """
 
   async def halt(self):
-    """ Halt the entire pump array. """
+    """Halt the entire pump array."""
 
   async def stop(self):
-    """ Close the connection to the pump array. """
+    """Close the connection to the pump array."""

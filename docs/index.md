@@ -3,8 +3,7 @@
 PyLabRobot is a hardware agnostic, pure Python SDK for liquid handling robots and accessories.
 
 - GitHub repository: [https://github.com/PyLabRobot/pylabrobot](https://github.com/PyLabRobot/pylabrobot)
-- Developer forum: [https://labautomation.io/c/pylabrobot/26](https://labautomation.io/c/pylabrobot/23)
-- User forum: [https://labautomation.io/c/pylabrobot/23](https://labautomation.io/c/pylabrobot/26)
+- Community: [https://discuss.pylabrobot.org](https://discuss.pylabrobot.org)
 - Paper: [https://www.cell.com/device/fulltext/S2666-9986(23)00170-9](https://www.cell.com/device/fulltext/S2666-9986(23)00170-9)
 
 ![Graphical abstract of PyLabRobot](/img/plr.jpg)
@@ -25,12 +24,20 @@ PyLabRobot is different from [PyHamilton](https://github.com/dgretton/pyhamilton
 :class: company
 ```
 
+```{image} /img/used_by/tt.png
+:alt: T-Therapeutics
+:class: company tt
+```
+
 ```{raw} html
 <style>
 .company {
   max-width: 200px;
   display: inline-block;
   margin: 0 1em;
+}
+.tt {
+  max-width: 300px; /* T-Therapeutics logo is wider */
 }
 </style>
 ```
@@ -68,7 +75,7 @@ api/pylabrobot
 ```{toctree}
 :hidden:
 
-Community <https://labautomation.io/c/pylabrobot-user-discussion/26>
+Community <https://discuss.pylabrobot.org/>
 ```
 
 ## Citing

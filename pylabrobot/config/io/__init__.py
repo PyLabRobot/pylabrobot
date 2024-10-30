@@ -5,7 +5,7 @@ from pylabrobot.config.formats import ConfigLoader, ConfigSaver
 
 
 class ConfigReader(ABC):
-  """ConfigReader is an abstract class for reading a Config object from some IO source. """
+  """ConfigReader is an abstract class for reading a Config object from some IO source."""
 
   open_mode: str = "r"
   encoding: str
@@ -15,11 +15,11 @@ class ConfigReader(ABC):
 
   @abstractmethod
   def read(self, r) -> Config:
-    """ Read from a source and load using `format_loader`. """
+    """Read from a source and load using `format_loader`."""
 
 
 class ConfigWriter(ABC):
-  """ConfigWriter is an abstract class for writing a Config object to some IO source. """
+  """ConfigWriter is an abstract class for writing a Config object to some IO source."""
 
   open_mode: str = "w"
   encoding: str
@@ -29,4 +29,4 @@ class ConfigWriter(ABC):
 
   @abstractmethod
   def write(self, w, cfg: Config):
-    """ Serialize cfg using format_saver and write to w. """
+    """Serialize cfg using format_saver and write to w."""

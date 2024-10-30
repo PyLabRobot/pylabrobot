@@ -2,7 +2,7 @@ from pylabrobot.scales.scale_backend import ScaleBackend
 
 
 class ScaleChatterboxBackend(ScaleBackend):
-  """ Chatter box backend for device-free testing. Prints out all operations. """
+  """Chatter box backend for device-free testing. Prints out all operations."""
 
   def __init__(self, dummy_weight: float = 0.0) -> None:
     self._dummy_weight = dummy_weight

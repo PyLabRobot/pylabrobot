@@ -1,4 +1,4 @@
-""" Convert liquid classes from EVOware into Python. """
+"""Convert liquid classes from EVOware into Python."""
 
 from xml.etree.ElementTree import parse
 
@@ -30,7 +30,7 @@ def main(lc):
       "pmp_sensitivity": pmp["sensitivity"],
       "pmp_viscosity": pmp["viscosity"],
       "pmp_character": pmp["character"],
-      "density": liquid_class[0][2].attrib["density"]
+      "density": liquid_class[0][2].attrib["density"],
     }
 
     for subclass in liquid_class[1]:
@@ -82,13 +82,15 @@ def main(lc):
         "dispense_retract_offset": disp[5].attrib["offset"],
       }
 
-      lc.write(f'\n\n')
-      lc.write(f'mapping[({mnv}, {mxv}, LiquidClass.{liquid.name}, TipType.{tip.name})] = TecanLiquidClass(\n')
+      lc.write(f"\n\n")
+      lc.write(
+        f"mapping[({mnv}, {mxv}, LiquidClass.{liquid.name}, TipType.{tip.name})] = TecanLiquidClass(\n"
+      )
       for k, v in glb.items():
-        lc.write(f'  {k}={v},\n')
+        lc.write(f"  {k}={v},\n")
       for k, v in sub.items():
-        lc.write(f'  {k}={v},\n')
-      lc.write(f')\n')
+        lc.write(f"  {k}={v},\n")
+      lc.write(f")\n")
 
 
 if __name__ == "__main__":

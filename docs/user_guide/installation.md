@@ -163,4 +163,14 @@ If you ever wish to switch back from firmware command to use `pyhamilton` or pla
 
 If you get a `usb.core.NoBackendError: No backend available` error: [this](https://github.com/pyusb/pyusb/blob/master/docs/faq.rst#how-do-i-fix-no-backend-available-errors) may be helpful.
 
-If you are still having trouble, please reach out on the [forum](https://forums.pylabrobot.org/c/pylabrobot-user-discussion/26).
+If you are still having trouble, please reach out on [discuss.pylabrobot.org](https://discuss.pylabrobot.org).
+
+## Cytation5 imager
+
+In order to use imaging on the Cytation5, you need to:
+
+1. Install python 3.10
+2. Download Spinnaker SDK and install (including Python) [https://www.teledynevisionsolutions.com/products/spinnaker-sdk/](https://www.teledynevisionsolutions.com/products/spinnaker-sdk/)
+3. Install numpy==1.26 (this is an older version)
+
+If you just want to do plate reading, heating, shaknig, etc. you don't need to follow these specific steps.
