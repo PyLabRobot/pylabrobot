@@ -1207,7 +1207,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def get_iswap_version(self) -> str:
     if self._iswap_version is None:
-      self._iswap_version = (await self.request_iswap_version())
+      self._iswap_version = await self.request_iswap_version()
     return self._iswap_version
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
@@ -6773,7 +6773,7 @@ class STAR(HamiltonLiquidHandler):
     return cast(int, resp["qw"]) == 1
 
   async def request_iswap_version(self) -> str:
-    return (await self.send_command("R0", "RF", fmt="rf"+"&"*15))["rf"]
+    return cast(str, (await self.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
 
   # -------------- 3.18 Cover and port control --------------
 
