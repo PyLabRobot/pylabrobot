@@ -1,7 +1,3 @@
-"""
-This file defines interfaces for all supported Hamilton liquid handling robots.
-"""
-
 from abc import ABCMeta
 import datetime
 import enum
@@ -1163,6 +1159,8 @@ class STAR(HamiltonLiquidHandler):
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
+    self._iswap_version: Optional[str] = None  # loaded lazily
+
   @property
   def unsafe(self) -> "UnSafe":
     """Actions that have a higher risk of damaging the robot. Use with care!"""
@@ -1206,6 +1204,12 @@ class STAR(HamiltonLiquidHandler):
   @property
   def core_parked(self) -> bool:
     return self._core_parked is True
+
+  async def get_iswap_version(self) -> str:
+    """Lazily load the iSWAP version. Use cached value if available."""
+    if self._iswap_version is None:
+      self._iswap_version = await self.request_iswap_version()
+    return self._iswap_version
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """Get the id from a firmware response."""
@@ -6206,13 +6210,17 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="GI")
 
-  async def iswap_open_gripper(self, open_position: int = 1320):
+  async def iswap_open_gripper(self, open_position: Optional[int] = None):
     """Open gripper
 
     Args:
       open_position: Open position [0.1mm] (0.1 mm = 16 increments) The gripper moves to pos + 20.
-                     Must be between 0 and 9999. Default 860.
+                     Must be between 0 and 9999. Default 1320 for iSWAP 4.0 (landscape). Default to
+                     910 for iSWAP 3 (portrait).
     """
+
+    if open_position is None:
+      open_position = 910 if (await self.get_iswap_version()).startswith("3") else 1320
 
     assert 0 <= open_position <= 9999, "open_position must be between 0 and 9999"
 
@@ -6764,6 +6772,10 @@ class STAR(HamiltonLiquidHandler):
 
     resp = await self.send_command(module="R0", command="QW", fmt="qw#")
     return cast(int, resp["qw"]) == 1
+
+  async def request_iswap_version(self) -> str:
+    """Firmware command for getting iswap version"""
+    return cast(str, (await self.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
 
   # -------------- 3.18 Cover and port control --------------
 
