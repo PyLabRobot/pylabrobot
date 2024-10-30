@@ -1206,6 +1206,7 @@ class STAR(HamiltonLiquidHandler):
     return self._core_parked is True
 
   async def get_iswap_version(self) -> str:
+    """Lazily load the iSWAP version. Use cached value if available."""
     if self._iswap_version is None:
       self._iswap_version = await self.request_iswap_version()
     return self._iswap_version
@@ -6773,6 +6774,7 @@ class STAR(HamiltonLiquidHandler):
     return cast(int, resp["qw"]) == 1
 
   async def request_iswap_version(self) -> str:
+    """Firmware command for getting iswap version"""
     return cast(str, (await self.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
 
   # -------------- 3.18 Cover and port control --------------
