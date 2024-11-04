@@ -36,7 +36,6 @@ class VSpin(CentrifugeBackend):
     self.homing_position = 0
 
   async def setup(self):
-    self.dev = Device()
     self.dev.open()
     logger.debug("open")
     # TODO: add functionality where if robot has been intialized before nothing needs to happen
