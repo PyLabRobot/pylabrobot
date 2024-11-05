@@ -89,7 +89,7 @@ class Loader(MachineBackend):
 
     # laser check
     r = await self.send_command(bytes.fromhex("1105000300500000b3dc"))
-    if r == b'\x11\x05\x00\x08\x00Q\x05\x00\x00\x03\x00\x00\x00y\xf1':
+    if r == b"\x11\x05\x00\x08\x00Q\x05\x00\x00\x03\x00\x00\x00y\xf1":
       raise LoaderNoPlateError("no plate found on stage")
 
     await self.send_command(bytes.fromhex("1105000a00460700018fc2b540020023dc"))
@@ -105,7 +105,7 @@ class Loader(MachineBackend):
 
     # laser check
     r = await self.send_command(bytes.fromhex("1105000300500000b3dc"))
-    if r == b'\x11\x05\x00\x08\x00Q\x05\x00\x00\x03\x00\x00\x00y\xf1':
+    if r == b"\x11\x05\x00\x08\x00Q\x05\x00\x00\x03\x00\x00\x00y\xf1":
       raise LoaderNoPlateError("no plate found in centrifuge")
 
     await self.send_command(bytes.fromhex("1105000a00460700017b14b6400200d57a"))
@@ -119,7 +119,9 @@ class VSpin(CentrifugeBackend):
   """Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation."""
 
-  def __init__(self, bucket_1_position: int, device_id: Optional[str] = None, loader: Optional[Loader] = None):
+  def __init__(
+    self, bucket_1_position: int, device_id: Optional[str] = None, loader: Optional[Loader] = None
+  ):
     """
     Args:
       device_id: The libftdi id for the centrifuge. Find using
@@ -134,8 +136,10 @@ class VSpin(CentrifugeBackend):
     self.bucket_1_position = bucket_1_position
     self.homing_position = 0
     if loader is not None and device_id is None:
-      raise ValueError("device_id must be provided if loader is provided. Use "
-                       "python3 -m pylibftdi.examples.list_devices to find the device id")
+      raise ValueError(
+        "device_id must be provided if loader is provided. Use "
+        "python3 -m pylibftdi.examples.list_devices to find the device id"
+      )
     self.loader = loader
 
   async def setup(self):
