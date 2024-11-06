@@ -16,9 +16,11 @@ else:
   from typing_extensions import Literal
 
 try:
-  from pylibftdi import Device
+  from pylibftdi import Device, add_custom_vid_pid
 
   USE_FTDI = True
+  add_custom_vid_pid(pids=0xBB68)
+
 except ImportError:
   USE_FTDI = False
 

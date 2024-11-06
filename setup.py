@@ -11,7 +11,7 @@ extras_fw = ["pyserial", "pyusb", "libusb_package<=1.0.26.2"]
 extras_http = ["requests", "types-requests"]
 
 extras_plate_reading = [
-  "pylibftdi",
+  "pylibftdi @ git+https://github.com/maraxen/pylibftdi@6848ece#egg=pylibftdi",
 ]
 
 extras_websockets = ["websockets"]
