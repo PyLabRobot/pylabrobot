@@ -2,7 +2,7 @@ from pylabrobot.resources.trough import Trough
 
 
 def ThermoFisherMatrixTrough8094(name: str) -> Trough:
-  """Thermo Fisher Trough 8094 - 25mL
+  """Thermo Fisher Trough 8094 - 25mL. Part number 8094.
   https://www.thermofisher.com/order/catalog/product/8094
   """
   return Trough(

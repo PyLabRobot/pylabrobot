@@ -45,7 +45,7 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
 )
 from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import STF_L, HTF_L
+from pylabrobot.resources.ml_star import STF, HTF
 from .standard import (
   GripDirection,
   Pickup,
@@ -102,9 +102,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   def test_resource_assignment(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="tip_rack_01")
-    tip_car[1] = STF_L(name="tip_rack_02")
-    tip_car[3] = HTF_L("tip_rack_04")
+    tip_car[0] = STF(name="tip_rack_01")
+    tip_car[1] = STF(name="tip_rack_02")
+    tip_car[3] = HTF("tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
@@ -136,7 +136,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   def test_get_resource(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="tip_rack_01")
+    tip_car[0] = STF(name="tip_rack_01")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
     self.deck.assign_child_resource(tip_car, rails=1)
@@ -159,8 +159,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
   def test_subcoordinates(self):
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="tip_rack_01")
-    tip_car[3] = HTF_L(name="tip_rack_04")
+    tip_car[0] = STF(name="tip_rack_01")
+    tip_car[3] = HTF(name="tip_rack_04")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
     plt_car[2] = Cor_96_wellplate_360ul_Fb(name="dispense plate")
@@ -208,7 +208,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     # Test assigning subresource with the same name as another resource in another carrier. This
     # should raise an ValueError when the carrier is assigned to the liquid handler.
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="sub")
+    tip_car[0] = STF(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="sub")
     self.deck.assign_child_resource(tip_car, rails=1)
@@ -219,7 +219,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
     # Test assigning subresource with the same name as another resource in another carrier, after
     # the carrier has been assigned. This should raise an error.
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="sub")
+    tip_car[0] = STF(name="sub")
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="ok")
     self.deck.assign_child_resource(tip_car, rails=1)
@@ -450,7 +450,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
 
-    self.tip_rack = STF_L(name="tip_rack")
+    self.tip_rack = STF(name="tip_rack")
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
@@ -1017,7 +1017,7 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     self.backend = backends.SaverBackend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    self.tip_rack = STF_L(name="tip_rack")
+    self.tip_rack = STF(name="tip_rack")
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))
@@ -1060,7 +1060,7 @@ class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCa
     self.backend = backends.SaverBackend(num_channels=8)
     self.deck = STARLetDeck()
     self.lh = LiquidHandler(backend=self.backend, deck=self.deck)
-    self.tip_rack = STF_L(name="tip_rack")
+    self.tip_rack = STF(name="tip_rack")
     self.plate = Cor_96_wellplate_360ul_Fb(name="plate")
     self.deck.assign_child_resource(self.tip_rack, location=Coordinate(0, 0, 0))
     self.deck.assign_child_resource(self.plate, location=Coordinate(100, 100, 0))

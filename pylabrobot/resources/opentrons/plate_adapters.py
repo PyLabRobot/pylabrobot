@@ -1,5 +1,3 @@
-"""Opentrons Plate Adapters"""
-
 from pylabrobot.resources.plate_adapter import PlateAdapter
 
 
