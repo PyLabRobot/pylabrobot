@@ -6175,39 +6175,43 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="FY")
 
-  async def move_iswap_x_direction(self, step_size: int = 0, direction: int = 0):
-    """Move iSWAP in X-direction
-
+  async def move_iswap_x(self, step_size: float):
+    """
     Args:
-      step_size: X Step size [0.1mm] Between 0 and 999. Default 0.
-      direction: X direction. 0 = positive 1 = negative
+      step_size: X Step size [1mm] Between -99.9 and 99.9.
     """
 
-    return await self.send_command(module="C0", command="GX", gx=step_size, xd=direction)
+    assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
+    direction = 0 if step_size >= 0 else -1
+    return await self.send_command(
+      module="C0", command="GX", gx=round(step_size * 10), xd=direction
+    )
 
-  async def move_iswap_y_direction(self, step_size: int = 0, direction: int = 0):
-    """Move iSWAP in Y-direction
-
+  async def move_iswap_y(self, step_size: float):
+    """
     Args:
-      step_size: Y Step size [0.1mm] Between 0 and 999. Default 0.
-      direction: Y direction. 0 = positive 1 = negative
+      step_size: Y Step size [1mm] Between -99.9 and 99.9.
     """
 
-    return await self.send_command(module="C0", command="GY", gx=step_size, xd=direction)
+    assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
+    direction = 0 if step_size >= 0 else -1
+    return await self.send_command(
+      module="C0", command="GY", gy=round(step_size * 10), yd=direction
+    )
 
-  async def move_iswap_z_direction(self, step_size: int = 0, direction: int = 0):
-    """Move iSWAP in Z-direction
-
+  async def move_iswap_z(self, step_size: float):
+    """
     Args:
-      step_size: Z Step size [0.1mm] Between 0 and 999. Default 0.
-      direction: Z direction. 0 = positive 1 = negative
+      step_size: Z Step size [1mm] Between -99.9 and 99.9.
     """
 
-    return await self.send_command(module="C0", command="GZ", gx=step_size, xd=direction)
+    assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
+    direction = 0 if step_size >= 0 else -1
+    return await self.send_command(
+      module="C0", command="GZ", gz=round(step_size * 10), zd=direction
+    )
 
   async def open_not_initialized_gripper(self):
-    """Open not initialized gripper"""
-
     return await self.send_command(module="C0", command="GI")
 
   async def iswap_open_gripper(self, open_position: Optional[int] = None):
@@ -6753,15 +6757,19 @@ class STAR(HamiltonLiquidHandler):
     """Request iSWAP position ( grip center )
 
     Returns:
-      xs: Hotel center in X direction [0.1mm]
+      xs: Hotel center in X direction [1mm]
       xd: X direction 0 = positive 1 = negative
-      yj: Gripper center in Y direction [0.1mm]
+      yj: Gripper center in Y direction [1mm]
       yd: Y direction 0 = positive 1 = negative
-      zj: Gripper Z height (gripping height) [0.1mm]
+      zj: Gripper Z height (gripping height) [1mm]
       zd: Z direction 0 = positive 1 = negative
     """
 
-    return await self.send_command(module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#")
+    resp = await self.send_command(module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#")
+    resp["xs"] = resp["xs"] / 10
+    resp["yj"] = resp["yj"] / 10
+    resp["zj"] = resp["zj"] / 10
+    return resp
 
   async def request_iswap_initialization_status(self) -> bool:
     """Request iSWAP initialization status

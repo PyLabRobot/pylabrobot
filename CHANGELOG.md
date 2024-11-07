@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Machine` no longer inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
 - `ResourceHolderMixin` is renamed to `ResourceHolder` and now inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
 - You can now place resources on 'rail' 0 on Hamilton decks (left support doesn't touch rail)
+- rename `STAR.move_iswap_{x,y,z}_direction` to `STAR.move_iswap_{x,y,z}`. Change units to mm. Infer direction. (https://github.com/PyLabRobot/pylabrobot/pull/295)
+- `STAR.request_iswap_position` returns loc in mm (https://github.com/PyLabRobot/pylabrobot/pull/296)
 
 ### Added
 
