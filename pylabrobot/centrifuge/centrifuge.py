@@ -9,12 +9,19 @@ class Centrifuge(Machine):
   def __init__(self, backend: CentrifugeBackend) -> None:
     super().__init__(backend=backend)
     self.backend: CentrifugeBackend = backend  # fix type
+    self._door_open = False
 
   async def open_door(self) -> None:
     await self.backend.open_door()
+    self._door_open = True
 
   async def close_door(self) -> None:
     await self.backend.close_door()
+    self._door_open = False
+
+  @property
+  def door_open(self) -> bool:
+    return self._door_open
 
   async def lock_door(self) -> None:
     await self.backend.lock_door()
