@@ -6757,15 +6757,19 @@ class STAR(HamiltonLiquidHandler):
     """Request iSWAP position ( grip center )
 
     Returns:
-      xs: Hotel center in X direction [0.1mm]
+      xs: Hotel center in X direction [1mm]
       xd: X direction 0 = positive 1 = negative
-      yj: Gripper center in Y direction [0.1mm]
+      yj: Gripper center in Y direction [1mm]
       yd: Y direction 0 = positive 1 = negative
-      zj: Gripper Z height (gripping height) [0.1mm]
+      zj: Gripper Z height (gripping height) [1mm]
       zd: Z direction 0 = positive 1 = negative
     """
 
-    return await self.send_command(module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#")
+    resp = await self.send_command(module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#")
+    resp["xs"] = resp["xs"] / 10
+    resp["yj"] = resp["yj"] / 10
+    resp["zj"] = resp["zj"] / 10
+    return resp
 
   async def request_iswap_initialization_status(self) -> bool:
     """Request iSWAP initialization status
