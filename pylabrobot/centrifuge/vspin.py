@@ -53,6 +53,10 @@ class Loader(MachineBackend):
     self.dev.open()
     self.dev.baudrate = 115384
 
+    status = await self.get_status()
+    if not status.endswith(bytes.fromhex("1105")):
+      raise RuntimeError("Failed to get status")
+
     await self.send_command(bytes.fromhex("110500030014000072b1"))
     await self.send_command(bytes.fromhex("1105000300100000ae71"))
     await self.send_command(bytes.fromhex("110500070024040000008000be89"))
@@ -71,6 +75,9 @@ class Loader(MachineBackend):
 
   def serialize(self):
     return {"device_id": self.dev.device_id, "timeout": self.timeout}
+
+  async def get_status(self) -> bytes:
+    return await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
   async def park(self):
     await self.send_command(bytes.fromhex("1105000e00440b0000000000410000704103007539"))
