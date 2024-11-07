@@ -6183,7 +6183,9 @@ class STAR(HamiltonLiquidHandler):
 
     assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
     direction = 0 if step_size >= 0 else -1
-    return await self.send_command(module="C0", command="GX", gx=round(step_size*10), xd=direction)
+    return await self.send_command(
+      module="C0", command="GX", gx=round(step_size * 10), xd=direction
+    )
 
   async def move_iswap_y(self, step_size: float):
     """
@@ -6193,7 +6195,9 @@ class STAR(HamiltonLiquidHandler):
 
     assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
     direction = 0 if step_size >= 0 else -1
-    return await self.send_command(module="C0", command="GY", gy=round(step_size*10), yd=direction)
+    return await self.send_command(
+      module="C0", command="GY", gy=round(step_size * 10), yd=direction
+    )
 
   async def move_iswap_z(self, step_size: float):
     """
@@ -6203,7 +6207,9 @@ class STAR(HamiltonLiquidHandler):
 
     assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
     direction = 0 if step_size >= 0 else -1
-    return await self.send_command(module="C0", command="GZ", gz=round(step_size*10), zd=direction)
+    return await self.send_command(
+      module="C0", command="GZ", gz=round(step_size * 10), zd=direction
+    )
 
   async def open_not_initialized_gripper(self):
     return await self.send_command(module="C0", command="GI")
