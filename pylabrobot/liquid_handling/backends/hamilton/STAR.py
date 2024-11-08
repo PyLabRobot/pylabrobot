@@ -7244,14 +7244,14 @@ class STAR(HamiltonLiquidHandler):
     Raises an error if the tip length is unsupported or if no tip is present.
 
     Parameters:
-        channel_idx: Index of the pipetting channel (0-based).
+      channel_idx: Index of the pipetting channel (0-based).
 
     Returns:
-        float: The measured tip length in millimeters.
+      The measured tip length in millimeters.
 
     Raises:
-        ValueError: If no tip is present on the channel or if the tip length is
-          unsupported.
+      ValueError: If no tip is present on the channel or if the tip length is
+        unsupported.
     """
 
     # Check there is a tip on the channel
@@ -7306,7 +7306,6 @@ class STAR(HamiltonLiquidHandler):
     aka a controlled 'crash'.
 
     Args:
-      self: The liquid handler.
       channel_idx: The index of the channel to use for probing. Backmost channel = 0.
       lowest_immers_pos: The lowest immersion position in mm.
       start_pos_lld_search: The start position for z-touch search in mm.
@@ -7317,11 +7316,21 @@ class STAR(HamiltonLiquidHandler):
         cf000 = No push down force, drive is switched off.
       post_detection_dist: Distance to move into the trajectory after detection in mm.
       move_channels_to_save_pos_after (bool): Flag to move channels to a safe position after
-      operation.
+        operation.
 
     Returns:
-      float: The detected Z-height in mm.
+      The detected Z-height in mm.
     """
+
+    version = await self.request_pip_channel_version(channel_idx)
+    year_matches = re.search(r"\b\d{4}\b", version)
+    if year_matches is not None:
+      year = int(year_matches.group())
+      if year < 2022:
+        raise ValueError("Z-touch probing is not supported for PIP versions predating 2022, "
+                          f"found version '{version}'")
+    return
+
     z_drive_mm_per_increment = 0.01072765  # mm per increment
     fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
 
