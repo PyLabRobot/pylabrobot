@@ -7213,7 +7213,7 @@ class STAR(HamiltonLiquidHandler):
     STRAIGHT = 2
     LEFT = 3
     REVERSE = 4
-  
+
   async def rotate_iswap_wrist(self, orientation: WristOrientation):
     return await self.send_command(
       module="R0",

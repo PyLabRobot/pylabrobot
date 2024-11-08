@@ -213,7 +213,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     self,
     module: str,
     command: str,
-    auto_id = True,
+    auto_id=True,
     tip_pattern: Optional[List[bool]] = None,
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
