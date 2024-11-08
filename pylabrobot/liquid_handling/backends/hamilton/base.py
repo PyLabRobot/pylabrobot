@@ -36,6 +36,7 @@ logger = logging.getLogger("pylabrobot")
 @dataclass
 class HamiltonTask:
   """A command that has been sent, awaiting a response."""
+
   id_: Optional[int]
   loop: asyncio.AbstractEventLoop
   fut: asyncio.Future
@@ -276,7 +277,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
 
   def _start_reading(
     self,
-    id_: int,
+    id_: Optional[int],
     loop: asyncio.AbstractEventLoop,
     fut: asyncio.Future,
     cmd: str,
@@ -285,7 +286,9 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     """Submit a task to the reading thread. Starts reading thread if it is not already running."""
 
     timeout_time = time.time() + timeout
-    self._waiting_tasks.append(HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time))
+    self._waiting_tasks.append(
+      HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time)
+    )
 
     # Start reading thread if it is not already running.
     if len(self._waiting_tasks) == 1:
@@ -323,7 +326,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         task = self._waiting_tasks[idx]
         if time.time() > task.timeout_time:
           logger.warning("Timeout while waiting for response to command %s.", task.cmd)
-          loop.call_soon_threadsafe(
+          task.loop.call_soon_threadsafe(
             task.fut.set_exception,
             TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
           )
@@ -347,11 +350,13 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         logger.warning("Could not parse response: %s (%s)", resp, e)
         continue
 
-      module_and_command = resp[:self.module_id_length + 2]
+      module_and_command = resp[: self.module_id_length + 2]
       for idx in range(len(self._waiting_tasks)):
         task = self._waiting_tasks[idx]
         # if the command has no id, we have to check the command itself
-        if response_id == task.id_ or (task.id_ is None and task.cmd.startswith(module_and_command)):
+        if response_id == task.id_ or (
+          task.id_ is None and task.cmd.startswith(module_and_command)
+        ):
           try:
             self.check_fw_string_error(resp)
           except Exception as e:
