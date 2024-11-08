@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import asyncio
+from dataclasses import dataclass
 import datetime
 import logging
 import threading
@@ -32,6 +33,16 @@ T = TypeVar("T")
 logger = logging.getLogger("pylabrobot")
 
 
+@dataclass
+class HamiltonTask:
+  """A command that has been sent, awaiting a response."""
+  id_: Optional[int]
+  loop: asyncio.AbstractEventLoop
+  fut: asyncio.Future
+  cmd: str
+  timeout_time: float
+
+
 class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
@@ -48,7 +59,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     write_timeout: int = 30,
   ):
     """
-
     Args:
       device_address: The USB address of the Hamilton device. Only useful if using more than one
         Hamilton device.
@@ -74,10 +84,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     self.id_ = 0
 
     self._reading_thread: Optional[threading.Thread] = None
-    self._waiting_tasks: Dict[
-      int,
-      Tuple[asyncio.AbstractEventLoop, asyncio.Future, str, float],
-    ] = {}
+    self._waiting_tasks: List[HamiltonTask] = []
     self._tth2tti: dict[int, int] = {}  # hash to tip type index
 
     # Whether to allow the firmware to plan liquid handling operations when the y positions are
@@ -91,6 +98,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     await USBBackend.setup(self)
 
   async def stop(self):
+    for task in self._waiting_tasks:
+      task.fut.set_exception(RuntimeError("Stopping HamiltonLiquidHandler."))
     self._waiting_tasks.clear()
     await super().stop()
 
@@ -243,7 +252,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
 
   async def _write_and_read_command(
     self,
-    id_: int,
+    id_: Optional[int],
     cmd: str,
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
@@ -276,7 +285,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     """Submit a task to the reading thread. Starts reading thread if it is not already running."""
 
     timeout_time = time.time() + timeout
-    self._waiting_tasks[id_] = (loop, fut, cmd, timeout_time)
+    self._waiting_tasks.append(HamiltonTask(id_=id_, loop=loop, fut=fut, cmd=cmd, timeout_time=timeout_time))
 
     # Start reading thread if it is not already running.
     if len(self._waiting_tasks) == 1:
@@ -298,31 +307,27 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
   def _continuously_read(self) -> None:
     """Continuously read from the USB port until all tasks are completed.
 
-    Tasks are stored in the `self._waiting_tasks` dictionary, and contain a future that will be
-    completed when the task is finished. Tasks are submitted to the dictionary using the
+    Tasks are stored in the `self._waiting_tasks` list, and contain a future that will be
+    completed when the task is finished. Tasks are submitted to the list using the
     `self._start_reading` method.
 
     On each iteration, read the USB port. If a response is received, parse it and check if it is
     relevant to any of the tasks. If so, complete the future and remove the task from the
-    dictionary. If a task has timed out, complete the future with a `TimeoutError`.
+    list. If a task has timed out, complete the future with a `TimeoutError`.
     """
 
     logger.debug("Starting reading thread...")
 
     while len(self._waiting_tasks) > 0:
-      for id_, (
-        loop,
-        fut,
-        cmd,
-        timeout_time,
-      ) in self._waiting_tasks.items():
-        if time.time() > timeout_time:
-          logger.warning("Timeout while waiting for response to command %s.", cmd)
+      for idx in range(len(self._waiting_tasks) - 1, -1, -1):  # reverse order to allow deletion
+        task = self._waiting_tasks[idx]
+        if time.time() > task.timeout_time:
+          logger.warning("Timeout while waiting for response to command %s.", task.cmd)
           loop.call_soon_threadsafe(
-            fut.set_exception,
-            TimeoutError(f"Timeout while waiting for response to command {cmd}."),
+            task.fut.set_exception,
+            TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
           )
-          del self._waiting_tasks[id_]
+          del self._waiting_tasks[idx]
           break
 
       try:
@@ -342,20 +347,18 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
         logger.warning("Could not parse response: %s (%s)", resp, e)
         continue
 
-      for id_, (
-        loop,
-        fut,
-        cmd,
-        timeout_time,
-      ) in self._waiting_tasks.items():
-        if response_id == id_:
+      module_and_command = resp[:self.module_id_length + 2]
+      for idx in range(len(self._waiting_tasks)):
+        task = self._waiting_tasks[idx]
+        # if the command has no id, we have to check the command itself
+        if response_id == task.id_ or (task.id_ is None and task.cmd.startswith(module_and_command)):
           try:
             self.check_fw_string_error(resp)
           except Exception as e:
-            loop.call_soon_threadsafe(fut.set_exception, e)
+            task.loop.call_soon_threadsafe(task.fut.set_exception, e)
           else:
-            loop.call_soon_threadsafe(fut.set_result, resp)
-          del self._waiting_tasks[id_]
+            task.loop.call_soon_threadsafe(task.fut.set_result, resp)
+          del self._waiting_tasks[idx]
           break
 
     self._reading_thread = None
@@ -480,12 +483,13 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
   ) -> Optional[str]:
     """Send a raw command to the machine."""
     id_index = command.find("id")
-    if id_index == -1:
-      raise ValueError("Command must contain an id.")
-    id_str = command[id_index + 2 : id_index + 6]
-    if not id_str.isdigit():
-      raise ValueError("Id must be a 4 digit int.")
-    id_ = int(id_str)
+    if id_index != -1:
+      id_str = command[id_index + 2 : id_index + 6]
+      if not id_str.isdigit():
+        raise ValueError("Id must be a 4 digit int.")
+      id_ = int(id_str)
+    else:
+      id_ = None
 
     return await self._write_and_read_command(
       id_=id_,
