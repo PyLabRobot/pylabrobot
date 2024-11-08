@@ -52,5 +52,5 @@ def Falcon_tube_14mL_Rb(name: str) -> Tube:
     size_z=95,
     model="Falcon_tube_14mL_Rb",
     material_z_thickness=1.19,
-    max_volume=14_000 # units: ul
+    max_volume=14_000,  # units: ul
   )

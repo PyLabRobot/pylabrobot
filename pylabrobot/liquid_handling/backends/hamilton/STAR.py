@@ -7327,9 +7327,10 @@ class STAR(HamiltonLiquidHandler):
     if year_matches is not None:
       year = int(year_matches.group())
       if year < 2022:
-        raise ValueError("Z-touch probing is not supported for PIP versions predating 2022, "
-                          f"found version '{version}'")
-    return
+        raise ValueError(
+          "Z-touch probing is not supported for PIP versions predating 2022, "
+          f"found version '{version}'"
+        )
 
     z_drive_mm_per_increment = 0.01072765  # mm per increment
     fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
