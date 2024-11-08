@@ -199,13 +199,16 @@ class STARCommandCatcher(STAR):
     self,
     module,
     command,
+    auto_id=True,
     tip_pattern=None,
     fmt="",
     read_timeout=0,
     write_timeout=0,
     **kwargs,
   ):
-    cmd, _ = self._assemble_command(module, command, tip_pattern, **kwargs)
+    cmd, _ = self._assemble_command(
+      module=module, command=command, auto_id=auto_id, tip_pattern=tip_pattern, **kwargs
+    )
     self.commands.append(cmd)
 
   async def stop(self):

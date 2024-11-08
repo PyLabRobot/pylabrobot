@@ -14,7 +14,7 @@ Here's how to create a virtual environment using virtualenv:
 mkdir your_project
 cd your_project
 python -m virtualenv env
-source env/bin/activate
+source env/bin/activate  # on Windows: .\env\Scripts\activate
 ```
 
 ### From source

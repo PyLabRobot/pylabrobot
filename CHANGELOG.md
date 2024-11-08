@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Machine` no longer inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
 - `ResourceHolderMixin` is renamed to `ResourceHolder` and now inherits from `Resource` (https://github.com/PyLabRobot/pylabrobot/pull/281)
 - You can now place resources on 'rail' 0 on Hamilton decks (left support doesn't touch rail)
+- rename `STAR.move_iswap_{x,y,z}_direction` to `STAR.move_iswap_{x,y,z}_relative`. Change units to mm. Infer direction. (https://github.com/PyLabRobot/pylabrobot/pull/295)
+- `STAR.request_iswap_position` returns loc in mm (https://github.com/PyLabRobot/pylabrobot/pull/296)
 
 ### Added
 
@@ -87,6 +89,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Resource.get_highest_known_point` (https://github.com/PyLabRobot/pylabrobot/pull/284)
 - `BioRad_384_DWP_50uL_Vb` (https://github.com/PyLabRobot/pylabrobot/commit/251c3c274040cdac73cd3baf3a1e9c94c2f368c3)
 - Support for portrait mode iSWAP (https://github.com/PyLabRobot/pylabrobot/pull/291)
+- `STAR.{rotate_iswap_wrist,rotate_iswap_rotation_drive}` (https://github.com/PyLabRobot/pylabrobot/pull/298)
+- `STAR.request_pip_channel_version`
 
 ### Deprecated
 
