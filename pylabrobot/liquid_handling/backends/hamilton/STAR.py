@@ -6175,7 +6175,7 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="FY")
 
-  async def move_iswap_x(self, step_size: float):
+  async def move_iswap_x_relative(self, step_size: float):
     """
     Args:
       step_size: X Step size [1mm] Between -99.9 and 99.9.
@@ -6187,7 +6187,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0", command="GX", gx=str(round(abs(step_size) * 10)).zfill(3), xd=direction
     )
 
-  async def move_iswap_y(self, step_size: float):
+  async def move_iswap_y_relative(self, step_size: float):
     """
     Args:
       step_size: Y Step size [1mm] Between -99.9 and 99.9.
@@ -6199,7 +6199,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0", command="GY", gy=str(round(abs(step_size) * 10)).zfill(3), yd=direction
     )
 
-  async def move_iswap_z(self, step_size: float):
+  async def move_iswap_z_relative(self, step_size: float):
     """
     Args:
       step_size: Z Step size [1mm] Between -99.9 and 99.9.
