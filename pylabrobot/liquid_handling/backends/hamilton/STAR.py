@@ -7195,6 +7195,33 @@ class STAR(HamiltonLiquidHandler):
 
     return result_in_mm
 
+  class RotationDriveOrientation(enum.Enum):
+    LEFT = 1
+    FRONT = 2
+    RIGHT = 3
+
+  async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
+    return await self.send_command(
+      module="R0",
+      command="WP",
+      auto_id=False,
+      wp=orientation.value,
+    )
+
+  class WristOrientation(enum.Enum):
+    RIGHT = 1
+    STRAIGHT = 2
+    LEFT = 3
+    REVERSE = 4
+
+  async def rotate_iswap_wrist(self, orientation: WristOrientation):
+    return await self.send_command(
+      module="R0",
+      command="TP",
+      auto_id=False,
+      tp=orientation.value,
+    )
+
 
 class UnSafe:
   """
