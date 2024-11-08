@@ -1211,6 +1211,9 @@ class STAR(HamiltonLiquidHandler):
       self._iswap_version = await self.request_iswap_version()
     return self._iswap_version
 
+  async def request_pip_channel_version(self, channel: int) -> str:
+    return cast(str, (await self.send_command(f"P{channel+1}", "RF", fmt="rf" + "&" * 17))["rf"])
+
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """Get the id from a firmware response."""
     parsed = parse_star_fw_string(resp, "id####")

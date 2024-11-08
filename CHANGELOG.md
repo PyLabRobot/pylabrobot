@@ -90,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `BioRad_384_DWP_50uL_Vb` (https://github.com/PyLabRobot/pylabrobot/commit/251c3c274040cdac73cd3baf3a1e9c94c2f368c3)
 - Support for portrait mode iSWAP (https://github.com/PyLabRobot/pylabrobot/pull/291)
 - `STAR.{rotate_iswap_wrist,rotate_iswap_rotation_drive}` (https://github.com/PyLabRobot/pylabrobot/pull/298)
+- `STAR.request_pip_channel_version`
 
 ### Deprecated
 
