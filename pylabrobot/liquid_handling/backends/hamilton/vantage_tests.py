@@ -221,6 +221,7 @@ class VantageCommandCatcher(Vantage):
     self,
     module: str,
     command: str,
+    auto_id: bool = True,
     tip_pattern: Optional[List[bool]] = None,
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
@@ -228,7 +229,7 @@ class VantageCommandCatcher(Vantage):
     fmt: Optional[Any] = None,
     **kwargs,
   ):
-    cmd, _ = self._assemble_command(module, command, tip_pattern, **kwargs)
+    cmd, _ = self._assemble_command(module=module, command=command, auto_id=auto_id, tip_pattern=tip_pattern, **kwargs)
     self.commands.append(cmd)
 
   async def stop(self):

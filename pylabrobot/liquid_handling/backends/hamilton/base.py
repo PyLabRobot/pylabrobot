@@ -162,7 +162,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     auto_id: bool,
     tip_pattern: Optional[List[bool]],
     **kwargs,
-  ) -> Tuple[str, int]:
+  ) -> Tuple[str, Optional[int]]:
     """Assemble a firmware command to the Hamilton machine.
 
     Args:
