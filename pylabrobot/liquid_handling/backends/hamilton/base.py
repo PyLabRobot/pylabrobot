@@ -159,6 +159,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     self,
     module: str,
     command: str,
+    auto_id: bool,
     tip_pattern: Optional[List[bool]],
     **kwargs,
   ) -> Tuple[str, int]:
@@ -177,8 +178,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     """
 
     cmd = module + command
-    cmd_id = self._generate_id()
-    cmd += f"id{cmd_id:04}"  # id has to be the first param
+    if auto_id:
+      cmd_id = self._generate_id()
+      cmd += f"id{cmd_id:04}"  # id has to be the first param
+    else:
+      cmd_id = None
 
     for k, v in kwargs.items():
       if isinstance(v, datetime.datetime):
@@ -209,6 +213,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     self,
     module: str,
     command: str,
+    auto_id = True,
     tip_pattern: Optional[List[bool]] = None,
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
@@ -221,6 +226,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     Args:
       module: 2 character module identifier (C0 for master, ...)
       command: 2 character command identifier (QM for request status)
+      auto_id: auto generate id if True, otherwise use the id in kwargs (or None if not present)
       write_timeout: write timeout in seconds. If None, `self.write_timeout` is used.
       read_timeout: read timeout in seconds. If None, `self.read_timeout` is used.
       wait: If True, wait for a response. If False, return `None` immediately after sending the
@@ -237,6 +243,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       module=module,
       command=command,
       tip_pattern=tip_pattern,
+      auto_id=auto_id,
       **kwargs,
     )
     resp = await self._write_and_read_command(
