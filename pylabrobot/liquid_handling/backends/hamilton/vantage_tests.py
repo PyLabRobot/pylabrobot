@@ -229,7 +229,9 @@ class VantageCommandCatcher(Vantage):
     fmt: Optional[Any] = None,
     **kwargs,
   ):
-    cmd, _ = self._assemble_command(module=module, command=command, auto_id=auto_id, tip_pattern=tip_pattern, **kwargs)
+    cmd, _ = self._assemble_command(
+      module=module, command=command, auto_id=auto_id, tip_pattern=tip_pattern, **kwargs
+    )
     self.commands.append(cmd)
 
   async def stop(self):
