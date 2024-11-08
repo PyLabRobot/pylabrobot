@@ -44,6 +44,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - You can now place resources on 'rail' 0 on Hamilton decks (left support doesn't touch rail)
 - rename `STAR.move_iswap_{x,y,z}_direction` to `STAR.move_iswap_{x,y,z}_relative`. Change units to mm. Infer direction. (https://github.com/PyLabRobot/pylabrobot/pull/295)
 - `STAR.request_iswap_position` returns loc in mm (https://github.com/PyLabRobot/pylabrobot/pull/296)
+- `STAR.{position_max_free_y_for_n,request_y_pos_channel_n,request_z_pos_channel_n}` are 0-indexed and return in mm (https://github.com/PyLabRobot/pylabrobot/pull/260)
+- Rename `STAR.probe_z_height_using_channel` to `STAR.clld_probe_z_height_using_channel` and use 0-based indexing for channels (https://github.com/PyLabRobot/pylabrobot/pull/260)
 
 ### Added
 
@@ -91,6 +93,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Support for portrait mode iSWAP (https://github.com/PyLabRobot/pylabrobot/pull/291)
 - `STAR.{rotate_iswap_wrist,rotate_iswap_rotation_drive}` (https://github.com/PyLabRobot/pylabrobot/pull/298)
 - `STAR.request_pip_channel_version`
+- `STAR.ztouch_probe_z_height_using_channel` for getting z-height by probing without cLLD (https://github.com/PyLabRobot/pylabrobot/pull/260)
 
 ### Deprecated
 
