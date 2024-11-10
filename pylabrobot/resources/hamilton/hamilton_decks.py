@@ -405,7 +405,7 @@ class HamiltonSTARDeck(HamiltonDeck):
       )
       teaching_carrier.assign_child_resource(teaching_tip_rack, location=Coordinate(x=5.9, y=400.3, z=0))
       self.assign_child_resource(teaching_carrier, location=
-        Coordinate(x=self.rails_to_location(31).x, y=51.8, z=100))
+        Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=51.8, z=100))
 
   def serialize(self) -> dict:
     return {
