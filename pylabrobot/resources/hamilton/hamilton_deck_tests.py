@@ -62,6 +62,9 @@ class HamiltonDeckTests(unittest.TestCase):
           │   ├── <empty>
           │   ├── <empty>
           │
+    (31)  ├── teaching_carrier          Resource       (775.000, 051.800, 100.000)
+          │   ├── teaching_tip_rack     TipRack        (780.900, 452.100, 100.000)
+          │
     (32)  ├── trash                     Trash          (800.000, 190.600, 137.100)
     """[1:]
       ),

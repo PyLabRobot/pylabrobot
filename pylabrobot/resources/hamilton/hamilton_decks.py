@@ -8,6 +8,8 @@ from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.carrier import CarrierSite
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource import Resource
+from pylabrobot.resources.tip_rack import TipRack, TipSpot
+from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
 from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.ml_star.mfx_modules import MFXModule
 
@@ -17,12 +19,12 @@ logger = logging.getLogger("pylabrobot")
 
 _RAILS_WIDTH = 22.5  # space between rails (mm)
 
-STARLET_NUM_RAILS = 30
+STARLET_NUM_RAILS = 32
 STARLET_SIZE_X = 1360
 STARLET_SIZE_Y = 653.5
 STARLET_SIZE_Z = 900
 
-STAR_NUM_RAILS = 55
+STAR_NUM_RAILS = 56
 STAR_SIZE_X = 1900
 STAR_SIZE_Y = 653.5
 STAR_SIZE_Z = 900
@@ -165,7 +167,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
         and rails is not None
       ):
         raise ValueError(
-          f"Resource with width {resource.get_absolute_size_x()} does not " f"fit at rails {rails}."
+          f"Resource with width {resource.get_absolute_size_x()} does not fit at rails {rails}."
         )
 
       # Check if there is space for this new resource.
@@ -352,6 +354,7 @@ class HamiltonSTARDeck(HamiltonDeck):
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
     no_trash: bool = False,
+    no_teaching_rack: bool = False,
   ) -> None:
     """Create a new STAR(let) deck of the given size."""
 
@@ -382,6 +385,43 @@ class HamiltonSTARDeck(HamiltonDeck):
         resource=self._trash96,
         location=Coordinate(x=-232.1, y=110.3, z=189.0),
       )  # 165.0 -> 189.0
+
+    if not no_teaching_rack:
+      teaching_carrier = Resource(name="teaching_carrier", size_x=30, size_y=445.2, size_z=100)
+      tip_spots = [
+        TipSpot(
+          name=f"tip_spot_{i}",
+          size_x=9.0,
+          size_y=9.0,
+          size_z=0,
+          make_tip=standard_volume_tip_with_filter,
+        )
+        for i in range(8)
+      ]
+      for i, ts in enumerate(tip_spots):
+        ts.location = Coordinate(x=0, y=9 * i, z=23.1)
+      teaching_tip_rack = TipRack(
+        name="teaching_tip_rack",
+        size_x=9 * 8,
+        size_y=9,
+        size_z=50.4,
+        ordered_items={f"A{i}": tip_spots[i] for i in range(8)},
+        with_tips=True,
+        model="hamilton_teaching_tip_rack",
+      )
+      teaching_carrier.assign_child_resource(
+        teaching_tip_rack, location=Coordinate(x=5.9, y=400.3, z=0)
+      )
+      self.assign_child_resource(
+        teaching_carrier,
+        location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=51.8, z=100),
+      )
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "no_teaching_rack": True,  # data encoded as child. (not very pretty to have this key though...)
+    }
 
   def rails_to_location(self, rails: int) -> Coordinate:
     x = 100.0 + (rails - 1) * _RAILS_WIDTH
