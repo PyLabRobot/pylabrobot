@@ -109,7 +109,7 @@ def _compute_volume_from_height_Cos_96_wellplate_2mL_Vb(
   h: float,
 ) -> float:
   if h > 44.1:  # 5% tolerance
-    raise ValueError(f"Height {h} is too large for Cos_96_DWP_2mL_Vb")
+    raise ValueError(f"Height {h} is too large for Cos_96_wellplate_2mL_Vb")
   return calculate_liquid_volume_container_2segments_square_vbottom(
     x=7.8, y=7.8, h_pyramid=4.0, h_cube=38.0, liquid_height=h
   )

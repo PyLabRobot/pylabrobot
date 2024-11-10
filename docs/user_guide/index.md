@@ -5,6 +5,7 @@
 :caption: Getting started
 
 installation
+rpi
 ```
 
 ```{toctree}
