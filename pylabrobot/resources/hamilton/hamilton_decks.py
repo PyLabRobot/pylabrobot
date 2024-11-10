@@ -389,23 +389,33 @@ class HamiltonSTARDeck(HamiltonDeck):
     if not no_teaching_rack:
       teaching_carrier = Resource(name="teaching_carrier", size_x=30, size_y=445.2, size_z=100)
       tip_spots = [
-        TipSpot(name=f'tip_spot_{i}', size_x=9.0, size_y=9.0, size_z=0, make_tip=standard_volume_tip_with_filter)
+        TipSpot(
+          name=f"tip_spot_{i}",
+          size_x=9.0,
+          size_y=9.0,
+          size_z=0,
+          make_tip=standard_volume_tip_with_filter,
+        )
         for i in range(8)
       ]
       for i, ts in enumerate(tip_spots):
         ts.location = Coordinate(x=0, y=9 * i, z=23.1)
       teaching_tip_rack = TipRack(
         name="teaching_tip_rack",
-        size_x=9*8,
+        size_x=9 * 8,
         size_y=9,
         size_z=50.4,
         ordered_items={f"A{i}": tip_spots[i] for i in range(8)},
         with_tips=True,
         model="hamilton_teaching_tip_rack",
       )
-      teaching_carrier.assign_child_resource(teaching_tip_rack, location=Coordinate(x=5.9, y=400.3, z=0))
-      self.assign_child_resource(teaching_carrier, location=
-        Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=51.8, z=100))
+      teaching_carrier.assign_child_resource(
+        teaching_tip_rack, location=Coordinate(x=5.9, y=400.3, z=0)
+      )
+      self.assign_child_resource(
+        teaching_carrier,
+        location=Coordinate(x=self.rails_to_location(self.num_rails - 1).x, y=51.8, z=100),
+      )
 
   def serialize(self) -> dict:
     return {
