@@ -46,6 +46,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `STAR.request_iswap_position` returns loc in mm (https://github.com/PyLabRobot/pylabrobot/pull/296)
 - `STAR.{position_max_free_y_for_n,request_y_pos_channel_n,request_z_pos_channel_n}` are 0-indexed and return in mm (https://github.com/PyLabRobot/pylabrobot/pull/260)
 - Rename `STAR.probe_z_height_using_channel` to `STAR.clld_probe_z_height_using_channel` and use 0-based indexing for channels (https://github.com/PyLabRobot/pylabrobot/pull/260)
+- `ResourceCarrierSite` -> `ResourceHolder`, `PlateCarrierSite` -> `PlateHolder` (https://github.com/PyLabRobot/pylabrobot/pull/280)
+- `Carrier.sites` is now a dictionary (https://github.com/PyLabRobot/pylabrobot/pull/280)
+- `create_carrier_sites`->`create_resources` (`site_size_{x,y}`->`resource_size_{x,y}`) (https://github.com/PyLabRobot/pylabrobot/pull/280)
+- `MFXCarrier` takes modules as direct children, instead of having `CarrierSite`s as intermediaries (https://github.com/PyLabRobot/pylabrobot/pull/280)
 
 ### Added
 
