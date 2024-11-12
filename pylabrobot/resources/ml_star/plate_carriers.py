@@ -219,7 +219,7 @@ def PLT_CAR_L5MD(name: str) -> PlateCarrier:
 
 
 def PLT_CAR_L5MD_A00(name: str) -> PlateCarrier:
-  """Carrier for 5 96/384-Well Plates"""
+  """Carrier for 5 96/384-Well Plates. pn: 182365/02"""
   return PlateCarrier(
     name=name,
     size_x=135.0,
@@ -312,7 +312,7 @@ def PLT_CAR_L5PCR_A01(name: str) -> PlateCarrier:
 
 
 def PLT_CAR_P3AC_A00(name: str) -> PlateCarrier:
-  """Carrier for 3 96 Deep Well Plates (portrait)"""
+  """Carrier for 3 96 Deep Well Plates (portrait). PN: 182065"""
   return PlateCarrier(
     name=name,
     size_x=135.0,
@@ -327,6 +327,7 @@ def PLT_CAR_P3AC_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=86.0,
       resource_size_y=127.0,
+      pedestal_size_z=6.55,  # same as PLT_CAR_L5MD_A00
     ),
     model="PLT_CAR_P3AC_A00",
   )
