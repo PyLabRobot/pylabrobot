@@ -5,13 +5,12 @@ import logging
 from typing import Optional, cast
 
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.carrier import CarrierSite
+from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
 from pylabrobot.resources.trash import Trash
-from pylabrobot.resources.ml_star.mfx_modules import MFXModule
 
 
 logger = logging.getLogger("pylabrobot")
@@ -223,8 +222,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       "well",
       "tube",
       "tip_spot",
-      "carrier_site",
-      "plate_carrier_site",
+      "resource_holder",
+      "plate_holder",
     }
 
     def find_longest_child_name(resource: Resource, depth=0, depth_weight=4):
@@ -308,12 +307,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     def print_tree(resource: Resource, depth=0):
       r_summary = print_resource_line(resource, depth=depth)
 
-      if isinstance(resource, MFXModule) and len(resource.children) == 0:
-        r_summary += "\n"
-        r_summary += print_empty_spot_line(depth=depth + 1)
-
       for child in resource.children:
-        if isinstance(child, CarrierSite):
+        if isinstance(child, ResourceHolder):
           r_summary += "\n"
           if child.resource is not None:
             r_summary += print_tree(child.resource, depth=depth + 1)
