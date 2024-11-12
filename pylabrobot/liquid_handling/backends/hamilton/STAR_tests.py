@@ -867,6 +867,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_iswap_move_with_intermediate_locations(self):
+    self.plt_car[1].resource.unassign()
     await self.lh.move_plate(
       self.plate,
       self.plt_car[1],
@@ -935,6 +936,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(deserialized.backend.__class__.__name__, "STAR")
 
   async def test_move_core(self):
+    self.plt_car[1].resource.unassign()
     await self.lh.move_plate(
       self.plate,
       self.plt_car[1],

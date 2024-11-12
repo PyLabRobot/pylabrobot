@@ -16,7 +16,7 @@ from pylabrobot.resources import (
   set_tip_tracking,
   Liquid,
 )
-from pylabrobot.resources.carrier import PlateCarrierSite
+from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
@@ -324,9 +324,9 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       (GripDirection.LEFT, GripDirection.RIGHT),
       (GripDirection.FRONT, GripDirection.BACK),
     ]
-    sites: List[Union[ResourceStack, PlateCarrierSite]] = [
+    sites: List[Union[ResourceStack, PlateHolder]] = [
       ResourceStack(name="stack", direction="z"),
-      PlateCarrierSite(
+      PlateHolder(
         name="site",
         size_x=100,
         size_y=100,
