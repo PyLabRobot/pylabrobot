@@ -211,7 +211,7 @@ class Resource:
       z: `"t"`/`"top"`, `"c"`/`"center"`, or `"b"`/`"bottom"`
     """
 
-    assert self.location is not None, "Resource has no location."
+    assert self.location is not None, f"Resource {self.name} has no location."
     if self.parent is None:
       return self.location
     parent_pos = self.parent.get_absolute_location()
