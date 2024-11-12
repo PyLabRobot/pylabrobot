@@ -46,7 +46,7 @@ class Carrier(Resource, Generic[S]):
       site.name = f"carrier-{self.name}-spot-{spot}"
       if site.location is None:
         raise ValueError(f"site {site} has no location")
-      self.assign_child_resource(site, location=site.location)
+      self.assign_child_resource(site, location=site.location, spot=spot)
 
   @property
   def capacity(self):
@@ -58,19 +58,21 @@ class Carrier(Resource, Generic[S]):
     resource: Resource,
     location: Coordinate,
     reassign: bool = True,
+    spot: Optional[int] = None,
   ):
     if not isinstance(resource, ResourceHolder):
       raise TypeError(f"Invalid resource {resource}")
 
-    # add in order
-    idx = len(self.sites)
+    # see if we have an index for the resource name (eg from deserialization or user specification),
+    # otherwise add in first available spot
+    idx = spot or len(self.sites)
+    if not reassign and self.sites[idx] is not None:
+      raise ValueError(f"a site with index {idx} already exists")
     self.sites[idx] = cast(S, resource)
 
-    super().assign_child_resource(resource, location=location)
+    super().assign_child_resource(resource, location=location, reassign=reassign)
 
   def assign_resource_to_site(self, resource: Resource, spot: int):
-    if spot < 0 or spot >= self.capacity:
-      raise IndexError(f"Invalid spot {spot}")
     if self.sites[spot].resource is not None:
       raise ValueError(f"spot {spot} already has a resource")
     self.sites[spot].assign_child_resource(resource)
@@ -88,8 +90,6 @@ class Carrier(Resource, Generic[S]):
 
   def __getitem__(self, idx: int) -> S:
     """Get a site by index."""
-    if not 0 <= idx < self.capacity:
-      raise IndexError(f"Invalid index {idx}")
     return self.sites[idx]
 
   def __setitem__(self, idx: int, resource: Optional[Resource]):
@@ -152,6 +152,7 @@ class PlateHolder(ResourceHolder):
     size_y: float,
     size_z: float,
     pedestal_size_z: float = None,  # type: ignore
+    child_location=Coordinate.zero(),
     category="plate_holder",
     model: Optional[str] = None,
   ):
@@ -164,6 +165,7 @@ class PlateHolder(ResourceHolder):
       )
 
     self.pedestal_size_z = pedestal_size_z
+    self.child_location = child_location
     # self.resource: Optional[Plate] = None  # fix type
     # TODO: add self.pedestal_2D_offset if necessary in the future
 
