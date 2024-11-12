@@ -85,4 +85,4 @@ Note that Opentrons definitions typically lack information that is required to m
 
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
-| 'Opentrons_96_adapter_Vb'<br>Part no.: 999-00028 (one of the three adapters purchased in the "Aluminum Block Set")<br>[manufacturer website](https://opentrons.com/products/aluminum-block-set) | ![](imgs/Opentrons_96_adapter_Vb.jpg" alt="Opentrons_96_adapter_Vb" width="250"/> | `Opentrons_96_adapter_Vb` |
+| 'Opentrons_96_adapter_Vb'<br>Part no.: 999-00028 (one of the three adapters purchased in the "Aluminum Block Set")<br>[manufacturer website](https://opentrons.com/products/aluminum-block-set) | ![](img/opentrons/Opentrons_96_adapter_Vb.jpg) | `Opentrons_96_adapter_Vb` |

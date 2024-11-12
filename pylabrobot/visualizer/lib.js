@@ -14,8 +14,6 @@ const robotWidthMM = 100 + 30 * 22.5; // mm, just the deck
 const robotHeightMM = 653.5; // mm
 var scaleX, scaleY;
 
-const numRails = 30;
-
 var resources = {}; // name -> Resource object
 
 let trash;
@@ -436,7 +434,7 @@ class HamiltonSTARDeck extends Deck {
     );
 
     // Draw vertical rails as lines
-    for (let i = 0; i < numRails; i++) {
+    for (let i = 0; i < this.num_rails; i++) {
       const rail = new Konva.Line({
         points: [
           100 + i * 22.5, // 22.5 mm per rail

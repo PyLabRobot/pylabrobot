@@ -12,7 +12,7 @@ from pylabrobot.liquid_handling.backends import (
 from pylabrobot.resources import (
   Plate,
   TipRack,
-  HTF_L,
+  HTF,
   Cor_96_wellplate_360ul_Fb,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
@@ -26,7 +26,7 @@ from pylabrobot.server.liquid_handling_server import create_app
 def build_layout() -> HamiltonDeck:
   # copied from liquid_handler_tests.py, can we make this shared?
   tip_car = TIP_CAR_480_A00(name="tip_carrier")
-  tip_car[0] = HTF_L(name="tip_rack_01")
+  tip_car[0] = HTF(name="tip_rack_01")
 
   plt_car = PLT_CAR_L5AC_A00(name="plate_carrier")
   plt_car[0] = plate = Cor_96_wellplate_360ul_Fb(name="aspiration plate")

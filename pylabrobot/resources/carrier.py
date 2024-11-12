@@ -160,12 +160,13 @@ class PlateHolder(ResourceHolder):
     if pedestal_size_z is None:
       raise ValueError(
         "pedestal_size_z must be provided. See "
-        "https://docs.pylabrobot.org/plate_carriers.html#pedestal_size_z for more "
+        "https://docs.pylabrobot.org/resources/plate_carriers.html#pedestal_size_z for more "
         "information."
       )
 
     self.pedestal_size_z = pedestal_size_z
     self.child_location = child_location
+    # self.resource: Optional[Plate] = None  # fix type
     # TODO: add self.pedestal_2D_offset if necessary in the future
 
   def assign_child_resource(
