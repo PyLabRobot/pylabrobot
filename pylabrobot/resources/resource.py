@@ -737,3 +737,19 @@ class Resource:
   def _state_updated(self):
     for callback in self._resource_state_updated_callbacks:
       callback(self.serialize_state())
+
+  def get_heighest_known_point(self) -> float:
+    """Recursively finds the highest known point in absolute space. This ignores the top of the
+    deck.
+
+    ```{warning}
+    This methods returns the highest KNOWN point. If you have labware that is not assigned in PLR,
+    this method might not return the correct value.
+    ```
+    """
+    heighest_point = self.get_absolute_location(z="t").z
+    if self.name == "deck":
+      heighest_point = 0
+    for resource in self.children:
+      heighest_point = max(heighest_point, resource.get_heighest_known_point())
+    return heighest_point

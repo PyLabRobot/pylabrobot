@@ -41,7 +41,6 @@ from pylabrobot.resources import (
   ResourceHolder,
   PlateHolder,
   Lid,
-  MFXModule,
   Plate,
   PlateAdapter,
   Tip,
@@ -347,19 +346,19 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Pick up all tips in the first column.
 
-      >>> lh.pick_up_tips(tips_resource["A1":"H1"])
+      >>> await lh.pick_up_tips(tips_resource["A1":"H1"])
 
       Pick up tips on odd numbered rows, skipping the other channels.
 
-      >>> lh.pick_up_tips(tips_resource["A1", "C1", "E1", "G1"],use_channels=[0, 2, 4, 6])
+      >>> await lh.pick_up_tips(tips_resource["A1", "C1", "E1", "G1"],use_channels=[0, 2, 4, 6])
 
       Pick up tips from different tip resources:
 
-      >>> lh.pick_up_tips(tips_resource1["A1"] + tips_resource2["B2"] + tips_resource3["C3"])
+      >>> await lh.pick_up_tips(tips_resource1["A1"] + tips_resource2["B2"] + tips_resource3["C3"])
 
       Picking up tips with different offsets:
 
-      >>> lh.pick_up_tips(
+      >>> await lh.pick_up_tips(
       ...   tip_spots=tips_resource["A1":"C1"],
       ...   offsets=[
       ...     Coordinate(0, 0, 0), # A1
@@ -473,11 +472,11 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Dropping tips to the first column.
 
-      >>> lh.pick_up_tips(tip_rack["A1:H1"])
+      >>> await lh.pick_up_tips(tip_rack["A1:H1"])
 
       Dropping tips with different offsets:
 
-      >>> lh.drop_tips(
+      >>> await lh.drop_tips(
       ...   channels=tips_resource["A1":"C1"],
       ...   offsets=[
       ...     Coordinate(0, 0, 0), # A1
@@ -600,8 +599,8 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Return the tips on the head to the tip rack where they were picked up:
 
-      >>> lh.pick_up_tips(tip_rack["A1"])
-      >>> lh.return_tips()
+      >>> await lh.pick_up_tips(tip_rack["A1"])
+      >>> await lh.return_tips()
 
     Args:
       backend_kwargs: backend kwargs passed to `drop_tips`.
@@ -639,11 +638,11 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Discarding the tips on channels 1 and 2:
 
-      >>> lh.discard_tips(use_channels=[0, 1])
+      >>> await lh.discard_tips(use_channels=[0, 1])
 
       Discarding all tips currently picked up:
 
-      >>> lh.discard_tips()
+      >>> await lh.discard_tips()
 
     Args:
       use_channels: List of channels to use. Index from front to back. If `None`, all that have
@@ -694,28 +693,28 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Aspirate a constant amount of liquid from the first column:
 
-      >>> lh.aspirate(plate["A1:H1"], 50)
+      >>> await lh.aspirate(plate["A1:H1"], 50)
 
       Aspirate an linearly increasing amount of liquid from the first column:
 
-      >>> lh.aspirate(plate["A1:H1"], range(0, 500, 50))
+      >>> await lh.aspirate(plate["A1:H1"], range(0, 500, 50))
 
       Aspirate arbitrary amounts of liquid from the first column:
 
-      >>> lh.aspirate(plate["A1:H1"], [0, 40, 10, 50, 100, 200, 300, 400])
+      >>> await lh.aspirate(plate["A1:H1"], [0, 40, 10, 50, 100, 200, 300, 400])
 
       Aspirate liquid from wells in different plates:
 
-      >>> lh.aspirate(plate["A1"] + plate2["A1"] + plate3["A1"], 50)
+      >>> await lh.aspirate(plate["A1"] + plate2["A1"] + plate3["A1"], 50)
 
       Aspirating with a 10mm z-offset:
 
-      >>> lh.aspirate(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
+      >>> await lh.aspirate(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
 
       Aspirate from a blue bucket (big container), with the first 4 channels (which will be
       spaced equally apart):
 
-      >>> lh.aspirate(blue_bucket, vols=50, use_channels=[0, 1, 2, 3])
+      >>> await lh.aspirate(blue_bucket, vols=50, use_channels=[0, 1, 2, 3])
 
     Args:
       resources: A list of wells to aspirate liquid from. Can be a single resource, or a list of
@@ -883,28 +882,28 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Dispense a constant amount of liquid to the first column:
 
-      >>> lh.dispense(plate["A1:H1"], 50)
+      >>> await lh.dispense(plate["A1:H1"], 50)
 
       Dispense an linearly increasing amount of liquid to the first column:
 
-      >>> lh.dispense(plate["A1:H1"], range(0, 500, 50))
+      >>> await lh.dispense(plate["A1:H1"], range(0, 500, 50))
 
       Dispense arbitrary amounts of liquid to the first column:
 
-      >>> lh.dispense(plate["A1:H1"], [0, 40, 10, 50, 100, 200, 300, 400])
+      >>> await lh.dispense(plate["A1:H1"], [0, 40, 10, 50, 100, 200, 300, 400])
 
       Dispense liquid to wells in different plates:
 
-      >>> lh.dispense((plate["A1"], 50), (plate2["A1"], 50), (plate3["A1"], 50))
+      >>> await lh.dispense((plate["A1"], 50), (plate2["A1"], 50), (plate3["A1"], 50))
 
       Dispensing with a 10mm z-offset:
 
-      >>> lh.dispense(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
+      >>> await lh.dispense(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
 
       Dispense a blue bucket (big container), with the first 4 channels (which will be spaced
       equally apart):
 
-      >>> lh.dispense(blue_bucket, vols=50, use_channels=[0, 1, 2, 3])
+      >>> await lh.dispense(blue_bucket, vols=50, use_channels=[0, 1, 2, 3])
 
     Args:
       wells: A list of resources to dispense liquid to. Can be a list of resources, or a single
@@ -1079,19 +1078,19 @@ class LiquidHandler(Resource, Machine):
 
       Transfer 50 uL of liquid from the first well to the second well:
 
-      >>> lh.transfer(plate["A1"], plate["B1"], source_vol=50)
+      >>> await lh.transfer(plate["A1"], plate["B1"], source_vol=50)
 
       Transfer 80 uL of liquid from the first well equally to the first column:
 
-      >>> lh.transfer(plate["A1"], plate["A1:H1"], source_vol=80)
+      >>> await lh.transfer(plate["A1"], plate["A1:H1"], source_vol=80)
 
       Transfer 60 uL of liquid from the first well in a 1:2 ratio to 2 other wells:
 
-      >>> lh.transfer(plate["A1"], plate["B1:C1"], source_vol=60, ratios=[2, 1])
+      >>> await lh.transfer(plate["A1"], plate["B1:C1"], source_vol=60, ratios=[2, 1])
 
       Transfer arbitrary volumes to the first column:
 
-      >>> lh.transfer(plate["A1"], plate["A1:H1"], target_vols=[3, 1, 4, 1, 5, 9, 6, 2])
+      >>> await lh.transfer(plate["A1"], plate["A1:H1"], target_vols=[3, 1, 4, 1, 5, 9, 6, 2])
 
     Args:
       source: The source well.
@@ -1148,15 +1147,15 @@ class LiquidHandler(Resource, Machine):
       Use channel index 2 for all liquid handling operations inside the context:
 
       >>> with lh.use_channels([2]):
-      ...   lh.pick_up_tips(tip_rack["A1"])
-      ...   lh.aspirate(plate["A1"], 50)
-      ...   lh.dispense(plate["A1"], 50)
+      ...   await lh.pick_up_tips(tip_rack["A1"])
+      ...   await lh.aspirate(plate["A1"], 50)
+      ...   await lh.dispense(plate["A1"], 50)
 
       This is equivalent to:
 
-      >>> lh.pick_up_tips(tip_rack["A1"], use_channels=[2])
-      >>> lh.aspirate(plate["A1"], 50, use_channels=[2])
-      >>> lh.dispense(plate["A1"], 50, use_channels=[2])
+      >>> await lh.pick_up_tips(tip_rack["A1"], use_channels=[2])
+      >>> await lh.aspirate(plate["A1"], 50, use_channels=[2])
+      >>> await lh.dispense(plate["A1"], 50, use_channels=[2])
 
       Within the context manager, you can override the default channels by specifying the
       `use_channels` argument explicitly.
@@ -1180,7 +1179,7 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Pick up tips from a 96-tip tiprack:
 
-      >>> lh.pick_up_tips96(my_tiprack)
+      >>> await lh.pick_up_tips96(my_tiprack)
 
     Args:
       tip_rack: The tip rack to pick up tips from.
@@ -1245,11 +1244,11 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Drop tips to a 96-tip tiprack:
 
-      >>> lh.drop_tips96(my_tiprack)
+      >>> await lh.drop_tips96(my_tiprack)
 
       Drop tips to the trash:
 
-      >>> lh.drop_tips96(lh.deck.get_trash_area96())
+      >>> await lh.drop_tips96(lh.deck.get_trash_area96())
 
     Args:
       resource: The tip rack to drop tips to.
@@ -1340,8 +1339,8 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Return the tips on the 96 head to the tip rack where they were picked up:
 
-      >>> lh.pick_up_tips96(my_tiprack)
-      >>> lh.return_tips96()
+      >>> await lh.pick_up_tips96(my_tiprack)
+      >>> await lh.return_tips96()
 
     Raises:
       RuntimeError: If no tips have been picked up.
@@ -1364,7 +1363,7 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Discard the tips on the 96 head:
 
-      >>> lh.discard_tips96()
+      >>> await lh.discard_tips96()
 
     Args:
       allow_nonzero_volume: If `True`, the tip will be dropped even if its volume is not zero (there
@@ -1396,8 +1395,8 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Aspirate an entire 96 well plate or a container of sufficient size:
 
-      >>> lh.aspirate96(plate, volume=50)
-      >>> lh.aspirate96(container, volume=50)
+      >>> await lh.aspirate96(plate, volume=50)
+      >>> await lh.aspirate96(container, volume=50)
 
     Args:
       resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
@@ -1542,7 +1541,7 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Dispense an entire 96 well plate:
 
-      >>> lh.dispense96(plate, volume=50)
+      >>> await lh.dispense96(plate, volume=50)
 
     Args:
       resource (Union[Plate, Container, List[Well]]): Resource object or list of wells.
@@ -1719,7 +1718,7 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Move a plate to a new location:
 
-      >>> lh.move_resource(plate, to=Coordinate(100, 100, 100))
+      >>> await lh.move_resource(plate, to=Coordinate(100, 100, 100))
 
     Args:
       resource: The Resource object.
@@ -1786,12 +1785,12 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Move a lid to the :class:`~resources.ResourceStack`:
 
-      >>> lh.move_lid(plate.lid, stacking_area)
+      >>> await lh.move_lid(plate.lid, stacking_area)
 
       Move a lid to the stacking area and back, grabbing it from the left side:
 
-      >>> lh.move_lid(plate.lid, stacking_area, get_direction=GripDirection.LEFT)
-      >>> lh.move_lid(stacking_area.get_top_item(), plate, put_direction=GripDirection.LEFT)
+      >>> await lh.move_lid(plate.lid, stacking_area, get_direction=GripDirection.LEFT)
+      >>> await lh.move_lid(stacking_area.get_top_item(), plate, put_direction=GripDirection.LEFT)
 
     Args:
       lid: The lid to move. Can be either a Plate object or a Lid object.
@@ -1859,20 +1858,20 @@ class LiquidHandler(Resource, Machine):
     Examples:
       Move a plate to into a carrier spot:
 
-      >>> lh.move_plate(plate, plt_car[1])
+      >>> await lh.move_plate(plate, plt_car[1])
 
       Move a plate to an absolute location:
 
-      >>> lh.move_plate(plate_01, Coordinate(100, 100, 100))
+      >>> await lh.move_plate(plate_01, Coordinate(100, 100, 100))
 
       Move a lid to another carrier spot, grabbing it from the left side:
 
-      >>> lh.move_plate(plate, plt_car[1], get_direction=GripDirection.LEFT)
-      >>> lh.move_plate(plate, plt_car[0], put_direction=GripDirection.LEFT)
+      >>> await lh.move_plate(plate, plt_car[1], get_direction=GripDirection.LEFT)
+      >>> await lh.move_plate(plate, plt_car[0], put_direction=GripDirection.LEFT)
 
       Move a resource while visiting a few intermediate locations along the way:
 
-      >>> lh.move_plate(plate, plt_car[1], intermediate_locations=[
+      >>> await lh.move_plate(plate, plt_car[1], intermediate_locations=[
       ...   Coordinate(100, 100, 100),
       ...   Coordinate(200, 200, 200),
       ... ])
@@ -1889,7 +1888,7 @@ class LiquidHandler(Resource, Machine):
       to_location = to.get_absolute_location(z="top")
     elif isinstance(to, Coordinate):
       to_location = to
-    elif isinstance(to, (MFXModule, Tilter)):
+    elif isinstance(to, Tilter):
       to_location = to.get_absolute_location() + to.child_resource_location
     elif isinstance(to, PlateHolder):
       if to.resource is not None and to.resource is not plate:
@@ -1944,7 +1943,7 @@ class LiquidHandler(Resource, Machine):
       if isinstance(to, ResourceStack) and to.direction != "z":
         raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       to.assign_child_resource(plate)
-    elif isinstance(to, (MFXModule, Tilter)):
+    elif isinstance(to, Tilter):
       to.assign_child_resource(plate, location=to.child_resource_location)
     elif isinstance(to, PlateAdapter):
       to.assign_child_resource(plate, location=to.compute_plate_location(plate))
@@ -2007,6 +2006,25 @@ class LiquidHandler(Resource, Machine):
 
     with open(path, "r", encoding="utf-8") as f:
       return cls.deserialize(json.load(f))
+
+  async def prepare_for_manual_channel_operation(self, channel: int):
+    assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
+    await self.backend.prepare_for_manual_channel_operation(channel=channel)
+
+  async def move_channel_x(self, channel: int, x: float):
+    """Move channel to absolute x position"""
+    assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
+    await self.backend.move_channel_x(channel=channel, x=x)
+
+  async def move_channel_y(self, channel: int, y: float):
+    """Move channel to absolute y position"""
+    assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
+    await self.backend.move_channel_y(channel=channel, y=y)
+
+  async def move_channel_z(self, channel: int, z: float):
+    """Move channel to absolute z position"""
+    assert 0 <= channel < self.backend.num_channels, f"Invalid channel: {channel}"
+    await self.backend.move_channel_z(channel=channel, z=z)
 
   # -- Resource methods --
 

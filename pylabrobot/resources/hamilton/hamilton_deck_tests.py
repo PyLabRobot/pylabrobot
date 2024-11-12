@@ -9,8 +9,8 @@ from pylabrobot.resources.stanley.cups import (
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import (
-  STF_L,
-  HTF_L,
+  STF,
+  HTF,
   TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
 )
@@ -24,9 +24,9 @@ class HamiltonDeckTests(unittest.TestCase):
     deck = STARLetDeck()
 
     tip_car = TIP_CAR_480_A00(name="tip_carrier")
-    tip_car[0] = STF_L(name="tip_rack_01")
-    tip_car[1] = STF_L(name="tip_rack_02")
-    tip_car[3] = HTF_L(name="tip_rack_04")
+    tip_car[0] = STF(name="tip_rack_01")
+    tip_car[1] = STF(name="tip_rack_02")
+    tip_car[3] = HTF(name="tip_rack_04")
 
     plt_car = PLT_CAR_L5AC_A00(name="plate carrier")
     plt_car[0] = Cor_96_wellplate_360ul_Fb(name="aspiration plate")
@@ -61,6 +61,9 @@ class HamiltonDeckTests(unittest.TestCase):
           │   ├── dispense plate        Plate          (554.000, 263.500, 183.120)
           │   ├── <empty>
           │   ├── <empty>
+          │
+    (31)  ├── teaching_carrier          Resource       (775.000, 051.800, 100.000)
+          │   ├── teaching_tip_rack     TipRack        (780.900, 452.100, 100.000)
           │
     (32)  ├── trash                     Trash          (800.000, 190.600, 137.100)
     """[1:]

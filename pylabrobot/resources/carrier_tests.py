@@ -128,7 +128,7 @@ class CarrierTests(unittest.TestCase):
       ),
     )
     plate = Resource("plate", size_x=10, size_y=10, size_z=10)
-    with self.assertRaises(IndexError):
+    with self.assertRaises(KeyError):
       carrier.assign_resource_to_site(plate, spot=3)
 
   def test_absolute_location(self):
@@ -175,15 +175,15 @@ class CarrierTests(unittest.TestCase):
   # few tests for __getitem__ and __setitem__
 
   def test_illegal_assignment(self):
-    with self.assertRaises(IndexError):
+    with self.assertRaises(KeyError):
       self.tip_car[-1] = self.A
-    with self.assertRaises(IndexError):
+    with self.assertRaises(KeyError):
       self.tip_car[99999] = self.A
 
   def test_illegal_get(self):
-    with self.assertRaises(IndexError):
+    with self.assertRaises(KeyError):
       self.tip_car[-1]
-    with self.assertRaises(IndexError):
+    with self.assertRaises(KeyError):
       self.tip_car[99999]
 
   def test_nonnone_to_none_assignment(self):
@@ -230,6 +230,7 @@ class CarrierTests(unittest.TestCase):
             },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
             "children": [],
             "parent_name": "tip_car",
             "model": None,
@@ -248,6 +249,7 @@ class CarrierTests(unittest.TestCase):
             },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
             "children": [],
             "parent_name": "tip_car",
             "model": None,
@@ -266,6 +268,7 @@ class CarrierTests(unittest.TestCase):
             },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
             "children": [],
             "parent_name": "tip_car",
             "model": None,
@@ -284,6 +287,7 @@ class CarrierTests(unittest.TestCase):
             },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
             "children": [],
             "parent_name": "tip_car",
             "model": None,
@@ -302,6 +306,7 @@ class CarrierTests(unittest.TestCase):
             },
             "rotation": {"type": "Rotation", "x": 0, "y": 0, "z": 0},
             "category": "resource_holder",
+            "child_location": {"type": "Coordinate", "x": 0, "y": 0, "z": 0},
             "children": [],
             "parent_name": "tip_car",
             "model": None,

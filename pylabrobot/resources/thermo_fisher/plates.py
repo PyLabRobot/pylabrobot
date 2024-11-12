@@ -70,22 +70,8 @@ def Thermo_TS_96_wellplate_1200ul_Rb_Lid(name: str) -> Lid:
   #   size_y=85.48,
   #   size_z=5,
   #   nesting_z_height=None, # measure overlap between lid and plate
-  #   model="ThermoScientific_96_DWP_1200ul_Rd_Lid",
+  #   model="Thermo_TS_96_wellplate_1200ul_Rb_Lid",
   # )
-
-
-def ThermoScientific_96_DWP_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
-  raise NotImplementedError(
-    "This function is deprecated and will be removed in a future version."
-    " Use 'Thermo_TS_96_wellplate_1200ul_Rb' instead."
-  )
-
-
-def ThermoScientific_96_wellplate_1200ul_Rd(name: str, with_lid: bool = False) -> Plate:
-  raise NotImplementedError(
-    "This function is deprecated and will be removed in a future version."
-    " Use 'Thermo_TS_96_wellplate_1200ul_Rb' instead."
-  )
 
 
 def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate:
@@ -133,11 +119,18 @@ def Thermo_TS_96_wellplate_1200ul_Rb(name: str, with_lid: bool = False) -> Plate
 
 
 def Thermo_TS_96_wellplate_1200ul_Rb_L(name: str, with_lid: bool = False) -> Plate:
-  return Thermo_TS_96_wellplate_1200ul_Rb(name=name, with_lid=with_lid)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use " "Thermo_TS_96_wellplate_1200ul_Rb instead."
+  )
 
 
 def Thermo_TS_96_wellplate_1200ul_Rb_P(name: str, with_lid: bool = False) -> Plate:
-  return Thermo_TS_96_wellplate_1200ul_Rb(name=name, with_lid=with_lid).rotated(90)
+  # https://github.com/PyLabRobot/pylabrobot/issues/252
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use "
+    "Thermo_TS_96_wellplate_1200ul_Rb().rotated(z=90) instead."
+  )
 
 
 # # # # # # # # # # Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate # # # # # # # # # #
@@ -240,8 +233,14 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name: str, with_lid: bool = Fals
 
 
 def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_L(name: str, with_lid: bool = False) -> Plate:
-  return Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name=name, with_lid=with_lid)
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use "
+    "Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate instead."
+  )
 
 
 def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_P(name: str, with_lid: bool = False) -> Plate:
-  return Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate(name=name, with_lid=with_lid).rotated(90)
+  raise NotImplementedError(
+    "_L and _P definitions are deprecated. Use "
+    "Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate.rotated(90) instead."
+  )

@@ -23,3 +23,4 @@ Backends
 
     chatterbox.PlateReaderChatterboxBackend
     clario_star.CLARIOStar
+    biotek_backend.Cytation5Backend
