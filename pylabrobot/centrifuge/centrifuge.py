@@ -1,5 +1,7 @@
-from pylabrobot.centrifuge.backend import CentrifugeBackend
 from pylabrobot.machines.machine import Machine
+from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
+from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.resource_holder import ResourceHolder
 
 
 class Centrifuge(Machine):
@@ -50,3 +52,31 @@ class Centrifuge(Machine):
       duration=duration,
       acceleration=acceleration,
     )
+
+
+class CentrifugeDoorError(Exception):
+  pass
+
+
+class Loader(Machine, ResourceHolder):
+  """The front end for centrifuge loaders.
+  Centrifuge loaders are devices that can load and unload samples from centrifuges."""
+
+  def __init__(self, backend: LoaderBackend, centrifuge: Centrifuge, stage_location: Coordinate) -> None:
+    super().__init__(backend=backend)
+    self.backend: LoaderBackend = backend  # fix type
+    self.centrifuge: Centrifuge = centrifuge
+    self.stage_location = stage_location
+
+  def get_default_child_location(self, resource):
+    return super().get_default_child_location(resource) + self.stage_location
+
+  async def load(self) -> None:
+    if not self.centrifuge.door_open:
+      raise CentrifugeDoorError("Centrifuge door must be open to load a plate.")
+    await self.backend.load()
+
+  async def unload(self) -> None:
+    if not self.centrifuge.door_open:
+      raise CentrifugeDoorError("Centrifuge door must be open to unload a plate.")
+    await self.backend.unload()
