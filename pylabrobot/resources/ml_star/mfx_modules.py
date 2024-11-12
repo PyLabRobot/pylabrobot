@@ -42,4 +42,5 @@ def MFX_DWP_rackbased_module(name: str) -> PlateHolder:
     # probe height - carrier_height - deck_height
     child_location=Coordinate(4.0, 3.5, 178.0 - 18.195 - 100),
     model=MFX_DWP_rackbased_module.__name__,
+    pedestal_size_z=-4.74,
   )
