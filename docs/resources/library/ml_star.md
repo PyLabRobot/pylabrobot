@@ -17,6 +17,8 @@ Company history: [Hamilton Robotics history](https://www.hamiltoncompany.com/his
 | Description               | Image              | PLR definition |
 |--------------------|--------------------|--------------------|
 | 'PLT_CAR_L5AC_A00'<br>Part no.: 182090<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182090) <br>Carrier for 5x 96 Deep Well Plates or for 5x 384 tip racks (e.g.384HEAD_384TIPS_50μl) (6T) | ![](img/ml_star/PLT_CAR_L5AC_A00_182090.jpg) | `PLT_CAR_L5AC_A00` |
+| 'PLT_CAR_L5MD_A00'<br>Part no.: 182365/02<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Carries five ANSI/SLAS footprint MTPs in landscape orientation. Occupies six tracks. | ![](img/ml_star/182365-Plate-Carrier.webp) | `PLT_CAR_L5MD_A00` |
+| 'PLT_CAR_P3AC'<br>Part no.: 182365/03<br>[manufacturer website](https://www.hamiltoncompany.com/automated-liquid-handling/other-robotics/182365) <br>Hamilton Deepwell Plate Carrier for 3 Plates (Portrait, 6 tracks wide) | ![](img/ml_star/PLT_CAR_P3AC.jpg) | `PLT_CAR_P3AC` |
 
 ### MFX carriers
 
