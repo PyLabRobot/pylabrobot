@@ -2,7 +2,7 @@ import datetime
 import logging
 from pathlib import Path
 import sys
-from typing import Union
+from typing import Optional, Union
 import warnings
 
 from pylabrobot.__version__ import __version__
@@ -11,8 +11,7 @@ from pylabrobot.config import load_config, Config
 
 CONFIG_FILE_NAME = "pylabrobot"
 
-CONFIG = load_config(CONFIG_FILE_NAME, create_default=True)
-"""The loaded configuration for pylabrobot."""
+CONFIG = load_config(CONFIG_FILE_NAME, create_default=False)
 
 
 def project_root() -> Path:
@@ -25,19 +24,20 @@ def project_root() -> Path:
   return Path(__file__).parent.parent
 
 
-def setup_logger(log_dir: Union[Path, str], level: int):
+def setup_logger(log_dir: Optional[Union[Path, str]], level: int):
   """
   Set up the logger for pylabrobot. If the log_dir does not exist, it will be created.
 
   Args:
-    log_dir: The directory to store the log files.
+    log_dir: The directory to store the log files. If None, no log files will be created.
     level: The logging level.
   """
   # Create a logger
-  if isinstance(log_dir, str):
-    log_dir = Path(log_dir)
-  if not log_dir.exists():
-    log_dir.mkdir(parents=True)
+  if log_dir is not None:
+    if isinstance(log_dir, str):
+      log_dir = Path(log_dir)
+    if not log_dir.exists():
+      log_dir.mkdir(parents=True)
   logger = logging.getLogger("pylabrobot")
   logger.setLevel(level)
 
@@ -50,20 +50,16 @@ def setup_logger(log_dir: Union[Path, str], level: int):
     if log_file.exists() and log_file.stat().st_size == 0:
       log_file.unlink()
 
-  # Add a file handler
-  fh = logging.FileHandler(log_dir / f"pylabrobot-{now}.log")
-  fh.setLevel(logging.NOTSET)  # logs everything it receives, but the logger level can filter
-  fh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-  logger.addHandler(fh)
+  # Add a file handler, if log_dir is not None
+  if log_dir is not None:
+    fh = logging.FileHandler(log_dir / f"pylabrobot-{now}.log")
+    fh.setLevel(logging.NOTSET)  # logs everything it receives, but the logger level can filter
+    fh.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logger.addHandler(fh)
 
 
 def configure(cfg: Config):
-  """
-  Configure pylabrobot.
-
-  Args:
-    cfg: The Config object.
-  """
+  """Configure pylabrobot."""
   setup_logger(cfg.logging.log_dir, cfg.logging.level)
 
 
