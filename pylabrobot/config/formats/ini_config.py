@@ -16,7 +16,6 @@ class IniLoader(ConfigLoader):
     """Load a Config object from an opened IO stream that is INI formatted."""
     config = configparser.ConfigParser()
     config.read_file(r)
-    print("loaded", config)
     log_config_data = config["logging"]
     log_dir = Path(log_config_data["log_dir"]) if "log_dir" in log_config_data else None
     logging_config = Config.Logging(log_dir=log_dir)
