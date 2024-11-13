@@ -212,20 +212,22 @@ class Resource:
     """
 
     assert self.location is not None, f"Resource {self.name} has no location."
-    if self.parent is None:
-      return self.location
-    parent_pos = self.parent.get_absolute_location()
 
-    rotated_location = Coordinate(
-      *matrix_vector_multiply_3x3(
-        self.parent.get_absolute_rotation().get_rotation_matrix(),
-        self.location.vector(),
-      )
-    )
     rotated_anchor = Coordinate(
       *matrix_vector_multiply_3x3(
         self.get_absolute_rotation().get_rotation_matrix(),
         self.get_anchor(x=x, y=y, z=z).vector(),
+      )
+    )
+
+    if self.parent is None:
+      return self.location + rotated_anchor
+
+    parent_pos = self.parent.get_absolute_location()
+    rotated_location = Coordinate(
+      *matrix_vector_multiply_3x3(
+        self.parent.get_absolute_rotation().get_rotation_matrix(),
+        self.location.vector(),
       )
     )
     return parent_pos + rotated_location + rotated_anchor

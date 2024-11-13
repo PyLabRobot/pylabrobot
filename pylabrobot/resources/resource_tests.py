@@ -1,5 +1,3 @@
-"""Tests for Resource"""
-
 import math
 import unittest
 import unittest.mock
@@ -136,6 +134,13 @@ class TestResource(unittest.TestCase):
     self.assertEqual(
       deck.get_resource("child").get_absolute_location(x="right", y="front", z="top"),
       Coordinate(20, 15, 20),
+    )
+
+    single = Resource("single", size_x=5, size_y=5, size_z=5)
+    single.location = Coordinate.zero()
+    self.assertEqual(
+      single.get_absolute_location(x="right", y="front", z="top"),
+      Coordinate(5, 0, 5),
     )
 
   def test_unassign_child(self):
