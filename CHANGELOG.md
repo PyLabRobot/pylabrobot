@@ -50,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Carrier.sites` is now a dictionary (https://github.com/PyLabRobot/pylabrobot/pull/280)
 - `create_carrier_sites`->`create_resources` (`site_size_{x,y}`->`resource_size_{x,y}`) (https://github.com/PyLabRobot/pylabrobot/pull/280)
 - `MFXCarrier` takes modules as direct children, instead of having `CarrierSite`s as intermediaries (https://github.com/PyLabRobot/pylabrobot/pull/280)
+- `Config.log_dir` is now optional and defaults to None (https://github.com/PyLabRobot/pylabrobot/pull/302)
 
 ### Added
 

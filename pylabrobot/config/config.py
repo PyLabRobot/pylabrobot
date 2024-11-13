@@ -1,6 +1,7 @@
-import logging
 from dataclasses import dataclass, field
+import logging
 from pathlib import Path
+from typing import Optional
 
 LOG_FROM_STRING = {
   "DEBUG": logging.DEBUG,
@@ -15,33 +16,31 @@ LOG_TO_STRING = {v: k for k, v in LOG_FROM_STRING.items()}
 
 @dataclass
 class Config:
-  """The configuration object for the application."""
+  """The configuration object for PyLabRobot."""
 
   @dataclass
   class Logging:
     """The logging configuration."""
 
     level: int = logging.INFO
-    log_dir: Path = Path(".")
+    log_dir: Optional[Path] = None
 
   logging: Logging = field(default_factory=Logging)
 
   @classmethod
   def from_dict(cls, d: dict) -> "Config":
-    """Create a Config object from a dictionary."""
     return cls(
       logging=cls.Logging(
         level=LOG_FROM_STRING[d["logging"]["level"]],
-        log_dir=Path(d["logging"]["log_dir"]),
+        log_dir=Path(d["logging"]["log_dir"]) if "log_dir" in d["logging"] else None,
       )
     )
 
   @property
   def as_dict(self) -> dict:
-    """Convert the Config object to a dictionary."""
     return {
       "logging": {
         "level": LOG_TO_STRING[self.logging.level],
-        "log_dir": str(self.logging.log_dir),
+        "log_dir": str(self.logging.log_dir) if self.logging.log_dir is not None else None,
       }
     }
