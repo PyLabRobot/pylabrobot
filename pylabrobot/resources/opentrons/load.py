@@ -19,9 +19,10 @@ from pylabrobot.resources.well import Well, CrossSectionType
 
 
 if TYPE_CHECKING:
-  from opentrons_shared_data.labware.dev_types import (
-    LabwareDefinition,
-  )
+  try:
+    from opentrons_shared_data.labware.types import LabwareDefinition  # type: ignore
+  except ImportError:
+    from opentrons_shared_data.labware.dev_types import LabwareDefinition  # type: ignore
 
 
 class UnknownResourceType(Exception):
