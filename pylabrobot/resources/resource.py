@@ -740,7 +740,7 @@ class Resource:
     for callback in self._resource_state_updated_callbacks:
       callback(self.serialize_state())
 
-  def get_heighest_known_point(self) -> float:
+  def get_highest_known_point(self) -> float:
     """Recursively finds the highest known point in absolute space. This ignores the top of the
     deck.
 
@@ -753,5 +753,5 @@ class Resource:
     if self.name == "deck":
       heighest_point = 0
     for resource in self.children:
-      heighest_point = max(heighest_point, resource.get_heighest_known_point())
+      heighest_point = max(heighest_point, resource.get_highest_known_point())
     return heighest_point
