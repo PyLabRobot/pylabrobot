@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from abc import ABC
 import functools
-from typing import Callable
+from abc import ABC
+from typing import Callable, ParamSpec, TypeVar
 
 from pylabrobot.machines.backends import MachineBackend
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
-def need_setup_finished(func: Callable):
+
+def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
   """Decorator for methods that require the machine to be set up.
 
   Checked by verifying `self.setup_finished` is `True`.
