@@ -1,5 +1,5 @@
-from pylabrobot.machines.machine import Machine
 from pylabrobot.centrifuge.backend import CentrifugeBackend
+from pylabrobot.machines.machine import Machine
 
 
 class Centrifuge(Machine):

@@ -1,42 +1,40 @@
-from typing import cast
 import unittest
 import unittest.mock
+from typing import cast
 
 from pylabrobot.liquid_handling import LiquidHandler
-from pylabrobot.liquid_handling.standard import Pickup, GripDirection
+from pylabrobot.liquid_handling.standard import GripDirection, Pickup
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.plate_reading.plate_reader_tests import (
   MockPlateReaderBackend,
 )
 from pylabrobot.resources import (
-  Plate,
-  Coordinate,
-  Container,
-  ResourceStack,
-  Lid,
-  TIP_CAR_480_A00,
-  TIP_CAR_288_C00,
-  PLT_CAR_L5AC_A00,
   HT,
   HTF,
+  PLT_CAR_L5AC_A00,
+  TIP_CAR_288_C00,
+  TIP_CAR_480_A00,
+  Container,
+  Coordinate,
   Cor_96_wellplate_360ul_Fb,
+  Lid,
+  Plate,
+  ResourceStack,
   no_volume_tracking,
 )
 from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources.ml_star import STF
-
 from tests.usb import MockDev, MockEndpoint
 
 from .STAR import (
   STAR,
-  parse_star_fw_string,
-  STARFirmwareError,
   CommandSyntaxError,
   HamiltonNoTipError,
   HardwareError,
+  STARFirmwareError,
   UnknownHamiltonError,
+  parse_star_fw_string,
 )
-
 
 PICKUP_TIP_FORMAT = "xp##### (n)yp#### (n)tm# (n)tt##tp####tz####th####td#"
 DROP_TIP_FORMAT = "xp##### (n)yp#### (n)tm# (n)tp####tz####th####ti#"

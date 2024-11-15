@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
-from typing import Union, Dict, List, Optional, Literal
+from typing import Dict, List, Literal, Optional, Union
 
 
 class PumpCalibration:

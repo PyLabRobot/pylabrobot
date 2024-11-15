@@ -1,14 +1,13 @@
 # similar library: https://github.com/janelia-pypi/mettler_toledo_device_python
 
 import asyncio
+import logging
 import time
 from typing import List, Literal, Optional, Union
 
-import logging
 import serial  # type: ignore
 
 from pylabrobot.scales.scale_backend import ScaleBackend
-
 
 logger = logging.getLogger("pylabrobot")
 

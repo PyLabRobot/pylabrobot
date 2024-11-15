@@ -7,9 +7,9 @@ from pylabrobot.resources.resource_holder import ResourceHolder
 
 from .coordinate import Coordinate
 from .plate import Plate
+from .plate_adapter import PlateAdapter
 from .resource import Resource
 from .resource_stack import ResourceStack
-from .plate_adapter import PlateAdapter
 
 logger = logging.getLogger("pylabrobot")
 

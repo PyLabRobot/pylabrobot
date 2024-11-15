@@ -1,18 +1,18 @@
-from abc import ABCMeta
 import sys
+from abc import ABCMeta
+from string import ascii_uppercase as LETTERS
 from typing import (
   Dict,
-  Union,
-  Tuple,
-  TypeVar,
+  Generator,
   Generic,
   List,
   Optional,
-  Generator,
   Sequence,
+  Tuple,
+  TypeVar,
+  Union,
   cast,
 )
-from string import ascii_uppercase as LETTERS
 
 import pylabrobot.utils
 

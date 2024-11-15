@@ -1,8 +1,9 @@
 from typing import Dict, Optional
+
 from pylabrobot.resources.carrier import (
+  Coordinate,
   PlateCarrier,
   PlateHolder,
-  Coordinate,
   create_homogeneous_resources,
 )
 from pylabrobot.resources.tecan.tecan_resource import TecanResource

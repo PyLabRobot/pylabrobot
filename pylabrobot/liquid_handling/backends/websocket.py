@@ -3,7 +3,7 @@ import json
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 try:
   import websockets
@@ -16,11 +16,11 @@ try:
 except ImportError:
   HAS_WEBSOCKETS = False
 
+from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.liquid_handling.backends.serializing_backend import (
   SerializingBackend,
 )
 from pylabrobot.resources import Resource
-from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 
 if TYPE_CHECKING:
   import websockets.legacy

@@ -5,32 +5,32 @@ import asyncio
 import json
 import os
 import threading
-from typing import Any, Coroutine, List, Tuple, Optional, cast
+from typing import Any, Coroutine, List, Optional, Tuple, cast
 
+import werkzeug
 from flask import (
   Blueprint,
   Flask,
-  request,
-  jsonify,
-  current_app,
   Request,
+  current_app,
+  jsonify,
+  request,
 )
-import werkzeug
 
-from pylabrobot import configure, Config
-from pylabrobot.config.io import ConfigReader
+from pylabrobot import Config, configure
 from pylabrobot.config.formats.json_config import JsonLoader
+from pylabrobot.config.io import ConfigReader
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
   Aspiration,
   Dispense,
   Drop,
+  Pickup,
 )
-from pylabrobot.resources import Coordinate, Deck, Tip, Liquid
+from pylabrobot.resources import Coordinate, Deck, Liquid, Tip
 from pylabrobot.serializer import deserialize
 
 lh_api = Blueprint("liquid handling", __name__)

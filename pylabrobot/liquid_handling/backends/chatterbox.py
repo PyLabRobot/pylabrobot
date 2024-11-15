@@ -3,20 +3,20 @@ from typing import List, Union
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
-from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  PickupTipRack,
+  Aspiration,
+  AspirationContainer,
+  AspirationPlate,
+  Dispense,
+  DispenseContainer,
+  DispensePlate,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
   Move,
+  Pickup,
+  PickupTipRack,
 )
+from pylabrobot.resources import Resource
 
 
 class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):

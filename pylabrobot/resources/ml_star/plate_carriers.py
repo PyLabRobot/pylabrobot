@@ -2,8 +2,8 @@
 
 from pylabrobot.resources.carrier import (
   Coordinate,
-  PlateHolder,
   PlateCarrier,
+  PlateHolder,
   create_homogeneous_resources,
 )
 

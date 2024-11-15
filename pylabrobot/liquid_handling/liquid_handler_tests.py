@@ -1,60 +1,59 @@
 """Tests for LiquidHandler"""
 
 import itertools
-import pytest
 import tempfile
-from typing import Any, Dict, List, Optional, Union, cast
 import unittest
 import unittest.mock
+from typing import Any, Dict, List, Optional, Union, cast
+
+import pytest
 
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
 from pylabrobot.resources import (
+  PLT_CAR_L5AC_A00,
+  TIP_CAR_480_A00,
+  Container,
+  Coordinate,
+  Cor_96_wellplate_360ul_Fb,
+  Deck,
+  Lid,
+  Liquid,
+  Plate,
+  ResourceNotFoundError,
+  ResourceStack,
+  TipRack,
   no_tip_tracking,
   set_tip_tracking,
-  Liquid,
 )
 from pylabrobot.resources.carrier import PlateHolder
 from pylabrobot.resources.errors import (
+  CrossContaminationError,
   HasTipError,
   NoTipError,
-  CrossContaminationError,
 )
+from pylabrobot.resources.hamilton import STARLetDeck
+from pylabrobot.resources.ml_star import HTF, STF
+from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
-  set_volume_tracking,
   set_cross_contamination_tracking,
+  set_volume_tracking,
 )
 from pylabrobot.resources.well import Well
-from pylabrobot.resources.utils import create_ordered_items_2d
 
 from . import backends
 from .liquid_handler import LiquidHandler, OperationCallback
-from pylabrobot.resources import (
-  Container,
-  Coordinate,
-  Deck,
-  Lid,
-  Plate,
-  ResourceStack,
-  TipRack,
-  TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00,
-  Cor_96_wellplate_360ul_Fb,
-  ResourceNotFoundError,
-)
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import STF, HTF
 from .standard import (
-  GripDirection,
-  Pickup,
+  Aspiration,
+  AspirationPlate,
+  Dispense,
+  DispensePlate,
   Drop,
   DropTipRack,
-  Aspiration,
-  Dispense,
-  AspirationPlate,
-  DispensePlate,
+  GripDirection,
+  Pickup,
 )
 
 

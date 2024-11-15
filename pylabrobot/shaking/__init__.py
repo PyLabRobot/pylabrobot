@@ -1,2 +1,2 @@
-from .shaker import Shaker
 from .backend import ShakerBackend
+from .shaker import Shaker

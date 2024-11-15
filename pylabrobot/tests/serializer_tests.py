@@ -1,4 +1,4 @@
-from pylabrobot.serializer import serialize, deserialize
+from pylabrobot.serializer import deserialize, serialize
 
 
 def test_serialize_deserialize_closure():

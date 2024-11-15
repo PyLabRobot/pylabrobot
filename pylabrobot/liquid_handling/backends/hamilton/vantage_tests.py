@@ -1,17 +1,17 @@
-from typing import Any, List, Optional
 import unittest
+from typing import Any, List, Optional
 
 from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.liquid_handling.standard import Pickup
 from pylabrobot.resources import (
-  Coordinate,
-  TIP_CAR_480_A00,
-  PLT_CAR_L5AC_A00,
   HT,
   LT,
+  PLT_CAR_L5AC_A00,
+  TIP_CAR_480_A00,
+  Coordinate,
   Cor_96_wellplate_360ul_Fb,
 )
 from pylabrobot.resources.hamilton import VantageDeck
-from pylabrobot.liquid_handling.standard import Pickup
 
 from .vantage import (
   Vantage,
@@ -19,7 +19,6 @@ from .vantage import (
   parse_vantage_fw_string,
   vantage_response_string_to_error,
 )
-
 
 PICKUP_TIP_FORMAT = {
   "xp": "[int]",

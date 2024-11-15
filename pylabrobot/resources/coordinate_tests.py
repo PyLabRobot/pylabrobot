@@ -2,8 +2,9 @@
 
 import unittest
 
+from pylabrobot.serializer import deserialize, serialize
+
 from .coordinate import Coordinate
-from pylabrobot.serializer import serialize, deserialize
 
 
 class TestCoordinate(unittest.TestCase):

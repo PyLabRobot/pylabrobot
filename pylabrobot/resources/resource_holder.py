@@ -1,4 +1,5 @@
 from typing import Optional
+
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource import Resource
 from pylabrobot.serializer import serialize

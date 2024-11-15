@@ -1,7 +1,7 @@
 from typing import Optional
 
-from pylabrobot.temperature_controlling import TemperatureController
 from pylabrobot.shaking import Shaker
+from pylabrobot.temperature_controlling import TemperatureController
 
 from .backend import HeaterShakerBackend
 

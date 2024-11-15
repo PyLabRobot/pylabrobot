@@ -1,18 +1,16 @@
 """Thermo Fisher Scientific  Inc. (and all its brand) plates"""
 
-from pylabrobot.resources.well import (
-  Well,
-  WellBottomType,
-  CrossSectionType,
-)
-from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.plate import Lid, Plate
-
 from pylabrobot.resources.height_volume_functions import (
   calculate_liquid_height_in_container_2segments_square_ubottom,
   calculate_liquid_volume_container_2segments_square_ubottom,
 )
-
+from pylabrobot.resources.plate import Lid, Plate
+from pylabrobot.resources.utils import create_ordered_items_2d
+from pylabrobot.resources.well import (
+  CrossSectionType,
+  Well,
+  WellBottomType,
+)
 
 # Please conform with the 'manufacturer-first, then brands' naming principle:
 
