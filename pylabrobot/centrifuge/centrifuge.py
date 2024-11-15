@@ -1,9 +1,10 @@
 from typing import cast
-from pylabrobot.machines.machine import Machine
+
 from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
+from pylabrobot.machines.machine import Machine
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource_holder import ResourceHolder
-from pylabrobot.serializer import serialize, deserialize
+from pylabrobot.serializer import deserialize, serialize
 
 
 class Centrifuge(Machine):
