@@ -42,7 +42,7 @@ else:
   USE_OT = False
 
 # https://github.com/Opentrons/opentrons/issues/14590
-# https://forums.pylabrobot.org/t/connect-pylabrobot-to-ot2/2862/18
+# https://labautomation.io/t/connect-pylabrobot-to-ot2/2862/18
 _OT_DECK_IS_ADDRESSABLE_AREA_VERSION = "7.1.0"
 
 
@@ -284,7 +284,7 @@ class OpentronsBackend(LiquidHandlerBackend):
     del self.defined_labware[name]
 
     # The OT-api does not support removing labware definitions
-    # https://forums.pylabrobot.org/t/feature-request-support-unloading-labware-in-the-http-api/3098
+    # https://labautomation.io/t/feature-request-support-unloading-labware-in-the-http-api/3098
     # instead, we move the labware off deck as a workaround
     ot_api.labware.move_labware(labware_id=name, off_deck=True)
 

@@ -1,7 +1,7 @@
 """Tecan plates
 
 size_z are best approximations, see
-https://forums.pylabrobot.org/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2987
+https://labautomation.io/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2987
 """
 
 from typing import Dict, Optional
