@@ -3,7 +3,6 @@ import re
 
 from pylabrobot.resources import Coordinate
 
-
 # path = "Carrier_Coley.cfg"
 path = "Carrier.cfg"
 

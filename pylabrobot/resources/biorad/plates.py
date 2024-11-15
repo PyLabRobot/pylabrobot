@@ -1,10 +1,10 @@
 from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
+  CrossSectionType,
   Well,
   WellBottomType,
-  CrossSectionType,
 )
-from pylabrobot.resources.utils import create_ordered_items_2d
 
 
 def BioRad_384_wellplate_50uL_Vb(name: str) -> Plate:

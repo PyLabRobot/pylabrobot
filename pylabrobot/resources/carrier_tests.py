@@ -2,9 +2,9 @@ import unittest
 
 from .carrier import (
   Carrier,
-  ResourceHolder,
   PlateCarrier,
   PlateHolder,
+  ResourceHolder,
   TipCarrier,
   create_homogeneous_resources,
 )

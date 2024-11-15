@@ -1,4 +1,5 @@
 import asyncio
+
 from .backend import FanBackend
 
 try:

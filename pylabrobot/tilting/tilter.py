@@ -3,8 +3,9 @@ from typing import List, Optional
 
 from pylabrobot.machines import Machine
 from pylabrobot.resources import Coordinate, Plate
-from pylabrobot.resources.well import CrossSectionType, Well
 from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.well import CrossSectionType, Well
+
 from .tilter_backend import TilterBackend
 
 

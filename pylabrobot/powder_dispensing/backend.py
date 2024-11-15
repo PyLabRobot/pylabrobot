@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 from abc import ABCMeta, abstractmethod
 from typing import List
 
 from pylabrobot.machines.backends import MachineBackend
-from pylabrobot.resources import Resource, Powder
+from pylabrobot.resources import Powder, Resource
 
 
 class PowderDispenserBackend(MachineBackend, metaclass=ABCMeta):

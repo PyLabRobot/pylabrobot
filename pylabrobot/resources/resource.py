@@ -6,12 +6,13 @@ import logging
 import sys
 from typing import Any, Callable, Dict, List, Optional, cast
 
+from pylabrobot.serializer import deserialize, serialize
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
+from pylabrobot.utils.object_parsing import find_subclass
+
 from .coordinate import Coordinate
 from .errors import ResourceNotFoundError
 from .rotation import Rotation
-from pylabrobot.serializer import serialize, deserialize
-from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
-from pylabrobot.utils.object_parsing import find_subclass
 
 if sys.version_info >= (3, 11):
   from typing import Self

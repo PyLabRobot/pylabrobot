@@ -3,8 +3,7 @@ from pathlib import Path
 from typing import IO
 
 from pylabrobot.config.config import Config
-from pylabrobot.config.formats import ConfigLoader
-from pylabrobot.config.formats import ConfigSaver
+from pylabrobot.config.formats import ConfigLoader, ConfigSaver
 
 
 class IniLoader(ConfigLoader):

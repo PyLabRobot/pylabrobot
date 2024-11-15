@@ -3,6 +3,7 @@
 import unittest
 
 from pylabrobot.resources import Coordinate, Lid, Plate, Resource
+
 from .resource_stack import ResourceStack
 
 

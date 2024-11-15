@@ -1,6 +1,6 @@
 import sys
-from typing import List
 import unittest
+from typing import List
 
 from pylabrobot.resources import (
   Coordinate,

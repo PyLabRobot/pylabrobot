@@ -3,21 +3,21 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import List, Optional, Union
 
-from pylabrobot.machines.backends import MachineBackend
-from pylabrobot.resources import Deck, Resource
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  PickupTipRack,
+  Aspiration,
+  AspirationContainer,
+  AspirationPlate,
+  Dispense,
+  DispenseContainer,
+  DispensePlate,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
   Move,
+  Pickup,
+  PickupTipRack,
 )
+from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.resources import Deck, Resource
 
 
 class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):

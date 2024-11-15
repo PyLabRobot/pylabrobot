@@ -1,9 +1,9 @@
-from abc import ABCMeta
 import datetime
 import enum
 import functools
 import logging
 import re
+from abc import ABCMeta
 from typing import (
   Callable,
   Dict,
@@ -27,18 +27,18 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   get_star_liquid_class,
 )
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  PickupTipRack,
+  Aspiration,
+  AspirationContainer,
+  AspirationPlate,
+  Dispense,
+  DispenseContainer,
+  DispensePlate,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
   GripDirection,
   Move,
+  Pickup,
+  PickupTipRack,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -49,10 +49,10 @@ from pylabrobot.resources import (
   Well,
 )
 from pylabrobot.resources.errors import (
-  TooLittleVolumeError,
-  TooLittleLiquidError,
   HasTipError,
   NoTipError,
+  TooLittleLiquidError,
+  TooLittleVolumeError,
 )
 from pylabrobot.resources.hamilton.hamilton_decks import (
   STAR_SIZE_X,

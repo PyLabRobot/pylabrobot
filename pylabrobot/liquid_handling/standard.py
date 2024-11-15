@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import enum
-from typing import List, Optional, Union, Tuple, TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
-from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.coordinate import Coordinate
+from pylabrobot.resources.liquid import Liquid
 
 if TYPE_CHECKING:
   from pylabrobot.resources import (

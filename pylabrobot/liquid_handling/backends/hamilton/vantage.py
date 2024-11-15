@@ -12,17 +12,17 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   get_vantage_liquid_class,
 )
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  PickupTipRack,
+  Aspiration,
+  AspirationContainer,
+  AspirationPlate,
+  Dispense,
+  DispenseContainer,
+  DispensePlate,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
   Move,
+  Pickup,
+  PickupTipRack,
 )
 from pylabrobot.resources import (
   Coordinate,
@@ -36,7 +36,6 @@ from pylabrobot.resources.ml_star import (
   TipPickupMethod,
   TipSize,
 )
-
 
 if sys.version_info >= (3, 8):
   from typing import Literal

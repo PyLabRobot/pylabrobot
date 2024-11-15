@@ -1,5 +1,5 @@
 import enum
-from typing import Union, Literal
+from typing import Literal, Union
 
 
 class ImagingMode(enum.Enum):

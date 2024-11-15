@@ -1,23 +1,23 @@
-import tempfile
 import os
+import tempfile
 import unittest
 
 from pylabrobot.resources import (
-  ResourceHolder,
   Coordinate,
   Deck,
   Plate,
   PlateCarrier,
   PlateHolder,
   Resource,
+  ResourceHolder,
+  ResourceNotFoundError,
   TipCarrier,
   TipRack,
   TipSpot,
   Well,
-  ResourceNotFoundError,
+  create_homogeneous_resources,
   create_ordered_items_2d,
   standard_volume_tip_with_filter,
-  create_homogeneous_resources,
 )
 
 

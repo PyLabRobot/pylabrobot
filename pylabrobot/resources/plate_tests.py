@@ -1,7 +1,7 @@
 import unittest
 
 from .coordinate import Coordinate
-from .plate import Plate, Lid
+from .plate import Lid, Plate
 from .utils import create_ordered_items_2d
 from .well import Well
 

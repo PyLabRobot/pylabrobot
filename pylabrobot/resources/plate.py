@@ -3,18 +3,19 @@ from __future__ import annotations
 from typing import (
   Dict,
   List,
+  Literal,
   Optional,
   Sequence,
   Tuple,
   Union,
   cast,
-  Literal,
 )
 
 from pylabrobot.resources.resource_holder import get_child_location
-from .liquid import Liquid
+
 from .itemized_resource import ItemizedResource
-from .resource import Resource, Coordinate
+from .liquid import Liquid
+from .resource import Coordinate, Resource
 from .well import Well
 
 

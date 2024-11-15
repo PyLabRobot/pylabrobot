@@ -1,24 +1,24 @@
-from abc import ABCMeta, abstractmethod
 import sys
-from typing import Any, Dict, Optional, List, Union
+from abc import ABCMeta, abstractmethod
+from typing import Any, Dict, List, Optional, Union
 
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
-from pylabrobot.resources import Resource
 from pylabrobot.liquid_handling.standard import (
-  Pickup,
-  PickupTipRack,
+  Aspiration,
+  AspirationContainer,
+  AspirationPlate,
+  Dispense,
+  DispenseContainer,
+  DispensePlate,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
   Move,
+  Pickup,
+  PickupTipRack,
 )
+from pylabrobot.resources import Resource
 from pylabrobot.serializer import serialize
 
 if sys.version_info >= (3, 8):

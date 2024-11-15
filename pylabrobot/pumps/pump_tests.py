@@ -2,10 +2,10 @@ import unittest
 from unittest.mock import AsyncMock, Mock
 
 from pylabrobot.pumps import PumpArray
+from pylabrobot.pumps.backend import PumpArrayBackend, PumpBackend
 from pylabrobot.pumps.calibration import PumpCalibration
 from pylabrobot.pumps.errors import NotCalibratedError
 from pylabrobot.pumps.pump import Pump
-from pylabrobot.pumps.backend import PumpBackend, PumpArrayBackend
 
 
 class TestPump(unittest.IsolatedAsyncioTestCase):

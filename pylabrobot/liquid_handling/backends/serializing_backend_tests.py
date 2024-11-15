@@ -5,12 +5,12 @@ from pylabrobot.liquid_handling.backends.serializing_backend import (
   SerializingSavingBackend,
 )
 from pylabrobot.resources import (
-  STARLetDeck,
-  TIP_CAR_480_A00,
   PLT_CAR_L5AC_A00,
-  Cor_96_wellplate_360ul_Fb,
   STF,
+  TIP_CAR_480_A00,
   Coordinate,
+  Cor_96_wellplate_360ul_Fb,
+  STARLetDeck,
   no_tip_tracking,
   no_volume_tracking,
 )
