@@ -1,4 +1,5 @@
 from typing import Optional
+
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Resource, Rotation
 from pylabrobot.scales.scale_backend import ScaleBackend

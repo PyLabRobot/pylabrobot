@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from abc import ABC
 import functools
+from abc import ABC
 from typing import Callable
 
 from pylabrobot.machines.backends import MachineBackend

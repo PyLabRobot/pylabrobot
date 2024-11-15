@@ -1,8 +1,8 @@
 from typing import List, Optional, Tuple, Union, cast
 
-from pylabrobot.plate_reading.standard import ImagingMode, Exposure, FocalPosition, Gain
-from pylabrobot.plate_reading.backend import ImagerBackend
 from pylabrobot.machines import Machine
+from pylabrobot.plate_reading.backend import ImagerBackend
+from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode
 from pylabrobot.resources import Plate, Resource, Well
 
 

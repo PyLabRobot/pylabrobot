@@ -1,5 +1,5 @@
-from typing import cast
 import unittest
+from typing import cast
 
 from pylabrobot.resources import (
   Coordinate,

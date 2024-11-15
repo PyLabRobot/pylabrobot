@@ -1,11 +1,10 @@
+from pylabrobot.resources.plate import Lid, Plate
+from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
+  CrossSectionType,
   Well,
   WellBottomType,
-  CrossSectionType,
 )
-from pylabrobot.resources.utils import create_ordered_items_2d
-from pylabrobot.resources.plate import Lid, Plate
-
 
 # # # # # # # # # # Eppendorf_96_wellplate_250ul_Vb # # # # # # # # # #
 

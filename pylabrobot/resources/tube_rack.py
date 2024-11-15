@@ -3,8 +3,8 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union, cast
 from pylabrobot.resources.itemized_resource import ItemizedResource
 from pylabrobot.resources.tube import Tube
 
-from .resource import Resource, Coordinate
 from .liquid import Liquid
+from .resource import Coordinate, Resource
 
 
 class TubeRack(ItemizedResource[Tube]):

@@ -1,6 +1,5 @@
 import unittest
 
-
 from .linalg import matrix_multiply_3x3, matrix_vector_multiply_3x3
 
 

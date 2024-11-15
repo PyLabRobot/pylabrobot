@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
 import logging
+from abc import ABCMeta, abstractmethod
 from typing import Optional, cast
 
-from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.carrier import ResourceHolder
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
-from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
 from pylabrobot.resources.trash import Trash
-
 
 logger = logging.getLogger("pylabrobot")
 

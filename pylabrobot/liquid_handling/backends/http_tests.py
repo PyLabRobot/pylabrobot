@@ -5,15 +5,15 @@ from responses import matchers
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import HTTPBackend
-from pylabrobot.resources.hamilton import STARLetDeck
 from pylabrobot.resources import (
+  HTF,
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
-  HTF,
   Cor_96_wellplate_360ul_Fb,
   no_tip_tracking,
   no_volume_tracking,
 )
+from pylabrobot.resources.hamilton import STARLetDeck
 
 header_match = matchers.header_matcher({"User-Agent": "pylabrobot/0.1.0"})
 

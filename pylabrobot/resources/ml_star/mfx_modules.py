@@ -3,7 +3,6 @@ from __future__ import annotations
 from pylabrobot.resources.carrier import Coordinate, PlateHolder
 from pylabrobot.resources.resource_holder import ResourceHolder
 
-
 ################## 1. Static modules ##################
 
 

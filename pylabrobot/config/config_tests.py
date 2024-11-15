@@ -1,16 +1,16 @@
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from pylabrobot import load_config
 from pylabrobot.config.config import Config
-from pylabrobot.config.io.file import FileReader, FileWriter
 from pylabrobot.config.formats import ConfigLoader, ConfigSaver
 from pylabrobot.config.formats.ini_config import IniLoader, IniSaver
 from pylabrobot.config.formats.json_config import (
   JsonLoader,
   JsonSaver,
 )
+from pylabrobot.config.io.file import FileReader, FileWriter
 
 
 class ConfigTests(unittest.TestCase):

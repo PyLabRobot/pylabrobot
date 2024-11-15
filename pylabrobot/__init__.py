@@ -1,13 +1,12 @@
 import datetime
 import logging
-from pathlib import Path
 import sys
-from typing import Optional, Union
 import warnings
+from pathlib import Path
+from typing import Optional, Union
 
 from pylabrobot.__version__ import __version__
-
-from pylabrobot.config import load_config, Config
+from pylabrobot.config import Config, load_config
 
 CONFIG_FILE_NAME = "pylabrobot"
 

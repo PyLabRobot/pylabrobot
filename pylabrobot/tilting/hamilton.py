@@ -1,8 +1,8 @@
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.tilting.tilter import Tilter
 from pylabrobot.tilting.hamilton_backend import (
   HamiltonTiltModuleBackend,
 )
+from pylabrobot.tilting.tilter import Tilter
 
 
 class HamiltonTiltModule(Tilter):

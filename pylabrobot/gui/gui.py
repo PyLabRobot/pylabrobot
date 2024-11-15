@@ -7,11 +7,11 @@ from flask import Flask, jsonify, render_template, request
 
 import pylabrobot.resources as resources_module
 from pylabrobot.resources import (
+  Deck,
+  OTDeck,
   Resource,
   STARDeck,
   STARLetDeck,
-  OTDeck,
-  Deck,
 )
 
 print("!" * 80)

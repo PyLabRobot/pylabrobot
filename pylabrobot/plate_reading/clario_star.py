@@ -2,13 +2,14 @@ import asyncio
 import ctypes
 import logging
 import math
-import time
 import struct
 import sys
+import time
 from typing import List, Optional, Union
 
-from .backend import PlateReaderBackend
 from pylabrobot import utils
+
+from .backend import PlateReaderBackend
 
 if sys.version_info >= (3, 8):
   from typing import Literal

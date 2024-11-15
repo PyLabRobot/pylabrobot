@@ -1,21 +1,22 @@
-from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.tip_rack import (
-  TipSpot,
-  TipRack,
   NestedTipRack,
+  TipRack,
+  TipSpot,
 )
+from pylabrobot.resources.utils import create_ordered_items_2d
+
 from .tip_creators import (
+  fifty_ul_tip_no_filter,
+  fifty_ul_tip_with_filter,
+  five_ml_tip,
+  four_ml_tip_with_filter,
+  high_volume_tip_no_filter,
+  high_volume_tip_with_filter,
   low_volume_tip_no_filter,
   low_volume_tip_with_filter,
   slim_standard_volume_tip_with_filter,
   standard_volume_tip_no_filter,
   standard_volume_tip_with_filter,
-  high_volume_tip_no_filter,
-  high_volume_tip_with_filter,
-  four_ml_tip_with_filter,
-  five_ml_tip,
-  fifty_ul_tip_with_filter,
-  fifty_ul_tip_no_filter,
   ultrawide_high_volume_tip_with_filter,
   wide_high_volume_tip_with_filter,
 )

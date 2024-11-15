@@ -1,9 +1,9 @@
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.trash import Trash
 from pylabrobot.resources.hamilton.hamilton_decks import (
-  HamiltonDeck,
   _RAILS_WIDTH,
+  HamiltonDeck,
 )
+from pylabrobot.resources.trash import Trash
 
 
 class VantageDeck(HamiltonDeck):

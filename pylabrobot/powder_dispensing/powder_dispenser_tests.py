@@ -1,15 +1,16 @@
 import unittest
+from typing import List
 from unittest.mock import AsyncMock
+
+from pylabrobot.powder_dispensing.backend import (
+  DispenseResults,
+  PowderDispense,
+  PowderDispenserBackend,
+)
 from pylabrobot.powder_dispensing.powder_dispenser import (
   PowderDispenser,
 )
-from pylabrobot.powder_dispensing.backend import (
-  PowderDispenserBackend,
-  PowderDispense,
-  DispenseResults,
-)
-from pylabrobot.resources import Powder, Cor_96_wellplate_360ul_Fb
-from typing import List
+from pylabrobot.resources import Cor_96_wellplate_360ul_Fb, Powder
 
 
 class MockPowderDispenserBackend(PowderDispenserBackend):

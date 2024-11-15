@@ -1,10 +1,10 @@
-from typing import Optional, Dict, Any, cast
 import urllib.parse
+from typing import Any, Dict, Optional, cast
 
+from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 from pylabrobot.liquid_handling.backends.serializing_backend import (
   SerializingBackend,
 )
-from pylabrobot.__version__ import STANDARD_FORM_JSON_VERSION
 
 try:
   import requests

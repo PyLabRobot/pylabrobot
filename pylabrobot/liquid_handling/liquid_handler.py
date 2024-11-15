@@ -8,71 +8,69 @@ import inspect
 import json
 import logging
 import threading
+import warnings
 from typing import (
   Any,
   Callable,
   Dict,
-  Union,
-  Optional,
   List,
+  Optional,
+  Protocol,
   Sequence,
   Set,
   Tuple,
-  Protocol,
+  Union,
   cast,
 )
-import warnings
 
-from pylabrobot.machines.machine import Machine, need_setup_finished
+from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
   get_strictness,
 )
-from pylabrobot.liquid_handling.errors import ChannelizedError
-from pylabrobot.resources.errors import HasTipError
+from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading import PlateReader
-from pylabrobot.resources.errors import CrossContaminationError
 from pylabrobot.resources import (
   Container,
-  Deck,
-  Resource,
-  ResourceStack,
   Coordinate,
-  ResourceHolder,
-  PlateHolder,
+  Deck,
   Lid,
   Plate,
   PlateAdapter,
+  PlateHolder,
+  Resource,
+  ResourceHolder,
+  ResourceStack,
   Tip,
   TipRack,
   TipSpot,
-  Trash,
-  Well,
   TipTracker,
+  Trash,
   VolumeTracker,
+  Well,
+  does_cross_contamination_tracking,
   does_tip_tracking,
   does_volume_tracking,
-  does_cross_contamination_tracking,
 )
+from pylabrobot.resources.errors import CrossContaminationError, HasTipError
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
 from .standard import (
-  Pickup,
-  PickupTipRack,
+  Aspiration,
+  AspirationContainer,
+  AspirationPlate,
+  Dispense,
+  DispenseContainer,
+  DispensePlate,
   Drop,
   DropTipRack,
-  Aspiration,
-  AspirationPlate,
-  AspirationContainer,
-  Dispense,
-  DispensePlate,
-  DispenseContainer,
-  Move,
   GripDirection,
+  Move,
+  Pickup,
+  PickupTipRack,
 )
-
 
 logger = logging.getLogger("pylabrobot")
 

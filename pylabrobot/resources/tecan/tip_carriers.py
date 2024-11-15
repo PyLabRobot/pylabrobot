@@ -1,9 +1,10 @@
 from typing import Dict, Optional
+
 from pylabrobot.resources.carrier import (
-  TipCarrier,
   ResourceHolder,
-  create_resources,
+  TipCarrier,
   create_homogeneous_resources,
+  create_resources,
 )
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.tecan.tecan_resource import TecanResource

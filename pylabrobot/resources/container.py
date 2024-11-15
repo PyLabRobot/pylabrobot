@@ -1,10 +1,10 @@
 from typing import Any, Callable, Dict, Optional
 
-from .resource import Resource
-from .coordinate import Coordinate
-from .volume_tracker import VolumeTracker
-
 from pylabrobot.serializer import serialize
+
+from .coordinate import Coordinate
+from .resource import Resource
+from .volume_tracker import VolumeTracker
 
 
 class Container(Resource):

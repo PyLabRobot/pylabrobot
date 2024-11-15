@@ -1,5 +1,5 @@
 import textwrap
-from typing import Optional, List
+from typing import List, Optional
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck

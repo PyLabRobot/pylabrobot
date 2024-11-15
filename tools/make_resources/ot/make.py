@@ -4,10 +4,9 @@ from opentrons_shared_data.load import get_shared_data_root
 
 from pylabrobot.resources import Plate, TipRack, TubeRack
 from pylabrobot.resources.opentrons.load import (
-  load_shared_opentrons_resource,
   UnknownResourceType,
+  load_shared_opentrons_resource,
 )
-
 
 OT_PATH = get_shared_data_root()
 

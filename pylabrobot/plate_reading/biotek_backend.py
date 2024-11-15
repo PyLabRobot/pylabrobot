@@ -29,7 +29,6 @@ except ImportError:
 from pylabrobot.plate_reading.backend import ImageReaderBackend
 from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode
 
-
 logger = logging.getLogger("pylabrobot.plate_reading.biotek")
 
 

@@ -1,7 +1,7 @@
 from .hamilton_decks import (
   HamiltonDeck,
   HamiltonSTARDeck,
-  STARLetDeck,
   STARDeck,
+  STARLetDeck,
 )
 from .vantage_decks import VantageDeck

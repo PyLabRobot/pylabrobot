@@ -1,13 +1,12 @@
+import asyncio
 import logging
 import threading
 import time
-import asyncio
-from typing import Optional, List, Dict, Union
+from typing import Dict, List, Optional, Union
 
 from pymodbus.client import AsyncModbusSerialClient  # type: ignore
 
 from pylabrobot.pumps.backend import PumpArrayBackend
-
 
 logger = logging.getLogger("pylabrobot")
 
