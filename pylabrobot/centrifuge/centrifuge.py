@@ -1,7 +1,9 @@
+from typing import cast
 from pylabrobot.machines.machine import Machine
 from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.serializer import serialize, deserialize
 
 
 class Centrifuge(Machine):
@@ -62,7 +64,9 @@ class Loader(Machine, ResourceHolder):
   """The front end for centrifuge loaders.
   Centrifuge loaders are devices that can load and unload samples from centrifuges."""
 
-  def __init__(self, backend: LoaderBackend, centrifuge: Centrifuge, stage_location: Coordinate) -> None:
+  def __init__(
+    self, backend: LoaderBackend, centrifuge: Centrifuge, stage_location: Coordinate
+  ) -> None:
     super().__init__(backend=backend)
     self.backend: LoaderBackend = backend  # fix type
     self.centrifuge: Centrifuge = centrifuge
@@ -80,3 +84,25 @@ class Loader(Machine, ResourceHolder):
     if not self.centrifuge.door_open:
       raise CentrifugeDoorError("Centrifuge door must be open to unload a plate.")
     await self.backend.unload()
+
+  def serialize(self) -> dict:
+    return {
+      **super().serialize(),
+      "resource": ResourceHolder.serialize(self),
+      "machine": Machine.serialize(self),
+      "centrifuge": self.centrifuge.serialize(),
+      "stage_location": serialize(self.stage_location),
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshall: bool = False):
+    data_copy = data.copy()  # copy data because we will be modifying it
+    centrifuge_data = data_copy.pop("centrifuge")
+    centrifuge = Centrifuge.deserialize(centrifuge_data)
+    stage_location_data = data_copy.pop("stage_location")
+    stage_location = cast(Coordinate, deserialize(stage_location_data))
+    return cls(
+      centrifuge=centrifuge,
+      stage_location=stage_location,
+      **data_copy,
+    )

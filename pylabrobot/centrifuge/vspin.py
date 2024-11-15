@@ -33,7 +33,7 @@ class Access2Backend(LoaderBackend):
     self.dev = Device(lazy_open=True, device_id=device_id)
     self.timeout = timeout
 
-  async def _read(self):
+  async def _read(self) -> bytes:
     x = b""
     r = None
     start = time.time()
@@ -46,10 +46,10 @@ class Access2Backend(LoaderBackend):
         raise TimeoutError("No data received within the specified timeout period")
     return x
 
-  def send_command(self, command: bytes):
+  async def send_command(self, command: bytes) -> bytes:
     logger.debug("[loader] Sending %s", command.hex())
     self.dev.write(command)
-    return self._read()
+    return await self._read()
 
   async def setup(self):
     logger.debug("[loader] setup")
@@ -137,9 +137,7 @@ class VSpin(CentrifugeBackend):
   """Backend for the Agilent Centrifuge.
   Note that this is not a complete implementation."""
 
-  def __init__(
-    self, bucket_1_position: int, device_id: Optional[str] = None, loader: Optional[Loader] = None
-  ):
+  def __init__(self, bucket_1_position: int, device_id: Optional[str] = None):
     """
     Args:
       device_id: The libftdi id for the centrifuge. Find using
