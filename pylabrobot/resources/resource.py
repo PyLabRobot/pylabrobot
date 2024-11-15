@@ -288,6 +288,7 @@ class Resource:
 
     # Check for unsupported resource assignment operations
     self._check_assignment(resource=resource, reassign=reassign)
+    self.get_root()._check_naming_conflicts(resource=resource)
 
     # Call "will assign" callbacks
     for callback in self._will_assign_resource_callbacks:
@@ -359,6 +360,24 @@ class Resource:
     if len(msgs) > 0:
       msg = " ".join(msgs)
       raise ValueError(msg)
+
+  def get_root(self) -> Resource:
+    """Get the root of the resource tree."""
+    if self.parent is None:
+      return self
+    return self.parent.get_root()
+
+  def _check_naming_conflicts(self, resource: Resource):
+    """Recursively check for naming conflicts in the resource tree."""
+    if resource.name == self.name:
+      raise ValueError(f"Resource with name '{resource.name}' already exists in the tree.")
+
+    # check if the name of the resource we are currently checking already exists in this subtree
+    for child in self.children:
+      child._check_naming_conflicts(resource)
+    # check if the name of any of the children of the resource already exists in this subtree
+    for child in resource.children:
+      self._check_naming_conflicts(child)
 
   def unassign_child_resource(self, resource: Resource):
     """Unassign a child resource from this resource.
