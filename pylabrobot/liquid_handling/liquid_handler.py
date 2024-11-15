@@ -459,7 +459,7 @@ class LiquidHandler(Resource, Machine):
   @need_setup_finished
   async def drop_tips(
     self,
-    tip_spots: List[Union[TipSpot, Trash]],
+    tip_spots: Sequence[Union[TipSpot, Trash]],
     use_channels: Optional[List[int]] = None,
     offsets: Optional[List[Coordinate]] = None,
     allow_nonzero_volume: bool = False,
@@ -1067,7 +1067,7 @@ class LiquidHandler(Resource, Machine):
     ratios: Optional[List[float]] = None,
     target_vols: Optional[List[float]] = None,
     aspiration_flow_rate: Optional[float] = None,
-    dispense_flow_rates: Optional[Union[float, List[Optional[float]]]] = None,
+    dispense_flow_rates: Optional[List[Optional[float]]] = None,
     **backend_kwargs,
   ):
     """Transfer liquid from one well to another.
@@ -1125,14 +1125,15 @@ class LiquidHandler(Resource, Machine):
     await self.aspirate(
       resources=[source],
       vols=[sum(target_vols)],
-      flow_rates=aspiration_flow_rate,
+      flow_rates=[aspiration_flow_rate],
       **backend_kwargs,
     )
-    for target, vol in zip(targets, target_vols):
+    dispense_flow_rates = dispense_flow_rates or [None] * len(targets)
+    for target, vol, dfr in zip(targets, target_vols, dispense_flow_rates):
       await self.dispense(
         resources=[target],
         vols=[vol],
-        flow_rates=dispense_flow_rates,
+        flow_rates=[dfr],
         use_channels=[0],
         **backend_kwargs,
       )
