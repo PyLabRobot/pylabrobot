@@ -1,0 +1,2 @@
+class LoaderNoPlateError(Exception):
+  pass
