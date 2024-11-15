@@ -53,7 +53,7 @@ class TestPowderDispenser(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense_multiple_resources(self):
     plate = Cor_96_wellplate_360ul_Fb(name="test_resource")
-    resources = [plate["A1"], plate["A2"]]
+    resources = plate["A1"] + plate["A2"]
     powders = [Powder("salt"), Powder("salt")]
     amounts = [0.005, 0.010]
     await self.dispenser.dispense(resources, powders, amounts)

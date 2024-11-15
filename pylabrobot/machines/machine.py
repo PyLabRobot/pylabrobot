@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import functools
+import sys
 from abc import ABC
-from typing import Callable
+from typing import Any, Awaitable, Callable, TypeVar
 
 from pylabrobot.machines.backends import MachineBackend
 
+if sys.version_info < (3, 10):
+  from typing_extensions import ParamSpec
+else:
+  from typing import ParamSpec
 
-def need_setup_finished(func: Callable):
+_P = ParamSpec("_P")
+_R = TypeVar("_R", bound=Awaitable[Any])
+
+
+def need_setup_finished(func: Callable[_P, _R]) -> Callable[_P, _R]:
   """Decorator for methods that require the machine to be set up.
 
   Checked by verifying `self.setup_finished` is `True`.
@@ -17,10 +26,13 @@ def need_setup_finished(func: Callable):
   """
 
   @functools.wraps(func)
-  async def wrapper(self: Machine, *args, **kwargs):
+  async def wrapper(*args, **kwargs):
+    assert isinstance(args[0], Machine), "The first argument must be a Machine."
+    self = args[0]
+
     if not self.setup_finished:
       raise RuntimeError("The setup has not finished. See `setup`.")
-    return await func(self, *args, **kwargs)
+    return await func(*args, **kwargs)
 
   return wrapper
 
