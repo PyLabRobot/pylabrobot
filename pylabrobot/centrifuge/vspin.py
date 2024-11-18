@@ -18,18 +18,18 @@ logger = logging.getLogger("pylabrobot.centrifuge.vspin")
 
 
 class Access2Backend(LoaderBackend):
-  def __init__(self, centrifuge: "VSpin", device_id: str, timeout: int = 60):
+  def __init__(self, vspin: "VSpin", device_id: str, timeout: int = 60):
     """
     Args:
       device_id: The libftdi id for the loader. Find using
         `python3 -m pylibftdi.examples.list_devices`
     """
-    if centrifuge.device_id is None:
+    if vspin.device_id is None:
       raise ValueError(
         "device_id must be provided to Centrifuge if loader is used. Use "
         "python3 -m pylibftdi.examples.list_devices to find the device id for each"
       )
-    self.centrifuge = centrifuge
+    self.vspin = vspin
     self.dev = Device(lazy_open=True, device_id=device_id)
     self.timeout = timeout
 
@@ -58,7 +58,8 @@ class Access2Backend(LoaderBackend):
     self.dev.baudrate = 115384
 
     status = await self.get_status()
-    if not status.endswith(bytes.fromhex("1105")):
+    print("status", status)
+    if not status.startswith(bytes.fromhex("1105")):
       raise RuntimeError("Failed to get status")
 
     await self.send_command(bytes.fromhex("110500030014000072b1"))
