@@ -6192,38 +6192,68 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="FY")
 
-  async def move_iswap_x_relative(self, step_size: float):
+  async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
     """
     Args:
-      step_size: X Step size [1mm] Between -99.9 and 99.9.
+      step_size: X Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
+      allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
 
-    assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
     direction = 0 if step_size >= 0 else 1
+    max_step_size = 99.9
+    if abs(step_size) > max_step_size:
+      if not allow_splitting:
+        raise ValueError("step_size must be less than 99.9")
+      await self.move_iswap_x_relative(
+        step_size=max_step_size if step_size > 0 else -max_step_size, allow_splitting=True
+      )
+      remaining_steps = step_size - max_step_size if step_size > 0 else step_size + max_step_size
+      return await self.move_iswap_x_relative(remaining_steps, allow_splitting)
+
     return await self.send_command(
       module="C0", command="GX", gx=str(round(abs(step_size) * 10)).zfill(3), xd=direction
     )
 
-  async def move_iswap_y_relative(self, step_size: float):
+  async def move_iswap_y_relative(self, step_size: float, allow_splitting: bool = False):
     """
     Args:
-      step_size: Y Step size [1mm] Between -99.9 and 99.9.
+      step_size: Y Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
+      allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
 
-    assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
     direction = 0 if step_size >= 0 else 1
+    max_step_size = 99.9
+    if abs(step_size) > max_step_size:
+      if not allow_splitting:
+        raise ValueError("step_size must be less than 99.9")
+      await self.move_iswap_y_relative(
+        step_size=max_step_size if step_size > 0 else -max_step_size, allow_splitting=True
+      )
+      remaining_steps = step_size - max_step_size if step_size > 0 else step_size + max_step_size
+      return await self.move_iswap_y_relative(remaining_steps, allow_splitting)
+
     return await self.send_command(
       module="C0", command="GY", gy=str(round(abs(step_size) * 10)).zfill(3), yd=direction
     )
 
-  async def move_iswap_z_relative(self, step_size: float):
+  async def move_iswap_z_relative(self, step_size: float, allow_splitting: bool = False):
     """
     Args:
-      step_size: Z Step size [1mm] Between -99.9 and 99.9.
+      step_size: Z Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
+      allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
 
-    assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
     direction = 0 if step_size >= 0 else 1
+    max_step_size = 99.9
+    if abs(step_size) > max_step_size:
+      if not allow_splitting:
+        raise ValueError("step_size must be less than 99.9")
+      await self.move_iswap_z_relative(
+        step_size=max_step_size if step_size > 0 else -max_step_size, allow_splitting=True
+      )
+      remaining_steps = step_size - max_step_size if step_size > 0 else step_size + max_step_size
+      return await self.move_iswap_z_relative(remaining_steps, allow_splitting)
+
     return await self.send_command(
       module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
     )
