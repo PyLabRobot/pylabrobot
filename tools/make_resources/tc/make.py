@@ -1,4 +1,3 @@
-
 import re
 
 from pylabrobot.resources import Coordinate
@@ -78,9 +77,7 @@ def main(pc, tc, p, tr, tcr):
         if all(x == resource_size_x[0] for x in resource_size_x) and all(
           y == resource_size_y[0] for y in resource_size_y
         ):
-          o.write(
-            f"    sites=create_homogeneous_resources(klass=ResourceHolder, locations=[\n"
-          )
+          o.write(f"    sites=create_homogeneous_resources(klass=ResourceHolder, locations=[\n")
           for l in locations:
             o.write(f"        {repr(l)},\n")
           o.write(f"      ],\n")
@@ -174,9 +171,7 @@ def main(pc, tc, p, tr, tcr):
           o.write(f"  #   size_x={size_x},\n")
           o.write(f"  #   size_y={size_y},\n")
           o.write("  #   size_z=None,           # measure the total z height\n")
-          o.write(
-            "  #   nesting_z_height=None, # measure overlap between lid and plate\n"
-          )
+          o.write("  #   nesting_z_height=None, # measure overlap between lid and plate\n")
           o.write(f'  #   model="{lid_name}",\n')
           o.write("  # )\n\n\n")
 
@@ -226,9 +221,7 @@ def main(pc, tc, p, tr, tcr):
             # print a warning, because this parameter is confusing in the file and I don't have
             # have a device to test this on. tbc.
             tcr.write('  print("WARNING: total_tip_length <= 0.")\n')
-            tcr.write(
-              '  print("Please get in touch at https://discuss.pylabrobot.org")\n'
-            )
+            tcr.write('  print("Please get in touch at https://discuss.pylabrobot.org")\n')
           tcr.write(f"  return TecanTip(\n")
           tcr.write(f"    has_filter={has_filter},\n")
           tcr.write(f"    total_tip_length={total_tip_length},\n")
@@ -259,7 +252,7 @@ def main(pc, tc, p, tr, tcr):
 if __name__ == "__main__":
   with open("plate_carriers.py", "w") as plate_carriers, open(
     "tip_carriers.py", "w"
-  ) as tip_carriers, open("plates.py", "w") as plates, open(
-    "tip_racks.py", "w"
-  ) as tip_racks, open("tip_creators.py", "w") as tip_creators:
+  ) as tip_carriers, open("plates.py", "w") as plates, open("tip_racks.py", "w") as tip_racks, open(
+    "tip_creators.py", "w"
+  ) as tip_creators:
     main(plate_carriers, tip_carriers, plates, tip_racks, tip_creators)
