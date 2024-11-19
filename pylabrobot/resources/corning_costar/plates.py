@@ -428,3 +428,8 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
       max_volume=360,
     ),
   )
+
+
+def Cor_6_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
+  # https://github.com/PyLabRobot/pylabrobot/issues/313
+  raise NotImplementedError("deprecated. use Cor_6_wellplate_16800ul_Fb instead")
