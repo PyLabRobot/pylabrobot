@@ -50,39 +50,45 @@ def _compute_height_from_volume_Cos_6_wellplate_16800ul_Fb(
   )
 
 
-def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
-  """Corning-Costar 6-well multi-well plate (MWP); product no.: 3516.
-  - Material: ?
-  - Cleanliness: 3516: sterilized by gamma irradiation
-  - Nonreversible lids with condensation rings to reduce contamination
-  - Treated for optimal cell attachment
-  - Cell growth area: 9.5 cm² (approx.)
-  - Total volume: 16.8 mL
+def Cor_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
+  Corning cat. no.s: 3335, 3506, 3516, 3471
+  """
+  BOTTOM_INNER_WELL_RADIUS = 35.43 / 2  # from Corning Product Description
+  TOP_INNER_WELL_RADIUS = 34.80 / 2  # from Corning Product Description
+
+  well_kwargs = {
+    "size_x": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_y": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_z": 17.4,  # from Corning Product Description
+    "bottom_type": WellBottomType.FLAT,
+    "max_volume": 16800,  # from Corning Product Description
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
+      liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
+      liquid_volume, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+  }
+
   return Plate(
     name=name,
-    size_x=127.0,
-    size_y=86.0,
-    size_z=20.0,
-    lid=Cos_6_wellplate_16800ul_Fb_Lid(name=name + "_lid") if with_lid else None,
-    model="Cos_6_wellplate_16800ul_Fb",
+    size_x=127.76,
+    size_y=85.47,
+    size_z=20.27,
+    lid=lid,
+    model=Cor_6_wellplate_16800ul_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=3,
       num_items_y=2,
-      dx=7.0,
-      dy=5.45,
-      dz=1.35,
-      item_dx=38.45,
-      item_dy=38.45,
-      size_x=35.0,
-      size_y=35.0,
-      size_z=17.5,
-      bottom_type=WellBottomType.FLAT,
-      material_z_thickness=1.4,
-      cross_section_type=CrossSectionType.CIRCLE,
-      compute_volume_from_height=_compute_volume_from_height_Cos_6_wellplate_16800ul_Fb,
-      compute_height_from_volume=_compute_height_from_volume_Cos_6_wellplate_16800ul_Fb,
+      dx=24.76 - BOTTOM_INNER_WELL_RADIUS,  # from Corning Product Description
+      dy=23.16 - BOTTOM_INNER_WELL_RADIUS,  # from Corning Product Description
+      dz=2.54,  # from Corning Product Description
+      item_dx=39.12,  # from Corning Product Description
+      item_dy=39.12,  # from Corning Product Description
+      material_z_thickness=1.27,  # from Corning Product Description
+      **well_kwargs,
     ),
   )
 
@@ -99,6 +105,149 @@ def Cos_6_wellplate_16800ul_Fb_P(name: str, with_lid: bool = True) -> Plate:
   raise NotImplementedError(
     "_L and _P definitions are deprecated. Use "
     "Cos_6_wellplate_16800ul_Fb().rotated(z=90) instead."
+  )
+
+
+# # # # # # # # # # Cor_12_wellplate_6900ul_Fb # # # # # # # # # #
+
+
+def Cor_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+  """
+  Corning cat. no.s: 3336, 3512, 3513
+
+  not validated
+  """
+  BOTTOM_INNER_WELL_RADIUS = 22.73 / 2  # from Corning Product Description
+  TOP_INNER_WELL_RADIUS = 22.11 / 2  # from Corning Product Description
+
+  well_kwargs = {
+    "size_x": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_y": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_z": 17.5,  # from Corning Product Description
+    "bottom_type": WellBottomType.FLAT,
+    "max_volume": 6900,  # from Corning Product Description
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
+      liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
+      liquid_volume, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.76,  # from Corning Product Description
+    size_y=85.6,  # from Corning Product Description
+    size_z=20.02,  # from Corning Product Description
+    lid=lid,
+    model=Cor_12_wellplate_6900ul_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=4,
+      num_items_y=3,
+      dx=24.94 - TOP_INNER_WELL_RADIUS,  # from Corning Product Description
+      dy=16.79 - TOP_INNER_WELL_RADIUS,  # from Corning Product Description
+      dz=2.16,  # from Corning Product Description
+      item_dx=26.01,  # from Corning Product Description
+      item_dy=26.01,  # from Corning Product Description
+      material_z_thickness=1.27,  # from Corning Product Description
+      **well_kwargs,
+    ),
+  )
+
+
+# # # # # # # # # # Cor_24_wellplate_3470ul_Fb # # # # # # # # # #
+
+
+def Cor_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+  """
+  Corning cat. no.s: 3337, 3524, 3526, 3527, 3473
+  https://www.corning.com/catalog/cls/documents/drawings/MD_Microplate_Dimension_Sheets_Multiple_Well.pdf
+  """
+  BOTTOM_INNER_WELL_RADIUS = 16.26 / 2  # from Corning Product Description
+  TOP_INNER_WELL_RADIUS = 15.62 / 2  # from Corning Product Description
+
+  well_kwargs = {
+    "size_x": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_y": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_z": 17.4,  # from Corning Product Description
+    "bottom_type": WellBottomType.FLAT,
+    "max_volume": 3400,  # website
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
+      liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
+      liquid_volume, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.76,  # from Corning Product Description
+    size_y=85.47,  # from Corning Product Description
+    size_z=20.27,  # from Corning Product Description
+    lid=lid,
+    model=Cor_24_wellplate_3470ul_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=6,
+      num_items_y=4,
+      dx=17.46 - TOP_INNER_WELL_RADIUS,  # from Corning Product Description
+      dy=13.78 - TOP_INNER_WELL_RADIUS,  # from Corning Product Description
+      dz=2.54,  # from Corning Product Description
+      item_dx=19.3,  # from Corning Product Description
+      item_dy=19.3,  # from Corning Product Description
+      material_z_thickness=1.27,  # from Corning Product Description
+      **well_kwargs,
+    ),
+  )
+
+
+# # # # # # # # # # Cor_48_wellplate_1620ul_Fb # # # # # # # # # #
+
+
+def Cor_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+  """
+  Corning cat. no.s: 3548
+
+  not validated
+  """
+  BOTTOM_INNER_WELL_RADIUS = 11.56 / 2  # from Corning Product Description
+  TOP_INNER_WELL_RADIUS = 11.05 / 2  # from Corning Product Description
+
+  well_kwargs = {
+    "size_x": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_y": BOTTOM_INNER_WELL_RADIUS * 2,
+    "size_z": 17.4,  # from Corning Product Description
+    "bottom_type": WellBottomType.FLAT,
+    "max_volume": 1620,  # from Corning Product Description
+    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
+      liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
+      liquid_volume, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
+    ),
+  }
+
+  return Plate(
+    name=name,
+    size_x=127.76,  # from Corning Product Description
+    size_y=85.6,  # from Corning Product Description
+    size_z=20.02,  # from Corning Product Description
+    lid=lid,
+    model=Cor_48_wellplate_1620ul_Fb.__name__,
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=8,
+      num_items_y=6,
+      dx=18.16 - TOP_INNER_WELL_RADIUS,  # from Corning Product Description
+      dy=10.08 - TOP_INNER_WELL_RADIUS,  # from Corning Product Description
+      dz=2.87,  # from Corning Product Description
+      item_dx=13.08,  # from Corning Product Description
+      item_dy=13.08,  # from Corning Product Description
+      material_z_thickness=1.27,  # from Corning Product Description
+      **well_kwargs,
+    ),
   )
 
 
@@ -277,52 +426,5 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
       bottom_type=WellBottomType.FLAT,
       cross_section_type=CrossSectionType.CIRCLE,
       max_volume=360,
-    ),
-  )
-
-
-# # # # # # # # # # Cor_6_wellplate_Fl # # # # # # # # # #
-
-
-def Cor_6_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
-  """
-  Corning cat. no.: 3471
-  - Material: Polystyrene
-  - Tissue culture treated: No
-  """
-  BOTTOM_INNER_WELL_RADIUS = 34.798 / 2  # from Corning Product Description
-  TOP_INNER_WELL_RADIUS = 35.433 / 2  # from Corning Product Description
-
-  well_kwargs = {
-    "size_x": BOTTOM_INNER_WELL_RADIUS * 2,
-    "size_y": BOTTOM_INNER_WELL_RADIUS * 2,
-    "size_z": 17.399,  # from Corning Product Description
-    "bottom_type": WellBottomType.FLAT,
-    "max_volume": 16.850,  # calculated
-    "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
-      liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
-    ),
-    "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_conical_frustum(
-      liquid_volume, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
-    ),
-  }
-
-  return Plate(
-    name=name,
-    size_x=127.762,  # from Corning Product Description
-    size_y=85.471,  # from Corning Product Description
-    size_z=22.6314,  # from Corning Product Description
-    lid=lid,
-    model=Cor_6_wellplate_Fl.__name__,
-    ordered_items=create_ordered_items_2d(
-      Well,
-      num_items_x=3,
-      num_items_y=2,
-      dx=7.5,  # measured
-      dy=6.3,  # measured
-      dz=1.8,  # calibrated manually by z-stepping down using a pipette.
-      item_dx=39,  # measured
-      item_dy=39,  # measured
-      **well_kwargs,
     ),
   )
