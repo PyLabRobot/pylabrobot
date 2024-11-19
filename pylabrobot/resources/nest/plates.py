@@ -4,7 +4,7 @@ from pylabrobot.resources.height_volume_functions import (
   compute_height_from_volume_rectangle,
   compute_volume_from_height_rectangle,
 )
-from pylabrobot.resources.plate import Lid, Plate
+from pylabrobot.resources.plate import Plate
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.well import (
   Well,
