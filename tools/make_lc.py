@@ -84,9 +84,7 @@ def main():
       continue
 
     dat = binascii.unhexlify(curve_data[2:])
-    assert len(dat) % 16 == 0 and not len(dat) == 0, (
-      "invalid length for " + dat.decode()
-    )
+    assert len(dat) % 16 == 0 and not len(dat) == 0, "invalid length for " + dat.decode()
 
     curve: Dict[float, float] = {}
 
@@ -100,13 +98,12 @@ def main():
     if notes != "":
       notes = "\n    # " + "\n    # ".join(notes.splitlines())
 
-    if name[0] in {
-      str(i) for i in range(11)
-    }:  # python doesn't allow numbers as first character
+    if name[0] in {str(i) for i in range(11)}:  # python doesn't allow numbers as first character
       name = "_" + name
 
     out_file.write(
-      textwrap.dedent(f"""\n
+      textwrap.dedent(
+        f"""\n
     {notes}
     mapping[({tip_volume}, {core}, {tip}, {has_filter}, Liquid.{liquid.name}, {jet}, {empty})] = \\
     {name} = HamiltonLiquidClass(
@@ -128,7 +125,8 @@ def main():
       dispense_settling_time={dispense_settling_time},
       dispense_stop_flow_rate={dispense_stop_flow_rate},
       dispense_stop_back_volume={dispense_stop_back_volume}
-    )""")
+    )"""
+      )
     )
 
     print(name)

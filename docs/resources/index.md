@@ -74,6 +74,7 @@ library/corning_costar
 library/eppendorf
 library/falcon
 library/ml_star
+library/nest
 library/opentrons
 library/porvair
 library/revvity
