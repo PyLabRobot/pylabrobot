@@ -105,6 +105,11 @@ html_theme_options = {
       "url": "https://youtube.com/@pylabrobot",
       "icon": "fa-brands fa-youtube",
     },
+    {
+      "name": "Bluesky",
+      "url": "https://bsky.app/profile/pylabrobot.bsky.social",
+      "icon": "fa-brands fa-bluesky",
+    },
   ],
   "logo": {
     "text": "PyLabRobot",
