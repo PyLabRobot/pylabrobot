@@ -99,6 +99,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `STAR.{rotate_iswap_wrist,rotate_iswap_rotation_drive}` (https://github.com/PyLabRobot/pylabrobot/pull/298)
 - `STAR.request_pip_channel_version`
 - `STAR.ztouch_probe_z_height_using_channel` for getting z-height by probing without cLLD (https://github.com/PyLabRobot/pylabrobot/pull/260)
+- `nest_8_troughplate_22000uL_Vb` and `nest_12_troughplate_15000uL_Vb` (https://github.com/PyLabRobot/pylabrobot/pull/312)
 
 ### Deprecated
 
