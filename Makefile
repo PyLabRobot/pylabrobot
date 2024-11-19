@@ -20,15 +20,15 @@ clean-docs:
 	rm -rf docs/user_guide/jupyter_execute
 
 lint:
-	$(BIN)python -m ruff check pylabrobot
+	$(BIN)python -m ruff check pylabrobot tools docs
 
 format:
-	$(BIN)python -m ruff format pylabrobot
-	$(BIN)python -m ruff check --fix pylabrobot --select I
+	$(BIN)python -m ruff format pylabrobot tools docs
+	$(BIN)python -m ruff check --fix pylabrobot tools docs --select I
 
 format-check:
-	$(BIN)python -m ruff format --check pylabrobot
-	$(BIN)python -m ruff check pylabrobot --select I
+	$(BIN)python -m ruff format --check pylabrobot tools docs
+	$(BIN)python -m ruff check pylabrobot tools docs --select I
 
 test:
 	$(BIN)python -m pytest -s -v
