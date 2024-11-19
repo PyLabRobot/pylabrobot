@@ -50,7 +50,7 @@ def _compute_height_from_volume_Cos_6_wellplate_16800ul_Fb(
   )
 
 
-def Cor_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+def Cor_6_wellplate_16800ul_Fb(name: str, with_lid=False) -> Plate:
   """
   Corning cat. no.s: 3335, 3506, 3516, 3471
   """
@@ -76,7 +76,7 @@ def Cor_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
     size_x=127.76,
     size_y=85.47,
     size_z=20.27,
-    lid=lid,
+    lid=Cos_6_wellplate_16800ul_Fb_Lid(name=name + "_lid") if with_lid else None,
     model=Cor_6_wellplate_16800ul_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
