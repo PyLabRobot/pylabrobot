@@ -167,4 +167,3 @@ if tags.has("no-api"):
   suppress_warnings = ["toc.excluded"]
 
 html_favicon = "_static/favicon.ico"
-
