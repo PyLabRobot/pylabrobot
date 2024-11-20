@@ -591,7 +591,12 @@ class LiquidHandler(Resource, Machine):
       **backend_kwargs,
     )
 
-  async def return_tips(self, use_channels: Optional[list[int]] = None, **backend_kwargs):
+  async def return_tips(
+    self,
+    use_channels: Optional[list[int]] = None,
+    allow_nonzero_volume: bool = False,
+    **backend_kwargs,
+  ):
     """Return all tips that are currently picked up to their original place.
 
     Examples:
@@ -601,6 +606,9 @@ class LiquidHandler(Resource, Machine):
       >>> await lh.return_tips()
 
     Args:
+      use_channels: List of channels to use. Index from front to back. If `None`, all that have
+        tips will be used.
+      allow_nonzero_volume: If `True`, tips will be returned even if their volumes are not zero.
       backend_kwargs: backend kwargs passed to `drop_tips`.
 
     Raises:
@@ -623,7 +631,12 @@ class LiquidHandler(Resource, Machine):
     if len(tip_spots) == 0:
       raise RuntimeError("No tips have been picked up.")
 
-    return await self.drop_tips(tip_spots=tip_spots, use_channels=channels, **backend_kwargs)
+    return await self.drop_tips(
+      tip_spots=tip_spots,
+      use_channels=channels,
+      allow_nonzero_volume=allow_nonzero_volume,
+      **backend_kwargs,
+    )
 
   async def discard_tips(
     self,
@@ -645,6 +658,7 @@ class LiquidHandler(Resource, Machine):
     Args:
       use_channels: List of channels to use. Index from front to back. If `None`, all that have
         tips will be used.
+      allow_nonzero_volume: If `True`, tips will be returned even if their volumes are not zero.
       backend_kwargs: Additional keyword arguments for the backend, optional.
     """
 
