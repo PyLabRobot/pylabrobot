@@ -14,8 +14,8 @@ from pylabrobot.resources.well import (
 
 def nest_8_troughplate_22000uL_Vb(name: str) -> Plate:
   """part no 360101. not validated"""
-  well_length = 107.5  # from datasheet
-  well_width = 8.2  # from datasheet
+  well_length = 8.2  # from datasheet
+  well_width = 107.5  # from datasheet
   well_kwargs = {
     "size_x": well_width,
     "size_y": well_length,
