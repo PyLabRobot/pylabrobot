@@ -40,8 +40,8 @@ def nest_8_troughplate_22000uL_Vb(name: str) -> Plate:
     model=nest_8_troughplate_22000uL_Vb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
-      num_items_x=8,
-      num_items_y=1,
+      num_items_x=1,
+      num_items_y=8,
       dx=(127.76 - 107.5) / 2,  # from datasheet
       dy=11.24 - 8.2 / 2,  # from datasheet
       dz=3.55,  # from datasheet
