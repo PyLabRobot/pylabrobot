@@ -102,6 +102,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `STAR.ztouch_probe_z_height_using_channel` for getting z-height by probing without cLLD (https://github.com/PyLabRobot/pylabrobot/pull/260)
 - `nest_8_troughplate_22000uL_Vb` and `nest_12_troughplate_15000uL_Vb` (https://github.com/PyLabRobot/pylabrobot/pull/312)
 - `Cor_12_wellplate_6900ul_Fb`, `Cor_24_wellplate_3470ul_Fb` and `Cor_48_wellplate_1620ul_Fb` (https://github.com/PyLabRobot/pylabrobot/pull/311)
+- `ignore_collision` parameter to `HamiltonDeck.assign_child_resource` (https://github.com/PyLabRobot/pylabrobot/pull/317)
 
 ### Deprecated
 
