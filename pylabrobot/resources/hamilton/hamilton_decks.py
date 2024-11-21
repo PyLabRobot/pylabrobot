@@ -158,7 +158,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     elif location is not None:
       resource_location = location
     else:
-      resource_location = None  # unknown resource location
+      raise ValueError("Either rails or location must be provided.")
 
     if not ignore_collision:
       if resource_location is not None:  # collision detection
