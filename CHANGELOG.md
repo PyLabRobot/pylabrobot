@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `MFXCarrier` takes modules as direct children, instead of having `CarrierSite`s as intermediaries (https://github.com/PyLabRobot/pylabrobot/pull/280)
 - `Config.log_dir` is now optional and defaults to None (https://github.com/PyLabRobot/pylabrobot/pull/302)
 - Definition of `Cor_6_wellplate_16800ul_Fb` to match the manufacturer spec (https://github.com/PyLabRobot/pylabrobot/pull/311)
+- `Trash` now inherits from `Container` (https://github.com/PyLabRobot/pylabrobot/pull/318)
 
 ### Added
 
