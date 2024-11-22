@@ -63,6 +63,10 @@ def AGenBio_4_wellplate_Vb(name: str, lid: Optional[Lid] = None) -> Plate:
 
 
 def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
+  raise NotImplementedError("deprecated. use AGenBio_1_troughplate_190000uL_Fl instead")
+
+
+def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   AGenBio Catalog No. RES-190-F
   - Material: Polypropylene
@@ -111,7 +115,7 @@ def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
   )
 
 
-def AGenBio_1_WP_Fl_Shallow(name: str, lid: Optional[Lid] = None) -> Plate:
+def AGenBio_1_troughplate_100000uL_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   AGenBio Catalog No. RES-100-F
   - Material: Polypropylene
