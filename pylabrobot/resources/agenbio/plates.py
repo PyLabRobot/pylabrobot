@@ -109,3 +109,48 @@ def AGenBio_1_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
       **well_kwargs,
     ),
   )
+
+
+def AGenBio_1_WP_Fl_Shallow(name: str, lid: Optional[Lid] = None) -> Plate:
+    """
+    AGenBio Catalog No. RES-100-F
+    - Material: Polypropylene
+    - Max. volume: 100 mL
+    """
+    assert lid is None
+    INNER_WELL_WIDTH = 107.2  # measured
+    INNER_WELL_HEIGHT = 70.9  # measured
+
+    well_kwargs = {
+        "size_x": INNER_WELL_WIDTH,  # measured
+        "size_y": INNER_WELL_HEIGHT,  # measured
+        "size_z": 13,  # measured to bottom of well
+        "bottom_type": WellBottomType.FLAT,
+        "cross_section_type": CrossSectionType.RECTANGLE,
+        "compute_height_from_volume": lambda liquid_volume: compute_height_from_volume_rectangle(
+            liquid_volume,
+            INNER_WELL_HEIGHT,
+            INNER_WELL_WIDTH,
+        ),
+        "material_z_thickness": 1,
+    }
+
+    return Plate(
+        name=name,
+        size_x=127.76,  # from spec
+        size_y=85.48,  # from spec
+        size_z=31.4,  # from spec
+        lid=lid,
+        model=AGenBio_1_WP_Fl_Shallow.__name__,
+        ordered_items=create_ordered_items_2d(
+            Well,
+            num_items_x=1,
+            num_items_y=1,
+            dx=9.8,
+            dy=7.6,
+            dz=5.88,
+            item_dx=INNER_WELL_WIDTH,
+            item_dy=INNER_WELL_HEIGHT,
+            **well_kwargs,
+        ),
+    )
