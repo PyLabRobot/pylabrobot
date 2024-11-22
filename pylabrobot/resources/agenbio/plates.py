@@ -117,7 +117,6 @@ def AGenBio_1_WP_Fl_Shallow(name: str, lid: Optional[Lid] = None) -> Plate:
     - Material: Polypropylene
     - Max. volume: 100 mL
     """
-    assert lid is None
     INNER_WELL_WIDTH = 107.2  # measured
     INNER_WELL_HEIGHT = 70.9  # measured
 
