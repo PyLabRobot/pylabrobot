@@ -116,7 +116,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Cos_96_DWP_2mL_Vb` in favor of `Cos_96_wellplate_2mL_Vb (https://github.com/PyLabRobot/pylabrobot/pull/205/)`
 - Resource definitions with `_L` and `_P`, it is easy enough to use the stem and `.rotated(z=90)` for `_P` (https://github.com/PyLabRobot/pylabrobot/pull/288)
 - `Cor_6_wellplate_Fl` (https://github.com/PyLabRobot/pylabrobot/pull/311)
-- `AGenBio_1_wellplate_Fl` (https://github.com/PyLabRobot/pylabrobot/pull/319)
+- `AGenBio_1_wellplate_Fl` -> `AGenBio_1_troughplate_190000uL_Fl`, `AGenBio_4_wellplate_Vb` -> `AGenBio_4_troughplate_75000_Vb` (https://github.com/PyLabRobot/pylabrobot/pull/319)
 
 ### Fixed
 
