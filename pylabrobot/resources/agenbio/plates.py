@@ -144,7 +144,7 @@ def AGenBio_1_troughplate_100000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
     size_y=85.48,  # from spec
     size_z=31.4,  # from spec
     lid=lid,
-    model=AGenBio_1_WP_Fl_Shallow.__name__,
+    model=AGenBio_1_troughplate_100000uL_Fl.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=1,
