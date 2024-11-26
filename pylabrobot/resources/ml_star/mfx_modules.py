@@ -1,9 +1,5 @@
-from __future__ import annotations
-
 from pylabrobot.resources.carrier import Coordinate, PlateHolder
 from pylabrobot.resources.resource_holder import ResourceHolder
-
-################## 1. Static modules ##################
 
 
 def MFX_TIP_module(name: str) -> ResourceHolder:
@@ -40,6 +36,26 @@ def MFX_DWP_rackbased_module(name: str) -> PlateHolder:
     size_z=178.0 - 18.195 - 100,
     # probe height - carrier_height - deck_height
     child_location=Coordinate(4.0, 3.5, 178.0 - 18.195 - 100),
+    model=MFX_DWP_rackbased_module.__name__,
+    pedestal_size_z=-4.74,
+  )
+
+
+def MFX_DWP_module_flat(name: str) -> PlateHolder:
+  """Hamilton cat. no.: 6601988-01
+  Module to position a Deep Well Plate. Flat, plastic base; no metal clamps like
+  MFX_DWP_rackbased_module.
+  """
+
+  width = 134.0
+  length = 92.10
+
+  return PlateHolder(
+    name=name,
+    size_x=width,
+    size_y=length,
+    size_z=66.4,  # measured with caliper
+    child_location=Coordinate(x=(width - 127.76)/2, y=(length - 85.48)/2, z=66.4),
     model=MFX_DWP_rackbased_module.__name__,
     pedestal_size_z=-4.74,
   )
