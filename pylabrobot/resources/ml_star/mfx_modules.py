@@ -55,7 +55,7 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
     size_x=width,
     size_y=length,
     size_z=66.4,  # measured with caliper
-    child_location=Coordinate(x=(width - 127.76)/2, y=(length - 85.48)/2, z=66.4),
+    child_location=Coordinate(x=(width - 127.76) / 2, y=(length - 85.48) / 2, z=66.4),
     model=MFX_DWP_rackbased_module.__name__,
     pedestal_size_z=-4.74,
   )
