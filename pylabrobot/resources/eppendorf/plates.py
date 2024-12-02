@@ -118,6 +118,8 @@ def Eppendorf_96_wellplate_250ul_Vb_semiskirted(name: str, with_lid: bool = Fals
       dx=12.4,
       dy=9.6,
       dz=0.81,
+      item_dx=9,
+      item_dy=9,
       size_x=5.48,
       size_y=5.48,
       size_z=19.5,
@@ -126,7 +128,6 @@ def Eppendorf_96_wellplate_250ul_Vb_semiskirted(name: str, with_lid: bool = Fals
       cross_section_type=CrossSectionType.CIRCLE
     )
   )
-
 
 def Eppendorf_96_wellplate_250ul_Vb_L(name: str, with_lid: bool = False) -> Plate:
   # https://github.com/PyLabRobot/pylabrobot/issues/252
