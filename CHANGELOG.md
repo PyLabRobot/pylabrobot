@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `MFXCarrier` takes modules as direct children, instead of having `CarrierSite`s as intermediaries (https://github.com/PyLabRobot/pylabrobot/pull/280)
 - `Config.log_dir` is now optional and defaults to None (https://github.com/PyLabRobot/pylabrobot/pull/302)
 - Definition of `Cor_6_wellplate_16800ul_Fb` to match the manufacturer spec (https://github.com/PyLabRobot/pylabrobot/pull/311)
+- `Trash` now inherits from `Container` (https://github.com/PyLabRobot/pylabrobot/pull/318)
 
 ### Added
 
@@ -102,6 +103,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `STAR.ztouch_probe_z_height_using_channel` for getting z-height by probing without cLLD (https://github.com/PyLabRobot/pylabrobot/pull/260)
 - `nest_8_troughplate_22000uL_Vb` and `nest_12_troughplate_15000uL_Vb` (https://github.com/PyLabRobot/pylabrobot/pull/312)
 - `Cor_12_wellplate_6900ul_Fb`, `Cor_24_wellplate_3470ul_Fb` and `Cor_48_wellplate_1620ul_Fb` (https://github.com/PyLabRobot/pylabrobot/pull/311)
+- `ignore_collision` parameter to `HamiltonDeck.assign_child_resource` (https://github.com/PyLabRobot/pylabrobot/pull/317)
+- `AGenBio_1_troughplate_100000uL_Fl` (https://github.com/PyLabRobot/pylabrobot/pull/319)
+- `MFX_DWP_module_flat` (https://github.com/PyLabRobot/pylabrobot/pull/320)
 
 ### Deprecated
 
@@ -113,6 +117,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Cos_96_DWP_2mL_Vb` in favor of `Cos_96_wellplate_2mL_Vb (https://github.com/PyLabRobot/pylabrobot/pull/205/)`
 - Resource definitions with `_L` and `_P`, it is easy enough to use the stem and `.rotated(z=90)` for `_P` (https://github.com/PyLabRobot/pylabrobot/pull/288)
 - `Cor_6_wellplate_Fl` (https://github.com/PyLabRobot/pylabrobot/pull/311)
+- `AGenBio_1_wellplate_Fl` -> `AGenBio_1_troughplate_190000uL_Fl`, `AGenBio_4_wellplate_Vb` -> `AGenBio_4_troughplate_75000_Vb` (https://github.com/PyLabRobot/pylabrobot/pull/319)
 
 ### Fixed
 

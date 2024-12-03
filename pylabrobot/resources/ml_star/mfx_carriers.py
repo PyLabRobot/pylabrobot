@@ -18,9 +18,16 @@ def MFX_CAR_L5_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier
     Coordinate(0.0, 293.0, 18.195),
     Coordinate(0.0, 389.0, 18.195),
   ]
+  half_locations = [c + Coordinate(y=90 / 2) for c in locations[:-1]]
   sites: Dict[int, ResourceHolder] = {}
   for i, module in modules.items():
-    module.location = locations[i]
+    if isinstance(i, int):
+      module.location = locations[i]
+    elif i - int(i) == 0.5:
+      module.location = half_locations[int(i)]
+    else:
+      raise ValueError(f"Invalid site index: {i}")
+
     sites[i] = module
 
   return MFXCarrier(
