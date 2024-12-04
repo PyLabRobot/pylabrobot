@@ -35,6 +35,7 @@ def Trough_CAR_4R200_A00(name: str) -> TroughCarrier:
       ],
       resource_size_x=37.0,
       resource_size_y=118.0,
+      name_prefix=name,
     ),
     model="Trough_CAR_4R200_A00",
   )
