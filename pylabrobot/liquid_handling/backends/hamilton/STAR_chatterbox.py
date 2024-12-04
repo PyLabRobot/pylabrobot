@@ -1,5 +1,6 @@
 from typing import Optional
 
+from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.backends.hamilton.STAR import STAR
 
 
@@ -11,6 +12,9 @@ class STARChatterboxBackend(STAR):
     super().__init__()
     self._num_channels = num_channels
     self._iswap_parked = True
+
+  async def setup(self, skip_autoload=False, skip_iswap=False, skip_core96_head=False) -> None:
+    LiquidHandlerBackend.setup(self)
 
   async def request_tip_presence(self):
     return list(range(self.num_channels))
