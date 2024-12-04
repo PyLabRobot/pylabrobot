@@ -65,6 +65,7 @@ class DeckTests(unittest.TestCase):
         locations=[Coordinate(10, 20, 30)],
         resource_size_x=10,
         resource_size_y=10,
+        name_prefix="tc",
       ),
     )
 
@@ -97,6 +98,7 @@ class DeckTests(unittest.TestCase):
         locations=[Coordinate(10, 20, 30)],
         resource_size_x=10,
         resource_size_y=10,
+        name_prefix="pc",
         pedestal_size_z=0,
       ),
     )

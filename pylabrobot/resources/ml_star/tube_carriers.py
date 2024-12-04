@@ -24,6 +24,7 @@ def Tube_CAR_24_A00(name: str) -> TubeCarrier:
       ],  # TODO: +1.2 to account for the Tube.material_z_thickness, fix container
       resource_size_x=18.0,
       resource_size_y=18.0,
+      name_prefix=name,
     ),
     model="Tube_CAR_24_A00",
   )
@@ -48,6 +49,7 @@ def Tube_CAR_32_A00(name: str) -> TubeCarrier:
       # should fix container
       resource_size_x=13.0,
       resource_size_y=13.0,
+      name_prefix=name,
     ),
     model="Tube_CAR_32_A00",
   )

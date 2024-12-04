@@ -41,6 +41,7 @@ class CarrierTests(unittest.TestCase):
         ],
         resource_size_x=10,
         resource_size_y=10,
+        name_prefix="tip_car",
       ),
     )
 
@@ -217,7 +218,7 @@ class CarrierTests(unittest.TestCase):
         "parent_name": None,
         "children": [
           {
-            "name": "carrier-tip_car-spot-0",
+            "name": "tip_car-0",
             "type": "ResourceHolder",
             "size_x": 10,
             "size_y": 10,
@@ -236,7 +237,7 @@ class CarrierTests(unittest.TestCase):
             "model": None,
           },
           {
-            "name": "carrier-tip_car-spot-1",
+            "name": "tip_car-1",
             "type": "ResourceHolder",
             "size_x": 10,
             "size_y": 10,
@@ -255,7 +256,7 @@ class CarrierTests(unittest.TestCase):
             "model": None,
           },
           {
-            "name": "carrier-tip_car-spot-2",
+            "name": "tip_car-2",
             "type": "ResourceHolder",
             "size_x": 10,
             "size_y": 10,
@@ -274,7 +275,7 @@ class CarrierTests(unittest.TestCase):
             "model": None,
           },
           {
-            "name": "carrier-tip_car-spot-3",
+            "name": "tip_car-3",
             "type": "ResourceHolder",
             "size_x": 10,
             "size_y": 10,
@@ -293,7 +294,7 @@ class CarrierTests(unittest.TestCase):
             "model": None,
           },
           {
-            "name": "carrier-tip_car-spot-4",
+            "name": "tip_car-4",
             "type": "ResourceHolder",
             "size_x": 10,
             "size_y": 10,
