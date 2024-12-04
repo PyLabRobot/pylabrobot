@@ -32,6 +32,11 @@ PyLabRobot is different from [PyHamilton](https://github.com/dgretton/pyhamilton
 :target: https://www.t-therapeutics.com/
 ```
 
+```{image} /img/used_by/duke.png
+:alt: Duke
+:class: company
+```
+
 ```{raw} html
 <style>
 .company {

@@ -105,6 +105,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Cor_12_wellplate_6900ul_Fb`, `Cor_24_wellplate_3470ul_Fb` and `Cor_48_wellplate_1620ul_Fb` (https://github.com/PyLabRobot/pylabrobot/pull/311)
 - `ignore_collision` parameter to `HamiltonDeck.assign_child_resource` (https://github.com/PyLabRobot/pylabrobot/pull/317)
 - `AGenBio_1_troughplate_100000uL_Fl` (https://github.com/PyLabRobot/pylabrobot/pull/319)
+- `MFX_DWP_module_flat` (https://github.com/PyLabRobot/pylabrobot/pull/320)
 
 ### Deprecated
 
