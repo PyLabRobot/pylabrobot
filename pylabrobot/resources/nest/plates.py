@@ -54,8 +54,10 @@ def nest_1_troughplate_195000uL_Vb(name: str) -> Plate:
 
 def nest_1_troughplate_185000uL_Vb(name: str) -> Plate:
   """part no 360104. 384 tiny holes, but one container."""
-  well_size_x = 127.76 - (12.13 - 2.4 / 2) * 2  # from datasheet
-  well_size_y = 85.48 - (8.99 - 2.4 / 2) * 2  # from datasheet
+  real_well_d = (85.48 - 8.99 * 2) / 15  # 4.5. in the drawing it says 2.4 which is wrong
+
+  well_size_y = 127.76 - (12.13 - real_well_d / 2) * 2  # from datasheet
+  well_size_x = 85.48 - (8.99 - real_well_d / 2) * 2  # from datasheet
   well_kwargs = {
     "size_x": well_size_x,
     "size_y": well_size_y,
@@ -82,8 +84,8 @@ def nest_1_troughplate_185000uL_Vb(name: str) -> Plate:
       Well,
       num_items_x=1,
       num_items_y=1,
-      dx=12.13 - 2.4 / 2,  # from datasheet
-      dy=8.99 - 2.4 / 2,  # from datasheet
+      dx=12.13 - real_well_d / 2,  # from datasheet
+      dy=8.99 - real_well_d / 2,  # from datasheet
       dz=3.55,  # from datasheet
       item_dx=9.0,  # from datasheet
       item_dy=9.0,  # from datasheet
