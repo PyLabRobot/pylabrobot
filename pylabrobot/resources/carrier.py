@@ -43,7 +43,6 @@ class Carrier(Resource, Generic[S]):
 
     self.sites: Dict[int, S] = {}
     for spot, site in sites.items():
-      site.name = f"carrier-{self.name}-spot-{spot}"
       if site.location is None:
         raise ValueError(f"site {site} has no location")
       self.assign_child_resource(site, location=site.location, spot=spot)
@@ -354,6 +353,7 @@ def create_resources(
   locations: List[Coordinate],
   resource_size_x: List[Union[float, int]],
   resource_size_y: List[Union[float, int]],
+  name_prefix: Optional[str] = None,
   **kwargs,
 ) -> Dict[int, T]:
   """Create a list of resource with the given sizes and locations."""
@@ -362,7 +362,7 @@ def create_resources(
   sites = {}
   for idx, (location, x, y) in enumerate(zip(locations, resource_size_x, resource_size_y)):
     site = klass(
-      name=f"resource-{idx}",
+      name=f"{name_prefix}-{idx}" if name_prefix else f"{klass.__name__}_{idx}",
       size_x=x,
       size_y=y,
       size_z=0,
@@ -378,6 +378,7 @@ def create_homogeneous_resources(
   locations: List[Coordinate],
   resource_size_x: float,
   resource_size_y: float,
+  name_prefix: Optional[str] = None,
   **kwargs,
 ) -> Dict[int, T]:
   """Create a list of resources with the same size at specified locations."""
@@ -389,5 +390,6 @@ def create_homogeneous_resources(
     locations=locations,
     resource_size_x=[resource_size_x] * n,
     resource_size_y=[resource_size_y] * n,
+    name_prefix=name_prefix,
     **kwargs,
   )
