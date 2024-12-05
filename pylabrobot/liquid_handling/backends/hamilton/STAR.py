@@ -7473,6 +7473,12 @@ class STAR(HamiltonLiquidHandler):
     return channel_ids[channel_idx]
 
   async def position_channels_in_y_direction(self, ys: List[int]):
+    """position all channels simultaneously in the Y direction. There is a command for this (C0OY),
+    but I couldn't get it to work, so this sends commands to the individual channels instead."""
+
+    if not all(ys[i] - ys[i + 1] >= 9 for i in range(len(ys) - 1)):
+      raise ValueError("Channels must be at least 9mm apart and in descending order")
+
     def _channel_y_to_steps(y: int) -> int:
       # for PX modules
       mm_per_step = 0.046302083
