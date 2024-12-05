@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import enum
 import functools
@@ -7463,6 +7464,29 @@ class STAR(HamiltonLiquidHandler):
       command="TP",
       auto_id=False,
       tp=orientation.value,
+    )
+
+  @staticmethod
+  def channel_id(channel_idx: int) -> str:
+    """channel_idx: plr style, 0-indexed from the back"""
+    channel_ids = "123456789ABCDEFG"
+    return channel_ids[channel_idx]
+
+  async def position_channels_in_y_direction(self, ys: List[int]):
+    def _channel_y_to_steps(y: int) -> int:
+      # for PX modules
+      mm_per_step = 0.046302083
+      return round(y / mm_per_step)
+
+    await asyncio.gather(
+      *(
+        self.send_command(
+          module=f"P{STAR.channel_id(channel_idx)}",
+          command="YA",
+          ya=f"{_channel_y_to_steps(y):04}",
+        )
+        for channel_idx, y in enumerate(ys)
+      )
     )
 
 
