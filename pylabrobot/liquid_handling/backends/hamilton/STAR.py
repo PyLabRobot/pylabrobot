@@ -7485,9 +7485,9 @@ class STAR(HamiltonLiquidHandler):
     """position all channels simultaneously in the Y direction. There is a command for this (C0OY),
     but I couldn't get it to work, so this sends commands to the individual channels instead.
 
-    ys:
-      A dictionary mapping channel index to the desired Y position in mm.
-      The channel index is 0-indexed from the back.
+    Args:
+      ys: A dictionary mapping channel index to the desired Y position in mm.  The channel index is
+      0-indexed from the back.
     """
 
     # check that the locations of channels after the move will be at least 9mm apart, and in
@@ -7496,7 +7496,7 @@ class STAR(HamiltonLiquidHandler):
     for channel_idx, y in ys.items():
       channel_locations[channel_idx] = y
     if not all(
-      channel_locations[i] - channel_locations[i + 1] >= 9
+      channel_locations[i + 1] - channel_locations[i] >= 9
       for i in range(len(channel_locations) - 1)
     ):
       raise ValueError("Channels must be at least 9mm apart and in descending order")
@@ -7511,9 +7511,10 @@ class STAR(HamiltonLiquidHandler):
         self.send_command(
           module=f"P{STAR.channel_id(channel_idx)}",
           command="YA",
-          ya=f"{_channel_y_to_steps(y):04}",
+          ya=f"{_channel_y_to_steps(y):05}",
         )
-        for channel_idx, y in ys.items()
+        # for channel_idx, y in ys.items()
+        for channel_idx, y in enumerate(channel_locations)
       )
     )
 
