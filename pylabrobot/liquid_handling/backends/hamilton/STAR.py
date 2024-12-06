@@ -7475,7 +7475,7 @@ class STAR(HamiltonLiquidHandler):
   async def get_channels_y_positions(self) -> List[float]:
     """Get the Y position of all channels in mm"""
     resp = await self.send_command(
-      module=f"C0",
+      module="C0",
       command="RY",
       fmt="ry#### (n)",
     )
