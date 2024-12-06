@@ -7501,7 +7501,7 @@ class STAR(HamiltonLiquidHandler):
     ):
       raise ValueError("Channels must be at least 9mm apart and in descending order")
 
-    def _channel_y_to_steps(y: int) -> int:
+    def _channel_y_to_steps(y: float) -> int:
       # for PX modules
       mm_per_step = 0.046302083
       return round(y / mm_per_step)
