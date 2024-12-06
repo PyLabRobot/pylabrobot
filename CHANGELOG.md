@@ -106,6 +106,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ignore_collision` parameter to `HamiltonDeck.assign_child_resource` (https://github.com/PyLabRobot/pylabrobot/pull/317)
 - `AGenBio_1_troughplate_100000uL_Fl` (https://github.com/PyLabRobot/pylabrobot/pull/319)
 - `MFX_DWP_module_flat` (https://github.com/PyLabRobot/pylabrobot/pull/320)
+- `STAR.position_channels_in_y_direction` (https://github.com/PyLabRobot/pylabrobot/pull/324)
 
 ### Deprecated
 

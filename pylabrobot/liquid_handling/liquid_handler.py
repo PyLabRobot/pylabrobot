@@ -784,7 +784,12 @@ class LiquidHandler(Resource, Machine):
       resource = resources[0]
       n = len(use_channels)
       resources = [resource] * len(use_channels)
-      centers = list(reversed(resource.centers(yn=n, zn=0)))
+      if resource.get_absolute_rotation().z % 180 == 0:
+        centers = list(reversed(resource.centers(yn=n, zn=0)))
+      elif resource.get_absolute_rotation().z % 90 == 0:
+        centers = list(reversed(resource.centers(xn=n, zn=0)))
+      else:
+        raise ValueError("Only 90 and 180 degree rotations are supported for now.")
       centers = [c - resource.center() for c in centers]  # offset is wrt center
       offsets = [c + o for c, o in zip(centers, offsets)]  # user-defined
 
@@ -968,7 +973,12 @@ class LiquidHandler(Resource, Machine):
       resource = resources[0]
       n = len(use_channels)
       resources = [resource] * len(use_channels)
-      centers = list(reversed(resource.centers(yn=n, zn=0)))
+      if resource.get_absolute_rotation().z % 180 == 0:
+        centers = list(reversed(resource.centers(yn=n, zn=0)))
+      elif resource.get_absolute_rotation().z % 90 == 0:
+        centers = list(reversed(resource.centers(xn=n, zn=0)))
+      else:
+        raise ValueError("Only 90 and 180 degree rotations are supported for now.")
       centers = [c - resource.center() for c in centers]  # offset is wrt center
       offsets = [c + o for c, o in zip(centers, offsets)]  # user-defined
 

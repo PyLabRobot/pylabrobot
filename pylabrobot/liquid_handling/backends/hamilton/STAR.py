@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import enum
 import functools
@@ -7463,6 +7464,58 @@ class STAR(HamiltonLiquidHandler):
       command="TP",
       auto_id=False,
       tp=orientation.value,
+    )
+
+  @staticmethod
+  def channel_id(channel_idx: int) -> str:
+    """channel_idx: plr style, 0-indexed from the back"""
+    channel_ids = "123456789ABCDEFG"
+    return channel_ids[channel_idx]
+
+  async def get_channels_y_positions(self) -> List[float]:
+    """Get the Y position of all channels in mm"""
+    resp = await self.send_command(
+      module="C0",
+      command="RY",
+      fmt="ry#### (n)",
+    )
+    return [round(y / 10, 2) for y in resp["ry"]]
+
+  async def position_channels_in_y_direction(self, ys: Dict[int, float]):
+    """position all channels simultaneously in the Y direction. There is a command for this (C0OY),
+    but I couldn't get it to work, so this sends commands to the individual channels instead.
+
+    Args:
+      ys: A dictionary mapping channel index to the desired Y position in mm.  The channel index is
+      0-indexed from the back.
+    """
+
+    # check that the locations of channels after the move will be at least 9mm apart, and in
+    # descending order
+    channel_locations = await self.get_channels_y_positions()
+    for channel_idx, y in ys.items():
+      channel_locations[channel_idx] = y
+    if not all(
+      channel_locations[i + 1] - channel_locations[i] >= 9
+      for i in range(len(channel_locations) - 1)
+    ):
+      raise ValueError("Channels must be at least 9mm apart and in descending order")
+
+    def _channel_y_to_steps(y: float) -> int:
+      # for PX modules
+      mm_per_step = 0.046302083
+      return round(y / mm_per_step)
+
+    await asyncio.gather(
+      *(
+        self.send_command(
+          module=f"P{STAR.channel_id(channel_idx)}",
+          command="YA",
+          ya=f"{_channel_y_to_steps(y):05}",
+        )
+        # for channel_idx, y in ys.items()
+        for channel_idx, y in enumerate(channel_locations)
+      )
     )
 
 
