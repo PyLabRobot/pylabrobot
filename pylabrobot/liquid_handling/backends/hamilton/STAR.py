@@ -7472,11 +7472,33 @@ class STAR(HamiltonLiquidHandler):
     channel_ids = "123456789ABCDEFG"
     return channel_ids[channel_idx]
 
-  async def position_channels_in_y_direction(self, ys: List[int]):
-    """position all channels simultaneously in the Y direction. There is a command for this (C0OY),
-    but I couldn't get it to work, so this sends commands to the individual channels instead."""
+  async def get_channels_y_positions(self) -> List[float]:
+    """Get the Y position of all channels in mm"""
+    resp = await self.send_command(
+      module=f"C0",
+      command="RY",
+      fmt="ry#### (n)",
+    )
+    return [round(y / 10, 2) for y in resp["ry"]]
 
-    if not all(ys[i] - ys[i + 1] >= 9 for i in range(len(ys) - 1)):
+  async def position_channels_in_y_direction(self, ys: Dict[int, float]):
+    """position all channels simultaneously in the Y direction. There is a command for this (C0OY),
+    but I couldn't get it to work, so this sends commands to the individual channels instead.
+
+    ys:
+      A dictionary mapping channel index to the desired Y position in mm.
+      The channel index is 0-indexed from the back.
+    """
+
+    # check that the locations of channels after the move will be at least 9mm apart, and in
+    # descending order
+    channel_locations = await self.get_channels_y_positions()
+    for channel_idx, y in ys.items():
+      channel_locations[channel_idx] = y
+    if not all(
+      channel_locations[i] - channel_locations[i + 1] >= 9
+      for i in range(len(channel_locations) - 1)
+    ):
       raise ValueError("Channels must be at least 9mm apart and in descending order")
 
     def _channel_y_to_steps(y: int) -> int:
@@ -7491,7 +7513,7 @@ class STAR(HamiltonLiquidHandler):
           command="YA",
           ya=f"{_channel_y_to_steps(y):04}",
         )
-        for channel_idx, y in enumerate(ys)
+        for channel_idx, y in ys.items()
       )
     )
 
