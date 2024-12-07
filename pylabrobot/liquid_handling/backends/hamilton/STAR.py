@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import enum
 import functools
@@ -6192,38 +6193,68 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="FY")
 
-  async def move_iswap_x_relative(self, step_size: float):
+  async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
     """
     Args:
-      step_size: X Step size [1mm] Between -99.9 and 99.9.
+      step_size: X Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
+      allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
 
-    assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
     direction = 0 if step_size >= 0 else 1
+    max_step_size = 99.9
+    if abs(step_size) > max_step_size:
+      if not allow_splitting:
+        raise ValueError("step_size must be less than 99.9")
+      await self.move_iswap_x_relative(
+        step_size=max_step_size if step_size > 0 else -max_step_size, allow_splitting=True
+      )
+      remaining_steps = step_size - max_step_size if step_size > 0 else step_size + max_step_size
+      return await self.move_iswap_x_relative(remaining_steps, allow_splitting)
+
     return await self.send_command(
       module="C0", command="GX", gx=str(round(abs(step_size) * 10)).zfill(3), xd=direction
     )
 
-  async def move_iswap_y_relative(self, step_size: float):
+  async def move_iswap_y_relative(self, step_size: float, allow_splitting: bool = False):
     """
     Args:
-      step_size: Y Step size [1mm] Between -99.9 and 99.9.
+      step_size: Y Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
+      allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
 
-    assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
     direction = 0 if step_size >= 0 else 1
+    max_step_size = 99.9
+    if abs(step_size) > max_step_size:
+      if not allow_splitting:
+        raise ValueError("step_size must be less than 99.9")
+      await self.move_iswap_y_relative(
+        step_size=max_step_size if step_size > 0 else -max_step_size, allow_splitting=True
+      )
+      remaining_steps = step_size - max_step_size if step_size > 0 else step_size + max_step_size
+      return await self.move_iswap_y_relative(remaining_steps, allow_splitting)
+
     return await self.send_command(
       module="C0", command="GY", gy=str(round(abs(step_size) * 10)).zfill(3), yd=direction
     )
 
-  async def move_iswap_z_relative(self, step_size: float):
+  async def move_iswap_z_relative(self, step_size: float, allow_splitting: bool = False):
     """
     Args:
-      step_size: Z Step size [1mm] Between -99.9 and 99.9.
+      step_size: Z Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
+      allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
 
-    assert -99.9 <= step_size <= 99.9, "step_size must be between 0 and 99.9"
     direction = 0 if step_size >= 0 else 1
+    max_step_size = 99.9
+    if abs(step_size) > max_step_size:
+      if not allow_splitting:
+        raise ValueError("step_size must be less than 99.9")
+      await self.move_iswap_z_relative(
+        step_size=max_step_size if step_size > 0 else -max_step_size, allow_splitting=True
+      )
+      remaining_steps = step_size - max_step_size if step_size > 0 else step_size + max_step_size
+      return await self.move_iswap_z_relative(remaining_steps, allow_splitting)
+
     return await self.send_command(
       module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
     )
@@ -7433,6 +7464,58 @@ class STAR(HamiltonLiquidHandler):
       command="TP",
       auto_id=False,
       tp=orientation.value,
+    )
+
+  @staticmethod
+  def channel_id(channel_idx: int) -> str:
+    """channel_idx: plr style, 0-indexed from the back"""
+    channel_ids = "123456789ABCDEFG"
+    return channel_ids[channel_idx]
+
+  async def get_channels_y_positions(self) -> List[float]:
+    """Get the Y position of all channels in mm"""
+    resp = await self.send_command(
+      module="C0",
+      command="RY",
+      fmt="ry#### (n)",
+    )
+    return [round(y / 10, 2) for y in resp["ry"]]
+
+  async def position_channels_in_y_direction(self, ys: Dict[int, float]):
+    """position all channels simultaneously in the Y direction. There is a command for this (C0OY),
+    but I couldn't get it to work, so this sends commands to the individual channels instead.
+
+    Args:
+      ys: A dictionary mapping channel index to the desired Y position in mm.  The channel index is
+      0-indexed from the back.
+    """
+
+    # check that the locations of channels after the move will be at least 9mm apart, and in
+    # descending order
+    channel_locations = await self.get_channels_y_positions()
+    for channel_idx, y in ys.items():
+      channel_locations[channel_idx] = y
+    if not all(
+      channel_locations[i + 1] - channel_locations[i] >= 9
+      for i in range(len(channel_locations) - 1)
+    ):
+      raise ValueError("Channels must be at least 9mm apart and in descending order")
+
+    def _channel_y_to_steps(y: float) -> int:
+      # for PX modules
+      mm_per_step = 0.046302083
+      return round(y / mm_per_step)
+
+    await asyncio.gather(
+      *(
+        self.send_command(
+          module=f"P{STAR.channel_id(channel_idx)}",
+          command="YA",
+          ya=f"{_channel_y_to_steps(y):05}",
+        )
+        # for channel_idx, y in ys.items()
+        for channel_idx, y in enumerate(channel_locations)
+      )
     )
 
 

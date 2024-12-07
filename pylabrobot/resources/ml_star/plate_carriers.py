@@ -1,5 +1,3 @@
-"""ML Star plate carriers"""
-
 from pylabrobot.resources.carrier import (
   Coordinate,
   PlateCarrier,
@@ -25,6 +23,7 @@ def PLT_CAR_L4_HHS_ALT_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L4_HHS-ALT_A00",
   )
@@ -48,6 +47,7 @@ def PLT_CAR_L5_ALT_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L5_ALT_A00",
   )
@@ -70,6 +70,7 @@ def PLT_CAR_L4HD(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L4HD",
   )
@@ -93,6 +94,7 @@ def PLT_CAR_L5AC(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L5AC",
   )
@@ -118,6 +120,7 @@ def PLT_CAR_L5AC_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
       pedestal_size_z=-4.74,
     ),
     model="PLT_CAR_L5AC_A00",
@@ -142,6 +145,7 @@ def PLT_CAR_L5FLEX_AC(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L5FLEX_AC",
   )
@@ -165,6 +169,7 @@ def PLT_CAR_L5FLEX_AC_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L5FLEX_AC_A00",
   )
@@ -188,6 +193,7 @@ def PLT_CAR_L5FLEX_MD_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
       pedestal_size_z=-4.8,
     ),
     model="PLT_CAR_L5FLEX_MD_A00",
@@ -212,6 +218,7 @@ def PLT_CAR_L5MD(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
       pedestal_size_z=6.55,
     ),
     model="PLT_CAR_L5MD",
@@ -236,6 +243,7 @@ def PLT_CAR_L5MD_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
       pedestal_size_z=6.55,
     ),
     model="PLT_CAR_L5MD_A00",
@@ -260,6 +268,7 @@ def PLT_CAR_L5PCR(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L5PCR",
   )
@@ -283,6 +292,7 @@ def PLT_CAR_L5PCR_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L5PCR_A00",
   )
@@ -306,6 +316,7 @@ def PLT_CAR_L5PCR_A01(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L5PCR_A01",
   )
@@ -327,6 +338,7 @@ def PLT_CAR_P3AC_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=86.0,
       resource_size_y=127.0,
+      name_prefix=name,
       pedestal_size_z=6.55,  # same as PLT_CAR_L5MD_A00
     ),
     model="PLT_CAR_P3AC_A00",
@@ -349,6 +361,7 @@ def PLT_CAR_P3AC_A01(name: str) -> PlateCarrier:
       ],
       resource_size_x=86.0,
       resource_size_y=127.0,
+      name_prefix=name,
       pedestal_size_z=6.55,  # same as PLT_CAR_L5MD_A00
     ),
     model="PLT_CAR_P3AC_A01",
@@ -371,6 +384,7 @@ def PLT_CAR_P3HD(name: str) -> PlateCarrier:
       ],
       resource_size_x=86.0,
       resource_size_y=127.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_P3HD",
   )
@@ -392,6 +406,7 @@ def PLT_CAR_P3MD(name: str) -> PlateCarrier:
       ],
       resource_size_x=86.0,
       resource_size_y=127.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_P3MD",
   )
@@ -413,6 +428,7 @@ def PLT_CAR_P3MD_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=86.0,
       resource_size_y=127.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_P3MD_A00",
   )
@@ -434,6 +450,7 @@ def PLT_CAR_P3MD_A01(name: str) -> PlateCarrier:
       ],
       resource_size_x=86.0,
       resource_size_y=127.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_P3MD_A01",
   )
@@ -457,6 +474,7 @@ def PLT_CAR_L5AC_P_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=126.8,
       resource_size_y=85.8,
+      name_prefix=name,
     ),
     model="PLT_CAR_L5AC_P_A00",
   )
@@ -478,6 +496,7 @@ def PLT_CAR_P3LI_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=109.0,
       resource_size_y=152.0,
+      name_prefix=name,
       pedestal_size_z=0,
     ),
     model="PLT_CAR_P3LI_A00",
@@ -501,6 +520,7 @@ def PLT_CAR_L4ST_B00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L4ST_B00",
   )
@@ -523,6 +543,7 @@ def PLT_CAR_L4ST_B00_4x5_Nunc96(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L4ST_B00_4x5_Nunc96",
   )
@@ -545,6 +566,7 @@ def PLT_CAR_L4ST_C00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L4ST_C00",
   )
@@ -567,6 +589,7 @@ def PLT_CAR_L4ST_HIGH_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L4ST_HIGH_A00",
   )
@@ -589,6 +612,7 @@ def PLT_CAR_L4ST_HIGH_A00_4x5_Nunc96(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L4ST_HIGH_A00_4x5_Nunc96",
   )
@@ -611,6 +635,7 @@ def PLT_CAR_L4ST_LOW_A00(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L4ST_LOW_A00",
   )
@@ -633,6 +658,7 @@ def PLT_CAR_L4ST_LOW_A00_4x9_Nunc96(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L4ST_LOW_A00_4x9_Nunc96",
   )
@@ -656,6 +682,7 @@ def PLT_CAR_L5_DWP(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="PLT_CAR_L5_DWP",
   )

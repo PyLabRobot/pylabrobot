@@ -65,6 +65,7 @@ def MP_2Pos_portrait_No_Robot_Access(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=85.5,
       resource_size_y=127.0,
+      name_prefix=name,
     ),
     model="MP_2Pos_portrait_No_Robot_Access",
   )
@@ -87,6 +88,7 @@ def MP_2_Pos_portrait(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=85.5,
       resource_size_y=127.0,
+      name_prefix=name,
     ),
     model="MP_2_Pos_portrait",
   )
@@ -115,6 +117,7 @@ def MP_3Pos_PCR(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
       pedestal_size_z=0,  # ?
     ),
     model="MP_3Pos_PCR",
@@ -144,6 +147,7 @@ def MP_3Pos_TePS(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_3Pos_TePS",
   )
@@ -172,6 +176,7 @@ def LI___MP_3Pos(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="LI___MP_3Pos",
   )
@@ -196,6 +201,7 @@ def MP_4Pos_landscape(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_4Pos_landscape",
   )
@@ -228,6 +234,7 @@ def MP_12Pos_landscape(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_12Pos_landscape",
   )
@@ -256,6 +263,7 @@ def MP_8Pos_landscape(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_8Pos_landscape",
   )
@@ -295,6 +303,7 @@ def MP_20Pos_landscape(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_20Pos_landscape",
   )
@@ -330,6 +339,7 @@ def MP_16Pos_landscape(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_16Pos_landscape",
   )
@@ -358,6 +368,7 @@ def MP_3Pos(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_3Pos",
   )
@@ -386,6 +397,7 @@ def MP_3Pos_Cooled(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_3Pos_Cooled",
   )
@@ -414,6 +426,7 @@ def MP_3Pos_Fixed(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=128.0,
       resource_size_y=86.0,
+      name_prefix=name,
     ),
     model="MP_3Pos_Fixed",
   )
@@ -440,6 +453,7 @@ def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
           ],
           resource_size_x=127.0,
           resource_size_y=85.5,
+          name_prefix=name,
         ),
         model="MP_3Pos_Flat"
       )
@@ -466,6 +480,7 @@ def MP_3Pos_Flat(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_3Pos_Flat",
   )
@@ -489,6 +504,7 @@ def MP_3Pos_No_Robot_Access(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_3Pos_No_Robot_Access",
   )
@@ -518,6 +534,7 @@ def MP_4Pos(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_4Pos",
   )
@@ -547,6 +564,7 @@ def MP_4Pos_flat(name: str) -> TecanPlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=85.5,
+      name_prefix=name,
     ),
     model="MP_4Pos_flat",
   )
