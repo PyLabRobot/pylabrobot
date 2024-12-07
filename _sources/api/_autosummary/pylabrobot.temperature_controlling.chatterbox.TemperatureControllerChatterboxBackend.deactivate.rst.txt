@@ -1,0 +1,6 @@
+pylabrobot.temperature\_controlling.chatterbox.TemperatureControllerChatterboxBackend.deactivate
+================================================================================================
+
+.. currentmodule:: pylabrobot.temperature_controlling.chatterbox
+
+.. automethod:: TemperatureControllerChatterboxBackend.deactivate

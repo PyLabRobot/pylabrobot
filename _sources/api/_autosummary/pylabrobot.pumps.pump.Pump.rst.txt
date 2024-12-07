@@ -1,0 +1,37 @@
+﻿pylabrobot.pumps.pump.Pump
+==========================
+
+.. currentmodule:: pylabrobot.pumps.pump
+
+.. autoclass:: Pump
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Pump.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Pump.__init__
+      ~Pump.deserialize
+      ~Pump.halt
+      ~Pump.pump_volume
+      ~Pump.run_continuously
+      ~Pump.run_for_duration
+      ~Pump.run_revolutions
+      ~Pump.serialize
+      ~Pump.setup
+      ~Pump.stop
+   
+   
