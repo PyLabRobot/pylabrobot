@@ -784,13 +784,17 @@ class LiquidHandler(Resource, Machine):
       resource = resources[0]
       n = len(use_channels)
       resources = [resource] * len(use_channels)
+      # space equally within 4.5mm margins of the edges
       if resource.get_absolute_rotation().z % 180 == 0:
-        centers = list(reversed(resource.centers(yn=n, zn=0)))
+        space_y = resource.get_size_y() - 4.5 * 2
+        spacing = space_y / (n + 1)
+        centers = list(reversed([Coordinate(0, 4.5 + i * spacing, 0) for i in range(n)]))
       elif resource.get_absolute_rotation().z % 90 == 0:
-        centers = list(reversed(resource.centers(xn=n, zn=0)))
+        space_x = resource.get_size_x() - 4.5 * 2
+        spacing = space_x / (n + 1)
+        centers = list(reversed([Coordinate(4.5 + i * spacing, 0, 0) for i in range(n)]))
       else:
         raise ValueError("Only 90 and 180 degree rotations are supported for now.")
-      centers = [c - resource.center() for c in centers]  # offset is wrt center
       offsets = [c + o for c, o in zip(centers, offsets)]  # user-defined
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
