@@ -2690,7 +2690,7 @@ class STAR(HamiltonLiquidHandler):
 
     center = location + center_in_absolute_space + offset
     grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    # grip_direction here is the put_direction. We use `rotation` to cancel it out and get the
+    # grip_direction here is the drop_direction. We use `rotation` to cancel it out and get the
     # original grip direction. Hack.
     # the resource still has its original orientation.
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
