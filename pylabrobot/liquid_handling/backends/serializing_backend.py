@@ -14,9 +14,11 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Drop,
   DropTipRack,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
 )
 from pylabrobot.resources import Resource
 from pylabrobot.serializer import serialize
@@ -187,20 +189,28 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       data["dispense"]["trough"] = dispense.container.name
     await self.send_command(command="dispense96", data=data)
 
-  async def move_resource(self, move: Move, **backend_kwargs):
+  async def pick_up_resource(self, pickup: ResourcePickup, **backend_kwargs):
     await self.send_command(
-      command="move",
+      command="pick_up_resource",
       data={
-        "move": {
-          "resource_name": move.resource.name,
-          "to": serialize(move.destination),
-          "intermediate_locations": [serialize(loc) for loc in move.intermediate_locations],
-          "resource_offset": serialize(move.resource_offset),
-          "destination_offset": serialize(move.destination_offset),
-          "pickup_distance_from_top": move.pickup_distance_from_top,
-          "get_direction": serialize(move.get_direction),
-          "put_direction": serialize(move.put_direction),
-        }
+        "resource_name": pickup.resource.name,
+        "offset": serialize(pickup.offset),
+        "pickup_distance_from_top": pickup.pickup_distance_from_top,
+        "direction": serialize(pickup.direction),
+      },
+      **backend_kwargs,
+    )
+
+  async def drop_resource(self, drop: ResourceDrop, **backend_kwargs):
+    await self.send_command(
+      command="drop_resource",
+      data={
+        "resource_name": drop.resource.name,
+        "destination": serialize(drop.destination),
+        "offset": serialize(drop.offset),
+        "pickup_distance_from_top": drop.pickup_distance_from_top,
+        "direction": serialize(drop.direction),
+        "rotation": drop.rotation,
       },
       **backend_kwargs,
     )

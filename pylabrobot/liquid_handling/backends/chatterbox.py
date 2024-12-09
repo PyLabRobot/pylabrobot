@@ -12,9 +12,11 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Drop,
   DropTipRack,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
 )
 from pylabrobot.resources import Resource
 
@@ -224,5 +226,8 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
       resource = dispense.container
     print(f"Dispensing {dispense.volume} to {resource}.")
 
-  async def move_resource(self, move: Move, **backend_kwargs):
-    print(f"Moving {move}.")
+  async def pick_up_resource(self, pickup: ResourcePickup):
+    print(f"Picking up resource: {pickup}")
+
+  async def drop_resource(self, drop: ResourceDrop):
+    print(f"Dropping resource: {drop}")

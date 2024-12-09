@@ -127,53 +127,30 @@ class GripDirection(enum.Enum):
 
 
 @dataclass(frozen=True)
-class Move:
-  """
-  Attributes:
-    resource: The resource to move.
-    destination: The destination of the move.
-    resource_offset: The offset of the resource.
-    destination_offset: The offset of the destination.
-    pickup_distance_from_top: The distance from the top of the resource to pick up from.
-    get_direction: The direction from which to grab the resource.
-    put_direction: The direction from which to put the resource.
-  """
+class ResourcePickup:
+  resource: Resource
+  offset: Coordinate
+  pickup_distance_from_top: float
+  direction: GripDirection
+
+
+@dataclass(frozen=True)
+class ResourceMove:
+  """Moving a resource that was already picked up."""
 
   resource: Resource
-  destination: Coordinate
-  intermediate_locations: List[Coordinate] = field(default_factory=list)
-  resource_offset: Coordinate = field(default_factory=Coordinate.zero)
-  destination_offset: Coordinate = field(default_factory=Coordinate.zero)
-  pickup_distance_from_top: float = 0
-  get_direction: GripDirection = GripDirection.FRONT
-  put_direction: GripDirection = GripDirection.FRONT
+  location: Coordinate
+  gripped_direction: GripDirection
 
-  @property
-  def rotation(self) -> int:
-    if self.get_direction == self.put_direction:
-      return 0
-    if (self.get_direction, self.put_direction) in (
-      (GripDirection.FRONT, GripDirection.RIGHT),
-      (GripDirection.RIGHT, GripDirection.BACK),
-      (GripDirection.BACK, GripDirection.LEFT),
-      (GripDirection.LEFT, GripDirection.FRONT),
-    ):
-      return 90
-    if (self.get_direction, self.put_direction) in (
-      (GripDirection.FRONT, GripDirection.BACK),
-      (GripDirection.BACK, GripDirection.FRONT),
-      (GripDirection.LEFT, GripDirection.RIGHT),
-      (GripDirection.RIGHT, GripDirection.LEFT),
-    ):
-      return 180
-    if (self.get_direction, self.put_direction) in (
-      (GripDirection.RIGHT, GripDirection.FRONT),
-      (GripDirection.BACK, GripDirection.RIGHT),
-      (GripDirection.LEFT, GripDirection.BACK),
-      (GripDirection.FRONT, GripDirection.LEFT),
-    ):
-      return 270
-    raise ValueError(f"Invalid grip directions: {self.get_direction}, {self.put_direction}")
+
+@dataclass(frozen=True)
+class ResourceDrop:
+  resource: Resource
+  destination: Coordinate
+  offset: Coordinate
+  pickup_distance_from_top: float
+  direction: GripDirection
+  rotation: float
 
 
 PipettingOp = Union[Pickup, Drop, Aspiration, Dispense]

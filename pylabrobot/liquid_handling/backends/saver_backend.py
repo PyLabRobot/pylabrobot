@@ -72,8 +72,11 @@ class SaverBackend(LiquidHandlerBackend):
   async def dispense96(self, *args, **kwargs):
     self.commands_received.append({"command": "dispense96", "args": args, "kwargs": kwargs})
 
-  async def move_resource(self, *args, **kwargs):
-    self.commands_received.append({"command": "move_resource", "args": args, "kwargs": kwargs})
+  async def pick_up_resource(self, *args, **kwargs):
+    self.commands_received.append({"command": "pick_up_resource", "args": args, "kwargs": kwargs})
+
+  async def drop_resource(self, *args, **kwargs):
+    self.commands_received.append({"command": "drop_resource", "args": args, "kwargs": kwargs})
 
   # Saver specific methods
 

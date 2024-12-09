@@ -37,9 +37,12 @@ from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
   GripDirection,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  # Move,
+  ResourcePickup,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -2651,7 +2654,7 @@ class STAR(HamiltonLiquidHandler):
     self,
     location: Coordinate,
     resource: Resource,
-    rotation: int,
+    rotation: float,
     offset: Coordinate,
     grip_direction: GripDirection,
     pickup_distance_from_top: float,
@@ -2689,6 +2692,7 @@ class STAR(HamiltonLiquidHandler):
     grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
     # grip_direction here is the put_direction. We use `rotation` to cancel it out and get the
     # original grip direction. Hack.
+    # the resource still has its original orientation.
     if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
       plate_width = resource.rotated(z=rotation).get_absolute_size_x()
     elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
@@ -2857,101 +2861,89 @@ class STAR(HamiltonLiquidHandler):
       return_tool=return_tool,
     )
 
-  async def move_resource(
+  async def pick_up_resource(
     self,
-    move: Move,
+    pickup: ResourcePickup,
     use_arm: Literal["iswap", "core"] = "iswap",
     channel_1: int = 7,
     channel_2: int = 8,
     core_grip_strength: int = 15,
-    return_core_gripper: bool = True,
   ):
-    """Move a resource.
-
-    Args:
-      move: The move to perform.
-      use_arm: Which arm to use. Either "iswap" or "core".
-      channel_1: The first channel to use with the core arm. Only used if `use_arm` is "core".
-      channel_2: The second channel to use with the core arm. Only used if `use_arm` is "core".
-      core_grip_strength: The grip strength to use with the core arm. Only used if `use_arm` is
-        "core".
-      return_core_gripper: Whether to return the core gripper to the home position after the move.
-        Only used if `use_arm` is "core".
-    """
-
-    if use_arm not in {"iswap", "core"}:
-      raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
-
     if use_arm == "iswap":
       await self.iswap_pick_up_resource(
-        resource=move.resource,
-        grip_direction=move.get_direction,
-        pickup_distance_from_top=move.pickup_distance_from_top,
-        offset=move.resource_offset,
+        resource=pickup.resource,
+        grip_direction=pickup.direction,
+        pickup_distance_from_top=pickup.pickup_distance_from_top,
+        offset=pickup.offset,
         minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
         z_position_at_the_command_end=self._traversal_height,
       )
-    else:
+    elif use_arm == "core":
       await self.core_pick_up_resource(
-        resource=move.resource,
-        pickup_distance_from_top=move.pickup_distance_from_top,
-        offset=move.resource_offset,
+        resource=pickup.resource,
+        pickup_distance_from_top=pickup.pickup_distance_from_top,
+        offset=pickup.offset,
         minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
         minimum_z_position_at_the_command_end=self._traversal_height,
         channel_1=channel_1,
         channel_2=channel_2,
         grip_strength=core_grip_strength,
       )
+    else:
+      raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
 
-    previous_location = move.resource.get_absolute_location() + move.resource_offset
-    minimum_traverse_height = 284.0
-    previous_location.z = minimum_traverse_height - move.resource.get_absolute_size_z() / 2
+  async def move_picked_up_resource(
+    self, move: ResourceMove, use_arm: Literal["iswap", "core"] = "iswap"
+  ):
+    if use_arm == "iswap":
+      await self.iswap_move_picked_up_resource(
+        location=move.location,
+        resource=move.resource,
+        grip_direction=move.gripped_direction,
+        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
+        collision_control_level=1,
+        acceleration_index_high_acc=4,
+        acceleration_index_low_acc=1,
+      )
+    else:
+      await self.core_move_picked_up_resource(
+        location=move.location,
+        resource=move.resource,
+        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
+        acceleration_index=4,
+      )
 
-    for location in move.intermediate_locations:
-      if use_arm == "iswap":
-        await self.iswap_move_picked_up_resource(
-          location=location,
-          resource=move.resource,
-          grip_direction=move.get_direction,
-          minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-          # int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
-          collision_control_level=1,
-          acceleration_index_high_acc=4,
-          acceleration_index_low_acc=1,
-        )
-      else:
-        await self.core_move_picked_up_resource(
-          location=location,
-          resource=move.resource,
-          minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-          # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
-          acceleration_index=4,
-        )
-      previous_location = location
-
+  async def drop_resource(
+    self,
+    drop: ResourceDrop,
+    use_arm: Literal["iswap", "core"] = "iswap",
+    return_core_gripper: bool = True,
+  ):
     if use_arm == "iswap":
       await self.iswap_release_picked_up_resource(
-        location=move.destination,
-        resource=move.resource,
-        rotation=move.rotation,
-        offset=move.destination_offset,
-        grip_direction=move.put_direction,
-        pickup_distance_from_top=move.pickup_distance_from_top,
+        location=drop.destination,
+        resource=drop.resource,
+        rotation=drop.rotation,  # TODO
+        offset=drop.offset,
+        grip_direction=drop.direction,
+        pickup_distance_from_top=drop.pickup_distance_from_top,
         minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
         # int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
         z_position_at_the_command_end=self._traversal_height,
       )
-    else:
+    elif use_arm == "core":
       await self.core_release_picked_up_resource(
-        location=move.destination,
-        resource=move.resource,
-        offset=move.destination_offset,
-        pickup_distance_from_top=move.pickup_distance_from_top,
+        location=drop.destination,
+        resource=drop.resource,
+        offset=drop.offset,
+        pickup_distance_from_top=drop.pickup_distance_from_top,
         minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
         z_position_at_the_command_end=self._traversal_height,
         # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
         return_tool=return_core_gripper,
       )
+    else:
+      raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
 
   async def prepare_for_manual_channel_operation(self, channel: int):
     """Prepare for manual operation."""

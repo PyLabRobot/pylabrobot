@@ -67,9 +67,11 @@ from .standard import (
   Drop,
   DropTipRack,
   GripDirection,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
 )
 
 logger = logging.getLogger("pylabrobot")
@@ -151,6 +153,8 @@ class LiquidHandler(Resource, Machine):
     self.location = Coordinate.zero()
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
+    self._resource_pickup: Optional[ResourcePickup] = None
+
   async def setup(self, **backend_kwargs):
     """Prepare the robot for use."""
 
@@ -166,6 +170,8 @@ class LiquidHandler(Resource, Machine):
     self._send_assigned_resource_to_backend(self.deck)
     for resource in self.deck.children:
       self._send_assigned_resource_to_backend(resource)
+
+    self._resource_pickup = None
 
   def serialize_state(self) -> Dict[str, Any]:
     """Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to
@@ -1722,12 +1728,107 @@ class LiquidHandler(Resource, Machine):
     await self.aspirate96(resource=source, volume=volume, flow_rate=aspiration_flow_rate)
     await self.dispense96(resource=source, volume=volume, flow_rate=dispense_flow_rate)
 
+  async def pick_up_resource(
+    self,
+    resource: Resource,
+    offset: Coordinate = Coordinate.zero(),
+    pickup_distance_from_top: float = 0,
+    direction: GripDirection = GripDirection.FRONT,
+    **backend_kwargs,
+  ):
+    if self._resource_pickup is not None:
+      raise RuntimeError(f"Resource {self._resource_pickup.resource.name} already picked up")
+
+    self._resource_pickup = ResourcePickup(
+      resource=resource,
+      offset=offset,
+      pickup_distance_from_top=pickup_distance_from_top,
+      direction=direction,
+    )
+
+    extras = self._check_args(self.backend.pick_up_resource, backend_kwargs, default={"pickup"})
+    for extra in extras:
+      del backend_kwargs[extra]
+
+    await self.backend.pick_up_resource(
+      pickup=self._resource_pickup,
+      **backend_kwargs,
+    )
+
+  async def move_picked_up_resource(
+    self,
+    to: Coordinate,
+  ):
+    if self._resource_pickup is None:
+      raise RuntimeError("No resource picked up")
+    await self.backend.move_picked_up_resource(
+      ResourceMove(
+        location=to,
+        resource=self._resource_pickup.resource,
+        gripped_direction=self._resource_pickup.direction,
+      )
+    )
+
+  async def drop_resource(
+    self,
+    destination: Coordinate,
+    offset: Coordinate = Coordinate.zero(),
+    direction: GripDirection = GripDirection.FRONT,
+    **backend_kwargs,
+  ):
+    if self._resource_pickup is None:
+      raise RuntimeError("No resource picked up")
+
+    # compute rotation based on the get_direction and put_direction
+
+    if self._resource_pickup.direction == direction:
+      rotation = 0
+    if (self._resource_pickup.direction, direction) in (
+      (GripDirection.FRONT, GripDirection.RIGHT),
+      (GripDirection.RIGHT, GripDirection.BACK),
+      (GripDirection.BACK, GripDirection.LEFT),
+      (GripDirection.LEFT, GripDirection.FRONT),
+    ):
+      rotation = 90
+    if (self._resource_pickup.direction, direction) in (
+      (GripDirection.FRONT, GripDirection.BACK),
+      (GripDirection.BACK, GripDirection.FRONT),
+      (GripDirection.LEFT, GripDirection.RIGHT),
+      (GripDirection.RIGHT, GripDirection.LEFT),
+    ):
+      rotation = 180
+    if (self._resource_pickup.direction, direction) in (
+      (GripDirection.RIGHT, GripDirection.FRONT),
+      (GripDirection.BACK, GripDirection.RIGHT),
+      (GripDirection.LEFT, GripDirection.BACK),
+      (GripDirection.FRONT, GripDirection.LEFT),
+    ):
+      rotation = 270
+
+    drop = ResourceDrop(
+      resource=self._resource_pickup.resource,
+      destination=destination,
+      offset=offset,
+      pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
+      direction=direction,
+      rotation=rotation,
+    )
+    result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
+
+    if rotation != 0:
+      self._resource_pickup.resource.rotate(z=rotation)
+
+    self._resource_pickup = None
+
+    return result
+
   async def move_resource(
     self,
     resource: Resource,
     to: Coordinate,
     intermediate_locations: Optional[List[Coordinate]] = None,
-    resource_offset: Coordinate = Coordinate.zero(),
+    resource_offset: Optional[Coordinate] = None,
+    pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
     get_direction: GripDirection = GripDirection.FRONT,
@@ -1747,7 +1848,7 @@ class LiquidHandler(Resource, Machine):
       resource: The Resource object.
       to: The absolute coordinate (meaning relative to deck) to move the resource to.
       intermediate_locations: A list of intermediate locations to move the resource through.
-      resource_offset: The offset from the resource's origin, optional (rarely necessary).
+      pickup_offset: The offset from the resource's origin, optional (rarely necessary).
       destination_offset: The offset from the location's origin, optional (rarely necessary).
       pickup_distance_from_top: The distance from the top of the resource to pick up from.
       get_direction: The direction from which to pick up the resource.
@@ -1757,44 +1858,34 @@ class LiquidHandler(Resource, Machine):
     # TODO: move conditional statements from move_plate into move_resource to enable
     # movement to other types besides Coordinate
 
-    extras = self._check_args(self.backend.move_resource, backend_kwargs, default={"move"})
-    for extra in extras:
-      del backend_kwargs[extra]
+    if resource_offset is not None:
+      raise NotImplementedError("resource_offset is deprecated, use pickup_offset instead")
 
-    move_operation = Move(
+    await self.pick_up_resource(
       resource=resource,
-      destination=to,
-      intermediate_locations=intermediate_locations or [],
-      resource_offset=resource_offset,
-      destination_offset=destination_offset,
+      offset=pickup_offset,
       pickup_distance_from_top=pickup_distance_from_top,
-      get_direction=get_direction,
-      put_direction=put_direction,
-    )
-
-    result = await self.backend.move_resource(move=move_operation, **backend_kwargs)
-
-    # rotate the resource if the move operation has a rotation.
-    # this code should be expanded to also update the resource's location
-    if move_operation.rotation != 0:
-      move_operation.resource.rotate(z=move_operation.rotation)
-
-    self._trigger_callback(
-      "move_resource",
-      liquid_handler=self,
-      move=move_operation,
-      error=None,
+      direction=get_direction,
       **backend_kwargs,
     )
 
-    return result
+    for intermediate_location in intermediate_locations or []:
+      await self.move_picked_up_resource(to=intermediate_location)
+
+    await self.drop_resource(
+      destination=to,
+      offset=destination_offset,
+      direction=put_direction,
+      **backend_kwargs,
+    )
 
   async def move_lid(
     self,
     lid: Lid,
     to: Union[Plate, ResourceStack, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
-    resource_offset: Coordinate = Coordinate.zero(),
+    resource_offset: Optional[Coordinate] = None,
+    pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
     get_direction: GripDirection = GripDirection.FRONT,
     put_direction: GripDirection = GripDirection.FRONT,
@@ -1818,12 +1909,15 @@ class LiquidHandler(Resource, Machine):
     Args:
       lid: The lid to move. Can be either a Plate object or a Lid object.
       to: The location to move the lid to, either a plate, ResourceStack or a Coordinate.
-      resource_offset: The offset from the resource's origin, optional (rarely necessary).
+      pickup_offset: The offset from the resource's origin, optional (rarely necessary).
       destination_offset: The offset from the location's origin, optional (rarely necessary).
 
     Raises:
       ValueError: If the lid is not assigned to a resource.
     """
+
+    if resource_offset is not None:
+      raise NotImplementedError("resource_offset is deprecated, use pickup_offset instead")
 
     if isinstance(to, Plate):
       to_location = to.get_absolute_location()
@@ -1845,7 +1939,7 @@ class LiquidHandler(Resource, Machine):
       to=to_location,
       intermediate_locations=intermediate_locations,
       pickup_distance_from_top=pickup_distance_from_top,
-      resource_offset=resource_offset,
+      pickup_offset=pickup_offset,
       destination_offset=destination_offset,
       get_direction=get_direction,
       put_direction=put_direction,
@@ -1867,7 +1961,8 @@ class LiquidHandler(Resource, Machine):
     plate: Plate,
     to: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
-    resource_offset: Coordinate = Coordinate.zero(),
+    resource_offset: Optional[Coordinate] = None,
+    pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
     put_direction: GripDirection = GripDirection.FRONT,
     get_direction: GripDirection = GripDirection.FRONT,
@@ -1902,9 +1997,12 @@ class LiquidHandler(Resource, Machine):
     Args:
       plate: The plate to move. Can be either a Plate object or a ResourceHolder object.
       to: The location to move the plate to, either a plate, ResourceHolder or a Coordinate.
-      resource_offset: The offset from the resource's origin, optional (rarely necessary).
+      pickup_offset: The offset from the resource's origin, optional (rarely necessary).
       destination_offset: The offset from the location's origin, optional (rarely necessary).
     """
+
+    if resource_offset is not None:
+      raise NotImplementedError("resource_offset is deprecated, use pickup_offset instead")
 
     if isinstance(to, ResourceStack):
       assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
@@ -1945,7 +2043,7 @@ class LiquidHandler(Resource, Machine):
       to=to_location,
       intermediate_locations=intermediate_locations,
       pickup_distance_from_top=pickup_distance_from_top,
-      resource_offset=resource_offset,
+      pickup_offset=pickup_offset,
       destination_offset=destination_offset,
       get_direction=get_direction,
       put_direction=put_direction,
