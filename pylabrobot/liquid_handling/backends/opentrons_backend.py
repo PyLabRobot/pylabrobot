@@ -15,9 +15,11 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Drop,
   DropTipRack,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
 )
 from pylabrobot.resources import (
   Coordinate,
@@ -572,20 +574,25 @@ class OpentronsBackend(LiquidHandlerBackend):
     ot_api.health.home()
 
   async def pick_up_tips96(self, pickup: PickupTipRack):
-    raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
+    raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
   async def drop_tips96(self, drop: DropTipRack):
-    raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
+    raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
   async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
-    raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
+    raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
   async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
-    raise NotImplementedError("The Opentrons backend does not support the CoRe 96.")
+    raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
-  async def move_resource(self, move: Move):
-    """Move the specified lid within the robot."""
-    raise NotImplementedError("Moving resources in Opentrons is not implemented yet.")
+  async def pick_up_resource(self, pickup: ResourcePickup):
+    raise NotImplementedError("The Opentrons backend does not support the robotic arm.")
+
+  async def move_picked_up_resource(self, move: ResourceMove):
+    raise NotImplementedError("The Opentrons backend does not support the robotic arm.")
+
+  async def drop_resource(self, drop: ResourceDrop):
+    raise NotImplementedError("The Opentrons backend does not support the robotic arm.")
 
   async def list_connected_modules(self) -> List[dict]:
     """List all connected temperature modules."""

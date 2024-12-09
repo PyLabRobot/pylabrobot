@@ -708,8 +708,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       self.plate,
       plate_reader,
       pickup_distance_from_top=8.2 - 3.33,
-      get_direction=GripDirection.FRONT,
-      put_direction=GripDirection.LEFT,
+      pickup_direction=GripDirection.FRONT,
+      drop_direction=GripDirection.LEFT,
     )
     plate_origin_location = {
       "xs": "03479",
@@ -750,8 +750,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       plate_reader.get_plate(),
       self.plt_car[0],
       pickup_distance_from_top=8.2 - 3.33,
-      get_direction=GripDirection.LEFT,
-      put_direction=GripDirection.FRONT,
+      pickup_direction=GripDirection.LEFT,
+      drop_direction=GripDirection.FRONT,
     )
     self._assert_command_sent_once(
       f"C0PPid0005xs{plate_reader_location['xs']}xd{plate_reader_location['xd']}"
