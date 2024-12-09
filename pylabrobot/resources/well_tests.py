@@ -1,5 +1,7 @@
 import unittest
 
+from .plate import Plate
+from .utils import create_ordered_items_2d
 from .well import Well, WellBottomType
 
 
@@ -52,3 +54,26 @@ class TestWell(unittest.TestCase):
     well.set_liquids([(None, 10)])
     self.assertEqual(well.tracker.liquids, [(None, 10)])
     self.assertEqual(well.tracker.get_used_volume(), 10)
+
+  def test_get_index_in_plate(self):
+    plate = Plate(
+      "plate",
+      size_x=1,
+      size_y=1,
+      size_z=1,
+      ordered_items=create_ordered_items_2d(
+        Well,
+        num_items_x=24,
+        num_items_y=16,
+        dx=1,
+        dy=1,
+        dz=1,
+        item_dx=1,
+        item_dy=1,
+        size_x=1,
+        size_y=1,
+        size_z=1,
+      ),
+    )
+    well = plate.get_well("A1")
+    self.assertEqual(well.get_identifier(), "A1")
