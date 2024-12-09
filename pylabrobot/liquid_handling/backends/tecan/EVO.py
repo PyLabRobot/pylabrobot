@@ -549,6 +549,9 @@ class EVO(TecanLiquidHandler):
     await self.roma.set_gripper_params(100, 75)
     await self.roma.grip_plate(h - 100)
 
+  async def move_picked_up_resource(self, move: ResourceMove):
+    raise NotImplementedError()
+
   async def drop_resource(self, drop: ResourceDrop):
     """Drop a resource like a plate or a lid using the integrated robotic arm."""
 

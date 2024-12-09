@@ -201,6 +201,17 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       **backend_kwargs,
     )
 
+  async def move_picked_up_resource(self, move: ResourceMove, **backend_kwargs):
+    await self.send_command(
+      command="move_picked_up_resource",
+      data={
+        "resource_name": move.resource.name,
+        "location": serialize(move.location),
+        "gripped_direction": serialize(move.gripped_direction),
+      },
+      **backend_kwargs,
+    )
+
   async def drop_resource(self, drop: ResourceDrop, **backend_kwargs):
     await self.send_command(
       command="drop_resource",

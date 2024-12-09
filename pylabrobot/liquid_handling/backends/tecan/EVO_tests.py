@@ -14,7 +14,6 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   Pickup,
   ResourceDrop,
-  ResourceMove,
   ResourcePickup,
 )
 from pylabrobot.resources import (

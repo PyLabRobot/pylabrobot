@@ -110,6 +110,7 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   async def pick_up_resource(self, pickup: ResourcePickup):
     """Pick up a resource like a plate or a lid using the integrated robotic arm."""
 
+  @abstractmethod
   async def move_picked_up_resource(self, move: ResourceMove):
     """Move a picked up resource like a plate or a lid using the integrated robotic arm."""
 

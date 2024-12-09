@@ -229,5 +229,8 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
   async def pick_up_resource(self, pickup: ResourcePickup):
     print(f"Picking up resource: {pickup}")
 
+  async def move_picked_up_resource(self, move: ResourceMove):
+    print(f"Moving picked up resource: {move}")
+
   async def drop_resource(self, drop: ResourceDrop):
     print(f"Dropping resource: {drop}")
