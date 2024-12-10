@@ -8,8 +8,7 @@ from pylabrobot.serializer import deserialize, serialize
 
 
 class Centrifuge(Machine):
-  """The front end for centrifuges.
-  Centrifuges are devices that can spin samples at high speeds."""
+  """The front end for centrifuges."""
 
   def __init__(self, backend: CentrifugeBackend) -> None:
     super().__init__(backend=backend)
@@ -66,25 +65,44 @@ class Loader(Machine, ResourceHolder):
   Centrifuge loaders are devices that can load and unload samples from centrifuges."""
 
   def __init__(
-    self, backend: LoaderBackend, centrifuge: Centrifuge, stage_location: Coordinate
+    self,
+    backend: LoaderBackend,
+    centrifuge: Centrifuge,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    child_location: Coordinate,
+    rotation=None,
+    category="loader",
+    model=None,
   ) -> None:
-    super().__init__(backend=backend)
+    Machine.__init__(self, backend=backend)
+    ResourceHolder.__init__(
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      child_location=child_location,
+      rotation=rotation,
+      category=category,
+      model=model,
+    )
     self.backend: LoaderBackend = backend  # fix type
     self.centrifuge: Centrifuge = centrifuge
-    self.stage_location = stage_location
-
-  def get_default_child_location(self, resource):
-    return super().get_default_child_location(resource) + self.stage_location
 
   async def load(self) -> None:
     if not self.centrifuge.door_open:
       raise CentrifugeDoorError("Centrifuge door must be open to load a plate.")
     await self.backend.load()
+    # TODO: assign plate to centrifuge bucket, at no location
 
-  async def unload(self) -> None:
+  async def unload(self) -> None:  # DOOR arg?
     if not self.centrifuge.door_open:
       raise CentrifugeDoorError("Centrifuge door must be open to unload a plate.")
     await self.backend.unload()
+    # TODO: assign plate from centrifuge bucket to self
 
   def serialize(self) -> dict:
     return {
@@ -92,7 +110,6 @@ class Loader(Machine, ResourceHolder):
       "resource": ResourceHolder.serialize(self),
       "machine": Machine.serialize(self),
       "centrifuge": self.centrifuge.serialize(),
-      "stage_location": serialize(self.stage_location),
     }
 
   @classmethod
@@ -100,10 +117,7 @@ class Loader(Machine, ResourceHolder):
     data_copy = data.copy()  # copy data because we will be modifying it
     centrifuge_data = data_copy.pop("centrifuge")
     centrifuge = Centrifuge.deserialize(centrifuge_data)
-    stage_location_data = data_copy.pop("stage_location")
-    stage_location = cast(Coordinate, deserialize(stage_location_data))
     return cls(
       centrifuge=centrifuge,
-      stage_location=stage_location,
       **data_copy,
     )
