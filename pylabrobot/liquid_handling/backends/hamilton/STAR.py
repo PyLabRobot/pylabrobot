@@ -2868,6 +2868,7 @@ class STAR(HamiltonLiquidHandler):
     channel_1: int = 7,
     channel_2: int = 8,
     core_grip_strength: int = 15,
+    hotel_open_gripper_position: Optional[float] = None,
     hotel_height_at_beginning=280.0,
     hotel_z_position_at_end=280.0,
     hotel_depth=160.0,
@@ -2902,10 +2903,11 @@ class STAR(HamiltonLiquidHandler):
         and pickup.resource.get_absolute_rotation().y == 0
       )
       assert pickup.resource.get_absolute_rotation().z % 90 == 0
-      if pickup.direction in (GripDirection.FRONT, GripDirection.BACK):
-        hotel_open_gripper_position = pickup.resource.get_absolute_size_x() * 10 + 50
-      else:
-        hotel_open_gripper_position = pickup.resource.get_absolute_size_y() * 10 + 50
+      if hotel_open_gripper_position is None:
+        if pickup.direction in (GripDirection.FRONT, GripDirection.BACK):
+          hotel_open_gripper_position = pickup.resource.get_absolute_size_x() * 10 + 50
+        else:
+          hotel_open_gripper_position = pickup.resource.get_absolute_size_y() * 10 + 50
 
       await self.unsafe.get_from_hotel(
         hotel_center_x_coord=round(x * 10),
@@ -2956,6 +2958,7 @@ class STAR(HamiltonLiquidHandler):
     drop: ResourceDrop,
     use_arm: Literal["iswap", "core", "iswap_hotel_unsafe"] = "iswap",
     return_core_gripper: bool = True,
+    hotel_open_gripper_position: Optional[float] = None,
     hotel_height_at_beginning=280.0,
     hotel_z_position_at_end=280.0,
     hotel_depth=160.0,
@@ -2992,10 +2995,11 @@ class STAR(HamiltonLiquidHandler):
         and drop.resource.get_absolute_rotation().y == 0
       )
       assert drop.resource.get_absolute_rotation().z % 90 == 0
-      if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
-        hotel_open_gripper_position = drop.resource.get_absolute_size_x() * 10 + 50
-      else:
-        hotel_open_gripper_position = drop.resource.get_absolute_size_y() * 10 + 50
+      if hotel_open_gripper_position is None:
+        if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
+          hotel_open_gripper_position = drop.resource.get_absolute_size_x() * 10 + 50
+        else:
+          hotel_open_gripper_position = drop.resource.get_absolute_size_y() * 10 + 50
 
       await self.unsafe.put_in_hotel(
         hotel_center_x_coord=round(drop.destination.x * 10),
