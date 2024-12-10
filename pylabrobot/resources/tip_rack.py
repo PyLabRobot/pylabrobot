@@ -100,6 +100,15 @@ class TipSpot(Resource):
   def load_state(self, state: Dict[str, Any]):
     self.tracker.load_state(state)
 
+  def get_identifier(self) -> str:
+    """Get the (canonical) identifier, like `"A1"` of the tip spot in the parent tip rack. If the
+    tip spot not in a tip rack, this will raise a ValueError."""
+
+    if self.parent is None or not isinstance(self.parent, TipRack):
+      raise ValueError("TipSpot must be in a tip rack to get its identifier.")
+
+    return self.parent.get_child_identifier(self)
+
 
 class TipRack(ItemizedResource[TipSpot], metaclass=ABCMeta):
   """Tip rack for disposable tips."""

@@ -53,6 +53,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Config.log_dir` is now optional and defaults to None (https://github.com/PyLabRobot/pylabrobot/pull/302)
 - Definition of `Cor_6_wellplate_16800ul_Fb` to match the manufacturer spec (https://github.com/PyLabRobot/pylabrobot/pull/311)
 - `Trash` now inherits from `Container` (https://github.com/PyLabRobot/pylabrobot/pull/318)
+- Renamed parameters of `LiquidHandler.move_{resource,plate,lid}` (https://github.com/PyLabRobot/pylabrobot/pull/328)
+  - resource_offset -> pickup_offset
+  - get_direction -> pickup_direction
+  - put_direction -> drop_direction
 
 ### Added
 
@@ -107,6 +111,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `AGenBio_1_troughplate_100000uL_Fl` (https://github.com/PyLabRobot/pylabrobot/pull/319)
 - `MFX_DWP_module_flat` (https://github.com/PyLabRobot/pylabrobot/pull/320)
 - `STAR.position_channels_in_y_direction` (https://github.com/PyLabRobot/pylabrobot/pull/324)
+- `{Well,TipSpot}.get_identifier` (https://github.com/PyLabRobot/pylabrobot/pull/327)
+- `LiquidHandler{Backend}.{pick_up_resource,move_picked_up_resource,drop_resource}` (https://github.com/PyLabRobot/pylabrobot/pull/328)
 
 ### Deprecated
 

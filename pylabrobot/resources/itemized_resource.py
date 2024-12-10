@@ -434,6 +434,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
         return i
     return None
 
+  def get_child_identifier(self, item: T) -> str:
+    """Get the identifier of the item."""
+    index = self.index_of_item(item)
+    if index is None:
+      raise ValueError(f"Item {item} not found in resource.")
+    return self._ordering[index]
+
   def get_all_items(self) -> List[T]:
     """Get all items in the resource. Items are in a 1D list, starting from the top left and going
     down, then right."""
