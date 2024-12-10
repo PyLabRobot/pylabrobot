@@ -2868,10 +2868,10 @@ class STAR(HamiltonLiquidHandler):
     channel_1: int = 7,
     channel_2: int = 8,
     core_grip_strength: int = 15,
-    hotel_height_at_beginning=2800,
-    hotel_z_position_at_end=2800,
-    hotel_depth=1600,
-    hotel_clearance_height=75,
+    hotel_height_at_beginning=280.0,
+    hotel_z_position_at_end=280.0,
+    hotel_depth=160.0,
+    hotel_clearance_height=7.5,
     hotel_high_speed=False,
   ):
     if use_arm == "iswap":
@@ -2908,18 +2908,18 @@ class STAR(HamiltonLiquidHandler):
         hotel_open_gripper_position = pickup.resource.get_absolute_size_y() * 10 + 50
 
       self.unsafe.get_from_hotel(
-        hotel_center_x_coord=x,
-        hotel_center_y_coord=y,
-        hotel_center_z_coord=z,
-        hotel_center_x_direction=0,  # 1?
+        hotel_center_x_coord=round(x * 10),
+        hotel_center_y_coord=round(y * 10),
+        hotel_center_z_coord=round(z * 10),
+        hotel_center_x_direction=0,
         hotel_center_y_direction=0,
         hotel_center_z_direction=0,
-        clearance_height=hotel_clearance_height,
-        hotel_depth=hotel_depth,
+        clearance_height=round(hotel_clearance_height * 10),
+        hotel_depth=round(hotel_depth * 10),
         grip_direction=pickup.direction,
-        open_gripper_position=hotel_open_gripper_position,
-        traverse_height_at_beginning=hotel_height_at_beginning,
-        z_position_at_end=hotel_z_position_at_end,
+        open_gripper_position=round(hotel_open_gripper_position * 10),
+        traverse_height_at_beginning=round(hotel_height_at_beginning * 10),
+        z_position_at_end=round(hotel_z_position_at_end * 10),
         high_acceleration_index=2 if hotel_high_speed else 1,
         low_acceleration_index=2 if hotel_high_speed else 1,
       )
@@ -2956,11 +2956,10 @@ class STAR(HamiltonLiquidHandler):
     drop: ResourceDrop,
     use_arm: Literal["iswap", "core", "iswap_hotel_unsafe"] = "iswap",
     return_core_gripper: bool = True,
-    hotel_height_at_beginning=2800,
-    hotel_z_position_at_end=2800,
-    hotel_open_gripper_position=1320,
-    hotel_depth=1600,
-    hotel_clearance_height=75,
+    hotel_height_at_beginning=280.0,
+    hotel_z_position_at_end=280.0,
+    hotel_depth=160.0,
+    hotel_clearance_height=7.5,
     hotel_high_speed=False,
   ):
     if use_arm == "iswap":
@@ -2999,18 +2998,18 @@ class STAR(HamiltonLiquidHandler):
         hotel_open_gripper_position = drop.resource.get_absolute_size_y() * 10 + 50
 
       await self.unsafe.put_in_hotel(
-        hotel_center_x_coord=drop.destination.x,
-        hotel_center_y_coord=drop.destination.y,
-        hotel_center_z_coord=drop.destination.z,
-        hotel_center_x_direction=0,  # 1?
+        hotel_center_x_coord=round(drop.destination.x * 10),
+        hotel_center_y_coord=round(drop.destination.y * 10),
+        hotel_center_z_coord=round(drop.destination.z * 10),
+        hotel_center_x_direction=0,
         hotel_center_y_direction=0,
         hotel_center_z_direction=0,
-        clearance_height=hotel_clearance_height,
-        hotel_depth=hotel_depth,
+        clearance_height=round(hotel_clearance_height * 10),
+        hotel_depth=round(hotel_depth * 10),
         grip_direction=drop.direction,
-        open_gripper_position=hotel_open_gripper_position,
-        traverse_height_at_beginning=hotel_height_at_beginning,
-        z_position_at_end=hotel_z_position_at_end,
+        open_gripper_position=round(hotel_open_gripper_position * 10),
+        traverse_height_at_beginning=round(hotel_height_at_beginning * 10),
+        z_position_at_end=round(hotel_z_position_at_end * 10),
         high_acceleration_index=2 if hotel_high_speed else 1,
         low_acceleration_index=2 if hotel_high_speed else 1,
       )
