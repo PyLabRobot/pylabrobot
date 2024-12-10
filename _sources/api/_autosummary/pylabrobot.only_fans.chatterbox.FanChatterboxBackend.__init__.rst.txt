@@ -1,0 +1,6 @@
+pylabrobot.only\_fans.chatterbox.FanChatterboxBackend.\_\_init\_\_
+==================================================================
+
+.. currentmodule:: pylabrobot.only_fans.chatterbox
+
+.. automethod:: FanChatterboxBackend.__init__

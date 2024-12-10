@@ -1,0 +1,324 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Temperature controllers (heaters and coolers)\n",
+    "\n",
+    "PyLabRobot supports the following temperature controllers:\n",
+    "\n",
+    "- Opentrons Temperature Module V2\n",
+    "\n",
+    "Temperature controllers are controlled by the {class}`~pylabrobot.temperature_controlling.temperature_controller.TemperatureController` class. This class takes a backend as an argument. The backend is responsible for communicating with the scale and is specific to the hardware being used.\n",
+    "\n",
+    "The {class}`~pylabrobot.temperature_controlling.opentrons.OpentronsTemperatureModuleV2` is a TemperatureController subclass initialized with a tube rack."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.temperature_controlling import TemperatureController\n",
+    "from pylabrobot.temperature_controlling.opentrons import OpentronsTemperatureModuleV2\n",
+    "from pylabrobot.temperature_controlling.opentrons_backend import (\n",
+    "  OpentronsTemperatureModuleBackend,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Using the Opentrons temperature controller currently requires an Opentrons robot. The robot must be connected to the host computer and to the temperature module."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.liquid_handling import LiquidHandler\n",
+    "from pylabrobot.liquid_handling.backends.opentrons_backend import OpentronsBackend\n",
+    "from pylabrobot.resources.opentrons import OTDeck\n",
+    "\n",
+    "ot = OpentronsBackend(host=\"169.254.184.185\", port=31950)  # Get the ip from the Opentrons app\n",
+    "lh = LiquidHandler(backend=ot, deck=OTDeck())\n",
+    "await lh.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "After setting up the robot, use the `OpentronsBackend.list_connected_modules()` to list the connected temperature modules. You are looking for the `'id'` of the module you want to use."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[{'id': 'fc409cc91770129af8eb0a01724c56cb052b306a',\n",
+       "  'serialNumber': 'TDV21P20201224B13',\n",
+       "  'firmwareVersion': 'v2.1.0',\n",
+       "  'hardwareRevision': 'temp_deck_v21',\n",
+       "  'hasAvailableUpdate': False,\n",
+       "  'moduleType': 'temperatureModuleType',\n",
+       "  'moduleModel': 'temperatureModuleV2',\n",
+       "  'data': {'status': 'idle', 'currentTemperature': 34.0},\n",
+       "  'usbPort': {'port': 1,\n",
+       "   'portGroup': 'main',\n",
+       "   'hub': False,\n",
+       "   'path': '1.0/tty/ttyACM0/dev'}}]"
+      ]
+     },
+     "execution_count": 3,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await ot.list_connected_modules()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Initialize the OpentronsTemperatureModuleV2 with the `id` of the module you want to use."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "t = OpentronsTemperatureModuleV2(name=\"t\", opentrons_id=\"fc409cc91770129af8eb0a01724c56cb052b306a\")\n",
+    "await t.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The `OpentronsTemperatureModuleV2` is a subclass of {class}`~pylabrobot.temperature_controlling.temperature_controller.TemperatureController`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "True"
+      ]
+     },
+     "execution_count": 5,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "isinstance(t, TemperatureController)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Be sure to assign the temperature controller to the robot deck before you use it. This is done with the usual {func}`~pylabrobot.resources.opentrons.deck.assign_child_at_slot` function."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "lh.deck.assign_child_at_slot(t, slot=3)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "You can set the temperature in Celsius using {func}`~pylabrobot.temperature_controlling.temperature_controller.TemperatureController.set_temperature`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await t.set_temperature(37)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Use {func}`~pylabrobot.temperature_controlling.temperature_controller.TemperatureController.wait_for_temperature` to wait for the temperature to stabilize at the target temperature."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await t.wait_for_temperature()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The temperature can be read using {func}`~pylabrobot.temperature_controlling.temperature_controller.TemperatureController.get_temperature`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "37.0"
+      ]
+     },
+     "execution_count": 9,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await t.get_temperature()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "If you are done with the temperature controller, you can use {func}`~pylabrobot.temperature_controlling.temperature_controller.TemperatureController.deactivate` to turn it off. The temperature controller will return to ambient temperature."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await t.deactivate()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Pipetting from the OT-2 temperature module"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Assign some tips to the deck and pick one up so that we can aspirate:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources.opentrons import opentrons_96_tiprack_300ul\n",
+    "\n",
+    "tips300 = opentrons_96_tiprack_300ul(name=\"tips\")\n",
+    "lh.deck.assign_child_at_slot(tips300, slot=11)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.pick_up_tips(tips300[\"A5\"])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Access the temperature controller's tube rack with the `tube_rack` attribute."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.aspirate(t.tube_rack[\"A1\"], vols=[20])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.aspirate(t.tube_rack[\"A6\"], vols=[20])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Return the tips to the tip rack when you are done."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await lh.return_tips()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.12"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}

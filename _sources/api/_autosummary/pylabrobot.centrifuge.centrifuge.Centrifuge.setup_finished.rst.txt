@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.setup\_finished
+===========================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. autoproperty:: Centrifuge.setup_finished
