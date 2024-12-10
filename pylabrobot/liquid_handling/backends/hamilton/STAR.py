@@ -2907,7 +2907,7 @@ class STAR(HamiltonLiquidHandler):
       else:
         hotel_open_gripper_position = pickup.resource.get_absolute_size_y() * 10 + 50
 
-      self.unsafe.get_from_hotel(
+      await self.unsafe.get_from_hotel(
         hotel_center_x_coord=round(x * 10),
         hotel_center_y_coord=round(y * 10),
         hotel_center_z_coord=round(z * 10),
