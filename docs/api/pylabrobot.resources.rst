@@ -237,3 +237,13 @@ See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
   no_volume_tracking
   set_volume_tracking
   volume_tracker.VolumeTracker
+
+Utils
+-----
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+  utils
