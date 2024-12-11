@@ -1,4 +1,13 @@
+from typing import Optional
+
 from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
+from pylabrobot.centrifuge.standard import (
+  BucketHasPlateError,
+  BucketNoPlateError,
+  CentrifugeDoorError,
+  LoaderNoPlateError,
+  NotAtBucketError,
+)
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.resource_holder import ResourceHolder
@@ -11,6 +20,13 @@ class Centrifuge(Machine):
     super().__init__(backend=backend)
     self.backend: CentrifugeBackend = backend  # fix type
     self._door_open = False
+    self._at_bucket: Optional[ResourceHolder] = None
+    self.bucket1 = ResourceHolder(
+      name="bucket1", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
+    )
+    self.bucket2 = ResourceHolder(
+      name="bucket2", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
+    )
 
   async def open_door(self) -> None:
     await self.backend.open_door()
@@ -38,12 +54,15 @@ class Centrifuge(Machine):
 
   async def go_to_bucket1(self) -> None:
     await self.backend.go_to_bucket1()
+    self._at_bucket = self.bucket1
 
   async def go_to_bucket2(self) -> None:
     await self.backend.go_to_bucket2()
+    self._at_bucket = self.bucket2
 
   async def rotate_distance(self, distance) -> None:
     await self.backend.rotate_distance(distance=distance)
+    self._at_bucket = None
 
   async def start_spin_cycle(self, g: float, duration: float, acceleration: float) -> None:
     await self.backend.start_spin_cycle(
@@ -51,10 +70,12 @@ class Centrifuge(Machine):
       duration=duration,
       acceleration=acceleration,
     )
+    self._at_bucket = None
 
-
-class CentrifugeDoorError(Exception):
-  pass
+  @property
+  def at_bucket(self) -> Optional[ResourceHolder]:
+    """None if not at a bucket or unknown, otherwise the resource representing the bucket."""
+    return self._at_bucket
 
 
 class Loader(Machine, ResourceHolder):
@@ -87,19 +108,49 @@ class Loader(Machine, ResourceHolder):
       model=model,
     )
     self.backend: LoaderBackend = backend  # fix type
-    self.centrifuge: Centrifuge = centrifuge
+    self.centrifuge = centrifuge
 
   async def load(self) -> None:
     if not self.centrifuge.door_open:
       raise CentrifugeDoorError("Centrifuge door must be open to load a plate.")
+
+    if self.centrifuge.at_bucket is None:
+      raise NotAtBucketError(
+        "Centrifuge must be at a bucket to load a plate, but current position is unknown or not at "
+        "a bucket. Use centrifuge.go_to_bucket{1,2}() to move to a bucket."
+      )
+
+    if self.resource is None:
+      raise LoaderNoPlateError("Loader must have a plate to load.")
+
+    if self.centrifuge.at_bucket.resource is not None:
+      raise BucketHasPlateError("Bucket must be empty to load a plate.")
+
     await self.backend.load()
-    # TODO: assign plate to centrifuge bucket, at no location
+
+    self.centrifuge.at_bucket.assign_child_resource(self.resource, location=Coordinate.zero())
 
   async def unload(self) -> None:  # DOOR arg?
     if not self.centrifuge.door_open:
       raise CentrifugeDoorError("Centrifuge door must be open to unload a plate.")
+
+    if self.centrifuge.at_bucket is None:
+      raise NotAtBucketError(
+        "Centrifuge must be at a bucket to unload a plate, but current position is unknown or not "
+        "at a bucket. Use centrifuge.go_to_bucket{1,2}() to move to a bucket."
+      )
+
+    if self.centrifuge.at_bucket.resource is None:
+      raise BucketNoPlateError("Bucket must have a plate to unload.")
+
     await self.backend.unload()
-    # TODO: assign plate from centrifuge bucket to self
+
+    print("assigning to self:", self.centrifuge.at_bucket.resource)
+    self.assign_child_resource(self.centrifuge.at_bucket.resource)
+    print("assigned to self:", self.resource)
+    print("paren :", self.resource.parent)
+    print(" .           :", self.centrifuge.at_bucket)
+    print(" .           :", self.centrifuge.at_bucket.resource)
 
   def serialize(self) -> dict:
     return {
@@ -113,7 +164,7 @@ class Loader(Machine, ResourceHolder):
   def deserialize(cls, data: dict, allow_marshall: bool = False):
     data_copy = data.copy()  # copy data because we will be modifying it
     centrifuge_data = data_copy.pop("centrifuge")
-    centrifuge = Centrifuge.deserialize(centrifuge_data)
+    centrifuge = Centrifuge.deserialize(centrifuge_data, allow_marshall=allow_marshall)
     return cls(
       centrifuge=centrifuge,
       **data_copy,
