@@ -173,6 +173,18 @@ class TestResource(unittest.TestCase):
     with self.assertRaises(ResourceNotFoundError):
       parent.get_resource("child")
 
+  def test_reassign_child(self):
+    child = Resource("child", size_x=5, size_y=5, size_z=5)
+    parent1 = Resource("parent1", size_x=10, size_y=10, size_z=10)
+    parent2 = Resource("parent2", size_x=10, size_y=10, size_z=10)
+
+    parent1.assign_child_resource(child, location=Coordinate(5, 5, 5))
+    parent2.assign_child_resource(child, location=Coordinate(5, 5, 5))
+
+    self.assertEqual(child.parent, parent2)
+    self.assertEqual(parent1.children, [])
+    self.assertEqual(parent2.children, [child])
+
   def test_get_all_children(self):
     deck = Deck()
     parent = Resource("parent", size_x=10, size_y=10, size_z=10)
