@@ -296,6 +296,8 @@ class Resource:
       callback(resource)
 
     # Modify the tree structure
+    if resource.parent is not None:
+      resource.parent.unassign_child_resource(resource)
     resource.parent = self
     resource.location = location
     self.children.append(resource)
@@ -401,6 +403,7 @@ class Resource:
 
     # Update the tree structure
     resource.parent = None
+    resource.location = None
     self.children.remove(resource)
 
     # Delete callbacks on the child resource so that they are not propagated up the tree.

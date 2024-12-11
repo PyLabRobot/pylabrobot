@@ -113,6 +113,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `STAR.position_channels_in_y_direction` (https://github.com/PyLabRobot/pylabrobot/pull/324)
 - `{Well,TipSpot}.get_identifier` (https://github.com/PyLabRobot/pylabrobot/pull/327)
 - `LiquidHandler{Backend}.{pick_up_resource,move_picked_up_resource,drop_resource}` (https://github.com/PyLabRobot/pylabrobot/pull/328)
+- `Access2` loader for vspin (https://github.com/PyLabRobot/pylabrobot/pull/308)
+- `CentrifugeChatterboxBackend` and `LoaderChatterboxBackend` (https://github.com/PyLabRobot/pylabrobot/pull/335)
 
 ### Deprecated
 
@@ -146,6 +148,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - volume tracking on channel 1-n (https://github.com/PyLabRobot/pylabrobot/pull/273)
 - correct trash location on Vantage (https://github.com/PyLabRobot/pylabrobot/pull/285)
 - `Resource.get_absolute_location` includes anchor even if parent is None
+- unassign from parent if resource is re-assigned (https://github.com/PyLabRobot/pylabrobot/pull/333)
 
 ### Removed
 
