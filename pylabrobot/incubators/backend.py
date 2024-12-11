@@ -6,6 +6,14 @@ from pylabrobot.resources import Plate
 
 class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
+  async def open_door(self):
+    pass
+
+  @abstractmethod
+  async def close_door(self):
+    pass
+
+  @abstractmethod
   async def fetch_plate(self, plate_name: str):
     pass
 
@@ -28,4 +36,10 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def stop_shaking(self):
+    pass
+
+  def serialize_state(self) -> dict:
+    return {}
+
+  def deserialize_state(self, state: dict):
     pass

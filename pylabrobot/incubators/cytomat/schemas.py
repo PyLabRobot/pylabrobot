@@ -1,17 +1,16 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from pylabrobot.resources.plate import Plate
-from pylabrobot.resources.well import Well
-
-from .constants import (
+from pylabrobot.incubators.cytomat.constants import (
   ActionRegister,
   ActionType,
   LoadStatusAtProcessor,
   LoadStatusFrontOfGate,
   SwapStationPosition,
 )
-from .schema import CytomatPlate
+from pylabrobot.incubators.cytomat.schema import CytomatPlate
+from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.well import Well
 
 # TODO combine these
 CytomatWell = Well

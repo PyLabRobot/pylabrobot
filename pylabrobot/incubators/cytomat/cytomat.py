@@ -11,10 +11,8 @@ import yaml
 from prettytable import PrettyTable
 
 from pylabrobot.incubators.backend import IncubatorBackend
-from pylabrobot.resources.plate import Plate
-
-from .config import CYTOMAT_CONFIG
-from .constants import (
+from pylabrobot.incubators.cytomat.config import CYTOMAT_CONFIG
+from pylabrobot.incubators.cytomat.constants import (
   HEX,
   ActionRegister,
   ActionType,
@@ -34,25 +32,25 @@ from .constants import (
   SwapStationPosition,
   WarningRegister,
 )
-from .errors import CytomatTelegramStructureError, error_map
-from .schema import (
+from pylabrobot.incubators.cytomat.errors import CytomatTelegramStructureError, error_map
+from pylabrobot.incubators.cytomat.schema import (
   CytomatRackState,
   CytomatRelativeLocation,
 )
-from .schemas import (
+from pylabrobot.incubators.cytomat.schemas import (
   ActionRegisterState,
   CytomatPlate,
   OverviewRegisterState,
-  PlatePair,
   SensorStates,
   SwapStationState,
 )
-from .utils import (
+from pylabrobot.incubators.cytomat.utils import (
   DATA_PATH,
   hex_to_base_twelve,
   hex_to_binary,
   validate_storage_location_number,
 )
+from pylabrobot.resources.plate import Plate
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +216,10 @@ class Cytomat(IncubatorBackend):
       return "\r"
     return "\r\n"
 
+  def _assemble_command(self, command_type, prefix, params):
+    command = f"{command_type.value}:{prefix.value} {params}".strip() + self._get_carriage_return()
+    return command
+
   async def _send_cmd(
     self,
     command_type: CommandType,
@@ -225,7 +227,7 @@ class Cytomat(IncubatorBackend):
     params: str,
     retries: int = 3,
   ) -> HEX:
-    command = f"{command_type.value}:{prefix.value} {params}".strip() + self._get_carriage_return()
+    command = self._assemble_command(command_type=command_type, prefix=prefix, params=params)
     logging.debug(command.encode(self.serial_message_encoding))
     self.ser.write(command.encode(self.serial_message_encoding))
     resp = self.ser.read(128).decode(self.serial_message_encoding)
@@ -356,7 +358,7 @@ class Cytomat(IncubatorBackend):
       **{member.name: bool(int(binary_values[member.value])) for member in SensorRegister}
     )
 
-  async def action_transfer_to_storage(
+  async def action_transfer_to_storage(  # used by insert_plate
     self, storage_location: CytomatRelativeLocation
   ) -> OverviewRegisterState:
     hex_value = await self._send_cmd(
@@ -370,7 +372,7 @@ class Cytomat(IncubatorBackend):
       **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
     )
 
-  async def action_storage_to_transfer(
+  async def action_storage_to_transfer(  # used by retrieve_plate
     self, storage_location: CytomatRelativeLocation
   ) -> OverviewRegisterState:
     hex_value = await self._send_cmd(
@@ -546,12 +548,6 @@ class Cytomat(IncubatorBackend):
     location = self.find_plate_location(plate_uid)
     return await self.retrieve_plate(location)
 
-  async def insert_plate_pair(self, plate_pair: PlatePair) -> CytomatRelativeLocation:
-    location = self.find_slot_for_plate(plate_pair.pylabrobot)
-    await self.insert_plate(plate_pair.cytomat, location)
-    plate_pair.pylabrobot.unassign()
-    return location
-
   async def insert_plate(
     self, cytomate_plate: CytomatPlate, cytomat_location: CytomatRelativeLocation
   ):
@@ -636,12 +632,25 @@ class Cytomat(IncubatorBackend):
         if row_num < len(slots):
           slot_id = list(slots.keys())[row_num]
           plate_info = slots[slot_id] if slots[slot_id] else "-"
-          row.append(f"{slot_id}: {plate_info.uid}")
+          wtf = "plate json" if plate_info != "-" else "-"
+          row.append(f"{slot_id}: {wtf}")
         else:
           row.append("")
       table.add_row(row)
 
     return f"cytomat {self.model.value} state:\n{table}"
+
+  async def fetch_plate(self, *args, **kwargs):
+    pass
+
+  async def get_temperature(self, *args, **kwargs):
+    pass
+
+  async def set_temperature(self, *args, **kwargs):
+    pass
+
+  async def take_in_plate(self, *args, **kwargs):
+    pass
 
 
 class QuotedKeyDumper(yaml.Dumper):
@@ -651,3 +660,14 @@ class QuotedKeyDumper(yaml.Dumper):
     if isinstance(data, str):
       return self.represent_scalar("tag:yaml.org,2002:str", data, style='"')
     return super().represent_data(data)
+
+
+class CytomatChatterbox(Cytomat):
+  def open_serial_connection(self):
+    print("Opening serial connection")
+
+  async def _send_cmd(self, command_type, prefix, params, retries=3):
+    print(self._assemble_command(command_type=command_type, prefix=prefix, params=params))
+    if command_type == CommandType.CHECK_REGISTER:
+      return "0"
+    return "0" * 8

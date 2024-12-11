@@ -220,5 +220,5 @@ CytomatCapabilities = {
   CytomatType.C2C_450_SHAKE: CytomatCapability(
     incubate=True, cool=True, shake=True
   ),  # Refers to cytomat with temp range 4-50 & shaker plugs
-  CytomatType.SWIRLER: CytomatCapability(incubate=True, cool=True, shake=True),
+  CytomatType.C5C: CytomatCapability(incubate=True, cool=True, shake=False),
 }

@@ -1,6 +1,6 @@
 import os
 
-from .constants import BINARY_REPRESENTATION, HEX
+from pylabrobot.incubators.cytomat.constants import BINARY_REPRESENTATION, HEX
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(current_dir, "..", "..", "..", "experiments", "cytomat", "data")

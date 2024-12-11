@@ -1,53 +1,49 @@
+import dataclasses
 from dataclasses import dataclass
 from typing import Optional
 
-# TODO remove pydantic
-from pydantic import BaseModel, Field, root_validator, validator
-
+from pylabrobot.incubators.cytomat.config import CYTOMAT_CONFIG
+from pylabrobot.incubators.cytomat.constants import CytomatRack, CytomatType
 from pylabrobot.resources.plate import Plate
-
-from .config import CYTOMAT_CONFIG
-from .constants import CytomatRack, CytomatType
-from .schema import CytomatPlate
 
 # TODO: combine these correctly
 CytomatPlate = Plate
 
 
-class Rack(BaseModel):
+# @dataclass(frozen=True)
+class Rack:
   rack_index: int
-  idx: dict[int, Optional[CytomatPlate]] = Field(default_factory=dict)
   type: CytomatRack
+  idx: dict[int, Optional[CytomatPlate]] = dataclasses.field(default_factory=dict)
 
-  @validator("rack_index")
-  def check_rack_index(cls, value):
-    if value < 1:
-      raise ValueError("Rack index must be greater than or equal to 1")
-    if value > 10:
-      raise ValueError("Rack index must be less than or equal to 10")
-    return value
+  def __init__(self, rack_index: int, type: CytomatRack, idx: dict[int, Optional[CytomatPlate]]):
+    self.rack_index = rack_index
+    self.type = CytomatRack(**type)
+    self.idx = idx
 
-  @root_validator  # todo #186 breaks in some pydantic versions
-  def check_key_less_than_slots(cls, values):
-    idx = values.get("idx")
-    num_slots = values.get("type").num_slots if "type" in values else None
+  def dict(self):
+    print(self.type)
 
-    if idx and num_slots is not None:
-      for key in idx.keys():
-        if key <= 0:
-          raise ValueError(f"Key '{key}' in 'idx' must be greater than 0")
+    def s(p):
+      if p is None:
+        return None
+      if isinstance(p, dict):
+        return p
+      return p.serialize()
 
-        if key > num_slots:
-          raise ValueError(
-            f"Key '{key}' in 'idx' must be less than the number of slots in 'type' ({num_slots})"
-          )
-    return values
+    return {
+      "rack_index": self.rack_index,
+      "type": dataclasses.asdict(self.type) if not isinstance(self.type, dict) else self.type,
+      "idx": {i: s(plate) for i, plate in self.idx.items()},
+    }
 
 
-class CytomatRackState(BaseModel):
+class CytomatRackState:
   racks: list[Rack]
 
-  @validator("racks")
+  def __init__(self, racks: dict):
+    self.racks = [Rack(**rack) for rack in racks]
+
   def check_unique_plate_uid(cls, attr: list[Rack]) -> list[Rack]:
     seen = set()
     for rack in attr:
@@ -77,6 +73,15 @@ class CytomatRackState(BaseModel):
 
     return cls(**rack_state)
 
+  def dict(self):
+    print(self.racks)
+    return {"racks": [rack.dict() for rack in self.racks]}
+
+  def json(self):
+    import json
+
+    return json.dumps(self.dict(), indent=2)
+
 
 @dataclass(frozen=True)
 class CytomatRelativeLocation:
@@ -99,7 +104,7 @@ class CytomatRelativeLocation:
       CytomatType.C6000,
       CytomatType.C6002,
       CytomatType.C2C_450_SHAKE,
-      CytomatType.SWIRLER,
+      CytomatType.C5C,
     ]:
       racks = CYTOMAT_CONFIG[self.model.value]
       slots_to_skip = sum(r.num_slots for r in racks["racks"][: self.rack - 1])
