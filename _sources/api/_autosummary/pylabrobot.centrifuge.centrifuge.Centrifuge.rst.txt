@@ -1,0 +1,43 @@
+﻿pylabrobot.centrifuge.centrifuge.Centrifuge
+===========================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. autoclass:: Centrifuge
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Centrifuge.door_open
+      ~Centrifuge.setup_finished
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~Centrifuge.__init__
+      ~Centrifuge.close_door
+      ~Centrifuge.deserialize
+      ~Centrifuge.go_to_bucket1
+      ~Centrifuge.go_to_bucket2
+      ~Centrifuge.lock_bucket
+      ~Centrifuge.lock_door
+      ~Centrifuge.open_door
+      ~Centrifuge.rotate_distance
+      ~Centrifuge.serialize
+      ~Centrifuge.setup
+      ~Centrifuge.start_spin_cycle
+      ~Centrifuge.stop
+      ~Centrifuge.unlock_bucket
+      ~Centrifuge.unlock_door
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.scales.scale.Scale.get\_highest\_known\_point
+========================================================
+
+.. currentmodule:: pylabrobot.scales.scale
+
+.. automethod:: Scale.get_highest_known_point
