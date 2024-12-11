@@ -145,12 +145,7 @@ class Loader(Machine, ResourceHolder):
 
     await self.backend.unload()
 
-    print("assigning to self:", self.centrifuge.at_bucket.resource)
     self.assign_child_resource(self.centrifuge.at_bucket.resource)
-    print("assigned to self:", self.resource)
-    print("paren :", self.resource.parent)
-    print(" .           :", self.centrifuge.at_bucket)
-    print(" .           :", self.centrifuge.at_bucket.resource)
 
   def serialize(self) -> dict:
     return {
@@ -164,7 +159,7 @@ class Loader(Machine, ResourceHolder):
   def deserialize(cls, data: dict, allow_marshall: bool = False):
     data_copy = data.copy()  # copy data because we will be modifying it
     centrifuge_data = data_copy.pop("centrifuge")
-    centrifuge = Centrifuge.deserialize(centrifuge_data, allow_marshall=allow_marshall)
+    centrifuge = Centrifuge.deserialize(centrifuge_data)
     return cls(
       centrifuge=centrifuge,
       **data_copy,

@@ -45,6 +45,7 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
     self.loader.assign_child_resource(self.plate)
     await self.loader.load()
     self.mock_loader_backend.load.assert_awaited_once()
+    assert self.centrifuge.at_bucket is not None
     self.assertEqual(self.centrifuge.at_bucket.children[0], self.plate)
     self.assertEqual(self.loader.children, [])
 
@@ -64,6 +65,7 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
   async def test_load_bucket_has_plate(self):
     await self.centrifuge.go_to_bucket1()
     await self.centrifuge.open_door()
+    assert self.centrifuge.at_bucket is not None
     self.centrifuge.at_bucket.assign_child_resource(self.plate)
     another_plate = Cor_96_wellplate_360ul_Fb(name="another_plate")
     self.loader.assign_child_resource(another_plate)
@@ -81,6 +83,7 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
   async def test_unload(self):
     await self.centrifuge.go_to_bucket1()
     await self.centrifuge.open_door()
+    assert self.centrifuge.at_bucket is not None
     self.centrifuge.at_bucket.assign_child_resource(self.plate)
     await self.loader.unload()
     self.mock_loader_backend.unload.assert_awaited_once()
