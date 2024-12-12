@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import sys
 from typing import Optional, Union, cast
 
 import serial
@@ -20,7 +19,6 @@ from pylabrobot.incubators.cytomat.constants import (
   ErrorRegister,
   LoadStatusAtProcessor,
   LoadStatusFrontOfGate,
-  OverviewRegister,
   SensorRegister,
   SwapStationPosition,
   WarningRegister,
@@ -62,13 +60,6 @@ class Cytomat(IncubatorBackend):
     self.port = port
 
   async def setup(self):
-    self.open_serial_connection()
-    await self.initialize()
-
-  async def stop(self):
-    self.close_connection()
-
-  def open_serial_connection(self):
     try:
       self.ser = serial.Serial(
         port=self.port,
@@ -79,21 +70,18 @@ class Cytomat(IncubatorBackend):
         write_timeout=1,
         timeout=1,
       )
-
     except serial.SerialException as e:
       logger.error("Could not connect to cytomat, is it in use by a different notebook?")
       raise e
 
-    # atexit.register(self.close_connection)
+    await self.initialize()
 
-  def close_connection(self):
+  async def stop(self):
     if self.ser.is_open:
       self.ser.close()
 
   def _get_carriage_return(self):
-    if self.model == CytomatType.C2C_425:
-      return "\r"
-    return "\r\n"
+    return "\r" if self.model == CytomatType.C2C_425 else "\r\n"
 
   def _assemble_command(self, command_type, prefix, params):
     command = f"{command_type.value}:{prefix.value} {params}".strip() + self._get_carriage_return()
@@ -176,12 +164,8 @@ class Cytomat(IncubatorBackend):
     raise ValueError(f"Unsupported Cytomat model: {self.model}")
 
   async def get_overview_register(self) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.OVERVIEW, "")
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    resp = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.OVERVIEW, "")
+    return OverviewRegisterState.from_resp(resp)
 
   async def get_warning_register(self) -> WarningRegister:
     hex_value = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.WARNING, "")
@@ -206,26 +190,17 @@ class Cytomat(IncubatorBackend):
     """move the cytomat arm to the home position"""
     await self._send_cmd(CommandType.LOW_LEVEL_COMMAND, CytomatLowLevelCommand.INITIALIZE, "")
 
-  async def action_open_device_door(self):
-    hex_value = await self._send_cmd(
+  async def open_door(self):
+    resp = await self._send_cmd(
       CommandType.LOW_LEVEL_COMMAND, CytomatLowLevelCommand.AUTOMATIC_GATE, "002"
     )
-    binary_value = hex_to_binary(hex_value)
+    return OverviewRegisterState.from_resp(resp)
 
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
-
-  async def action_close_device_door(self):
-    hex_value = await self._send_cmd(
+  async def close_door(self):
+    resp = await self._send_cmd(
       CommandType.LOW_LEVEL_COMMAND, CytomatLowLevelCommand.AUTOMATIC_GATE, "001"
     )
-
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def get_action_register(self) -> ActionRegisterState:
     hex_value = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.ACTION, "")
@@ -267,118 +242,78 @@ class Cytomat(IncubatorBackend):
   async def action_transfer_to_storage(  # used by insert_plate
     self, site: PlateHolder
   ) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.TRANSFER_TO_STORAGE,
       self._site_to_firmware_string(site),
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_storage_to_transfer(  # used by retrieve_plate
     self, site: PlateHolder
   ) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.STORAGE_TO_TRANSFER,
       self._site_to_firmware_string(site),
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_storage_to_wait(self, site: PlateHolder) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.STORAGE_TO_WAIT,
       self._site_to_firmware_string(site),
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_wait_to_storage(self, site: PlateHolder) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.WAIT_TO_STORAGE,
       self._site_to_firmware_string(site),
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_wait_to_transfer(self) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND, CytomatComplexCommand.WAIT_TO_TRANSFER, ""
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_transfer_to_wait(self) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND, CytomatComplexCommand.TRANSFER_TO_WAIT, ""
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_wait_to_exposed(self) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND, CytomatComplexCommand.WAIT_TO_EXPOSED, ""
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_exposed_to_wait(self) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND, CytomatComplexCommand.EXPOSED_TO_WAIT, ""
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_exposed_to_storage(self, site: PlateHolder) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.EXPOSED_TO_STORAGE,
       self._site_to_firmware_string(site),
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_storage_to_exposed(self, site: PlateHolder) -> OverviewRegisterState:
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.STORAGE_TO_EXPOSED,
       self._site_to_firmware_string(site),
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def action_read_barcode(
     self,
@@ -387,60 +322,28 @@ class Cytomat(IncubatorBackend):
   ) -> OverviewRegisterState:
     validate_storage_location_number(site_number_a)
     validate_storage_location_number(site_number_b)
-    hex_value = await self._send_cmd(
+    resp = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.READ_BARCODE,
       f"{site_number_a} {site_number_b}",
     )
-    binary_value = hex_to_binary(hex_value)
-
-    return OverviewRegisterState(
-      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
-    )
+    return OverviewRegisterState.from_resp(resp)
 
   async def wait_for_transfer_station_to_be_unoccupied(self):
-    dots = 0
-    message = "Transfer station is occupied, waiting for it to open"
-    max_dots = 3
     while (await self.get_overview_register()).transfer_station_occupied:
-      sys.stdout.write(f"\r{message}{'.' * dots}" + " " * max_dots)
-      sys.stdout.flush()
-      dots = (dots + 1) % (max_dots + 1)
       await asyncio.sleep(1)
-    sys.stdout.write("\r" + " " * (len(message) + max_dots) + "\r")
-    sys.stdout.flush()
 
   async def wait_for_transfer_station_to_be_occupied(self):
-    dots = 0
-    message = "Transfer station is open, waiting for it to be occupied"
-    max_dots = 3
     while not (await self.get_overview_register()).transfer_station_occupied:
-      sys.stdout.write(f"\r{message}{'.' * dots}" + " " * max_dots)
-      sys.stdout.flush()
-      dots = (dots + 1) % (max_dots + 1)
       await asyncio.sleep(1)
-
-    sys.stdout.write("\r" + " " * (len(message) + max_dots) + "\r")
-    sys.stdout.flush()
 
   async def wait_for_task_completion(self):
     # TODO #108 - turn this into a context that insulates both sides of an action
-    dots = 0
-    message = "Cytomat is busy, waiting for it to finish"
-    max_dots = 3
     while True:
       overview_register = await self.get_overview_register()
       if not overview_register.busy_bit_set:
         break
-
-      sys.stdout.write(f"\r{message}{'.' * dots}" + " " * max_dots)
-      sys.stdout.flush()
-      dots = (dots + 1) % (max_dots + 1)
-
       await asyncio.sleep(1)
-
-    sys.stdout.write("\r" + " " * (len(message) + max_dots) + "\r")
-    sys.stdout.flush()
 
   async def init_shakers(self):
     return hex_to_binary(
@@ -499,12 +402,6 @@ class Cytomat(IncubatorBackend):
       nominal_value=float(nominal.lstrip("+")), actual_value=float(actual.lstrip("+"))
     )
 
-  async def open_door(self, *args, **kwargs):
-    pass
-
-  async def close_door(self, *args, **kwargs):
-    pass
-
   async def fetch_plate_to_loading_tray(self, plate: Plate):
     await self.wait_for_task_completion()
     site = plate.parent
@@ -523,8 +420,11 @@ class Cytomat(IncubatorBackend):
 
 
 class CytomatChatterbox(Cytomat):
-  def open_serial_connection(self):
-    print("Opening serial connection")
+  async def setup(self):
+    print("CytomatChatterbox setup")
+
+  async def stop(self):
+    print("CytomatChatterbox stop")
 
   async def _send_cmd(self, command_type, prefix, params, retries=3):
     print(self._assemble_command(command_type=command_type, prefix=prefix, params=params))

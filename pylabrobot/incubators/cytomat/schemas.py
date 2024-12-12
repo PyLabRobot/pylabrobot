@@ -5,8 +5,10 @@ from pylabrobot.incubators.cytomat.constants import (
   ActionType,
   LoadStatusAtProcessor,
   LoadStatusFrontOfGate,
+  OverviewRegister,
   SwapStationPosition,
 )
+from pylabrobot.incubators.cytomat.utils import hex_to_binary
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,13 @@ class OverviewRegisterState:
   warning_register_set: bool
   ready_bit_set: bool
   busy_bit_set: bool
+
+  @classmethod
+  def from_resp(self, resp) -> "OverviewRegisterState":
+    binary_value = hex_to_binary(resp)
+    return OverviewRegisterState(
+      **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
+    )
 
 
 @dataclass(frozen=True)
