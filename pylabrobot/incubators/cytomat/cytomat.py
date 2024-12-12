@@ -1,5 +1,4 @@
 import asyncio
-import atexit
 import logging
 import sys
 from typing import Optional, Union, cast
@@ -7,9 +6,7 @@ from typing import Optional, Union, cast
 import serial
 
 from pylabrobot.incubators.backend import IncubatorBackend
-from pylabrobot.incubators.cytomat.config import CYTOMAT_CONFIG
 from pylabrobot.incubators.cytomat.constants import (
-  HEX,
   ActionRegister,
   ActionType,
   CommandType,
@@ -38,10 +35,11 @@ from pylabrobot.incubators.cytomat.schemas import (
 from pylabrobot.incubators.cytomat.utils import (
   hex_to_base_twelve,
   hex_to_binary,
-  site_number,
+  validate_storage_location_number,
 )
 from pylabrobot.incubators.rack import Rack
 from pylabrobot.resources.carrier import PlateHolder
+from pylabrobot.resources.plate import Plate
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +48,7 @@ class Cytomat(IncubatorBackend):
   default_baud = 9600
   serial_message_encoding = "utf-8"
 
-  def __init__(self, model: CytomatType):
+  def __init__(self, model: CytomatType, port: str):
     supported_models = [
       CytomatType.C6000,
       CytomatType.C6002,
@@ -61,6 +59,7 @@ class Cytomat(IncubatorBackend):
     if model not in supported_models:
       raise NotImplementedError("Only the following Cytomats are supported:", supported_models)
     self.model = model
+    self.port = port
 
   async def setup(self):
     self.open_serial_connection()
@@ -91,13 +90,6 @@ class Cytomat(IncubatorBackend):
     if self.ser.is_open:
       self.ser.close()
 
-  def handle_error(resp):
-    error_code = int(resp[3:5])
-    if error_code in error_map:
-      raise error_map[error_code]
-
-    raise Exception(f"Unknown cytomat error code in response: {resp}")
-
   def _get_carriage_return(self):
     if self.model == CytomatType.C2C_425:
       return "\r"
@@ -110,10 +102,12 @@ class Cytomat(IncubatorBackend):
   async def _send_cmd(
     self,
     command_type: CommandType,
-    prefix: Union[CytomatRegisterType, CytomatComplexCommand],
+    prefix: Union[
+      CytomatRegisterType, CytomatComplexCommand, CytomatLowLevelCommand, CytomatIncubationQuery
+    ],
     params: str,
     retries: int = 3,
-  ) -> HEX:
+  ) -> str:
     command = self._assemble_command(command_type=command_type, prefix=prefix, params=params)
     logging.debug(command.encode(self.serial_message_encoding))
     self.ser.write(command.encode(self.serial_message_encoding))
@@ -148,8 +142,8 @@ class Cytomat(IncubatorBackend):
       if value == "03":
         error_register = await self.get_error_register()
         raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
-      if value in error_map:
-        raise error_map[value]
+      if int(value) in error_map:
+        raise error_map[int(value)]
       raise Exception(f"Unknown cytomat error code in response: {resp}")
 
     raise Exception(f"Unknown response from cytomat: {resp}")
@@ -160,7 +154,7 @@ class Cytomat(IncubatorBackend):
     site_idx = next(idx for idx, s in rack.sites.items() if s == site)
 
     if self.model in [CytomatType.C2C_425]:
-      return f"{str(self.rack).zfill(2)} {str(site_idx).zfill(2)}"
+      return f"{str(rack_idx).zfill(2)} {str(site_idx).zfill(2)}"
 
     if self.model in [
       CytomatType.C6000,
@@ -209,9 +203,7 @@ class Cytomat(IncubatorBackend):
     await self._send_cmd(CommandType.RESET_REGISTER, CytomatRegisterType.ERROR, "")
 
   async def initialize(self) -> None:
-    """
-    move the cytomat arm to the home position
-    """
+    """move the cytomat arm to the home position"""
     await self._send_cmd(CommandType.LOW_LEVEL_COMMAND, CytomatLowLevelCommand.INITIALIZE, "")
 
   async def action_open_device_door(self):
@@ -241,16 +233,16 @@ class Cytomat(IncubatorBackend):
     target, action = binary_repr[:3], binary_repr[3:]
 
     target_enum = None
-    for member in ActionType:
-      if int(target, 2) == int(member.value, 16):
-        target_enum = member
+    for action_type_member in ActionType:
+      if int(target, 2) == int(action_type_member.value, 16):
+        target_enum = action_type_member
         break
     assert target_enum is not None, f"Unknown target value: {target}"
 
     action_enum = None
-    for member in ActionRegister:
-      if int(action, 2) == int(member.value, 16):
-        action_enum = member
+    for action_register_member in ActionRegister:
+      if int(action, base=2) == int(action_register_member.value, base=16):
+        action_enum = action_register_member
         break
     assert action_enum is not None, f"Unknown HIGH_LEVEL_COMMANDment value: {action}"
 
@@ -393,8 +385,8 @@ class Cytomat(IncubatorBackend):
     site_number_a: str,
     site_number_b: str,
   ) -> OverviewRegisterState:
-    site_number(site_number_a)
-    site_number(site_number_b)
+    validate_storage_location_number(site_number_a)
+    validate_storage_location_number(site_number_b)
     hex_value = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.READ_BARCODE,
@@ -450,14 +442,6 @@ class Cytomat(IncubatorBackend):
     sys.stdout.write("\r" + " " * (len(message) + max_dots) + "\r")
     sys.stdout.flush()
 
-  async def insert_plate(self, cytomate_plate: CytomatPlate, site: PlateHolder):
-    await self.wait_for_task_completion()
-    await self.action_transfer_to_storage(cytomat_location)
-
-  async def retrieve_plate(self, site: PlateHolder) -> CytomatPlate:
-    await self.wait_for_task_completion()
-    await self.action_storage_to_transfer(location)
-
   async def init_shakers(self):
     return hex_to_binary(
       await self._send_cmd(
@@ -467,10 +451,12 @@ class Cytomat(IncubatorBackend):
       )
     )
 
-  async def start_shaking(self):
+  async def start_shaking(self, frequency: float):
     await self.wait_for_task_completion()
     if self.model == CytomatType.C5C:
       raise NotImplementedError("Shaking is not supported on this model")
+
+    # TODO: call set_shaking_frequency here
 
     return hex_to_binary(
       await self._send_cmd(CommandType.LOW_LEVEL_COMMAND, CytomatComplexCommand.START_SHAKING, "")
@@ -486,12 +472,11 @@ class Cytomat(IncubatorBackend):
     )
 
   async def set_shaking_frequency(self, frequency: int, shaker: Optional[int] = 0):
-    frequency = f"{frequency:04}"
     if shaker == 1 or shaker == 0:
       hex1 = await self._send_cmd(
         CommandType.SET_PARAMETER,
         CytomatComplexCommand.SET_FREQUENCY_TOS_1,
-        frequency,
+        f"{frequency:04}",
       )
       if shaker == 1:
         return hex1
@@ -499,7 +484,7 @@ class Cytomat(IncubatorBackend):
       hex2 = await self._send_cmd(
         CommandType.SET_PARAMETER,
         CytomatComplexCommand.SET_FREQUENCY_TOS_2,
-        frequency,
+        f"{frequency:04}",
       )
       if shaker == 2:
         return hex_to_binary(hex2)
@@ -520,16 +505,20 @@ class Cytomat(IncubatorBackend):
   async def close_door(self, *args, **kwargs):
     pass
 
-  async def fetch_plate(self, *args, **kwargs):
-    pass
+  async def fetch_plate_to_loading_tray(self, plate: Plate):
+    await self.wait_for_task_completion()
+    site = plate.parent
+    assert isinstance(site, PlateHolder)
+    await self.action_storage_to_transfer(site)
+
+  async def take_in_plate(self, plate: Plate, site: PlateHolder):
+    await self.wait_for_task_completion()
+    await self.action_transfer_to_storage(site)
 
   async def get_temperature(self, *args, **kwargs):
     pass
 
   async def set_temperature(self, *args, **kwargs):
-    pass
-
-  async def take_in_plate(self, *args, **kwargs):
     pass
 
 

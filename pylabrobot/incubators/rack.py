@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from pylabrobot.resources.carrier import PlateCarrier, PlateHolder
 
@@ -30,7 +30,7 @@ class Rack(PlateCarrier):
   def index(self) -> int:
     return self._index
 
-  def get_free_sites(self):
+  def get_free_sites(self) -> List[PlateHolder]:
     return [site for site in self.sites.values() if site.resource is None]
 
   def pitch(self):  # TODO: rename this

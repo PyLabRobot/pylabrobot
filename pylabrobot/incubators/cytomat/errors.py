@@ -1,3 +1,6 @@
+from typing import Dict
+
+
 class CytomatBusyError(Exception):
   """Exception raised when the device is still busy and a new command is not accepted."""
 
@@ -94,21 +97,21 @@ class CytomatUnauthorizedAccessError(Exception):
   pass
 
 
-error_map = {
-  "01": CytomatBusyError("Device still busy, new command not accepted"),
-  "02": CytomatCommandUnknownError("Command unknown"),
-  "03": CytomatTelegramStructureError("Telegram structure error"),
-  "04": CytomatIncorrectParameterError("Incorrect parameter in telegram"),
-  "05": CytomatUnknownLocationError("Unknown location number specified"),
-  "11": CytomatIncorrectHandlerPositionError("Incorrect handler (start) position"),
-  "12": CytomatShovelExtendedError("Command cannot be executed as shovel is extended"),
-  "21": CytomatHandlerOccupiedError("Handler already occupied"),
-  "22": CytomatHandlerEmptyError("Handler empty"),
-  "31": CytomatTransferStationEmptyError("Transfer station empty"),
-  "32": CytomatTransferStationOccupiedError("Transfer station occupied"),
-  "33": CytomatTransferStationPositionError("Transfer station not in position"),
-  "41": CytomatLiftDoorNotConfiguredError("Automatic lift door not configured"),
-  "42": CytomatLiftDoorNotOpenError("Automatic lift door not open"),
-  "51": CytomatMemoryAccessError("Error while accessing internal memory"),
-  "52": CytomatUnauthorizedAccessError("Incorrect password / unauthorized access"),
+error_map: Dict[int, Exception] = {
+  1: CytomatBusyError("Device still busy, new command not accepted"),
+  2: CytomatCommandUnknownError("Command unknown"),
+  3: CytomatTelegramStructureError("Telegram structure error"),
+  4: CytomatIncorrectParameterError("Incorrect parameter in telegram"),
+  5: CytomatUnknownLocationError("Unknown location number specified"),
+  11: CytomatIncorrectHandlerPositionError("Incorrect handler (start) position"),
+  12: CytomatShovelExtendedError("Command cannot be executed as shovel is extended"),
+  21: CytomatHandlerOccupiedError("Handler already occupied"),
+  22: CytomatHandlerEmptyError("Handler empty"),
+  31: CytomatTransferStationEmptyError("Transfer station empty"),
+  32: CytomatTransferStationOccupiedError("Transfer station occupied"),
+  33: CytomatTransferStationPositionError("Transfer station not in position"),
+  41: CytomatLiftDoorNotConfiguredError("Automatic lift door not configured"),
+  42: CytomatLiftDoorNotOpenError("Automatic lift door not open"),
+  51: CytomatMemoryAccessError("Error while accessing internal memory"),
+  52: CytomatUnauthorizedAccessError("Incorrect password / unauthorized access"),
 }

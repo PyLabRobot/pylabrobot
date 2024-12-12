@@ -1,4 +1,4 @@
-from typing import Dict, Optional, cast
+from typing import Optional, cast
 
 from pylabrobot.machines import Machine
 from pylabrobot.resources import (
@@ -88,6 +88,7 @@ class Incubator(Machine, Resource):
     """Fetch a plate from the incubator and put it on the loading tray."""
 
     site = self.get_site_by_plate_name(plate_name)
+    assert site.resource is not None
     await self.backend.fetch_plate_to_loading_tray(site.resource)
 
     self.loading_tray.assign_child_resource(site.resource)
@@ -148,19 +149,19 @@ class Incubator(Machine, Resource):
     return await self.backend.get_temperature()
 
   def summary(self) -> str:
-    def create_pretty_table(header, *columns):
+    def create_pretty_table(header, *columns) -> str:
       col_widths = [
         max(len(str(item)) for item in [header[i]] + list(columns[i])) for i in range(len(header))
       ]
 
-      def format_row(row, border="|"):
+      def format_row(row, border="|") -> str:
         return (
           f"{border} "
           + " | ".join(f"{str(row[i]).ljust(col_widths[i])}" for i in range(len(row)))
           + f" {border}"
         )
 
-      def separator_line(cross="+", line="-"):
+      def separator_line(cross: str = "+", line: str = "-") -> str:
         return cross + cross.join(line * (width + 2) for width in col_widths) + cross
 
       table = []
@@ -178,3 +179,17 @@ class Incubator(Machine, Resource):
       for rack in self.racks
     ]
     return create_pretty_table(header, *sites)
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshall: bool = False):
+    backend = IncubatorBackend.deserialize(data["backend"])
+    return cls(
+      backend=backend,
+      name=data["name"],
+      size_x=data["size_x"],
+      size_y=data["size_y"],
+      size_z=data["size_z"],
+      rotation=Rotation.deserialize(data["rotation"]),
+      category=data["category"],
+      model=data["model"],
+    )

@@ -10,7 +10,7 @@ class IncubatorChatterboxBackend(IncubatorBackend):
   async def setup(self):
     print("Setting up incubator backend")
 
-  async def stop():
+  async def stop(self):
     print("Stopping incubator backend")
 
   async def open_door(self):

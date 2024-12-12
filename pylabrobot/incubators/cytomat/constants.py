@@ -1,9 +1,5 @@
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import NewType
-
-BINARY_REPRESENTATION = NewType("BINARY_REPRESENTATION", str)
-HEX = NewType("HEX", str)
 
 
 class CommandType(Enum):
