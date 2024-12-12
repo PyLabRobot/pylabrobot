@@ -1,9 +1,4 @@
-import os
-
 from pylabrobot.incubators.cytomat.constants import BINARY_REPRESENTATION, HEX
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(current_dir, "..", "..", "..", "experiments", "cytomat", "data")
 
 
 def hex_to_binary(hex_str: HEX) -> BINARY_REPRESENTATION:

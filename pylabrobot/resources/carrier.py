@@ -164,7 +164,6 @@ class PlateHolder(ResourceHolder):
       )
 
     self.pedestal_size_z = pedestal_size_z
-    self.child_location = child_location
     # self.resource: Optional[Plate] = None  # fix type
     # TODO: add self.pedestal_2D_offset if necessary in the future
 

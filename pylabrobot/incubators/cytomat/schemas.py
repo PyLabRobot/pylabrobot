@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from pylabrobot.incubators.cytomat.constants import (
   ActionRegister,
@@ -8,12 +7,6 @@ from pylabrobot.incubators.cytomat.constants import (
   LoadStatusFrontOfGate,
   SwapStationPosition,
 )
-from pylabrobot.incubators.cytomat.schema import CytomatPlate
-from pylabrobot.resources.plate import Plate
-from pylabrobot.resources.well import Well
-
-# TODO combine these
-CytomatWell = Well
 
 
 @dataclass(frozen=True)
@@ -58,39 +51,3 @@ class SensorStates:
   HANDLER_POSITIONED_TOWARDS_STACKER: bool
   HANDLER_POSITIONED_TOWARDS_GATE: bool
   TRANSFER_STATION_SECOND_PLATE_OCCUPIED: bool
-
-
-@dataclass(frozen=True)
-class PlatePair:
-  """
-  contains the cytomat plate, containing information about the metadata
-  and the plr plate, which contains information about the deck position
-  """
-
-  cytomat: CytomatPlate
-  pylabrobot: Plate
-
-  def __post_init__(self):
-    assert (
-      self.cytomat.uid == self.pylabrobot.name
-    ), f"Plate names do not match: {self.cytomat.uid} != {self.pylabrobot.name}"
-    assert (
-      self.cytomat.has_lid == self.pylabrobot.has_lid()
-    ), f"Plate lid status do not match: {self.cytomat.has_lid} != {self.pylabrobot.has_lid()}"
-
-  @classmethod
-  def from_cytomat_plate(cls, cytomat_plate: CytomatPlate) -> "PlatePair":
-    return cls(cytomat=cytomat_plate, pylabrobot=cytomat_plate.to_pylabrobot())
-
-  @classmethod
-  def from_pylabrobot_plate(
-    cls, pylabrobot_plate: Plate, wells: Optional[list[CytomatWell]] = None
-  ) -> "PlatePair":
-    wells = (
-      [CytomatWell.empty() for w in pylabrobot_plate.children if isinstance(w, Well)]
-      if wells is None
-      else wells
-    )
-    return cls(
-      cytomat=CytomatPlate.from_pylabrobot(pylabrobot_plate, wells), pylabrobot=pylabrobot_plate
-    )

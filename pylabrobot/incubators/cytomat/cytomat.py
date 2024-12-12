@@ -1,14 +1,10 @@
 import asyncio
 import atexit
-import json
 import logging
-import os
 import sys
-from typing import Optional, Union
+from typing import Optional, Union, cast
 
 import serial
-import yaml
-from prettytable import PrettyTable
 
 from pylabrobot.incubators.backend import IncubatorBackend
 from pylabrobot.incubators.cytomat.config import CYTOMAT_CONFIG
@@ -33,24 +29,19 @@ from pylabrobot.incubators.cytomat.constants import (
   WarningRegister,
 )
 from pylabrobot.incubators.cytomat.errors import CytomatTelegramStructureError, error_map
-from pylabrobot.incubators.cytomat.schema import (
-  CytomatRackState,
-  CytomatRelativeLocation,
-)
 from pylabrobot.incubators.cytomat.schemas import (
   ActionRegisterState,
-  CytomatPlate,
   OverviewRegisterState,
   SensorStates,
   SwapStationState,
 )
 from pylabrobot.incubators.cytomat.utils import (
-  DATA_PATH,
   hex_to_base_twelve,
   hex_to_binary,
-  validate_storage_location_number,
+  site_number,
 )
-from pylabrobot.resources.plate import Plate
+from pylabrobot.incubators.rack import Rack
+from pylabrobot.resources.carrier import PlateHolder
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +60,7 @@ class Cytomat(IncubatorBackend):
     ]
     if model not in supported_models:
       raise NotImplementedError("Only the following Cytomats are supported:", supported_models)
-
     self.model = model
-
-    self.rack_cfg = CYTOMAT_CONFIG[model.value]["racks"]
 
   async def setup(self):
     self.open_serial_connection()
@@ -102,107 +90,6 @@ class Cytomat(IncubatorBackend):
   def close_connection(self):
     if self.ser.is_open:
       self.ser.close()
-
-  @property
-  def data_path(self):
-    os.makedirs(DATA_PATH, exist_ok=True)
-    return os.path.join(DATA_PATH, f"cytomat_{self.model.value}.yaml")
-
-  @property
-  def rack_state(self) -> CytomatRackState:
-    if not os.path.exists(self.data_path):
-      rack_state = CytomatRackState.from_cytomat_type(self.model)
-      self.save_state(rack_state)
-
-    with open(self.data_path, "r") as file:
-      return CytomatRackState(**yaml.load(file, Loader=yaml.FullLoader))
-
-  def save_state(self, rack_state: CytomatRackState):
-    rack_state = CytomatRackState(**rack_state.dict())
-
-    current_state = json.loads(rack_state.json())
-    with open(self.data_path, "w") as file:
-      yaml.dump(current_state, file, Dumper=QuotedKeyDumper)
-
-  def _add_plate_to_rack_state(
-    self, location: CytomatRelativeLocation, cytomat_plate: CytomatPlate
-  ):
-    rack_state = self.rack_state
-
-    rack_index = next(
-      (index for index, rack in enumerate(rack_state.racks) if rack.rack_index == location.rack),
-      None,
-    )
-    if rack_index is None:
-      raise ValueError(f"Rack {location.rack} not found")
-
-    if rack_state.racks[rack_index].idx.get(location.slot) is not None:
-      raise ValueError(f"Slot {location.slot} already contains a plate")
-
-    rack_state.racks[rack_index].idx[location.slot] = cytomat_plate
-    self.save_state(rack_state)
-
-  def _remove_plate_from_rack_state(self, location: CytomatRelativeLocation) -> CytomatPlate:
-    rack_state = self.rack_state
-
-    list_index = next(
-      (index for index, rack in enumerate(rack_state.racks) if location.rack == rack.rack_index),
-      None,
-    )
-    if list_index is None:
-      raise ValueError(f"Rack {location.rack} not found")
-
-    retrieved_plate = rack_state.racks[list_index].idx.get(location.slot)
-    if retrieved_plate is None:
-      raise ValueError(f"Plate not found in slot {location}")
-    rack_state.racks[list_index].idx[location.slot] = None
-
-    self.save_state(rack_state)
-    return retrieved_plate
-
-  def find_slot_for_plate(self, plr_plate: Plate) -> CytomatRelativeLocation:
-    """
-    find the smallest available slot for a plate
-    """
-
-    def _plate_height(p: Plate):
-      if p.has_lid():
-        return p.get_size_z() + 3
-
-      return p.get_size_z()
-
-    filtered_sorted_racks = sorted(
-      (rack for rack in self.rack_state.racks if _plate_height(plr_plate) < rack.type.pitch),
-      key=lambda rack: rack.type.pitch,
-    )
-    if len(filtered_sorted_racks) == 0:
-      raise ValueError(f"No available slot for plate with pitch {plr_plate.get_size_z()}")
-
-    for rack in filtered_sorted_racks:
-      for slot, plate in rack.idx.items():
-        if plate is None:
-          return CytomatRelativeLocation(rack.rack_index, int(slot), self.model)
-
-    raise ValueError(f"No available slot for plate with pitch {plr_plate.get_size_z()}")
-
-  def find_plate_location(self, plate_uid: str) -> CytomatRelativeLocation:
-    for rack in self.rack_state.racks:
-      for slot, plate in rack.idx.items():
-        if plate is not None and plate.uid == plate_uid:
-          return CytomatRelativeLocation(
-            rack=rack.rack_index,
-            slot=slot,
-            model=self.model,
-          )
-    raise ValueError(f"Plate {plate_uid} not found in racks")
-
-  def list_plates_by_prefix(self, prefix: str) -> list[str]:
-    plates = []
-    for rack in self.rack_state.racks:
-      for _, plate in rack.idx.items():
-        if plate is not None and plate.uid.startswith(prefix):
-          plates.append(plate.uid)
-    return plates
 
   def handle_error(resp):
     error_code = int(resp[3:5])
@@ -266,6 +153,33 @@ class Cytomat(IncubatorBackend):
       raise Exception(f"Unknown cytomat error code in response: {resp}")
 
     raise Exception(f"Unknown response from cytomat: {resp}")
+
+  def _site_to_firmware_string(self, site: PlateHolder) -> str:
+    rack = cast(Rack, site.parent)
+    rack_idx = rack.index
+    site_idx = next(idx for idx, s in rack.sites.items() if s == site)
+
+    if self.model in [CytomatType.C2C_425]:
+      return f"{str(self.rack).zfill(2)} {str(site_idx).zfill(2)}"
+
+    if self.model in [
+      CytomatType.C6000,
+      CytomatType.C6002,
+      CytomatType.C2C_450_SHAKE,
+      CytomatType.C5C,
+    ]:
+      slots_to_skip = sum(r.capacity for r in self.racks[:rack_idx])
+      if self.model == CytomatType.C2C_450_SHAKE:
+        # TODO: is this generally true?
+        # This is the "rack shaker" we ripped out ever other level so multiply by two.
+        # The initial rack shaker is unused, so add fifteen.
+        absolute_slot = 15 + 2 * (slots_to_skip + site_idx)
+      else:
+        absolute_slot = slots_to_skip + site_idx
+
+      return f"{absolute_slot:03}"
+
+    raise ValueError(f"Unsupported Cytomat model: {self.model}")
 
   async def get_overview_register(self) -> OverviewRegisterState:
     hex_value = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.OVERVIEW, "")
@@ -359,12 +273,12 @@ class Cytomat(IncubatorBackend):
     )
 
   async def action_transfer_to_storage(  # used by insert_plate
-    self, storage_location: CytomatRelativeLocation
+    self, site: PlateHolder
   ) -> OverviewRegisterState:
     hex_value = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.TRANSFER_TO_STORAGE,
-      storage_location.to_firmware_string(),
+      self._site_to_firmware_string(site),
     )
     binary_value = hex_to_binary(hex_value)
 
@@ -373,12 +287,12 @@ class Cytomat(IncubatorBackend):
     )
 
   async def action_storage_to_transfer(  # used by retrieve_plate
-    self, storage_location: CytomatRelativeLocation
+    self, site: PlateHolder
   ) -> OverviewRegisterState:
     hex_value = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.STORAGE_TO_TRANSFER,
-      storage_location.to_firmware_string(),
+      self._site_to_firmware_string(site),
     )
     binary_value = hex_to_binary(hex_value)
 
@@ -386,13 +300,11 @@ class Cytomat(IncubatorBackend):
       **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
     )
 
-  async def action_storage_to_wait(
-    self, location: CytomatRelativeLocation
-  ) -> OverviewRegisterState:
+  async def action_storage_to_wait(self, site: PlateHolder) -> OverviewRegisterState:
     hex_value = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.STORAGE_TO_WAIT,
-      location.to_firmware_string(),
+      self._site_to_firmware_string(site),
     )
     binary_value = hex_to_binary(hex_value)
 
@@ -400,13 +312,11 @@ class Cytomat(IncubatorBackend):
       **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
     )
 
-  async def action_wait_to_storage(
-    self, location: CytomatRelativeLocation
-  ) -> OverviewRegisterState:
+  async def action_wait_to_storage(self, site: PlateHolder) -> OverviewRegisterState:
     hex_value = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.WAIT_TO_STORAGE,
-      location.to_firmware_string(),
+      self._site_to_firmware_string(site),
     )
     binary_value = hex_to_binary(hex_value)
 
@@ -454,13 +364,11 @@ class Cytomat(IncubatorBackend):
       **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
     )
 
-  async def action_exposed_to_storage(
-    self, location: CytomatRelativeLocation
-  ) -> OverviewRegisterState:
+  async def action_exposed_to_storage(self, site: PlateHolder) -> OverviewRegisterState:
     hex_value = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.EXPOSED_TO_STORAGE,
-      location.to_firmware_string(),
+      self._site_to_firmware_string(site),
     )
     binary_value = hex_to_binary(hex_value)
 
@@ -468,13 +376,11 @@ class Cytomat(IncubatorBackend):
       **{member.name.lower(): binary_value[member.value] == "1" for member in OverviewRegister}
     )
 
-  async def action_storage_to_exposed(
-    self, location: CytomatRelativeLocation
-  ) -> OverviewRegisterState:
+  async def action_storage_to_exposed(self, site: PlateHolder) -> OverviewRegisterState:
     hex_value = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.STORAGE_TO_EXPOSED,
-      location.to_firmware_string(),
+      self._site_to_firmware_string(site),
     )
     binary_value = hex_to_binary(hex_value)
 
@@ -484,15 +390,15 @@ class Cytomat(IncubatorBackend):
 
   async def action_read_barcode(
     self,
-    storage_location_number_a: str,
-    storage_location_number_b: str,
+    site_number_a: str,
+    site_number_b: str,
   ) -> OverviewRegisterState:
-    validate_storage_location_number(storage_location_number_a)
-    validate_storage_location_number(storage_location_number_b)
+    site_number(site_number_a)
+    site_number(site_number_b)
     hex_value = await self._send_cmd(
       CommandType.HIGH_LEVEL_COMMAND,
       CytomatComplexCommand.READ_BARCODE,
-      f"{storage_location_number_a} {storage_location_number_b}",
+      f"{site_number_a} {site_number_b}",
     )
     binary_value = hex_to_binary(hex_value)
 
@@ -544,21 +450,13 @@ class Cytomat(IncubatorBackend):
     sys.stdout.write("\r" + " " * (len(message) + max_dots) + "\r")
     sys.stdout.flush()
 
-  async def retrieve_plate_by_uid(self, plate_uid: str) -> CytomatPlate:
-    location = self.find_plate_location(plate_uid)
-    return await self.retrieve_plate(location)
-
-  async def insert_plate(
-    self, cytomate_plate: CytomatPlate, cytomat_location: CytomatRelativeLocation
-  ):
+  async def insert_plate(self, cytomate_plate: CytomatPlate, site: PlateHolder):
     await self.wait_for_task_completion()
     await self.action_transfer_to_storage(cytomat_location)
-    self._add_plate_to_rack_state(cytomat_location, cytomate_plate)
 
-  async def retrieve_plate(self, location: CytomatRelativeLocation) -> CytomatPlate:
+  async def retrieve_plate(self, site: PlateHolder) -> CytomatPlate:
     await self.wait_for_task_completion()
     await self.action_storage_to_transfer(location)
-    return self._remove_plate_from_rack_state(location)
 
   async def init_shakers(self):
     return hex_to_binary(
@@ -616,29 +514,11 @@ class Cytomat(IncubatorBackend):
       nominal_value=float(nominal.lstrip("+")), actual_value=float(actual.lstrip("+"))
     )
 
-  def __str__(self):
-    table = PrettyTable()
-    headers = [f"rack {i} p{k.type.pitch}" for i, k in enumerate(self.rack_state.racks)]
-    table.field_names = headers
-    table.align = "l"
+  async def open_door(self, *args, **kwargs):
+    pass
 
-    num_rows = max(rack.num_slots for rack in self.rack_cfg)
-
-    # Fill in the table rows
-    for row_num in range(num_rows):
-      row = []
-      for rack in self.rack_state.racks:
-        slots = rack.idx
-        if row_num < len(slots):
-          slot_id = list(slots.keys())[row_num]
-          plate_info = slots[slot_id] if slots[slot_id] else "-"
-          wtf = "plate json" if plate_info != "-" else "-"
-          row.append(f"{slot_id}: {wtf}")
-        else:
-          row.append("")
-      table.add_row(row)
-
-    return f"cytomat {self.model.value} state:\n{table}"
+  async def close_door(self, *args, **kwargs):
+    pass
 
   async def fetch_plate(self, *args, **kwargs):
     pass
@@ -651,15 +531,6 @@ class Cytomat(IncubatorBackend):
 
   async def take_in_plate(self, *args, **kwargs):
     pass
-
-
-class QuotedKeyDumper(yaml.Dumper):
-  # by default, yaml interprests strings with prepended zeros as octal numbers, so we override the default representer
-  def represent_data(self, data):
-    # If the data is a dictionary key, force it to be represented with quotes
-    if isinstance(data, str):
-      return self.represent_scalar("tag:yaml.org,2002:str", data, style='"')
-    return super().represent_data(data)
 
 
 class CytomatChatterbox(Cytomat):

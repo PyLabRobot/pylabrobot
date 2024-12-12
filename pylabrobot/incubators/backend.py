@@ -1,10 +1,16 @@
 from abc import ABCMeta, abstractmethod
 
 from pylabrobot.machines.backends import MachineBackend
-from pylabrobot.resources import Plate
+from pylabrobot.resources import Plate, PlateHolder
 
 
 class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
+  def __init__(self):
+    self.racks = []
+
+  def set_racks(self, racks):
+    self.racks = racks
+
   @abstractmethod
   async def open_door(self):
     pass
@@ -14,11 +20,11 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
     pass
 
   @abstractmethod
-  async def fetch_plate(self, plate_name: str):
+  async def fetch_plate_to_loading_tray(self, plate: Plate):
     pass
 
   @abstractmethod
-  async def take_in_plate(self, plate: Plate):
+  async def take_in_plate(self, plate: Plate, site: PlateHolder):
     pass
 
   @abstractmethod
@@ -36,10 +42,4 @@ class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def stop_shaking(self):
-    pass
-
-  def serialize_state(self) -> dict:
-    return {}
-
-  def deserialize_state(self, state: dict):
     pass
