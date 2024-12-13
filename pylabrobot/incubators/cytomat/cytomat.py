@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Literal, Optional, cast
 
 import serial
@@ -69,6 +70,7 @@ class Cytomat(IncubatorBackend):
       logger.error("Could not connect to cytomat, is it in use by a different notebook?")
       raise e
 
+    await self.wait_for_task_completion()
     await self.initialize()
 
   async def stop(self):
@@ -82,45 +84,33 @@ class Cytomat(IncubatorBackend):
     command = f"{command_type}:{command} {params}".strip() + self._get_carriage_return()
     return command
 
-  async def _send_cmd(self, command_type: str, command: str, params: str, retries: int = 3) -> str:
-    command = self._assemble_command(command_type=command_type, command=command, params=params)
-    logging.debug(command.encode(self.serial_message_encoding))
-    self.ser.write(command.encode(self.serial_message_encoding))
+  async def _send_cmd(self, command_type: str, command: str, params: str, wait: bool = True) -> str:
+    command_str = self._assemble_command(command_type=command_type, command=command, params=params)
+    logging.debug(command_str.encode(self.serial_message_encoding))
+    self.ser.write(command_str.encode(self.serial_message_encoding))
     resp = self.ser.read(128).decode(self.serial_message_encoding)
     if len(resp) == 0:
       raise RuntimeError("Cytomat did not respond to command, is it turned on?")
     key, *values = resp.split()
     value = " ".join(values)
 
-    if key == CytomatActionResponse.OK.value or key == command.value:
+    if key == CytomatActionResponse.OK.value or key == command:
       # actions return an OK response, while checks return the command at the start of the response
+      # if wait:
+      # TODO: sometimes this command does not get recognized
+      # await self.wait_for_task_completion()
       return value
     if key == CytomatActionResponse.ERROR.value:
-      logger.error("Retrying: '%s'. Failed with: '%s'", command, resp)
-      if retries > 0:
-        if retries > 1:
-          await asyncio.sleep(5)
-        else:
-          # on the last retry, attemp a re-initialization
-          await self.initialize()
-          await self.wait_for_task_completion()
-          if (await self.get_overview_register()).error_register_set:
-            await self.reset_error_register()
-
-        return await self._send_cmd(
-          command_type=command_type,
-          command=command,
-          params=params,
-          retries=retries - 1,
-        )
+      logger.error("Command %s failed with: '%s'", command_str, resp)
 
       if value == "03":
         error_register = await self.get_error_register()
         raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
-      if int(value, base="16") in error_map:
-        raise error_map[int(value, base="16")]
+      if int(value, base=16) in error_map:
+        raise error_map[int(value, base=16)]
       raise Exception(f"Unknown cytomat error code in response: {resp}")
 
+    logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
     raise Exception(f"Unknown response from cytomat: {resp}")
 
   def _site_to_firmware_string(self, site: PlateHolder) -> str:
@@ -185,6 +175,14 @@ class Cytomat(IncubatorBackend):
     resp = await self._send_cmd("ll", "gp", "001")
     return OverviewRegisterState.from_resp(resp)
 
+  async def shovel_in(self):
+    resp = await self._send_cmd("ll", "sp", "001")
+    return OverviewRegisterState.from_resp(resp)
+
+  async def shovel_out(self):
+    resp = await self._send_cmd("ll", "sp", "002")
+    return OverviewRegisterState.from_resp(resp)
+
   async def get_action_register(self) -> ActionRegisterState:
     hex_value = await self._send_cmd("ch", "ba", "")
     binary_repr = hex_to_binary(hex_value)
@@ -226,11 +224,7 @@ class Cytomat(IncubatorBackend):
     self, site: PlateHolder
   ) -> OverviewRegisterState:
     # Open lift door, retrieve from transfer, close door, place at storage
-    resp = await self._send_cmd(
-      "mv",
-      "ts",
-      self._site_to_firmware_string(site),
-    )
+    resp = await self._send_cmd("mv", "ts", self._site_to_firmware_string(site))
     return OverviewRegisterState.from_resp(resp)
 
   async def action_storage_to_transfer(  # used by retrieve_plate
@@ -299,13 +293,16 @@ class Cytomat(IncubatorBackend):
     while not (await self.get_overview_register()).transfer_station_occupied:
       await asyncio.sleep(1)
 
-  async def wait_for_task_completion(self):
+  async def wait_for_task_completion(self, timeout=60):
     # TODO #108 - turn this into a context that insulates both sides of an action
+    start = time.time()
     while True:
       overview_register = await self.get_overview_register()
       if not overview_register.busy_bit_set:
         break
       await asyncio.sleep(1)
+      if time.time() - start > timeout:
+        raise TimeoutError("Cytomat did not complete task in time")
 
   async def init_shakers(self):
     return hex_to_binary(await self._send_cmd("ll", "vi", ""))
@@ -361,13 +358,11 @@ class Cytomat(IncubatorBackend):
     return (await self.get_incubation_query("it")).actual_value
 
   async def fetch_plate_to_loading_tray(self, plate: Plate):
-    await self.wait_for_task_completion()
     site = plate.parent
     assert isinstance(site, PlateHolder)
     await self.action_storage_to_transfer(site)
 
   async def take_in_plate(self, plate: Plate, site: PlateHolder):
-    await self.wait_for_task_completion()
     await self.action_transfer_to_storage(site)
 
   async def set_temperature(self, *args, **kwargs):
