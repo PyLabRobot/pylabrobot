@@ -130,8 +130,8 @@ class Cytomat(IncubatorBackend):
       if value == "03":
         error_register = await self.get_error_register()
         raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
-      if int(value) in error_map:
-        raise error_map[int(value)]
+      if int(value, base="16") in error_map:
+        raise error_map[int(value, base="16")]
       raise Exception(f"Unknown cytomat error code in response: {resp}")
 
     raise Exception(f"Unknown response from cytomat: {resp}")
