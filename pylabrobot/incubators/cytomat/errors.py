@@ -4,97 +4,65 @@ from typing import Dict
 class CytomatBusyError(Exception):
   """Exception raised when the device is still busy and a new command is not accepted."""
 
-  pass
-
 
 class CytomatCommandUnknownError(Exception):
   """Exception raised for an unknown command."""
-
-  pass
 
 
 class CytomatTelegramStructureError(Exception):
   """Exception raised for telegram structure errors."""
 
-  pass
-
 
 class CytomatIncorrectParameterError(Exception):
   """Exception raised for incorrect parameters in telegram."""
-
-  pass
 
 
 class CytomatUnknownLocationError(Exception):
   """Exception raised for unknown location numbers specified."""
 
-  pass
-
 
 class CytomatIncorrectHandlerPositionError(Exception):
   """Exception raised for incorrect handler start positions."""
-
-  pass
 
 
 class CytomatShovelExtendedError(Exception):
   """Exception raised when a command cannot be executed as the shovel is extended."""
 
-  pass
-
 
 class CytomatHandlerOccupiedError(Exception):
   """Exception raised when the handler is already occupied."""
-
-  pass
 
 
 class CytomatHandlerEmptyError(Exception):
   """Exception raised when the handler is empty."""
 
-  pass
-
 
 class CytomatTransferStationEmptyError(Exception):
   """Exception raised when the transfer station is empty."""
-
-  pass
 
 
 class CytomatTransferStationOccupiedError(Exception):
   """Exception raised when the transfer station is occupied."""
 
-  pass
-
 
 class CytomatTransferStationPositionError(Exception):
   """Exception raised when the transfer station is not in position."""
-
-  pass
 
 
 class CytomatLiftDoorNotConfiguredError(Exception):
   """Exception raised when the automatic lift door is not configured."""
 
-  pass
-
 
 class CytomatLiftDoorNotOpenError(Exception):
   """Exception raised when the automatic lift door is not open."""
-
-  pass
 
 
 class CytomatMemoryAccessError(Exception):
   """Exception raised for errors while accessing internal memory."""
 
-  pass
-
 
 class CytomatUnauthorizedAccessError(Exception):
   """Exception raised for incorrect password or unauthorized access."""
-
-  pass
 
 
 error_map: Dict[int, Exception] = {

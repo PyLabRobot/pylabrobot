@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional, Union, cast
+from typing import Literal, Optional, cast
 
 import serial
 
@@ -8,13 +8,8 @@ from pylabrobot.incubators.backend import IncubatorBackend
 from pylabrobot.incubators.cytomat.constants import (
   ActionRegister,
   ActionType,
-  CommandType,
   CytomatActionResponse,
-  CytomatComplexCommand,
-  CytomatIncubationQuery,
   CytomatIncupationResponse,
-  CytomatLowLevelCommand,
-  CytomatRegisterType,
   CytomatType,
   ErrorRegister,
   LoadStatusAtProcessor,
@@ -83,20 +78,12 @@ class Cytomat(IncubatorBackend):
   def _get_carriage_return(self):
     return "\r" if self.model == CytomatType.C2C_425 else "\r\n"
 
-  def _assemble_command(self, command_type, prefix, params):
-    command = f"{command_type.value}:{prefix.value} {params}".strip() + self._get_carriage_return()
+  def _assemble_command(self, command_type: str, command: str, params: str):
+    command = f"{command_type}:{command} {params}".strip() + self._get_carriage_return()
     return command
 
-  async def _send_cmd(
-    self,
-    command_type: CommandType,
-    prefix: Union[
-      CytomatRegisterType, CytomatComplexCommand, CytomatLowLevelCommand, CytomatIncubationQuery
-    ],
-    params: str,
-    retries: int = 3,
-  ) -> str:
-    command = self._assemble_command(command_type=command_type, prefix=prefix, params=params)
+  async def _send_cmd(self, command_type: str, command: str, params: str, retries: int = 3) -> str:
+    command = self._assemble_command(command_type=command_type, command=command, params=params)
     logging.debug(command.encode(self.serial_message_encoding))
     self.ser.write(command.encode(self.serial_message_encoding))
     resp = self.ser.read(128).decode(self.serial_message_encoding)
@@ -105,11 +92,11 @@ class Cytomat(IncubatorBackend):
     key, *values = resp.split()
     value = " ".join(values)
 
-    if key == CytomatActionResponse.OK.value or key == prefix.value:
-      # actions return an OK response, while checks return the prefix at the start of the response
+    if key == CytomatActionResponse.OK.value or key == command.value:
+      # actions return an OK response, while checks return the command at the start of the response
       return value
     if key == CytomatActionResponse.ERROR.value:
-      logger.error(f"Retrying: '{command}'. Failed with: '{resp}'")
+      logger.error("Retrying: '%s'. Failed with: '%s'", command, resp)
       if retries > 0:
         if retries > 1:
           await asyncio.sleep(5)
@@ -122,7 +109,7 @@ class Cytomat(IncubatorBackend):
 
         return await self._send_cmd(
           command_type=command_type,
-          prefix=prefix,
+          command=command,
           params=params,
           retries=retries - 1,
         )
@@ -164,11 +151,11 @@ class Cytomat(IncubatorBackend):
     raise ValueError(f"Unsupported Cytomat model: {self.model}")
 
   async def get_overview_register(self) -> OverviewRegisterState:
-    resp = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.OVERVIEW, "")
+    resp = await self._send_cmd("ch", "bs", "")
     return OverviewRegisterState.from_resp(resp)
 
   async def get_warning_register(self) -> WarningRegister:
-    hex_value = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.WARNING, "")
+    hex_value = await self._send_cmd("ch", "bw", "")
     for member in WarningRegister:
       if hex_value == member.value:
         return member
@@ -176,7 +163,7 @@ class Cytomat(IncubatorBackend):
     raise Exception(f"Unknown warning register value: {hex_value}")
 
   async def get_error_register(self) -> ErrorRegister:
-    hex_value = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.ERROR, "")
+    hex_value = await self._send_cmd("ch", "be", "")
     for member in ErrorRegister:
       if hex_value == member.value:
         return member
@@ -184,26 +171,22 @@ class Cytomat(IncubatorBackend):
     raise Exception(f"Unknown error register value: {hex_value}")
 
   async def reset_error_register(self) -> None:
-    await self._send_cmd(CommandType.RESET_REGISTER, CytomatRegisterType.ERROR, "")
+    await self._send_cmd("rs", "be", "")
 
   async def initialize(self) -> None:
     """move the cytomat arm to the home position"""
-    await self._send_cmd(CommandType.LOW_LEVEL_COMMAND, CytomatLowLevelCommand.INITIALIZE, "")
+    await self._send_cmd("ll", "in", "")
 
   async def open_door(self):
-    resp = await self._send_cmd(
-      CommandType.LOW_LEVEL_COMMAND, CytomatLowLevelCommand.AUTOMATIC_GATE, "002"
-    )
+    resp = await self._send_cmd("ll", "gp", "002")
     return OverviewRegisterState.from_resp(resp)
 
   async def close_door(self):
-    resp = await self._send_cmd(
-      CommandType.LOW_LEVEL_COMMAND, CytomatLowLevelCommand.AUTOMATIC_GATE, "001"
-    )
+    resp = await self._send_cmd("ll", "gp", "001")
     return OverviewRegisterState.from_resp(resp)
 
   async def get_action_register(self) -> ActionRegisterState:
-    hex_value = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.ACTION, "")
+    hex_value = await self._send_cmd("ch", "ba", "")
     binary_repr = hex_to_binary(hex_value)
     target, action = binary_repr[:3], binary_repr[3:]
 
@@ -224,7 +207,7 @@ class Cytomat(IncubatorBackend):
     return ActionRegisterState(target=target_enum, action=action_enum)
 
   async def get_swap_register(self) -> SwapStationState:
-    value = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.SWAP, "")
+    value = await self._send_cmd("ch", "sw", "")
 
     return SwapStationState(
       position=SwapStationPosition(int(value[0])),
@@ -233,7 +216,7 @@ class Cytomat(IncubatorBackend):
     )
 
   async def get_sensor_register(self) -> SensorStates:
-    hex_value = await self._send_cmd(CommandType.CHECK_REGISTER, CytomatRegisterType.SENSOR, "")
+    hex_value = await self._send_cmd("ch", "ts", "")
     binary_values = hex_to_base_twelve(hex_value)
     return SensorStates(
       **{member.name: bool(int(binary_values[member.value])) for member in SensorRegister}
@@ -242,9 +225,10 @@ class Cytomat(IncubatorBackend):
   async def action_transfer_to_storage(  # used by insert_plate
     self, site: PlateHolder
   ) -> OverviewRegisterState:
+    # Open lift door, retrieve from transfer, close door, place at storage
     resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND,
-      CytomatComplexCommand.TRANSFER_TO_STORAGE,
+      "mv",
+      "ts",
       self._site_to_firmware_string(site),
     )
     return OverviewRegisterState.from_resp(resp)
@@ -252,67 +236,48 @@ class Cytomat(IncubatorBackend):
   async def action_storage_to_transfer(  # used by retrieve_plate
     self, site: PlateHolder
   ) -> OverviewRegisterState:
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND,
-      CytomatComplexCommand.STORAGE_TO_TRANSFER,
-      self._site_to_firmware_string(site),
-    )
+    # Retrieve from storage, open door, move to transfer, close door
+    resp = await self._send_cmd("mv", "st", self._site_to_firmware_string(site))
     return OverviewRegisterState.from_resp(resp)
 
   async def action_storage_to_wait(self, site: PlateHolder) -> OverviewRegisterState:
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND,
-      CytomatComplexCommand.STORAGE_TO_WAIT,
-      self._site_to_firmware_string(site),
-    )
+    # Retrieve from storage, move to wait position
+    resp = await self._send_cmd("mv", "sw", self._site_to_firmware_string(site))
     return OverviewRegisterState.from_resp(resp)
 
   async def action_wait_to_storage(self, site: PlateHolder) -> OverviewRegisterState:
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND,
-      CytomatComplexCommand.WAIT_TO_STORAGE,
-      self._site_to_firmware_string(site),
-    )
+    # Move from wait to storage, unload, return to wait
+    resp = await self._send_cmd("mv", "ws", self._site_to_firmware_string(site))
     return OverviewRegisterState.from_resp(resp)
 
   async def action_wait_to_transfer(self) -> OverviewRegisterState:
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND, CytomatComplexCommand.WAIT_TO_TRANSFER, ""
-    )
+    # Open door, place on transfer, return to wait, close door
+    resp = await self._send_cmd("mv", "wt", "")
     return OverviewRegisterState.from_resp(resp)
 
   async def action_transfer_to_wait(self) -> OverviewRegisterState:
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND, CytomatComplexCommand.TRANSFER_TO_WAIT, ""
-    )
+    # Open door, retrieve from transfer, return to wait, close door
+    resp = await self._send_cmd("mv", "tw", "")
     return OverviewRegisterState.from_resp(resp)
 
   async def action_wait_to_exposed(self) -> OverviewRegisterState:
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND, CytomatComplexCommand.WAIT_TO_EXPOSED, ""
-    )
+    # Move from wait to exposed position outside device
+    resp = await self._send_cmd("mv", "wh", "")
     return OverviewRegisterState.from_resp(resp)
 
   async def action_exposed_to_wait(self) -> OverviewRegisterState:
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND, CytomatComplexCommand.EXPOSED_TO_WAIT, ""
-    )
+    # Return to wait from exposed, close door
+    resp = await self._send_cmd("mv", "hw", "")
     return OverviewRegisterState.from_resp(resp)
 
   async def action_exposed_to_storage(self, site: PlateHolder) -> OverviewRegisterState:
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND,
-      CytomatComplexCommand.EXPOSED_TO_STORAGE,
-      self._site_to_firmware_string(site),
-    )
+    # Return with MTP from exposed to storage, move to wait, close door
+    resp = await self._send_cmd("mv", "hs", self._site_to_firmware_string(site))
     return OverviewRegisterState.from_resp(resp)
 
   async def action_storage_to_exposed(self, site: PlateHolder) -> OverviewRegisterState:
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND,
-      CytomatComplexCommand.STORAGE_TO_EXPOSED,
-      self._site_to_firmware_string(site),
-    )
+    # Move from wait to storage, load MTP, transport to exposed
+    resp = await self._send_cmd("mv", "sh", self._site_to_firmware_string(site))
     return OverviewRegisterState.from_resp(resp)
 
   async def action_read_barcode(
@@ -320,13 +285,10 @@ class Cytomat(IncubatorBackend):
     site_number_a: str,
     site_number_b: str,
   ) -> OverviewRegisterState:
+    # Read barcode of storage locations
     validate_storage_location_number(site_number_a)
     validate_storage_location_number(site_number_b)
-    resp = await self._send_cmd(
-      CommandType.HIGH_LEVEL_COMMAND,
-      CytomatComplexCommand.READ_BARCODE,
-      f"{site_number_a} {site_number_b}",
-    )
+    resp = await self._send_cmd("mv", "sn", f"{site_number_a} {site_number_b}")
     return OverviewRegisterState.from_resp(resp)
 
   async def wait_for_transfer_station_to_be_unoccupied(self):
@@ -346,13 +308,7 @@ class Cytomat(IncubatorBackend):
       await asyncio.sleep(1)
 
   async def init_shakers(self):
-    return hex_to_binary(
-      await self._send_cmd(
-        CommandType.LOW_LEVEL_COMMAND,
-        CytomatComplexCommand.INITIALIZE_SHAKERS,
-        "",
-      )
-    )
+    return hex_to_binary(await self._send_cmd("ll", "vi", ""))
 
   async def start_shaking(self, frequency: float):
     await self.wait_for_task_completion()
@@ -361,46 +317,48 @@ class Cytomat(IncubatorBackend):
 
     # TODO: call set_shaking_frequency here
 
-    return hex_to_binary(
-      await self._send_cmd(CommandType.LOW_LEVEL_COMMAND, CytomatComplexCommand.START_SHAKING, "")
-    )
+    return hex_to_binary(await self._send_cmd("ll", "va", ""))
 
   async def stop_shaking(self):
     await self.wait_for_task_completion()
     if self.model == CytomatType.C5C:
       raise NotImplementedError("Shaking is not supported on this model")
 
-    return hex_to_binary(
-      await self._send_cmd(CommandType.LOW_LEVEL_COMMAND, CytomatComplexCommand.STOP_SHAKING, "")
-    )
+    return hex_to_binary(await self._send_cmd("ll", "vd", ""))
 
   async def set_shaking_frequency(self, frequency: int, shaker: Optional[int] = 0):
     if shaker == 1 or shaker == 0:
-      hex1 = await self._send_cmd(
-        CommandType.SET_PARAMETER,
-        CytomatComplexCommand.SET_FREQUENCY_TOS_1,
-        f"{frequency:04}",
-      )
+      hex1 = await self._send_cmd("se", "pb 20", f"{frequency:04}")
       if shaker == 1:
         return hex1
     if shaker == 2 or shaker == 0:
-      hex2 = await self._send_cmd(
-        CommandType.SET_PARAMETER,
-        CytomatComplexCommand.SET_FREQUENCY_TOS_2,
-        f"{frequency:04}",
-      )
+      hex2 = await self._send_cmd("se", "pb 21", f"{frequency:04}")
       if shaker == 2:
         return hex_to_binary(hex2)
     if shaker == 0:
       return hex_to_binary(hex1), hex_to_binary(hex2)
     raise ValueError("Shaker number must be 1, 2 or 0 for both")
 
-  async def get_incubation_query(self, query: CytomatIncubationQuery) -> CytomatIncupationResponse:
-    resp = await self._send_cmd(CommandType.CHECK_REGISTER, query, "")
+  async def get_incubation_query(
+    self, query: Literal["ic", "ih", "io", "it"]
+  ) -> CytomatIncupationResponse:
+    resp = await self._send_cmd("ch", query, "")
     nominal, actual = resp.split()
     return CytomatIncupationResponse(
       nominal_value=float(nominal.lstrip("+")), actual_value=float(actual.lstrip("+"))
     )
+
+  async def get_co2(self) -> CytomatIncupationResponse:
+    return await self.get_incubation_query("ic")
+
+  async def get_humidity(self) -> CytomatIncupationResponse:
+    return await self.get_incubation_query("ih")
+
+  async def get_o2(self) -> CytomatIncupationResponse:
+    return await self.get_incubation_query("io")
+
+  async def get_temperature(self) -> float:
+    return (await self.get_incubation_query("it")).actual_value
 
   async def fetch_plate_to_loading_tray(self, plate: Plate):
     await self.wait_for_task_completion()
@@ -412,11 +370,8 @@ class Cytomat(IncubatorBackend):
     await self.wait_for_task_completion()
     await self.action_transfer_to_storage(site)
 
-  async def get_temperature(self, *args, **kwargs):
-    pass
-
   async def set_temperature(self, *args, **kwargs):
-    pass
+    raise NotImplementedError("Temperature control is not implemented yet")
 
 
 class CytomatChatterbox(Cytomat):
@@ -426,8 +381,8 @@ class CytomatChatterbox(Cytomat):
   async def stop(self):
     print("CytomatChatterbox stop")
 
-  async def _send_cmd(self, command_type, prefix, params, retries=3):
-    print(self._assemble_command(command_type=command_type, prefix=prefix, params=params))
-    if command_type == CommandType.CHECK_REGISTER:
+  async def _send_cmd(self, command_type, command, params, retries=3):
+    print(self._assemble_command(command_type=command_type, command=command, params=params))
+    if command_type == "ch":
       return "0"
     return "0" * 8

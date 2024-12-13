@@ -2,19 +2,11 @@ from dataclasses import dataclass
 from enum import Enum, IntEnum
 
 
-class CommandType(Enum):
-  CHECK_REGISTER = "ch"
-  RESET_REGISTER = "rs"
-  HIGH_LEVEL_COMMAND = "mv"
-  LOW_LEVEL_COMMAND = "ll"
-  SET_PARAMETER = "se"
-
-
 class OverviewRegister(Enum):
   """
   This is returned by:
-    the check_register command f"{CommandType.CHECK_REGISTER.value}{OverviewRegister.value}"
-    any of the CommandType.HIGH_LEVEL_COMMAND commands
+    the check_register command f"ch:{OverviewRegister.value}"
+    any of the `mv` commands
   """
 
   TRANSFER_STATION_OCCUPIED = 0
@@ -127,48 +119,6 @@ class SensorRegister(IntEnum):
   HANDLER_POSITIONED_TOWARDS_STACKER = 12
   HANDLER_POSITIONED_TOWARDS_GATE = 13
   TRANSFER_STATION_SECOND_PLATE_OCCUPIED = 14
-
-
-class CytomatRegisterType(Enum):
-  OVERVIEW = "bs"
-  WARNING = "bw"
-  ERROR = "be"
-  ACTION = "ba"
-  SWAP = "sw"
-  SENSOR = "ts"
-
-
-class CytomatComplexCommand(Enum):
-  TRANSFER_TO_STORAGE = "ts"  # Open lift door, retrieve from transfer, close door, place at storage
-  STORAGE_TO_TRANSFER = "st"  # Retrieve from storage, open door, move to transfer, close door
-  STORAGE_TO_WAIT = "sw"  # Retrieve from storage, move to wait position
-  WAIT_TO_STORAGE = "ws"  # Move from wait to storage, unload, return to wait
-  WAIT_TO_TRANSFER = "wt"  # Open door, place on transfer, return to wait, close door
-  TRANSFER_TO_WAIT = "tw"  # Open door, retrieve from transfer, return to wait, close door
-  WAIT_TO_EXPOSED = "wh"  # Move from wait to exposed position outside device
-  EXPOSED_TO_WAIT = "hw"  # Return to wait from exposed, close door
-  EXPOSED_TO_STORAGE = "hs"  # Return with MTP from exposed to storage, move to wait, close door
-  STORAGE_TO_EXPOSED = "sh"  # Move from wait to storage, load MTP, transport to exposed
-  READ_BARCODE = "sn"  # Read barcode of storage locations
-  INITIALIZE_SHAKERS = "vi"
-  START_SHAKING = "va"
-  STOP_SHAKING = "vd"
-  # SHAKER_OPEN_CLAMPS = "xa"
-  # SHAKER_CLOSE_CLAMPS = "xd"
-  SET_FREQUENCY_TOS_1 = "pb 20"
-  SET_FREQUENCY_TOS_2 = "pb 21"
-
-
-class CytomatLowLevelCommand(Enum):
-  INITIALIZE = "in"
-  AUTOMATIC_GATE = "gp"
-
-
-class CytomatIncubationQuery(Enum):
-  CO2 = "ic"
-  HUMIDITY = "ih"
-  O2 = "io"
-  TEMP = "it"
 
 
 @dataclass(frozen=True)

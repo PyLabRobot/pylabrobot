@@ -74,6 +74,10 @@ class Incubator(Machine, Resource):
     ]
     # TODO: racks should be children of self.
 
+  async def setup(self, **backend_kwargs):
+    await self.backend.setup(**backend_kwargs)
+    self.backend.set_racks(self.racks)
+
   def get_num_free_sites(self) -> int:
     return sum(len(rack.get_free_sites()) for rack in self.racks)
 
@@ -147,6 +151,12 @@ class Incubator(Machine, Resource):
 
   async def get_temperature(self) -> float:
     return await self.backend.get_temperature()
+
+  async def open_door(self):
+    return await self.backend.open_door()
+
+  async def close_door(self):
+    return await self.backend.close_door()
 
   def summary(self) -> str:
     def create_pretty_table(header, *columns) -> str:

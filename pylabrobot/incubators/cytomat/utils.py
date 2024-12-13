@@ -3,11 +3,11 @@ def hex_to_binary(hex_str: str) -> str:
   >>> hex_to_binary('01')
   '00000001'
   """
-  return bin(int(hex_str, 16))[2:].zfill(8)
+  return bin(int(hex_str, base=16))[2:].zfill(8)
 
 
 def hex_to_base_twelve(hex_str: str) -> str:
-  return bin(int(hex_str, 12))[2:].zfill(15)
+  return bin(int(hex_str, base=12))[2:].zfill(15)
 
 
 def validate_storage_location_number(storage_location_number: str):
