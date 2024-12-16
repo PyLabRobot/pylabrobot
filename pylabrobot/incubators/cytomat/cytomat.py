@@ -53,8 +53,9 @@ class Cytomat(IncubatorBackend):
       raise NotImplementedError("Only the following Cytomats are supported:", supported_models)
     self.model = model
     self.port = port
+    self._racks: List[PlateCarrier] = []
 
-  async def setup(self, racks: List[PlateCarrier]):
+  async def setup(self):
     try:
       self.ser = serial.Serial(
         port=self.port,
@@ -71,6 +72,9 @@ class Cytomat(IncubatorBackend):
 
     await self.wait_for_task_completion()
     await self.initialize()
+
+  async def set_racks(self, racks: List[PlateCarrier]):
+    await self.set_racks(racks)
     warnings.warn("Cytomat racks need to be configured with the exe software")
 
   async def stop(self):
@@ -82,14 +86,7 @@ class Cytomat(IncubatorBackend):
     command = f"{command_type}:{command} {params}".strip() + carriage_return
     return command
 
-  async def send_command(
-    self, command_type: str, command: str, params: str, timeout: Optional[int] = 10
-  ) -> str:
-    """
-    Args:
-      timeout: The maximum time to wait for the command to complete. If None, the command will not
-        wait for completion.
-    """
+  async def send_command(self, command_type: str, command: str, params: str) -> str:
     command_str = self._assemble_command(command_type=command_type, command=command, params=params)
     logging.debug(command_str.encode(self.serial_message_encoding))
     self.ser.write(command_str.encode(self.serial_message_encoding))
@@ -101,15 +98,9 @@ class Cytomat(IncubatorBackend):
 
     if key == CytomatActionResponse.OK.value or key == command:
       # actions return an OK response, while checks return the command at the start of the response
-      # TODO: what is being returned is the value of the command (eg overview register), at the time
-      # when it was received.
-      if timeout is not None:
-        # TODO: sometimes this command does not get recognized
-        await self.wait_for_task_completion(timeout=timeout)
       return value
     if key == CytomatActionResponse.ERROR.value:
       logger.error("Command %s failed with: '%s'", command_str, resp)
-
       if value == "03":
         error_register = await self.get_error_register()
         raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
@@ -120,9 +111,22 @@ class Cytomat(IncubatorBackend):
     logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
     raise Exception(f"Unknown response from cytomat: {resp}")
 
+  async def send_action(
+    self, command_type: str, command: str, params: str, timeout: Optional[int] = 10
+  ) -> OverviewRegisterState:
+    """Calls send_command, but has a timeout handler and returns the overview register state.
+    Args:
+      timeout: The maximum time to wait for the command to complete. If None, the command will not
+        wait for completion.
+    """
+    resp = await self.send_command("ll", "sp", "002")
+    if timeout is not None:
+      await self.wait_for_task_completion(timeout=timeout)
+    return OverviewRegisterState.from_resp(resp)
+
   def _site_to_firmware_string(self, site: PlateHolder) -> str:
     rack = cast(PlateCarrier, site.parent)
-    rack_idx = self.racks.index(rack)
+    rack_idx = self._racks.index(rack)
     site_idx = next(idx for idx, s in rack.sites.items() if s == site)
 
     if self.model in [CytomatType.C2C_425]:
@@ -134,7 +138,7 @@ class Cytomat(IncubatorBackend):
       CytomatType.C2C_450_SHAKE,
       CytomatType.C5C,
     ]:
-      slots_to_skip = sum(r.capacity for r in self.racks[:rack_idx])
+      slots_to_skip = sum(r.capacity for r in self._racks[:rack_idx])
       absolute_slot = slots_to_skip + site_idx + 1  # 1-indexed
 
       return f"{absolute_slot:03}"
@@ -142,7 +146,7 @@ class Cytomat(IncubatorBackend):
     raise ValueError(f"Unsupported Cytomat model: {self.model}")
 
   async def get_overview_register(self) -> OverviewRegisterState:
-    resp = await self.send_command("ch", "bs", "", timeout=None)
+    resp = await self.send_command("ch", "bs", "")
     return OverviewRegisterState.from_resp(resp)
 
   async def get_warning_register(self) -> WarningRegister:
@@ -165,23 +169,19 @@ class Cytomat(IncubatorBackend):
     await self.send_command("rs", "be", "")
 
   async def initialize(self) -> None:
-    await self.send_command("ll", "in", "", timeout=60)
+    await self.send_action("ll", "in", "")
 
   async def open_door(self):
-    resp = await self.send_command("ll", "gp", "002")
-    return OverviewRegisterState.from_resp(resp)
+    return await self.send_action("ll", "gp", "002")
 
   async def close_door(self):
-    resp = await self.send_command("ll", "gp", "001")
-    return OverviewRegisterState.from_resp(resp)
+    return await self.send_action("ll", "gp", "001")
 
   async def shovel_in(self):
-    resp = await self.send_command("ll", "sp", "001")
-    return OverviewRegisterState.from_resp(resp)
+    return await self.send_action("ll", "sp", "001")
 
   async def shovel_out(self):
-    resp = await self.send_command("ll", "sp", "002")
-    return OverviewRegisterState.from_resp(resp)
+    return await self.send_action("ll", "sp", "002")
 
   async def get_action_register(self) -> ActionRegisterState:
     hex_value = await self.send_command("ch", "ba", "")
@@ -223,56 +223,46 @@ class Cytomat(IncubatorBackend):
   async def action_transfer_to_storage(  # used by insert_plate
     self, site: PlateHolder
   ) -> OverviewRegisterState:
-    # Open lift door, retrieve from transfer, close door, place at storage
-    resp = await self.send_command("mv", "ts", self._site_to_firmware_string(site))
-    return OverviewRegisterState.from_resp(resp)
+    """Open lift door, retrieve from transfer, close door, place at storage"""
+    return await self.send_action("mv", "ts", self._site_to_firmware_string(site))
 
   async def action_storage_to_transfer(  # used by retrieve_plate
     self, site: PlateHolder
   ) -> OverviewRegisterState:
-    # Retrieve from storage, open door, move to transfer, close door
-    resp = await self.send_command("mv", "st", self._site_to_firmware_string(site))
-    return OverviewRegisterState.from_resp(resp)
+    """Retrieve from storage, open door, move to transfer, close door"""
+    return await self.send_action("mv", "st", self._site_to_firmware_string(site))
 
   async def action_storage_to_wait(self, site: PlateHolder) -> OverviewRegisterState:
-    # Retrieve from storage, move to wait position
-    resp = await self.send_command("mv", "sw", self._site_to_firmware_string(site))
-    return OverviewRegisterState.from_resp(resp)
+    """Retrieve from storage, move to wait position"""
+    return await self.send_action("mv", "sw", self._site_to_firmware_string(site))
 
   async def action_wait_to_storage(self, site: PlateHolder) -> OverviewRegisterState:
-    # Move from wait to storage, unload, return to wait
-    resp = await self.send_command("mv", "ws", self._site_to_firmware_string(site))
-    return OverviewRegisterState.from_resp(resp)
+    """Move from wait to storage, unload, return to wait"""
+    return await self.send_action("mv", "ws", self._site_to_firmware_string(site))
 
   async def action_wait_to_transfer(self) -> OverviewRegisterState:
-    # Open door, place on transfer, return to wait, close door
-    resp = await self.send_command("mv", "wt", "")
-    return OverviewRegisterState.from_resp(resp)
+    """Open door, place on transfer, return to wait, close door"""
+    return await self.send_action("mv", "wt", "")
 
   async def action_transfer_to_wait(self) -> OverviewRegisterState:
-    # Open door, retrieve from transfer, return to wait, close door
-    resp = await self.send_command("mv", "tw", "")
-    return OverviewRegisterState.from_resp(resp)
+    """Open door, retrieve from transfer, return to wait, close door"""
+    return await self.send_action("mv", "tw", "")
 
   async def action_wait_to_exposed(self) -> OverviewRegisterState:
-    # Move from wait to exposed position outside device
-    resp = await self.send_command("mv", "wh", "")
-    return OverviewRegisterState.from_resp(resp)
+    """Move from wait to exposed position outside device"""
+    return await self.send_action("mv", "wh", "")
 
   async def action_exposed_to_wait(self) -> OverviewRegisterState:
-    # Return to wait from exposed, close door
-    resp = await self.send_command("mv", "hw", "")
-    return OverviewRegisterState.from_resp(resp)
+    """Return to wait from exposed, close door"""
+    return await self.send_action("mv", "hw", "")
 
   async def action_exposed_to_storage(self, site: PlateHolder) -> OverviewRegisterState:
-    # Return with MTP from exposed to storage, move to wait, close door
-    resp = await self.send_command("mv", "hs", self._site_to_firmware_string(site))
-    return OverviewRegisterState.from_resp(resp)
+    """Return with MTP from exposed to storage, move to wait, close door"""
+    return await self.send_action("mv", "hs", self._site_to_firmware_string(site))
 
   async def action_storage_to_exposed(self, site: PlateHolder) -> OverviewRegisterState:
-    # Move from wait to storage, load MTP, transport to exposed
-    resp = await self.send_command("mv", "sh", self._site_to_firmware_string(site))
-    return OverviewRegisterState.from_resp(resp)
+    """Move from wait to storage, load MTP, transport to exposed"""
+    return await self.send_action("mv", "sh", self._site_to_firmware_string(site))
 
   async def action_read_barcode(
     self,
@@ -285,18 +275,15 @@ class Cytomat(IncubatorBackend):
     resp = await self.send_command("mv", "sn", f"{site_number_a} {site_number_b}")
     return OverviewRegisterState.from_resp(resp)
 
-  async def wait_for_transfer_station_to_be_unoccupied(self):
-    while (await self.get_overview_register()).transfer_station_occupied:
-      await asyncio.sleep(1)
-
-  async def wait_for_transfer_station_to_be_occupied(self):
-    while not (await self.get_overview_register()).transfer_station_occupied:
+  async def wait_for_transfer_station(self, occupied: bool = False):
+    """Wait for the transfer station to be occupied, or unoccupied."""
+    while (await self.get_overview_register()).transfer_station_occupied != occupied:
       await asyncio.sleep(1)
 
   async def wait_for_task_completion(self, timeout=60):
     start = time.time()
     while True:
-      overview_register = await self.get_overview_register()
+      overview_register = await self.get_overview_register()  # TODO: sometimes not recognized
       if not overview_register.busy_bit_set:
         break
       await asyncio.sleep(1)
@@ -306,20 +293,21 @@ class Cytomat(IncubatorBackend):
   async def init_shakers(self):
     return hex_to_binary(await self.send_command("ll", "vi", ""))
 
-  async def start_shaking(self, frequency: float, shakers: List[int] = None):
-    await self.wait_for_task_completion()
+  async def start_shaking(self, frequency: float, shakers: Optional[List[int]] = None):
     if self.model == CytomatType.C5C:
       raise NotImplementedError("Shaking is not supported on this model")
-    await self.set_shaking_frequency(frequency=frequency, shakers=shakers)
+    await self.set_shaking_frequency(frequency=int(frequency), shakers=shakers)
     return hex_to_binary(await self.send_command("ll", "va", ""))
 
   async def stop_shaking(self):
-    await self.wait_for_task_completion()
     if self.model == CytomatType.C5C:
       raise NotImplementedError("Shaking is not supported on this model")
     return hex_to_binary(await self.send_command("ll", "vd", ""))
 
-  async def set_shaking_frequency(self, frequency: int, shakers: List[int] = None) -> List[str]:
+  async def set_shaking_frequency(
+    self, frequency: int, shakers: Optional[List[int]] = None
+  ) -> List[str]:
+    shakers = shakers or [1, 2]
     assert all(shaker in [1, 2] for shaker in shakers), "Shaker index must be 1 or 2"
     return [await self.send_command("se", f"pb 2{idx-1}", f"{frequency:04}") for idx in shakers]
 
@@ -357,13 +345,13 @@ class Cytomat(IncubatorBackend):
 
 
 class CytomatChatterbox(Cytomat):
-  async def setup(self, racks: List[PlateCarrier]):
+  async def setup(self):
     print("CytomatChatterbox setup")
 
   async def stop(self):
     print("CytomatChatterbox stop")
 
-  async def send_command(self, command_type, command, params, timeout):
+  async def send_command(self, command_type, command, params):
     print(self._assemble_command(command_type=command_type, command=command, params=params))
     if command_type == "ch":
       return "0"

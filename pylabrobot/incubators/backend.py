@@ -1,14 +1,21 @@
 from abc import ABCMeta, abstractmethod
-from typing import List
+from typing import List, Optional
 
 from pylabrobot.machines.backends import MachineBackend
-from pylabrobot.resources import Plate, PlateHolder
-from pylabrobot.resources.carrier import PlateCarrier
+from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 
 class IncubatorBackend(MachineBackend, metaclass=ABCMeta):
-  def __init__(self, racks: List[PlateCarrier]):
-    self.racks = []
+  def __init__(self):
+    self._racks: Optional[List[PlateCarrier]] = None
+
+  @property
+  def racks(self) -> List[PlateCarrier]:
+    assert self._racks is not None, "Backend not set up?"
+    return self._racks
+
+  async def set_racks(self, racks: List[PlateCarrier]):
+    self._racks = racks
 
   @abstractmethod
   async def open_door(self):

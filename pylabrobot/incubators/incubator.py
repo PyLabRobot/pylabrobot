@@ -53,7 +53,8 @@ class Incubator(Machine, Resource):
       self.assign_child_resource(rack, location=None)
 
   async def setup(self, **backend_kwargs):
-    await self.backend.setup(**backend_kwargs, racks=self._racks)
+    await self.backend.setup(**backend_kwargs)
+    await self.backend.set_racks(self._racks)
 
   def get_num_free_sites(self) -> int:
     return sum(len(rack.get_free_sites()) for rack in self._racks)
@@ -86,7 +87,7 @@ class Incubator(Machine, Resource):
 
     available = [
       site
-      for rack in self.racks
+      for rack in self._racks
       for site in rack.get_free_sites()
       if site.get_size_z() >= _plate_height(plate)
     ]
@@ -151,7 +152,7 @@ class Incubator(Machine, Resource):
       table.append(separator_line())  # Bottom border
       return "\n".join(table)
 
-    header = [f"Rack {i}" for i in range(len(self.racks))]
+    header = [f"Rack {i}" for i in range(len(self._racks))]
     sites = [
       [site.resource.name if site.resource else "empty" for site in rack.sites.values()]
       for rack in self._racks
@@ -162,7 +163,7 @@ class Incubator(Machine, Resource):
     return {
       **super().serialize(),
       "backend": self.backend.serialize(),
-      "racks": [rack.serialize() for rack in self.racks],
+      "racks": [rack.serialize() for rack in self._racks],
     }
 
   @classmethod
