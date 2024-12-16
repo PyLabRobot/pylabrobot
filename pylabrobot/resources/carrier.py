@@ -114,6 +114,9 @@ class Carrier(Resource, Generic[S]):
   def __eq__(self, other):
     return super().__eq__(other) and self.sites == other.sites
 
+  def get_free_sites(self) -> List[S]:
+    return [site for site in self.sites.values() if site.resource is None]
+
 
 class TipCarrier(Carrier):
   r"""Base class for tip carriers.
@@ -164,8 +167,7 @@ class PlateHolder(ResourceHolder):
       )
 
     self.pedestal_size_z = pedestal_size_z
-    self.child_location = child_location
-    # self.resource: Optional[Plate] = None  # fix type
+    self.resource: Optional[Plate]  # fix type
     # TODO: add self.pedestal_2D_offset if necessary in the future
 
   def assign_child_resource(
@@ -269,6 +271,7 @@ class PlateCarrier(Carrier):
       category=category,
       model=model,
     )
+    self.sites: Dict[int, PlateHolder] = sites or {}  # fix type
 
 
 class MFXCarrier(Carrier[ResourceHolder]):
