@@ -1,5 +1,3 @@
-from typing import Dict, List, Optional
-
 from pylabrobot.resources import Coordinate
 from pylabrobot.resources.carrier import PlateCarrier, PlateHolder, create_homogeneous_resources
 

@@ -1,4 +1,5 @@
-from typing import Optional, cast
+import random
+from typing import List, Literal, Optional, Union, cast
 
 from pylabrobot.machines import Machine
 from pylabrobot.resources import (
@@ -106,7 +107,12 @@ class Incubator(Machine, Resource):
         return p.get_size_z() + 3
       return p.get_size_z()
 
-    available = [rack.get_free_sites() for rack in self.racks if rack.pitch() >= plate.get_size_z()]
+    available = [
+      site
+      for rack in self.racks
+      for site in rack.get_free_sites()
+      if site.get_size_z() >= plate.get_size_z()
+    ]
     if len(available) == 0:
       raise NoFreeSiteError(
         f"No free site found in incubator '{self.name}' for plate '{plate.name}'"
@@ -122,11 +128,11 @@ class Incubator(Machine, Resource):
   async def take_in_plate(self, site: Union[PlateHolder, Literal["first", "random", "smallest"]]):
     """Take a plate from the loading tray and put it in the incubator."""
 
-    plate = self.loading_tray.resource
+    plate = cast(Plate, self.loading_tray.resource)
     if plate is None:
       raise ResourceNotFoundError(f"No plate on the loading tray of incubator '{self.name}'")
 
-    site = self.find_first_site_for_plate(plate=plate)
+    site = self.find_smallest_site_for_plate(plate=plate)
     await self.backend.take_in_plate(plate, site)
     site.assign_child_resource(plate)
 
@@ -175,6 +181,13 @@ class Incubator(Machine, Resource):
     ]
     return create_pretty_table(header, *sites)
 
+  def serialize(self):
+    return {
+      **super().serialize(),
+      "backend": self.backend.serialize(),
+      "racks": [rack.serialize() for rack in self.racks],
+    }
+
   @classmethod
   def deserialize(cls, data: dict, allow_marshall: bool = False):
     backend = IncubatorBackend.deserialize(data["backend"])
@@ -184,6 +197,7 @@ class Incubator(Machine, Resource):
       size_x=data["size_x"],
       size_y=data["size_y"],
       size_z=data["size_z"],
+      racks=[PlateCarrier.deserialize(rack) for rack in data["racks"]],
       rotation=Rotation.deserialize(data["rotation"]),
       category=data["category"],
       model=data["model"],
