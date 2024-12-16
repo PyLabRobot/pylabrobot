@@ -57,6 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - resource_offset -> pickup_offset
   - get_direction -> pickup_direction
   - put_direction -> drop_direction
+- `location` parameter of `assign_child_resource` is not optional (https://github.com/PyLabRobot/pylabrobot/pull/336)
 
 ### Added
 
