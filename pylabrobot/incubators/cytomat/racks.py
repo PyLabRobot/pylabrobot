@@ -22,6 +22,7 @@ def _cytomat_rack(name: str, site_height: float, num_sites: int, model: str):
       resource_size_x=85.48,
       resource_size_y=127.27,
       name_prefix=name,
+      pedestal_size_z=0,
     ),
     model=model,
   )

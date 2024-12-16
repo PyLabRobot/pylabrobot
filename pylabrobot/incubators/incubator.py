@@ -103,14 +103,22 @@ class Incubator(Machine, Resource):
   def find_random_site(self, plate: Plate) -> PlateHolder:
     return random.choice(self._find_available_sites_sorted(plate))
 
-  async def take_in_plate(self, site: Union[PlateHolder, Literal["first", "random", "smallest"]]):
+  async def take_in_plate(self, site: Union[PlateHolder, Literal["random", "smallest"]]):
     """Take a plate from the loading tray and put it in the incubator."""
 
     plate = cast(Plate, self.loading_tray.resource)
     if plate is None:
       raise ResourceNotFoundError(f"No plate on the loading tray of incubator '{self.name}'")
 
-    site = self.find_smallest_site_for_plate(plate=plate)
+    if site == "random":
+      site = self.find_random_site(plate)
+    elif site == "smallest":
+      site = self.find_smallest_site_for_plate(plate)
+    elif isinstance(site, PlateHolder):
+      if site not in self._find_available_sites_sorted(plate):
+        raise ValueError(f"Site {site.name} is not available for plate {plate.name}")
+    else:
+      raise ValueError(f"Invalid site: {site}")
     await self.backend.take_in_plate(plate, site)
     site.assign_child_resource(plate)
 
@@ -161,14 +169,15 @@ class Incubator(Machine, Resource):
 
   def serialize(self):
     return {
-      **super().serialize(),
+      **Machine.serialize(self),
+      **Resource.serialize(self),
       "backend": self.backend.serialize(),
       "racks": [rack.serialize() for rack in self._racks],
     }
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshall: bool = False):
-    backend = IncubatorBackend.deserialize(data["backend"])
+    backend = IncubatorBackend.deserialize(data.pop("backend"))
     return cls(
       backend=backend,
       name=data["name"],

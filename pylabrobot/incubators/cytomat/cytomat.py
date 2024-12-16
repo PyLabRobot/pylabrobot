@@ -119,7 +119,7 @@ class Cytomat(IncubatorBackend):
       timeout: The maximum time to wait for the command to complete. If None, the command will not
         wait for completion.
     """
-    resp = await self.send_command("ll", "sp", "002")
+    resp = await self.send_command(command_type, command, params)
     if timeout is not None:
       await self.wait_for_task_completion(timeout=timeout)
     return OverviewRegisterState.from_resp(resp)
@@ -132,6 +132,7 @@ class Cytomat(IncubatorBackend):
     if self.model in [CytomatType.C2C_425]:
       return f"{str(rack_idx).zfill(2)} {str(site_idx).zfill(2)}"
 
+    # TODO: configure all cytomats to use `rack site` format
     if self.model in [
       CytomatType.C6000,
       CytomatType.C6002,
@@ -206,7 +207,6 @@ class Cytomat(IncubatorBackend):
 
   async def get_swap_register(self) -> SwapStationState:
     value = await self.send_command("ch", "sw", "")
-
     return SwapStationState(
       position=SwapStationPosition(int(value[0])),
       load_status_front_of_gate=LoadStatusFrontOfGate(int(value[1])),
