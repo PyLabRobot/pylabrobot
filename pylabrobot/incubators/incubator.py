@@ -11,7 +11,6 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   Rotation,
 )
-from pylabrobot.resources.coordinate import Coordinate
 
 from .backend import IncubatorBackend
 
@@ -49,40 +48,18 @@ class Incubator(Machine, Resource):
       name=self.name + "_tray", size_x=127.76, size_y=85.48, size_z=0
     )
 
-    def c(i):
-      ph = PlateHolder(
-        name="rack1_site" + str(i), size_x=127.76, size_y=85.48, size_z=60, pedestal_size_z=0
-      )
-      ph.location = Coordinate.zero()
-      return ph
-
-    self.racks = [
-      PlateCarrier(
-        name="rack1",
-        size_x=127.76,
-        size_y=85.48,
-        size_z=1000,
-        sites={i: c(i) for i in range(10)},
-      ),
-      PlateCarrier(
-        name="rack2",
-        size_x=127.76,
-        size_y=85.48,
-        size_z=1000,
-        sites={i: c(i) for i in range(10)},
-      ),
-    ]
-    # TODO: racks should be children of self.
+    self._racks = racks
+    for i, rack in enumerate(self._racks):
+      self.assign_child_resource(rack, location=None)
 
   async def setup(self, **backend_kwargs):
-    await self.backend.setup(**backend_kwargs)
-    self.backend.set_racks(self.racks)
+    await self.backend.setup(**backend_kwargs, racks=self._racks)
 
   def get_num_free_sites(self) -> int:
-    return sum(len(rack.get_free_sites()) for rack in self.racks)
+    return sum(len(rack.get_free_sites()) for rack in self._racks)
 
   def get_site_by_plate_name(self, plate_name: str) -> PlateHolder:
-    for rack in self.racks:
+    for rack in self._racks:
       for site in rack.sites.values():
         if site.resource is not None and site.resource.name == plate_name:
           return site
@@ -111,7 +88,7 @@ class Incubator(Machine, Resource):
       site
       for rack in self.racks
       for site in rack.get_free_sites()
-      if site.get_size_z() >= plate.get_size_z()
+      if site.get_size_z() >= _plate_height(plate)
     ]
     if len(available) == 0:
       raise NoFreeSiteError(
@@ -177,7 +154,7 @@ class Incubator(Machine, Resource):
     header = [f"Rack {i}" for i in range(len(self.racks))]
     sites = [
       [site.resource.name if site.resource else "empty" for site in rack.sites.values()]
-      for rack in self.racks
+      for rack in self._racks
     ]
     return create_pretty_table(header, *sites)
 
