@@ -55,7 +55,7 @@ class Carrier(Resource, Generic[S]):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate,
+    location: Optional[Coordinate],
     reassign: bool = True,
     spot: Optional[int] = None,
   ):
