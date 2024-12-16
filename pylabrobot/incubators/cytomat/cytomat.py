@@ -31,8 +31,7 @@ from pylabrobot.incubators.cytomat.utils import (
   hex_to_binary,
   validate_storage_location_number,
 )
-from pylabrobot.incubators.rack import Rack
-from pylabrobot.resources.carrier import PlateHolder
+from pylabrobot.resources.carrier import PlateCarrier, PlateHolder
 from pylabrobot.resources.plate import Plate
 
 logger = logging.getLogger(__name__)
@@ -114,8 +113,8 @@ class Cytomat(IncubatorBackend):
     raise Exception(f"Unknown response from cytomat: {resp}")
 
   def _site_to_firmware_string(self, site: PlateHolder) -> str:
-    rack = cast(Rack, site.parent)
-    rack_idx = rack.index
+    rack = cast(PlateCarrier, site.parent)
+    rack_idx = self.racks.index(rack)
     site_idx = next(idx for idx, s in rack.sites.items() if s == site)
 
     if self.model in [CytomatType.C2C_425]:

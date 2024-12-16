@@ -114,6 +114,9 @@ class Carrier(Resource, Generic[S]):
   def __eq__(self, other):
     return super().__eq__(other) and self.sites == other.sites
 
+  def get_free_sites(self) -> List[S]:
+    return [site for site in self.sites.values() if site.resource is None]
+
 
 class TipCarrier(Carrier):
   r"""Base class for tip carriers.

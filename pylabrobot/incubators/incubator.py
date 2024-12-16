@@ -3,6 +3,7 @@ from typing import Optional, cast
 from pylabrobot.machines import Machine
 from pylabrobot.resources import (
   Plate,
+  PlateCarrier,
   PlateHolder,
   Resource,
   ResourceHolder,
@@ -12,7 +13,6 @@ from pylabrobot.resources import (
 from pylabrobot.resources.coordinate import Coordinate
 
 from .backend import IncubatorBackend
-from .rack import Rack
 
 
 class NoFreeSiteError(Exception):
@@ -27,6 +27,7 @@ class Incubator(Machine, Resource):
     size_x: float,
     size_y: float,
     size_z: float,
+    racks: List[PlateCarrier],
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
@@ -55,21 +56,19 @@ class Incubator(Machine, Resource):
       return ph
 
     self.racks = [
-      Rack(
+      PlateCarrier(
         name="rack1",
         size_x=127.76,
         size_y=85.48,
         size_z=1000,
-        sites={i: c(i) for i in range(1, 10)},
-        index=1,
+        sites={i: c(i) for i in range(10)},
       ),
-      Rack(
+      PlateCarrier(
         name="rack2",
         size_x=127.76,
         size_y=85.48,
         size_z=1000,
-        sites={i: c(i) for i in range(1, 10)},
-        index=2,
+        sites={i: c(i) for i in range(10)},
       ),
     ]
     # TODO: racks should be children of self.
@@ -97,52 +96,38 @@ class Incubator(Machine, Resource):
 
     self.loading_tray.assign_child_resource(site.resource)
 
-  def find_first_site_for_plate(self, plate: Plate) -> PlateHolder:
-    for rack in self.racks:
-      free_sites = rack.get_free_sites()
-      # TODO: check if the plate fits in the site
-      if len(free_sites) > 0:
-        return free_sites[0]
-    raise NoFreeSiteError(f"No free site found in incubator '{self.name}'")
+  def _find_available_sites_sorted(self, plate: Plate) -> List[PlateHolder]:
+    """Find all sites that are free and fit the plate, sorted by size."""
 
-  def find_smallest_site_for_plate(self, plate: Plate) -> PlateHolder:
     def _plate_height(p: Plate):
       if p.has_lid():
         # TODO: we can use plr nesting height
         # lid.location.z + lid.get_anchor(z="t").z
         return p.get_size_z() + 3
-
       return p.get_size_z()
 
-    filtered_sorted_racks = sorted(
-      (rack for rack in self.racks if _plate_height(plate) < rack.pitch()),
-      key=lambda rack: rack.pitch(),
-    )
-    if len(filtered_sorted_racks) == 0:
-      raise NoFreeSiteError(f"No available site for plate with pitch {plate.get_size_z()}")
+    available = [rack.get_free_sites() for rack in self.racks if rack.pitch() >= plate.get_size_z()]
+    if len(available) == 0:
+      raise NoFreeSiteError(
+        f"No free site found in incubator '{self.name}' for plate '{plate.name}'"
+      )
+    return sorted(available, key=lambda site: site.get_size_z())
 
-    for rack in filtered_sorted_racks:
-      free_sites = rack.get_free_sites()
-      if len(free_sites) > 0:
-        return free_sites[0]
+  def find_smallest_site_for_plate(self, plate: Plate) -> PlateHolder:
+    return self._find_available_sites_sorted(plate)[0]
 
-    raise ValueError(f"No available site for plate with pitch {plate.get_size_z()}")
+  def find_random_site(self, plate: Plate) -> PlateHolder:
+    return random.choice(self._find_available_sites_sorted(plate))
 
-  async def take_in_plate(self):  # site
-    """Take a plate from the loading tray and put it in the incubator.
+  async def take_in_plate(self, site: Union[PlateHolder, Literal["first", "random", "smallest"]]):
+    """Take a plate from the loading tray and put it in the incubator."""
 
-    Args:
-      site: PlateHolder, or `"first"`, or `"random"`, or `"smallest"`.
-    """
-
-    plate = cast(Plate, self.loading_tray.resource)
+    plate = self.loading_tray.resource
     if plate is None:
       raise ResourceNotFoundError(f"No plate on the loading tray of incubator '{self.name}'")
 
     site = self.find_first_site_for_plate(plate=plate)
-
     await self.backend.take_in_plate(plate, site)
-
     site.assign_child_resource(plate)
 
   async def set_temperature(self, temperature: float):
@@ -183,7 +168,7 @@ class Incubator(Machine, Resource):
       table.append(separator_line())  # Bottom border
       return "\n".join(table)
 
-    header = [f"Rack {rack.index}" for rack in self.racks]
+    header = [f"Rack {i}" for i in range(len(self.racks))]
     sites = [
       [site.resource.name if site.resource else "empty" for site in rack.sites.values()]
       for rack in self.racks
