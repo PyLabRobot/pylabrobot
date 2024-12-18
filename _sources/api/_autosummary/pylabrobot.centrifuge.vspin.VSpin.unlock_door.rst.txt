@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin.VSpin.unlock\_door
+==============================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin
+
+.. automethod:: VSpin.unlock_door

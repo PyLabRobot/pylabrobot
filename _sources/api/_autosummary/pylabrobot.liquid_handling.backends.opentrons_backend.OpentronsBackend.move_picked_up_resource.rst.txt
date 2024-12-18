@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.opentrons\_backend.OpentronsBackend.move\_picked\_up\_resource
+===================================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.opentrons_backend
+
+.. automethod:: OpentronsBackend.move_picked_up_resource

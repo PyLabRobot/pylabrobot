@@ -1,0 +1,30 @@
+﻿pylabrobot.plate\_reading.chatterbox.PlateReaderChatterboxBackend
+=================================================================
+
+.. currentmodule:: pylabrobot.plate_reading.chatterbox
+
+.. autoclass:: PlateReaderChatterboxBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~PlateReaderChatterboxBackend.__init__
+      ~PlateReaderChatterboxBackend.close
+      ~PlateReaderChatterboxBackend.deserialize
+      ~PlateReaderChatterboxBackend.open
+      ~PlateReaderChatterboxBackend.read_absorbance
+      ~PlateReaderChatterboxBackend.read_fluorescence
+      ~PlateReaderChatterboxBackend.read_luminescence
+      ~PlateReaderChatterboxBackend.serialize
+      ~PlateReaderChatterboxBackend.setup
+      ~PlateReaderChatterboxBackend.stop
+   
+   
