@@ -11,7 +11,7 @@ from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
 
 from .coordinate import Coordinate
-from .errors import ResourceNotFoundError, NoLocationError
+from .errors import NoLocationError, ResourceNotFoundError
 from .rotation import Rotation
 
 if sys.version_info >= (3, 11):
