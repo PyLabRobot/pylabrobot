@@ -7,6 +7,7 @@ from typing import Optional, cast
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
+from pylabrobot.resources.errors import NoLocationError
 from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
@@ -55,7 +56,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       origin=origin,
     )
     self.num_rails = num_rails
-    self.register_did_assign_resource_callback(self._check_save_z_height)
+    self.register_did_assign_resource_callback(self._check_safe_z_height)
 
   @abstractmethod
   def rails_to_location(self, rails: int) -> Coordinate:
@@ -69,15 +70,20 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       "no_trash": True,  # data encoded as child. (not very pretty to have this key though...)
     }
 
-  def _check_save_z_height(self, resource: Resource):
-    """ " Check for this resource, and all its children, that the z location is not too high."""
+  def _check_safe_z_height(self, resource: Resource):
+    """Check for this resource, and all its children, that the z location is not too high."""
 
     # TODO: maybe these are parameters per HamiltonDeck that we can take as attributes.
     Z_MOVEMENT_LIMIT = 245
     Z_GRAB_LIMIT = 285
 
     def check_z_height(resource: Resource):
-      z_top = resource.get_absolute_location(z="top").z
+      try:
+        z_top = resource.get_absolute_location(z="top").z
+      except NoLocationError:
+        # if a resource has no location, we cannot check its z height
+        # this is fine, because it's a convenience feature and not critical
+        return
 
       if z_top > Z_MOVEMENT_LIMIT:
         logger.warning(
