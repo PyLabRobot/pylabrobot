@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import (
+  TYPE_CHECKING,
   Dict,
   List,
   Literal,
@@ -16,7 +17,9 @@ from pylabrobot.resources.resource_holder import get_child_location
 from .itemized_resource import ItemizedResource
 from .liquid import Liquid
 from .resource import Coordinate, Resource
-from .well import Well
+
+if TYPE_CHECKING:
+  from .well import Well
 
 
 class Lid(Resource):
@@ -60,7 +63,7 @@ class Lid(Resource):
     }
 
 
-class Plate(ItemizedResource[Well]):
+class Plate(ItemizedResource["Well"]):
   """Base class for Plate resources."""
 
   def __init__(
@@ -69,7 +72,7 @@ class Plate(ItemizedResource[Well]):
     size_x: float,
     size_y: float,
     size_z: float,
-    ordered_items: Optional[Dict[str, Well]] = None,
+    ordered_items: Optional[Dict[str, "Well"]] = None,
     ordering: Optional[List[str]] = None,
     category: str = "plate",
     lid: Optional[Lid] = None,
@@ -144,7 +147,7 @@ class Plate(ItemizedResource[Well]):
       f"size_y={self._size_y}, size_z={self._size_z}, location={self.location})"
     )
 
-  def get_well(self, identifier: Union[str, int, Tuple[int, int]]) -> Well:
+  def get_well(self, identifier: Union[str, int, Tuple[int, int]]) -> "Well":
     """Get the item with the given identifier.
 
     See :meth:`~.get_item` for more information.
@@ -152,7 +155,7 @@ class Plate(ItemizedResource[Well]):
 
     return super().get_item(identifier)
 
-  def get_wells(self, identifier: Union[str, Sequence[int]]) -> List[Well]:
+  def get_wells(self, identifier: Union[str, Sequence[int]]) -> List["Well"]:
     """Get the wells with the given identifier.
 
     See :meth:`~.get_items` for more information.
@@ -220,7 +223,7 @@ class Plate(ItemizedResource[Well]):
 
   # TODO: add quadrant definition for 96-well plates & specify current
   # quadrant definition is only for 384-well plates
-  def get_quadrant(self, quadrant: int) -> List[Well]:
+  def get_quadrant(self, quadrant: int) -> List["Well"]:
     """Return the wells in the specified quadrant. Quadrants are overlapping and refer to
     alternating rows and columns of the plate. Quadrant 1 contains A1, A3, C1, etc. Quadrant 2
     contains A2, quadrant 3 contains B1, and quadrant 4 contains B2."""

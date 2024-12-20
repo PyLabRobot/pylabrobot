@@ -6,9 +6,10 @@ https://labautomation.io/t/pylabrobot-tecan-error-in-adding-labware-to-carrier/2
 
 from typing import Dict, Optional
 
-from pylabrobot.resources.plate import Lid, Plate, Well
+from pylabrobot.resources.plate import Lid, Plate
 from pylabrobot.resources.tecan.tecan_resource import TecanResource
 from pylabrobot.resources.utils import create_ordered_items_2d
+from pylabrobot.resources.well import Well
 
 
 class TecanPlate(Plate, TecanResource):

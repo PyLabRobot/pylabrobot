@@ -12,9 +12,11 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Drop,
   DropTipRack,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
 )
 from pylabrobot.machines.backends import MachineBackend
 from pylabrobot.resources import Deck, Resource
@@ -105,8 +107,16 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """Dispense to all wells in 96 well plate."""
 
   @abstractmethod
-  async def move_resource(self, move: Move):
-    """Move a resource to a new location."""
+  async def pick_up_resource(self, pickup: ResourcePickup):
+    """Pick up a resource like a plate or a lid using the integrated robotic arm."""
+
+  @abstractmethod
+  async def move_picked_up_resource(self, move: ResourceMove):
+    """Move a picked up resource like a plate or a lid using the integrated robotic arm."""
+
+  @abstractmethod
+  async def drop_resource(self, drop: ResourceDrop):
+    """Drop a resource like a plate or a lid using the integrated robotic arm."""
 
   async def prepare_for_manual_channel_operation(self, channel: int):
     """Prepare the robot for manual operation."""

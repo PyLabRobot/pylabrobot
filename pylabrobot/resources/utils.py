@@ -152,11 +152,11 @@ def create_ordered_items_2d(
     klass: The class of the resource to create
     num_items_x: The number of items in the x direction
     num_items_y: The number of items in the y direction
-    dx: The bottom left corner for items in the left column
-    dy: The bottom left corner for items in the bottom row
+    dx: The bottom left corner for items in the left column wrt the parent
+    dy: The bottom left corner for items in the bottom row wrt the parent
     dz: The z coordinate for all items
-    item_dx: The size of the items in the x direction
-    item_dy: The size of the items in the y direction
+    item_dx: The spacing of the items in the x direction (center to center)
+    item_dy: The spacing of the items in the y direction (center to center)
     **kwargs: Additional keyword arguments to pass to the resource constructor
 
   Returns:

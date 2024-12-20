@@ -28,7 +28,7 @@ from .ml_star import *
 from .nest import *
 from .opentrons import *
 from .petri_dish import PetriDish, PetriDishHolder
-from .plate import Lid, Plate, Well
+from .plate import Lid, Plate
 from .plate_adapter import PlateAdapter
 from .porvair import *
 from .powder import Powder
@@ -65,3 +65,4 @@ from .volume_tracker import (
   set_volume_tracking,
 )
 from .vwr import *
+from .well import CrossSectionType, Well, WellBottomType

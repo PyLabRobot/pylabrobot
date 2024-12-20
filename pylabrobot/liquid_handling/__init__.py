@@ -7,8 +7,8 @@ from .standard import (
   DispensePlate,
   Drop,
   DropTipRack,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceMove,
 )
 from .strictness import Strictness, get_strictness, set_strictness

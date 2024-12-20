@@ -268,7 +268,7 @@ class Resource:
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate,
+    location: Optional[Coordinate],
     reassign: bool = True,
   ):
     """Assign a child resource to this resource.
@@ -282,7 +282,7 @@ class Resource:
 
     Args:
       resource: The resource to assign.
-      location: The location of the resource, relative to this resource.
+      location: The location of the resource, relative to this resource. None if undefined.
       reassign: If `False`, an error will be raised if the resource to be assigned is already
         assigned to this resource. Defaults to `True`.
     """
@@ -296,6 +296,8 @@ class Resource:
       callback(resource)
 
     # Modify the tree structure
+    if resource.parent is not None:
+      resource.parent.unassign_child_resource(resource)
     resource.parent = self
     resource.location = location
     self.children.append(resource)
@@ -401,6 +403,7 @@ class Resource:
 
     # Update the tree structure
     resource.parent = None
+    resource.location = None
     self.children.remove(resource)
 
     # Delete callbacks on the child resource so that they are not propagated up the tree.

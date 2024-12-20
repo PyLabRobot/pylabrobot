@@ -75,7 +75,7 @@ class OTDeck(Deck):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate,
+    location: Optional[Coordinate],
     reassign: bool = True,
   ):
     """Assign a resource to a slot.
@@ -83,6 +83,9 @@ class OTDeck(Deck):
     ..warning:: This method exists only for deserialization. You should use
     :meth:`assign_child_at_slot` instead.
     """
+
+    if location is None:
+      raise ValueError("location must be provided for resources on the deck")
 
     if location not in self.slot_locations:
       super().assign_child_resource(resource, location=location)
