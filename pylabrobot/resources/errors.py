@@ -44,3 +44,9 @@ class ResourceDefinitionIncompleteError(Exception):
       "Please create a PR to complete this resource, or create an issue if you "
       "need help. https://github.com/PyLabRobot/pylabrobot"
     )
+
+
+class NoLocationError(Exception):
+  """Raised when trying to access a location that does not exist, eg. when calling
+  get_absolute_location on a resource where some resource between it and the root
+  has no location."""
