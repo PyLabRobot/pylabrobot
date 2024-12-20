@@ -2864,7 +2864,7 @@ class STAR(HamiltonLiquidHandler):
   async def pick_up_resource(
     self,
     pickup: ResourcePickup,
-    use_arm: Literal["iswap", "core", "iswap_hotel_unsafe"] = "iswap",
+    use_arm: Literal["iswap", "core"] = "iswap",
     channel_1: int = 7,
     channel_2: int = 8,
     core_grip_strength: int = 15,
@@ -2874,17 +2874,52 @@ class STAR(HamiltonLiquidHandler):
     hotel_depth=160.0,
     hotel_clearance_height=7.5,
     hotel_high_speed=False,
+    pickup_use_unsafe_hotel: bool = False,
   ):
     if use_arm == "iswap":
-      await self.iswap_pick_up_resource(
-        resource=pickup.resource,
-        grip_direction=pickup.direction,
-        pickup_distance_from_top=pickup.pickup_distance_from_top,
-        offset=pickup.offset,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        z_position_at_the_command_end=self._traversal_height,
-      )
+      if pickup_use_unsafe_hotel:
+        x, y, z = pickup.resource.get_absolute_location("c", "c", "t")
+        z -= pickup.pickup_distance_from_top
+        assert (
+          pickup.resource.get_absolute_rotation().x == 0
+          and pickup.resource.get_absolute_rotation().y == 0
+        )
+        assert pickup.resource.get_absolute_rotation().z % 90 == 0
+        if hotel_open_gripper_position is None:
+          if pickup.direction in (GripDirection.FRONT, GripDirection.BACK):
+            hotel_open_gripper_position = pickup.resource.get_absolute_size_x() + 5
+          else:
+            hotel_open_gripper_position = pickup.resource.get_absolute_size_y() + 5
+
+        await self.unsafe.get_from_hotel(
+          hotel_center_x_coord=round(x * 10),
+          hotel_center_y_coord=round(y * 10),
+          hotel_center_z_coord=round(z * 10),
+          hotel_center_x_direction=0,
+          hotel_center_y_direction=0,
+          hotel_center_z_direction=0,
+          clearance_height=round(hotel_clearance_height * 10),
+          hotel_depth=round(hotel_depth * 10),
+          grip_direction=pickup.direction,
+          open_gripper_position=round(hotel_open_gripper_position * 10),
+          traverse_height_at_beginning=round(hotel_height_at_beginning * 10),
+          z_position_at_end=round(hotel_z_position_at_end * 10),
+          high_acceleration_index=2 if hotel_high_speed else 1,
+          low_acceleration_index=2 if hotel_high_speed else 1,
+        )
+      else:
+        await self.iswap_pick_up_resource(
+          resource=pickup.resource,
+          grip_direction=pickup.direction,
+          pickup_distance_from_top=pickup.pickup_distance_from_top,
+          offset=pickup.offset,
+          minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
+          z_position_at_the_command_end=self._traversal_height,
+        )
     elif use_arm == "core":
+      if pickup_use_unsafe_hotel:
+        raise ValueError("Cannot use iswap hotel mode with core grippers")
+
       await self.core_pick_up_resource(
         resource=pickup.resource,
         pickup_distance_from_top=pickup.pickup_distance_from_top,
@@ -2895,40 +2930,8 @@ class STAR(HamiltonLiquidHandler):
         channel_2=channel_2,
         grip_strength=core_grip_strength,
       )
-    elif use_arm == "iswap_hotel_unsafe":
-      x, y, z = pickup.resource.get_absolute_location("c", "c", "t")
-      z -= pickup.pickup_distance_from_top
-      assert (
-        pickup.resource.get_absolute_rotation().x == 0
-        and pickup.resource.get_absolute_rotation().y == 0
-      )
-      assert pickup.resource.get_absolute_rotation().z % 90 == 0
-      if hotel_open_gripper_position is None:
-        if pickup.direction in (GripDirection.FRONT, GripDirection.BACK):
-          hotel_open_gripper_position = pickup.resource.get_absolute_size_x() * 10 + 50
-        else:
-          hotel_open_gripper_position = pickup.resource.get_absolute_size_y() * 10 + 50
-
-      await self.unsafe.get_from_hotel(
-        hotel_center_x_coord=round(x * 10),
-        hotel_center_y_coord=round(y * 10),
-        hotel_center_z_coord=round(z * 10),
-        hotel_center_x_direction=0,
-        hotel_center_y_direction=0,
-        hotel_center_z_direction=0,
-        clearance_height=round(hotel_clearance_height * 10),
-        hotel_depth=round(hotel_depth * 10),
-        grip_direction=pickup.direction,
-        open_gripper_position=round(hotel_open_gripper_position * 10),
-        traverse_height_at_beginning=round(hotel_height_at_beginning * 10),
-        z_position_at_end=round(hotel_z_position_at_end * 10),
-        high_acceleration_index=2 if hotel_high_speed else 1,
-        low_acceleration_index=2 if hotel_high_speed else 1,
-      )
     else:
-      raise ValueError(
-        f"use_arm must be either 'iswap', 'iswap_hotel_unsafe', 'core', not {use_arm}"
-      )
+      raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
 
   async def move_picked_up_resource(
     self, move: ResourceMove, use_arm: Literal["iswap", "core"] = "iswap"
@@ -2956,7 +2959,7 @@ class STAR(HamiltonLiquidHandler):
   async def drop_resource(
     self,
     drop: ResourceDrop,
-    use_arm: Literal["iswap", "core", "iswap_hotel_unsafe"] = "iswap",
+    use_arm: Literal["iswap", "core"] = "iswap",
     return_core_gripper: bool = True,
     hotel_open_gripper_position: Optional[float] = None,
     hotel_height_at_beginning=280.0,
@@ -2964,20 +2967,60 @@ class STAR(HamiltonLiquidHandler):
     hotel_depth=160.0,
     hotel_clearance_height=7.5,
     hotel_high_speed=False,
+    drop_use_unsafe_hotel: bool = False,
   ):
     if use_arm == "iswap":
-      await self.iswap_release_picked_up_resource(
-        location=drop.destination,
-        resource=drop.resource,
-        rotation=drop.rotation,  # TODO
-        offset=drop.offset,
-        grip_direction=drop.direction,
-        pickup_distance_from_top=drop.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        # int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
-        z_position_at_the_command_end=self._traversal_height,
-      )
+      if drop_use_unsafe_hotel:
+        # this rotation is the original orientation of the plate, before it is put down.
+        assert (
+          drop.resource.get_absolute_rotation().x == 0
+          and drop.resource.get_absolute_rotation().y == 0
+        )
+        assert drop.resource.get_absolute_rotation().z % 90 == 0
+        if hotel_open_gripper_position is None:
+          if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
+            hotel_open_gripper_position = drop.resource.get_absolute_size_x() + 50
+          else:
+            hotel_open_gripper_position = drop.resource.get_absolute_size_y() + 50
+
+        # down forward down.
+        # hotel_depth is forward.
+        # clearance height is second down.
+
+        print(drop.destination)
+        print("putting in hotel")
+        await self.unsafe.put_in_hotel(
+          hotel_center_x_coord=round(drop.destination.x * 10),
+          hotel_center_y_coord=round(drop.destination.y * 10),
+          hotel_center_z_coord=round(drop.destination.z * 10),
+          hotel_center_x_direction=0,
+          hotel_center_y_direction=0,
+          hotel_center_z_direction=0,
+          clearance_height=round(hotel_clearance_height * 10),
+          hotel_depth=round(hotel_depth * 10),
+          grip_direction=drop.direction,
+          open_gripper_position=round(hotel_open_gripper_position * 10),
+          traverse_height_at_beginning=round(hotel_height_at_beginning * 10),
+          z_position_at_end=round(hotel_z_position_at_end * 10),
+          high_acceleration_index=2 if hotel_high_speed else 1,
+          low_acceleration_index=2 if hotel_high_speed else 1,
+        )
+      else:
+        await self.iswap_release_picked_up_resource(
+          location=drop.destination,
+          resource=drop.resource,
+          rotation=drop.rotation,  # TODO
+          offset=drop.offset,
+          grip_direction=drop.direction,
+          pickup_distance_from_top=drop.pickup_distance_from_top,
+          minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
+          # int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
+          z_position_at_the_command_end=self._traversal_height,
+        )
     elif use_arm == "core":
+      if drop_use_unsafe_hotel:
+        raise ValueError("Cannot use iswap hotel mode with core grippers")
+
       await self.core_release_picked_up_resource(
         location=drop.destination,
         resource=drop.resource,
@@ -2987,35 +3030,6 @@ class STAR(HamiltonLiquidHandler):
         z_position_at_the_command_end=self._traversal_height,
         # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
         return_tool=return_core_gripper,
-      )
-    elif use_arm == "iswap_hotel_unsafe":
-      # this rotation is the original orientation of the plate, before it is put down.
-      assert (
-        drop.resource.get_absolute_rotation().x == 0
-        and drop.resource.get_absolute_rotation().y == 0
-      )
-      assert drop.resource.get_absolute_rotation().z % 90 == 0
-      if hotel_open_gripper_position is None:
-        if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
-          hotel_open_gripper_position = drop.resource.get_absolute_size_x() * 10 + 50
-        else:
-          hotel_open_gripper_position = drop.resource.get_absolute_size_y() * 10 + 50
-
-      await self.unsafe.put_in_hotel(
-        hotel_center_x_coord=round(drop.destination.x * 10),
-        hotel_center_y_coord=round(drop.destination.y * 10),
-        hotel_center_z_coord=round(drop.destination.z * 10),
-        hotel_center_x_direction=0,
-        hotel_center_y_direction=0,
-        hotel_center_z_direction=0,
-        clearance_height=round(hotel_clearance_height * 10),
-        hotel_depth=round(hotel_depth * 10),
-        grip_direction=drop.direction,
-        open_gripper_position=round(hotel_open_gripper_position * 10),
-        traverse_height_at_beginning=round(hotel_height_at_beginning * 10),
-        z_position_at_end=round(hotel_z_position_at_end * 10),
-        high_acceleration_index=2 if hotel_high_speed else 1,
-        low_acceleration_index=2 if hotel_high_speed else 1,
       )
     else:
       raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")

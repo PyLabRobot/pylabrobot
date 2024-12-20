@@ -1750,10 +1750,14 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    await self.backend.pick_up_resource(
-      pickup=self._resource_pickup,
-      **backend_kwargs,
-    )
+    try:
+      await self.backend.pick_up_resource(
+        pickup=self._resource_pickup,
+        **backend_kwargs,
+      )
+    except Exception:
+      self._resource_pickup = None
+      raise
 
   async def move_picked_up_resource(
     self,
