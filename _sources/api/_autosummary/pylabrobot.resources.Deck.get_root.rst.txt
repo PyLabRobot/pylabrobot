@@ -1,0 +1,6 @@
+pylabrobot.resources.Deck.get\_root
+===================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: Deck.get_root

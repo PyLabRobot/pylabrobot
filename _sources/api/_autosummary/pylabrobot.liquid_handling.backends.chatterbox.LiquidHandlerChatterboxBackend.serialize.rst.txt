@@ -1,0 +1,6 @@
+pylabrobot.liquid\_handling.backends.chatterbox.LiquidHandlerChatterboxBackend.serialize
+========================================================================================
+
+.. currentmodule:: pylabrobot.liquid_handling.backends.chatterbox
+
+.. automethod:: LiquidHandlerChatterboxBackend.serialize
