@@ -122,7 +122,7 @@ Use the following code to configure the centrifuge in Python:
 from pylabrobot import Centrifuge
 from pylabrobot.backends.vspin import VSpin
 
-# Replace with your specific device ID and bucket position.
+# Replace with your specific FTDI device ID and bucket position for profile in Agilent Centrifuge Config Tool.
 backend = VSpin(bucket_1_position=6971, device_id="FTE0RJ5T")
 centrifuge = Centrifuge(backend=backend)
 
