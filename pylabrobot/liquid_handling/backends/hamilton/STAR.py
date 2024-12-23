@@ -69,7 +69,6 @@ from pylabrobot.resources.ml_star import (
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.resources.resource_holder import get_child_location
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 T = TypeVar("T")
@@ -2771,7 +2770,7 @@ class STAR(HamiltonLiquidHandler):
       )
       z_position_at_the_command_end = z_position_at_the_command_end or self._traversal_height
 
-      print("z pickup", z, round(z*10), z*10)
+      print("z pickup", z, round(z * 10), z * 10)
 
       if use_unsafe_hotel:
         if hotel_open_gripper_position is None:

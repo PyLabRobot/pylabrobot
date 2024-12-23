@@ -18,7 +18,6 @@ from pylabrobot.resources import (
   Coordinate,
   Cor_96_wellplate_360ul_Fb,
   Lid,
-  Plate,
   ResourceStack,
   no_volume_tracking,
 )
