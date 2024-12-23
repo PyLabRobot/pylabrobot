@@ -1,6 +1,6 @@
 # Retro Filter V4
 
-![RetroFilterV4.png](RetroFitlerV4.png)
+<img src="RetroFilterV4.png" width="800" />
 
 Designed for flow cytometry prep.
 
@@ -18,6 +18,6 @@ Designed for flow cytometry prep.
 ### [OnShape doc](https://cad.onshape.com/documents/c9c3cf6b64034d54f966eda5/w/fed83636389b833df37c2dac/e/80426a2258abe186fc00e172?renderMode=0&uiState=6768d74c1ea3896154236237)
 
 
-<p align="center">
+<p align="left">
   <img src="../../docs/img/used_by/retrobio.webp" alt="RetroBio Logo" width="100"/>
 </p>
