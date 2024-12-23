@@ -28,6 +28,7 @@ from pylabrobot.liquid_handling.strictness import (
   Strictness,
   get_strictness,
 )
+from pylabrobot.filters.filter import Filter
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading import PlateReader
 from pylabrobot.resources import (
@@ -777,8 +778,12 @@ class LiquidHandler(Resource, Machine):
 
     # Checks
     for resource in resources:
-      if isinstance(resource.parent, Plate) and resource.parent.has_lid():
-        raise ValueError("Aspirating from a well with a lid is not supported.")
+      if (
+        isinstance(resource.parent, Plate)
+        and resource.parent.has_lid()
+        and not isinstance(resource.parent.lid, Filter)
+      ):
+        raise ValueError("Aspirating from a well with a non-filter lid is not supported.")
 
     self._make_sure_channels_exist(use_channels)
     assert len(resources) == len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
@@ -1000,8 +1005,12 @@ class LiquidHandler(Resource, Machine):
             raise BlowOutVolumeError("Blowout volume is larger than aspirated volume")
 
     for resource in resources:
-      if isinstance(resource.parent, Plate) and resource.parent.has_lid():
-        raise ValueError("Dispensing to plate with lid")
+      if (
+        isinstance(resource.parent, Plate)
+        and resource.parent.has_lid()
+        and not isinstance(resource.parent.lid, Filter)
+      ):
+        raise ValueError("Aspirating from a well with a non-filter lid is not supported.")
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
