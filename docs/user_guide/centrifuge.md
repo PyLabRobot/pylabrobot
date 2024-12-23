@@ -77,6 +77,10 @@ Download the required `.dll` files from the following link:
    - `libftdi1.dll`
    - `libusb-1.0.dll`
 
+##### Place DLLs in Python Scripts Folder
+
+Paste the copied `.dll` files into the `Scripts` folder of your Python environment. This enables Python to communicate with FTDI devices.
+
 - macOS:
 
 Install libftdi using [Homebrew](https://brew.sh/):
@@ -95,13 +99,9 @@ sudo apt-get install libftdi-dev
 
 Other distros may have similar packages.
 
-##### Place DLLs in Python Scripts Folder
-
-Paste the copied `.dll` files into the `Scripts` folder of your Python environment. This enables Python to communicate with FTDI devices.
-
 #### 2. Configuring the Driver with Zadig
 
-- **This step is only required for Windows.**
+- **This step is only required on Windows.**
 
 Use Zadig to replace the default driver of the VSpin device with `libusbk`:
 
