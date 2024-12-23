@@ -51,6 +51,8 @@ The VSpin centrifuge connects to your system via a COM port. Integrating it with
 
 #### 1. Preparing Your Environment
 
+- Windows:
+
 ##### Find Your Python Directory
 
 To use the necessary FTDI `.dll` files, you need to locate your Python environment:
@@ -75,11 +77,31 @@ Download the required `.dll` files from the following link:
    - `libftdi1.dll`
    - `libusb-1.0.dll`
 
+- macOS:
+
+Install libftdi using [Homebrew](https://brew.sh/):
+
+```bash
+brew install libftdi
+```
+
+- Linux:
+
+Debian (rpi) / Ubuntu etc:
+
+```bash
+sudo apt-get install libftdi-dev
+```
+
+Other distros may have similar packages.
+
 ##### Place DLLs in Python Scripts Folder
 
 Paste the copied `.dll` files into the `Scripts` folder of your Python environment. This enables Python to communicate with FTDI devices.
 
 #### 2. Configuring the Driver with Zadig
+
+- **This step is only required for Windows.**
 
 Use Zadig to replace the default driver of the VSpin device with `libusbk`:
 
