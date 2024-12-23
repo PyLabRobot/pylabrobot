@@ -45,15 +45,14 @@ from pylabrobot.centrifuge import Centrifuge, VSpin
 cf = Centrifuge(name = 'centrifuge', backend = VSpin(bucket_1_position=0), size_x= 1, size_y=1, size_z=1)
 ```
 
-# Guide to Using Zadig for the VSpin Centrifuge
+### Installation
 
-The VSpin centrifuge connects to your system via a COM port. Integrating it with Python's `pylabrobot` library requires some setup. Follow this guide to get started.
+The VSpin centrifuge connects to your system via a COM port. Integrating it with `pylabrobot` library requires some setup. Follow this guide to get started.
 
----
+#### 1. Preparing Your Environment
 
-## **1. Preparing Your Environment**
+##### Find Your Python Directory
 
-### **Find Your Python Directory**
 To use the necessary FTDI `.dll` files, you need to locate your Python environment:
 
 1. Open Python in your terminal:
@@ -65,9 +64,10 @@ To use the necessary FTDI `.dll` files, you need to locate your Python environme
 2. This will print a path, e.g., `C:\Python39\python.exe`.
 3. Navigate to the `Scripts` folder in the same directory as `python.exe`.
 
-### **Download FTDI DLLs**
+##### **Download FTDI DLLs**
+
 Download the required `.dll` files from the following link:
-[FTDI Development Kit](https://sourceforge.net/projects/picusb/files/libftdi1-1.5_devkit_x86_x64_19July2020.zip/download).
+[FTDI Development Kit](https://sourceforge.net/projects/picusb/files/libftdi1-1.5_devkit_x86_x64_19July2020.zip/download) (link will start download).
 
 1. Extract the downloaded zip file.
 2. Locate the `bin64` folder.
@@ -75,16 +75,16 @@ Download the required `.dll` files from the following link:
    - `libftdi1.dll`
    - `libusb-1.0.dll`
 
-### **Place DLLs in Python Scripts Folder**
+##### Place DLLs in Python Scripts Folder
+
 Paste the copied `.dll` files into the `Scripts` folder of your Python environment. This enables Python to communicate with FTDI devices.
 
----
-
-## **2. Configuring the Driver with Zadig**
+#### 2. Configuring the Driver with Zadig
 
 Use Zadig to replace the default driver of the VSpin device with `libusbk`:
 
 1. **Identify the VSpin Device**
+
    - Open Zadig.
    - To confirm the VSpin device, disconnect the RS232 port from the centrifuge while monitoring the Zadig device list.
    - The device that disappears is your VSpin, likely titled "USB Serial Converter."
@@ -96,11 +96,9 @@ Use Zadig to replace the default driver of the VSpin device with `libusbk`:
 
 > **Note:** If you need to revert to the original driver for tools like the Agilent Centrifuge Config Tool, go to **Device Manager** and uninstall the `libusbk` driver. The default driver will reinstall automatically.
 
----
+#### 3. Finding the FTDI ID
 
-## **3. Finding the FTDI ID**
-
-To interact with the centrifuge programmatically, you need its FTDI device ID:
+To interact with the centrifuge programmatically, you need its FTDI device ID. Use the following steps to find it:
 
 1. Open a terminal and run:
    ```bash
@@ -112,9 +110,7 @@ To interact with the centrifuge programmatically, you need its FTDI device ID:
    ```
 3. Copy the ID (`FTE0RJ5T` or your equivalent).
 
----
-
-## **4. Setting Up the Centrifuge**
+#### **4. Setting Up the Centrifuge**
 
 Use the following code to configure the centrifuge in Python:
 
@@ -123,19 +119,11 @@ from pylabrobot import Centrifuge
 from pylabrobot.backends.vspin import VSpin
 
 # Replace with your specific FTDI device ID and bucket position for profile in Agilent Centrifuge Config Tool.
-backend = VSpin(bucket_1_position=6971, device_id="FTE0RJ5T")
+backend = VSpin(bucket_1_position=6969, device_id="XXXXXXXX")
 centrifuge = Centrifuge(backend=backend)
 
 # Initialize the centrifuge.
 await centrifuge.setup()
 ```
 
----
-
-### **Summary**
-1. Locate your Python directory and copy the required `.dll` files.
-2. Use Zadig to replace the VSpin driver with `libusbk`.
-3. Retrieve the FTDI ID and configure the centrifuge in Python.
-
 You’re now ready to use your VSpin centrifuge with `pylabrobot`!
-
