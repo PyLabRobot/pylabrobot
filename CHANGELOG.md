@@ -118,6 +118,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Access2` loader for vspin (https://github.com/PyLabRobot/pylabrobot/pull/308)
 - `CentrifugeChatterboxBackend` and `LoaderChatterboxBackend` (https://github.com/PyLabRobot/pylabrobot/pull/335)
 - Add support for TF cytomat `C6000`, `C2C_50`, `C2C_425`, `C2C_450_SHAKE`, `C5C` (https://github.com/PyLabRobot/pylabrobot/pull/332)
+- Add `resource_size_z` parameter to `create_homogeneous_resources and `create_resources` (https://github.com/PyLabRobot/pylabrobot/pull/341)
 
 ### Deprecated
 
