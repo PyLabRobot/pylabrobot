@@ -2770,8 +2770,6 @@ class STAR(HamiltonLiquidHandler):
       )
       z_position_at_the_command_end = z_position_at_the_command_end or self._traversal_height
 
-      print("z pickup", z, round(z * 10), z * 10)
-
       if use_unsafe_hotel:
         if hotel_open_gripper_position is None:
           if pickup.direction in (GripDirection.FRONT, GripDirection.BACK):
