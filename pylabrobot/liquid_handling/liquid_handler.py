@@ -1854,6 +1854,8 @@ class LiquidHandler(Resource, Machine):
         correction_anchor = Coordinate(0, 0, -z_sinking_depth)
         to_location += correction_anchor
     elif isinstance(destination, PlateAdapter):
+      if not isinstance(resource, Plate):
+        raise ValueError("Only plates can be moved to a PlateAdapter")
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = destination.compute_plate_location(
         resource.rotated(z=relative_rotation)
@@ -1902,6 +1904,8 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(destination, Tilter):
       destination.assign_child_resource(resource, location=destination.child_resource_location)
     elif isinstance(destination, PlateAdapter):
+      if not isinstance(resource, Plate):
+        raise ValueError("Only plates can be moved to a PlateAdapter")
       destination.assign_child_resource(
         resource, location=destination.compute_plate_location(resource)
       )
