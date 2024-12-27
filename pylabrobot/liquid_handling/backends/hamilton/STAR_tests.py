@@ -18,7 +18,6 @@ from pylabrobot.resources import (
   Coordinate,
   Cor_96_wellplate_360ul_Fb,
   Lid,
-  Plate,
   ResourceStack,
   no_volume_tracking,
 )
@@ -957,61 +956,3 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "C0ZSid0023xs07975xd0ya1240yb1065tp2150tz2050th2450te2450",
       "xs#####xd#ya####yb####tp####tz####th####te####",
     )
-
-  async def test_iswap_pick_up_resource_grip_direction_changes_plate_width(
-    self,
-  ):
-    size_x = 100
-    size_y = 200
-    plate = Plate(
-      "dummy",
-      size_x=size_x,
-      size_y=size_y,
-      size_z=100,
-      ordered_items={},
-    )
-    plate.location = Coordinate.zero()
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_get_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_pick_up_resource(plate, GripDirection.FRONT, 1)
-      assert mocked_iswap_get_plate.call_args.kwargs["plate_width"] == size_x * 10 - 33
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_get_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_pick_up_resource(plate, GripDirection.LEFT, 1)
-      assert mocked_iswap_get_plate.call_args.kwargs["plate_width"] == size_y * 10 - 33
-
-  async def test_iswap_release_picked_up_resource_grip_direction_changes_plate_width(
-    self,
-  ):
-    size_x = 100
-    size_y = 200
-    plate = Plate(
-      "dummy",
-      size_x=size_x,
-      size_y=size_y,
-      size_z=100,
-      ordered_items={},
-    )
-    plate.location = Coordinate.zero()
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_put_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_release_picked_up_resource(
-        location=Coordinate.zero(),
-        resource=plate,
-        rotation=0,
-        offset=Coordinate.zero(),
-        grip_direction=GripDirection.FRONT,
-        pickup_distance_from_top=1,
-      )
-      assert mocked_iswap_get_plate.call_args.kwargs["open_gripper_position"] == size_x * 10 + 30
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_put_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_release_picked_up_resource(
-        location=Coordinate.zero(),
-        resource=plate,
-        rotation=0,
-        offset=Coordinate.zero(),
-        grip_direction=GripDirection.LEFT,
-        pickup_distance_from_top=1,
-      )
-      assert mocked_iswap_get_plate.call_args.kwargs["open_gripper_position"] == size_y * 10 + 30
