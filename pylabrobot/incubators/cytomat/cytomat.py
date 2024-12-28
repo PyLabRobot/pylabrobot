@@ -277,7 +277,7 @@ class Cytomat(IncubatorBackend):
 
   async def wait_for_transfer_station(self, occupied: bool = False):
     """Wait for the transfer station to be occupied, or unoccupied."""
-    print("waitiung for transfer station to be occupied (simulated)")
+    print("waiting for transfer station to be occupied (simulated)")
     # while (await self.get_overview_register()).transfer_station_occupied != occupied:
     #   await asyncio.sleep(1)
 
