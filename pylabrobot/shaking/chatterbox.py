@@ -17,10 +17,3 @@ class ShakerChatterboxBackend(ShakerBackend):
 
   async def unlock_plate(self):
     print("Unlocking plate")
-
-  async def set_temperature(self, temperature: float):
-    self.temperature = temperature
-    print("setting temp: ", temperature)
-
-  async def get_temperature(self) -> float:
-    return self.temperature

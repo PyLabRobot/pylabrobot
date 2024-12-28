@@ -61,19 +61,3 @@ class Shaker(ResourceHolder, Machine):
   async def unlock_plate(self):
     """Unlock the plate"""
     await self.backend.unlock_plate()
-
-  async def set_temperature(self, temperature: float):
-    """Set the temperature of the shaker
-
-    Args:
-      temperature: Temperature in degrees Celsius
-    """
-    await self.backend.set_temperature(temperature=temperature)
-
-  async def get_current_temperature(self) -> float:
-    """Get the current temperature of the shaker
-
-    Returns:
-      Current temperature in degrees Celsius
-    """
-    return await self.backend.get_current_temperature()
