@@ -1,10 +1,11 @@
 import asyncio
 from typing import Optional
 
-from pylabrobot.heating_shaking.backend import HeaterShakerBackend
-from pylabrobot.heating_shaking.chatterbox import HeaterShakerChatterboxBackend
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.shaking.chatterbox import ShakerChatterboxBackend
+
+from .backend import ShakerBackend
 
 
 class Shaker(ResourceHolder, Machine):
@@ -16,8 +17,8 @@ class Shaker(ResourceHolder, Machine):
     size_x: float,
     size_y: float,
     size_z: float,
-    backend: HeaterShakerBackend,
-    category: str = "heatershaker",
+    backend: ShakerBackend,
+    category: str = "shaker",
     model: Optional[str] = None,
   ):
     ResourceHolder.__init__(
@@ -30,7 +31,7 @@ class Shaker(ResourceHolder, Machine):
       model=model,
     )
     Machine.__init__(self, backend=backend)
-    self.backend: HeaterShakerBackend = backend  # fix type
+    self.backend: ShakerBackend = backend  # fix type
 
   async def shake(self, speed: float, duration: Optional[float] = None):
     """Shake the shaker at the given speed
@@ -42,7 +43,7 @@ class Shaker(ResourceHolder, Machine):
     await self.backend.lock_plate()
     await self.backend.shake(speed=speed)
 
-    if duration is None or isinstance(self.backend, HeaterShakerChatterboxBackend):
+    if duration is None or isinstance(self.backend, ShakerChatterboxBackend):
       return
 
     await asyncio.sleep(duration)
