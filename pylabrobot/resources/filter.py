@@ -20,7 +20,6 @@ class Filter(Resource):
     size_x: float,
     size_y: float,
     size_z: float,
-    nesting_z_height: float,
     category: str = "filter",
     model: Optional[str] = None,
   ):
@@ -31,15 +30,18 @@ class Filter(Resource):
       size_z=size_z,
       category=category,
       model=model,
-      nesting_z_height=nesting_z_height,
     )
 
   async def move_filter(
-    self, lh: LiquidHandler, to_dest: Union[Plate, ResourceHolder], arm: str = "core", **kwargs
+    self,
+    lh: LiquidHandler,
+    to_dest: Union[Plate, ResourceHolder, Coordinate],
+    arm: str = "core",
+    **kwargs,
   ):
     """move filter from CarrierSite to a Plate using core grippers (faster) or iSWAP (slower)"""
-    await lh.move_lid(
-      lid=self,
+    await lh.move_resource(
+      resource=self,
       to=to_dest,
       use_arm=arm,
       pickup_distance_from_top=15,
@@ -76,4 +78,4 @@ class Filter(Resource):
 
 
 def RetroFilterv4(name: str) -> Filter:
-  return Filter(name=name, size_x=129, size_y=88, size_z=19.7, nesting_z_height=2)
+  return Filter(name=name, size_x=129, size_y=88, size_z=19.7)
