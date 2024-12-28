@@ -71,10 +71,9 @@ class Cytomat(IncubatorBackend):
       raise e
 
     await self.wait_for_task_completion()
-    await self.initialize()
 
   async def set_racks(self, racks: List[PlateCarrier]):
-    await self.set_racks(racks)
+    self._racks = racks
     warnings.warn("Cytomat racks need to be configured with the exe software")
 
   async def stop(self):
@@ -136,6 +135,7 @@ class Cytomat(IncubatorBackend):
     if self.model in [
       CytomatType.C6000,
       CytomatType.C6002,
+      CytomatType.C2C_425,
       CytomatType.C2C_450_SHAKE,
       CytomatType.C5C,
     ]:
@@ -277,8 +277,9 @@ class Cytomat(IncubatorBackend):
 
   async def wait_for_transfer_station(self, occupied: bool = False):
     """Wait for the transfer station to be occupied, or unoccupied."""
-    while (await self.get_overview_register()).transfer_station_occupied != occupied:
-      await asyncio.sleep(1)
+    print("waitiung for transfer station to be occupied (simulated)")
+    # while (await self.get_overview_register()).transfer_station_occupied != occupied:
+    #   await asyncio.sleep(1)
 
   async def wait_for_task_completion(self, timeout=60):
     start = time.time()

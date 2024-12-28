@@ -11,6 +11,7 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   Rotation,
 )
+from pylabrobot.resources.coordinate import Coordinate
 
 from .backend import IncubatorBackend
 
@@ -28,6 +29,7 @@ class Incubator(Machine, Resource):
     size_y: float,
     size_z: float,
     racks: List[PlateCarrier],
+    loading_tray_location: Coordinate,
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
@@ -47,6 +49,7 @@ class Incubator(Machine, Resource):
     self.loading_tray = ResourceHolder(
       name=self.name + "_tray", size_x=127.76, size_y=85.48, size_z=0
     )
+    self.loading_tray.location = loading_tray_location
 
     self._racks = racks
     for i, rack in enumerate(self._racks):
