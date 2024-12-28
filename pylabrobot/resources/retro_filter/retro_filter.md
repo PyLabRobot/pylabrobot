@@ -1,6 +1,6 @@
 # Retro Filter V4
 
-<img src="RetroFilterV4.png" width="800" />
+<img src="retro_filter.png" width="800" />
 
 Designed for flow cytometry prep.
 
