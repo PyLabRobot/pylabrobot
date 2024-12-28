@@ -3,10 +3,11 @@ from typing import Optional, Union
 from pylabrobot.liquid_handling.liquid_handler import LiquidHandler
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
-from pylabrobot.resources.plate import Lid, Plate
+from pylabrobot.resources.plate import Plate
+from pylabrobot.resources.resource import Resource
 
 
-class Filter(Lid):
+class Filter(Resource):
   """Filter for plates for use in filtering cells before flow cytometry."""
 
   filter_dispense_offset = Coordinate(
