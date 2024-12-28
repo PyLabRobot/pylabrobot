@@ -2921,9 +2921,12 @@ class STAR(HamiltonLiquidHandler):
             hotel_open_gripper_position = drop.resource.get_absolute_size_y() + 50
 
         await self.unsafe.put_in_hotel(
-          hotel_center_x_coord=round(x * 10),
-          hotel_center_y_coord=round(y * 10),
-          hotel_center_z_coord=round(z * 10),
+          hotel_center_x_coord=round(abs(x) * 10),
+          hotel_center_y_coord=round(abs(y) * 10),
+          hotel_center_z_coord=round(abs(z) * 10),
+          hotel_center_x_direction=0 if x > 0 else 1,
+          hotel_center_y_direction=0 if y > 0 else 1,
+          hotel_center_z_direction=0 if z > 0 else 1,
           clearance_height=round(hotel_clearance_height * 10),
           hotel_depth=round(hotel_depth * 10),
           grip_direction=drop.direction,
@@ -2935,12 +2938,12 @@ class STAR(HamiltonLiquidHandler):
         )
       else:
         await self.iswap_put_plate(
-          x_position=round(x * 10),
-          y_position=round(y * 10),
-          z_position=round(z * 10),
-          x_direction=0,
-          y_direction=0,
-          z_direction=0,
+          x_position=round(abs(x) * 10),
+          y_position=round(abs(y) * 10),
+          z_position=round(abs(z) * 10),
+          x_direction=0 if x > 0 else 1,
+          y_direction=0 if y > 0 else 1,
+          z_direction=0 if z > 0 else 1,
           grip_direction={
             GripDirection.FRONT: 1,
             GripDirection.RIGHT: 2,
