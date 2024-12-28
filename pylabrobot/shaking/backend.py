@@ -17,3 +17,19 @@ class ShakerBackend(MachineBackend, metaclass=ABCMeta):
   @abstractmethod
   async def stop_shaking(self):
     """Stop shaking"""
+
+  @abstractmethod
+  async def lock_plate(self):
+    """Lock the plate"""
+
+  @abstractmethod
+  async def unlock_plate(self):
+    """Unlock the plate"""
+
+  @abstractmethod
+  async def set_temperature(self, temperature: float):
+    """Set the temperature of the shaker"""
+
+  @abstractmethod
+  async def get_temperature(self) -> float:
+    """Get the temperature of the shaker"""
