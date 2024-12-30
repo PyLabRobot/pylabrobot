@@ -8,7 +8,6 @@ from pylabrobot.resources import (
   PlateCarrier,
   PlateHolder,
   Resource,
-  ResourceHolder,
   ResourceNotFoundError,
   Rotation,
 )
