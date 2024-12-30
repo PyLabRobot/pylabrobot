@@ -74,7 +74,7 @@ class Cytomat(IncubatorBackend):
     await self.initialize()
 
   async def set_racks(self, racks: List[PlateCarrier]):
-    await self.set_racks(racks)
+    await super().set_racks(racks)
     warnings.warn("Cytomat racks need to be configured with the exe software")
 
   async def stop(self):
@@ -346,13 +346,20 @@ class Cytomat(IncubatorBackend):
 
 class CytomatChatterbox(Cytomat):
   async def setup(self):
-    print("CytomatChatterbox setup")
+    await self.wait_for_task_completion()
+    await self.initialize()
 
   async def stop(self):
-    print("CytomatChatterbox stop")
+    print("closing connection to cytomat")
 
   async def send_command(self, command_type, command, params):
-    print(self._assemble_command(command_type=command_type, command=command, params=params))
+    print(
+      "cytomat", self._assemble_command(command_type=command_type, command=command, params=params)
+    )
     if command_type == "ch":
       return "0"
     return "0" * 8
+
+  async def wait_for_transfer_station(self, occupied: bool = False):
+    # send the command, but don't wait when we are in chatting mode.
+    _ = await self.get_overview_register()
