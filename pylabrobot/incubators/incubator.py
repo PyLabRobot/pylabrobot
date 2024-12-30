@@ -2,6 +2,7 @@ import random
 from typing import List, Literal, Optional, Union, cast
 
 from pylabrobot.machines import Machine
+from pylabrobot.pylabrobot.serializer import deserialize, serialize
 from pylabrobot.resources import (
   Coordinate,
   Plate,
@@ -188,6 +189,7 @@ class Incubator(Machine, Resource):
       **Resource.serialize(self),
       "backend": self.backend.serialize(),
       "racks": [rack.serialize() for rack in self._racks],
+      "loading_tray_location": serialize(self.loading_tray.location),
     }
 
   @classmethod
@@ -200,6 +202,7 @@ class Incubator(Machine, Resource):
       size_y=data["size_y"],
       size_z=data["size_z"],
       racks=[PlateCarrier.deserialize(rack) for rack in data["racks"]],
+      loading_tray_location=deserialize(data["loading_tray_location"]),
       rotation=Rotation.deserialize(data["rotation"]),
       category=data["category"],
       model=data["model"],
