@@ -2,7 +2,6 @@ import random
 from typing import List, Literal, Optional, Union, cast
 
 from pylabrobot.machines import Machine
-from pylabrobot.serializer import deserialize, serialize
 from pylabrobot.resources import (
   Coordinate,
   Plate,
@@ -12,6 +11,7 @@ from pylabrobot.resources import (
   ResourceNotFoundError,
   Rotation,
 )
+from pylabrobot.serializer import deserialize, serialize
 
 from .backend import IncubatorBackend
 
