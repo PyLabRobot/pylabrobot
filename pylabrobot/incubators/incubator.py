@@ -3,6 +3,7 @@ from typing import List, Literal, Optional, Union, cast
 
 from pylabrobot.machines import Machine
 from pylabrobot.resources import (
+  Coordinate,
   Plate,
   PlateCarrier,
   PlateHolder,
@@ -28,6 +29,7 @@ class Incubator(Machine, Resource):
     size_y: float,
     size_z: float,
     racks: List[PlateCarrier],
+    loading_tray_location: Coordinate,
     rotation: Optional[Rotation] = None,
     category: Optional[str] = None,
     model: Optional[str] = None,
@@ -44,16 +46,21 @@ class Incubator(Machine, Resource):
       category=category,
       model=model,
     )
-    self.loading_tray = ResourceHolder(
-      name=self.name + "_tray", size_x=127.76, size_y=85.48, size_z=0
+    self.loading_tray = PlateHolder(
+      name=self.name + "_tray", size_x=127.76, size_y=85.48, size_z=0, pedestal_size_z=0
     )
+    self.assign_child_resource(self.loading_tray, location=loading_tray_location)
 
     self._racks = racks
-    for i, rack in enumerate(self._racks):
+    for rack in self._racks:
       self.assign_child_resource(rack, location=None)
 
+  @property
+  def racks(self) -> List[PlateCarrier]:
+    return self._racks
+
   async def setup(self, **backend_kwargs):
-    await self.backend.setup(**backend_kwargs)
+    await super().setup()
     await self.backend.set_racks(self._racks)
 
   def get_num_free_sites(self) -> int:
@@ -66,14 +73,16 @@ class Incubator(Machine, Resource):
           return site
     raise ResourceNotFoundError(f"Plate {plate_name} not found in incubator '{self.name}'")
 
-  async def fetch_plate_to_loading_tray(self, plate_name: str):
+  async def fetch_plate_to_loading_tray(self, plate_name: str) -> Plate:
     """Fetch a plate from the incubator and put it on the loading tray."""
 
     site = self.get_site_by_plate_name(plate_name)
-    assert site.resource is not None
-    await self.backend.fetch_plate_to_loading_tray(site.resource)
-
-    self.loading_tray.assign_child_resource(site.resource)
+    plate = site.resource
+    assert plate is not None
+    await self.backend.fetch_plate_to_loading_tray(plate)
+    plate.unassign()
+    self.loading_tray.assign_child_resource(plate)
+    return plate
 
   def _find_available_sites_sorted(self, plate: Plate) -> List[PlateHolder]:
     """Find all sites that are free and fit the plate, sorted by size."""
@@ -120,6 +129,7 @@ class Incubator(Machine, Resource):
     else:
       raise ValueError(f"Invalid site: {site}")
     await self.backend.take_in_plate(plate, site)
+    plate.unassign()
     site.assign_child_resource(plate)
 
   async def set_temperature(self, temperature: float):
@@ -134,6 +144,12 @@ class Incubator(Machine, Resource):
 
   async def close_door(self):
     return await self.backend.close_door()
+
+  async def start_shaking(self, frequency: float = 1.0):
+    await self.backend.start_shaking(frequency=frequency)
+
+  async def stop_shaking(self):
+    await self.backend.stop_shaking()
 
   def summary(self) -> str:
     def create_pretty_table(header, *columns) -> str:
