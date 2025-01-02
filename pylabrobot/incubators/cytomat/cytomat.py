@@ -111,7 +111,7 @@ class Cytomat(IncubatorBackend):
     raise Exception(f"Unknown response from cytomat: {resp}")
 
   async def send_action(
-    self, command_type: str, command: str, params: str, timeout: Optional[int] = 10
+    self, command_type: str, command: str, params: str, timeout: Optional[int] = 30
   ) -> OverviewRegisterState:
     """Calls send_command, but has a timeout handler and returns the overview register state.
     Args:
@@ -128,8 +128,8 @@ class Cytomat(IncubatorBackend):
     rack_idx = self._racks.index(rack)
     site_idx = next(idx for idx, s in rack.sites.items() if s == site)
 
-    if self.model in [CytomatType.C2C_425]:
-      return f"{str(rack_idx).zfill(2)} {str(site_idx).zfill(2)}"
+    # if self.model in [CytomatType.C2C_425]:
+    #   return f"{str(rack_idx).zfill(2)} {str(site_idx).zfill(2)}"
 
     # TODO: configure all cytomats to use `rack site` format
     if self.model in [
@@ -289,7 +289,7 @@ class Cytomat(IncubatorBackend):
         break
       await asyncio.sleep(1)
       if time.time() - start > timeout:
-        raise TimeoutError("Cytomat did not complete task in time")
+        raise TimeoutError("Cytomat did not complete task in time", timeout, "seconds")
 
   async def init_shakers(self):
     return hex_to_binary(await self.send_command("ll", "vi", ""))

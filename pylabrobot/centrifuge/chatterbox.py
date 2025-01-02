@@ -2,6 +2,15 @@ from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
 
 
 class CentrifugeChatterboxBackend(CentrifugeBackend):
+  is_setup = False
+
+  async def setup(self):
+    print("Setting up centrifuge")
+    self.is_setup = True
+
+  async def stop(self):
+    print("Stopping centrifuge")
+
   async def open_door(self):
     print("Opening door")
 
