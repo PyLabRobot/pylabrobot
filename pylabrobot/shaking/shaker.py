@@ -3,7 +3,6 @@ from typing import Optional
 
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources.resource_holder import ResourceHolder
-from pylabrobot.shaking.chatterbox import ShakerChatterboxBackend
 
 from .backend import ShakerBackend
 
@@ -43,7 +42,7 @@ class Shaker(ResourceHolder, Machine):
     await self.backend.lock_plate()
     await self.backend.shake(speed=speed)
 
-    if duration is None or isinstance(self.backend, ShakerChatterboxBackend):
+    if duration is None:
       return
 
     await asyncio.sleep(duration)
@@ -51,13 +50,10 @@ class Shaker(ResourceHolder, Machine):
     await self.backend.unlock_plate()
 
   async def stop_shaking(self):
-    """Stop shaking the shaker"""
     await self.backend.stop_shaking()
 
   async def lock_plate(self):
-    """Lock the plate"""
     await self.backend.lock_plate()
 
   async def unlock_plate(self):
-    """Unlock the plate"""
     await self.backend.unlock_plate()
