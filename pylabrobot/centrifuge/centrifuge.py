@@ -16,32 +16,20 @@ from pylabrobot.resources.resource_holder import ResourceHolder
 class Centrifuge(Machine):
   """The front end for centrifuges."""
 
-  def __init__(self, backend: CentrifugeBackend, loading_tray_location: Coordinate) -> None:
+  def __init__(self, backend: CentrifugeBackend) -> None:
     super().__init__(backend=backend)
     self.backend: CentrifugeBackend = backend  # fix type
     self._door_open = False
     self._at_bucket: Optional[ResourceHolder] = None
-
     self.bucket1 = ResourceHolder(
-      name="centrifuge_bucket1",
-      size_x=127.76,
-      size_y=85.48,
-      size_z=0,
-      child_location=Coordinate.zero(),
+      name="bucket1", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
     )
     self.bucket2 = ResourceHolder(
-      name="cengrifuge_bucket2",
-      size_x=127.76,
-      size_y=85.48,
-      size_z=0,
-      child_location=Coordinate.zero(),
+      name="bucket2", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
     )
 
-    self.bucket1.location = loading_tray_location
-    self.bucket2.location = loading_tray_location
-
-  async def open_door(self, **kwargs) -> None:
-    await self.backend.open_door(**kwargs)
+  async def open_door(self) -> None:
+    await self.backend.open_door()
     self._door_open = True
 
   async def close_door(self) -> None:
