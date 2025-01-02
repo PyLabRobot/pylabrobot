@@ -2739,8 +2739,8 @@ class STAR(HamiltonLiquidHandler):
     channel_2: int = 8,
     iswap_grip_strength: int = 4,
     core_grip_strength: int = 15,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    z_position_at_the_command_end: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = 265,
+    z_position_at_the_command_end: Optional[float] = 265,
     plate_width_tolerance: float = 2.0,
     hotel_center_x_direction: Literal[0, 1] = 0,
     hotel_center_y_direction: Literal[0, 1] = 0,
@@ -2781,10 +2781,10 @@ class STAR(HamiltonLiquidHandler):
             hotel_open_gripper_position = pickup.resource.get_absolute_size_y() + 5
 
         await self.unsafe.get_from_hotel(
-          hotel_center_x_coord=round(x * 10),
-          hotel_center_y_coord=round(y * 10),
+          hotel_center_x_coord=round(abs(x) * 10),
+          hotel_center_y_coord=round(abs(y) * 10),
           # hotel_center_z_coord=int((z * 10)+0.5), # use sensible rounding (.5 goes up)
-          hotel_center_z_coord=round(z * 10),
+          hotel_center_z_coord=round(abs(z) * 10),
           hotel_center_x_direction=hotel_center_x_direction,
           hotel_center_y_direction=hotel_center_y_direction,
           hotel_center_z_direction=hotel_center_z_direction,
@@ -2869,8 +2869,8 @@ class STAR(HamiltonLiquidHandler):
     drop: ResourceDrop,
     use_arm: Literal["iswap", "core"] = "iswap",
     return_core_gripper: bool = True,
-    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
-    z_position_at_the_command_end: Optional[float] = None,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = 265,
+    z_position_at_the_command_end: Optional[float] = 265,
     hotel_open_gripper_position: Optional[float] = None,
     hotel_center_x_direction: Literal[0, 1] = 0,
     hotel_center_y_direction: Literal[0, 1] = 0,
@@ -2944,9 +2944,9 @@ class STAR(HamiltonLiquidHandler):
         )
       else:
         await self.iswap_put_plate(
-          x_position=round(x * 10),
-          y_position=round(y * 10),
-          z_position=round(z * 10),
+          x_position=round(abs(x) * 10),
+          y_position=round(abs(y) * 10),
+          z_position=round(abs(z) * 10),
           x_direction=0,
           y_direction=0,
           z_direction=0,
