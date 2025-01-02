@@ -2755,7 +2755,7 @@ class STAR(HamiltonLiquidHandler):
     iswap_fold_up_sequence_at_the_end_of_process: bool = True,
   ):
     if use_arm == "iswap":
-      x, y, z = pickup.resource.get_absolute_location("c", "c", "t")
+      x, y, z = pickup.resource.get_absolute_location("c", "c", "t") + pickup.offset
       z -= pickup.pickup_distance_from_top
       assert (
         pickup.resource.get_absolute_rotation().x == 0

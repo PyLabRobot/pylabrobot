@@ -149,26 +149,3 @@ class CytomatType(Enum):
   C2C_425 = "C2C_425"
   C2C_450_SHAKE = "C2C_450_SHAKE"
   C5C = "C5C"  # Cytomat 5C
-
-
-@dataclass(frozen=True)
-class CytomatCapability:  # to enhance protocol modularity across cytomats, here we define instrument capabilities
-  incubate: bool
-  cool: bool
-  shake: bool
-
-
-CytomatCapabilities = {
-  CytomatType.C6000: CytomatCapability(incubate=True, cool=False, shake=False),
-  CytomatType.C6002: CytomatCapability(incubate=False, cool=True, shake=False),
-  CytomatType.C2C_50: CytomatCapability(
-    incubate=True, cool=False, shake=False
-  ),  # Refers to cytomat with temp range 25-50 (incubator-only)
-  CytomatType.C2C_425: CytomatCapability(
-    incubate=False, cool=True, shake=False
-  ),  # Refers to cytomat with temp range 4-25 (fridge-only)
-  CytomatType.C2C_450_SHAKE: CytomatCapability(
-    incubate=True, cool=True, shake=True
-  ),  # Refers to cytomat with temp range 4-50 & shaker plugs
-  CytomatType.C5C: CytomatCapability(incubate=True, cool=True, shake=False),
-}

@@ -71,9 +71,10 @@ class Cytomat(IncubatorBackend):
       raise e
 
     await self.wait_for_task_completion()
+    await self.initialize()
 
   async def set_racks(self, racks: List[PlateCarrier]):
-    self._racks = racks
+    await super().set_racks(racks)
     warnings.warn("Cytomat racks need to be configured with the exe software")
 
   async def stop(self):
@@ -111,7 +112,7 @@ class Cytomat(IncubatorBackend):
     raise Exception(f"Unknown response from cytomat: {resp}")
 
   async def send_action(
-    self, command_type: str, command: str, params: str, timeout: Optional[int] = 30
+    self, command_type: str, command: str, params: str, timeout: Optional[int] = 10
   ) -> OverviewRegisterState:
     """Calls send_command, but has a timeout handler and returns the overview register state.
     Args:
@@ -128,14 +129,13 @@ class Cytomat(IncubatorBackend):
     rack_idx = self._racks.index(rack)
     site_idx = next(idx for idx, s in rack.sites.items() if s == site)
 
-    # if self.model in [CytomatType.C2C_425]:
-    #   return f"{str(rack_idx).zfill(2)} {str(site_idx).zfill(2)}"
+    if self.model in [CytomatType.C2C_425]:
+      return f"{str(rack_idx).zfill(2)} {str(site_idx).zfill(2)}"
 
     # TODO: configure all cytomats to use `rack site` format
     if self.model in [
       CytomatType.C6000,
       CytomatType.C6002,
-      CytomatType.C2C_425,
       CytomatType.C2C_450_SHAKE,
       CytomatType.C5C,
     ]:
@@ -277,9 +277,8 @@ class Cytomat(IncubatorBackend):
 
   async def wait_for_transfer_station(self, occupied: bool = False):
     """Wait for the transfer station to be occupied, or unoccupied."""
-    print("waiting for transfer station to be occupied (simulated)")
-    # while (await self.get_overview_register()).transfer_station_occupied != occupied:
-    #   await asyncio.sleep(1)
+    while (await self.get_overview_register()).transfer_station_occupied != occupied:
+      await asyncio.sleep(1)
 
   async def wait_for_task_completion(self, timeout=60):
     start = time.time()
@@ -289,7 +288,7 @@ class Cytomat(IncubatorBackend):
         break
       await asyncio.sleep(1)
       if time.time() - start > timeout:
-        raise TimeoutError("Cytomat did not complete task in time", timeout, "seconds")
+        raise TimeoutError("Cytomat did not complete task in time")
 
   async def init_shakers(self):
     return hex_to_binary(await self.send_command("ll", "vi", ""))
@@ -347,13 +346,20 @@ class Cytomat(IncubatorBackend):
 
 class CytomatChatterbox(Cytomat):
   async def setup(self):
-    print("CytomatChatterbox setup")
+    await self.wait_for_task_completion()
+    await self.initialize()
 
   async def stop(self):
-    print("CytomatChatterbox stop")
+    print("closing connection to cytomat")
 
   async def send_command(self, command_type, command, params):
-    print(self._assemble_command(command_type=command_type, command=command, params=params))
+    print(
+      "cytomat", self._assemble_command(command_type=command_type, command=command, params=params)
+    )
     if command_type == "ch":
       return "0"
     return "0" * 8
+
+  async def wait_for_transfer_station(self, occupied: bool = False):
+    # send the command, but don't wait when we are in chatting mode.
+    _ = await self.get_overview_register()
