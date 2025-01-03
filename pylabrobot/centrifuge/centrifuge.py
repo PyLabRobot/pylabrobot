@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
 from pylabrobot.centrifuge.standard import (
@@ -10,28 +10,42 @@ from pylabrobot.centrifuge.standard import (
 )
 from pylabrobot.machines.machine import Machine
 from pylabrobot.resources import Coordinate, Resource, ResourceHolder
+from pylabrobot.resources.rotation import Rotation
+from pylabrobot.serializer import deserialize
 
 
 class Centrifuge(Machine, Resource):
   """The front end for centrifuges."""
 
   def __init__(
-    self, backend: CentrifugeBackend, name: str, size_x: float, size_y: float, size_z: float
+    self,
+    backend: CentrifugeBackend,
+    name: str,
+    size_x: float,
+    size_y: float,
+    size_z: float,
+    rotation: Optional[Rotation] = None,
+    category: Optional[str] = "centrifuge",
+    model: Optional[str] = None,
+    buckets: Optional[Tuple[ResourceHolder, ResourceHolder]] = None,
   ) -> None:
     Machine.__init__(self, backend=backend)
-    Resource.__init__(self, name=name, size_x=size_x, size_y=size_y, size_z=size_z)
+    Resource.__init__(self, name=name, size_x=size_x, size_y=size_y, size_z=size_z, rotation=rotation, category=category, model=model)
     self.backend: CentrifugeBackend = backend  # fix type
     self._door_open = False
     self._at_bucket: Optional[ResourceHolder] = None
-    self.bucket1 = ResourceHolder(
-      name="bucket1", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
-    )
-    self.bucket2 = ResourceHolder(
-      name="bucket2", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
-    )
-    # TODO: figure out good locations for this.
-    self.assign_child_resource(self.bucket1, location=Coordinate.zero())
-    self.assign_child_resource(self.bucket2, location=Coordinate.zero())
+    if buckets is None:
+      self.bucket1 = ResourceHolder(
+        name="bucket1", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
+      )
+      self.bucket2 = ResourceHolder(
+        name="bucket2", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
+      )
+      # TODO: figure out good locations for this.
+      self.assign_child_resource(self.bucket1, location=Coordinate.zero())
+      self.assign_child_resource(self.bucket2, location=Coordinate.zero())
+    else:
+      self.bucket1, self.bucket2 = buckets
 
   async def open_door(self) -> None:
     await self.backend.open_door()
@@ -81,6 +95,28 @@ class Centrifuge(Machine, Resource):
   def at_bucket(self) -> Optional[ResourceHolder]:
     """None if not at a bucket or unknown, otherwise the resource representing the bucket."""
     return self._at_bucket
+
+  def serialize(self) -> dict:
+    return {
+      **Machine.serialize(self),
+      **Resource.serialize(self),
+      "buckets": [bucket.serialize() for bucket in [self.bucket1, self.bucket2]],
+    }
+
+  @classmethod
+  def deserialize(cls, data: dict, allow_marshall: bool = False):
+    backend = CentrifugeBackend.deserialize(data["backend"])
+    return cls(
+      backend=backend,
+      name=data["name"],
+      size_x=data["size_x"],
+      size_y=data["size_y"],
+      size_z=data["size_z"],
+      rotation=Rotation.deserialize(data["rotation"]),
+      category=data["category"],
+      model=data["model"],
+      buckets=[ResourceHolder.deserialize(bucket) for bucket in data["buckets"]],
+    )
 
 
 class Loader(Machine, ResourceHolder):
@@ -154,7 +190,6 @@ class Loader(Machine, ResourceHolder):
 
   def serialize(self) -> dict:
     return {
-      **super().serialize(),
       "resource": ResourceHolder.serialize(self),
       "machine": Machine.serialize(self),
       "centrifuge": self.centrifuge.serialize(),
@@ -162,10 +197,15 @@ class Loader(Machine, ResourceHolder):
 
   @classmethod
   def deserialize(cls, data: dict, allow_marshall: bool = False):
-    data_copy = data.copy()  # copy data because we will be modifying it
-    centrifuge_data = data_copy.pop("centrifuge")
-    centrifuge = Centrifuge.deserialize(centrifuge_data)
     return cls(
-      centrifuge=centrifuge,
-      **data_copy,
+      backend=LoaderBackend.deserialize(data["machine"]["backend"]),
+      centrifuge=Centrifuge.deserialize(data["centrifuge"]),
+      name=data["resource"]["name"],
+      size_x=data["resource"]["size_x"],
+      size_y=data["resource"]["size_y"],
+      size_z=data["resource"]["size_z"],
+      child_location=deserialize(data["resource"]["child_location"]),
+      rotation=deserialize(data["resource"]["rotation"]),
+      category=data["resource"]["category"],
+      model=data["resource"]["model"],
     )

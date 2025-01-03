@@ -2,6 +2,12 @@ from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
 
 
 class CentrifugeChatterboxBackend(CentrifugeBackend):
+  async def setup(self):
+    print("Setting up")
+  
+  async def stop(self):
+    print("Stopping")
+
   async def open_door(self):
     print("Opening door")
 
@@ -34,6 +40,12 @@ class CentrifugeChatterboxBackend(CentrifugeBackend):
 
 
 class LoaderChatterboxBackend(LoaderBackend):
+  async def setup(self):
+    print("Setting up")
+
+  async def stop(self):
+    print("Stopping")
+
   async def load(self):
     print("Loading")
 
