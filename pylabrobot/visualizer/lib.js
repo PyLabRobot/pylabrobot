@@ -469,7 +469,8 @@ class HamiltonSTARDeck extends Deck {
       ...super.serialize(),
       ...{
         num_rails: this.num_rails,
-        no_trash: true,
+        with_trash: false,
+        with_trash96: false,
       },
     };
   }
@@ -547,7 +548,7 @@ class OTDeck extends Deck {
     return {
       ...super.serialize(),
       ...{
-        no_trash: true,
+        with_trash: false,
       },
     };
   }
