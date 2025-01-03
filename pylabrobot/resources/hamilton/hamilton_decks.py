@@ -360,8 +360,8 @@ class HamiltonSTARDeck(HamiltonDeck):
     with_trash: bool = True,
     with_trash96: bool = True,
     with_teaching_rack: bool = True,
-    no_trash: Optional[bool] = False,
-    no_teaching_rack: Optional[bool] = False,
+    no_trash: Optional[bool] = None,
+    no_teaching_rack: Optional[bool] = None,
   ) -> None:
     """Create a new STAR(let) deck of the given size."""
 
