@@ -378,7 +378,9 @@ class HamiltonSTARDeck(HamiltonDeck):
     if no_trash is not None:
       raise NotImplementedError("no_trash is deprecated. Use with_trash=False instead.")
     if no_teaching_rack is not None:
-      raise NotImplementedError("no_teaching_rack is deprecated. Use with_teaching_rack=False instead.")
+      raise NotImplementedError(
+        "no_teaching_rack is deprecated. Use with_teaching_rack=False instead."
+      )
 
     # assign trash area
     if with_trash:
@@ -443,7 +445,9 @@ class HamiltonSTARDeck(HamiltonDeck):
 
   def get_trash_area96(self) -> Trash:
     if self._trash96 is None:
-      raise RuntimeError("Trash area for 96-well plates was not created. Initialize with `with_trash96=True`.")
+      raise RuntimeError(
+        "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
+      )
     return self._trash96
 
 
