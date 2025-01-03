@@ -1,0 +1,171 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Heater Shakers\n",
+    "\n",
+    "Heater-shakers are a hybrid of {class}`~pylabrobot.temperature_controllers.temperature_controller.TemperatureController` and {class}`~pylabrobot.shakers.shaker.Shaker`. They are used to control the temperature of a sample while shaking it.\n",
+    "\n",
+    "PyLabRobot supports the following heater shakers:\n",
+    "\n",
+    "- Inheco ThermoShake RM (tested)\n",
+    "- Inheco ThermoShake (should have the same API as RM)\n",
+    "- Inheco ThermoShake AC (should have the same API as RM)\n",
+    "\n",
+    "Heater-shakers are controlled by the {class}`~pylabrobot.heating_shaking.heater_shaker.HeaterShaker` class. This class takes a backend as an argument. The backend is responsible for communicating with the scale and is specific to the hardware being used."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.heating_shaking import HeaterShaker\n",
+    "from pylabrobot.heating_shaking import InhecoThermoShake"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "backend = InhecoThermoShake()  # take any ScaleBackend you want\n",
+    "hs = HeaterShaker(backend=backend, name=\"HeaterShaker\", size_x=0, size_y=0, size_z=0)\n",
+    "await hs.setup()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The {meth}`~pylabrobot.heating_shaking.heater_shaker.HeaterShaker.setup` method is used to initialize the scale. This is where the backend will connect to the scale and perform any necessary initialization.\n",
+    "\n",
+    "The {class}`~pylabrobot.heating_shaking.heater_shaker.HeaterShaker` class has a number of methods for controlling the temperature and shaking of the sample. These are inherited from the {class}`~pylabrobot.temperature_controllers.temperature_controller.TemperatureController` and {class}`~pylabrobot.shakers.shaker.Shaker` classes.\n",
+    "\n",
+    "- {meth}`~pylabrobot.heating_shaking.heater_shaker.HeaterShaker.set_temperature`: Set the temperature of the module.\n",
+    "- {meth}`~pylabrobot.heating_shaking.heater_shaker.HeaterShaker.get_temperature`: Get the current temperature of the module.\n",
+    "- {meth}`~pylabrobot.heating_shaking.heater_shaker.HeaterShaker.shake`: Set the shaking speed of the module.\n",
+    "- {meth}`~pylabrobot.heating_shaking.heater_shaker.HeaterShaker.stop_shaking`: Stop the shaking of the module."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "=(InhecoThermoShake)\n",
+    "\n",
+    "## Inheco ThermoShake\n",
+    "\n",
+    "The Inheco ThermoShaker heater shaker is controlled by the {class}`~pylabrobot.heating_shaking.heater_shaker.InhecoThermoShake` class. This heater shaker connects using a USB-B cable.\n",
+    "\n",
+    "We will reuse the same `hs` as above:\n",
+    "\n",
+    "```python\n",
+    "backend = InhecoThermoShake() # take any ScaleBackend you want\n",
+    "hs = HeaterShaker(backend=backend, name=\"HeaterShaker\", size_x=0, size_y=0, size_z=0)\n",
+    "await hs.setup()\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Shake indefinitely:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.shake(speed=100)  # speed in rpm"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Shake for 10 seconds:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.shake(speed=100, duration=10)  # speed in rpm, duration in seconds"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Get the current temperature:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "23.2"
+      ]
+     },
+     "execution_count": 5,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "await hs.get_temperature()  # get current temperature"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Set the temperature to 37&deg;C:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "await hs.set_temperature(37)  # temperature in degrees C"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.12"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}

@@ -1,0 +1,30 @@
+﻿pylabrobot.resources.revvity.plates
+===================================
+
+.. currentmodule:: pylabrobot.resources.revvity
+
+.. automodule:: pylabrobot.resources.revvity.plates
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      Revvity_384_wellplate_28ul_Ub
+      Revvity_384_wellplate_28ul_Ub_Lid
+   
+   
+
+   
+   
+   
+
+   
+   
+   

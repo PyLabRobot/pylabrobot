@@ -1,0 +1,27 @@
+﻿pylabrobot.only\_fans.backend.FanBackend
+========================================
+
+.. currentmodule:: pylabrobot.only_fans.backend
+
+.. autoclass:: FanBackend
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~FanBackend.__init__
+      ~FanBackend.deserialize
+      ~FanBackend.serialize
+      ~FanBackend.setup
+      ~FanBackend.stop
+      ~FanBackend.turn_off
+      ~FanBackend.turn_on
+   
+   

@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.get\_size\_z
+========================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Centrifuge.get_size_z

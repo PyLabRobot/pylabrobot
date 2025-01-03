@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.at\_bucket
+======================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. autoproperty:: Centrifuge.at_bucket

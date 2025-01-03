@@ -1,0 +1,6 @@
+pylabrobot.tilting.chatterbox.TilterChatterboxBackend.deserialize
+=================================================================
+
+.. currentmodule:: pylabrobot.tilting.chatterbox
+
+.. automethod:: TilterChatterboxBackend.deserialize
