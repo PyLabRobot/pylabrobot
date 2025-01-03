@@ -17,7 +17,9 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.mock_centrifuge_backend = unittest.mock.MagicMock(spec=CentrifugeBackend)
     self.mock_loader_backend = unittest.mock.MagicMock(spec=LoaderBackend)
-    self.centrifuge = Centrifuge(backend=self.mock_centrifuge_backend)
+    self.centrifuge = Centrifuge(
+      backend=self.mock_centrifuge_backend, name="centrifuge", size_x=1, size_y=1, size_z=1
+    )
     self.loader = Loader(
       backend=self.mock_loader_backend,
       centrifuge=self.centrifuge,
