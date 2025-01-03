@@ -59,6 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - put_direction -> drop_direction
 - `location` parameter of `assign_child_resource` is not optional (https://github.com/PyLabRobot/pylabrobot/pull/336)
 - `Resource.get_absolute_location` raises `NoLocationError` instead of `AssertionError` when absolute location is not defined (https://github.com/PyLabRobot/pylabrobot/pull/338)
+- `no_trash` and `no_teaching_rack` were renamed to `with_trash` and `with_teaching_rack` to avoid double negatives (https://github.com/PyLabRobot/pylabrobot/pull/347)
 
 ### Added
 
@@ -143,6 +144,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - `hotel_high_speed=False`
     - `use_unsafe_hotel: bool = False`
     - `iswap_collision_control_level: int = 0`
+- `with_trash96` on `HamiltonSTARDeck` so there is more fine grained control (https://github.com/PyLabRobot/pylabrobot/pull/347)
 
 ### Deprecated
 

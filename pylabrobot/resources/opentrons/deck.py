@@ -16,7 +16,7 @@ class OTDeck(Deck):
     size_y: float = 565.2,
     size_z: float = 900,
     origin: Coordinate = Coordinate(0, 0, 0),
-    no_trash: bool = False,
+    with_trash: bool = True,
     name: str = "deck",
   ):
     # size_z is probably wrong
@@ -40,7 +40,7 @@ class OTDeck(Deck):
       Coordinate(x=265.0, y=271.5, z=0.0),
     ]
 
-    if not no_trash:
+    if with_trash:
       self._assign_trash()
 
   def _assign_trash(self):
