@@ -30,16 +30,33 @@ class Centrifuge(Machine, Resource):
     buckets: Optional[Tuple[ResourceHolder, ResourceHolder]] = None,
   ) -> None:
     Machine.__init__(self, backend=backend)
-    Resource.__init__(self, name=name, size_x=size_x, size_y=size_y, size_z=size_z, rotation=rotation, category=category, model=model)
+    Resource.__init__(
+      self,
+      name=name,
+      size_x=size_x,
+      size_y=size_y,
+      size_z=size_z,
+      rotation=rotation,
+      category=category,
+      model=model,
+    )
     self.backend: CentrifugeBackend = backend  # fix type
     self._door_open = False
     self._at_bucket: Optional[ResourceHolder] = None
     if buckets is None:
       self.bucket1 = ResourceHolder(
-        name="bucket1", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
+        name=f"{name}_bucket1",
+        size_x=127.76,
+        size_y=85.48,
+        size_z=0,
+        child_location=Coordinate.zero(),
       )
       self.bucket2 = ResourceHolder(
-        name="bucket2", size_x=127.76, size_y=85.48, size_z=0, child_location=Coordinate.zero()
+        name=f"{name}_bucket2",
+        size_x=127.76,
+        size_y=85.48,
+        size_z=0,
+        child_location=Coordinate.zero(),
       )
       # TODO: figure out good locations for this.
       self.assign_child_resource(self.bucket1, location=Coordinate.zero())
@@ -106,6 +123,8 @@ class Centrifuge(Machine, Resource):
   @classmethod
   def deserialize(cls, data: dict, allow_marshall: bool = False):
     backend = CentrifugeBackend.deserialize(data["backend"])
+    buckets = tuple(ResourceHolder.deserialize(bucket) for bucket in data["buckets"])
+    assert len(buckets) == 2
     return cls(
       backend=backend,
       name=data["name"],
@@ -115,7 +134,7 @@ class Centrifuge(Machine, Resource):
       rotation=Rotation.deserialize(data["rotation"]),
       category=data["category"],
       model=data["model"],
-      buckets=[ResourceHolder.deserialize(bucket) for bucket in data["buckets"]],
+      buckets=buckets,
     )
 
 

@@ -4,7 +4,7 @@ from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
 class CentrifugeChatterboxBackend(CentrifugeBackend):
   async def setup(self):
     print("Setting up")
-  
+
   async def stop(self):
     print("Stopping")
 

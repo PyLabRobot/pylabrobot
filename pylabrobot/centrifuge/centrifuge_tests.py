@@ -120,7 +120,7 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(NotAtBucketError):
       await self.loader.unload()
     self.mock_loader_backend.unload.assert_not_awaited()
-  
+
   def test_serialize(self):
     self.loader.backend = LoaderChatterboxBackend()
     self.centrifuge.backend = CentrifugeChatterboxBackend()
