@@ -125,5 +125,4 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
     self.loader.backend = LoaderChatterboxBackend()
     self.centrifuge.backend = CentrifugeChatterboxBackend()
     serialized = self.loader.serialize()
-    print(serialized)
     self.assertEqual(Loader.deserialize(serialized), self.loader)
