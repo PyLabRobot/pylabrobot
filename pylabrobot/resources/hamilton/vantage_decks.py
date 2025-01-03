@@ -15,7 +15,7 @@ class VantageDeck(HamiltonDeck):
     name="deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
-    no_trash: bool = False,
+    with_trash: bool = True,
   ) -> None:
     """Create a new Vantage deck of the given size.
 
@@ -41,7 +41,7 @@ class VantageDeck(HamiltonDeck):
       )
       self.size = 1.3
 
-      if not no_trash:
+      if with_trash:
         trash_x = size_x - 480  # works with vantage 1.3 (480) (used to be 460)
 
         # an experimentally informed guess.
