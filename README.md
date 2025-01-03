@@ -89,7 +89,7 @@ Centrifugation at 800g for 60 seconds:
 
 ```python
 from pylabrobot.centrifuge import Centrifuge, VSpin
-cf = Centrifuge(backend=VSpin(bucket_1_position=0))
+cf = Centrifuge(backend=VSpin(bucket_1_position=0), name="centrifuge", size_x=1, size_y=1, size_z=1)
 await cf.setup()
 
 await cf.start_spin_cycle(g = 800, duration = 60)

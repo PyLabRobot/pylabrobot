@@ -10,6 +10,7 @@ from pylabrobot.centrifuge import (
   NotAtBucketError,
 )
 from pylabrobot.centrifuge.backend import CentrifugeBackend, LoaderBackend
+from pylabrobot.centrifuge.chatterbox import CentrifugeChatterboxBackend, LoaderChatterboxBackend
 from pylabrobot.resources import Coordinate, Cor_96_wellplate_360ul_Fb
 
 
@@ -17,7 +18,9 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.mock_centrifuge_backend = unittest.mock.MagicMock(spec=CentrifugeBackend)
     self.mock_loader_backend = unittest.mock.MagicMock(spec=LoaderBackend)
-    self.centrifuge = Centrifuge(backend=self.mock_centrifuge_backend)
+    self.centrifuge = Centrifuge(
+      backend=self.mock_centrifuge_backend, name="centrifuge", size_x=1, size_y=1, size_z=1
+    )
     self.loader = Loader(
       backend=self.mock_loader_backend,
       centrifuge=self.centrifuge,
@@ -117,3 +120,9 @@ class CentrifugeLoaderResourceModelTests(unittest.IsolatedAsyncioTestCase):
     with self.assertRaises(NotAtBucketError):
       await self.loader.unload()
     self.mock_loader_backend.unload.assert_not_awaited()
+
+  def test_serialize(self):
+    self.loader.backend = LoaderChatterboxBackend()
+    self.centrifuge.backend = CentrifugeChatterboxBackend()
+    serialized = self.loader.serialize()
+    self.assertEqual(Loader.deserialize(serialized), self.loader)
