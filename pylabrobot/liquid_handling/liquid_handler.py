@@ -1001,7 +1001,7 @@ class LiquidHandler(Resource, Machine):
 
     for resource in resources:
       if isinstance(resource.parent, Plate) and resource.parent.has_lid():
-        raise ValueError("Dispensing to plate with lid")
+        raise ValueError("Aspirating from a well with a lid is not supported.")
 
     assert len(vols) == len(offsets) == len(flow_rates) == len(liquid_height)
 
