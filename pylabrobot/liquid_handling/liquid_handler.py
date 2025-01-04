@@ -53,6 +53,7 @@ from pylabrobot.resources import (
   does_volume_tracking,
 )
 from pylabrobot.resources.errors import CrossContaminationError, HasTipError
+from pylabrobot.resources.filter import Filter
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.tilting.tilter import Tilter
 
@@ -1872,6 +1873,13 @@ class LiquidHandler(Resource, Machine):
         y=plate_location.y,
         z=plate_location.z + destination.get_absolute_size_z() - lid.nesting_z_height,
       )
+    elif isinstance(destination, Plate) and isinstance(resource, Filter):
+      plate_location = destination.get_absolute_location("c", "c", "t")
+      to_location = Coordinate(
+        x=0,
+        y=0,
+        z=resource.nesting_z_height,
+      )
     else:
       to_location = destination.get_absolute_location()
 
@@ -1911,6 +1919,8 @@ class LiquidHandler(Resource, Machine):
       )
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       destination.assign_child_resource(resource)
+    elif isinstance(destination, Plate) and isinstance(resource, Filter):
+      destination.assign_child_resource(resource, location=to_location)
     else:
       destination.assign_child_resource(resource, location=to_location)
 
