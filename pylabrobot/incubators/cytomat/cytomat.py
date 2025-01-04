@@ -347,7 +347,6 @@ class Cytomat(IncubatorBackend):
 class CytomatChatterbox(Cytomat):
   async def setup(self):
     await self.wait_for_task_completion()
-    # await self.initialize()
 
   async def stop(self):
     print("closing connection to cytomat")

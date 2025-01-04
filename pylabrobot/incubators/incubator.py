@@ -53,7 +53,7 @@ class Incubator(Machine, Resource):
 
     self._racks = racks
     for rack in self._racks:
-      self.assign_child_resource(rack, location=Coordinate(0, 0, 0))
+      self.assign_child_resource(rack, location=None)
 
   @property
   def racks(self) -> List[PlateCarrier]:
