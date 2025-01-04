@@ -88,3 +88,6 @@ class STARChatterboxBackend(STAR):
   ) -> Optional[str]:
     print(command)
     return None
+
+  async def request_z_pos_channel_n(self, channel: int) -> float:
+    return 285.0
