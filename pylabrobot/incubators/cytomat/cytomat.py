@@ -71,7 +71,9 @@ class Cytomat(IncubatorBackend):
       raise e
 
     await self.wait_for_task_completion()
-    await self.initialize()
+    res = await self.get_overview_register()
+    print("res", res)
+    # await self.initialize()
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)
@@ -170,7 +172,7 @@ class Cytomat(IncubatorBackend):
     await self.send_command("rs", "be", "")
 
   async def initialize(self) -> None:
-    await self.send_action("ll", "in", "")
+    await self.send_action("ll", "in", "", timeout=120)  # this command sometimes times out
 
   async def open_door(self):
     return await self.send_action("ll", "gp", "002")
@@ -347,7 +349,7 @@ class Cytomat(IncubatorBackend):
 class CytomatChatterbox(Cytomat):
   async def setup(self):
     await self.wait_for_task_completion()
-    await self.initialize()
+    # await self.initialize()
 
   async def stop(self):
     print("closing connection to cytomat")
