@@ -71,9 +71,7 @@ class Cytomat(IncubatorBackend):
       raise e
 
     await self.wait_for_task_completion()
-    res = await self.get_overview_register()
-    print("res", res)
-    # await self.initialize()
+    await self.get_overview_register()
 
   async def set_racks(self, racks: List[PlateCarrier]):
     await super().set_racks(racks)
