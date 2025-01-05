@@ -3,6 +3,7 @@
 import enum
 import inspect
 import marshal
+import math
 import sys
 import types
 from typing import Any, Dict, List, Union, cast
@@ -29,6 +30,9 @@ def serialize(obj: Any) -> JSON:
   """Serialize an object."""
 
   if isinstance(obj, (int, float, str, bool, type(None))):
+    # infinities and NaNs are not valid JSON, so we convert them to strings
+    if isinstance(obj, float) and not math.isfinite(obj):
+      return "nan" if math.isnan(obj) else ("Infinity" if obj > 0 else "-Infinity")
     return obj
   if isinstance(obj, (list, tuple, set)):
     return [serialize(item) for item in obj]

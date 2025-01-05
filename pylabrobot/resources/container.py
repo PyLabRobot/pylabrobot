@@ -57,7 +57,7 @@ class Container(Resource):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "max_volume": self.max_volume,
+      "max_volume": serialize(self.max_volume),
       "material_z_thickness": self._material_z_thickness,
       "compute_volume_from_height": serialize(self._compute_volume_from_height),
       "compute_height_from_volume": serialize(self._compute_height_from_volume),

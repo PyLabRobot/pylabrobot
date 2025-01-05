@@ -73,7 +73,11 @@ window.addEventListener("load", () => {
       const reader = new FileReader();
 
       reader.onload = (e) => {
-        const deck = JSON.parse(e.target.result);
+        const deck = JSON.parse(e.target.result, (key, value) => {
+          if (value == "Infinity") return Infinity;
+          if (value == "-Infinity") return -Infinity;
+          return value;
+        });
         fileContents = deck;
 
         // TODO: validate deck on the server
