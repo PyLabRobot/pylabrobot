@@ -33,7 +33,7 @@ from pylabrobot.resources import (
   TipRack,
   Well,
 )
-from pylabrobot.resources.ml_star import (
+from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipPickupMethod,
   TipSize,

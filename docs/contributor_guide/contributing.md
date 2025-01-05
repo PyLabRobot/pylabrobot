@@ -67,7 +67,7 @@ Make sure you write a test that fails before your fix and passes after your fix.
 
 ### Adding resources
 
-If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a [partial function](https://docs.python.org/3/library/functools.html#functools.partial) is enough. There are many examples, like [tipracks.py](https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/liquid_handling/resources/ml_star/tipracks.py). If you are writing a new kind of resource, you should probably subclass resource in a new file.
+If you have defined a new resource, it is highly appreciated by the community if you add them to the repo. In most cases, a [partial function](https://docs.python.org/3/library/functools.html#functools.partial) is enough. There are many examples, like [tipracks.py](https://github.com/PyLabRobot/pylabrobot/blob/main/pylabrobot/liquid_handling/resources/hamilton/tipracks.py). If you are writing a new kind of resource, you should probably subclass resource in a new file.
 
 Make sure to add your file to the imports in `__init__.py` of your resources package.
 
