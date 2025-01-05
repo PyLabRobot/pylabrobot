@@ -18,7 +18,7 @@ class RetroFilter(Filter):
     size_z: float = 19.7,
     category: str = "filter",
     model: Optional[str] = None,
-    nesting_z_height: float = 15,
+    nesting_z_height: float = 2,
   ):
     self.nesting_z_height = nesting_z_height
     super().__init__(
@@ -30,8 +30,8 @@ class RetroFilter(Filter):
     lh: LiquidHandler,
     to_dest: Plate,  # lh drop_resource only supports filters on Plates (for now)
     arm: str = "core",
-    channel_1=1,
-    channel_2=2,
+    channel_1=7,
+    channel_2=8,
     **kwargs,
   ):
     """move filter from CarrierSite to a Plate using core grippers (faster) or iSWAP (slower)"""
@@ -39,13 +39,13 @@ class RetroFilter(Filter):
     pickup_kwargs = kwargs.copy()
     if arm == "core":
       pickup_kwargs.update(
-        {"core_grip_strength": 20, "channel_1": channel_1, "channel_2": channel_2}
+        {"core_grip_strength": 15, "channel_1": channel_1, "channel_2": channel_2}
       )
     await lh.pick_up_resource(
       resource=self, use_arm=arm, pickup_distance_from_top=15, **pickup_kwargs
     )
 
-    await lh.drop_resource(destination=to_dest, **kwargs)
+    await lh.drop_resource(destination=to_dest, use_arm=arm, **kwargs)
 
   async def dispense_through_filter(
     self, indices: list[int], volume: float, lh: LiquidHandler, **disp_kwargs

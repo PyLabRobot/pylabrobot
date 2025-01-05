@@ -1874,11 +1874,11 @@ class LiquidHandler(Resource, Machine):
         z=plate_location.z + destination.get_absolute_size_z() - lid.nesting_z_height,
       )
     elif isinstance(destination, Plate) and isinstance(resource, Filter):
-      plate_location = destination.get_absolute_location("c", "c", "t")
+      plate_location = destination.get_absolute_location()
       to_location = Coordinate(
-        x=0,
-        y=0,
-        z=resource.nesting_z_height,
+        x=plate_location.x,
+        y=plate_location.y,
+        z=plate_location.z + destination.get_size_z() - resource.nesting_z_height,
       )
     else:
       to_location = destination.get_absolute_location()
@@ -1920,7 +1920,10 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       destination.assign_child_resource(resource)
     elif isinstance(destination, Plate) and isinstance(resource, Filter):
-      destination.assign_child_resource(resource, location=to_location)
+      destination.assign_child_resource(
+        resource,
+        location=Coordinate(x=0, y=0, z=destination.get_size_z() - resource.nesting_z_height),
+      )
     else:
       destination.assign_child_resource(resource, location=to_location)
 
@@ -2210,5 +2213,6 @@ class LiquidHandler(Resource, Machine):
 
 
 class OperationCallback(Protocol):
-  def __call__(self, handler: "LiquidHandler", *args: Any, **kwargs: Any) -> None:
-    ...  # pragma: no cover
+  def __call__(
+    self, handler: "LiquidHandler", *args: Any, **kwargs: Any
+  ) -> None: ...  # pragma: no cover

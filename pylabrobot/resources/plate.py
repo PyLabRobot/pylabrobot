@@ -12,6 +12,7 @@ from typing import (
   cast,
 )
 
+from pylabrobot.resources.filter import Filter
 from pylabrobot.resources.resource_holder import get_child_location
 
 from .itemized_resource import ItemizedResource
@@ -126,6 +127,10 @@ class Plate(ItemizedResource["Well"]):
     location: Optional[Coordinate] = None,
     reassign: bool = True,
   ):
+    if isinstance(resource, Filter):
+      default_location = get_child_location(resource) + self._get_lid_location(resource)
+      location = location or default_location
+      return super().assign_child_resource(resource, location=location, reassign=reassign)
     if isinstance(resource, Lid):
       if self.has_lid():
         raise ValueError(f"Plate '{self.name}' already has a lid.")
