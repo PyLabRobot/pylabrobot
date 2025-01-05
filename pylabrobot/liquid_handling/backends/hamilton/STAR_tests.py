@@ -21,8 +21,7 @@ from pylabrobot.resources import (
   ResourceStack,
   no_volume_tracking,
 )
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import STF
+from pylabrobot.resources.hamilton import STF, STARLetDeck
 from tests.usb import MockDev, MockEndpoint
 
 from .STAR import (

@@ -1,8 +1,8 @@
 from .hamilton_decks import (
-    HamiltonDeck,
-    HamiltonSTARDeck,
-    STARDeck,
-    STARLetDeck,
+  HamiltonDeck,
+  HamiltonSTARDeck,
+  STARDeck,
+  STARLetDeck,
 )
 from .mfx_carriers import *
 from .mfx_modules import *
