@@ -7500,25 +7500,37 @@ class STAR(HamiltonLiquidHandler):
     )
     return [round(y / 10, 2) for y in resp["ry"]]
 
-  async def position_channels_in_y_direction(self, ys: Dict[int, float]):
+  async def position_channels_in_y_direction_relative(
+    self, ys: Dict[int, float], yv: Optional[int] = 6000
+  ):
+    positions = await self.get_channels_y_positions()
+    relative_positions = [positions[i] + ys.get(i, 0) for i in range(len(positions))]
+    await self.position_channels_in_y_direction(dict(enumerate(relative_positions)), yv=yv)
+
+  async def position_channels_in_y_direction(self, ys: Dict[int, float], yv: Optional[int] = 6000):
     """position all channels simultaneously in the Y direction. There is a command for this (C0OY),
     but I couldn't get it to work, so this sends commands to the individual channels instead.
 
     Args:
       ys: A dictionary mapping channel index to the desired Y position in mm.  The channel index is
       0-indexed from the back.
+      yv: The maximum velocity of the movement in steps/second. The default is 6000.
     """
+    print("yv", f"{yv:04}")
 
     # check that the locations of channels after the move will be at least 9mm apart, and in
     # descending order
     channel_locations = await self.get_channels_y_positions()
     for channel_idx, y in ys.items():
       channel_locations[channel_idx] = y
-    if not all(
-      channel_locations[i + 1] - channel_locations[i] >= 9
-      for i in range(len(channel_locations) - 1)
-    ):
-      raise ValueError("Channels must be at least 9mm apart and in descending order")
+    for i in range(len(channel_locations) - 1):
+      if channel_locations[i + 1] - channel_locations[i] >= 8.9:  # within positional error range
+        print(
+          f"Channel pair ({i}, {i + 1}) violates the rule: "
+          f"{channel_locations[i + 1]} - {channel_locations[i]} = "
+          f"{channel_locations[i + 1] - channel_locations[i]}"
+        )
+        raise ValueError("Channels must be at least 9mm apart and in descending order")
 
     def _channel_y_to_steps(y: float) -> int:
       # for PX modules
@@ -7531,6 +7543,7 @@ class STAR(HamiltonLiquidHandler):
           module=f"P{STAR.channel_id(channel_idx)}",
           command="YA",
           ya=f"{_channel_y_to_steps(y):05}",
+          yv=f"{yv:04}",
         )
         # for channel_idx, y in ys.items()
         for channel_idx, y in enumerate(channel_locations)
