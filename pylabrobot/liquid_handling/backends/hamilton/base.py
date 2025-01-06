@@ -21,7 +21,7 @@ from pylabrobot.liquid_handling.backends.backend import (
 from pylabrobot.liquid_handling.standard import PipettingOp
 from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import TipSpot
-from pylabrobot.resources.ml_star import (
+from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipPickupMethod,
   TipSize,

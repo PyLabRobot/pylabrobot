@@ -58,18 +58,17 @@ from pylabrobot.resources.errors import (
   TooLittleLiquidError,
   TooLittleVolumeError,
 )
-from pylabrobot.resources.hamilton.hamilton_decks import (
-  STAR_SIZE_X,
-  STARLET_SIZE_X,
-)
-from pylabrobot.resources.liquid import Liquid
-from pylabrobot.resources.ml_star import (
+from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipDropMethod,
   TipPickupMethod,
   TipSize,
 )
-from pylabrobot.resources.resource_holder import get_child_location
+from pylabrobot.resources.hamilton.hamilton_decks import (
+  STAR_SIZE_X,
+  STARLET_SIZE_X,
+)
+from pylabrobot.resources.liquid import Liquid
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 T = TypeVar("T")
@@ -2553,64 +2552,6 @@ class STAR(HamiltonLiquidHandler):
 
     return ret
 
-  async def iswap_pick_up_resource(
-    self,
-    resource: Resource,
-    grip_direction: GripDirection,
-    pickup_distance_from_top: float,
-    offset: Coordinate = Coordinate.zero(),
-    minimum_traverse_height_at_beginning_of_a_command: float = 284.0,
-    z_position_at_the_command_end: float = 284.0,
-    grip_strength: int = 4,
-    plate_width_tolerance: float = 2.0,
-    collision_control_level: int = 0,
-    acceleration_index_high_acc: int = 4,
-    acceleration_index_low_acc: int = 1,
-    fold_up_sequence_at_the_end_of_process: bool = True,
-  ):
-    """Pick up a resource using iSWAP.
-    Low level component of :meth:`move_resource`
-    """
-
-    assert self.iswap_installed, "iswap must be installed"
-
-    # Get center of source plate. Also gripping height and plate width.
-    center = resource.get_absolute_location(x="c", y="c", z="b") + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.get_absolute_size_x()
-    elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.get_absolute_size_y()
-    else:
-      raise ValueError("Invalid grip direction")
-
-    await self.iswap_get_plate(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      y_position=round(center.y * 10),
-      y_direction=0,
-      z_position=round(grip_height * 10),
-      z_direction=0,
-      grip_direction={
-        GripDirection.FRONT: 1,
-        GripDirection.RIGHT: 2,
-        GripDirection.BACK: 3,
-        GripDirection.LEFT: 4,
-      }[grip_direction],
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        minimum_traverse_height_at_beginning_of_a_command * 10
-      ),
-      z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
-      grip_strength=grip_strength,
-      open_gripper_position=round(plate_width * 10) + 30,
-      plate_width=round(plate_width * 10) - 33,
-      plate_width_tolerance=round(plate_width_tolerance * 10),
-      collision_control_level=collision_control_level,
-      acceleration_index_high_acc=acceleration_index_high_acc,
-      acceleration_index_low_acc=acceleration_index_low_acc,
-      fold_up_sequence_at_the_end_of_process=fold_up_sequence_at_the_end_of_process,
-    )
-
   async def iswap_move_picked_up_resource(
     self,
     location: Coordinate,
@@ -2648,77 +2589,6 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=collision_control_level,
       acceleration_index_high_acc=acceleration_index_high_acc,
       acceleration_index_low_acc=acceleration_index_low_acc,
-    )
-
-  async def iswap_release_picked_up_resource(
-    self,
-    location: Coordinate,
-    resource: Resource,
-    rotation: float,
-    offset: Coordinate,
-    grip_direction: GripDirection,
-    pickup_distance_from_top: float,
-    minimum_traverse_height_at_beginning_of_a_command: float = 284.0,
-    z_position_at_the_command_end: float = 284.0,
-    collision_control_level: int = 0,
-  ):
-    """After a resource is picked up, release it at the specified location.
-    Low level component of :meth:`move_resource`
-
-    Args:
-      location: The location to release the resource (bottom front left corner).
-      resource: The resource to release.
-      rotation: The rotation of the resource's final orientation wrt the pickup orientation.
-      offset: offset for location
-      grip_direction: The direction of the iswap arm on release.
-      pickup_distance_from_top: How far from the top the resource was picked up.
-    """
-
-    assert self.iswap_installed, "iswap must be installed"
-
-    # Get center of source plate in absolute space.
-    # The computation of the center has to be rotated so that the offset is in absolute space.
-    center_in_absolute_space = Coordinate(
-      *matrix_vector_multiply_3x3(
-        resource.rotated(z=rotation).get_absolute_rotation().get_rotation_matrix(),
-        resource.center().vector(),
-      )
-    )
-    # This is when the resource is rotated (around its origin), but we also need to translate
-    # so that the left front bottom corner of the plate is lfb in absolute space, not local.
-    center_in_absolute_space += get_child_location(resource.rotated(z=rotation))
-
-    center = location + center_in_absolute_space + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    # grip_direction here is the drop_direction. We use `rotation` to cancel it out and get the
-    # original grip direction. Hack.
-    # the resource still has its original orientation.
-    if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.rotated(z=rotation).get_absolute_size_x()
-    elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.rotated(z=rotation).get_absolute_size_y()
-    else:
-      raise ValueError("Invalid grip direction")
-
-    await self.iswap_put_plate(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      y_position=round(center.y * 10),
-      y_direction=0,
-      z_position=round(grip_height * 10),
-      z_direction=0,
-      grip_direction={
-        GripDirection.FRONT: 1,
-        GripDirection.RIGHT: 2,
-        GripDirection.BACK: 3,
-        GripDirection.LEFT: 4,
-      }[grip_direction],
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        minimum_traverse_height_at_beginning_of_a_command * 10
-      ),
-      z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
-      open_gripper_position=round(plate_width * 10) + 30,
-      collision_control_level=collision_control_level,
     )
 
   async def core_pick_up_resource(
@@ -2867,18 +2737,96 @@ class STAR(HamiltonLiquidHandler):
     use_arm: Literal["iswap", "core"] = "iswap",
     channel_1: int = 7,
     channel_2: int = 8,
+    iswap_grip_strength: int = 4,
     core_grip_strength: int = 15,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    z_position_at_the_command_end: Optional[float] = None,
+    plate_width_tolerance: float = 2.0,
+    hotel_open_gripper_position: Optional[float] = None,
+    hotel_depth=160.0,
+    hotel_clearance_height=7.5,
+    high_speed=False,
+    plate_width: Optional[float] = None,
+    use_unsafe_hotel: bool = False,
+    iswap_collision_control_level: int = 0,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
   ):
     if use_arm == "iswap":
-      await self.iswap_pick_up_resource(
-        resource=pickup.resource,
-        grip_direction=pickup.direction,
-        pickup_distance_from_top=pickup.pickup_distance_from_top,
-        offset=pickup.offset,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        z_position_at_the_command_end=self._traversal_height,
+      x, y, z = pickup.resource.get_absolute_location("c", "c", "t") + pickup.offset
+      z -= pickup.pickup_distance_from_top
+      assert (
+        pickup.resource.get_absolute_rotation().x == 0
+        and pickup.resource.get_absolute_rotation().y == 0
       )
+      assert pickup.resource.get_absolute_rotation().z % 90 == 0
+      if plate_width is None:
+        if pickup.direction in (GripDirection.FRONT, GripDirection.BACK):
+          plate_width = pickup.resource.get_absolute_size_x()
+        else:
+          plate_width = pickup.resource.get_absolute_size_y()
+
+      traverse_height_at_beginning = (
+        minimum_traverse_height_at_beginning_of_a_command or self._traversal_height
+      )
+      z_position_at_the_command_end = z_position_at_the_command_end or self._traversal_height
+
+      if use_unsafe_hotel:
+        if hotel_open_gripper_position is None:
+          if pickup.direction in (GripDirection.FRONT, GripDirection.BACK):
+            hotel_open_gripper_position = pickup.resource.get_absolute_size_x() + 5
+          else:
+            hotel_open_gripper_position = pickup.resource.get_absolute_size_y() + 5
+
+        await self.unsafe.get_from_hotel(
+          hotel_center_x_coord=round(abs(x) * 10),
+          hotel_center_y_coord=round(abs(y) * 10),
+          # hotel_center_z_coord=int((z * 10)+0.5), # use sensible rounding (.5 goes up)
+          hotel_center_z_coord=round(abs(z) * 10),
+          hotel_center_x_direction=0 if x >= 0 else 1,
+          hotel_center_y_direction=0 if y >= 0 else 1,
+          hotel_center_z_direction=0 if z >= 0 else 1,
+          clearance_height=round(hotel_clearance_height * 10),
+          hotel_depth=round(hotel_depth * 10),
+          grip_direction=pickup.direction,
+          open_gripper_position=round(hotel_open_gripper_position * 10),
+          traverse_height_at_beginning=round(traverse_height_at_beginning * 10),
+          z_position_at_end=round(z_position_at_the_command_end * 10),
+          high_acceleration_index=4 if high_speed else 1,
+          low_acceleration_index=1,
+          plate_width=round(plate_width * 10),
+          plate_width_tolerance=round(plate_width_tolerance * 10),
+        )
+      else:
+        await self.iswap_get_plate(
+          x_position=round(x * 10),
+          y_position=round(y * 10),
+          z_position=round(z * 10),
+          x_direction=0 if x >= 0 else 1,
+          y_direction=0 if y >= 0 else 1,
+          z_direction=0 if z >= 0 else 1,
+          grip_direction={
+            GripDirection.FRONT: 1,
+            GripDirection.RIGHT: 2,
+            GripDirection.BACK: 3,
+            GripDirection.LEFT: 4,
+          }[pickup.direction],
+          minimum_traverse_height_at_beginning_of_a_command=round(
+            traverse_height_at_beginning * 10
+          ),
+          z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
+          grip_strength=iswap_grip_strength,
+          open_gripper_position=round(plate_width * 10) + 30,
+          plate_width=round(plate_width * 10) - 33,
+          plate_width_tolerance=round(plate_width_tolerance * 10),
+          collision_control_level=iswap_collision_control_level,
+          acceleration_index_high_acc=4 if high_speed else 1,
+          acceleration_index_low_acc=1,
+          fold_up_sequence_at_the_end_of_process=iswap_fold_up_sequence_at_the_end_of_process,
+        )
     elif use_arm == "core":
+      if use_unsafe_hotel:
+        raise ValueError("Cannot use iswap hotel mode with core grippers")
+
       await self.core_pick_up_resource(
         resource=pickup.resource,
         pickup_distance_from_top=pickup.pickup_distance_from_top,
@@ -2918,20 +2866,99 @@ class STAR(HamiltonLiquidHandler):
     drop: ResourceDrop,
     use_arm: Literal["iswap", "core"] = "iswap",
     return_core_gripper: bool = True,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    z_position_at_the_command_end: Optional[float] = None,
+    hotel_open_gripper_position: Optional[float] = None,
+    hotel_depth=160.0,
+    hotel_clearance_height=7.5,
+    hotel_high_speed=False,
+    use_unsafe_hotel: bool = False,
+    iswap_collision_control_level: int = 0,
   ):
     if use_arm == "iswap":
-      await self.iswap_release_picked_up_resource(
-        location=drop.destination,
-        resource=drop.resource,
-        rotation=drop.rotation,  # TODO
-        offset=drop.offset,
-        grip_direction=drop.direction,
-        pickup_distance_from_top=drop.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        # int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
-        z_position_at_the_command_end=self._traversal_height,
+      traversal_height_start = (
+        minimum_traverse_height_at_beginning_of_a_command or self._traversal_height
       )
+      z_position_at_the_command_end = z_position_at_the_command_end or self._traversal_height
+      assert (
+        drop.resource.get_absolute_rotation().x == 0
+        and drop.resource.get_absolute_rotation().y == 0
+      )
+      assert drop.resource.get_absolute_rotation().z % 90 == 0
+
+      # grip_direction here is the drop_direction. We use `rotation` to cancel it out and get the
+      # original grip direction. Hack.
+      # the resource still has its original orientation.
+      if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
+        plate_width = drop.resource.rotated(z=drop.rotation).get_absolute_size_x()
+      elif drop.direction in (GripDirection.RIGHT, GripDirection.LEFT):
+        plate_width = drop.resource.rotated(z=drop.rotation).get_absolute_size_y()
+      else:
+        raise ValueError("Invalid grip direction")
+
+      # Get center of source plate in absolute space.
+      # The computation of the center has to be rotated so that the offset is in absolute space.
+      center_in_absolute_space = Coordinate(
+        *matrix_vector_multiply_3x3(
+          drop.resource.rotated(z=drop.rotation).get_absolute_rotation().get_rotation_matrix(),
+          drop.resource.center().vector(),
+        )
+      )
+
+      x, y, z = drop.destination + center_in_absolute_space + drop.offset
+      z = z + drop.resource.get_absolute_size_z() - drop.pickup_distance_from_top
+
+      if use_unsafe_hotel:
+        # hotel: down forward down.
+        # down to level of the destination + the clearance height (so clearance height can be subtracted)
+        # hotel_depth is forward.
+        # clearance height is second down.
+
+        if hotel_open_gripper_position is None:
+          if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
+            hotel_open_gripper_position = drop.resource.get_absolute_size_x() + 50
+          else:
+            hotel_open_gripper_position = drop.resource.get_absolute_size_y() + 50
+
+        await self.unsafe.put_in_hotel(
+          hotel_center_x_coord=round(abs(x) * 10),
+          hotel_center_y_coord=round(abs(y) * 10),
+          hotel_center_z_coord=round(abs(z) * 10),
+          hotel_center_x_direction=0 if x >= 0 else 1,
+          hotel_center_y_direction=0 if y >= 0 else 1,
+          hotel_center_z_direction=0 if z >= 0 else 1,
+          clearance_height=round(hotel_clearance_height * 10),
+          hotel_depth=round(hotel_depth * 10),
+          grip_direction=drop.direction,
+          open_gripper_position=round(hotel_open_gripper_position * 10),
+          traverse_height_at_beginning=round(traversal_height_start * 10),
+          z_position_at_end=round(z_position_at_the_command_end * 10),
+          high_acceleration_index=4 if hotel_high_speed else 1,
+          low_acceleration_index=1,
+        )
+      else:
+        await self.iswap_put_plate(
+          x_position=round(abs(x) * 10),
+          y_position=round(abs(y) * 10),
+          z_position=round(abs(z) * 10),
+          x_direction=0 if x >= 0 else 1,
+          y_direction=0 if y >= 0 else 1,
+          z_direction=0 if z >= 0 else 1,
+          grip_direction={
+            GripDirection.FRONT: 1,
+            GripDirection.RIGHT: 2,
+            GripDirection.BACK: 3,
+            GripDirection.LEFT: 4,
+          }[drop.direction],
+          minimum_traverse_height_at_beginning_of_a_command=round(traversal_height_start * 10),
+          z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
+          open_gripper_position=round(plate_width * 10) + 30,
+          collision_control_level=iswap_collision_control_level,
+        )
     elif use_arm == "core":
+      if use_unsafe_hotel:
+        raise ValueError("Cannot use iswap hotel mode with core grippers")
+
       await self.core_release_picked_up_resource(
         location=drop.destination,
         resource=drop.resource,
@@ -7525,7 +7552,6 @@ class UnSafe:
     hotel_center_x_coord: int = 0,
     hotel_center_y_coord: int = 0,
     hotel_center_z_coord: int = 0,
-    # for direction, 0 is positive, 1 is negative
     hotel_center_x_direction: Literal[0, 1] = 0,
     hotel_center_y_direction: Literal[0, 1] = 0,
     hotel_center_z_direction: Literal[0, 1] = 0,

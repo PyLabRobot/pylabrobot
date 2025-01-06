@@ -34,8 +34,7 @@ from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
 )
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import HTF, STF
+from pylabrobot.resources.hamilton import HTF, STF, STARLetDeck
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
   set_cross_contamination_tracking,

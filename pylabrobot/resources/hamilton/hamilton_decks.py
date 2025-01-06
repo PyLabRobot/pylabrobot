@@ -7,7 +7,8 @@ from typing import Optional, cast
 from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
-from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
+from pylabrobot.resources.errors import NoLocationError
+from pylabrobot.resources.hamilton.tip_creators import standard_volume_tip_with_filter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.trash import Trash
@@ -55,7 +56,7 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       origin=origin,
     )
     self.num_rails = num_rails
-    self.register_did_assign_resource_callback(self._check_save_z_height)
+    self.register_did_assign_resource_callback(self._check_safe_z_height)
 
   @abstractmethod
   def rails_to_location(self, rails: int) -> Coordinate:
@@ -66,18 +67,24 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
     return {
       **super().serialize(),
       "num_rails": self.num_rails,
-      "no_trash": True,  # data encoded as child. (not very pretty to have this key though...)
+      "with_trash": False,  # data encoded as child. (not very pretty to have this key though...)
+      "with_trash96": False,
     }
 
-  def _check_save_z_height(self, resource: Resource):
-    """ " Check for this resource, and all its children, that the z location is not too high."""
+  def _check_safe_z_height(self, resource: Resource):
+    """Check for this resource, and all its children, that the z location is not too high."""
 
     # TODO: maybe these are parameters per HamiltonDeck that we can take as attributes.
     Z_MOVEMENT_LIMIT = 245
     Z_GRAB_LIMIT = 285
 
     def check_z_height(resource: Resource):
-      z_top = resource.get_absolute_location(z="top").z
+      try:
+        z_top = resource.get_absolute_location(z="top").z
+      except NoLocationError:
+        # if a resource has no location, we cannot check its z height
+        # this is fine, because it's a convenience feature and not critical
+        return
 
       if z_top > Z_MOVEMENT_LIMIT:
         logger.warning(
@@ -301,8 +308,11 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       r_summary += resource.__class__.__name__.ljust(type_column_length)
 
       # Print resource location
-      location = resource.get_absolute_location()
-      r_summary += str(location).ljust(location_column_length)
+      try:
+        location = str(resource.get_absolute_location())
+      except NoLocationError:
+        location = "Undefined"
+      r_summary += location.ljust(location_column_length)
 
       return r_summary
 
@@ -350,8 +360,11 @@ class HamiltonSTARDeck(HamiltonDeck):
     name="deck",
     category: str = "deck",
     origin: Coordinate = Coordinate.zero(),
-    no_trash: bool = False,
-    no_teaching_rack: bool = False,
+    with_trash: bool = True,
+    with_trash96: bool = True,
+    with_teaching_rack: bool = True,
+    no_trash: Optional[bool] = None,
+    no_teaching_rack: Optional[bool] = None,
   ) -> None:
     """Create a new STAR(let) deck of the given size."""
 
@@ -365,8 +378,15 @@ class HamiltonSTARDeck(HamiltonDeck):
       origin=origin,
     )
 
+    if no_trash is not None:
+      raise NotImplementedError("no_trash is deprecated. Use with_trash=False instead.")
+    if no_teaching_rack is not None:
+      raise NotImplementedError(
+        "no_teaching_rack is deprecated. Use with_teaching_rack=False instead."
+      )
+
     # assign trash area
-    if not no_trash:
+    if with_trash:
       trash_x = (
         size_x - 560
       )  # only tested on STARLet, assume STAR is same distance from right max..
@@ -376,6 +396,8 @@ class HamiltonSTARDeck(HamiltonDeck):
         location=Coordinate(x=trash_x, y=190.6, z=137.1),
       )  # z I am not sure about
 
+    self._trash96: Optional[Trash] = None
+    if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
       self._trash96 = Trash("trash_core96", size_x=82.6, size_y=122.4, size_z=0)  # size of tiprack
       self.assign_child_resource(
@@ -383,7 +405,7 @@ class HamiltonSTARDeck(HamiltonDeck):
         location=Coordinate(x=-232.1, y=110.3, z=189.0),
       )  # 165.0 -> 189.0
 
-    if not no_teaching_rack:
+    if with_teaching_rack:
       teaching_carrier = Resource(name="teaching_carrier", size_x=30, size_y=445.2, size_z=100)
       tip_spots = [
         TipSpot(
@@ -417,7 +439,7 @@ class HamiltonSTARDeck(HamiltonDeck):
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "no_teaching_rack": True,  # data encoded as child. (not very pretty to have this key though...)
+      "with_teaching_rack": False,  # data encoded as child. (not very pretty to have this key though...)
     }
 
   def rails_to_location(self, rails: int) -> Coordinate:
@@ -425,11 +447,18 @@ class HamiltonSTARDeck(HamiltonDeck):
     return Coordinate(x=x, y=63, z=100)
 
   def get_trash_area96(self) -> Trash:
+    if self._trash96 is None:
+      raise RuntimeError(
+        "Trash area for 96-well plates was not created. Initialize with `with_trash96=True`."
+      )
     return self._trash96
 
 
 def STARLetDeck(
   origin: Coordinate = Coordinate.zero(),
+  with_trash: bool = True,
+  with_trash96: bool = True,
+  with_teaching_rack: bool = True,
 ) -> HamiltonSTARDeck:
   """Create a new STARLet deck.
 
@@ -442,11 +471,17 @@ def STARLetDeck(
     size_y=STARLET_SIZE_Y,
     size_z=STARLET_SIZE_Z,
     origin=origin,
+    with_trash=with_trash,
+    with_trash96=with_trash96,
+    with_teaching_rack=with_teaching_rack,
   )
 
 
 def STARDeck(
   origin: Coordinate = Coordinate.zero(),
+  with_trash: bool = True,
+  with_trash96: bool = True,
+  with_teaching_rack: bool = True,
 ) -> HamiltonSTARDeck:
   """Create a new STAR deck.
 
@@ -459,4 +494,7 @@ def STARDeck(
     size_y=STAR_SIZE_Y,
     size_z=STAR_SIZE_Z,
     origin=origin,
+    with_trash=with_trash,
+    with_trash96=with_trash96,
+    with_teaching_rack=with_teaching_rack,
   )

@@ -16,7 +16,7 @@ class OTDeck(Deck):
     size_y: float = 565.2,
     size_z: float = 900,
     origin: Coordinate = Coordinate(0, 0, 0),
-    no_trash: bool = False,
+    with_trash: bool = True,
     name: str = "deck",
   ):
     # size_z is probably wrong
@@ -40,7 +40,7 @@ class OTDeck(Deck):
       Coordinate(x=265.0, y=271.5, z=0.0),
     ]
 
-    if not no_trash:
+    if with_trash:
       self._assign_trash()
 
   def _assign_trash(self):
@@ -75,7 +75,7 @@ class OTDeck(Deck):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate,
+    location: Optional[Coordinate],
     reassign: bool = True,
   ):
     """Assign a resource to a slot.
@@ -83,6 +83,9 @@ class OTDeck(Deck):
     ..warning:: This method exists only for deserialization. You should use
     :meth:`assign_child_at_slot` instead.
     """
+
+    if location is None:
+      raise ValueError("location must be provided for resources on the deck")
 
     if location not in self.slot_locations:
       super().assign_child_resource(resource, location=location)
