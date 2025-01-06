@@ -308,8 +308,11 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       r_summary += resource.__class__.__name__.ljust(type_column_length)
 
       # Print resource location
-      location = resource.get_absolute_location()
-      r_summary += str(location).ljust(location_column_length)
+      try:
+        location = str(resource.get_absolute_location())
+      except NoLocationError:
+        location = "Undefined"
+      r_summary += location.ljust(location_column_length)
 
       return r_summary
 
