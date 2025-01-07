@@ -4,12 +4,12 @@ import unittest
 from pylabrobot.resources.corning_costar import (
   Cor_96_wellplate_360ul_Fb,
 )
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import (
+from pylabrobot.resources.hamilton import (
   HTF,
   PLT_CAR_L5AC_A00,
   STF,
   TIP_CAR_480_A00,
+  STARLetDeck,
 )
 from pylabrobot.resources.stanley.cups import (
   StanleyCup_QUENCHER_FLOWSTATE_TUMBLER,

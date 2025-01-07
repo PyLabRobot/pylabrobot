@@ -8,7 +8,7 @@ from pylabrobot.resources.carrier import ResourceHolder
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.deck import Deck
 from pylabrobot.resources.errors import NoLocationError
-from pylabrobot.resources.ml_star.tip_creators import standard_volume_tip_with_filter
+from pylabrobot.resources.hamilton.tip_creators import standard_volume_tip_with_filter
 from pylabrobot.resources.resource import Resource
 from pylabrobot.resources.tip_rack import TipRack, TipSpot
 from pylabrobot.resources.trash import Trash
@@ -308,8 +308,11 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
       r_summary += resource.__class__.__name__.ljust(type_column_length)
 
       # Print resource location
-      location = resource.get_absolute_location()
-      r_summary += str(location).ljust(location_column_length)
+      try:
+        location = str(resource.get_absolute_location())
+      except NoLocationError:
+        location = "Undefined"
+      r_summary += location.ljust(location_column_length)
 
       return r_summary
 
