@@ -426,7 +426,7 @@ class HamiltonSTARDeck(HamiltonDeck):
         model="hamilton_teaching_tip_rack",
       )
       teaching_carrier.assign_child_resource(
-        teaching_tip_rack, location=Coordinate(x=5.9, y=400.3 + 9, z=0)
+        teaching_tip_rack, location=Coordinate(x=5.9, y=409.3, z=0)
       )
       self.assign_child_resource(
         teaching_carrier,
