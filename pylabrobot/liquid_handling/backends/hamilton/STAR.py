@@ -1389,7 +1389,7 @@ class STAR(HamiltonLiquidHandler):
       if not core96_head_initialized:
         await self.initialize_core_96_head(
           trash96=self.deck.get_trash_area96(),
-          z_position_at_the_command_end=int(self._traversal_height * 10),
+          z_position_at_the_command_end=self._traversal_height,
         )
 
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
