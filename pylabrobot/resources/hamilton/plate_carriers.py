@@ -268,6 +268,7 @@ def PLT_CAR_L5PCR(name: str) -> PlateCarrier:
       ],
       resource_size_x=127.0,
       resource_size_y=86.0,
+      resource_size_z=0,
       name_prefix=name,
     ),
     model="PLT_CAR_L5PCR",
