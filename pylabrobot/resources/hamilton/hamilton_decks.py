@@ -399,11 +399,11 @@ class HamiltonSTARDeck(HamiltonDeck):
     self._trash96: Optional[Trash] = None
     if with_trash96:
       # got this location from a .lay file, but will probably need to be adjusted by the user.
-      self._trash96 = Trash("trash_core96", size_x=82.6, size_y=122.4, size_z=0)  # size of tiprack
+      self._trash96 = Trash("trash_core96", size_x=122.4, size_y=82.6, size_z=0)  # size of tiprack
       self.assign_child_resource(
         resource=self._trash96,
-        location=Coordinate(x=-232.1, y=110.3, z=189.0),
-      )  # 165.0 -> 189.0
+        location=Coordinate(x=-42.0 - 16.2, y=120.3 - 14.3, z=229.0),
+      )
 
     if with_teaching_rack:
       teaching_carrier = Resource(name="teaching_carrier", size_x=30, size_y=445.2, size_z=100)

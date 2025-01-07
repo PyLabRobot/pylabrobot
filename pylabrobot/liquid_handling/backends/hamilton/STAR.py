@@ -69,6 +69,7 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
   STARLET_SIZE_X,
 )
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.trash import Trash
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 T = TypeVar("T")
@@ -1387,7 +1388,8 @@ class STAR(HamiltonLiquidHandler):
       core96_head_initialized = await self.request_core_96_head_initialization_status()
       if not core96_head_initialized:
         await self.initialize_core_96_head(
-          z_position_at_the_command_end=int(self._traversal_height * 10)
+          trash96=self.deck.get_trash_area96(),
+          z_position_at_the_command_end=int(self._traversal_height * 10),
         )
 
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
@@ -2176,7 +2178,7 @@ class STAR(HamiltonLiquidHandler):
       tip_a1 = drop.resource.get_item("A1")
       position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
     else:
-      position = drop.resource.get_absolute_location() + drop.offset
+      position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
     x_direction = 0 if position.x > 0 else 1
     return await self.discard_tips_core96(
@@ -3097,6 +3099,17 @@ class STAR(HamiltonLiquidHandler):
     if audio_feedback:
       audio.play_got_item()
     return True
+
+  def _position_96_head_in_resource(self, resource: Resource) -> Coordinate:
+    """The firmware command expects location of tip A1 of the head. We center the head in the given
+    resource."""
+    head_size_x = 9 * 11  # 12 channels, 9mm spacing in between
+    head_size_y = 9 * 7  #   8 channels, 9mm spacing in between
+    channel_size = 9
+    loc = resource.get_absolute_location()
+    loc.x += (resource.get_size_x() - head_size_x) / 2 + channel_size / 2
+    loc.y += (resource.get_size_y() - head_size_y) / 2 + channel_size / 2
+    return loc
 
   # ============== Firmware Commands ==============
 
@@ -5116,46 +5129,28 @@ class STAR(HamiltonLiquidHandler):
   # -------------- 3.10.1 Initialization --------------
 
   async def initialize_core_96_head(
-    self,
-    x_position: int = 2321,
-    x_direction: int = 1,
-    y_position: int = 1103,
-    z_deposit_position: int = 1890,
-    z_position_at_the_command_end: int = 2450,
+    self, trash96: Trash, z_position_at_the_command_end: float = 245.0
   ):
     """Initialize CoRe 96 Head
 
-    Initialize CoRe 96 Head. Dependent to configuration initialization change.
-
     Args:
-      x_position: X-Position [0.1mm] (discard position of tip A1). Must be between 0 and 30000.
-        Default 0.
-      x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      y_position: Y-Position [0.1mm] (discard position of tip A1 ). Must be between 1054 and 5743.
-        Default 5743.
-      z_deposit_position_[0.1mm]: Z- deposit position [0.1mm] (collar bearing position). Must be
-        between 0 and 3425. Default 3425.
-      z_position_at_the_command_end: Z-Position at the command end [0.1mm]. Must be between 0 and
-        3425. Default 3425.
+      trash96: Trash object where tips should be disposed. The 96 head will be positioned in the
+        center of the trash.
+      z_position_at_the_command_end: Z position at the end of the command [mm].
     """
 
-    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
-    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
-    assert 1054 <= y_position <= 5743, "y_position must be between 1054 and 5743"
-    assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
-    assert (
-      0 <= z_position_at_the_command_end <= 3425
-    ), "z_position_at_the_command_end must be between 0 and 3425"
+    # The firmware command expects location of tip A1 of the head.
+    loc = self._position_96_head_in_resource(trash96)
 
     return await self.send_command(
       module="C0",
       command="EI",
       read_timeout=60,
-      xs=f"{x_position:05}",
-      xd=x_direction,
-      yh=f"{y_position}",
-      za=f"{z_deposit_position}",
-      ze=f"{z_position_at_the_command_end}",
+      xs=f"{abs(round(loc.x * 10)):05}",
+      xd=0 if loc.x >= 0 else 1,
+      yh=f"{abs(round(loc.y * 10)):04}",
+      za=f"{round(loc.z * 10):04}",
+      ze=f"{round(z_position_at_the_command_end*10)}",
     )
 
   async def move_core_96_to_safe_position(self):
