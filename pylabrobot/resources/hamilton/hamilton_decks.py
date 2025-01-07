@@ -424,12 +424,12 @@ class HamiltonSTARDeck(HamiltonDeck):
         size_x=9 * 8,
         size_y=9,
         size_z=50.4,
-        ordered_items={f"A{i}": tip_spots[i] for i in range(8)},
+        ordered_items={f"{letter}1": tip_spots[idx] for idx, letter in enumerate("HGFEDCBA")},
         with_tips=True,
         model="hamilton_teaching_tip_rack",
       )
       teaching_carrier.assign_child_resource(
-        teaching_tip_rack, location=Coordinate(x=5.9, y=400.3, z=0)
+        teaching_tip_rack, location=Coordinate(x=5.9, y=409.3, z=0)
       )
       self.assign_child_resource(
         teaching_carrier,
