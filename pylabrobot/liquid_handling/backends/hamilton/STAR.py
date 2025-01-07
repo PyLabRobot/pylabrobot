@@ -5150,7 +5150,7 @@ class STAR(HamiltonLiquidHandler):
       xd=0 if loc.x >= 0 else 1,
       yh=f"{abs(round(loc.y * 10)):04}",
       za=f"{round(loc.z * 10):04}",
-      ze=f"{round(z_position_at_the_command_end*10)}",
+      ze=f"{round(z_position_at_the_command_end*10):04}",
     )
 
   async def move_core_96_to_safe_position(self):
