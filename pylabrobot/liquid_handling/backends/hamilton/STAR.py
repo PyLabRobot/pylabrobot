@@ -7336,7 +7336,7 @@ class STAR(HamiltonLiquidHandler):
     channel_idx: int,  # 0-based indexing of channels!
     tip_len: Optional[float] = None,  # mm
     lowest_immers_pos: float = 99.98,  # mm
-    start_pos_search: float = 330.0,  # mm
+    start_pos_search: Optional[float] = None,  # mm
     channel_speed: float = 10.0,  # mm/sec
     channel_acceleration: float = 800.0,  # mm/sec**2
     channel_speed_upwards: float = 125.0,  # mm
@@ -7380,12 +7380,16 @@ class STAR(HamiltonLiquidHandler):
 
     if tip_len is None:
       tip_len = await self.request_tip_len_on_channel(channel_idx=channel_idx)
+    if start_pos_search is None:
+      start_pos_search = 334.7 - tip_len
 
     tip_len_used_in_increments = (tip_len - fitting_depth) / STAR.z_drive_mm_per_increment
-    tip_adjusted_start_pos = start_pos_search + tip_len # start_pos of the head itself!
+    channel_head_start_pos = start_pos_search + tip_len # start_pos of the head itself!
+    safe_head_bottom_z_pos = 99.98 + tip_len # 99.98 == STAR.z_drive_increment_to_mm(9_320) 
+    safe_head_top_z_pos = 334.7  # 334.7 == STAR.z_drive_increment_to_mm(31_200)
 
     lowest_immers_pos_increments = STAR.mm_to_z_drive_increment(lowest_immers_pos)
-    start_pos_search_increments = STAR.mm_to_z_drive_increment(tip_adjusted_start_pos)
+    start_pos_search_increments = STAR.mm_to_z_drive_increment(channel_head_start_pos)
     channel_speed_increments = STAR.mm_to_z_drive_increment(channel_speed)
     channel_acceleration_thousand_increments = STAR.mm_to_z_drive_increment(
       channel_acceleration / 1000
@@ -7396,12 +7400,12 @@ class STAR(HamiltonLiquidHandler):
     assert 20 <= tip_len <= 120, "Total tip length must be between 20 and 120"
 
     assert 9320 <= lowest_immers_pos_increments <= 31_200, (
-      f"Lowest immersion position must be between \n{STAR.z_drive_increment_to_mm(9_320)}"
-      + f" and {STAR.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
+      "Lowest immersion position must be between \n99.98"
+      + f" and 334.7 mm, is {lowest_immers_pos} mm"
     )
-    assert 9320 <= start_pos_search_increments <= 31_200, (
-      f"Start position of LLD search must be between \n{STAR.z_drive_increment_to_mm(9_320)}"
-      + f" and {STAR.z_drive_increment_to_mm(31_200)} mm, is {start_pos_search} mm"
+    assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
+      f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
+      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm"
     )
     assert 20 <= channel_speed_increments <= 15_000, (
       f"Z-touch search speed must be between \n{STAR.z_drive_increment_to_mm(20)}"
