@@ -7384,8 +7384,12 @@ class STAR(HamiltonLiquidHandler):
       start_pos_search = 334.7 - tip_len + fitting_depth
 
     tip_len_used_in_increments = (tip_len - fitting_depth) / STAR.z_drive_mm_per_increment
-    channel_head_start_pos = start_pos_search + tip_len - fitting_depth # start_pos of the head itself!
-    safe_head_bottom_z_pos = 99.98 + tip_len - fitting_depth # 99.98 == STAR.z_drive_increment_to_mm(9_320)
+    channel_head_start_pos = (
+      start_pos_search + tip_len - fitting_depth
+    )  # start_pos of the head itself!
+    safe_head_bottom_z_pos = (
+      99.98 + tip_len - fitting_depth
+    )  # 99.98 == STAR.z_drive_increment_to_mm(9_320)
     safe_head_top_z_pos = 334.7  # 334.7 == STAR.z_drive_increment_to_mm(31_200)
 
     lowest_immers_pos_increments = STAR.mm_to_z_drive_increment(lowest_immers_pos)
