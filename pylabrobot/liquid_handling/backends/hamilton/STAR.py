@@ -7382,9 +7382,10 @@ class STAR(HamiltonLiquidHandler):
       tip_len = await self.request_tip_len_on_channel(channel_idx=channel_idx)
 
     tip_len_used_in_increments = (tip_len - fitting_depth) / STAR.z_drive_mm_per_increment
+    tip_adjusted_start_pos = start_pos_search + tip_len # start_pos of the head itself!
 
     lowest_immers_pos_increments = STAR.mm_to_z_drive_increment(lowest_immers_pos)
-    start_pos_search_increments = STAR.mm_to_z_drive_increment(start_pos_search)
+    start_pos_search_increments = STAR.mm_to_z_drive_increment(tip_adjusted_start_pos)
     channel_speed_increments = STAR.mm_to_z_drive_increment(channel_speed)
     channel_acceleration_thousand_increments = STAR.mm_to_z_drive_increment(
       channel_acceleration / 1000
