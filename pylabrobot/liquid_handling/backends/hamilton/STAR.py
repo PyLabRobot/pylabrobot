@@ -3005,10 +3005,10 @@ class STAR(HamiltonLiquidHandler):
 
     assert current_y_pos != y, f"Channel {channel} already at y-position = {y}"
     assert max_safe_lower_y_pos <= y <= max_safe_upper_y_pos, (
-      f"Channel {channel} y-target must be >= {max_safe_lower_y_pos} and"
+      f"channel_{channel} y-target must be >= {max_safe_lower_y_pos} and"
       + f" <= {max_safe_upper_y_pos}, is {round(y,2)} mm,\n"
       + f"  current y-position = {current_y_pos} mm,\n"
-      + f"  Can you move the neighboring channels to create space for channel {channel}?"
+      + f"  Can you move the neighboring channels to create space for channel_{channel}?"
     )
 
     await self.position_single_pipetting_channel_in_y_direction(
