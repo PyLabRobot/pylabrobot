@@ -2985,6 +2985,28 @@ class STAR(HamiltonLiquidHandler):
 
   async def move_channel_y(self, channel: int, y: float):
     """Move a channel in the y direction."""
+
+    # Anti-channel-crash feature
+    if channel > 0:
+      channel_idx_minus_one_y_pos = await self.request_y_pos_channel_n(channel - 1)
+    else:
+      channel_idx_minus_one_y_pos = STAR.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
+    if channel < (self.num_channels - 1):
+      channel_idx_plus_one_y_pos = await self.request_y_pos_channel_n(channel + 1)
+    else:
+      channel_idx_plus_one_y_pos = 6
+      # Insight: STAR machines appear to lose connection to a channel
+      # if y < 6 mm OR y > 635 mm 
+
+    max_safe_upper_y_pos = channel_idx_minus_one_y_pos - 9
+    max_safe_lower_y_pos = channel_idx_plus_one_y_pos + 9 if channel_idx_plus_one_y_pos != 0 else 6
+
+    assert max_safe_lower_y_pos <= y <= max_safe_upper_y_pos, (
+      f"Channel {channel} y-position must be between {max_safe_lower_y_pos} and"
+      + f" {max_safe_upper_y_pos}, is {y} mm,\n"
+      + "Can you move the neighboring channels to create space for channel {channel}?"
+    )
+
     await self.position_single_pipetting_channel_in_y_direction(
       pipetting_channel_index=channel + 1, y_position=round(y * 10)
     )
