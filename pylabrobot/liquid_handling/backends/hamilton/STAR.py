@@ -2998,7 +2998,7 @@ class STAR(HamiltonLiquidHandler):
     else:
       channel_idx_plus_one_y_pos = 6
       # Insight: STAR machines appear to lose connection to a channel
-      # if y < 6 mm OR y > 635 mm 
+      # if y < 6 mm OR y > 635 mm
 
     max_safe_upper_y_pos = channel_idx_minus_one_y_pos - 9
     max_safe_lower_y_pos = channel_idx_plus_one_y_pos + 9 if channel_idx_plus_one_y_pos != 0 else 6
