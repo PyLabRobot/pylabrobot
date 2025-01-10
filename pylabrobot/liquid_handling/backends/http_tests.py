@@ -1,7 +1,7 @@
 import unittest
 
-import responses
-from responses import matchers
+import responses  # type: ignore
+from responses import matchers  # type: ignore
 
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends import HTTPBackend
