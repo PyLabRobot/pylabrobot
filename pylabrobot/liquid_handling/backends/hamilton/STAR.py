@@ -2986,30 +2986,32 @@ class STAR(HamiltonLiquidHandler):
   async def move_channel_y(self, channel: int, y: float):
     """Move a channel safely in the y direction."""
 
-    current_y_pos = await self.request_y_pos_channel_n(channel)
-
     # Anti-channel-crash feature
     if channel > 0:
-      channel_idx_minus_one_y_pos = await self.request_y_pos_channel_n(channel - 1)
+      max_y_pos = await self.request_y_pos_channel_n(channel - 1)
+      if y > max_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be <= {max_y_pos} mm "
+          f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
+        )
     else:
-      channel_idx_minus_one_y_pos = 635 + 9
+      # STAR machines appear to lose connection to a channel if y > 635 mm
+      max_y_pos = 635
+      if y > max_y_pos:
+        raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm (machine limit)")
+
     if channel < (self.num_channels - 1):
-      channel_idx_plus_one_y_pos = await self.request_y_pos_channel_n(channel + 1)
+      min_y_pos = await self.request_y_pos_channel_n(channel + 1)
+      if y < min_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be >= {min_y_pos} mm "
+          f"(channel {channel + 1} y-position is {round(y, 2)} mm)"
+        )
     else:
-      channel_idx_plus_one_y_pos = 6
-      # Insight: STAR machines appear to lose connection to a channel
-      # if y < 6 mm OR y > 635 mm
-
-    max_safe_upper_y_pos = channel_idx_minus_one_y_pos - 9
-    max_safe_lower_y_pos = channel_idx_plus_one_y_pos + 9 if channel_idx_plus_one_y_pos != 0 else 6
-
-    assert current_y_pos != y, f"Channel {channel} already at y-position = {y}"
-    assert max_safe_lower_y_pos <= y <= max_safe_upper_y_pos, (
-      f"channel_{channel} y-target must be >= {max_safe_lower_y_pos} and"
-      + f" <= {max_safe_upper_y_pos}, is {round(y,2)} mm,\n"
-      + f"  current y-position = {current_y_pos} mm,\n"
-      + f"  Can you move the neighboring channels to create space for channel_{channel}?"
-    )
+      # STAR machines appear to lose connection to a channel if y < 6 mm
+      min_y_pos = 6
+      if y < min_y_pos:
+        raise ValueError(f"channel {channel} y-target must be >= {min_y_pos} mm (machine limit)")
 
     await self.position_single_pipetting_channel_in_y_direction(
       pipetting_channel_index=channel + 1, y_position=round(y * 10)
