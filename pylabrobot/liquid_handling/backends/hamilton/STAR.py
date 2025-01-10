@@ -2984,7 +2984,35 @@ class STAR(HamiltonLiquidHandler):
     await self.position_left_x_arm_(round(x * 10))
 
   async def move_channel_y(self, channel: int, y: float):
-    """Move a channel in the y direction."""
+    """Move a channel safely in the y direction."""
+
+    # Anti-channel-crash feature
+    if channel > 0:
+      max_y_pos = await self.request_y_pos_channel_n(channel - 1)
+      if y > max_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be <= {max_y_pos} mm "
+          f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
+        )
+    else:
+      # STAR machines appear to lose connection to a channel if y > 635 mm
+      max_y_pos = 635
+      if y > max_y_pos:
+        raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm (machine limit)")
+
+    if channel < (self.num_channels - 1):
+      min_y_pos = await self.request_y_pos_channel_n(channel + 1)
+      if y < min_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be >= {min_y_pos} mm "
+          f"(channel {channel + 1} y-position is {round(y, 2)} mm)"
+        )
+    else:
+      # STAR machines appear to lose connection to a channel if y < 6 mm
+      min_y_pos = 6
+      if y < min_y_pos:
+        raise ValueError(f"channel {channel} y-target must be >= {min_y_pos} mm (machine limit)")
+
     await self.position_single_pipetting_channel_in_y_direction(
       pipetting_channel_index=channel + 1, y_position=round(y * 10)
     )
@@ -7171,15 +7199,24 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
+  y_drive_mm_per_increment = 0.046302082
   z_drive_mm_per_increment = 0.01072765
+
+  @staticmethod
+  def mm_to_y_drive_increment(value_mm: float) -> int:
+    return round(value_mm / STAR.y_drive_mm_per_increment)
+
+  @staticmethod
+  def y_drive_increment_to_mm(value_mm: int) -> float:
+    return round(value_mm * STAR.y_drive_mm_per_increment, 2)
 
   @staticmethod
   def mm_to_z_drive_increment(value_mm: float) -> int:
     return round(value_mm / STAR.z_drive_mm_per_increment)
 
   @staticmethod
-  def z_drive_increment_to_mm(value_mm: int) -> float:
-    return round(value_mm * STAR.z_drive_mm_per_increment, 2)
+  def z_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STAR.z_drive_mm_per_increment, 2)
 
   async def clld_probe_z_height_using_channel(
     self,
