@@ -2984,13 +2984,15 @@ class STAR(HamiltonLiquidHandler):
     await self.position_left_x_arm_(round(x * 10))
 
   async def move_channel_y(self, channel: int, y: float):
-    """Move a channel in the y direction."""
+    """Move a channel safely in the y direction."""
+
+    current_y_pos = await self.request_y_pos_channel_n(channel)
 
     # Anti-channel-crash feature
     if channel > 0:
       channel_idx_minus_one_y_pos = await self.request_y_pos_channel_n(channel - 1)
     else:
-      channel_idx_minus_one_y_pos = STAR.y_drive_increment_to_mm(13_714) + 9  # y-position=635 mm
+      channel_idx_minus_one_y_pos = 635 + 9
     if channel < (self.num_channels - 1):
       channel_idx_plus_one_y_pos = await self.request_y_pos_channel_n(channel + 1)
     else:
@@ -3001,10 +3003,12 @@ class STAR(HamiltonLiquidHandler):
     max_safe_upper_y_pos = channel_idx_minus_one_y_pos - 9
     max_safe_lower_y_pos = channel_idx_plus_one_y_pos + 9 if channel_idx_plus_one_y_pos != 0 else 6
 
+    assert current_y_pos != y, f"Channel {channel} already at y-position = {y}"
     assert max_safe_lower_y_pos <= y <= max_safe_upper_y_pos, (
-      f"Channel {channel} y-position must be between {max_safe_lower_y_pos} and"
-      + f" {max_safe_upper_y_pos}, is {y} mm,\n"
-      + "Can you move the neighboring channels to create space for channel {channel}?"
+      f"Channel {channel} y-target must be >= {max_safe_lower_y_pos} and"
+      + f" <= {max_safe_upper_y_pos}, is {round(y,2)} mm,\n"
+      + f"  current y-position = {current_y_pos} mm,\n"
+      + f"  Can you move the neighboring channels to create space for channel {channel}?"
     )
 
     await self.position_single_pipetting_channel_in_y_direction(
@@ -7193,15 +7197,24 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
+  y_drive_mm_per_increment = 0.046302082
   z_drive_mm_per_increment = 0.01072765
+
+  @staticmethod
+  def mm_to_y_drive_increment(value_mm: float) -> int:
+    return round(value_mm / STAR.y_drive_mm_per_increment)
+
+  @staticmethod
+  def y_drive_increment_to_mm(value_mm: int) -> float:
+    return round(value_mm * STAR.y_drive_mm_per_increment, 2)
 
   @staticmethod
   def mm_to_z_drive_increment(value_mm: float) -> int:
     return round(value_mm / STAR.z_drive_mm_per_increment)
 
   @staticmethod
-  def z_drive_increment_to_mm(value_mm: int) -> float:
-    return round(value_mm * STAR.z_drive_mm_per_increment, 2)
+  def z_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STAR.z_drive_mm_per_increment, 2)
 
   async def clld_probe_z_height_using_channel(
     self,
