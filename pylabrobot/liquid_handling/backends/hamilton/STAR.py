@@ -4802,10 +4802,6 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.6 Adjustment & movement commands --------------
 
-  # TODO:(command:JY) Position all pipetting channels in Y-direction
-
-  # TODO:(command:JZ) Position all pipetting channels in Z-direction
-
   async def position_single_pipetting_channel_in_y_direction(
     self, pipetting_channel_index: int, y_position: int
   ):
@@ -7532,14 +7528,14 @@ class STAR(HamiltonLiquidHandler):
     channel_ids = "123456789ABCDEFG"
     return channel_ids[channel_idx]
 
-  async def get_channels_y_positions(self) -> List[float]:
+  async def get_channels_y_positions(self) -> Dict[int, float]:
     """Get the Y position of all channels in mm"""
     resp = await self.send_command(
       module="C0",
       command="RY",
       fmt="ry#### (n)",
     )
-    return [round(y / 10, 2) for y in resp["ry"]]
+    return {channel_idx: round(y / 10, 2) for channel_idx, y in enumerate(resp["ry"])}
 
   async def position_channels_in_y_direction(self, ys: Dict[int, float]):
     """position all channels simultaneously in the Y direction. There is a command for this (C0OY),
@@ -7553,10 +7549,11 @@ class STAR(HamiltonLiquidHandler):
     # check that the locations of channels after the move will be at least 9mm apart, and in
     # descending order
     channel_locations = await self.get_channels_y_positions()
+
     for channel_idx, y in ys.items():
       channel_locations[channel_idx] = y
     if not all(
-      channel_locations[i + 1] - channel_locations[i] >= 9
+      channel_locations[i] - channel_locations[i + 1] >= 9
       for i in range(len(channel_locations) - 1)
     ):
       raise ValueError("Channels must be at least 9mm apart and in descending order")
@@ -7573,9 +7570,27 @@ class STAR(HamiltonLiquidHandler):
           command="YA",
           ya=f"{_channel_y_to_steps(y):05}",
         )
-        # for channel_idx, y in ys.items()
-        for channel_idx, y in enumerate(channel_locations)
+        for channel_idx, y in channel_locations.items()
       )
+    )
+
+  async def get_channels_z_positions(self) -> Dict[int, float]:
+    """Get the Y position of all channels in mm"""
+    resp = await self.send_command(
+      module="C0",
+      command="RZ",
+      fmt="rz#### (n)",
+    )
+    return {channel_idx: round(y / 10, 2) for channel_idx, y in enumerate(resp["rz"])}
+
+  async def position_channels_in_z_direction(self, zs: Dict[int, float]):
+    channel_locations = await self.get_channels_z_positions()
+
+    for channel_idx, z in zs.items():
+      channel_locations[channel_idx] = z
+
+    return await self.send_command(
+      module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()]
     )
 
 
