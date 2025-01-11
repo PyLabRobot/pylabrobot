@@ -1017,16 +1017,13 @@ class LiquidHandler(Resource, Machine):
     # center of the resource.
     if len(set(resources)) == 1:
       resource = resources[0]
-      n = len(use_channels)
       resources = [resource] * len(use_channels)
-      if resource.get_absolute_rotation().z % 180 == 0:
-        centers = list(reversed(resource.centers(yn=n, zn=0)))
-      elif resource.get_absolute_rotation().z % 90 == 0:
-        centers = list(reversed(resource.centers(xn=n, zn=0)))
-      else:
-        raise ValueError("Only 90 and 180 degree rotations are supported for now.")
-      centers = [c - resource.center() for c in centers]  # offset is wrt center
-      offsets = [c + o for c, o in zip(centers, offsets)]  # user-defined
+      center_offsets = self._get_single_resource_liquid_op_offsets(
+        resource=resource, num_channels=len(use_channels)
+      )
+
+      # add user defined offsets to the computed centers
+      offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
