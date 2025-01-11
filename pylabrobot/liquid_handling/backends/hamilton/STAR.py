@@ -7528,7 +7528,7 @@ class STAR(HamiltonLiquidHandler):
     channel_ids = "123456789ABCDEFG"
     return channel_ids[channel_idx]
 
-  async def get_channels_y_positions(self) -> List[float]:
+  async def get_channels_y_positions(self) -> Dict[int, float]:
     """Get the Y position of all channels in mm"""
     resp = await self.send_command(
       module="C0",
@@ -7574,7 +7574,7 @@ class STAR(HamiltonLiquidHandler):
       )
     )
 
-  async def get_channels_z_positions(self) -> List[float]:
+  async def get_channels_z_positions(self) -> Dict[int, float]:
     """Get the Y position of all channels in mm"""
     resp = await self.send_command(
       module="C0",
