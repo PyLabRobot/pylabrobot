@@ -1750,7 +1750,6 @@ class STAR(HamiltonLiquidHandler):
         for hlc in hamilton_liquid_classes
       ],
     )
-    transport_air_volume = [0]*n
     blow_out_air_volumes = [
       (op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0))
       for op, hlc in zip(ops, hamilton_liquid_classes)
