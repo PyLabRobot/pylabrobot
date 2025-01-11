@@ -18,12 +18,10 @@ from pylabrobot.resources import (
   Coordinate,
   Cor_96_wellplate_360ul_Fb,
   Lid,
-  Plate,
   ResourceStack,
   no_volume_tracking,
 )
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import STF
+from pylabrobot.resources.hamilton import STF, STARLetDeck
 from tests.usb import MockDev, MockEndpoint
 
 from .STAR import (
@@ -628,7 +626,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.discard_tips96()
 
     self._assert_command_sent_once(
-      "C0ERid0213xs02321xd1yh1103za2164zh2450ze2450",
+      "C0ERid0213xs00420xd1yh1203za2164zh2450ze2450",
       "xs#####xd#yh####za####zh####ze####",
     )
 
@@ -708,8 +706,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       self.plate,
       plate_reader,
       pickup_distance_from_top=8.2 - 3.33,
-      get_direction=GripDirection.FRONT,
-      put_direction=GripDirection.LEFT,
+      pickup_direction=GripDirection.FRONT,
+      drop_direction=GripDirection.LEFT,
     )
     plate_origin_location = {
       "xs": "03479",
@@ -750,8 +748,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       plate_reader.get_plate(),
       self.plt_car[0],
       pickup_distance_from_top=8.2 - 3.33,
-      get_direction=GripDirection.LEFT,
-      put_direction=GripDirection.FRONT,
+      pickup_direction=GripDirection.LEFT,
+      drop_direction=GripDirection.FRONT,
     )
     self._assert_command_sent_once(
       f"C0PPid0005xs{plate_reader_location['xs']}xd{plate_reader_location['xd']}"
@@ -957,61 +955,3 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "C0ZSid0023xs07975xd0ya1240yb1065tp2150tz2050th2450te2450",
       "xs#####xd#ya####yb####tp####tz####th####te####",
     )
-
-  async def test_iswap_pick_up_resource_grip_direction_changes_plate_width(
-    self,
-  ):
-    size_x = 100
-    size_y = 200
-    plate = Plate(
-      "dummy",
-      size_x=size_x,
-      size_y=size_y,
-      size_z=100,
-      ordered_items={},
-    )
-    plate.location = Coordinate.zero()
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_get_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_pick_up_resource(plate, GripDirection.FRONT, 1)
-      assert mocked_iswap_get_plate.call_args.kwargs["plate_width"] == size_x * 10 - 33
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_get_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_pick_up_resource(plate, GripDirection.LEFT, 1)
-      assert mocked_iswap_get_plate.call_args.kwargs["plate_width"] == size_y * 10 - 33
-
-  async def test_iswap_release_picked_up_resource_grip_direction_changes_plate_width(
-    self,
-  ):
-    size_x = 100
-    size_y = 200
-    plate = Plate(
-      "dummy",
-      size_x=size_x,
-      size_y=size_y,
-      size_z=100,
-      ordered_items={},
-    )
-    plate.location = Coordinate.zero()
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_put_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_release_picked_up_resource(
-        location=Coordinate.zero(),
-        resource=plate,
-        rotation=0,
-        offset=Coordinate.zero(),
-        grip_direction=GripDirection.FRONT,
-        pickup_distance_from_top=1,
-      )
-      assert mocked_iswap_get_plate.call_args.kwargs["open_gripper_position"] == size_x * 10 + 30
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_put_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_release_picked_up_resource(
-        location=Coordinate.zero(),
-        resource=plate,
-        rotation=0,
-        offset=Coordinate.zero(),
-        grip_direction=GripDirection.LEFT,
-        pickup_distance_from_top=1,
-      )
-      assert mocked_iswap_get_plate.call_args.kwargs["open_gripper_position"] == size_y * 10 + 30

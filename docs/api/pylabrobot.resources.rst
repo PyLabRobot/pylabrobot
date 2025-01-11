@@ -122,11 +122,11 @@ ML Star resources
   :nosignatures:
   :recursive:
 
-    ml_star
-    ml_star.tip_creators
-    ml_star.tip_racks
-    ml_star.tip_carriers
-    ml_star.plate_carriers
+    hamilton
+    hamilton.tip_creators
+    hamilton.tip_racks
+    hamilton.tip_carriers
+    hamilton.plate_carriers
 
 
 Opentrons
@@ -237,3 +237,13 @@ See :doc:`Using trackers </user_guide/using-trackers>` for a tutorial.
   no_volume_tracking
   set_volume_tracking
   volume_tracker.VolumeTracker
+
+Utils
+-----
+
+.. autosummary::
+  :toctree: _autosummary
+  :nosignatures:
+  :recursive:
+
+  utils

@@ -67,9 +67,11 @@ from .standard import (
   Drop,
   DropTipRack,
   GripDirection,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
 )
 
 logger = logging.getLogger("pylabrobot")
@@ -161,6 +163,8 @@ class LiquidHandler(Resource, Machine):
     self.location = Coordinate.zero()
     super().assign_child_resource(deck, location=deck.location or Coordinate.zero())
 
+    self._resource_pickup: Optional[ResourcePickup] = None
+
   async def setup(self, **backend_kwargs):
     """Prepare the robot for use."""
 
@@ -176,6 +180,8 @@ class LiquidHandler(Resource, Machine):
     self._send_assigned_resource_to_backend(self.deck)
     for resource in self.deck.children:
       self._send_assigned_resource_to_backend(resource)
+
+    self._resource_pickup = None
 
   def serialize_state(self) -> Dict[str, Any]:
     """Serialize the state of this liquid handler. Use :meth:`~Resource.serialize_all_states` to
@@ -1765,16 +1771,209 @@ class LiquidHandler(Resource, Machine):
     await self.aspirate96(resource=source, volume=volume, flow_rate=aspiration_flow_rate)
     await self.dispense96(resource=source, volume=volume, flow_rate=dispense_flow_rate)
 
+  async def pick_up_resource(
+    self,
+    resource: Resource,
+    offset: Coordinate = Coordinate.zero(),
+    pickup_distance_from_top: float = 0,
+    direction: GripDirection = GripDirection.FRONT,
+    **backend_kwargs,
+  ):
+    if self._resource_pickup is not None:
+      raise RuntimeError(f"Resource {self._resource_pickup.resource.name} already picked up")
+
+    self._resource_pickup = ResourcePickup(
+      resource=resource,
+      offset=offset,
+      pickup_distance_from_top=pickup_distance_from_top,
+      direction=direction,
+    )
+
+    extras = self._check_args(self.backend.pick_up_resource, backend_kwargs, default={"pickup"})
+    for extra in extras:
+      del backend_kwargs[extra]
+
+    await self.backend.pick_up_resource(
+      pickup=self._resource_pickup,
+      **backend_kwargs,
+    )
+
+  async def move_picked_up_resource(
+    self,
+    to: Coordinate,
+  ):
+    if self._resource_pickup is None:
+      raise RuntimeError("No resource picked up")
+    await self.backend.move_picked_up_resource(
+      ResourceMove(
+        location=to,
+        resource=self._resource_pickup.resource,
+        gripped_direction=self._resource_pickup.direction,
+      )
+    )
+
+  async def drop_resource(
+    self,
+    destination: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
+    offset: Coordinate = Coordinate.zero(),
+    direction: GripDirection = GripDirection.FRONT,
+    **backend_kwargs,
+  ):
+    if self._resource_pickup is None:
+      raise RuntimeError("No resource picked up")
+    resource = self._resource_pickup.resource
+
+    # compute rotation based on the pickup_direction and drop_direction
+    if self._resource_pickup.direction == direction:
+      rotation = 0
+    if (self._resource_pickup.direction, direction) in (
+      (GripDirection.FRONT, GripDirection.RIGHT),
+      (GripDirection.RIGHT, GripDirection.BACK),
+      (GripDirection.BACK, GripDirection.LEFT),
+      (GripDirection.LEFT, GripDirection.FRONT),
+    ):
+      rotation = 90
+    if (self._resource_pickup.direction, direction) in (
+      (GripDirection.FRONT, GripDirection.BACK),
+      (GripDirection.BACK, GripDirection.FRONT),
+      (GripDirection.LEFT, GripDirection.RIGHT),
+      (GripDirection.RIGHT, GripDirection.LEFT),
+    ):
+      rotation = 180
+    if (self._resource_pickup.direction, direction) in (
+      (GripDirection.RIGHT, GripDirection.FRONT),
+      (GripDirection.BACK, GripDirection.RIGHT),
+      (GripDirection.LEFT, GripDirection.BACK),
+      (GripDirection.FRONT, GripDirection.LEFT),
+    ):
+      rotation = 270
+
+    # the resource's absolute rotation should be the resource's previous rotation plus the
+    # rotation the move applied. The resource's absolute rotation is the rotation of the
+    # new parent plus the resource's rotation relative to the parent. So to find the new
+    # rotation of the resource wrt its new paretn, we compute what the new absolute rotation
+    # should be and subtract the rotation of the new parent. Note that before the new rotation
+    # is applied, the resource's rotation is still with respect to the old parent.
+    destination_rotation = (
+      destination.get_absolute_rotation().z if not isinstance(destination, Coordinate) else 0
+    )
+    new_rotation_z = resource.get_absolute_rotation().z + rotation - destination_rotation
+    relative_rotation = new_rotation_z - resource.rotation.z
+
+    # get the location of the destination
+    if isinstance(destination, ResourceStack):
+      assert (
+        destination.direction == "z"
+      ), "Only ResourceStacks with direction 'z' are currently supported"
+      to_location = destination.get_absolute_location(z="top")
+    elif isinstance(destination, Coordinate):
+      to_location = destination
+    elif isinstance(destination, Tilter):
+      to_location = destination.get_absolute_location() + destination.child_resource_location
+    elif isinstance(destination, PlateHolder):
+      if destination.resource is not None and destination.resource is not resource:
+        raise RuntimeError("Destination already has a plate")
+      to_location = (
+        destination.get_absolute_location()
+      )  # + destination.get_default_child_location(resource.rotated(z=relative_rotation))
+
+      # if we are moving a plate, we may need to adjust based on the pedestal size
+      # and plate geometry
+      if isinstance(resource, Plate):
+        # Sanity check for equal well clearances / dz
+        well_dz_set = {
+          round(well.location.z, 2)
+          for well in resource.get_all_children()
+          if well.category == "well" and well.location is not None
+        }
+        assert len(well_dz_set) == 1, "All wells must have the same dz"
+        well_dz = well_dz_set.pop()
+        # Plate "sinking" logic based on well dz to pedestal relationship
+        # 1. no pedestal
+        # 2. pedestal taller than plate.well.dz
+        # 3. pedestal shorter than plate.well.dz
+        pedestal_size_z = abs(destination.pedestal_size_z)
+        z_sinking_depth = min(pedestal_size_z, well_dz)
+        correction_anchor = Coordinate(0, 0, -z_sinking_depth)
+        to_location += correction_anchor
+    elif isinstance(destination, PlateAdapter):
+      if not isinstance(resource, Plate):
+        raise ValueError("Only plates can be moved to a PlateAdapter")
+      # Calculate location adjustment of Plate based on PlateAdapter geometry
+      adjusted_plate_anchor = destination.compute_plate_location(
+        resource.rotated(z=relative_rotation)
+      )
+      to_location = destination.get_absolute_location() + adjusted_plate_anchor
+    elif isinstance(destination, ResourceHolder):
+      x = destination.get_default_child_location(resource.rotated(z=relative_rotation))
+      to_location = destination.get_absolute_location() + x
+    elif isinstance(destination, Plate) and isinstance(resource, Lid):
+      lid = resource
+      plate_location = destination.get_absolute_location()
+      to_location = Coordinate(
+        x=plate_location.x,
+        y=plate_location.y,
+        z=plate_location.z + destination.get_absolute_size_z() - lid.nesting_z_height,
+      )
+    else:
+      to_location = destination.get_absolute_location()
+
+    drop = ResourceDrop(
+      resource=self._resource_pickup.resource,
+      destination=to_location,
+      offset=offset,
+      pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
+      direction=direction,
+      rotation=rotation,
+    )
+    result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
+
+    if rotation != 0:
+      resource.rotate(z=relative_rotation)
+
+    # assign to destination
+    resource.unassign()
+    if isinstance(destination, Coordinate):
+      to_location -= self.deck.location  # passed as an absolute location, but stored as relative
+      self.deck.assign_child_resource(resource, location=to_location)
+    elif isinstance(destination, PlateHolder):  # .zero() resources
+      destination.assign_child_resource(resource)
+    elif isinstance(destination, ResourceHolder):  # .zero() resources
+      destination.assign_child_resource(resource)
+    elif isinstance(destination, (ResourceStack, PlateReader)):  # manage its own resources
+      if isinstance(destination, ResourceStack) and destination.direction != "z":
+        raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
+      destination.assign_child_resource(resource)
+    elif isinstance(destination, Tilter):
+      destination.assign_child_resource(resource, location=destination.child_resource_location)
+    elif isinstance(destination, PlateAdapter):
+      if not isinstance(resource, Plate):
+        raise ValueError("Only plates can be moved to a PlateAdapter")
+      destination.assign_child_resource(
+        resource, location=destination.compute_plate_location(resource)
+      )
+    elif isinstance(destination, Plate) and isinstance(resource, Lid):
+      destination.assign_child_resource(resource)
+    else:
+      destination.assign_child_resource(resource, location=to_location)
+
+    self._resource_pickup = None
+
+    return result
+
   async def move_resource(
     self,
     resource: Resource,
-    to: Coordinate,
+    to: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
-    resource_offset: Coordinate = Coordinate.zero(),
+    resource_offset: Optional[Coordinate] = None,
+    pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
     pickup_distance_from_top: float = 0,
-    get_direction: GripDirection = GripDirection.FRONT,
-    put_direction: GripDirection = GripDirection.FRONT,
+    pickup_direction: GripDirection = GripDirection.FRONT,
+    drop_direction: GripDirection = GripDirection.FRONT,
+    get_direction: Optional[GripDirection] = None,
+    put_direction: Optional[GripDirection] = None,
     **backend_kwargs,
   ):
     """Move a resource to a new location.
@@ -1790,57 +1989,54 @@ class LiquidHandler(Resource, Machine):
       resource: The Resource object.
       to: The absolute coordinate (meaning relative to deck) to move the resource to.
       intermediate_locations: A list of intermediate locations to move the resource through.
-      resource_offset: The offset from the resource's origin, optional (rarely necessary).
+      pickup_offset: The offset from the resource's origin, optional (rarely necessary).
       destination_offset: The offset from the location's origin, optional (rarely necessary).
       pickup_distance_from_top: The distance from the top of the resource to pick up from.
-      get_direction: The direction from which to pick up the resource.
-      put_direction: The direction from which to put down the resource.
+      pickup_direction: The direction from which to pick up the resource.
+      drop_direction: The direction from which to put down the resource.
     """
 
     # TODO: move conditional statements from move_plate into move_resource to enable
     # movement to other types besides Coordinate
 
-    extras = self._check_args(self.backend.move_resource, backend_kwargs, default={"move"})
-    for extra in extras:
-      del backend_kwargs[extra]
+    # https://github.com/PyLabRobot/pylabrobot/issues/329
+    if resource_offset is not None:
+      raise NotImplementedError("resource_offset is deprecated, use pickup_offset instead")
+    if get_direction is not None:
+      raise NotImplementedError("get_direction is deprecated, use pickup_direction instead")
+    if put_direction is not None:
+      raise NotImplementedError("put_direction is deprecated, use drop_direction instead")
 
-    move_operation = Move(
+    await self.pick_up_resource(
       resource=resource,
-      destination=to,
-      intermediate_locations=intermediate_locations or [],
-      resource_offset=resource_offset,
-      destination_offset=destination_offset,
+      offset=pickup_offset,
       pickup_distance_from_top=pickup_distance_from_top,
-      get_direction=get_direction,
-      put_direction=put_direction,
-    )
-
-    result = await self.backend.move_resource(move=move_operation, **backend_kwargs)
-
-    # rotate the resource if the move operation has a rotation.
-    # this code should be expanded to also update the resource's location
-    if move_operation.rotation != 0:
-      move_operation.resource.rotate(z=move_operation.rotation)
-
-    self._trigger_callback(
-      "move_resource",
-      liquid_handler=self,
-      move=move_operation,
-      error=None,
+      direction=pickup_direction,
       **backend_kwargs,
     )
 
-    return result
+    for intermediate_location in intermediate_locations or []:
+      await self.move_picked_up_resource(to=intermediate_location)
+
+    await self.drop_resource(
+      destination=to,
+      offset=destination_offset,
+      direction=drop_direction,
+      **backend_kwargs,
+    )
 
   async def move_lid(
     self,
     lid: Lid,
     to: Union[Plate, ResourceStack, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
-    resource_offset: Coordinate = Coordinate.zero(),
+    resource_offset: Optional[Coordinate] = None,
+    pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
-    get_direction: GripDirection = GripDirection.FRONT,
-    put_direction: GripDirection = GripDirection.FRONT,
+    pickup_direction: GripDirection = GripDirection.FRONT,
+    drop_direction: GripDirection = GripDirection.FRONT,
+    get_direction: Optional[GripDirection] = None,
+    put_direction: Optional[GripDirection] = None,
     pickup_distance_from_top: float = 5.7 - 3.33,
     **backend_kwargs,
   ):
@@ -1855,65 +2051,51 @@ class LiquidHandler(Resource, Machine):
 
       Move a lid to the stacking area and back, grabbing it from the left side:
 
-      >>> await lh.move_lid(plate.lid, stacking_area, get_direction=GripDirection.LEFT)
-      >>> await lh.move_lid(stacking_area.get_top_item(), plate, put_direction=GripDirection.LEFT)
+      >>> await lh.move_lid(plate.lid, stacking_area, pickup_direction=GripDirection.LEFT)
+      >>> await lh.move_lid(stacking_area.get_top_item(), plate, drop_direction=GripDirection.LEFT)
 
     Args:
       lid: The lid to move. Can be either a Plate object or a Lid object.
       to: The location to move the lid to, either a plate, ResourceStack or a Coordinate.
-      resource_offset: The offset from the resource's origin, optional (rarely necessary).
+      pickup_offset: The offset from the resource's origin, optional (rarely necessary).
       destination_offset: The offset from the location's origin, optional (rarely necessary).
 
     Raises:
       ValueError: If the lid is not assigned to a resource.
     """
 
-    if isinstance(to, Plate):
-      to_location = to.get_absolute_location()
-      to_location = Coordinate(
-        x=to_location.x,
-        y=to_location.y,
-        z=to_location.z + to.get_absolute_size_z() - lid.nesting_z_height,
-      )
-    elif isinstance(to, ResourceStack):
-      assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      to_location = to.get_absolute_location(z="top")
-    elif isinstance(to, Coordinate):
-      to_location = to
-    else:
-      raise ValueError(f"Cannot move lid to {to}")
+    # https://github.com/PyLabRobot/pylabrobot/issues/329
+    if resource_offset is not None:
+      raise NotImplementedError("resource_offset is deprecated, use pickup_offset instead")
+    if get_direction is not None:
+      raise NotImplementedError("get_direction is deprecated, use pickup_direction instead")
+    if put_direction is not None:
+      raise NotImplementedError("put_direction is deprecated, use drop_direction instead")
 
     await self.move_resource(
       lid,
-      to=to_location,
+      to=to,
       intermediate_locations=intermediate_locations,
       pickup_distance_from_top=pickup_distance_from_top,
-      resource_offset=resource_offset,
+      pickup_offset=pickup_offset,
       destination_offset=destination_offset,
-      get_direction=get_direction,
-      put_direction=put_direction,
+      pickup_direction=pickup_direction,
+      drop_direction=drop_direction,
       **backend_kwargs,
     )
-
-    lid.unassign()
-    if isinstance(to, Coordinate):
-      self.deck.assign_child_resource(lid, location=to_location)
-    elif isinstance(to, ResourceStack):  # manage its own resources
-      to.assign_child_resource(lid)
-    elif isinstance(to, Plate):
-      to.assign_child_resource(resource=lid)
-    else:
-      raise ValueError("'to' must be either a Coordinate, ResourceStack or Plate")
 
   async def move_plate(
     self,
     plate: Plate,
     to: Union[ResourceStack, ResourceHolder, Resource, Coordinate],
     intermediate_locations: Optional[List[Coordinate]] = None,
-    resource_offset: Coordinate = Coordinate.zero(),
+    resource_offset: Optional[Coordinate] = None,
+    pickup_offset: Coordinate = Coordinate.zero(),
     destination_offset: Coordinate = Coordinate.zero(),
-    put_direction: GripDirection = GripDirection.FRONT,
-    get_direction: GripDirection = GripDirection.FRONT,
+    drop_direction: GripDirection = GripDirection.FRONT,
+    pickup_direction: GripDirection = GripDirection.FRONT,
+    get_direction: Optional[GripDirection] = None,
+    put_direction: Optional[GripDirection] = None,
     pickup_distance_from_top: float = 13.2 - 3.33,
     **backend_kwargs,
   ):
@@ -1932,8 +2114,8 @@ class LiquidHandler(Resource, Machine):
 
       Move a lid to another carrier spot, grabbing it from the left side:
 
-      >>> await lh.move_plate(plate, plt_car[1], get_direction=GripDirection.LEFT)
-      >>> await lh.move_plate(plate, plt_car[0], put_direction=GripDirection.LEFT)
+      >>> await lh.move_plate(plate, plt_car[1], pickup_direction=GripDirection.LEFT)
+      >>> await lh.move_plate(plate, plt_car[0], drop_direction=GripDirection.LEFT)
 
       Move a resource while visiting a few intermediate locations along the way:
 
@@ -1945,76 +2127,29 @@ class LiquidHandler(Resource, Machine):
     Args:
       plate: The plate to move. Can be either a Plate object or a ResourceHolder object.
       to: The location to move the plate to, either a plate, ResourceHolder or a Coordinate.
-      resource_offset: The offset from the resource's origin, optional (rarely necessary).
+      pickup_offset: The offset from the resource's origin, optional (rarely necessary).
       destination_offset: The offset from the location's origin, optional (rarely necessary).
     """
 
-    if isinstance(to, ResourceStack):
-      assert to.direction == "z", "Only ResourceStacks with direction 'z' are currently supported"
-      to_location = to.get_absolute_location(z="top")
-    elif isinstance(to, Coordinate):
-      to_location = to
-    elif isinstance(to, Tilter):
-      to_location = to.get_absolute_location() + to.child_resource_location
-    elif isinstance(to, PlateHolder):
-      if to.resource is not None and to.resource is not plate:
-        raise RuntimeError("Destination already has a plate")
-      to_location = to.get_absolute_location()
-      # Sanity check for equal well clearances / dz
-      well_dz_set = {
-        round(well.location.z, 2)
-        for well in plate.get_all_children()
-        if well.category == "well" and well.location is not None
-      }
-      assert len(well_dz_set) == 1, "All wells must have the same dz"
-      well_dz = well_dz_set.pop()
-      # Plate "sinking" logic based on well dz to pedestal relationship
-      # 1. no pedestal
-      # 2. pedestal taller than plate.well.dz
-      # 3. pedestal shorter than plate.well.dz
-      pedestal_size_z = abs(to.pedestal_size_z)
-      z_sinking_depth = min(pedestal_size_z, well_dz)
-      correction_anchor = Coordinate(0, 0, -z_sinking_depth)
-      to_location += correction_anchor
-    elif isinstance(to, PlateAdapter):
-      # Calculate location adjustment of Plate based on PlateAdapter geometry
-      adjusted_plate_anchor = to.compute_plate_location(plate)
-      to_location = to.get_absolute_location() + adjusted_plate_anchor
-    else:
-      to_location = to.get_absolute_location()
+    # https://github.com/PyLabRobot/pylabrobot/issues/329
+    if resource_offset is not None:
+      raise NotImplementedError("resource_offset is deprecated, use pickup_offset instead")
+    if get_direction is not None:
+      raise NotImplementedError("get_direction is deprecated, use pickup_direction instead")
+    if put_direction is not None:
+      raise NotImplementedError("put_direction is deprecated, use drop_direction instead")
 
     await self.move_resource(
       plate,
-      to=to_location,
+      to=to,
       intermediate_locations=intermediate_locations,
       pickup_distance_from_top=pickup_distance_from_top,
-      resource_offset=resource_offset,
+      pickup_offset=pickup_offset,
       destination_offset=destination_offset,
-      get_direction=get_direction,
-      put_direction=put_direction,
+      pickup_direction=pickup_direction,
+      drop_direction=drop_direction,
       **backend_kwargs,
     )
-
-    # Some of the code below should probably be moved to `move_resource` so that is can be shared
-    # with the `move_lid` convenience method.
-    plate.unassign()
-    if isinstance(to, Coordinate):
-      to_location -= self.deck.location  # passed as an absolute location, but stored as relative
-      self.deck.assign_child_resource(plate, location=to_location)
-    elif isinstance(to, PlateHolder):  # .zero() resources
-      to.assign_child_resource(plate)
-    elif isinstance(to, ResourceHolder):  # .zero() resources
-      to.assign_child_resource(plate)
-    elif isinstance(to, (ResourceStack, PlateReader)):  # manage its own resources
-      if isinstance(to, ResourceStack) and to.direction != "z":
-        raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
-      to.assign_child_resource(plate)
-    elif isinstance(to, Tilter):
-      to.assign_child_resource(plate, location=to.child_resource_location)
-    elif isinstance(to, PlateAdapter):
-      to.assign_child_resource(plate, location=to.compute_plate_location(plate))
-    else:
-      to.assign_child_resource(plate, location=to_location)
 
   def register_callback(self, method_name: str, callback: OperationCallback):
     """Registers a callback for a specific method."""
@@ -2097,7 +2232,7 @@ class LiquidHandler(Resource, Machine):
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate,
+    location: Optional[Coordinate],
     reassign: bool = True,
   ):
     """Not implement on LiquidHandler, since the deck is managed by the :attr:`deck` attribute."""

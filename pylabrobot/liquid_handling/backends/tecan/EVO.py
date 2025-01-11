@@ -33,9 +33,11 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Drop,
   DropTipRack,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
 )
 from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import (
@@ -515,16 +517,15 @@ class EVO(TecanLiquidHandler):
   async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
     raise NotImplementedError()
 
-  async def move_resource(self, move: Move):
-    """Pick up a resource and move it to a new location."""
-
+  async def pick_up_resource(self, pickup: ResourcePickup):
     # TODO: implement PnP for moving tubes
     assert self.roma_connected
 
     z_range = await self.roma.report_z_param(5)
-    x, y, z = self._roma_positions(move.resource, move.resource.get_absolute_location(), z_range)
-    h = int(move.resource.get_absolute_size_y() * 10)
-    xt, yt, zt = self._roma_positions(move.resource, move.destination, z_range)
+    x, y, z = self._roma_positions(
+      pickup.resource, pickup.resource.get_absolute_location(), z_range
+    )
+    h = int(pickup.resource.get_absolute_size_y() * 10)
 
     # move to resource
     await self.roma.set_smooth_move_x(1)
@@ -547,6 +548,16 @@ class EVO(TecanLiquidHandler):
     await self.roma.set_fast_speed_r(2000, 600)
     await self.roma.set_gripper_params(100, 75)
     await self.roma.grip_plate(h - 100)
+
+  async def move_picked_up_resource(self, move: ResourceMove):
+    raise NotImplementedError()
+
+  async def drop_resource(self, drop: ResourceDrop):
+    """Drop a resource like a plate or a lid using the integrated robotic arm."""
+
+    z_range = await self.roma.report_z_param(5)
+    x, y, z = self._roma_positions(drop.resource, drop.resource.get_absolute_location(), z_range)
+    xt, yt, zt = self._roma_positions(drop.resource, drop.destination, z_range)
 
     # move to target
     await self.roma.set_target_window_class(1, 0, 0, 0, 135, 0)
