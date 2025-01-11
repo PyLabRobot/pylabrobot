@@ -7589,7 +7589,9 @@ class STAR(HamiltonLiquidHandler):
     for channel_idx, z in zs.items():
       channel_locations[channel_idx] = z
 
-    return await self.send_command(module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()])
+    return await self.send_command(
+      module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()]
+    )
 
 
 class UnSafe:
