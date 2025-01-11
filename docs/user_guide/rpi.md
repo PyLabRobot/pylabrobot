@@ -21,6 +21,10 @@ You can use PLR on any operating system, but Raspberry Pis can be a good choice 
   ```
   SUBSYSTEM=="usb", MODE="0666"
   ```
+- Reload the udev rules with
+  ```bash
+  sudo udevadm control --reload-rules && sudo udevadm trigger
+  ```
 
 ```{warning}
 This adds permissions to all USB devices. This is useful when you control the device and don't want to worry when plugging in new devices, but it could be a security risk if the machine is shared with untrusted users. See [udev documentation](https://www.kernel.org/pub/linux/utils/kernel/hotplug/udev/udev.html) for more granular control.

@@ -137,12 +137,15 @@ To interact with the centrifuge programmatically, you need its FTDI device ID. U
 Use the following code to configure the centrifuge in Python:
 
 ```python
-from pylabrobot import Centrifuge
-from pylabrobot.backends.vspin import VSpin
+from pylabrobot.centrifuge import Centrifuge, VSpin
 
 # Replace with your specific FTDI device ID and bucket position for profile in Agilent Centrifuge Config Tool.
 backend = VSpin(bucket_1_position=6969, device_id="XXXXXXXX")
-centrifuge = Centrifuge(backend=backend)
+centrifuge = Centrifuge(
+   backend=backend,
+   name="centrifuge",
+   size_x=1, size_y=1, size_z=1
+)
 
 # Initialize the centrifuge.
 await centrifuge.setup()

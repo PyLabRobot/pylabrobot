@@ -4,12 +4,12 @@ import unittest
 from pylabrobot.resources.corning_costar import (
   Cor_96_wellplate_360ul_Fb,
 )
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import (
+from pylabrobot.resources.hamilton import (
   HTF,
   PLT_CAR_L5AC_A00,
   STF,
   TIP_CAR_480_A00,
+  STARLetDeck,
 )
 from pylabrobot.resources.stanley.cups import (
   StanleyCup_QUENCHER_FLOWSTATE_TUMBLER,
@@ -46,7 +46,7 @@ class HamiltonDeckTests(unittest.TestCase):
         """
     Rail  Resource                      Type           Coordinates (mm)
     =================================================================================
-    (-13) ├── trash_core96              Trash          (-232.100, 110.300, 189.000)
+    (-6)  ├── trash_core96              Trash          (-58.200, 106.000, 229.000)
           │
     (1)   ├── tip_carrier               TipCarrier     (100.000, 063.000, 100.000)
           │   ├── tip_rack_01           TipRack        (106.200, 073.000, 214.950)
@@ -63,7 +63,7 @@ class HamiltonDeckTests(unittest.TestCase):
           │   ├── <empty>
           │
     (31)  ├── teaching_carrier          Resource       (775.000, 051.800, 100.000)
-          │   ├── teaching_tip_rack     TipRack        (780.900, 452.100, 100.000)
+          │   ├── teaching_tip_rack     TipRack        (780.900, 461.100, 100.000)
           │
     (32)  ├── trash                     Trash          (800.000, 190.600, 137.100)
     """[1:]

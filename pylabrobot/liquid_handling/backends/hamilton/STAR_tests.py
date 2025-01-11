@@ -21,8 +21,7 @@ from pylabrobot.resources import (
   ResourceStack,
   no_volume_tracking,
 )
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import STF
+from pylabrobot.resources.hamilton import STF, STARLetDeck
 from tests.usb import MockDev, MockEndpoint
 
 from .STAR import (
@@ -627,7 +626,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.discard_tips96()
 
     self._assert_command_sent_once(
-      "C0ERid0213xs02321xd1yh1103za2164zh2450ze2450",
+      "C0ERid0213xs00420xd1yh1203za2164zh2450ze2450",
       "xs#####xd#yh####za####zh####ze####",
     )
 
