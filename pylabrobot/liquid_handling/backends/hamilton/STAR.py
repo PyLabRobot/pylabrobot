@@ -2985,7 +2985,35 @@ class STAR(HamiltonLiquidHandler):
     await self.position_left_x_arm_(round(x * 10))
 
   async def move_channel_y(self, channel: int, y: float):
-    """Move a channel in the y direction."""
+    """Move a channel safely in the y direction."""
+
+    # Anti-channel-crash feature
+    if channel > 0:
+      max_y_pos = await self.request_y_pos_channel_n(channel - 1)
+      if y > max_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be <= {max_y_pos} mm "
+          f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
+        )
+    else:
+      # STAR machines appear to lose connection to a channel if y > 635 mm
+      max_y_pos = 635
+      if y > max_y_pos:
+        raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm (machine limit)")
+
+    if channel < (self.num_channels - 1):
+      min_y_pos = await self.request_y_pos_channel_n(channel + 1)
+      if y < min_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be >= {min_y_pos} mm "
+          f"(channel {channel + 1} y-position is {round(y, 2)} mm)"
+        )
+    else:
+      # STAR machines appear to lose connection to a channel if y < 6 mm
+      min_y_pos = 6
+      if y < min_y_pos:
+        raise ValueError(f"channel {channel} y-target must be >= {min_y_pos} mm (machine limit)")
+
     await self.position_single_pipetting_channel_in_y_direction(
       pipetting_channel_index=channel + 1, y_position=round(y * 10)
     )
@@ -7168,15 +7196,24 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
+  y_drive_mm_per_increment = 0.046302082
   z_drive_mm_per_increment = 0.01072765
+
+  @staticmethod
+  def mm_to_y_drive_increment(value_mm: float) -> int:
+    return round(value_mm / STAR.y_drive_mm_per_increment)
+
+  @staticmethod
+  def y_drive_increment_to_mm(value_mm: int) -> float:
+    return round(value_mm * STAR.y_drive_mm_per_increment, 2)
 
   @staticmethod
   def mm_to_z_drive_increment(value_mm: float) -> int:
     return round(value_mm / STAR.z_drive_mm_per_increment)
 
   @staticmethod
-  def z_drive_increment_to_mm(value_mm: int) -> float:
-    return round(value_mm * STAR.z_drive_mm_per_increment, 2)
+  def z_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STAR.z_drive_mm_per_increment, 2)
 
   async def clld_probe_z_height_using_channel(
     self,
@@ -7333,7 +7370,7 @@ class STAR(HamiltonLiquidHandler):
     channel_idx: int,  # 0-based indexing of channels!
     tip_len: Optional[float] = None,  # mm
     lowest_immers_pos: float = 99.98,  # mm
-    start_pos_search: float = 330.0,  # mm
+    start_pos_search: Optional[float] = None,  # mm
     channel_speed: float = 10.0,  # mm/sec
     channel_acceleration: float = 800.0,  # mm/sec**2
     channel_speed_upwards: float = 125.0,  # mm
@@ -7377,11 +7414,20 @@ class STAR(HamiltonLiquidHandler):
 
     if tip_len is None:
       tip_len = await self.request_tip_len_on_channel(channel_idx=channel_idx)
+    if start_pos_search is None:
+      start_pos_search = 334.7 - tip_len + fitting_depth
 
     tip_len_used_in_increments = (tip_len - fitting_depth) / STAR.z_drive_mm_per_increment
+    channel_head_start_pos = (
+      start_pos_search + tip_len - fitting_depth
+    )  # start_pos of the head itself!
+    safe_head_bottom_z_pos = (
+      99.98 + tip_len - fitting_depth
+    )  # 99.98 == STAR.z_drive_increment_to_mm(9_320)
+    safe_head_top_z_pos = 334.7  # 334.7 == STAR.z_drive_increment_to_mm(31_200)
 
     lowest_immers_pos_increments = STAR.mm_to_z_drive_increment(lowest_immers_pos)
-    start_pos_search_increments = STAR.mm_to_z_drive_increment(start_pos_search)
+    start_pos_search_increments = STAR.mm_to_z_drive_increment(channel_head_start_pos)
     channel_speed_increments = STAR.mm_to_z_drive_increment(channel_speed)
     channel_acceleration_thousand_increments = STAR.mm_to_z_drive_increment(
       channel_acceleration / 1000
@@ -7392,12 +7438,12 @@ class STAR(HamiltonLiquidHandler):
     assert 20 <= tip_len <= 120, "Total tip length must be between 20 and 120"
 
     assert 9320 <= lowest_immers_pos_increments <= 31_200, (
-      f"Lowest immersion position must be between \n{STAR.z_drive_increment_to_mm(9_320)}"
-      + f" and {STAR.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
+      "Lowest immersion position must be between \n99.98"
+      + f" and 334.7 mm, is {lowest_immers_pos} mm"
     )
-    assert 9320 <= start_pos_search_increments <= 31_200, (
-      f"Start position of LLD search must be between \n{STAR.z_drive_increment_to_mm(9_320)}"
-      + f" and {STAR.z_drive_increment_to_mm(31_200)} mm, is {start_pos_search} mm"
+    assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
+      f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
+      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm"
     )
     assert 20 <= channel_speed_increments <= 15_000, (
       f"Z-touch search speed must be between \n{STAR.z_drive_increment_to_mm(20)}"
