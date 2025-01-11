@@ -7593,6 +7593,96 @@ class STAR(HamiltonLiquidHandler):
       module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()]
     )
 
+  async def step_off_foil(
+    self, well: Well, front_channel: int, back_channel: int, move_inwards: float = 2
+  ):
+    """
+    Hold down a plate by placing two channels on the edges of a plate that is sealed with foil
+    while moving up the channels that are still within the foil. This is useful when, for
+    example, aspirating from a plate that is sealed: without holding it down, the tips might get
+    stuck in the plate and move it up when retracting. Putting plates on the edge prevents this.
+
+    When aspirating or dispensing in the foil, be sure to set the `min_z_endpos` parameter in
+    `lh.aspirate` or `lh.dispense` to a value in the foil. You might want to use something like
+
+    ```python
+    well = plate.get_well("A3")
+    await wc.lh.aspirate(
+      [well]*4, vols=[100]*4, use_channels=[7,8,9,10],
+      min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
+      surface_following_distance=0,
+      pull_out_distance_transport_air=[0] * 4)
+    await step_off_foil(lh.backend, well, front_channel=11, back_channel=6, move_inwards = 3)
+    ```
+
+    Args:
+      well: Well in the plate to hold down. (x-coordinate of channels will be at center of well).
+      front_channel: The channel to place on the front of the plate.
+      back_channel: The channel to place on the back of the plate.
+      move_inwards: mm to move inwards (backward on the front channel; frontward on the back).
+    """
+
+    if front_channel <= back_channel:
+      raise ValueError(
+        "front_channel should be in front of back_channel. " "Channels are 0-indexed from the back."
+      )
+
+    # Get the absolute locations for center front top and center back top
+    back_location = well.get_absolute_location("c", "b", "t")
+    front_location = well.get_absolute_location("c", "f", "t")
+
+    # The y positions may cause a crash if the channel in front of `front_channel`
+    # or to the back of `back_channel` are still within the space that the front&back
+    # channel will span above the plate. To check, we request the current y locations
+    # of all channels, and update it with the locations we computed above. Then,
+    # we correct any potential error.
+    channel_locations = await self.get_channels_y_positions()
+    channel_locations[front_channel] = front_location.y + move_inwards
+    channel_locations[back_channel] = back_location.y + move_inwards
+
+    # For the channels to the back of `back_channel`, make sure the space between them is
+    # >=9mm. We start with the channel closest to `back_channel`, and make sure the
+    # channel behind it is at least 9mm, updating if needed. Iterating from the front (closest
+    # to `back_channel`) to the back (channel 0), all channels are put at the correct location.
+    # This order matters because the channel in front of any channel may have been moved in the
+    # previous iteration.
+    # Note that if a channel is already spaced at >=9mm, it is not moved.
+    for channel_idx in range(back_channel, 0, -1):
+      if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < 9:
+        channel_locations[channel_idx - 1] = channel_locations[channel_idx] + 9
+
+    # Similarly for the channels to the front of `front_channel`, make sure they are all
+    # spaced >=9mm apart. This time, we iterate from back (closest to `front_channel`)
+    # to the front (lh.backend.num_channels - 1), and put each channel >=9mm before the
+    # one behind it.
+    for channel_idx in range(front_channel, self.num_channels - 1):
+      if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < 9:
+        channel_locations[channel_idx + 1] = channel_locations[channel_idx] - 9
+
+    # Quick checks before movement.
+    assert channel_locations[0] <= 650, "Channel 0 would hit the back of the robot"
+    assert (
+      channel_locations[self.num_channels - 1] >= 6
+    ), "Channel N would hit the front of the robot"
+
+    try:
+      # Then move all channels in the y-space simultaneously.
+      await self.position_channels_in_y_direction(channel_locations)
+
+      await self.move_channel_z(front_channel, front_location.z)
+      await self.move_channel_z(back_channel, back_location.z)
+    finally:
+      # Move channels that are lower than the `front_channel` and `back_channel` to
+      # the same z-height. This will mean they are level with the foil (making minimal
+      # or no contact.)
+      zs = await self.get_channels_z_positions()
+      indices = [channel_idx for channel_idx, z in zs.items() if z < front_location.z]
+      idx = {idx: front_location.z for idx in indices}
+      await self.position_channels_in_z_direction(idx)
+
+      # After that, all channels are clear to move up.
+      await self.move_all_channels_in_z_safety()
+
 
 class UnSafe:
   """

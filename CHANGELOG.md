@@ -146,6 +146,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - `iswap_collision_control_level: int = 0`
 - `with_trash96` on `HamiltonSTARDeck` so there is more fine grained control (https://github.com/PyLabRobot/pylabrobot/pull/347)
 - add `STAR.{get_channels_z_positions, position_channels_in_z_direction}` (https://github.com/PyLabRobot/pylabrobot/pull/356)
+- `STAR.step_off_foil` (https://github.com/PyLabRobot/pylabrobot/pull/357)
 
 ### Deprecated
 
