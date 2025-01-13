@@ -16,6 +16,7 @@ from pylabrobot.liquid_handling.standard import (
   ResourceDrop,
   ResourcePickup,
 )
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources import (
   Coordinate,
   DeepWell_96_Well,
@@ -340,6 +341,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     drop = ResourceDrop(
       resource=self.plate,
       destination=self.plate_carrier[0].get_absolute_location(),
+      destination_absolute_rotation=Rotation(0, 0, 0),
       offset=Coordinate.zero(),
       pickup_distance_from_top=13.2,
       direction=GripDirection.FRONT,
