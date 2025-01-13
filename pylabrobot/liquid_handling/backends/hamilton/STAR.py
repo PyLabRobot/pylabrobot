@@ -2902,7 +2902,7 @@ class STAR(HamiltonLiquidHandler):
       # The computation of the center has to be rotated so that the offset is in absolute space.
       center_in_absolute_space = Coordinate(
         *matrix_vector_multiply_3x3(
-          drop.resource.rotated(z=drop.rotation).get_absolute_rotation().get_rotation_matrix(),
+          drop.resource.rotated(z=drop.rotation + drop.destination_absolute_rotation.z).get_absolute_rotation().get_rotation_matrix(),
           drop.resource.center().vector(),
         )
       )

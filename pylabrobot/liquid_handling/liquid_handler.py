@@ -1878,6 +1878,7 @@ class LiquidHandler(Resource, Machine):
     drop = ResourceDrop(
       resource=self._resource_pickup.resource,
       destination=to_location,
+      destination_absolute_rotation=destination.get_absolute_rotation(),
       offset=offset,
       pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
       direction=direction,
