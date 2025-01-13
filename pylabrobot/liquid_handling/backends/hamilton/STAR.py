@@ -2892,9 +2892,13 @@ class STAR(HamiltonLiquidHandler):
       # original grip direction. Hack.
       # the resource still has its original orientation.
       if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
-        plate_width = drop.resource.rotated(z=drop.rotation).get_absolute_size_x()
+        plate_width = drop.resource.rotated(
+          z=drop.rotation + drop.destination_absolute_rotation.z
+        ).get_absolute_size_x()
       elif drop.direction in (GripDirection.RIGHT, GripDirection.LEFT):
-        plate_width = drop.resource.rotated(z=drop.rotation).get_absolute_size_y()
+        plate_width = drop.resource.rotated(
+          z=drop.rotation + drop.destination_absolute_rotation.z
+        ).get_absolute_size_y()
       else:
         raise ValueError("Invalid grip direction")
 
@@ -2902,7 +2906,9 @@ class STAR(HamiltonLiquidHandler):
       # The computation of the center has to be rotated so that the offset is in absolute space.
       center_in_absolute_space = Coordinate(
         *matrix_vector_multiply_3x3(
-          drop.resource.rotated(z=drop.rotation).get_absolute_rotation().get_rotation_matrix(),
+          drop.resource.rotated(z=drop.rotation + drop.destination_absolute_rotation.z)
+          .get_absolute_rotation()
+          .get_rotation_matrix(),
           drop.resource.center().vector(),
         )
       )

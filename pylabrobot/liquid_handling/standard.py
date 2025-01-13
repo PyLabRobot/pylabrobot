@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.rotation import Rotation
 
 if TYPE_CHECKING:
   from pylabrobot.resources import (
@@ -147,6 +148,7 @@ class ResourceMove:
 class ResourceDrop:
   resource: Resource
   destination: Coordinate
+  destination_absolute_rotation: Rotation
   offset: Coordinate
   pickup_distance_from_top: float
   direction: GripDirection
