@@ -2892,9 +2892,13 @@ class STAR(HamiltonLiquidHandler):
       # original grip direction. Hack.
       # the resource still has its original orientation.
       if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
-        plate_width = drop.resource.rotated(z=drop.rotation + drop.destination_absolute_rotation.z).get_absolute_size_x()
+        plate_width = drop.resource.rotated(
+          z=drop.rotation + drop.destination_absolute_rotation.z
+        ).get_absolute_size_x()
       elif drop.direction in (GripDirection.RIGHT, GripDirection.LEFT):
-        plate_width = drop.resource.rotated(z=drop.rotation + drop.destination_absolute_rotation.z).get_absolute_size_y()
+        plate_width = drop.resource.rotated(
+          z=drop.rotation + drop.destination_absolute_rotation.z
+        ).get_absolute_size_y()
       else:
         raise ValueError("Invalid grip direction")
 

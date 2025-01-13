@@ -30,7 +30,6 @@ from pylabrobot.liquid_handling.strictness import (
 )
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading import PlateReader
-from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources import (
   Container,
   Coordinate,
@@ -55,6 +54,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.errors import CrossContaminationError, HasTipError
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
@@ -1922,7 +1922,9 @@ class LiquidHandler(Resource, Machine):
     drop = ResourceDrop(
       resource=self._resource_pickup.resource,
       destination=to_location,
-      destination_absolute_rotation=destination.get_absolute_rotation() if isinstance(destination, Resource) else Rotation(0, 0, 0),
+      destination_absolute_rotation=destination.get_absolute_rotation()
+      if isinstance(destination, Resource)
+      else Rotation(0, 0, 0),
       offset=offset,
       pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
       direction=direction,

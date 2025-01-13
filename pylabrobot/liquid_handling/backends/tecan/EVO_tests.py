@@ -16,7 +16,6 @@ from pylabrobot.liquid_handling.standard import (
   ResourceDrop,
   ResourcePickup,
 )
-from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources import (
   Coordinate,
   DeepWell_96_Well,
@@ -25,6 +24,7 @@ from pylabrobot.resources import (
   EVO150Deck,
   MP_3Pos_PCR,
 )
+from pylabrobot.resources.rotation import Rotation
 
 
 class EVOTests(unittest.IsolatedAsyncioTestCase):
