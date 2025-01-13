@@ -92,6 +92,16 @@ def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
   )
 
 
+def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing: float):
+  """Get the centers of the channels with a minimum margin on the edges."""
+  if dim_size < margin * 2 + (n - 1) * min_spacing:
+    raise ValueError("Resource is too small to space channels.")
+  if dim_size - (n - 1) * min_spacing <= min_spacing * 2:
+    remaining_space = dim_size - (n - 1) * min_spacing - margin * 2
+    return [margin + remaining_space / 2 + i * min_spacing for i in range(n)]
+  return [(i + 1) * dim_size / (n + 1) for i in range(n)]
+
+
 class BlowOutVolumeError(Exception):
   pass
 
@@ -694,6 +704,45 @@ class LiquidHandler(Resource, Machine):
     if len(not_containers) > 0:
       raise TypeError(f"Resources must be `Container`s, got {not_containers}")
 
+  def _get_single_resource_liquid_op_offsets(
+    self, resource: Resource, num_channels: int
+  ) -> List[Coordinate]:
+    min_spacing_edge = (
+      2  # minimum spacing between the edge of the container and the center of channel
+    )
+    min_spacing_between_channels = 9
+
+    resource_size: float
+    if resource.get_absolute_rotation().z % 180 == 0:
+      resource_size = resource.get_size_y()
+    elif resource.get_absolute_rotation().z % 90 == 0:
+      resource_size = resource.get_size_x()
+    else:
+      raise ValueError("Only 90 and 180 degree rotations are supported for now.")
+
+    centers = list(
+      reversed(
+        _get_centers_with_margin(
+          dim_size=resource_size,
+          n=num_channels,
+          margin=min_spacing_edge,
+          min_spacing=min_spacing_between_channels,
+        )
+      )
+    )  # reverse because channels are from back to front
+
+    center_offsets: List[Coordinate] = []
+    if resource.get_absolute_rotation().z % 180 == 0:
+      x_offset = resource.get_size_x() / 2
+      center_offsets = [Coordinate(x=x_offset, y=c, z=0) for c in centers]
+    elif resource.get_absolute_rotation().z % 90 == 0:
+      y_offset = resource.get_size_y() / 2
+      center_offsets = [Coordinate(x=c, y=y_offset, z=0) for c in centers]
+
+    # offsets are relative to the center of the resource, but above we computed them wrt lfb
+    # so we need to subtract the center of the resource
+    return [c - resource.center() for c in center_offsets]
+
   @need_setup_finished
   async def aspirate(
     self,
@@ -788,16 +837,13 @@ class LiquidHandler(Resource, Machine):
     # center of the resource.
     if len(set(resources)) == 1:
       resource = resources[0]
-      n = len(use_channels)
       resources = [resource] * len(use_channels)
-      if resource.get_absolute_rotation().z % 180 == 0:
-        centers = list(reversed(resource.centers(yn=n, zn=0)))
-      elif resource.get_absolute_rotation().z % 90 == 0:
-        centers = list(reversed(resource.centers(xn=n, zn=0)))
-      else:
-        raise ValueError("Only 90 and 180 degree rotations are supported for now.")
-      centers = [c - resource.center() for c in centers]  # offset is wrt center
-      offsets = [c + o for c, o in zip(centers, offsets)]  # user-defined
+      center_offsets = self._get_single_resource_liquid_op_offsets(
+        resource=resource, num_channels=len(use_channels)
+      )
+
+      # add user defined offsets to the computed centers
+      offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     liquids: List[List[Tuple[Optional[Liquid], float]]] = []
@@ -977,16 +1023,13 @@ class LiquidHandler(Resource, Machine):
     # center of the resource.
     if len(set(resources)) == 1:
       resource = resources[0]
-      n = len(use_channels)
       resources = [resource] * len(use_channels)
-      if resource.get_absolute_rotation().z % 180 == 0:
-        centers = list(reversed(resource.centers(yn=n, zn=0)))
-      elif resource.get_absolute_rotation().z % 90 == 0:
-        centers = list(reversed(resource.centers(xn=n, zn=0)))
-      else:
-        raise ValueError("Only 90 and 180 degree rotations are supported for now.")
-      centers = [c - resource.center() for c in centers]  # offset is wrt center
-      offsets = [c + o for c, o in zip(centers, offsets)]  # user-defined
+      center_offsets = self._get_single_resource_liquid_op_offsets(
+        resource=resource, num_channels=len(use_channels)
+      )
+
+      # add user defined offsets to the computed centers
+      offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     tips = [self.head[channel].get_tip() for channel in use_channels]
 

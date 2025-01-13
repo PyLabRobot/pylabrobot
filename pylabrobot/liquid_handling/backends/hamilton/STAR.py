@@ -2984,7 +2984,35 @@ class STAR(HamiltonLiquidHandler):
     await self.position_left_x_arm_(round(x * 10))
 
   async def move_channel_y(self, channel: int, y: float):
-    """Move a channel in the y direction."""
+    """Move a channel safely in the y direction."""
+
+    # Anti-channel-crash feature
+    if channel > 0:
+      max_y_pos = await self.request_y_pos_channel_n(channel - 1)
+      if y > max_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be <= {max_y_pos} mm "
+          f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
+        )
+    else:
+      # STAR machines appear to lose connection to a channel if y > 635 mm
+      max_y_pos = 635
+      if y > max_y_pos:
+        raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm (machine limit)")
+
+    if channel < (self.num_channels - 1):
+      min_y_pos = await self.request_y_pos_channel_n(channel + 1)
+      if y < min_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be >= {min_y_pos} mm "
+          f"(channel {channel + 1} y-position is {round(y, 2)} mm)"
+        )
+    else:
+      # STAR machines appear to lose connection to a channel if y < 6 mm
+      min_y_pos = 6
+      if y < min_y_pos:
+        raise ValueError(f"channel {channel} y-target must be >= {min_y_pos} mm (machine limit)")
+
     await self.position_single_pipetting_channel_in_y_direction(
       pipetting_channel_index=channel + 1, y_position=round(y * 10)
     )
@@ -4773,10 +4801,6 @@ class STAR(HamiltonLiquidHandler):
   # TODO:(command:ZB)
 
   # -------------- 3.5.6 Adjustment & movement commands --------------
-
-  # TODO:(command:JY) Position all pipetting channels in Y-direction
-
-  # TODO:(command:JZ) Position all pipetting channels in Z-direction
 
   async def position_single_pipetting_channel_in_y_direction(
     self, pipetting_channel_index: int, y_position: int
@@ -7171,15 +7195,24 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
+  y_drive_mm_per_increment = 0.046302082
   z_drive_mm_per_increment = 0.01072765
+
+  @staticmethod
+  def mm_to_y_drive_increment(value_mm: float) -> int:
+    return round(value_mm / STAR.y_drive_mm_per_increment)
+
+  @staticmethod
+  def y_drive_increment_to_mm(value_mm: int) -> float:
+    return round(value_mm * STAR.y_drive_mm_per_increment, 2)
 
   @staticmethod
   def mm_to_z_drive_increment(value_mm: float) -> int:
     return round(value_mm / STAR.z_drive_mm_per_increment)
 
   @staticmethod
-  def z_drive_increment_to_mm(value_mm: int) -> float:
-    return round(value_mm * STAR.z_drive_mm_per_increment, 2)
+  def z_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STAR.z_drive_mm_per_increment, 2)
 
   async def clld_probe_z_height_using_channel(
     self,
@@ -7336,7 +7369,7 @@ class STAR(HamiltonLiquidHandler):
     channel_idx: int,  # 0-based indexing of channels!
     tip_len: Optional[float] = None,  # mm
     lowest_immers_pos: float = 99.98,  # mm
-    start_pos_search: float = 330.0,  # mm
+    start_pos_search: Optional[float] = None,  # mm
     channel_speed: float = 10.0,  # mm/sec
     channel_acceleration: float = 800.0,  # mm/sec**2
     channel_speed_upwards: float = 125.0,  # mm
@@ -7380,11 +7413,20 @@ class STAR(HamiltonLiquidHandler):
 
     if tip_len is None:
       tip_len = await self.request_tip_len_on_channel(channel_idx=channel_idx)
+    if start_pos_search is None:
+      start_pos_search = 334.7 - tip_len + fitting_depth
 
     tip_len_used_in_increments = (tip_len - fitting_depth) / STAR.z_drive_mm_per_increment
+    channel_head_start_pos = (
+      start_pos_search + tip_len - fitting_depth
+    )  # start_pos of the head itself!
+    safe_head_bottom_z_pos = (
+      99.98 + tip_len - fitting_depth
+    )  # 99.98 == STAR.z_drive_increment_to_mm(9_320)
+    safe_head_top_z_pos = 334.7  # 334.7 == STAR.z_drive_increment_to_mm(31_200)
 
     lowest_immers_pos_increments = STAR.mm_to_z_drive_increment(lowest_immers_pos)
-    start_pos_search_increments = STAR.mm_to_z_drive_increment(start_pos_search)
+    start_pos_search_increments = STAR.mm_to_z_drive_increment(channel_head_start_pos)
     channel_speed_increments = STAR.mm_to_z_drive_increment(channel_speed)
     channel_acceleration_thousand_increments = STAR.mm_to_z_drive_increment(
       channel_acceleration / 1000
@@ -7395,12 +7437,12 @@ class STAR(HamiltonLiquidHandler):
     assert 20 <= tip_len <= 120, "Total tip length must be between 20 and 120"
 
     assert 9320 <= lowest_immers_pos_increments <= 31_200, (
-      f"Lowest immersion position must be between \n{STAR.z_drive_increment_to_mm(9_320)}"
-      + f" and {STAR.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
+      "Lowest immersion position must be between \n99.98"
+      + f" and 334.7 mm, is {lowest_immers_pos} mm"
     )
-    assert 9320 <= start_pos_search_increments <= 31_200, (
-      f"Start position of LLD search must be between \n{STAR.z_drive_increment_to_mm(9_320)}"
-      + f" and {STAR.z_drive_increment_to_mm(31_200)} mm, is {start_pos_search} mm"
+    assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
+      f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
+      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm"
     )
     assert 20 <= channel_speed_increments <= 15_000, (
       f"Z-touch search speed must be between \n{STAR.z_drive_increment_to_mm(20)}"
@@ -7486,14 +7528,14 @@ class STAR(HamiltonLiquidHandler):
     channel_ids = "123456789ABCDEFG"
     return channel_ids[channel_idx]
 
-  async def get_channels_y_positions(self) -> List[float]:
+  async def get_channels_y_positions(self) -> Dict[int, float]:
     """Get the Y position of all channels in mm"""
     resp = await self.send_command(
       module="C0",
       command="RY",
       fmt="ry#### (n)",
     )
-    return [round(y / 10, 2) for y in resp["ry"]]
+    return {channel_idx: round(y / 10, 2) for channel_idx, y in enumerate(resp["ry"])}
 
   async def position_channels_in_y_direction(self, ys: Dict[int, float]):
     """position all channels simultaneously in the Y direction. There is a command for this (C0OY),
@@ -7507,10 +7549,11 @@ class STAR(HamiltonLiquidHandler):
     # check that the locations of channels after the move will be at least 9mm apart, and in
     # descending order
     channel_locations = await self.get_channels_y_positions()
+
     for channel_idx, y in ys.items():
       channel_locations[channel_idx] = y
     if not all(
-      channel_locations[i + 1] - channel_locations[i] >= 9
+      channel_locations[i] - channel_locations[i + 1] >= 9
       for i in range(len(channel_locations) - 1)
     ):
       raise ValueError("Channels must be at least 9mm apart and in descending order")
@@ -7527,10 +7570,118 @@ class STAR(HamiltonLiquidHandler):
           command="YA",
           ya=f"{_channel_y_to_steps(y):05}",
         )
-        # for channel_idx, y in ys.items()
-        for channel_idx, y in enumerate(channel_locations)
+        for channel_idx, y in channel_locations.items()
       )
     )
+
+  async def get_channels_z_positions(self) -> Dict[int, float]:
+    """Get the Y position of all channels in mm"""
+    resp = await self.send_command(
+      module="C0",
+      command="RZ",
+      fmt="rz#### (n)",
+    )
+    return {channel_idx: round(y / 10, 2) for channel_idx, y in enumerate(resp["rz"])}
+
+  async def position_channels_in_z_direction(self, zs: Dict[int, float]):
+    channel_locations = await self.get_channels_z_positions()
+
+    for channel_idx, z in zs.items():
+      channel_locations[channel_idx] = z
+
+    return await self.send_command(
+      module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()]
+    )
+
+  async def step_off_foil(
+    self, well: Well, front_channel: int, back_channel: int, move_inwards: float = 2
+  ):
+    """
+    Hold down a plate by placing two channels on the edges of a plate that is sealed with foil
+    while moving up the channels that are still within the foil. This is useful when, for
+    example, aspirating from a plate that is sealed: without holding it down, the tips might get
+    stuck in the plate and move it up when retracting. Putting plates on the edge prevents this.
+
+    When aspirating or dispensing in the foil, be sure to set the `min_z_endpos` parameter in
+    `lh.aspirate` or `lh.dispense` to a value in the foil. You might want to use something like
+
+    ```python
+    well = plate.get_well("A3")
+    await wc.lh.aspirate(
+      [well]*4, vols=[100]*4, use_channels=[7,8,9,10],
+      min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
+      surface_following_distance=0,
+      pull_out_distance_transport_air=[0] * 4)
+    await step_off_foil(lh.backend, well, front_channel=11, back_channel=6, move_inwards = 3)
+    ```
+
+    Args:
+      well: Well in the plate to hold down. (x-coordinate of channels will be at center of well).
+      front_channel: The channel to place on the front of the plate.
+      back_channel: The channel to place on the back of the plate.
+      move_inwards: mm to move inwards (backward on the front channel; frontward on the back).
+    """
+
+    if front_channel <= back_channel:
+      raise ValueError(
+        "front_channel should be in front of back_channel. " "Channels are 0-indexed from the back."
+      )
+
+    # Get the absolute locations for center front top and center back top
+    back_location = well.get_absolute_location("c", "b", "t")
+    front_location = well.get_absolute_location("c", "f", "t")
+
+    # The y positions may cause a crash if the channel in front of `front_channel`
+    # or to the back of `back_channel` are still within the space that the front&back
+    # channel will span above the plate. To check, we request the current y locations
+    # of all channels, and update it with the locations we computed above. Then,
+    # we correct any potential error.
+    channel_locations = await self.get_channels_y_positions()
+    channel_locations[front_channel] = front_location.y + move_inwards
+    channel_locations[back_channel] = back_location.y + move_inwards
+
+    # For the channels to the back of `back_channel`, make sure the space between them is
+    # >=9mm. We start with the channel closest to `back_channel`, and make sure the
+    # channel behind it is at least 9mm, updating if needed. Iterating from the front (closest
+    # to `back_channel`) to the back (channel 0), all channels are put at the correct location.
+    # This order matters because the channel in front of any channel may have been moved in the
+    # previous iteration.
+    # Note that if a channel is already spaced at >=9mm, it is not moved.
+    for channel_idx in range(back_channel, 0, -1):
+      if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < 9:
+        channel_locations[channel_idx - 1] = channel_locations[channel_idx] + 9
+
+    # Similarly for the channels to the front of `front_channel`, make sure they are all
+    # spaced >=9mm apart. This time, we iterate from back (closest to `front_channel`)
+    # to the front (lh.backend.num_channels - 1), and put each channel >=9mm before the
+    # one behind it.
+    for channel_idx in range(front_channel, self.num_channels - 1):
+      if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < 9:
+        channel_locations[channel_idx + 1] = channel_locations[channel_idx] - 9
+
+    # Quick checks before movement.
+    assert channel_locations[0] <= 650, "Channel 0 would hit the back of the robot"
+    assert (
+      channel_locations[self.num_channels - 1] >= 6
+    ), "Channel N would hit the front of the robot"
+
+    try:
+      # Then move all channels in the y-space simultaneously.
+      await self.position_channels_in_y_direction(channel_locations)
+
+      await self.move_channel_z(front_channel, front_location.z)
+      await self.move_channel_z(back_channel, back_location.z)
+    finally:
+      # Move channels that are lower than the `front_channel` and `back_channel` to
+      # the same z-height. This will mean they are level with the foil (making minimal
+      # or no contact.)
+      zs = await self.get_channels_z_positions()
+      indices = [channel_idx for channel_idx, z in zs.items() if z < front_location.z]
+      idx = {idx: front_location.z for idx in indices}
+      await self.position_channels_in_z_direction(idx)
+
+      # After that, all channels are clear to move up.
+      await self.move_all_channels_in_z_safety()
 
 
 class UnSafe:
