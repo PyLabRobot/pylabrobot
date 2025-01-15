@@ -938,6 +938,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       self.plt_car[1],
       pickup_distance_from_top=13 - 3.33,
       use_arm="core",
+      # kwargs specific to pickup and drop
+      channel_1=7,
+      channel_2=8,
+      return_core_gripper=False,
     )
     self._assert_command_sent_once(
       "C0ZTid0020xs07975xd0ya1240yb1065pa07pb08tp2350tz2250th2450tt14",

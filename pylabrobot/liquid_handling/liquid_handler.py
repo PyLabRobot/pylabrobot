@@ -285,12 +285,17 @@ class LiquidHandler(Resource, Machine):
     method: Callable,
     backend_kwargs: Dict[str, Any],
     default: Set[str],
+    strictness: Strictness,
   ) -> Set[str]:
     """Checks that the arguments to `method` are valid.
 
     Args:
       method: Method to check.
       backend_kwargs: Keyword arguments to `method`.
+      default: Default arguments to `method`. (Of the abstract backend)
+      strictness: Strictness level. If `Strictness.STRICT`, raises an error if there are extra
+        arguments. If `Strictness.WARN`, raises a warning. If `Strictness.IGNORE`, logs a debug
+        message.
 
     Raises:
       TypeError: If the arguments are invalid.
@@ -318,8 +323,6 @@ class LiquidHandler(Resource, Machine):
       }
     }
     non_default = {arg for arg, param in args.items() if param.default == inspect.Parameter.empty}
-
-    strictness = get_strictness()
 
     backend_kws = set(backend_kwargs.keys())
 
@@ -440,6 +443,7 @@ class LiquidHandler(Resource, Machine):
       self.backend.pick_up_tips,
       backend_kwargs,
       default={"ops", "use_channels"},
+      strictness=get_strictness(),
     )
     for extra in extras:
       del backend_kwargs[extra]
@@ -571,6 +575,7 @@ class LiquidHandler(Resource, Machine):
       self.backend.drop_tips,
       backend_kwargs,
       default={"ops", "use_channels"},
+      strictness=get_strictness(),
     )
     for extra in extras:
       del backend_kwargs[extra]
@@ -901,6 +906,7 @@ class LiquidHandler(Resource, Machine):
       self.backend.aspirate,
       backend_kwargs,
       default={"ops", "use_channels"},
+      strictness=get_strictness(),
     )
     for extra in extras:
       del backend_kwargs[extra]
@@ -1096,6 +1102,7 @@ class LiquidHandler(Resource, Machine):
       self.backend.dispense,
       backend_kwargs,
       default={"ops", "use_channels"},
+      strictness=get_strictness(),
     )
     for extra in extras:
       del backend_kwargs[extra]
@@ -1264,7 +1271,9 @@ class LiquidHandler(Resource, Machine):
     if not tip_rack.num_items == 96:
       raise ValueError("Tip rack must have 96 tips")
 
-    extras = self._check_args(self.backend.pick_up_tips96, backend_kwargs, default={"pickup"})
+    extras = self._check_args(
+      self.backend.pick_up_tips96, backend_kwargs, default={"pickup"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1336,7 +1345,9 @@ class LiquidHandler(Resource, Machine):
     if isinstance(resource, TipRack) and not resource.num_items == 96:
       raise ValueError("Tip rack must have 96 tips")
 
-    extras = self._check_args(self.backend.drop_tips96, backend_kwargs, default={"drop"})
+    extras = self._check_args(
+      self.backend.drop_tips96, backend_kwargs, default={"drop"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1488,7 +1499,9 @@ class LiquidHandler(Resource, Machine):
     ):
       raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
 
-    extras = self._check_args(self.backend.aspirate96, backend_kwargs, default={"aspiration"})
+    extras = self._check_args(
+      self.backend.aspirate96, backend_kwargs, default={"aspiration"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1633,7 +1646,9 @@ class LiquidHandler(Resource, Machine):
     ):
       raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
 
-    extras = self._check_args(self.backend.dispense96, backend_kwargs, default={"dispense"})
+    extras = self._check_args(
+      self.backend.dispense96, backend_kwargs, default={"dispense"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1789,7 +1804,9 @@ class LiquidHandler(Resource, Machine):
       direction=direction,
     )
 
-    extras = self._check_args(self.backend.pick_up_resource, backend_kwargs, default={"pickup"})
+    extras = self._check_args(
+      self.backend.pick_up_resource, backend_kwargs, default={"pickup"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -2007,22 +2024,38 @@ class LiquidHandler(Resource, Machine):
     if put_direction is not None:
       raise NotImplementedError("put_direction is deprecated, use drop_direction instead")
 
+    extra = self._check_args(
+      self.backend.pick_up_resource,
+      backend_kwargs,
+      default={"pickup"},
+      strictness=Strictness.IGNORE,
+    )
+    pickup_kwargs = {k: v for k, v in backend_kwargs.items() if k not in extra}
+
     await self.pick_up_resource(
       resource=resource,
       offset=pickup_offset,
       pickup_distance_from_top=pickup_distance_from_top,
       direction=pickup_direction,
-      **backend_kwargs,
+      **pickup_kwargs,
     )
 
     for intermediate_location in intermediate_locations or []:
       await self.move_picked_up_resource(to=intermediate_location)
 
+    extra = self._check_args(
+      self.backend.drop_resource,
+      backend_kwargs,
+      default={"drop"},
+      strictness=Strictness.IGNORE,
+    )
+    drop_kwargs = {k: v for k, v in backend_kwargs.items() if k not in extra}
+
     await self.drop_resource(
       destination=to,
       offset=destination_offset,
       direction=drop_direction,
-      **backend_kwargs,
+      **drop_kwargs,
     )
 
   async def move_lid(
