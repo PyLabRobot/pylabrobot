@@ -941,7 +941,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       # kwargs specific to pickup and drop
       channel_1=7,
       channel_2=8,
-      return_core_gripper=False,
+      return_core_gripper=True,
     )
     self._assert_command_sent_once(
       "C0ZTid0020xs07975xd0ya1240yb1065pa07pb08tp2350tz2250th2450tt14",
