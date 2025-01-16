@@ -68,6 +68,7 @@ library/azenta
 library/biorad
 library/boekel
 library/celltreat
+library/cellvis
 library/corning_axygen
 library/corning_costar
 library/eppendorf
