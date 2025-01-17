@@ -7668,7 +7668,7 @@ class STAR(HamiltonLiquidHandler):
     # Quick checks before movement.
     assert channel_locations[0] <= 650, "Channel 0 would hit the back of the robot"
     assert (
-      channel_locations[self.num_channels - 1] >= 6
+      channel_locations[self.num_channels - 1] >= 0
     ), "Channel N would hit the front of the robot"
 
     try:
