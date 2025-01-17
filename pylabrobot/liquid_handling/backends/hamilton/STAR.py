@@ -7286,55 +7286,23 @@ class STAR(HamiltonLiquidHandler):
 
   async def request_tip_len_on_channel(
     self,
-    channel_idx: int,  # 0-based indexing of channels!
+    channel_idx: int,  # 0-indexed indexing of channels!
   ) -> float:
     """
-    Measures the length of the tip attached to the specified pipetting channel.
-
-    Checks if a tip is present on the given channel. If present, moves all channels
-    to THE safe Z position, 334.3 mm, measures the tip bottom Z-coordinate, and calculates
-    the total tip length. Supports tips of lengths 50.4 mm, 59.9 mm, and 95.1 mm.
-    Raises an error if the tip length is unsupported or if no tip is present.
+    Measures the length of the tip attached to the specified pipetting channel. This information is
+    available from the tip rack where the tip on channel `channel_idx` was picked up.
 
     Parameters:
-      channel_idx: Index of the pipetting channel (0-based).
+      channel_idx: Index of the pipetting channel (0-indexed).
 
     Returns:
-      The measured tip length in millimeters.
+      The tip length in millimeters.
 
     Raises:
-      ValueError: If no tip is present on the channel or if the tip length is unsupported.
+      NoTipError: If no tip is present on the channel.
     """
 
-    # Check there is a tip on the channel
-    all_channel_occupancy = await self.request_tip_presence()
-    if not all_channel_occupancy[channel_idx]:
-      raise ValueError(f"No tip present on channel {channel_idx}")
-
-    # Level all channels
-    await self.move_all_channels_in_z_safety()
-    known_top_position_channel_head = 334.3  # mm
-    fitting_depth_of_all_standard_channel_tips = 8  # mm
-    unknown_offset_for_all_tips = 0.4  # mm
-
-    # Request z-coordinate of channel+tip bottom
-    tip_bottom_z_coordinate = await self.request_z_pos_channel_n(
-      pipetting_channel_index=channel_idx
-    )
-
-    total_tip_len = round(
-      known_top_position_channel_head
-      - (
-        tip_bottom_z_coordinate
-        - fitting_depth_of_all_standard_channel_tips
-        - unknown_offset_for_all_tips
-      ),
-      1,
-    )
-
-    if total_tip_len in [50.4, 59.9, 95.1]:  # 50ul, 300ul, 1000ul
-      return total_tip_len
-    raise ValueError(f"Tip of length {total_tip_len} not yet supported")
+    return self.head[channel_idx].get_tip().total_tip_length
 
   async def ztouch_probe_z_height_using_channel(
     self,
