@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from pylabrobot.liquid_handling.standard import (
   Aspiration,
@@ -20,6 +20,7 @@ from pylabrobot.liquid_handling.standard import (
 )
 from pylabrobot.machines.backends import MachineBackend
 from pylabrobot.resources import Deck, Resource
+from pylabrobot.resources.tip_tracker import TipTracker
 
 
 class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
@@ -36,16 +37,33 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   def __init__(self):
     self.setup_finished = False
     self._deck: Optional[Deck] = None
+    self._head: Optional[Dict[int, TipTracker]] = None
+    self._head96: Optional[Dict[int, TipTracker]] = None
 
   def set_deck(self, deck: Deck):
     """Set the deck for the robot. Called automatically by `LiquidHandler.setup` or can be called
     manually if interacting with the backend directly. A deck must be set before setup."""
     self._deck = deck
 
+  def set_heads(self, head: Dict[int, TipTracker], head96: Optional[Dict[int, TipTracker]] = None):
+    """Set the tip tracker for the robot. Called automatically by `LiquidHandler.setup` or can be
+    called manually if interacting with the backend directly. A head must be set before setup."""
+    self._head = head
+    self._head96 = head96
+
   @property
   def deck(self) -> Deck:
     assert self._deck is not None, "Deck not set"
     return self._deck
+
+  @property
+  def head(self) -> Dict[int, TipTracker]:
+    assert self._head is not None, "Head not set"
+    return self._head
+
+  @property
+  def head96(self) -> Optional[Dict[int, TipTracker]]:
+    return self._head96
 
   async def setup(self):
     """Set up the robot. This method should be called before any other method is called."""
