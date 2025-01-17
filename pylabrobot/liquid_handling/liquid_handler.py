@@ -54,6 +54,7 @@ from pylabrobot.resources import (
 )
 from pylabrobot.resources.errors import CrossContaminationError, HasTipError
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
@@ -90,6 +91,16 @@ def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
     not src_tracker.is_cross_contamination_tracking_disabled
     and not dest_tracker.is_cross_contamination_tracking_disabled
   )
+
+
+def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing: float):
+  """Get the centers of the channels with a minimum margin on the edges."""
+  if dim_size < margin * 2 + (n - 1) * min_spacing:
+    raise ValueError("Resource is too small to space channels.")
+  if dim_size - (n - 1) * min_spacing <= min_spacing * 2:
+    remaining_space = dim_size - (n - 1) * min_spacing - margin * 2
+    return [margin + remaining_space / 2 + i * min_spacing for i in range(n)]
+  return [(i + 1) * dim_size / (n + 1) for i in range(n)]
 
 
 class BlowOutVolumeError(Exception):
@@ -276,12 +287,17 @@ class LiquidHandler(Resource, Machine):
     method: Callable,
     backend_kwargs: Dict[str, Any],
     default: Set[str],
+    strictness: Strictness,
   ) -> Set[str]:
     """Checks that the arguments to `method` are valid.
 
     Args:
       method: Method to check.
       backend_kwargs: Keyword arguments to `method`.
+      default: Default arguments to `method`. (Of the abstract backend)
+      strictness: Strictness level. If `Strictness.STRICT`, raises an error if there are extra
+        arguments. If `Strictness.WARN`, raises a warning. If `Strictness.IGNORE`, logs a debug
+        message.
 
     Raises:
       TypeError: If the arguments are invalid.
@@ -309,8 +325,6 @@ class LiquidHandler(Resource, Machine):
       }
     }
     non_default = {arg for arg, param in args.items() if param.default == inspect.Parameter.empty}
-
-    strictness = get_strictness()
 
     backend_kws = set(backend_kwargs.keys())
 
@@ -431,6 +445,7 @@ class LiquidHandler(Resource, Machine):
       self.backend.pick_up_tips,
       backend_kwargs,
       default={"ops", "use_channels"},
+      strictness=get_strictness(),
     )
     for extra in extras:
       del backend_kwargs[extra]
@@ -562,6 +577,7 @@ class LiquidHandler(Resource, Machine):
       self.backend.drop_tips,
       backend_kwargs,
       default={"ops", "use_channels"},
+      strictness=get_strictness(),
     )
     for extra in extras:
       del backend_kwargs[extra]
@@ -695,6 +711,45 @@ class LiquidHandler(Resource, Machine):
     if len(not_containers) > 0:
       raise TypeError(f"Resources must be `Container`s, got {not_containers}")
 
+  def _get_single_resource_liquid_op_offsets(
+    self, resource: Resource, num_channels: int
+  ) -> List[Coordinate]:
+    min_spacing_edge = (
+      2  # minimum spacing between the edge of the container and the center of channel
+    )
+    min_spacing_between_channels = 9
+
+    resource_size: float
+    if resource.get_absolute_rotation().z % 180 == 0:
+      resource_size = resource.get_size_y()
+    elif resource.get_absolute_rotation().z % 90 == 0:
+      resource_size = resource.get_size_x()
+    else:
+      raise ValueError("Only 90 and 180 degree rotations are supported for now.")
+
+    centers = list(
+      reversed(
+        _get_centers_with_margin(
+          dim_size=resource_size,
+          n=num_channels,
+          margin=min_spacing_edge,
+          min_spacing=min_spacing_between_channels,
+        )
+      )
+    )  # reverse because channels are from back to front
+
+    center_offsets: List[Coordinate] = []
+    if resource.get_absolute_rotation().z % 180 == 0:
+      x_offset = resource.get_size_x() / 2
+      center_offsets = [Coordinate(x=x_offset, y=c, z=0) for c in centers]
+    elif resource.get_absolute_rotation().z % 90 == 0:
+      y_offset = resource.get_size_y() / 2
+      center_offsets = [Coordinate(x=c, y=y_offset, z=0) for c in centers]
+
+    # offsets are relative to the center of the resource, but above we computed them wrt lfb
+    # so we need to subtract the center of the resource
+    return [c - resource.center() for c in center_offsets]
+
   @need_setup_finished
   async def aspirate(
     self,
@@ -789,16 +844,13 @@ class LiquidHandler(Resource, Machine):
     # center of the resource.
     if len(set(resources)) == 1:
       resource = resources[0]
-      n = len(use_channels)
       resources = [resource] * len(use_channels)
-      if resource.get_absolute_rotation().z % 180 == 0:
-        centers = list(reversed(resource.centers(yn=n, zn=0)))
-      elif resource.get_absolute_rotation().z % 90 == 0:
-        centers = list(reversed(resource.centers(xn=n, zn=0)))
-      else:
-        raise ValueError("Only 90 and 180 degree rotations are supported for now.")
-      centers = [c - resource.center() for c in centers]  # offset is wrt center
-      offsets = [c + o for c, o in zip(centers, offsets)]  # user-defined
+      center_offsets = self._get_single_resource_liquid_op_offsets(
+        resource=resource, num_channels=len(use_channels)
+      )
+
+      # add user defined offsets to the computed centers
+      offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     liquids: List[List[Tuple[Optional[Liquid], float]]] = []
@@ -856,6 +908,7 @@ class LiquidHandler(Resource, Machine):
       self.backend.aspirate,
       backend_kwargs,
       default={"ops", "use_channels"},
+      strictness=get_strictness(),
     )
     for extra in extras:
       del backend_kwargs[extra]
@@ -978,16 +1031,13 @@ class LiquidHandler(Resource, Machine):
     # center of the resource.
     if len(set(resources)) == 1:
       resource = resources[0]
-      n = len(use_channels)
       resources = [resource] * len(use_channels)
-      if resource.get_absolute_rotation().z % 180 == 0:
-        centers = list(reversed(resource.centers(yn=n, zn=0)))
-      elif resource.get_absolute_rotation().z % 90 == 0:
-        centers = list(reversed(resource.centers(xn=n, zn=0)))
-      else:
-        raise ValueError("Only 90 and 180 degree rotations are supported for now.")
-      centers = [c - resource.center() for c in centers]  # offset is wrt center
-      offsets = [c + o for c, o in zip(centers, offsets)]  # user-defined
+      center_offsets = self._get_single_resource_liquid_op_offsets(
+        resource=resource, num_channels=len(use_channels)
+      )
+
+      # add user defined offsets to the computed centers
+      offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     tips = [self.head[channel].get_tip() for channel in use_channels]
 
@@ -1054,6 +1104,7 @@ class LiquidHandler(Resource, Machine):
       self.backend.dispense,
       backend_kwargs,
       default={"ops", "use_channels"},
+      strictness=get_strictness(),
     )
     for extra in extras:
       del backend_kwargs[extra]
@@ -1222,7 +1273,9 @@ class LiquidHandler(Resource, Machine):
     if not tip_rack.num_items == 96:
       raise ValueError("Tip rack must have 96 tips")
 
-    extras = self._check_args(self.backend.pick_up_tips96, backend_kwargs, default={"pickup"})
+    extras = self._check_args(
+      self.backend.pick_up_tips96, backend_kwargs, default={"pickup"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1294,7 +1347,9 @@ class LiquidHandler(Resource, Machine):
     if isinstance(resource, TipRack) and not resource.num_items == 96:
       raise ValueError("Tip rack must have 96 tips")
 
-    extras = self._check_args(self.backend.drop_tips96, backend_kwargs, default={"drop"})
+    extras = self._check_args(
+      self.backend.drop_tips96, backend_kwargs, default={"drop"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1446,7 +1501,9 @@ class LiquidHandler(Resource, Machine):
     ):
       raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
 
-    extras = self._check_args(self.backend.aspirate96, backend_kwargs, default={"aspiration"})
+    extras = self._check_args(
+      self.backend.aspirate96, backend_kwargs, default={"aspiration"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1591,7 +1648,9 @@ class LiquidHandler(Resource, Machine):
     ):
       raise TypeError(f"Resource must be a Plate, Container, or list of Wells, got {resource}")
 
-    extras = self._check_args(self.backend.dispense96, backend_kwargs, default={"dispense"})
+    extras = self._check_args(
+      self.backend.dispense96, backend_kwargs, default={"dispense"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1747,7 +1806,9 @@ class LiquidHandler(Resource, Machine):
       direction=direction,
     )
 
-    extras = self._check_args(self.backend.pick_up_resource, backend_kwargs, default={"pickup"})
+    extras = self._check_args(
+      self.backend.pick_up_resource, backend_kwargs, default={"pickup"}, strictness=get_strictness()
+    )
     for extra in extras:
       del backend_kwargs[extra]
 
@@ -1879,6 +1940,9 @@ class LiquidHandler(Resource, Machine):
     drop = ResourceDrop(
       resource=self._resource_pickup.resource,
       destination=to_location,
+      destination_absolute_rotation=destination.get_absolute_rotation()
+      if isinstance(destination, Resource)
+      else Rotation(0, 0, 0),
       offset=offset,
       pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
       direction=direction,
@@ -1965,22 +2029,38 @@ class LiquidHandler(Resource, Machine):
     if put_direction is not None:
       raise NotImplementedError("put_direction is deprecated, use drop_direction instead")
 
+    extra = self._check_args(
+      self.backend.pick_up_resource,
+      backend_kwargs,
+      default={"pickup"},
+      strictness=Strictness.IGNORE,
+    )
+    pickup_kwargs = {k: v for k, v in backend_kwargs.items() if k not in extra}
+
     await self.pick_up_resource(
       resource=resource,
       offset=pickup_offset,
       pickup_distance_from_top=pickup_distance_from_top,
       direction=pickup_direction,
-      **backend_kwargs,
+      **pickup_kwargs,
     )
 
     for intermediate_location in intermediate_locations or []:
       await self.move_picked_up_resource(to=intermediate_location)
 
+    extra = self._check_args(
+      self.backend.drop_resource,
+      backend_kwargs,
+      default={"drop"},
+      strictness=Strictness.IGNORE,
+    )
+    drop_kwargs = {k: v for k, v in backend_kwargs.items() if k not in extra}
+
     await self.drop_resource(
       destination=to,
       offset=destination_offset,
       direction=drop_direction,
-      **backend_kwargs,
+      **drop_kwargs,
     )
 
   async def move_lid(
