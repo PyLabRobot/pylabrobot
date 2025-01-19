@@ -2923,10 +2923,7 @@ class STAR(HamiltonLiquidHandler):
         # clearance height is second down.
 
         if hotel_open_gripper_position is None:
-          if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
-            hotel_open_gripper_position = drop.resource.get_absolute_size_x() + 50
-          else:
-            hotel_open_gripper_position = drop.resource.get_absolute_size_y() + 50
+          hotel_open_gripper_position = plate_width + 5
 
         await self.unsafe.put_in_hotel(
           hotel_center_x_coord=round(abs(x) * 10),
