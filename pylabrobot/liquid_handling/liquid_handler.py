@@ -1005,10 +1005,6 @@ class LiquidHandler(Resource, Machine):
       ValueError: If all channels are `None`.
     """
 
-    # If the user specified a single resource, but multiple channels to use, we will assume they
-    # want to space the channels evenly across the resource. Note that offsets are relative to the
-    # center of the resource.
-
     self._check_containers(resources)
 
     use_channels = use_channels or self._default_use_channels or list(range(len(resources)))
@@ -1028,7 +1024,7 @@ class LiquidHandler(Resource, Machine):
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
     # center of the resource.
-    if len(set(resources)) == 1:
+    if len(set(resources)) == 1 & len(use_channels) > 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
       center_offsets = self._get_single_resource_liquid_op_offsets(
