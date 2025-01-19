@@ -20,7 +20,7 @@ class Tilter(ResourceHolder, Machine):
     size_z: float,
     backend: TilterBackend,
     hinge_coordinate: Coordinate,
-    child_resource_location: Coordinate,
+    child_location: Coordinate,
     category: Optional[str] = None,
     model: Optional[str] = None,
   ):
@@ -37,7 +37,7 @@ class Tilter(ResourceHolder, Machine):
     self.backend: TilterBackend = backend  # fix type
     self._absolute_angle: float = 0
     self._hinge_coordinate = hinge_coordinate
-    self.child_resource_location = child_resource_location
+    self.child_location = child_location
 
   @property
   def absolute_angle(self) -> float:

@@ -1887,7 +1887,7 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(destination, Coordinate):
       to_location = destination
     elif isinstance(destination, Tilter):
-      to_location = destination.get_absolute_location() + destination.child_resource_location
+      to_location = destination.get_absolute_location() + destination.child_location
     elif isinstance(destination, PlateHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
@@ -1966,7 +1966,7 @@ class LiquidHandler(Resource, Machine):
         raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       destination.assign_child_resource(resource)
     elif isinstance(destination, Tilter):
-      destination.assign_child_resource(resource, location=destination.child_resource_location)
+      destination.assign_child_resource(resource, location=destination.child_location)
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
