@@ -193,7 +193,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
 
     if not USE_USB:
       raise RuntimeError(
-        "USB is not enabled. Please install pyusb and libusb."
+        "USB is not enabled. Please install pyusb and libusb. "
         "https://docs.pylabrobot.org/installation.html"
       )
 

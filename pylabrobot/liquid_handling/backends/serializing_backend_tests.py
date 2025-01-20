@@ -219,20 +219,24 @@ class SerializingBackendTests(unittest.IsolatedAsyncioTestCase):
   async def test_move(self):
     to = Coordinate(600, 200, 200)
     await self.lh.move_plate(self.plate, to=to)
-    self.assertEqual(len(self.backend.sent_commands), 3)  # move + resource unassign + assign
-    self.assertEqual(self.backend.sent_commands[0]["command"], "move")
+    self.assertEqual(len(self.backend.sent_commands), 4)  # move + resource unassign + assign
     self.assertEqual(
-      self.backend.get_first_data_for_command("move"),
+      self.backend.get_first_data_for_command("pick_up_resource"),
       {
-        "move": {
-          "resource_name": self.plate.name,
-          "to": serialize(to),
-          "intermediate_locations": [],
-          "resource_offset": serialize(Coordinate.zero()),
-          "destination_offset": serialize(Coordinate.zero()),
-          "pickup_distance_from_top": 9.87,
-          "get_direction": "FRONT",
-          "put_direction": "FRONT",
-        }
+        "resource_name": self.plate.name,
+        "offset": serialize(Coordinate.zero()),
+        "pickup_distance_from_top": 9.87,
+        "direction": "FRONT",
+      },
+    )
+    self.assertEqual(
+      self.backend.get_first_data_for_command("drop_resource"),
+      {
+        "resource_name": self.plate.name,
+        "destination": serialize(to),
+        "offset": serialize(Coordinate.zero()),
+        "pickup_distance_from_top": 9.87,
+        "direction": "FRONT",
+        "rotation": 0,
       },
     )

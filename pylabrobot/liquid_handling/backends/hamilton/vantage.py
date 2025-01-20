@@ -20,9 +20,11 @@ from pylabrobot.liquid_handling.standard import (
   DispensePlate,
   Drop,
   DropTipRack,
-  Move,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
 )
 from pylabrobot.resources import (
   Coordinate,
@@ -31,7 +33,7 @@ from pylabrobot.resources import (
   TipRack,
   Well,
 )
-from pylabrobot.resources.ml_star import (
+from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipPickupMethod,
   TipSize,
@@ -1277,25 +1279,9 @@ class Vantage(HamiltonLiquidHandler):
       recording_mode=recording_mode,
     )
 
-  async def move_resource(self, move: Move):
-    await self.pick_up_resource(
-      resource=move.resource,
-      offset=move.resource_offset,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-    )
-
-    await self.release_picked_up_resource(
-      resource=move.resource,
-      destination=move.destination,
-      offset=move.destination_offset,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-    )
-
   async def pick_up_resource(
     self,
-    resource: Resource,
-    offset: Coordinate,
-    pickup_distance_from_top: float,
+    pickup: ResourcePickup,
     grip_strength: int = 81,
     plate_width_tolerance: float = 2.0,
     acceleration_index: int = 4,
@@ -1306,9 +1292,9 @@ class Vantage(HamiltonLiquidHandler):
     """Pick up a resource with the IPG. You probably want to use :meth:`move_resource`, which
     allows you to pick up and move a resource with a single command."""
 
-    center = resource.get_absolute_location(x="c", y="c", z="b") + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    plate_width = resource.get_absolute_size_x()
+    center = pickup.resource.get_absolute_location(x="c", y="c", z="b") + pickup.offset
+    grip_height = center.z + pickup.resource.get_absolute_size_z() - pickup.pickup_distance_from_top
+    plate_width = pickup.resource.get_absolute_size_x()
 
     await self.ipg_grip_plate(
       x_position=round(center.x * 10),
@@ -1326,7 +1312,7 @@ class Vantage(HamiltonLiquidHandler):
       ),
     )
 
-  async def move_picked_up_resource(self):
+  async def move_picked_up_resource(self, move: ResourceMove):
     """Move a resource picked up with the IPG. See :meth:`pick_up_resource`.
 
     You probably want to use :meth:`move_resource`, which allows you to pick up and move a resource
@@ -1335,12 +1321,9 @@ class Vantage(HamiltonLiquidHandler):
 
     raise NotImplementedError()
 
-  async def release_picked_up_resource(
+  async def drop_resource(
     self,
-    resource: Resource,
-    destination: Coordinate,
-    offset: Coordinate,
-    pickup_distance_from_top: float,
+    drop: ResourceDrop,
     z_clearance_height: float = 0,
     press_on_distance: int = 5,
     hotel_depth: float = 0,
@@ -1352,9 +1335,9 @@ class Vantage(HamiltonLiquidHandler):
     with a single command.
     """
 
-    center = destination + resource.center() + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    plate_width = resource.get_absolute_size_x()
+    center = drop.destination + drop.resource.center() + drop.offset
+    grip_height = center.z + drop.resource.get_absolute_size_z() - drop.pickup_distance_from_top
+    plate_width = drop.resource.get_absolute_size_x()
 
     await self.ipg_put_plate(
       x_position=round(center.x * 10),

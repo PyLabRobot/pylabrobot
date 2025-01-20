@@ -34,8 +34,7 @@ from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
 )
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import HTF, STF
+from pylabrobot.resources.hamilton import HTF, STF, STARLetDeck
 from pylabrobot.resources.utils import create_ordered_items_2d
 from pylabrobot.resources.volume_tracker import (
   set_cross_contamination_tracking,
@@ -336,12 +335,12 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
 
     test_cases = itertools.product(sites, rotations, grip_directions)
 
-    for site, rotation, (get_direction, put_direction) in test_cases:
+    for site, rotation, (pickup_direction, drop_direction) in test_cases:
       with self.subTest(
         stack_type=site.__class__.__name__,
         rotation=rotation,
-        get_direction=get_direction,
-        put_direction=put_direction,
+        pickup_direction=pickup_direction,
+        drop_direction=drop_direction,
       ):
         self.deck.assign_child_resource(site, location=Coordinate(100, 100, 0))
 
@@ -370,8 +369,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         await self.lh.move_plate(
           plate,
           site,
-          get_direction=get_direction,
-          put_direction=put_direction,
+          pickup_direction=pickup_direction,
+          drop_direction=drop_direction,
         )
         new_center = plate.get_absolute_location(x="c", y="c", z="c")
 
@@ -379,8 +378,8 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
           new_center,
           original_center,
           f"Center mismatch for {site.__class__.__name__}, rotation {rotation}, "
-          f"get_direction {get_direction}, "
-          f"put_direction {put_direction}",
+          f"pickup_direction {pickup_direction}, "
+          f"drop_direction {drop_direction}",
         )
         plate.unassign()
         self.deck.unassign_child_resource(site)
@@ -403,11 +402,11 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
       nesting_z_height=4,
     )
     self.deck.assign_child_resource(plate, location=Coordinate(100, 100, 0))
-    for rot, (get_direction, put_direction) in test_cases:
+    for rot, (pickup_direction, drop_direction) in test_cases:
       with self.subTest(
         rotation=rot,
-        get_direction=get_direction,
-        put_direction=put_direction,
+        pickup_direction=pickup_direction,
+        drop_direction=drop_direction,
       ):
         plate.rotate(z=rot)
         plate.assign_child_resource(lid)
@@ -415,15 +414,15 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         await self.lh.move_lid(
           lid,
           plate,
-          get_direction=get_direction,
-          put_direction=put_direction,
+          pickup_direction=pickup_direction,
+          drop_direction=drop_direction,
         )
         new_center = lid.get_absolute_location(x="c", y="c", z="c")
         self.assertEqual(
           new_center,
           original_center,
-          f"Center mismatch for rotation {rot}, get_direction {get_direction}, "
-          f"put_direction {put_direction}",
+          f"Center mismatch for rotation {rot}, pickup_direction {pickup_direction}, "
+          f"drop_direction {drop_direction}",
         )
         lid.unassign()
         # reset rotations

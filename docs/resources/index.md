@@ -2,7 +2,6 @@
 
 The PLR Resource Library (PLR-RL) is the world's biggest and most accurate centralized collection of labware. If you cannot find something, please contribute what you are looking for!
 
-
 ```{toctree}
 :maxdepth: 1
 
@@ -69,11 +68,12 @@ library/azenta
 library/biorad
 library/boekel
 library/celltreat
+library/cellvis
 library/corning_axygen
 library/corning_costar
 library/eppendorf
 library/falcon
-library/ml_star
+library/hamilton
 library/nest
 library/opentrons
 library/porvair

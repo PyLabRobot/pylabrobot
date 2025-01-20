@@ -3,7 +3,8 @@ import logging
 import time
 from typing import Optional, Union
 
-from .backend import CentrifugeBackend
+from .backend import CentrifugeBackend, LoaderBackend
+from .standard import LoaderNoPlateError
 
 try:
   from pylibftdi import Device
@@ -14,6 +15,121 @@ except ImportError:
 
 
 logger = logging.getLogger("pylabrobot.centrifuge.vspin")
+
+
+class Access2Backend(LoaderBackend):
+  def __init__(
+    self,
+    device_id: str,
+    timeout: int = 60,
+  ):
+    """
+    Args:
+      device_id: The libftdi id for the loader. Find using
+        `python3 -m pylibftdi.examples.list_devices`
+    """
+    self.dev = Device(lazy_open=True, device_id=device_id)
+    self.timeout = timeout
+
+  async def _read(self) -> bytes:
+    x = b""
+    r = None
+    start = time.time()
+    while r != b"" or x == b"":
+      r = self.dev.read(1)
+      x += r
+      if r == b"":
+        await asyncio.sleep(0.1)
+      if x == b"" and (time.time() - start) > self.timeout:
+        raise TimeoutError("No data received within the specified timeout period")
+    return x
+
+  async def send_command(self, command: bytes) -> bytes:
+    logger.debug("[loader] Sending %s", command.hex())
+    self.dev.write(command)
+    return await self._read()
+
+  async def setup(self):
+    logger.debug("[loader] setup")
+
+    self.dev.open()
+    self.dev.baudrate = 115384
+
+    status = await self.get_status()
+    print("status", status)
+    if not status.startswith(bytes.fromhex("1105")):
+      raise RuntimeError("Failed to get status")
+
+    await self.send_command(bytes.fromhex("110500030014000072b1"))
+    await self.send_command(bytes.fromhex("1105000300100000ae71"))
+    await self.send_command(bytes.fromhex("110500070024040000008000be89"))
+    await self.send_command(bytes.fromhex("11050007002404008000800063b1"))
+    await self.send_command(bytes.fromhex("11050007002404000001800089b9"))
+    await self.send_command(bytes.fromhex("1105000700240400800180005481"))
+    await self.send_command(bytes.fromhex("110500070024040000024000c6bd"))
+    await self.send_command(bytes.fromhex("1105000300400000f0bf"))
+    await self.send_command(bytes.fromhex("1105000a004607000100000000020235bf"))
+    await self.send_command(bytes.fromhex("11050003002000006bd4"))
+    await self.send_command(bytes.fromhex("1105000e00440b00000000000000007041020203c7"))
+    await self.send_command(bytes.fromhex("11050003002000006bd4"))
+
+  async def stop(self):
+    logger.debug("[loader] stop")
+    self.dev.close()
+
+  def serialize(self):
+    return {"device_id": self.dev.device_id, "timeout": self.timeout}
+
+  async def get_status(self) -> bytes:
+    logger.debug("[loader] get_status")
+    return await self.send_command(bytes.fromhex("11050003002000006bd4"))
+
+  async def park(self):
+    logger.debug("[loader] park")
+    await self.send_command(bytes.fromhex("1105000e00440b0000000000410000704103007539"))
+
+  async def close(self):
+    logger.debug("[loader] close")
+    await self.send_command(bytes.fromhex("1105000a00420700010000803f02008c64"))
+
+  async def open(self):
+    logger.debug("[loader] open")
+    await self.send_command(bytes.fromhex("1105000a0042070001000080bf0200b73e"))
+
+  async def load(self):
+    """only tested for 1cm plate, 3mm pickup height"""
+    logger.debug("[loader] load")
+
+    await self.send_command(bytes.fromhex("1105000a004607000100000000020235bf"))
+    await self.send_command(bytes.fromhex("1105000e00440b000100004040000020410200a5cb"))
+
+    # laser check
+    r = await self.send_command(bytes.fromhex("1105000300500000b3dc"))
+    if r == b"\x11\x05\x00\x08\x00Q\x05\x00\x00\x03\x00\x00\x00y\xf1":
+      raise LoaderNoPlateError("no plate found on stage")
+
+    await self.send_command(bytes.fromhex("1105000a00460700018fc2b540020023dc"))
+    await self.send_command(bytes.fromhex("1105000e00440b000200004040000020410300ee00"))
+    await self.send_command(bytes.fromhex("1105000a004607000100000000020015fd"))
+    await self.send_command(bytes.fromhex("1105000e00440b0000000040400000204102007d82"))
+
+  async def unload(self):
+    """only tested for 1cm plate, 3mm pickup height"""
+    logger.debug("[loader] unload")
+
+    await self.send_command(bytes.fromhex("1105000a004607000100000000020235bf"))
+    await self.send_command(bytes.fromhex("1105000e00440b000200004040000020410200dd31"))
+
+    # laser check
+    r = await self.send_command(bytes.fromhex("1105000300500000b3dc"))
+    if r == b"\x11\x05\x00\x08\x00Q\x05\x00\x00\x03\x00\x00\x00y\xf1":
+      raise LoaderNoPlateError("no plate found in centrifuge")
+
+    await self.send_command(bytes.fromhex("1105000a00460700017b14b6400200d57a"))
+    await self.send_command(bytes.fromhex("1105000e00440b00010000404000002041030096fa"))
+    await self.send_command(bytes.fromhex("1105000a004607000100000000020015fd"))
+    await self.send_command(bytes.fromhex("1105000e00440b00000000000000002041020056be"))
+    await self.send_command(bytes.fromhex("11050003002000006bd4"))
 
 
 class VSpin(CentrifugeBackend):
@@ -34,6 +150,7 @@ class VSpin(CentrifugeBackend):
     self.dev = Device(lazy_open=True, device_id=device_id)
     self.bucket_1_position = bucket_1_position
     self.homing_position = 0
+    self.device_id = device_id
 
   async def setup(self):
     self.dev.open()
@@ -147,8 +264,7 @@ class VSpin(CentrifugeBackend):
   async def stop(self):
     await self.send(b"\xaa\x02\x0e\x10")
     await self.configure_and_initialize()
-    if self.dev:
-      self.dev.close()
+    self.dev.close()
 
   async def get_status(self):
     """Returns 14 bytes

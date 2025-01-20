@@ -307,3 +307,14 @@ class HamiltonTiltModuleBackend(TilterBackend):
     assert -100 <= offset <= 100, "Offset must be between -100 and 100."
 
     return await self.send_command(command="SO", parameter=str(offset))
+
+
+class HamiltonTiltModuleChatterboxBackend(HamiltonTiltModuleBackend):
+  async def setup(self, initial_offset=0):
+    print(f"[tilter] setup initial offset {initial_offset}")
+
+  async def stop(self):
+    print("[tilter] stopping")
+
+  async def send_command(self, command, parameter=None):
+    print(f"[tilter] Sending command: {command} with parameter: {parameter}")

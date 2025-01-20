@@ -14,14 +14,22 @@ class STARChatterboxBackend(STAR):
     self._iswap_parked = True
 
   async def setup(self, skip_autoload=False, skip_iswap=False, skip_core96_head=False) -> None:
-    LiquidHandlerBackend.setup(self)
+    await LiquidHandlerBackend.setup(self)
 
   async def request_tip_presence(self):
     return list(range(self.num_channels))
 
   async def request_machine_configuration(self):
-    # configuration is directly copied from a STARlet w/ 8p, iswap, and autoload
-    self.conf = {"kb": 11, "kp": 8, "id": 2}
+    # configuration byte `kb` is directly copied from a STARlet w/ 8p, iswap, and autoload
+    # Bit 0:   PIP Type                           0 = 300ul       1 = 1000ul
+    # Bit 1:   ISWAP                              0 = none        1 = installed
+    # Bit 2:   Main front cover monitoring        0 = none        1 = installed
+    # Bit 3:   Auto load                          0 = none        1 = installed
+    # Bit 4:   Wash station 1                     0 = none        1 = installed
+    # Bit 5:   Wash station 2                     0 = none        1 = installed
+    # Bit 6:   Temp. controlled carrier 1         0 = none        1 = installed
+    # Bit 7:   Temp. controlled carrier 2         0 = none        1 = installed
+    self.conf = {"kb": 11, "kp": self.num_channels, "id": 2}
     return self.conf
 
   async def request_extended_configuration(self):
@@ -59,8 +67,17 @@ class STARChatterboxBackend(STAR):
   def iswap_parked(self) -> bool:
     return self._iswap_parked is True
 
-  async def send_command(self, module, command, *args, **kwargs):
-    print(f"Sending command: {module}{command} with args {args} and kwargs {kwargs}.")
+  async def _write_and_read_command(
+    self,
+    id_: Optional[int],
+    cmd: str,
+    write_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    wait: bool = True,
+  ) -> Optional[str]:
+    # print(f"Sending command: {module}{command} with args {args} and kwargs {kwargs}.")
+    print(cmd)
+    return None
 
   async def send_raw_command(
     self,
@@ -69,5 +86,8 @@ class STARChatterboxBackend(STAR):
     read_timeout: Optional[int] = None,
     wait: bool = True,
   ) -> Optional[str]:
-    print(f"Sending raw command: {command}")
+    print(command)
     return None
+
+  async def request_z_pos_channel_n(self, channel: int) -> float:
+    return 285.0

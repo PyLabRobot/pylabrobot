@@ -11,7 +11,7 @@ from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
 
 from .coordinate import Coordinate
-from .errors import ResourceNotFoundError
+from .errors import NoLocationError, ResourceNotFoundError
 from .rotation import Rotation
 
 if sys.version_info >= (3, 11):
@@ -212,7 +212,8 @@ class Resource:
       z: `"t"`/`"top"`, `"c"`/`"center"`, or `"b"`/`"bottom"`
     """
 
-    assert self.location is not None, f"Resource {self.name} has no location."
+    if self.location is None:
+      raise NoLocationError(f"Resource {self.name} has no location.")
 
     rotated_anchor = Coordinate(
       *matrix_vector_multiply_3x3(
@@ -268,7 +269,7 @@ class Resource:
   def assign_child_resource(
     self,
     resource: Resource,
-    location: Coordinate,
+    location: Optional[Coordinate],
     reassign: bool = True,
   ):
     """Assign a child resource to this resource.
@@ -282,7 +283,7 @@ class Resource:
 
     Args:
       resource: The resource to assign.
-      location: The location of the resource, relative to this resource.
+      location: The location of the resource, relative to this resource. None if undefined.
       reassign: If `False`, an error will be raised if the resource to be assigned is already
         assigned to this resource. Defaults to `True`.
     """
@@ -296,6 +297,8 @@ class Resource:
       callback(resource)
 
     # Modify the tree structure
+    if resource.parent is not None:
+      resource.parent.unassign_child_resource(resource)
     resource.parent = self
     resource.location = location
     self.children.append(resource)
@@ -401,6 +404,7 @@ class Resource:
 
     # Update the tree structure
     resource.parent = None
+    resource.location = None
     self.children.remove(resource)
 
     # Delete callbacks on the child resource so that they are not propagated up the tree.
