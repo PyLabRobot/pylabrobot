@@ -10,11 +10,9 @@ class thermocyclerBackend(MachineBackend, metaclass=ABCMeta):
   async def setup(self) -> None:
     """Set up comm with thermocycler. This should be called before any other methods."""
 
-
   @abstractmethod
   async def run_protocol(self, protocol_data: dict) -> None:
     """Run the protocol"""
-
 
   @abstractmethod
   async def stop(self) -> None:
