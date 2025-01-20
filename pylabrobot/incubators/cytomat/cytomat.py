@@ -111,7 +111,7 @@ class Cytomat(IncubatorBackend):
     raise Exception(f"Unknown response from cytomat: {resp}")
 
   async def send_action(
-    self, command_type: str, command: str, params: str, timeout: Optional[int] = 10
+    self, command_type: str, command: str, params: str, timeout: Optional[int] = 60
   ) -> OverviewRegisterState:
     """Calls send_command, but has a timeout handler and returns the overview register state.
     Args:
