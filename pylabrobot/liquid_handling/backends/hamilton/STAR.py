@@ -7569,15 +7569,15 @@ class STAR(HamiltonLiquidHandler):
     When aspirating or dispensing in the foil, be sure to set the `min_z_endpos` parameter in
     `lh.aspirate` or `lh.dispense` to a value in the foil. You might want to use something like
 
-    ```python
-    well = plate.get_well("A3")
-    await wc.lh.aspirate(
-      [well]*4, vols=[100]*4, use_channels=[7,8,9,10],
-      min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
-      surface_following_distance=0,
-      pull_out_distance_transport_air=[0] * 4)
-    await step_off_foil(lh.backend, well, front_channel=11, back_channel=6, move_inwards = 3)
-    ```
+    .. code-block:: python
+
+        well = plate.get_well("A3")
+        await wc.lh.aspirate(
+          [well]*4, vols=[100]*4, use_channels=[7,8,9,10],
+          min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
+          surface_following_distance=0,
+          pull_out_distance_transport_air=[0] * 4)
+        await step_off_foil(lh.backend, well, front_channel=11, back_channel=6, move_inwards = 3)
 
     Args:
       well: Well in the plate to hold down. (x-coordinate of channels will be at center of well).
