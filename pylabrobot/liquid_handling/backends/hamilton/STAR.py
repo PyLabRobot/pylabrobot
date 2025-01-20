@@ -7371,6 +7371,9 @@ class STAR(HamiltonLiquidHandler):
     # fitting_depth = 8 mm for 10, 50, 300, 1000 ul Hamilton tips
     fitting_depth = self.head[channel_idx].get_tip().fitting_depth
 
+    if start_pos_search is None:
+      start_pos_search = 334.7 - tip_len + fitting_depth
+
     tip_len_used_in_increments = (tip_len - fitting_depth) / STAR.z_drive_mm_per_increment
     channel_head_start_pos = (
       start_pos_search + tip_len - fitting_depth
