@@ -173,6 +173,7 @@ class LiquidHandler(Resource, Machine):
       raise RuntimeError("The setup has already finished. See `LiquidHandler.stop`.")
 
     self.backend.set_deck(self.deck)
+    self.backend.set_heads(head=self.head, head96=self.head96)
     await super().setup(**backend_kwargs)
 
     self.head = {c: TipTracker(thing=f"Channel {c}") for c in range(self.backend.num_channels)}
@@ -1887,7 +1888,7 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(destination, Coordinate):
       to_location = destination
     elif isinstance(destination, Tilter):
-      to_location = destination.get_absolute_location() + destination.child_resource_location
+      to_location = destination.get_absolute_location() + destination.child_location
     elif isinstance(destination, PlateHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
@@ -1966,7 +1967,7 @@ class LiquidHandler(Resource, Machine):
         raise ValueError("Only ResourceStacks with direction 'z' are currently supported")
       destination.assign_child_resource(resource)
     elif isinstance(destination, Tilter):
-      destination.assign_child_resource(resource, location=destination.child_resource_location)
+      destination.assign_child_resource(resource, location=destination.child_location)
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")

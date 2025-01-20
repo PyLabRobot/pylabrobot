@@ -7314,58 +7314,6 @@ class STAR(HamiltonLiquidHandler):
 
     return result_in_mm
 
-  async def request_tip_len_on_channel(
-    self,
-    channel_idx: int,  # 0-based indexing of channels!
-  ) -> float:
-    """
-    Measures the length of the tip attached to the specified pipetting channel.
-
-    Checks if a tip is present on the given channel. If present, moves all channels
-    to THE safe Z position, 334.3 mm, measures the tip bottom Z-coordinate, and calculates
-    the total tip length. Supports tips of lengths 50.4 mm, 59.9 mm, and 95.1 mm.
-    Raises an error if the tip length is unsupported or if no tip is present.
-
-    Parameters:
-      channel_idx: Index of the pipetting channel (0-based).
-
-    Returns:
-      The measured tip length in millimeters.
-
-    Raises:
-      ValueError: If no tip is present on the channel or if the tip length is unsupported.
-    """
-
-    # Check there is a tip on the channel
-    all_channel_occupancy = await self.request_tip_presence()
-    if not all_channel_occupancy[channel_idx]:
-      raise ValueError(f"No tip present on channel {channel_idx}")
-
-    # Level all channels
-    await self.move_all_channels_in_z_safety()
-    known_top_position_channel_head = 334.3  # mm
-    fitting_depth_of_all_standard_channel_tips = 8  # mm
-    unknown_offset_for_all_tips = 0.4  # mm
-
-    # Request z-coordinate of channel+tip bottom
-    tip_bottom_z_coordinate = await self.request_z_pos_channel_n(
-      pipetting_channel_index=channel_idx
-    )
-
-    total_tip_len = round(
-      known_top_position_channel_head
-      - (
-        tip_bottom_z_coordinate
-        - fitting_depth_of_all_standard_channel_tips
-        - unknown_offset_for_all_tips
-      ),
-      1,
-    )
-
-    if total_tip_len in [50.4, 59.9, 95.1]:  # 50ul, 300ul, 1000ul
-      return total_tip_len
-    raise ValueError(f"Tip of length {total_tip_len} not yet supported")
-
   async def ztouch_probe_z_height_using_channel(
     self,
     channel_idx: int,  # 0-based indexing of channels!
@@ -7386,6 +7334,8 @@ class STAR(HamiltonLiquidHandler):
 
     Args:
       channel_idx: The index of the channel to use for probing. Backmost channel = 0.
+      tip_len: override the tip length (of tip on channel `channel_idx`). Default is the tip length
+        of the tip that was picked up.
       lowest_immers_pos: The lowest immersion position in mm.
       start_pos_lld_search: The start position for z-touch search in mm.
       channel_speed: The speed of channel movement in mm/sec.
@@ -7411,10 +7361,12 @@ class STAR(HamiltonLiquidHandler):
           f"found version '{version}'"
         )
 
-    fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
-
     if tip_len is None:
-      tip_len = await self.request_tip_len_on_channel(channel_idx=channel_idx)
+      tip_len = self.head[channel_idx].get_tip().total_tip_length
+
+    # fitting_depth = 8 mm for 10, 50, 300, 1000 ul Hamilton tips
+    fitting_depth = self.head[channel_idx].get_tip().fitting_depth
+
     if start_pos_search is None:
       start_pos_search = 334.7 - tip_len + fitting_depth
 
