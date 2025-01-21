@@ -70,6 +70,7 @@ class Cytomat(IncubatorBackend):
       logger.error("Could not connect to cytomat, is it in use by a different notebook?")
       raise e
 
+    await self.initialize()
     await self.wait_for_task_completion()
 
   async def set_racks(self, racks: List[PlateCarrier]):
