@@ -17,6 +17,7 @@
     "klass",
     "labware",
     "modbus",
+    "pipettor",
     "pylabrobot",
     "pytest",
     "subclassing",

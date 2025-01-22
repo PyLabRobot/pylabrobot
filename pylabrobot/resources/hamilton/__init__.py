@@ -1,6 +1,7 @@
 from .hamilton_decks import (
   HamiltonDeck,
   HamiltonSTARDeck,
+  PrepDeck,
   STARDeck,
   STARLetDeck,
 )
