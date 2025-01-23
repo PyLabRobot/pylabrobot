@@ -7511,12 +7511,17 @@ class STAR(HamiltonLiquidHandler):
 
     return {channel_idx: y for channel_idx, y in enumerate(y_positions)}
 
-  async def position_channels_in_y_direction(self, ys: Dict[int, float]):
+  async def position_channels_in_y_direction(self, ys: Dict[int, float], make_space=True):
     """position all channels simultaneously in the Y direction.
 
     Args:
       ys: A dictionary mapping channel index to the desired Y position in mm. The channel index is
-      0-indexed from the back.
+        0-indexed from the back.
+      make_space: If True, the channels will be moved to ensure they are at least 9mm apart and in
+        descending order, after the channels in `ys` have been put at the desired locations. Note
+        that an error may still be raised, if there is insufficient space to move the channels or
+        if the requested locations are not valid. Set this to False if you wan to aviod inadvertently
+        moving other channels.
     """
 
     # check that the locations of channels after the move will be at least 9mm apart, and in
@@ -7525,6 +7530,37 @@ class STAR(HamiltonLiquidHandler):
 
     for channel_idx, y in ys.items():
       channel_locations[channel_idx] = y
+
+    if make_space:
+      # For the channels to the back of `back_channel`, make sure the space between them is
+      # >=9mm. We start with the channel closest to `back_channel`, and make sure the
+      # channel behind it is at least 9mm, updating if needed. Iterating from the front (closest
+      # to `back_channel`) to the back (channel 0), all channels are put at the correct location.
+      # This order matters because the channel in front of any channel may have been moved in the
+      # previous iteration.
+      # Note that if a channel is already spaced at >=9mm, it is not moved.
+      use_channels = list(ys.keys())
+      back_channel = min(use_channels)
+      for channel_idx in range(back_channel, 0, -1):
+        if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < 9:
+          channel_locations[channel_idx - 1] = channel_locations[channel_idx] + 9
+
+      # Similarly for the channels to the front of `front_channel`, make sure they are all
+      # spaced >=9mm apart. This time, we iterate from back (closest to `front_channel`)
+      # to the front (lh.backend.num_channels - 1), and put each channel >=9mm before the
+      # one behind it.
+      front_channel = max(use_channels)
+      for channel_idx in range(front_channel, self.num_channels - 1):
+        if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < 9:
+          channel_locations[channel_idx + 1] = channel_locations[channel_idx] - 9
+
+    # Quick checks before movement.
+    if channel_locations[0] > 650:
+      raise ValueError("Channel 0 would hit the back of the robot")
+
+    if channel_locations[self.num_channels - 1] < 6:
+      raise ValueError("Channel N would hit the front of the robot")
+
     if not all(
       channel_locations[i] - channel_locations[i + 1] >= 9
       for i in range(len(channel_locations) - 1)
@@ -7595,43 +7631,14 @@ class STAR(HamiltonLiquidHandler):
     back_location = well.get_absolute_location("c", "b", "t")
     front_location = well.get_absolute_location("c", "f", "t")
 
-    # The y positions may cause a crash if the channel in front of `front_channel`
-    # or to the back of `back_channel` are still within the space that the front&back
-    # channel will span above the plate. To check, we request the current y locations
-    # of all channels, and update it with the locations we computed above. Then,
-    # we correct any potential error.
-    channel_locations = await self.get_channels_y_positions()
-    channel_locations[front_channel] = front_location.y + move_inwards
-    channel_locations[back_channel] = back_location.y + move_inwards
-
-    # For the channels to the back of `back_channel`, make sure the space between them is
-    # >=9mm. We start with the channel closest to `back_channel`, and make sure the
-    # channel behind it is at least 9mm, updating if needed. Iterating from the front (closest
-    # to `back_channel`) to the back (channel 0), all channels are put at the correct location.
-    # This order matters because the channel in front of any channel may have been moved in the
-    # previous iteration.
-    # Note that if a channel is already spaced at >=9mm, it is not moved.
-    for channel_idx in range(back_channel, 0, -1):
-      if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < 9:
-        channel_locations[channel_idx - 1] = channel_locations[channel_idx] + 9
-
-    # Similarly for the channels to the front of `front_channel`, make sure they are all
-    # spaced >=9mm apart. This time, we iterate from back (closest to `front_channel`)
-    # to the front (lh.backend.num_channels - 1), and put each channel >=9mm before the
-    # one behind it.
-    for channel_idx in range(front_channel, self.num_channels - 1):
-      if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < 9:
-        channel_locations[channel_idx + 1] = channel_locations[channel_idx] - 9
-
-    # Quick checks before movement.
-    assert channel_locations[0] <= 650, "Channel 0 would hit the back of the robot"
-    assert (
-      channel_locations[self.num_channels - 1] >= 6
-    ), "Channel N would hit the front of the robot"
-
     try:
       # Then move all channels in the y-space simultaneously.
-      await self.position_channels_in_y_direction(channel_locations)
+      await self.position_channels_in_y_direction(
+        {
+          front_channel: front_location.y + move_inwards,
+          back_channel: back_location.y - move_inwards,
+        }
+      )
 
       await self.move_channel_z(front_channel, front_location.z)
       await self.move_channel_z(back_channel, back_location.z)
