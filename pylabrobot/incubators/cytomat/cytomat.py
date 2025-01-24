@@ -159,6 +159,7 @@ class Cytomat(IncubatorBackend):
       except CytomatCommandUnknownError:
         continue
       return OverviewRegisterState.from_resp(resp)
+    raise CytomatCommandUnknownError("Could not get overview register")
 
   async def get_warning_register(self) -> WarningRegister:
     hex_value = await self.send_command("ch", "bw", "")
