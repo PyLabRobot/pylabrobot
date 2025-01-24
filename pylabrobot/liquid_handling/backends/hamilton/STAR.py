@@ -2743,13 +2743,13 @@ class STAR(HamiltonLiquidHandler):
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     z_position_at_the_command_end: Optional[float] = None,
     plate_width_tolerance: float = 2.0,
-    hotel_open_gripper_position: Optional[float] = None,
+    open_gripper_position: Optional[float] = None,
     hotel_depth=160.0,
     hotel_clearance_height=7.5,
     high_speed=False,
     plate_width: Optional[float] = None,
     use_unsafe_hotel: bool = False,
-    iswap_collision_control_level: int = 0,
+    iswap_collision_control_level: int = 1,
     iswap_fold_up_sequence_at_the_end_of_process: bool = True,
   ):
     if use_arm == "iswap":
@@ -2771,13 +2771,18 @@ class STAR(HamiltonLiquidHandler):
       )
       z_position_at_the_command_end = z_position_at_the_command_end or self._traversal_height
 
-      if use_unsafe_hotel:
-        if hotel_open_gripper_position is None:
+      if open_gripper_position is None:
+        if use_unsafe_hotel:
           if pickup.direction in (GripDirection.FRONT, GripDirection.BACK):
-            hotel_open_gripper_position = pickup.resource.get_absolute_size_x() + 5
+            open_gripper_position = pickup.resource.get_absolute_size_x() + 5
           else:
-            hotel_open_gripper_position = pickup.resource.get_absolute_size_y() + 5
+            open_gripper_position = pickup.resource.get_absolute_size_y() + 5
+        else: 
+          open_gripper_position = plate_width + 5
+          
+      print("open_gripper_position", open_gripper_position)
 
+      if use_unsafe_hotel:
         await self.unsafe.get_from_hotel(
           hotel_center_x_coord=round(abs(x) * 10),
           hotel_center_y_coord=round(abs(y) * 10),
@@ -2789,7 +2794,7 @@ class STAR(HamiltonLiquidHandler):
           clearance_height=round(hotel_clearance_height * 10),
           hotel_depth=round(hotel_depth * 10),
           grip_direction=pickup.direction,
-          open_gripper_position=round(hotel_open_gripper_position * 10),
+          open_gripper_position=round(open_gripper_position * 10),
           traverse_height_at_beginning=round(traverse_height_at_beginning * 10),
           z_position_at_end=round(z_position_at_the_command_end * 10),
           high_acceleration_index=4 if high_speed else 1,
@@ -2816,7 +2821,7 @@ class STAR(HamiltonLiquidHandler):
           ),
           z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
           grip_strength=iswap_grip_strength,
-          open_gripper_position=round(plate_width * 10) + 30,
+          open_gripper_position=round(open_gripper_position * 10),
           plate_width=round(plate_width * 10) - 33,
           plate_width_tolerance=round(plate_width_tolerance * 10),
           collision_control_level=iswap_collision_control_level,
@@ -7630,6 +7635,12 @@ class STAR(HamiltonLiquidHandler):
     ), "Channel N would hit the front of the robot"
 
     try:
+      # Move the channels used for holding the foil down before moving in the y-direction.
+      # This is in case the foil channels are also used in the aspiration/dispense.
+      # TODO: move to actual safe height rather than + 30
+      await self.move_channel_z(front_channel, front_location.z + 30)
+      await self.move_channel_z(back_channel, back_location.z + 30)
+
       # Then move all channels in the y-space simultaneously.
       await self.position_channels_in_y_direction(channel_locations)
 
