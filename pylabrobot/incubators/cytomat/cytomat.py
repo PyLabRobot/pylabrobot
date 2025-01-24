@@ -20,7 +20,7 @@ from pylabrobot.incubators.cytomat.constants import (
   SwapStationPosition,
   WarningRegister,
 )
-from pylabrobot.incubators.cytomat.errors import CytomatTelegramStructureError, error_map
+from pylabrobot.incubators.cytomat.errors import CytomatBusyError, CytomatTelegramStructureError, error_map
 from pylabrobot.incubators.cytomat.schemas import (
   ActionRegisterState,
   OverviewRegisterState,
@@ -111,6 +111,42 @@ class Cytomat(IncubatorBackend):
     logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
     raise Exception(f"Unknown response from cytomat: {resp}")
 
+  
+  async def send_command_with_retry(
+        self,
+        command_type: str,
+        command: str,
+        params: str,
+        timeout: float = 60.0,
+        poll_interval: float = 1.0,
+    ) -> str:
+        start_time = time.monotonic()
+        retry_count = 0
+        
+        print(f"Sending command: {command_type} {command} {params} with retry")
+
+        while True:
+            try:
+                return await self.send_command(command_type, command, params)
+            except CytomatBusyError as e:
+                elapsed_time = time.monotonic() - start_time
+                retry_count += 1
+
+                if elapsed_time >= timeout:
+                    raise TimeoutError(
+                        f"Cytomat device remained busy for {timeout} seconds (command: {command})."
+                    ) from e
+
+                logging.warning(
+                    "Cytomat is busy. Retry attempt #%d for command '%s'. "
+                    "Elapsed: %.2f seconds, waiting %.2f seconds before retry...",
+                    retry_count, command, elapsed_time, poll_interval
+                )
+                await asyncio.sleep(poll_interval)
+
+            except Exception:
+                raise
+
   async def send_action(
     self, command_type: str, command: str, params: str, timeout: Optional[int] = 60
   ) -> OverviewRegisterState:
@@ -119,7 +155,7 @@ class Cytomat(IncubatorBackend):
       timeout: The maximum time to wait for the command to complete. If None, the command will not
         wait for completion.
     """
-    resp = await self.send_command(command_type, command, params)
+    resp = await self.send_command_with_retry(command_type, command, params)
     if timeout is not None:
       await self.wait_for_task_completion(timeout=timeout)
     return OverviewRegisterState.from_resp(resp)
@@ -147,7 +183,7 @@ class Cytomat(IncubatorBackend):
     raise ValueError(f"Unsupported Cytomat model: {self.model}")
 
   async def get_overview_register(self) -> OverviewRegisterState:
-    resp = await self.send_command("ch", "bs", "")
+    resp = await self.send_command_with_retry("ch", "bs", "")
     return OverviewRegisterState.from_resp(resp)
 
   async def get_warning_register(self) -> WarningRegister:
