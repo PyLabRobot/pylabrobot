@@ -665,6 +665,7 @@ class LiquidHandler(Resource, Machine):
     self,
     use_channels: Optional[List[int]] = None,
     allow_nonzero_volume: bool = True,
+    offsets: Optional[List[Coordinate]] = None,
     **backend_kwargs,
   ):
     """Permanently discard tips in the trash.
@@ -695,7 +696,15 @@ class LiquidHandler(Resource, Machine):
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
     trash = self.deck.get_trash_area()
-    offsets = [c - trash.center() for c in reversed(trash.centers(yn=n))]  # offset is wrt center
+    trash_offsets = [
+      c - trash.center() for c in reversed(trash.centers(yn=n))
+    ]  # offset is wrt center
+    # add trash_offsets to offsets if defined, otherwise use trash_offsets
+    # too advanced for mypy
+    offsets = [
+      o + to if o is not None else to
+      for o, to in zip(offsets or [None] * n, trash_offsets)  # type: ignore
+    ]
 
     return await self.drop_tips(
       tip_spots=[trash] * n,
