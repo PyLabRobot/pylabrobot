@@ -2749,7 +2749,7 @@ class STAR(HamiltonLiquidHandler):
     high_speed=False,
     plate_width: Optional[float] = None,
     use_unsafe_hotel: bool = False,
-    iswap_collision_control_level: int = 1,
+    iswap_collision_control_level: int = 0,
     iswap_fold_up_sequence_at_the_end_of_process: bool = True,
   ):
     if use_arm == "iswap":
@@ -7632,12 +7632,6 @@ class STAR(HamiltonLiquidHandler):
     front_location = well.get_absolute_location("c", "f", "t")
 
     try:
-      # Move the channels used for holding the foil down before moving in the y-direction.
-      # This is in case the foil channels are also used in the aspiration/dispense.
-      # TODO: move to actual safe height rather than + 30
-      await self.move_channel_z(front_channel, front_location.z + 30)
-      await self.move_channel_z(back_channel, back_location.z + 30)
-
       # Then move all channels in the y-space simultaneously.
       await self.position_channels_in_y_direction(
         {
