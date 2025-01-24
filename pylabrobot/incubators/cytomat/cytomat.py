@@ -21,6 +21,7 @@ from pylabrobot.incubators.cytomat.constants import (
   WarningRegister,
 )
 from pylabrobot.incubators.cytomat.errors import (
+  CytomatBusyError,
   CytomatCommandUnknownError,
   CytomatTelegramStructureError,
   error_map,
@@ -152,11 +153,14 @@ class Cytomat(IncubatorBackend):
 
   async def get_overview_register(self) -> OverviewRegisterState:
     # Sometimes this command is not recognized and it is not known why. We will retry a few times
+    # We don't care if the cytomat is still busy, that is actually what we are often checking for.
+    # We are just gathering state, so just try a little bit later.
     num_tries = 10
     for _ in range(num_tries):
       try:
         resp = await self.send_command("ch", "bs", "")
-      except CytomatCommandUnknownError:
+      except (CytomatCommandUnknownError, CytomatBusyError):
+        await asyncio.sleep(0.1)
         continue
       return OverviewRegisterState.from_resp(resp)
     raise CytomatCommandUnknownError("Could not get overview register")
