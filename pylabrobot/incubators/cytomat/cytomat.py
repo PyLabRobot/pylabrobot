@@ -20,7 +20,11 @@ from pylabrobot.incubators.cytomat.constants import (
   SwapStationPosition,
   WarningRegister,
 )
-from pylabrobot.incubators.cytomat.errors import CytomatTelegramStructureError, error_map
+from pylabrobot.incubators.cytomat.errors import (
+  CytomatCommandUnknownError,
+  CytomatTelegramStructureError,
+  error_map,
+)
 from pylabrobot.incubators.cytomat.schemas import (
   ActionRegisterState,
   OverviewRegisterState,
@@ -147,8 +151,14 @@ class Cytomat(IncubatorBackend):
     raise ValueError(f"Unsupported Cytomat model: {self.model}")
 
   async def get_overview_register(self) -> OverviewRegisterState:
-    resp = await self.send_command("ch", "bs", "")
-    return OverviewRegisterState.from_resp(resp)
+    # Sometimes this command is not recognized and it is not known why. We will retry a few times
+    num_tries = 10
+    for _ in range(num_tries):
+      try:
+        resp = await self.send_command("ch", "bs", "")
+      except CytomatCommandUnknownError:
+        continue
+      return OverviewRegisterState.from_resp(resp)
 
   async def get_warning_register(self) -> WarningRegister:
     hex_value = await self.send_command("ch", "bw", "")
@@ -283,7 +293,7 @@ class Cytomat(IncubatorBackend):
   async def wait_for_task_completion(self, timeout=60):
     start = time.time()
     while True:
-      overview_register = await self.get_overview_register()  # TODO: sometimes not recognized
+      overview_register = await self.get_overview_register()
       if not overview_register.busy_bit_set:
         break
       await asyncio.sleep(1)
