@@ -20,7 +20,11 @@ from pylabrobot.incubators.cytomat.constants import (
   SwapStationPosition,
   WarningRegister,
 )
-from pylabrobot.incubators.cytomat.errors import CytomatBusyError, CytomatTelegramStructureError, error_map
+from pylabrobot.incubators.cytomat.errors import (
+  CytomatBusyError,
+  CytomatTelegramStructureError,
+  error_map,
+)
 from pylabrobot.incubators.cytomat.schemas import (
   ActionRegisterState,
   OverviewRegisterState,
@@ -111,41 +115,43 @@ class Cytomat(IncubatorBackend):
     logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
     raise Exception(f"Unknown response from cytomat: {resp}")
 
-  
   async def send_command_with_retry(
-        self,
-        command_type: str,
-        command: str,
-        params: str,
-        timeout: float = 60.0,
-        poll_interval: float = 1.0,
-    ) -> str:
-        start_time = time.monotonic()
-        retry_count = 0
-        
-        print(f"Sending command: {command_type} {command} {params} with retry")
+    self,
+    command_type: str,
+    command: str,
+    params: str,
+    timeout: float = 60.0,
+    poll_interval: float = 1.0,
+  ) -> str:
+    start_time = time.monotonic()
+    retry_count = 0
 
-        while True:
-            try:
-                return await self.send_command(command_type, command, params)
-            except CytomatBusyError as e:
-                elapsed_time = time.monotonic() - start_time
-                retry_count += 1
+    print(f"Sending command: {command_type} {command} {params} with retry")
 
-                if elapsed_time >= timeout:
-                    raise TimeoutError(
-                        f"Cytomat device remained busy for {timeout} seconds (command: {command})."
-                    ) from e
+    while True:
+      try:
+        return await self.send_command(command_type, command, params)
+      except CytomatBusyError as e:
+        elapsed_time = time.monotonic() - start_time
+        retry_count += 1
 
-                logging.warning(
-                    "Cytomat is busy. Retry attempt #%d for command '%s'. "
-                    "Elapsed: %.2f seconds, waiting %.2f seconds before retry...",
-                    retry_count, command, elapsed_time, poll_interval
-                )
-                await asyncio.sleep(poll_interval)
+        if elapsed_time >= timeout:
+          raise TimeoutError(
+            f"Cytomat device remained busy for {timeout} seconds (command: {command})."
+          ) from e
 
-            except Exception:
-                raise
+        logging.warning(
+          "Cytomat is busy. Retry attempt #%d for command '%s'. "
+          "Elapsed: %.2f seconds, waiting %.2f seconds before retry...",
+          retry_count,
+          command,
+          elapsed_time,
+          poll_interval,
+        )
+        await asyncio.sleep(poll_interval)
+
+      except Exception:
+        raise
 
   async def send_action(
     self, command_type: str, command: str, params: str, timeout: Optional[int] = 60
