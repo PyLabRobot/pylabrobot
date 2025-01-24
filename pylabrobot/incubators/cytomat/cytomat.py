@@ -235,17 +235,30 @@ class Cytomat(IncubatorBackend):
       **{member.name: bool(int(binary_values[member.value])) for member in SensorRegister}
     )
 
-  async def action_transfer_to_storage(  # used by insert_plate
-    self, site: PlateHolder
-  ) -> OverviewRegisterState:
-    """Open lift door, retrieve from transfer, close door, place at storage"""
-    return await self.send_action("mv", "ts", self._site_to_firmware_string(site))
 
-  async def action_storage_to_transfer(  # used by retrieve_plate
-    self, site: PlateHolder
-  ) -> OverviewRegisterState:
-    """Retrieve from storage, open door, move to transfer, close door"""
-    return await self.send_action("mv", "st", self._site_to_firmware_string(site))
+  async def action_transfer_to_storage(self, site: "PlateHolder") -> "OverviewRegisterState":
+      """Open lift door, retrieve from transfer, close door, place at storage."""
+      num_tries = 10
+      for _ in range(num_tries):
+          try:
+              return await self.send_action("mv", "ts", self._site_to_firmware_string(site))
+          except (CytomatCommandUnknownError, CytomatBusyError):
+              await asyncio.sleep(0.1)
+      raise CytomatCommandUnknownError(
+          "Could not complete action_transfer_to_storage."
+      )
+
+  async def action_storage_to_transfer(self, site: "PlateHolder") -> "OverviewRegisterState":
+      """Retrieve from storage, open door, move to transfer, close door."""
+      num_tries = 10
+      for _ in range(num_tries):
+          try:
+              return await self.send_action("mv", "st", self._site_to_firmware_string(site))
+          except (CytomatCommandUnknownError, CytomatBusyError):
+              await asyncio.sleep(0.1)
+      raise CytomatCommandUnknownError(
+          "Could not complete action_storage_to_transfer."
+      )
 
   async def action_storage_to_wait(self, site: PlateHolder) -> OverviewRegisterState:
     """Retrieve from storage, move to wait position"""
