@@ -2772,7 +2772,10 @@ class STAR(HamiltonLiquidHandler):
       z_position_at_the_command_end = z_position_at_the_command_end or self._traversal_height
 
       if open_gripper_position is None:
-        open_gripper_position = plate_width + 5
+        if use_unsafe_hotel:
+          open_gripper_position = plate_width + 5
+        else:
+          open_gripper_position = plate_width + 3
 
       if use_unsafe_hotel:
         await self.unsafe.get_from_hotel(
