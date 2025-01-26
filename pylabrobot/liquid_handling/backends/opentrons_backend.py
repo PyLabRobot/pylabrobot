@@ -532,7 +532,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6,
     }[pipette_name]
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     """Dispense liquid from the specified resource using pip."""
 
     assert len(ops) == 1, "only one channel supported for now"

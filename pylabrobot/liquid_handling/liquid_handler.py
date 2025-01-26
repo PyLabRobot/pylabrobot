@@ -862,7 +862,7 @@ class LiquidHandler(Resource, Machine):
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    liSingleChannelAspirationt[List[Tuple[Optional[Liquid], float]]] = []
+    liquids: List[List[Tuple[Optional[Liquid], float]]] = []
     for r, vol in zip(resources, vols):
       if r.tracker.is_disabled or not does_volume_tracking():
         liquids.append([(None, vol)])
@@ -871,7 +871,7 @@ class LiquidHandler(Resource, Machine):
 
     # create operations
     aspirations = [
-      Aspiration(
+      SingleChannelAspiration(
         resource=r,
         volume=v,
         offset=o,

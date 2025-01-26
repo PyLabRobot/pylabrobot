@@ -1182,7 +1182,7 @@ class Vantage(HamiltonLiquidHandler):
         determined based on the jet, blow_out, and empty parameters.
     """
 
-    if isinstance(dispense, DispensePlate):
+    if isinstance(dispense, MultiHeadDispensePlate):
       top_left_well = dispense.wells[0]
       position = (
         top_left_well.get_absolute_location()

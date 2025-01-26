@@ -27,21 +27,21 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   get_star_liquid_class,
 )
 from pylabrobot.liquid_handling.standard import (
-  SingleChannelAspiration,
-  MultiHeadAspirationContainer,
-  MultiHeadAspirationPlate,
-  SingleChannelDispense,
-  MultiHeadDispenseContainr,
-  MultiHeadDispensePlate,
   Drop,
   DropTipRack,
   GripDirection,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainr,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   # Move,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.resources import (
   Carrier,
