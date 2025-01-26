@@ -45,14 +45,14 @@ from pylabrobot.resources.well import Well
 from . import backends
 from .liquid_handler import LiquidHandler, OperationCallback
 from .standard import (
-  Aspiration,
-  AspirationPlate,
-  Dispense,
-  DispensePlate,
   Drop,
   DropTipRack,
   GripDirection,
+  MultiHeadAspirationPlate,
+  MultiHeadDispensePlate,
   Pickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 
 
@@ -61,8 +61,8 @@ def _make_asp(
   vol: float,
   tip: Any,
   offset: Coordinate = Coordinate.zero(),
-) -> Aspiration:
-  return Aspiration(
+) -> SingleChannelAspiration:
+  return SingleChannelAspiration(
     resource=r,
     volume=vol,
     tip=tip,
@@ -79,8 +79,8 @@ def _make_disp(
   vol: float,
   tip: Any,
   offset: Coordinate = Coordinate.zero(),
-) -> Dispense:
-  return Dispense(
+) -> SingleChannelDispense:
+  return SingleChannelDispense(
     resource=r,
     volume=vol,
     tip=tip,
@@ -781,7 +781,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         "command": "aspirate96",
         "args": (),
         "kwargs": {
-          "aspiration": AspirationPlate(
+          "aspiration": MultiHeadAspirationPlate(
             wells=self.plate.get_all_items(),
             volume=10.0,
             tips=ts,
@@ -800,7 +800,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
         "command": "dispense96",
         "args": (),
         "kwargs": {
-          "dispense": DispensePlate(
+          "dispense": MultiHeadDispensePlate(
             wells=self.plate.get_all_items(),
             volume=10.0,
             tips=ts,

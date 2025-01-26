@@ -59,20 +59,20 @@ from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
 from .standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
   GripDirection,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainr,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 
 logger = logging.getLogger("pylabrobot")
@@ -862,7 +862,7 @@ class LiquidHandler(Resource, Machine):
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
-    liquids: List[List[Tuple[Optional[Liquid], float]]] = []
+    liSingleChannelAspirationt[List[Tuple[Optional[Liquid], float]]] = []
     for r, vol in zip(resources, vols):
       if r.tracker.is_disabled or not does_volume_tracking():
         liquids.append([(None, vol)])
@@ -963,22 +963,22 @@ class LiquidHandler(Resource, Machine):
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     **backend_kwargs,
   ):
-    """Dispense liquid to the specified channels.
+    """SingleChannelDispense liquid to the specified channels.
 
     Examples:
-      Dispense a constant amount of liquid to the first column:
+      SingleChannelDispense a constant amount of liquid to the first column:
 
       >>> await lh.dispense(plate["A1:H1"], 50)
 
-      Dispense an linearly increasing amount of liquid to the first column:
+      SingleChannelDispense an linearly increasing amount of liquid to the first column:
 
       >>> await lh.dispense(plate["A1:H1"], range(0, 500, 50))
 
-      Dispense arbitrary amounts of liquid to the first column:
+      SingleChannelDispense arbitrary amounts of liquid to the first column:
 
       >>> await lh.dispense(plate["A1:H1"], [0, 40, 10, 50, 100, 200, 300, 400])
 
-      Dispense liquid to wells in different plates:
+      SingleChannelDispense liquid to wells in different plates:
 
       >>> await lh.dispense((plate["A1"], 50), (plate2["A1"], 50), (plate3["A1"], 50))
 
@@ -986,7 +986,7 @@ class LiquidHandler(Resource, Machine):
 
       >>> await lh.dispense(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
 
-      Dispense a blue bucket (big container), with the first 4 channels (which will be spaced
+      SingleChannelDispense a blue bucket (big container), with the first 4 channels (which will be spaced
       equally apart):
 
       >>> await lh.dispense(blue_bucket, vols=50, use_channels=[0, 1, 2, 3])
@@ -1074,7 +1074,7 @@ class LiquidHandler(Resource, Machine):
 
     # create operations
     dispenses = [
-      Dispense(
+      SingleChannelDispense(
         resource=r,
         volume=v,
         offset=o,
@@ -1518,7 +1518,7 @@ class LiquidHandler(Resource, Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    aspiration: Union[AspirationPlate, AspirationContainer]
+    aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
 
     # Convert everything to floats to handle exotic number types
     volume = float(volume)
@@ -1545,7 +1545,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed(liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      aspiration = AspirationContainer(
+      aspiration = MultiHeadAspirationContainer(
         container=resource,
         volume=volume,
         offset=offset,
@@ -1585,7 +1585,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed(liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      aspiration = AspirationPlate(
+      aspiration = MultiHeadAspirationPlate(
         wells=wells,
         volume=volume,
         offset=offset,
@@ -1632,10 +1632,10 @@ class LiquidHandler(Resource, Machine):
     blow_out_air_volume: Optional[float] = None,
     **backend_kwargs,
   ):
-    """Dispense to all wells in a plate.
+    """SingleChannelDispense to all wells in a plate.
 
     Examples:
-      Dispense an entire 96 well plate:
+      SingleChannelDispense an entire 96 well plate:
 
       >>> await lh.dispense96(plate, volume=50)
 
@@ -1665,7 +1665,7 @@ class LiquidHandler(Resource, Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    dispense: Union[DispensePlate, DispenseContainer]
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr]
 
     # Convert everything to floats to handle exotic number types
     volume = float(volume)
@@ -1692,7 +1692,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed(reversed_liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      dispense = DispenseContainer(
+      dispense = MultiHeadDispenseContainr(
         container=resource,
         volume=volume,
         offset=offset,
@@ -1729,7 +1729,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed_liquids:
           well.tracker.add_liquid(liquid=liquid, volume=vol)
 
-      dispense = DispensePlate(
+      dispense = MultiHeadDispensePlate(
         wells=wells,
         volume=volume,
         offset=offset,

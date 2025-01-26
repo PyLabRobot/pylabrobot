@@ -25,10 +25,10 @@ from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  Dispense,
   Drop,
   Pickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.resources import Coordinate, Deck, Liquid, Tip
 from pylabrobot.serializer import deserialize
@@ -235,7 +235,7 @@ async def aspirate():
         deserialize(sc["liquids"]),
       )
       aspirations.append(
-        Aspiration(
+        SingleChannelAspiration(
           resource=resource,
           tip=tip,
           offset=offset,
@@ -291,7 +291,7 @@ async def dispense():
         deserialize(sc["liquids"]),
       )
       dispenses.append(
-        Dispense(
+        SingleChannelDispense(
           resource=resource,
           tip=tip,
           offset=offset,
