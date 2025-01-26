@@ -399,7 +399,7 @@ class EVO(TecanLiquidHandler):
     await self.liha.move_plunger_relative(ppr)
 
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
-    """SingleChannelDispense liquid from the specified channels.
+    """Dispense liquid from the specified channels.
 
     Args:
       ops: The dispense operations to perform.

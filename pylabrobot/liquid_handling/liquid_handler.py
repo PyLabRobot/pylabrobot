@@ -963,22 +963,22 @@ class LiquidHandler(Resource, Machine):
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
     **backend_kwargs,
   ):
-    """SingleChannelDispense liquid to the specified channels.
+    """Dispense liquid to the specified channels.
 
     Examples:
-      SingleChannelDispense a constant amount of liquid to the first column:
+      Dispense a constant amount of liquid to the first column:
 
       >>> await lh.dispense(plate["A1:H1"], 50)
 
-      SingleChannelDispense an linearly increasing amount of liquid to the first column:
+      Dispense an linearly increasing amount of liquid to the first column:
 
       >>> await lh.dispense(plate["A1:H1"], range(0, 500, 50))
 
-      SingleChannelDispense arbitrary amounts of liquid to the first column:
+      Dispense arbitrary amounts of liquid to the first column:
 
       >>> await lh.dispense(plate["A1:H1"], [0, 40, 10, 50, 100, 200, 300, 400])
 
-      SingleChannelDispense liquid to wells in different plates:
+      Dispense liquid to wells in different plates:
 
       >>> await lh.dispense((plate["A1"], 50), (plate2["A1"], 50), (plate3["A1"], 50))
 
@@ -986,7 +986,7 @@ class LiquidHandler(Resource, Machine):
 
       >>> await lh.dispense(plate["A1"], vols=50, offsets=[Coordinate(0, 0, 10)])
 
-      SingleChannelDispense a blue bucket (big container), with the first 4 channels (which will be spaced
+      Dispense a blue bucket (big container), with the first 4 channels (which will be spaced
       equally apart):
 
       >>> await lh.dispense(blue_bucket, vols=50, use_channels=[0, 1, 2, 3])
@@ -1632,10 +1632,10 @@ class LiquidHandler(Resource, Machine):
     blow_out_air_volume: Optional[float] = None,
     **backend_kwargs,
   ):
-    """SingleChannelDispense to all wells in a plate.
+    """Dispense to all wells in a plate.
 
     Examples:
-      SingleChannelDispense an entire 96 well plate:
+      Dispense an entire 96 well plate:
 
       >>> await lh.dispense96(plate, volume=50)
 

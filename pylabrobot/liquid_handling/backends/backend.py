@@ -106,7 +106,7 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
-    """SingleChannelDispense liquid from the specified resource using pip."""
+    """Dispense liquid from the specified resource using pip."""
 
   @abstractmethod
   async def pick_up_tips96(self, pickup: PickupTipRack):
@@ -124,7 +124,7 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
 
   @abstractmethod
   async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr]):
-    """SingleChannelDispense to all wells in 96 well plate."""
+    """Dispense to all wells in 96 well plate."""
 
   @abstractmethod
   async def pick_up_resource(self, pickup: ResourcePickup):
