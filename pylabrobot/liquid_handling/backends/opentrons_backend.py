@@ -7,19 +7,19 @@ from pylabrobot.liquid_handling.backends.backend import (
 )
 from pylabrobot.liquid_handling.errors import NoChannelError
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainr,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.resources import (
   Coordinate,
@@ -471,7 +471,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6,
     }[pipette_name]
 
-  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
+  async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
     """Aspirate liquid from the specified resource using pip."""
 
     assert len(ops) == 1, "only one channel supported for now"
@@ -532,7 +532,7 @@ class OpentronsBackend(LiquidHandlerBackend):
       "p20_multi_gen2": 7.6,
     }[pipette_name]
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     """Dispense liquid from the specified resource using pip."""
 
     assert len(ops) == 1, "only one channel supported for now"
@@ -579,10 +579,12 @@ class OpentronsBackend(LiquidHandlerBackend):
   async def drop_tips96(self, drop: DropTipRack):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(
+    self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
+  ):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr]):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
   async def pick_up_resource(self, pickup: ResourcePickup):

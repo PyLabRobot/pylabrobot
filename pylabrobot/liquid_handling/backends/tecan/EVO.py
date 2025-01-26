@@ -25,19 +25,19 @@ from pylabrobot.liquid_handling.liquid_classes.tecan import (
   get_liquid_class,
 )
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainr,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import (
@@ -309,7 +309,7 @@ class EVO(TecanLiquidHandler):
   # ============== LiquidHandlerBackend methods ==============
 
   async def aspirate(
-    self, ops: List[Aspiration], use_channels: List[int]
+    self, ops: List[SingleChannelAspiration], use_channels: List[int]
   ):  # TODO: pass in operation parameters to override TecanLiquidClass defaults
     """Aspirate liquid from the specified channels.
 
@@ -398,7 +398,7 @@ class EVO(TecanLiquidHandler):
     await self.liha.set_end_speed_plunger(sep)
     await self.liha.move_plunger_relative(ppr)
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     """Dispense liquid from the specified channels.
 
     Args:
@@ -511,10 +511,12 @@ class EVO(TecanLiquidHandler):
   async def drop_tips96(self, drop: DropTipRack):
     raise NotImplementedError()
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(
+    self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
+  ):
     raise NotImplementedError()
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr]):
     raise NotImplementedError()
 
   async def pick_up_resource(self, pickup: ResourcePickup):
@@ -601,7 +603,7 @@ class EVO(TecanLiquidHandler):
 
   def _liha_positions(
     self,
-    ops: Sequence[Union[Aspiration, Dispense, Pickup, Drop]],
+    ops: Sequence[Union[SingleChannelAspiration, SingleChannelDispense, Pickup, Drop]],
     use_channels: List[int],
   ) -> Tuple[
     List[Optional[int]],
@@ -709,7 +711,7 @@ class EVO(TecanLiquidHandler):
 
   def _aspirate_action(
     self,
-    ops: Sequence[Union[Aspiration, Dispense]],
+    ops: Sequence[Union[SingleChannelAspiration, SingleChannelDispense]],
     use_channels: List[int],
     tecan_liquid_classes: List[Optional[TecanLiquidClass]],
     zadd: List[Optional[int]],
@@ -753,7 +755,7 @@ class EVO(TecanLiquidHandler):
 
   def _dispense_action(
     self,
-    ops: Sequence[Union[Aspiration, Dispense]],
+    ops: Sequence[Union[SingleChannelAspiration, SingleChannelDispense]],
     use_channels: List[int],
     tecan_liquid_classes: List[Optional[TecanLiquidClass]],
   ) -> Tuple[

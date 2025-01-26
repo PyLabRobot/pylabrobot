@@ -27,21 +27,21 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   get_star_liquid_class,
 )
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
   GripDirection,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainr,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   # Move,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -1563,7 +1563,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def aspirate(
     self,
-    ops: List[Aspiration],
+    ops: List[SingleChannelAspiration],
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,
@@ -1872,7 +1872,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def dispense(
     self,
-    ops: List[Dispense],
+    ops: List[SingleChannelDispense],
     use_channels: List[int],
     lld_search_height: Optional[List[float]] = None,
     liquid_surface_no_lld: Optional[List[float]] = None,
@@ -2193,7 +2193,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def aspirate96(
     self,
-    aspiration: Union[AspirationPlate, AspirationContainer],
+    aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer],
     jet: bool = False,
     blow_out: bool = False,
     use_lld: bool = False,
@@ -2269,7 +2269,7 @@ class STAR(HamiltonLiquidHandler):
     assert self.core96_head_installed, "96 head must be installed"
 
     # get the first well and tip as representatives
-    if isinstance(aspiration, AspirationPlate):
+    if isinstance(aspiration, MultiHeadAspirationPlate):
       top_left_well = aspiration.wells[0]
       position = (
         top_left_well.get_absolute_location()
@@ -2375,7 +2375,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: Union[DispensePlate, DispenseContainer],
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr],
     jet: bool = False,
     empty: bool = False,
     blow_out: bool = False,
@@ -2446,7 +2446,7 @@ class STAR(HamiltonLiquidHandler):
     assert self.core96_head_installed, "96 head must be installed"
 
     # get the first well and tip as representatives
-    if isinstance(dispense, DispensePlate):
+    if isinstance(dispense, MultiHeadDispensePlate):
       top_left_well = dispense.wells[0]
       position = (
         top_left_well.get_absolute_location()

@@ -59,20 +59,20 @@ from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
 from .standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
   GripDirection,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainr,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 
 logger = logging.getLogger("pylabrobot")
@@ -871,7 +871,7 @@ class LiquidHandler(Resource, Machine):
 
     # create operations
     aspirations = [
-      Aspiration(
+      SingleChannelAspiration(
         resource=r,
         volume=v,
         offset=o,
@@ -1074,7 +1074,7 @@ class LiquidHandler(Resource, Machine):
 
     # create operations
     dispenses = [
-      Dispense(
+      SingleChannelDispense(
         resource=r,
         volume=v,
         offset=o,
@@ -1518,7 +1518,7 @@ class LiquidHandler(Resource, Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    aspiration: Union[AspirationPlate, AspirationContainer]
+    aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
 
     # Convert everything to floats to handle exotic number types
     volume = float(volume)
@@ -1545,7 +1545,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed(liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      aspiration = AspirationContainer(
+      aspiration = MultiHeadAspirationContainer(
         container=resource,
         volume=volume,
         offset=offset,
@@ -1585,7 +1585,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed(liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      aspiration = AspirationPlate(
+      aspiration = MultiHeadAspirationPlate(
         wells=wells,
         volume=volume,
         offset=offset,
@@ -1665,7 +1665,7 @@ class LiquidHandler(Resource, Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    dispense: Union[DispensePlate, DispenseContainer]
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr]
 
     # Convert everything to floats to handle exotic number types
     volume = float(volume)
@@ -1692,7 +1692,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed(reversed_liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      dispense = DispenseContainer(
+      dispense = MultiHeadDispenseContainr(
         container=resource,
         volume=volume,
         offset=offset,
@@ -1729,7 +1729,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed_liquids:
           well.tracker.add_liquid(liquid=liquid, volume=vol)
 
-      dispense = DispensePlate(
+      dispense = MultiHeadDispensePlate(
         wells=wells,
         volume=volume,
         offset=offset,
