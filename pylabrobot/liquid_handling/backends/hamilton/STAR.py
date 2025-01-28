@@ -7657,6 +7657,11 @@ class STAR(HamiltonLiquidHandler):
       # After that, all channels are clear to move up.
       await self.move_all_channels_in_z_safety()
 
+  async def request_volume_in_tip(self, channel: int) -> float:
+    resp = await self.send_command(f"P{channel + 1}", "QC", fmt="qc##### (n)")
+    _, current_volume = resp["qc"].split(" ")  # first is max volume
+    return float(current_volume) / 10
+
 
 class UnSafe:
   """
