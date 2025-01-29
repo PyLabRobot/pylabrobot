@@ -14,6 +14,7 @@ from typing import (
   Callable,
   Dict,
   List,
+  Literal,
   Optional,
   Protocol,
   Sequence,
@@ -720,7 +721,7 @@ class LiquidHandler(Resource, Machine):
     if len(not_containers) > 0:
       raise TypeError(f"Resources must be `Container`s, got {not_containers}")
 
-  def _get_single_resource_liquid_op_offsets(
+  def _get_wide_single_resource_liquid_op_offsets(
     self, resource: Resource, num_channels: int
   ) -> List[Coordinate]:
     min_spacing_edge = (
@@ -759,6 +760,34 @@ class LiquidHandler(Resource, Machine):
     # so we need to subtract the center of the resource
     return [c - resource.center() for c in center_offsets]
 
+  def _get_tight_single_resource_liquid_op_offsets(
+    self, resource: Resource, num_channels: int
+  ) -> List[Coordinate]:
+    min_spacing_between_channels = 9
+    min_spacing_edge = (
+      2  # minimum spacing between the edge of the container and the center of channel
+    )
+
+    channel_space = min_spacing_edge * 2 + (num_channels - 1) * min_spacing_between_channels
+
+    resource_size: float
+    if resource.get_absolute_rotation().z % 180 == 0:
+      min_y = (resource.get_size_y() - channel_space) / 2
+      offsets = [
+        Coordinate(0, min_y + i * min_spacing_between_channels, 0) for i in range(num_channels)
+      ]
+    elif resource.get_absolute_rotation().z % 90 == 0:
+      min_x = (resource.get_size_x() - channel_space) / 2
+      offsets = [
+        Coordinate(min_x + i * min_spacing_between_channels, 0, 0) for i in range(num_channels)
+      ]
+    else:
+      raise ValueError("Only 90 and 180 degree rotations are supported for now.")
+
+    # offsets are relative to the center of the resource, but above we computed them wrt lfb
+    # so we need to subtract the center of the resource
+    return [o - resource.center() for o in offsets]
+
   @need_setup_finished
   async def aspirate(
     self,
@@ -769,6 +798,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
+    spread: Literal["wide", "tight"] = "wide",
     **backend_kwargs,
   ):
     """Aspirate liquid from the specified wells.
@@ -813,6 +843,9 @@ class LiquidHandler(Resource, Machine):
       liquid_height: The height of the liquid in the well wrt the bottom, in mm.
       blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
         backend default will be used.
+      spread: Used if aspirating from a single resource with multiple channels. If "tight", the
+        channels will be spaced as close as possible. If "wide", the channels will be spaced as far
+        apart as possible.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -854,9 +887,14 @@ class LiquidHandler(Resource, Machine):
     if len(set(resources)) == 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
-      center_offsets = self._get_single_resource_liquid_op_offsets(
-        resource=resource, num_channels=len(use_channels)
-      )
+      if spread == "tight":
+        center_offsets = self._get_tight_single_resource_liquid_op_offsets(
+          resource=resource, num_channels=len(use_channels)
+        )
+      else:  # wide
+        center_offsets = self._get_wide_single_resource_liquid_op_offsets(
+          resource=resource, num_channels=len(use_channels)
+        )
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
@@ -961,6 +999,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
+    spread: Literal["wide", "tight"] = "wide",
     **backend_kwargs,
   ):
     """Dispense liquid to the specified channels.
@@ -1041,9 +1080,14 @@ class LiquidHandler(Resource, Machine):
     if len(set(resources)) == 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
-      center_offsets = self._get_single_resource_liquid_op_offsets(
-        resource=resource, num_channels=len(use_channels)
-      )
+      if spread == "tight":
+        center_offsets = self._get_tight_single_resource_liquid_op_offsets(
+          resource=resource, num_channels=len(use_channels)
+        )
+      else:
+        center_offsets = self._get_wide_single_resource_liquid_op_offsets(
+          resource=resource, num_channels=len(use_channels)
+        )
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
