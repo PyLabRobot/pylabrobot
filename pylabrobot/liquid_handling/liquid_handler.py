@@ -800,7 +800,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
-    spread: Literal["wide", "tight"] = "tight",
+    spread: Literal["wide", "tight"] = "wide",
     **backend_kwargs,
   ):
     """Aspirate liquid from the specified wells.
@@ -1001,7 +1001,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
-    spread: Literal["wide", "tight"] = "tight",
+    spread: Literal["wide", "tight"] = "wide",
     **backend_kwargs,
   ):
     """Dispense liquid to the specified channels.
