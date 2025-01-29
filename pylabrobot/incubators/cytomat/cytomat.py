@@ -20,7 +20,12 @@ from pylabrobot.incubators.cytomat.constants import (
   SwapStationPosition,
   WarningRegister,
 )
-from pylabrobot.incubators.cytomat.errors import CytomatTelegramStructureError, error_map
+from pylabrobot.incubators.cytomat.errors import (
+  CytomatBusyError,
+  CytomatCommandUnknownError,
+  CytomatTelegramStructureError,
+  error_map,
+)
 from pylabrobot.incubators.cytomat.schemas import (
   ActionRegisterState,
   OverviewRegisterState,
@@ -147,8 +152,18 @@ class Cytomat(IncubatorBackend):
     raise ValueError(f"Unsupported Cytomat model: {self.model}")
 
   async def get_overview_register(self) -> OverviewRegisterState:
-    resp = await self.send_command("ch", "bs", "")
-    return OverviewRegisterState.from_resp(resp)
+    # Sometimes this command is not recognized and it is not known why. We will retry a few times
+    # We don't care if the cytomat is still busy, that is actually what we are often checking for.
+    # We are just gathering state, so just try a little bit later.
+    num_tries = 10
+    for _ in range(num_tries):
+      try:
+        resp = await self.send_command("ch", "bs", "")
+      except (CytomatCommandUnknownError, CytomatBusyError):
+        await asyncio.sleep(0.1)
+        continue
+      return OverviewRegisterState.from_resp(resp)
+    raise CytomatCommandUnknownError("Could not get overview register")
 
   async def get_warning_register(self) -> WarningRegister:
     hex_value = await self.send_command("ch", "bw", "")
@@ -220,17 +235,30 @@ class Cytomat(IncubatorBackend):
       **{member.name: bool(int(binary_values[member.value])) for member in SensorRegister}
     )
 
-  async def action_transfer_to_storage(  # used by insert_plate
-    self, site: PlateHolder
-  ) -> OverviewRegisterState:
-    """Open lift door, retrieve from transfer, close door, place at storage"""
-    return await self.send_action("mv", "ts", self._site_to_firmware_string(site))
 
-  async def action_storage_to_transfer(  # used by retrieve_plate
-    self, site: PlateHolder
-  ) -> OverviewRegisterState:
-    """Retrieve from storage, open door, move to transfer, close door"""
-    return await self.send_action("mv", "st", self._site_to_firmware_string(site))
+  async def action_transfer_to_storage(self, site: "PlateHolder") -> "OverviewRegisterState":
+      """Open lift door, retrieve from transfer, close door, place at storage."""
+      num_tries = 10
+      for _ in range(num_tries):
+          try:
+              return await self.send_action("mv", "ts", self._site_to_firmware_string(site))
+          except (CytomatCommandUnknownError, CytomatBusyError):
+              await asyncio.sleep(0.1)
+      raise CytomatCommandUnknownError(
+          "Could not complete action_transfer_to_storage."
+      )
+
+  async def action_storage_to_transfer(self, site: "PlateHolder") -> "OverviewRegisterState":
+      """Retrieve from storage, open door, move to transfer, close door."""
+      num_tries = 10
+      for _ in range(num_tries):
+          try:
+              return await self.send_action("mv", "st", self._site_to_firmware_string(site))
+          except (CytomatCommandUnknownError, CytomatBusyError):
+              await asyncio.sleep(0.1)
+      raise CytomatCommandUnknownError(
+          "Could not complete action_storage_to_transfer."
+      )
 
   async def action_storage_to_wait(self, site: PlateHolder) -> OverviewRegisterState:
     """Retrieve from storage, move to wait position"""
@@ -283,7 +311,7 @@ class Cytomat(IncubatorBackend):
   async def wait_for_task_completion(self, timeout=60):
     start = time.time()
     while True:
-      overview_register = await self.get_overview_register()  # TODO: sometimes not recognized
+      overview_register = await self.get_overview_register()
       if not overview_register.busy_bit_set:
         break
       await asyncio.sleep(1)
