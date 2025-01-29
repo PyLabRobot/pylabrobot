@@ -851,18 +851,15 @@ class LiquidHandler(Resource, Machine):
     # If the user specified a single resource, but multiple channels to use, we will assume they
     # want to space the channels evenly across the resource. Note that offsets are relative to the
     # center of the resource.
-    if all(isinstance(r, Resource) for r in resources):
-      if len(set(resources)) == 1:
-        resource = resources[0]
-        resources = [resource] * len(use_channels)
-        center_offsets = self._get_single_resource_liquid_op_offsets(
-          resource=resource, num_channels=len(use_channels)
-        )
+    if len(set(resources)) == 1:
+      resource = resources[0]
+      resources = [resource] * len(use_channels)
+      center_offsets = self._get_single_resource_liquid_op_offsets(
+        resource=resource, num_channels=len(use_channels)
+      )
 
-        # add user defined offsets to the computed centers
-        offsets = [c + o for c, o in zip(center_offsets, offsets)]
-    elif not all(isinstance(r, Coordinate) for r in resources):
-      raise ValueError("Resources must be a list of `Resource`s or `Coordinate`s.")
+      # add user defined offsets to the computed centers
+      offsets = [c + o for c, o in zip(center_offsets, offsets)]
 
     # liquid(s) for each channel. If volume tracking is disabled, use None as the liquid.
     liquids: List[List[Tuple[Optional[Liquid], float]]] = []
