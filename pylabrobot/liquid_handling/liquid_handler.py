@@ -772,13 +772,11 @@ class LiquidHandler(Resource, Machine):
 
     resource_size: float
     if resource.get_absolute_rotation().z % 180 == 0:
-      resource_size = resource.get_size_y()
       min_y = (resource.get_size_y() - channel_space) / 2
       offsets = [
         Coordinate(0, min_y + i * min_spacing_between_channels, 0) for i in range(num_channels)
       ]
     elif resource.get_absolute_rotation().z % 90 == 0:
-      resource_size = resource.get_size_x()
       min_x = (resource.get_size_x() - channel_space) / 2
       offsets = [
         Coordinate(min_x + i * min_spacing_between_channels, 0, 0) for i in range(num_channels)
