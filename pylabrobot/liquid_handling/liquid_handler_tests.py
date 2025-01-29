@@ -605,173 +605,158 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       self.assertEqual(self.lh.head96[i].get_tip().tracker.get_used_volume(), 0)
 
   async def test_transfer(self):
-    t = self.tip_rack.get_item("A1").get_tip()
-    self.lh.update_head_state({0: t})
-
-    # Simple transfer
-    self.plate.get_item("A1").tracker.set_liquids([(None, 10)])
-    await self.lh.transfer(self.plate.get_well("A1"), self.plate["A2"], source_vol=10)
-
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    tips = [self.lh.head[i].get_tip() for i in range(8)]
+    self.plate.get_item("A1").tracker.set_liquids([(None, 80)])
+    await self.lh.transfer(self.plate["A1:H1"], self.plate["A2:H2"], vols=[80] * 8)
     self.assertEqual(
       self.get_first_command("aspirate"),
       {
         "command": "aspirate",
         "args": (),
         "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_asp(self.plate.get_item("A1"), vol=10.0, tip=t)],
+          "ops": [
+            _make_asp(well, vol=80.0, tip=tip) for well, tip in zip(self.plate["A1:H1"], tips)
+          ],
+          "use_channels": list(range(8)),
         },
       },
     )
+
     self.assertEqual(
       self.get_first_command("dispense"),
       {
         "command": "dispense",
         "args": (),
         "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_disp(self.plate.get_item("A2"), vol=10.0, tip=t)],
+          "ops": [
+            _make_disp(well, vol=80.0, tip=tip) for well, tip in zip(self.plate["A2:H2"], tips)
+          ],
+          "use_channels": list(range(8)),
         },
       },
     )
     self.backend.clear()
 
-    # Transfer to multiple wells
-    self.plate.get_item("A1").tracker.set_liquids([(None, 80)])
-    await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], source_vol=80)
-    self.assertEqual(
-      self.get_first_command("aspirate"),
-      {
-        "command": "aspirate",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_asp(self.plate.get_item("A1"), vol=80.0, tip=t)],
-        },
-      },
+  async def test_aliquot_single_asp(self):
+    self.lh.aspirate = unittest.mock.AsyncMock()
+    self.lh.dispense = unittest.mock.AsyncMock()
+
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    await self.lh.aliquot(
+      self.plate["A1:H1"],
+      [
+        self.plate["A2:H2"],
+        self.plate["A3:H3"],
+        self.plate["A4:H4"],
+      ],
+      vol_per_transfer=10,
     )
 
-    dispenses = list(
-      filter(
-        lambda x: x["command"] == "dispense",
-        self.backend.commands_received,
-      )
+    self.lh.aspirate.assert_called_once_with(
+      resources=self.plate["A1:H1"],
+      vols=[30] * 8,
     )
-    self.assertEqual(
-      dispenses,
+
+    self.lh.dispense.assert_has_calls(
       [
-        {
-          "command": "dispense",
-          "args": (),
-          "kwargs": {
-            "use_channels": [0],
-            "ops": [_make_disp(well, vol=10.0, tip=t)],
-          },
-        }
-        for well in self.plate["A1:H1"]
+        unittest.mock.call(resources=self.plate["A2:H2"], vols=[10] * 8),
+        unittest.mock.call(resources=self.plate["A3:H3"], vols=[10] * 8),
+        unittest.mock.call(resources=self.plate["A4:H4"], vols=[10] * 8),
       ],
     )
-    self.backend.clear()
 
-    # Transfer with ratios
-    self.plate.get_item("A1").tracker.set_liquids([(None, 60)])
-    await self.lh.transfer(
-      self.plate.get_well("A1"),
-      self.plate["B1:C1"],
-      source_vol=60,
-      ratios=[2, 1],
-    )
-    self.assertEqual(
-      self.get_first_command("aspirate"),
-      {
-        "command": "aspirate",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_asp(self.plate.get_item("A1"), vol=60.0, tip=t)],
-        },
-      },
-    )
-    dispenses = list(
-      filter(
-        lambda x: x["command"] == "dispense",
-        self.backend.commands_received,
-      )
-    )
-    self.assertEqual(
-      dispenses,
+  async def test_aliquot_multiple_asp(self):
+    self.lh.aspirate = unittest.mock.AsyncMock()
+    self.lh.dispense = unittest.mock.AsyncMock()
+
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    await self.lh.aliquot(
+      self.plate["A1:H1"],
       [
-        {
-          "command": "dispense",
-          "args": (),
-          "kwargs": {
-            "use_channels": [0],
-            "ops": [_make_disp(well, vol=vol, tip=t)],
-          },
-        }
-        for well, vol in zip(self.plate["B1:C1"], [40, 20])
+        self.plate["A2:H2"],
+        self.plate["A3:H3"],
+        self.plate["A4:H4"],
+      ],
+      vol_per_transfer=150,
+    )
+
+    self.lh.aspirate.assert_has_calls(
+      [
+        unittest.mock.call(resources=self.plate["A1:H1"], vols=[300] * 8),
+        unittest.mock.call(resources=self.plate["A1:H1"], vols=[150] * 8),
       ],
     )
-    self.backend.clear()
 
-    # Transfer with target_vols
-    vols: List[float] = [3, 1, 4, 1, 5, 9, 6, 2]
-    self.plate.get_item("A1").tracker.set_liquids([(None, sum(vols))])
-    await self.lh.transfer(self.plate.get_well("A1"), self.plate["A1:H1"], target_vols=vols)
-    self.assertEqual(
-      self.get_first_command("aspirate"),
-      {
-        "command": "aspirate",
-        "args": (),
-        "kwargs": {
-          "use_channels": [0],
-          "ops": [_make_asp(self.plate.get_well("A1"), vol=sum(vols), tip=t)],
-        },
-      },
-    )
-    dispenses = list(
-      filter(
-        lambda x: x["command"] == "dispense",
-        self.backend.commands_received,
-      )
-    )
-    self.assertEqual(
-      dispenses,
+    self.lh.dispense.assert_has_calls(
       [
-        {
-          "command": "dispense",
-          "args": (),
-          "kwargs": {
-            "use_channels": [0],
-            "ops": [_make_disp(well, vol=vol, tip=t)],
-          },
-        }
-        for well, vol in zip(self.plate["A1:H1"], vols)
+        unittest.mock.call(resources=self.plate["A2:H2"], vols=[150] * 8),
+        unittest.mock.call(resources=self.plate["A3:H3"], vols=[150] * 8),
+        unittest.mock.call(resources=self.plate["A4:H4"], vols=[150] * 8),
       ],
     )
-    self.backend.clear()
 
-    # target_vols and source_vol specified
-    with self.assertRaises(TypeError):
-      await self.lh.transfer(
-        self.plate.get_well("A1"),
+  async def test_aliquot_dead_volume(self):
+    self.lh.aspirate = unittest.mock.AsyncMock()
+    self.lh.dispense = unittest.mock.AsyncMock()
+
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    await self.lh.aliquot(
+      self.plate["A1:H1"],
+      [
+        self.plate["A2:H2"],
+        self.plate["A3:H3"],
+        self.plate["A4:H4"],
+      ],
+      vol_per_transfer=150,
+      dead_volume=50,
+    )
+
+    self.lh.aspirate.assert_has_calls(
+      [
+        unittest.mock.call(resources=self.plate["A1:H1"], vols=[350] * 8),
+        unittest.mock.call(resources=self.plate["A1:H1"], vols=[150] * 8),
+      ],
+    )
+
+    self.lh.dispense.assert_has_calls(
+      [
+        unittest.mock.call(resources=self.plate["A2:H2"], vols=[150] * 8),
+        unittest.mock.call(resources=self.plate["A3:H3"], vols=[150] * 8),
+        unittest.mock.call(resources=self.plate["A4:H4"], vols=[150] * 8),
+      ],
+    )
+
+  async def test_serial_dilution(self):
+    self.lh.aspirate = unittest.mock.AsyncMock()
+    self.lh.dispense = unittest.mock.AsyncMock()
+
+    await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
+    await self.lh.serial_dilute(
+      [
         self.plate["A1:H1"],
-        source_vol=100,
-        target_vols=vols,
-      )
+        self.plate["A2:H2"],
+        self.plate["A3:H3"],
+      ],
+      vol_per_transfer=10,
+    )
 
-    # target_vols and ratios specified
-    with self.assertRaises(TypeError):
-      await self.lh.transfer(
-        self.plate.get_well("A1"),
-        self.plate["A1:H1"],
-        ratios=[1] * 8,
-        target_vols=vols,
-      )
+    self.lh.aspirate.assert_has_calls(
+      [
+        unittest.mock.call(resources=self.plate["A1:H1"], vols=[10] * 8),
+        unittest.mock.call(resources=self.plate["A2:H2"], vols=[10] * 8),
+      ],
+    )
+
+    self.lh.dispense.assert_has_calls(
+      [
+        unittest.mock.call(resources=self.plate["A2:H2"], vols=[10] * 8),
+        unittest.mock.call(resources=self.plate["A3:H3"], vols=[10] * 8),
+      ],
+    )
 
   async def test_stamp(self):
-    # Simple transfer
-    await self.lh.pick_up_tips96(self.tip_rack)  # pick up tips first.
+    await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.stamp(self.plate, self.plate, volume=10)
     ts = self.tip_rack.get_all_tips()
 

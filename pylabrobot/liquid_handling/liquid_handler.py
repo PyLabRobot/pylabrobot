@@ -7,6 +7,7 @@ import contextlib
 import inspect
 import json
 import logging
+import math
 import threading
 import warnings
 from typing import (
@@ -1195,82 +1196,126 @@ class LiquidHandler(Resource, Machine):
 
   async def transfer(
     self,
-    source: Well,
+    sources: List[Well],
     targets: List[Well],
-    source_vol: Optional[float] = None,
-    ratios: Optional[List[float]] = None,
-    target_vols: Optional[List[float]] = None,
-    aspiration_flow_rate: Optional[float] = None,
-    dispense_flow_rates: Optional[List[Optional[float]]] = None,
+    vols: List[float],
     **backend_kwargs,
   ):
-    """Transfer liquid from one well to another.
+    """Transfer liquid from a list of source wells to a list of target wells. The length of the
+    source list must be equal to the length of the target list.
 
     Examples:
 
-      Transfer 50 uL of liquid from the first well to the second well:
+      Transfer 50 uL of liquid from one well to another:
 
-      >>> await lh.transfer(plate["A1"], plate["B1"], source_vol=50)
+      >>> await lh.transfer(plate["A1"], plate["B1"], vols=[50])
 
-      Transfer 80 uL of liquid from the first well equally to the first column:
+      Transfer 50 uL of liquid from the first column to the second:
 
-      >>> await lh.transfer(plate["A1"], plate["A1:H1"], source_vol=80)
-
-      Transfer 60 uL of liquid from the first well in a 1:2 ratio to 2 other wells:
-
-      >>> await lh.transfer(plate["A1"], plate["B1:C1"], source_vol=60, ratios=[2, 1])
-
-      Transfer arbitrary volumes to the first column:
-
-      >>> await lh.transfer(plate["A1"], plate["A1:H1"], target_vols=[3, 1, 4, 1, 5, 9, 6, 2])
+      >>> await lh.transfer(plate["A1:H1"], plate["A2:H2"], vols=[50] * 8)
 
     Args:
-      source: The source well.
-      targets: The target wells.
+      sources: The source wells.
+      targets: The target wells. Length must be equal to the length of `source`.
       source_vol: The volume to transfer from the source well.
-      ratios: The ratios to use when transferring liquid to the target wells. If not specified, then
-        the volumes will be distributed equally.
-      target_vols: The volumes to transfer to the target wells. If specified, `source_vols` and
-        `ratios` must be `None`.
-      aspiration_flow_rate: The flow rate to use when aspirating, in ul/s. If `None`, the backend
-        default will be used.
-      dispense_flow_rates: The flow rates to use when dispensing, in ul/s. If `None`, the backend
-        default will be used. Either a single flow rate for all channels, or a list of flow rates,
-        one for each target well.
-
-    Raises:
-      RuntimeError: If the setup has not been run. See :meth:`~LiquidHandler.setup`.
     """
 
-    if target_vols is not None:
-      if ratios is not None:
-        raise TypeError("Cannot specify ratios and target_vols at the same time")
-      if source_vol is not None:
-        raise TypeError("Cannot specify source_vol and target_vols at the same time")
-    else:
-      if source_vol is None:
-        raise TypeError("Must specify either source_vol or target_vols")
-
-      if ratios is None:
-        ratios = [1] * len(targets)
-
-      target_vols = [source_vol * r / sum(ratios) for r in ratios]
+    if not (len(sources) == len(targets) == len(vols)):
+      raise ValueError("Length of source, targets, and vols must be equal.")
 
     await self.aspirate(
-      resources=[source],
-      vols=[sum(target_vols)],
-      flow_rates=[aspiration_flow_rate],
+      resources=sources,
+      vols=vols,
       **backend_kwargs,
     )
-    dispense_flow_rates = dispense_flow_rates or [None] * len(targets)
-    for target, vol, dfr in zip(targets, target_vols, dispense_flow_rates):
-      await self.dispense(
-        resources=[target],
-        vols=[vol],
-        flow_rates=[dfr],
-        use_channels=[0],
-        **backend_kwargs,
+    await self.dispense(
+      resources=targets,
+      vols=vols,
+      **backend_kwargs,
+    )
+
+  async def serial_dilute(
+    self,
+    targets: List[List[Well]],
+    vol_per_transfer: float,
+  ):
+    """
+    Make a serial dilution. The first list of wells is the first source, and the second list is the
+    first target. The second list of wells is the second source, and the third list is the second
+    target, and so on.
+
+    Before calling this method, the first source well should be filled with the liquid to dilute.
+    All the other wells should already have the diluent.
+    """
+
+    target_lens = [len(target) for target in targets]
+    if not len(set(target_lens)) == 1:
+      raise ValueError("All target lists must have the same length, but got: ", target_lens)
+
+    for sources, targets in zip(targets, targets[1:]):
+      await self.transfer(sources, targets, vols=[vol_per_transfer] * len(sources))
+
+  async def aliquot(
+    self,
+    source: List[Well],
+    targets: List[List[Well]],
+    vol_per_transfer: float,
+    dead_volume: float = 0,
+  ):
+    """
+    Aliquot liquid from a list of source wells to a list of a list of target wells. Each list of the
+    targets will get the same liquid. The first item in the source list will be aliquoted to the
+    first item in each target list, the second item in the source list will be aliquoted to the
+    second item in each target list, and so on. This means that the length of the source list must
+    be equal to the length of each inner target list.
+
+    This method optimizes the number of aspirates and dispenses to save time. It will aspirate the
+    source well the maximum amount possible, where needed, and dispense to as many target wells as
+    possible. If there are not enough target wells to dispense require the maximum amount in the
+    tip, only the required amount will be aspirated. The dead_volume parameter will only be
+    aspirated the first time, and is the minimum amount of liquid that will be in the tip afterwards
+    for the remainder of the aliquots.
+
+    Args:
+      source: The source wells.
+      targets: The list of list of target wells. Each inner list will get the same liquid.
+      vol_per_transfer: The volume to transfer to each target well.
+      dead_volume: The dead volume of the tips. This is the volume that will be left in the tip
+        after a dispensing round. At the end of this method, dead_volume of liquid will be left in
+        the tips.
+    """
+
+    assert all(len(target_set) == len(source) for target_set in targets)
+
+    max_tip_volume_set = set(channel.get_tip().maximal_volume for channel in self.head.values())
+    if len(max_tip_volume_set) > 1:
+      raise ValueError("All tips must have the same maximal volume.")
+    max_tip_volume = max_tip_volume_set.pop()
+
+    if vol_per_transfer > max_tip_volume:
+      raise ValueError(f"Volume per transfer ({vol_per_transfer}) is greater than the tip volume.")
+
+    num_dispenses_per_aspirate = (max_tip_volume - dead_volume) // vol_per_transfer
+    num_aspirates = math.ceil(len(targets) / num_dispenses_per_aspirate)
+
+    for aspirate_index in range(num_aspirates):
+      start = aspirate_index * num_dispenses_per_aspirate
+      end = min(start + num_dispenses_per_aspirate, len(targets))
+      num_dispenses = end - start
+      aspiration_vol = vol_per_transfer * num_dispenses
+      if aspirate_index == 0:
+        aspiration_vol += dead_volume
+
+      await self.aspirate(
+        resources=source,
+        vols=[aspiration_vol] * len(source),
       )
+
+      for target_set in targets[start:end]:
+        await self.dispense(
+          resources=target_set,
+          vols=[vol_per_transfer] * len(target_set),
+        )
 
   @contextlib.contextmanager
   def use_channels(self, channels: List[int]):
