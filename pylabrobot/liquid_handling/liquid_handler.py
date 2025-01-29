@@ -770,7 +770,6 @@ class LiquidHandler(Resource, Machine):
 
     channel_space = min_spacing_edge * 2 + (num_channels - 1) * min_spacing_between_channels
 
-    resource_size: float
     if resource.get_absolute_rotation().z % 180 == 0:
       min_y = (resource.get_size_y() - channel_space) / 2
       offsets = [
