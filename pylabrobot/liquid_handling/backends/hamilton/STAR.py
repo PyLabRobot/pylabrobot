@@ -26,10 +26,6 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   HamiltonLiquidClass,
   get_star_liquid_class,
 )
-from pylabrobot.liquid_handling.liquid_handler import (
-  _get_tight_single_resource_liquid_op_offsets,
-  _get_wide_single_resource_liquid_op_offsets,
-)
 from pylabrobot.liquid_handling.standard import (
   Drop,
   DropTipRack,
@@ -46,6 +42,10 @@ from pylabrobot.liquid_handling.standard import (
   ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,
+)
+from pylabrobot.liquid_handling.utils import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -7671,30 +7671,30 @@ class STAR(HamiltonLiquidHandler):
     """
 
     x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
-    await self.lh.move_channel_x(0, x=x)
+    await self.move_channel_x(0, x=x)
 
     if spread == "wide":
-      offsets = _get_wide_single_resource_liquid_op_offsets(
+      offsets = get_wide_single_resource_liquid_op_offsets(
         well, num_channels=len(piercing_channels)
       )
     else:
-      offsets = _get_tight_single_resource_liquid_op_offsets(
+      offsets = get_tight_single_resource_liquid_op_offsets(
         well, num_channels=len(piercing_channels)
       )
     ys = [y + offset.y for offset in offsets]
 
     await self.position_channels_in_y_direction(
-      {channel: y for channel, y in zip(self.config.use_channels, ys)}
+      {channel: y for channel, y in zip(piercing_channels, ys)}
     )
 
     distance_from_bottom = 20
-    zs = [z + distance_from_bottom for _ in range(len(self.config.use_channels))]
+    zs = [z + distance_from_bottom for _ in range(len(piercing_channels))]
     if one_by_one:
       for channel in piercing_channels:
         await self.move_channel_z(channel, z)
     else:
       await self.position_channels_in_z_direction(
-        {channel: z for channel, z in zip(self.config.use_channels, zs)}
+        {channel: z for channel, z in zip(piercing_channels, zs)}
       )
 
     await self.step_off_foil(
