@@ -32,7 +32,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
-  MultiHeadDispenseContainr,
+  MultiHeadDispenseContainer,
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
@@ -2375,7 +2375,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr],
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer],
     jet: bool = False,
     empty: bool = False,
     blow_out: bool = False,
