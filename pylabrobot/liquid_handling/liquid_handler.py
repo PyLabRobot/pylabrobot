@@ -1272,8 +1272,8 @@ class LiquidHandler(Resource, Machine):
     This method optimizes the number of aspirates and dispenses to save time. It will aspirate the
     source well the maximum amount possible, where needed, and dispense to as many target wells as
     possible. If there are not enough target wells to dispense require the maximum amount in the
-    tip, only the required amount will be aspirated. The dead_volume parameter will only be
-    aspirated the first time, and is the minimum amount of liquid that will be in the tip afterwards
+    tip, only the required amount will be aspirated. The dead_volume will only be aspirated on the
+    first aspiration, and is the minimum amount of liquid that will be in the tip afterwards
     for the remainder of the aliquots.
 
     Args:
