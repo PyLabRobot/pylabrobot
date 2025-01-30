@@ -7596,6 +7596,47 @@ class STAR(HamiltonLiquidHandler):
       module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()]
     )
 
+  async def pierce_foil(self, media_column: int):
+    """Pierce the foil of the media source plate at the specified column. Throw away the tips
+    after piercing because there will be a bit of foil stuck to the tips. Use this method
+    before aspirating from a foil-sealed plate to make sure the tips are clean and the
+    aspirations are accurate.
+    """
+
+    foil_channels = [self.config.use_channels[0] - 1, self.config.use_channels[-1] + 1]
+    if foil_channels[0] < 0 or foil_channels[1] >= self.lh.backend.num_channels:
+      raise ValueError(
+        "Foil channels are out of range. One channel to the back and one channel to the front of use_channels must be available"
+      )
+
+    well = self.media_source_plate.get_well(media_column - 1)
+
+    await self.pick_up_tips(4)
+    await self.lh.pick_up_tips(self.foil_tips, use_channels=foil_channels)
+    x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
+    await self.lh.move_channel_x(0, x=x)
+
+    offsets = self.lh._get_single_resource_liquid_op_offsets(well, num_channels=4)
+    ys = [y + offset.y for offset in offsets]
+
+    await self.lh.backend.position_channels_in_y_direction(
+      {channel: y for channel, y in zip(self.config.use_channels, ys)}
+    )
+
+    distance_from_bottom = 20
+    zs = [z + distance_from_bottom for _ in range(len(self.config.use_channels))]
+    await self.lh.backend.position_channels_in_z_direction(
+      {channel: z for channel, z in zip(self.config.use_channels, zs)}
+    )
+
+    await self.lh.backend.step_off_foil(
+      well, back_channel=foil_channels[0], front_channel=foil_channels[1], move_inwards=3
+    )
+
+    # return foil tips, discard piercing tips
+    await self.lh.return_tips(use_channels=foil_channels)
+    await self.lh.discard_tips()
+
   async def step_off_foil(
     self, well: Well, front_channel: int, back_channel: int, move_inwards: float = 2
   ):
