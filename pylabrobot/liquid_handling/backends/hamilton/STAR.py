@@ -7650,7 +7650,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def pierce_foil(
     self,
-    well: Well,
+    wells: Union[Well, List[Well]],
     piercing_channels: List[int],
     hold_down_channels: List[int],
     spread: Literal["wide", "tight"] = "wide",
@@ -7662,26 +7662,41 @@ class STAR(HamiltonLiquidHandler):
     aspirations are accurate.
 
     Args:
-      well: Well in the plate to pierce the foil.
+      wells: Well or wells in the plate to pierce the foil. If multiple wells, they must be on one
+        column.
       piercing_channels: The channels to use for piercing the foil.
       hold_down_channels: The channels to use for holding down the plate when moving up the
         piercing channels.
+      spread: The spread of the piercing channels in the well.
       one_by_one: If True, the channels will pierce the foil one by one. If False, all channels
         will pierce the foil simultaneously.
     """
 
-    x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
-    await self.move_channel_x(0, x=x)
+    x: float
+    ys: List[float]
+    z: float
+    if isinstance(wells, Well):
+      well = wells
+      x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
 
-    if spread == "wide":
-      offsets = get_wide_single_resource_liquid_op_offsets(
-        well, num_channels=len(piercing_channels)
-      )
+      if spread == "wide":
+        offsets = get_wide_single_resource_liquid_op_offsets(
+          well, num_channels=len(piercing_channels)
+        )
+      else:
+        offsets = get_tight_single_resource_liquid_op_offsets(
+          well, num_channels=len(piercing_channels)
+        )
+      ys = [y + offset.y for offset in offsets]
     else:
-      offsets = get_tight_single_resource_liquid_op_offsets(
-        well, num_channels=len(piercing_channels)
-      )
-    ys = [y + offset.y for offset in offsets]
+      assert (
+        len(set(w.get_absolute_location().x for w in wells)) == 1
+      ), "Wells must be on the same column"
+      x = wells[0].get_absolute_location().x
+      ys = [well.get_absolute_location().y for well in wells]
+      z = wells[0].get_absolute_location("cavity_bottom").z
+
+    await self.move_channel_x(0, x=x)
 
     await self.position_channels_in_y_direction(
       {channel: y for channel, y in zip(piercing_channels, ys)}
