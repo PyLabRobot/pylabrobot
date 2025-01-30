@@ -7689,9 +7689,13 @@ class STAR(HamiltonLiquidHandler):
 
     distance_from_bottom = 20
     zs = [z + distance_from_bottom for _ in range(len(self.config.use_channels))]
-    await self.position_channels_in_z_direction(
-      {channel: z for channel, z in zip(self.config.use_channels, zs)}
-    )
+    if one_by_one:
+      for channel in piercing_channels:
+        await self.move_channel_z(channel, z)
+    else:
+      await self.position_channels_in_z_direction(
+        {channel: z for channel, z in zip(self.config.use_channels, zs)}
+      )
 
     await self.step_off_foil(
       well, back_channel=hold_down_channels[0], front_channel=hold_down_channels[1], move_inwards=3
