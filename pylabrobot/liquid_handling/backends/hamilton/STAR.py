@@ -1219,7 +1219,9 @@ class STAR(HamiltonLiquidHandler):
     return self._iswap_version
 
   async def request_pip_channel_version(self, channel: int) -> str:
-    return cast(str, (await self.send_command(f"P{channel+1}", "RF", fmt="rf" + "&" * 17))["rf"])
+    return cast(
+      str, (await self.send_command(STAR.channel_id(channel), "RF", fmt="rf" + "&" * 17))["rf"]
+    )
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """Get the id from a firmware response."""
@@ -7302,7 +7304,7 @@ class STAR(HamiltonLiquidHandler):
     post_detection_dist_str = f"{post_detection_dist_increments:04}"
 
     await self.send_command(
-      module=f"P{channel_idx+1}",
+      module=STAR.channel_id(channel_idx),
       command="ZL",
       zh=lowest_immers_pos_str,  # Lowest immersion position [increment]
       zc=start_pos_search_str,  # Start position of LLD search [increment]
@@ -7482,7 +7484,7 @@ class STAR(HamiltonLiquidHandler):
     push_down_force_in_PWM_str = f"{push_down_force_in_PWM:03}"
 
     ztouch_probed_z_height = await self.send_command(
-      module=f"P{channel_idx+1}",
+      module=STAR.channel_id(channel_idx),
       command="ZH",
       zb=start_pos_search_str,  # begin of searching range [increment]
       za=lowest_immers_pos_str,  # end of searching range [increment]
@@ -7535,7 +7537,7 @@ class STAR(HamiltonLiquidHandler):
   def channel_id(channel_idx: int) -> str:
     """channel_idx: plr style, 0-indexed from the back"""
     channel_ids = "123456789ABCDEFG"
-    return channel_ids[channel_idx]
+    return "P" + channel_ids[channel_idx]
 
   async def get_channels_y_positions(self) -> Dict[int, float]:
     """Get the Y position of all channels in mm"""
@@ -7780,6 +7782,11 @@ class STAR(HamiltonLiquidHandler):
 
       # After that, all channels are clear to move up.
       await self.move_all_channels_in_z_safety()
+
+  async def request_volume_in_tip(self, channel: int) -> float:
+    resp = await self.send_command(STAR.channel_id(channel), "QC", fmt="qc##### (n)")
+    _, current_volume = resp["qc"]  # first is max volume
+    return float(current_volume) / 10
 
 
 class UnSafe:
