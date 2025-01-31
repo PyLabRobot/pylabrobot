@@ -7714,7 +7714,10 @@ class STAR(HamiltonLiquidHandler):
       )
 
     await self.step_off_foil(
-      well, back_channel=hold_down_channels[0], front_channel=hold_down_channels[1], move_inwards=move_inwards
+      well,
+      back_channel=hold_down_channels[0],
+      front_channel=hold_down_channels[1],
+      move_inwards=move_inwards,
     )
 
   async def step_off_foil(
