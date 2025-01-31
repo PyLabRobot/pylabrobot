@@ -11,7 +11,7 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
-  MultiHeadDispenseContainr,
+  MultiHeadDispenseContainer,
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
@@ -584,7 +584,7 @@ class OpentronsBackend(LiquidHandlerBackend):
   ):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
-  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
     raise NotImplementedError("The Opentrons backend does not support the 96 head.")
 
   async def pick_up_resource(self, pickup: ResourcePickup):

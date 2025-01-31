@@ -32,7 +32,7 @@ from pylabrobot.liquid_handling.standard import (
   GripDirection,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
-  MultiHeadDispenseContainr,
+  MultiHeadDispenseContainer,
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
@@ -42,6 +42,10 @@ from pylabrobot.liquid_handling.standard import (
   ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,
+)
+from pylabrobot.liquid_handling.utils import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.resources import (
   Carrier,
@@ -2377,7 +2381,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr],
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer],
     jet: bool = False,
     empty: bool = False,
     blow_out: bool = False,
@@ -7319,6 +7323,54 @@ class STAR(HamiltonLiquidHandler):
 
     return result_in_mm
 
+  async def request_tip_len_on_channel(
+    self,
+    channel_idx: int,  # 0-based indexing of channels!
+  ) -> float:
+    """
+    Measures the length of the tip attached to the specified pipetting channel.
+    Checks if a tip is present on the given channel. If present, moves all channels
+    to THE safe Z position, 334.3 mm, measures the tip bottom Z-coordinate, and calculates
+    the total tip length. Supports tips of lengths 50.4 mm, 59.9 mm, and 95.1 mm.
+    Raises an error if the tip length is unsupported or if no tip is present.
+    Parameters:
+      channel_idx: Index of the pipetting channel (0-based).
+    Returns:
+      The measured tip length in millimeters.
+    Raises:
+      ValueError: If no tip is present on the channel or if the tip length is unsupported.
+    """
+
+    # Check there is a tip on the channel
+    all_channel_occupancy = await self.request_tip_presence()
+    if not all_channel_occupancy[channel_idx]:
+      raise ValueError(f"No tip present on channel {channel_idx}")
+
+    # Level all channels
+    await self.move_all_channels_in_z_safety()
+    known_top_position_channel_head = 334.3  # mm
+    fitting_depth_of_all_standard_channel_tips = 8  # mm
+    unknown_offset_for_all_tips = 0.4  # mm
+
+    # Request z-coordinate of channel+tip bottom
+    tip_bottom_z_coordinate = await self.request_z_pos_channel_n(
+      pipetting_channel_index=channel_idx
+    )
+
+    total_tip_len = round(
+      known_top_position_channel_head
+      - (
+        tip_bottom_z_coordinate
+        - fitting_depth_of_all_standard_channel_tips
+        - unknown_offset_for_all_tips
+      ),
+      1,
+    )
+
+    if total_tip_len in [50.4, 59.9, 95.1]:  # 50ul, 300ul, 1000ul
+      return total_tip_len
+    raise ValueError(f"Tip of length {total_tip_len} not yet supported")
+
   async def ztouch_probe_z_height_using_channel(
     self,
     channel_idx: int,  # 0-based indexing of channels!
@@ -7596,6 +7648,78 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(
       module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()]
+    )
+
+  async def pierce_foil(
+    self,
+    wells: Union[Well, List[Well]],
+    piercing_channels: List[int],
+    hold_down_channels: List[int],
+    move_inwards: float,
+    spread: Literal["wide", "tight"] = "wide",
+    one_by_one: bool = False,
+  ):
+    """Pierce the foil of the media source plate at the specified column. Throw away the tips
+    after piercing because there will be a bit of foil stuck to the tips. Use this method
+    before aspirating from a foil-sealed plate to make sure the tips are clean and the
+    aspirations are accurate.
+
+    Args:
+      wells: Well or wells in the plate to pierce the foil. If multiple wells, they must be on one
+        column.
+      piercing_channels: The channels to use for piercing the foil.
+      hold_down_channels: The channels to use for holding down the plate when moving up the
+        piercing channels.
+      spread: The spread of the piercing channels in the well.
+      one_by_one: If True, the channels will pierce the foil one by one. If False, all channels
+        will pierce the foil simultaneously.
+    """
+
+    x: float
+    ys: List[float]
+    z: float
+    if isinstance(wells, Well):
+      well = wells
+      x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
+
+      if spread == "wide":
+        offsets = get_wide_single_resource_liquid_op_offsets(
+          well, num_channels=len(piercing_channels)
+        )
+      else:
+        offsets = get_tight_single_resource_liquid_op_offsets(
+          well, num_channels=len(piercing_channels)
+        )
+      ys = [y + offset.y for offset in offsets]
+    else:
+      assert (
+        len(set(w.get_absolute_location().x for w in wells)) == 1
+      ), "Wells must be on the same column"
+      x = wells[0].get_absolute_location().x
+      ys = [well.get_absolute_location().y for well in wells]
+      z = wells[0].get_absolute_location("cavity_bottom").z
+
+    await self.move_channel_x(0, x=x)
+
+    await self.position_channels_in_y_direction(
+      {channel: y for channel, y in zip(piercing_channels, ys)}
+    )
+
+    distance_from_bottom = 20
+    zs = [z + distance_from_bottom for _ in range(len(piercing_channels))]
+    if one_by_one:
+      for channel in piercing_channels:
+        await self.move_channel_z(channel, z)
+    else:
+      await self.position_channels_in_z_direction(
+        {channel: z for channel, z in zip(piercing_channels, zs)}
+      )
+
+    await self.step_off_foil(
+      well,
+      back_channel=hold_down_channels[0],
+      front_channel=hold_down_channels[1],
+      move_inwards=move_inwards,
     )
 
   async def step_off_foil(

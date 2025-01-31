@@ -8,7 +8,7 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
-  MultiHeadDispenseContainr,
+  MultiHeadDispenseContainer,
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
@@ -123,7 +123,7 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """Aspirate from all wells in 96 well plate."""
 
   @abstractmethod
-  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
     """Dispense to all wells in 96 well plate."""
 
   @abstractmethod

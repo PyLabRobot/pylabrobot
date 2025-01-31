@@ -8,7 +8,7 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
-  MultiHeadDispenseContainr,
+  MultiHeadDispenseContainer,
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
@@ -221,7 +221,7 @@ class LiquidHandlerChatterboxBackend(LiquidHandlerBackend):
       resource = aspiration.container
     print(f"Aspirating {aspiration.volume} from {resource}.")
 
-  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
     if isinstance(dispense, MultiHeadDispensePlate):
       resource = dispense.wells[0].parent
     else:
