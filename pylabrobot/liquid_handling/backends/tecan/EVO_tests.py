@@ -9,12 +9,12 @@ from pylabrobot.liquid_handling.backends.tecan.EVO import (
   RoMa,
 )
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  Dispense,
   GripDirection,
   Pickup,
   ResourceDrop,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.resources import (
   Coordinate,
@@ -136,7 +136,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
   #   self.evo.send_command.assert_has_calls([])
 
   async def test_aspirate(self):
-    op = Aspiration(
+    op = SingleChannelAspiration(
       resource=self.plate.get_item("A1"),
       offset=Coordinate.zero(),
       tip=self.tr.get_tip("A1"),
@@ -277,7 +277,7 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     )
 
   async def test_dispense(self):
-    op = Dispense(
+    op = SingleChannelDispense(
       resource=self.plate.get_item("A1"),
       offset=Coordinate.zero(),
       tip=self.tr.get_tip("A1"),

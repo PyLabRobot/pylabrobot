@@ -148,6 +148,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - add `STAR.{get_channels_z_positions, position_channels_in_z_direction}` (https://github.com/PyLabRobot/pylabrobot/pull/356)
 - `STAR.step_off_foil` (https://github.com/PyLabRobot/pylabrobot/pull/357)
 - `make_space` param to `position_channels_in_y_direction` (https://github.com/PyLabRobot/pylabrobot/pull/369)
+- `spread: Literal["wide", "tight"]` for single-resource multi-channel aspirations/dispenses (https://github.com/PyLabRobot/pylabrobot/pull/378)
+- `STAR.request_volume_in_tip` (https://github.com/PyLabRobot/pylabrobot/pull/376)
 
 ### Deprecated
 

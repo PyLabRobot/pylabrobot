@@ -6,19 +6,19 @@ from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.resources import Resource
 from pylabrobot.serializer import serialize
@@ -97,7 +97,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       data={"channels": serialized, "use_channels": use_channels},
     )
 
-  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
+  async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
     serialized = [
       {
         "resource_name": op.resource.name,
@@ -116,7 +116,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       data={"channels": serialized, "use_channels": use_channels},
     )
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     serialized = [
       {
         "resource_name": op.resource.name,
@@ -153,7 +153,9 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
       },
     )
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(
+    self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
+  ):
     data = {
       "aspiration": {
         "offset": serialize(aspiration.offset),
@@ -165,13 +167,13 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "tips": [serialize(tip) for tip in aspiration.tips],
       }
     }
-    if isinstance(aspiration, AspirationPlate):
+    if isinstance(aspiration, MultiHeadAspirationPlate):
       data["aspiration"]["well_names"] = [well.name for well in aspiration.wells]
     else:
       data["aspiration"]["trough"] = aspiration.container.name
     await self.send_command(command="aspirate96", data=data)
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
     data = {
       "dispense": {
         "offset": serialize(dispense.offset),
@@ -183,7 +185,7 @@ class SerializingBackend(LiquidHandlerBackend, metaclass=ABCMeta):
         "tips": [serialize(tip) for tip in dispense.tips],
       }
     }
-    if isinstance(dispense, DispensePlate):
+    if isinstance(dispense, MultiHeadDispensePlate):
       data["dispense"]["well_names"] = [well.name for well in dispense.wells]
     else:
       data["dispense"]["trough"] = dispense.container.name
