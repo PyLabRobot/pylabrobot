@@ -43,6 +43,10 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
+from pylabrobot.liquid_handling.utils import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
+)
 from pylabrobot.resources import (
   Carrier,
   Coordinate,
@@ -7642,6 +7646,78 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(
       module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()]
+    )
+
+  async def pierce_foil(
+    self,
+    wells: Union[Well, List[Well]],
+    piercing_channels: List[int],
+    hold_down_channels: List[int],
+    move_inwards: float,
+    spread: Literal["wide", "tight"] = "wide",
+    one_by_one: bool = False,
+  ):
+    """Pierce the foil of the media source plate at the specified column. Throw away the tips
+    after piercing because there will be a bit of foil stuck to the tips. Use this method
+    before aspirating from a foil-sealed plate to make sure the tips are clean and the
+    aspirations are accurate.
+
+    Args:
+      wells: Well or wells in the plate to pierce the foil. If multiple wells, they must be on one
+        column.
+      piercing_channels: The channels to use for piercing the foil.
+      hold_down_channels: The channels to use for holding down the plate when moving up the
+        piercing channels.
+      spread: The spread of the piercing channels in the well.
+      one_by_one: If True, the channels will pierce the foil one by one. If False, all channels
+        will pierce the foil simultaneously.
+    """
+
+    x: float
+    ys: List[float]
+    z: float
+    if isinstance(wells, Well):
+      well = wells
+      x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
+
+      if spread == "wide":
+        offsets = get_wide_single_resource_liquid_op_offsets(
+          well, num_channels=len(piercing_channels)
+        )
+      else:
+        offsets = get_tight_single_resource_liquid_op_offsets(
+          well, num_channels=len(piercing_channels)
+        )
+      ys = [y + offset.y for offset in offsets]
+    else:
+      assert (
+        len(set(w.get_absolute_location().x for w in wells)) == 1
+      ), "Wells must be on the same column"
+      x = wells[0].get_absolute_location().x
+      ys = [well.get_absolute_location().y for well in wells]
+      z = wells[0].get_absolute_location("cavity_bottom").z
+
+    await self.move_channel_x(0, x=x)
+
+    await self.position_channels_in_y_direction(
+      {channel: y for channel, y in zip(piercing_channels, ys)}
+    )
+
+    distance_from_bottom = 20
+    zs = [z + distance_from_bottom for _ in range(len(piercing_channels))]
+    if one_by_one:
+      for channel in piercing_channels:
+        await self.move_channel_z(channel, z)
+    else:
+      await self.position_channels_in_z_direction(
+        {channel: z for channel, z in zip(piercing_channels, zs)}
+      )
+
+    await self.step_off_foil(
+      well,
+      back_channel=hold_down_channels[0],
+      front_channel=hold_down_channels[1],
+      move_inwards=move_inwards,
     )
 
   async def step_off_foil(
