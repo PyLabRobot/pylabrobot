@@ -7653,6 +7653,7 @@ class STAR(HamiltonLiquidHandler):
     wells: Union[Well, List[Well]],
     piercing_channels: List[int],
     hold_down_channels: List[int],
+    move_inwards: float,
     spread: Literal["wide", "tight"] = "wide",
     one_by_one: bool = False,
   ):
@@ -7713,7 +7714,7 @@ class STAR(HamiltonLiquidHandler):
       )
 
     await self.step_off_foil(
-      well, back_channel=hold_down_channels[0], front_channel=hold_down_channels[1], move_inwards=3
+      well, back_channel=hold_down_channels[0], front_channel=hold_down_channels[1], move_inwards=move_inwards
     )
 
   async def step_off_foil(

@@ -62,18 +62,20 @@ def get_tight_single_resource_liquid_op_offsets(
     2  # minimum spacing between the edge of the container and the center of channel
   )
 
-  channel_space = min_spacing_edge * 2 + (num_channels - 1) * min_spacing_between_channels
+  channel_space = (num_channels - 1) * min_spacing_between_channels
 
   if resource.get_absolute_rotation().z % 180 == 0:
     min_y = (resource.get_size_y() - channel_space) / 2
+    if min_y < min_spacing_edge:
+      raise ValueError("Resource is too small to space channels.")
     offsets = [
       Coordinate(0, min_y + i * min_spacing_between_channels, 0) for i in range(num_channels)
-    ]
+    ][::-1]
   elif resource.get_absolute_rotation().z % 90 == 0:
     min_x = (resource.get_size_x() - channel_space) / 2
     offsets = [
       Coordinate(min_x + i * min_spacing_between_channels, 0, 0) for i in range(num_channels)
-    ]
+    ][::-1]
   else:
     raise ValueError("Only 90 and 180 degree rotations are supported for now.")
 
