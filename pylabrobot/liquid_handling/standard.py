@@ -109,7 +109,7 @@ class MultiHeadAspirationContainer:
 
 
 @dataclass(frozen=True)
-class MultiHeadDispenseContainr:
+class MultiHeadDispenseContainer:
   container: Container
   offset: Coordinate
   tips: List[Tip]

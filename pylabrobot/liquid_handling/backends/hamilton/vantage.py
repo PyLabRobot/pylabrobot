@@ -16,7 +16,7 @@ from pylabrobot.liquid_handling.standard import (
   DropTipRack,
   MultiHeadAspirationContainer,
   MultiHeadAspirationPlate,
-  MultiHeadDispenseContainr,
+  MultiHeadDispenseContainer,
   MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
@@ -1135,7 +1135,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainr],
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer],
     jet: bool = False,
     blow_out: bool = False,  # "empty" in the VENUS liquid editor
     empty: bool = False,  # truly "empty", does not exist in liquid editor, dm4
