@@ -92,7 +92,7 @@ class Cytomat(IncubatorBackend):
     return command
 
   async def send_command(self, command_type: str, command: str, params: str) -> str:
-    async def _send_command(command_str):
+    async def _send_command(command_str) -> str:
       logging.debug(command_str.encode(self.serial_message_encoding))
       self.ser.write(command_str.encode(self.serial_message_encoding))
       resp = self.ser.read(128).decode(self.serial_message_encoding)
@@ -121,7 +121,7 @@ class Cytomat(IncubatorBackend):
     # which costs 1s if there is a true error, but is necessary to avoid false negatives.
     command_str = self._assemble_command(command_type=command_type, command=command, params=params)
     n_retries = 10
-    exc = None
+    exc: Optional[BaseException] = None
     for _ in range(n_retries):
       try:
         return await _send_command(command_str)
@@ -129,6 +129,7 @@ class Cytomat(IncubatorBackend):
         exc = e
         await asyncio.sleep(0.1)
         continue
+    assert exc is not None
     raise exc
 
   async def send_action(
