@@ -2917,12 +2917,10 @@ class STAR(HamiltonLiquidHandler):
       # The resource is moved by drop.rotation
       # The new resource absolute location is
       # drop.resource.get_absolute_rotation().z + drop.rotation
-      drop.destination_absolute_rotation.z 
+      drop.destination_absolute_rotation.z
       center_in_absolute_space = Coordinate(
         *matrix_vector_multiply_3x3(
-          drop.resource.rotated(
-            z=drop.resource.get_absolute_rotation().z +
-              drop.rotation)
+          drop.resource.rotated(z=drop.resource.get_absolute_rotation().z + drop.rotation)
           .get_absolute_rotation()
           .get_rotation_matrix(),
           drop.resource.center().vector(),
