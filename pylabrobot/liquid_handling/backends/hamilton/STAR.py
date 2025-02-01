@@ -2909,9 +2909,20 @@ class STAR(HamiltonLiquidHandler):
 
       # Get center of source plate in absolute space.
       # The computation of the center has to be rotated so that the offset is in absolute space.
+      # center_in_absolute_space will be the vector pointing from the destination origin to the
+      # center of the moved the resource after drop.
+      # This means that the center vector has to be rotated from the child local space by the
+      # new child absolute rotation. The moved resource's rotation will be the original child
+      # rotation plus the rotation applied by the movement.
+      # The resource is moved by drop.rotation
+      # The new resource absolute location is
+      # drop.resource.get_absolute_rotation().z + drop.rotation
+      drop.destination_absolute_rotation.z 
       center_in_absolute_space = Coordinate(
         *matrix_vector_multiply_3x3(
-          drop.resource.rotated(z=drop.rotation + drop.destination_absolute_rotation.z)
+          drop.resource.rotated(
+            z=drop.resource.get_absolute_rotation().z +
+              drop.rotation)
           .get_absolute_rotation()
           .get_rotation_matrix(),
           drop.resource.center().vector(),
