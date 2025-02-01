@@ -1875,13 +1875,15 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(destination, Coordinate):
       to_location = destination
     elif isinstance(destination, Tilter):
-      to_location = destination.get_absolute_location() + destination.child_location
+      to_location = destination.get_absolute_location() + destination.get_default_child_location(
+        resource.rotated(z=relative_rotation)
+      )
     elif isinstance(destination, PlateHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
-      to_location = (
-        destination.get_absolute_location()
-      )  # + destination.get_default_child_location(resource.rotated(z=relative_rotation))
+      to_location = (destination.get_absolute_location()) + destination.get_default_child_location(
+        resource.rotated(z=relative_rotation)
+      )
 
       # if we are moving a plate, we may need to adjust based on the pedestal size
       # and plate geometry

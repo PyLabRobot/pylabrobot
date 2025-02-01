@@ -72,6 +72,7 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
   STARLET_SIZE_X,
 )
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
 from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
@@ -2882,6 +2883,7 @@ class STAR(HamiltonLiquidHandler):
     use_unsafe_hotel: bool = False,
     iswap_collision_control_level: int = 0,
   ):
+    print("drop")
     if use_arm == "iswap":
       traversal_height_start = (
         minimum_traverse_height_at_beginning_of_a_command or self._traversal_height
@@ -2917,12 +2919,9 @@ class STAR(HamiltonLiquidHandler):
       # The resource is moved by drop.rotation
       # The new resource absolute location is
       # drop.resource.get_absolute_rotation().z + drop.rotation
-      drop.destination_absolute_rotation.z
       center_in_absolute_space = Coordinate(
         *matrix_vector_multiply_3x3(
-          drop.resource.rotated(z=drop.resource.get_absolute_rotation().z + drop.rotation)
-          .get_absolute_rotation()
-          .get_rotation_matrix(),
+          Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation).get_rotation_matrix(),
           drop.resource.center().vector(),
         )
       )
