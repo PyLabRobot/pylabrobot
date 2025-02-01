@@ -150,6 +150,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `make_space` param to `position_channels_in_y_direction` (https://github.com/PyLabRobot/pylabrobot/pull/369)
 - `spread: Literal["wide", "tight"]` for single-resource multi-channel aspirations/dispenses (https://github.com/PyLabRobot/pylabrobot/pull/378)
 - `STAR.request_volume_in_tip` (https://github.com/PyLabRobot/pylabrobot/pull/376)
+- `ItemizedResource.{row,column}` (https://github.com/PyLabRobot/pylabrobot/pull/384)
 
 ### Deprecated
 
