@@ -1918,11 +1918,7 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       lid = resource
       plate_location = destination.get_absolute_location()
-      to_location = Coordinate(
-        x=plate_location.x,
-        y=plate_location.y,
-        z=plate_location.z + destination.get_absolute_size_z() - lid.nesting_z_height,
-      ) + destination.get_lid_location(lid.rotated(z=relative_rotation))
+      to_location = plate_location + destination.get_lid_location(lid.rotated(z=relative_rotation))
     else:
       to_location = destination.get_absolute_location()
 
