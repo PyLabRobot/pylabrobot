@@ -1922,7 +1922,7 @@ class LiquidHandler(Resource, Machine):
         x=plate_location.x,
         y=plate_location.y,
         z=plate_location.z + destination.get_absolute_size_z() - lid.nesting_z_height,
-      )
+      ) + destination.get_lid_location(lid)
     else:
       to_location = destination.get_absolute_location()
 
