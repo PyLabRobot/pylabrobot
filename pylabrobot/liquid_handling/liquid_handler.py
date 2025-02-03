@@ -1831,28 +1831,28 @@ class LiquidHandler(Resource, Machine):
 
     # compute rotation based on the pickup_direction and drop_direction
     if self._resource_pickup.direction == direction:
-      rotation = 0
+      rotation_applied_by_move = 0
     if (self._resource_pickup.direction, direction) in (
       (GripDirection.FRONT, GripDirection.RIGHT),
       (GripDirection.RIGHT, GripDirection.BACK),
       (GripDirection.BACK, GripDirection.LEFT),
       (GripDirection.LEFT, GripDirection.FRONT),
     ):
-      rotation = 90
+      rotation_applied_by_move = 90
     if (self._resource_pickup.direction, direction) in (
       (GripDirection.FRONT, GripDirection.BACK),
       (GripDirection.BACK, GripDirection.FRONT),
       (GripDirection.LEFT, GripDirection.RIGHT),
       (GripDirection.RIGHT, GripDirection.LEFT),
     ):
-      rotation = 180
+      rotation_applied_by_move = 180
     if (self._resource_pickup.direction, direction) in (
       (GripDirection.RIGHT, GripDirection.FRONT),
       (GripDirection.BACK, GripDirection.RIGHT),
       (GripDirection.LEFT, GripDirection.BACK),
       (GripDirection.FRONT, GripDirection.LEFT),
     ):
-      rotation = 270
+      rotation_applied_by_move = 270
 
     # the resource's absolute rotation should be the resource's previous rotation plus the
     # rotation the move applied. The resource's absolute rotation is the rotation of the
@@ -1865,11 +1865,13 @@ class LiquidHandler(Resource, Machine):
     )
     # new_rotation_z = resource.get_absolute_rotation().z + rotation - destination_rotation
     # relative_rotation = new_rotation_z - resource.rotation.z
-    resource_absolute_rotation_after_move = resource.get_absolute_rotation().z + rotation
+    resource_absolute_rotation_after_move = (
+      resource.get_absolute_rotation().z + rotation_applied_by_move
+    )
+    # moving from a resource from a rotated parent to a non-rotated parent means child inherits/'houses' the rotation after move
     resource_rotation_relative_to_destination = (
       resource_absolute_rotation_after_move - destination_rotation
-    )  # moving from a resource from a rotated parent to a non-rotated parent means child inherits/'houses' the rotation after move
-    rotation_applied_by_move = rotation
+    )
 
     # get the location of the destination
     if isinstance(destination, ResourceStack):
@@ -1918,12 +1920,14 @@ class LiquidHandler(Resource, Machine):
       offset=offset,
       pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
       direction=direction,
-      rotation=rotation,
+      rotation=rotation_applied_by_move,
     )
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
 
-    if rotation != 0:
-      resource.rotate(z=resource_rotation_relative_to_destination)
+    if rotation_applied_by_move != 0:
+      # we rotate the resource on top of its original rotation. So in order to set the new rotation,
+      # we have to subtract its current rotation.
+      resource.rotate(z=resource_rotation_relative_to_destination - resource.rotation.z)
 
     # assign to destination
     resource.unassign()
