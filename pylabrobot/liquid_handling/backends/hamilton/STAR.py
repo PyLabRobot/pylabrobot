@@ -7419,7 +7419,10 @@ class STAR(HamiltonLiquidHandler):
         )
 
     if tip_len is None:
-      tip_len = self.head[channel_idx].get_tip().total_tip_length
+      # currently a bug, will be fixed in the future
+      # reverted to previous implementation
+      # tip_len = self.head[channel_idx].get_tip().total_tip_length
+      tip_len = await self.request_tip_len_on_channel(channel_idx)
 
     # fitting_depth = 8 mm for 10, 50, 300, 1000 ul Hamilton tips
     fitting_depth = self.head[channel_idx].get_tip().fitting_depth
