@@ -2777,7 +2777,11 @@ class STAR(HamiltonLiquidHandler):
           pickup.resource.center().vector(),
         )
       )
-      x, y, z = pickup.resource.get_absolute_location("l", "f", "t") + center_in_absolute_space + pickup.offset
+      x, y, z = (
+        pickup.resource.get_absolute_location("l", "f", "t")
+        + center_in_absolute_space
+        + pickup.offset
+      )
       z -= pickup.pickup_distance_from_top
 
       traverse_height_at_beginning = (
