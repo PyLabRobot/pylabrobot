@@ -1860,17 +1860,23 @@ class LiquidHandler(Resource, Machine):
     # rotation of the resource wrt its new paretn, we compute what the new absolute rotation
     # should be and subtract the rotation of the new parent. Note that before the new rotation
     # is applied, the resource's rotation is still with respect to the old parent.
-    destination_rotation = (
-      destination.get_absolute_rotation().z if not isinstance(destination, Coordinate) else 0
-    )
-    # new_rotation_z = resource.get_absolute_rotation().z + rotation - destination_rotation
-    # relative_rotation = new_rotation_z - resource.rotation.z
+
+    # moving from a resource from a rotated parent to a non-rotated parent means child inherits/'houses' the rotation after move
     resource_absolute_rotation_after_move = (
       resource.get_absolute_rotation().z + rotation_applied_by_move
     )
-    # moving from a resource from a rotated parent to a non-rotated parent means child inherits/'houses' the rotation after move
-    resource_rotation_relative_to_destination = (
-      resource_absolute_rotation_after_move - destination_rotation
+    destination_rotation = (
+      destination.get_absolute_rotation().z if not isinstance(destination, Coordinate) else 0
+    )
+    resource_rotation_wrt_destination = resource_absolute_rotation_after_move - destination_rotation
+
+    # `get_default_child_location`, which is used to compute the translation of the child wrt the parent,
+    # only considers the child's local rotation. In order to set this new child rotation locally for the
+    # translation computation, we have to subtract the current rotation of the resource, so we can use
+    # resource.rotated(z=resource_rotation_wrt_destination_wrt_local) to 'set' the new local rotation.
+    # Remember, rotated() applies the rotation on top of the current rotation. <- TODO: stupid
+    resource_rotation_wrt_destination_wrt_local = (
+      resource_rotation_wrt_destination - resource.rotation.z
     )
 
     # get the location of the destination
@@ -1883,30 +1889,32 @@ class LiquidHandler(Resource, Machine):
       to_location = destination
     elif isinstance(destination, Tilter):
       to_location = destination.get_absolute_location() + destination.get_default_child_location(
-        resource.rotated(z=rotation_applied_by_move)
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       )
     elif isinstance(destination, PlateHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
       to_location = (destination.get_absolute_location()) + destination.get_default_child_location(
-        resource.rotated(z=rotation_applied_by_move)
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       )
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = destination.compute_plate_location(
-        resource.rotated(z=rotation_applied_by_move)
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       )
       to_location = destination.get_absolute_location() + adjusted_plate_anchor
     elif isinstance(destination, ResourceHolder):
-      x = destination.get_default_child_location(resource.rotated(z=rotation_applied_by_move))
+      x = destination.get_default_child_location(
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
+      )
       to_location = destination.get_absolute_location() + x
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       lid = resource
       plate_location = destination.get_absolute_location()
       to_location = plate_location + destination.get_lid_location(
-        lid.rotated(z=rotation_applied_by_move)
+        lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
       )
     else:
       to_location = destination.get_absolute_location()
@@ -1927,7 +1935,7 @@ class LiquidHandler(Resource, Machine):
     if rotation_applied_by_move != 0:
       # we rotate the resource on top of its original rotation. So in order to set the new rotation,
       # we have to subtract its current rotation.
-      resource.rotate(z=resource_rotation_relative_to_destination - resource.rotation.z)
+      resource.rotate(z=resource_rotation_wrt_destination - resource.rotation.z)
 
     # assign to destination
     resource.unassign()
