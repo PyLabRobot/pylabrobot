@@ -1,0 +1,44 @@
+﻿pylabrobot.resources.corning\_costar.plates
+===========================================
+
+.. currentmodule:: pylabrobot.resources.corning_costar
+
+.. automodule:: pylabrobot.resources.corning_costar.plates
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+   
+      Cor_12_wellplate_6900ul_Fb
+      Cor_24_wellplate_3470ul_Fb
+      Cor_48_wellplate_1620ul_Fb
+      Cor_6_wellplate_16800ul_Fb
+      Cor_6_wellplate_Fl
+      Cor_96_wellplate_360ul_Fb
+      Cor_96_wellplate_360ul_Fb_Lid
+      Cos_6_wellplate_16800ul_Fb_L
+      Cos_6_wellplate_16800ul_Fb_Lid
+      Cos_6_wellplate_16800ul_Fb_P
+      Cos_96_DWP_2mL_Vb
+      Cos_96_EZWash
+      Cos_96_wellplate_2mL_Vb
+      Cos_96_wellplate_2mL_Vb_L
+      Cos_96_wellplate_2mL_Vb_Lid
+      Cos_96_wellplate_2mL_Vb_P
+   
+   
+
+   
+   
+   
+
+   
+   
+   

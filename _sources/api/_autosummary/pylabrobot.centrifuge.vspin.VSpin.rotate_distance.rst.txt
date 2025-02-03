@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin.VSpin.rotate\_distance
+==================================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin
+
+.. automethod:: VSpin.rotate_distance
