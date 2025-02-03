@@ -2760,8 +2760,6 @@ class STAR(HamiltonLiquidHandler):
     iswap_fold_up_sequence_at_the_end_of_process: bool = True,
   ):
     if use_arm == "iswap":
-      x, y, z = pickup.resource.get_absolute_location("c", "c", "t") + pickup.offset
-      z -= pickup.pickup_distance_from_top
       assert (
         pickup.resource.get_absolute_rotation().x == 0
         and pickup.resource.get_absolute_rotation().y == 0
@@ -2772,6 +2770,15 @@ class STAR(HamiltonLiquidHandler):
           plate_width = pickup.resource.get_absolute_size_x()
         else:
           plate_width = pickup.resource.get_absolute_size_y()
+
+      center_in_absolute_space = Coordinate(
+        *matrix_vector_multiply_3x3(
+          pickup.resource.get_absolute_rotation().get_rotation_matrix(),
+          pickup.resource.center().vector(),
+        )
+      )
+      x, y, z = pickup.resource.get_absolute_location("l", "f", "t") + center_in_absolute_space + pickup.offset
+      z -= pickup.pickup_distance_from_top
 
       traverse_height_at_beginning = (
         minimum_traverse_height_at_beginning_of_a_command or self._traversal_height
