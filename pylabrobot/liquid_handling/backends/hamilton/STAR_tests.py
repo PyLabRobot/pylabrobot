@@ -967,14 +967,15 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.mockSTAR = STARCommandCatcher()
-    self.lh = LiquidHandler(self.mockSTAR, deck=STARLetDeck())
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(self.mockSTAR, deck=self.deck)
 
     self.plt_car = PLT_CAR_L5MD_A00(name="plt_car")
     self.plt_car[0] = self.plate = CellTreat_96_wellplate_350ul_Ub(name="plate")
-    self.lh.deck.assign_child_resource(self.plt_car, rails=15)
+    self.deck.assign_child_resource(self.plt_car, rails=15)
 
     self.plt_car2 = PLT_CAR_P3AC_A01(name="plt_car2")
-    self.lh.deck.assign_child_resource(self.plt_car2, rails=3)
+    self.deck.assign_child_resource(self.plt_car2, rails=3)
 
   # TODO: horrible
   # copied from above
