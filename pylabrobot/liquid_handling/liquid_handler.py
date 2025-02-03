@@ -1870,7 +1870,6 @@ class LiquidHandler(Resource, Machine):
       resource_absolute_rotation_after_move - destination_rotation
     )  # moving from a resource from a rotated parent to a non-rotated parent means child inherits/'houses' the rotation after move
     rotation_applied_by_move = rotation
-    rotation_applied_by_move_relative_to_current = rotation_applied_by_move - resource.rotation.z
 
     # get the location of the destination
     if isinstance(destination, ResourceStack):
@@ -1882,52 +1881,30 @@ class LiquidHandler(Resource, Machine):
       to_location = destination
     elif isinstance(destination, Tilter):
       to_location = destination.get_absolute_location() + destination.get_default_child_location(
-        resource.rotated(z=rotation_applied_by_move_relative_to_current)
+        resource.rotated(z=rotation_applied_by_move)
       )
     elif isinstance(destination, PlateHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
       to_location = (destination.get_absolute_location()) + destination.get_default_child_location(
-        resource.rotated(z=rotation_applied_by_move_relative_to_current)
+        resource.rotated(z=rotation_applied_by_move)
       )
-
-      # if we are moving a plate, we may need to adjust based on the pedestal size
-      # and plate geometry
-      if isinstance(resource, Plate):
-        # Sanity check for equal well clearances / dz
-        well_dz_set = {
-          round(well.location.z, 2)
-          for well in resource.get_all_children()
-          if well.category == "well" and well.location is not None
-        }
-        assert len(well_dz_set) == 1, "All wells must have the same dz"
-        well_dz = well_dz_set.pop()
-        # Plate "sinking" logic based on well dz to pedestal relationship
-        # 1. no pedestal
-        # 2. pedestal taller than plate.well.dz
-        # 3. pedestal shorter than plate.well.dz
-        pedestal_size_z = abs(destination.pedestal_size_z)
-        z_sinking_depth = min(pedestal_size_z, well_dz)
-        correction_anchor = Coordinate(0, 0, -z_sinking_depth)
-        to_location += correction_anchor
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = destination.compute_plate_location(
-        resource.rotated(z=rotation_applied_by_move_relative_to_current)
+        resource.rotated(z=rotation_applied_by_move)
       )
       to_location = destination.get_absolute_location() + adjusted_plate_anchor
     elif isinstance(destination, ResourceHolder):
-      x = destination.get_default_child_location(
-        resource.rotated(z=rotation_applied_by_move_relative_to_current)
-      )
+      x = destination.get_default_child_location(resource.rotated(z=rotation_applied_by_move))
       to_location = destination.get_absolute_location() + x
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       lid = resource
       plate_location = destination.get_absolute_location()
       to_location = plate_location + destination.get_lid_location(
-        lid.rotated(z=rotation_applied_by_move_relative_to_current)
+        lid.rotated(z=rotation_applied_by_move)
       )
     else:
       to_location = destination.get_absolute_location()
