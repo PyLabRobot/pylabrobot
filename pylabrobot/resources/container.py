@@ -87,7 +87,7 @@ class Container(Resource):
 
     return self._compute_height_from_volume(liquid_volume)
 
-  def get_anchor(self, x: str, y: str, z: str) -> Coordinate:
+  def get_anchor(self, x: str = "l", y: str = "f", z: str = "b") -> Coordinate:
     """Get a relative location within the container. (Update to Resource superclass to
       include cavity_bottom)
 

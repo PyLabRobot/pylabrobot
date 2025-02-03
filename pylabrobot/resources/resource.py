@@ -137,7 +137,7 @@ class Resource:
   def __hash__(self) -> int:
     return hash(repr(self))
 
-  def get_anchor(self, x: str, y: str, z: str) -> Coordinate:
+  def get_anchor(self, x: str = "l", y: str = "f", z: str = "b") -> Coordinate:
     """Get a relative location within the resource.
 
     Args:
