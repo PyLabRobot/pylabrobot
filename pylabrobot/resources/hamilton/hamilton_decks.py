@@ -309,7 +309,8 @@ class HamiltonDeck(Deck, metaclass=ABCMeta):
 
       # Print resource location
       try:
-        location = str(resource.get_absolute_location())
+        x, y, z = resource.get_absolute_location()
+        location = f"(x: {x:7.3f}, y: {y:7.3f}, z: {z:7.3f})"
       except NoLocationError:
         location = "Undefined"
       r_summary += location.ljust(location_column_length)
