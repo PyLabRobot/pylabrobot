@@ -147,6 +147,7 @@ class ResourceMove:
 @dataclass(frozen=True)
 class ResourceDrop:
   resource: Resource
+  # Destination is the location of the lfb of `resource`
   destination: Coordinate
   destination_absolute_rotation: Rotation
   offset: Coordinate
