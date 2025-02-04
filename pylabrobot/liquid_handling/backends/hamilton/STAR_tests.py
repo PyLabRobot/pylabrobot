@@ -1104,6 +1104,7 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     assert plate2.get_absolute_location() == Coordinate(x=189.1, y=228.26, z=183.98)
     assert plate3.get_absolute_location() == Coordinate(x=274.21, y=246.5, z=183.98)
 
+    assert self.plate.lid is not None
     await self.lh.move_lid(self.plate.lid, plate2, drop_direction=GripDirection.LEFT)
     self._assert_command_sent_once(
       "C0PPid0009xs04829xd0yj1142yd0zj2242zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
@@ -1114,6 +1115,7 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
       PUT_PLATE_FMT,
     )
 
+    assert plate2.lid is not None
     await self.lh.move_lid(plate2.lid, plate3, drop_direction=GripDirection.BACK)
     self._assert_command_sent_once(
       "C0PPid0011xs02318xd0yj1644yd0zj1983zd0gr1th2450te2450gw4go0885gb0822gt20ga0gc1",
@@ -1124,6 +1126,7 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
       PUT_PLATE_FMT,
     )
 
+    assert plate3.lid is not None
     await self.lh.move_lid(plate3.lid, self.plate, drop_direction=GripDirection.LEFT)
     self._assert_command_sent_once(
       "C0PPid0013xs02315xd0yj3104yd0zj1983zd0gr1th2450te2450gw4go0885gb0822gt20ga0gc1",
