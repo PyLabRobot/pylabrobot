@@ -147,11 +147,13 @@ class ResourceMove:
 @dataclass(frozen=True)
 class ResourceDrop:
   resource: Resource
+  # Destination is the location of the lfb of `resource`
   destination: Coordinate
   destination_absolute_rotation: Rotation
   offset: Coordinate
   pickup_distance_from_top: float
-  direction: GripDirection
+  pickup_direction: GripDirection
+  drop_direction: GripDirection
   rotation: float
 
 

@@ -343,6 +343,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
         pickup_direction=pickup_direction,
         drop_direction=drop_direction,
       ):
+        print()
         self.deck.assign_child_resource(site, location=Coordinate(100, 100, 0))
 
         plate = Plate(
@@ -374,6 +375,7 @@ class TestLiquidHandlerLayout(unittest.IsolatedAsyncioTestCase):
           drop_direction=drop_direction,
         )
         new_center = plate.get_absolute_location(x="c", y="c", z="c")
+        assert plate.rotation.z == (rotation + 180) % 360
 
         self.assertEqual(
           new_center,
