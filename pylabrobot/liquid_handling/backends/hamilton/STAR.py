@@ -7676,7 +7676,7 @@ class STAR(HamiltonLiquidHandler):
     move_inwards: float,
     spread: Literal["wide", "tight"] = "wide",
     one_by_one: bool = False,
-    distance_from_bottom: float = 20.0
+    distance_from_bottom: float = 20.0,
   ):
     """Pierce the foil of the media source plate at the specified column. Throw away the tips
     after piercing because there will be a bit of foil stuck to the tips. Use this method
@@ -7791,11 +7791,12 @@ class STAR(HamiltonLiquidHandler):
       await self.move_channel_z(back_channel, back_location.z)
     finally:
       # Move channels that are lower than the `front_channel` and `back_channel` to
-      # the same z-height. This will mean they are level with the foil (making minimal
-      # or no contact.)
+      # the just above the foil, in case the foil pops up.
       zs = await self.get_channels_z_positions()
       indices = [channel_idx for channel_idx, z in zs.items() if z < front_location.z]
-      idx = {idx: front_location.z + 20 for idx in indices if idx not in (front_channel, back_channel)}
+      idx = {
+        idx: front_location.z + 20 for idx in indices if idx not in (front_channel, back_channel)
+      }
       await self.position_channels_in_z_direction(idx)
 
       # After that, all channels are clear to move up.
