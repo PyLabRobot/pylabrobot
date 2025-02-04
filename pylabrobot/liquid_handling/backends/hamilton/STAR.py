@@ -7676,6 +7676,7 @@ class STAR(HamiltonLiquidHandler):
     move_inwards: float,
     spread: Literal["wide", "tight"] = "wide",
     one_by_one: bool = False,
+    distance_from_bottom: float = 20.0
   ):
     """Pierce the foil of the media source plate at the specified column. Throw away the tips
     after piercing because there will be a bit of foil stuck to the tips. Use this method
@@ -7715,7 +7716,7 @@ class STAR(HamiltonLiquidHandler):
       ), "Wells must be on the same column"
       x = wells[0].get_absolute_location().x
       ys = [well.get_absolute_location().y for well in wells]
-      z = wells[0].get_absolute_location("cavity_bottom").z
+      z = wells[0].get_absolute_location(z="cavity_bottom").z
 
     await self.move_channel_x(0, x=x)
 
@@ -7723,7 +7724,6 @@ class STAR(HamiltonLiquidHandler):
       {channel: y for channel, y in zip(piercing_channels, ys)}
     )
 
-    distance_from_bottom = 20
     zs = [z + distance_from_bottom for _ in range(len(piercing_channels))]
     if one_by_one:
       for channel in piercing_channels:
@@ -7795,7 +7795,7 @@ class STAR(HamiltonLiquidHandler):
       # or no contact.)
       zs = await self.get_channels_z_positions()
       indices = [channel_idx for channel_idx, z in zs.items() if z < front_location.z]
-      idx = {idx: front_location.z for idx in indices}
+      idx = {idx: front_location.z + 20 for idx in indices if idx not in (front_channel, back_channel)}
       await self.position_channels_in_z_direction(idx)
 
       # After that, all channels are clear to move up.
