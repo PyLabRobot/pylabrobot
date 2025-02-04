@@ -2894,7 +2894,6 @@ class STAR(HamiltonLiquidHandler):
     use_unsafe_hotel: bool = False,
     iswap_collision_control_level: int = 0,
   ):
-    print("drop")
     if use_arm == "iswap":
       traversal_height_start = (
         minimum_traverse_height_at_beginning_of_a_command or self._traversal_height
@@ -2906,17 +2905,17 @@ class STAR(HamiltonLiquidHandler):
       )
       assert drop.resource.get_absolute_rotation().z % 90 == 0
 
-      # grip_direction here is the drop_direction. We use `rotation` to cancel it out and get the
-      # original grip direction. Hack.
-      # the resource still has its original orientation.
-      if drop.direction in (GripDirection.FRONT, GripDirection.BACK):
-        plate_width = drop.resource.rotated(
-          z=drop.rotation + drop.destination_absolute_rotation.z
-        ).get_absolute_size_x()
-      elif drop.direction in (GripDirection.RIGHT, GripDirection.LEFT):
-        plate_width = drop.resource.rotated(
-          z=drop.rotation + drop.destination_absolute_rotation.z
-        ).get_absolute_size_y()
+      # Use the pickup direction to determine how wide the plate is gripped.
+      # Note that the plate is still in the original orientation at this point,
+      # so get_absolute_size_{x,y}() will return the size of the plate in the original orientation.
+      if (
+        drop.pickup_direction == GripDirection.FRONT or drop.pickup_direction == GripDirection.BACK
+      ):
+        plate_width = drop.resource.get_absolute_size_x()
+      elif (
+        drop.pickup_direction == GripDirection.RIGHT or drop.pickup_direction == GripDirection.LEFT
+      ):
+        plate_width = drop.resource.get_absolute_size_y()
       else:
         raise ValueError("Invalid grip direction")
 
@@ -2961,7 +2960,7 @@ class STAR(HamiltonLiquidHandler):
           hotel_center_z_direction=0 if z >= 0 else 1,
           clearance_height=round(hotel_clearance_height * 10),
           hotel_depth=round(hotel_depth * 10),
-          grip_direction=drop.direction,
+          grip_direction=drop.drop_direction,
           open_gripper_position=round(open_gripper_position * 10),
           traverse_height_at_beginning=round(traversal_height_start * 10),
           z_position_at_end=round(z_position_at_the_command_end * 10),
@@ -2981,7 +2980,7 @@ class STAR(HamiltonLiquidHandler):
             GripDirection.RIGHT: 2,
             GripDirection.BACK: 3,
             GripDirection.LEFT: 4,
-          }[drop.direction],
+          }[drop.drop_direction],
           minimum_traverse_height_at_beginning_of_a_command=round(traversal_height_start * 10),
           z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
           open_gripper_position=round(open_gripper_position * 10),

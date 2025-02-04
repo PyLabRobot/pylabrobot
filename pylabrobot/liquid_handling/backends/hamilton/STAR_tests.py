@@ -971,7 +971,7 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     self.lh = LiquidHandler(self.mockSTAR, deck=self.deck)
 
     self.plt_car = PLT_CAR_L5MD_A00(name="plt_car")
-    self.plt_car[0] = self.plate = CellTreat_96_wellplate_350ul_Ub(name="plate")
+    self.plt_car[0] = self.plate = CellTreat_96_wellplate_350ul_Ub(name="plate", with_lid=True)
     self.deck.assign_child_resource(self.plt_car, rails=15)
 
     self.plt_car2 = PLT_CAR_P3AC_A01(name="plt_car2")
@@ -1091,4 +1091,45 @@ class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
     )
     self._assert_command_sent_once(
       "C0PRid0022xs04829xd0yj1141yd0zj2143zd0th2450te2450gr2go0881ga0", PUT_PLATE_FMT
+    )
+
+  async def test_move_lid_across_rotated_resources(self):
+    self.plt_car2[0] = plate2 = CellTreat_96_wellplate_350ul_Ub(
+      name="plate2", with_lid=False
+    ).rotated(z=270)
+    self.plt_car2[1] = plate3 = CellTreat_96_wellplate_350ul_Ub(
+      name="plate3", with_lid=False
+    ).rotated(z=90)
+
+    assert plate2.get_absolute_location() == Coordinate(x=189.1, y=228.26, z=183.98)
+    assert plate3.get_absolute_location() == Coordinate(x=274.21, y=246.5, z=183.98)
+
+    await self.lh.move_lid(self.plate.lid, plate2, drop_direction=GripDirection.LEFT)
+    self._assert_command_sent_once(
+      "C0PPid0009xs04829xd0yj1142yd0zj2242zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0010xs02318xd0yj1644yd0zj1983zd0th2450te2450gr4go1308ga0",
+      PUT_PLATE_FMT,
+    )
+
+    await self.lh.move_lid(plate2.lid, plate3, drop_direction=GripDirection.BACK)
+    self._assert_command_sent_once(
+      "C0PPid0011xs02318xd0yj1644yd0zj1983zd0gr1th2450te2450gw4go0885gb0822gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0012xs02315xd0yj3104yd0zj1983zd0th2450te2450gr3go0885ga0",
+      PUT_PLATE_FMT,
+    )
+
+    await self.lh.move_lid(plate3.lid, self.plate, drop_direction=GripDirection.LEFT)
+    self._assert_command_sent_once(
+      "C0PPid0013xs02315xd0yj3104yd0zj1983zd0gr1th2450te2450gw4go0885gb0822gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0014xs04829xd0yj1142yd0zj2242zd0th2450te2450gr4go0885ga0",
+      PUT_PLATE_FMT,
     )
