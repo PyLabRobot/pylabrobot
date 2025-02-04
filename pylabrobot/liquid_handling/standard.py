@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.rotation import Rotation
 
 if TYPE_CHECKING:
   from pylabrobot.resources import (
@@ -48,7 +49,7 @@ class DropTipRack:
 
 
 @dataclass(frozen=True)
-class Aspiration:
+class SingleChannelAspiration:
   resource: Container
   offset: Coordinate
   tip: Tip
@@ -60,7 +61,7 @@ class Aspiration:
 
 
 @dataclass(frozen=True)
-class Dispense:
+class SingleChannelDispense:
   resource: Container
   offset: Coordinate
   tip: Tip
@@ -72,7 +73,7 @@ class Dispense:
 
 
 @dataclass(frozen=True)
-class AspirationPlate:
+class MultiHeadAspirationPlate:
   wells: List[Well]
   offset: Coordinate
   tips: List[Tip]
@@ -84,7 +85,7 @@ class AspirationPlate:
 
 
 @dataclass(frozen=True)
-class DispensePlate:
+class MultiHeadDispensePlate:
   wells: List[Well]
   offset: Coordinate
   tips: List[Tip]
@@ -96,7 +97,7 @@ class DispensePlate:
 
 
 @dataclass(frozen=True)
-class AspirationContainer:
+class MultiHeadAspirationContainer:
   container: Container
   offset: Coordinate
   tips: List[Tip]
@@ -108,7 +109,7 @@ class AspirationContainer:
 
 
 @dataclass(frozen=True)
-class DispenseContainer:
+class MultiHeadDispenseContainer:
   container: Container
   offset: Coordinate
   tips: List[Tip]
@@ -146,11 +147,14 @@ class ResourceMove:
 @dataclass(frozen=True)
 class ResourceDrop:
   resource: Resource
+  # Destination is the location of the lfb of `resource`
   destination: Coordinate
+  destination_absolute_rotation: Rotation
   offset: Coordinate
   pickup_distance_from_top: float
-  direction: GripDirection
+  pickup_direction: GripDirection
+  drop_direction: GripDirection
   rotation: float
 
 
-PipettingOp = Union[Pickup, Drop, Aspiration, Dispense]
+PipettingOp = Union[Pickup, Drop, SingleChannelAspiration, SingleChannelDispense]

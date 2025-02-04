@@ -11,7 +11,7 @@ from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 from pylabrobot.utils.object_parsing import find_subclass
 
 from .coordinate import Coordinate
-from .errors import ResourceNotFoundError
+from .errors import NoLocationError, ResourceNotFoundError
 from .rotation import Rotation
 
 if sys.version_info >= (3, 11):
@@ -137,7 +137,7 @@ class Resource:
   def __hash__(self) -> int:
     return hash(repr(self))
 
-  def get_anchor(self, x: str, y: str, z: str) -> Coordinate:
+  def get_anchor(self, x: str = "l", y: str = "f", z: str = "b") -> Coordinate:
     """Get a relative location within the resource.
 
     Args:
@@ -212,7 +212,8 @@ class Resource:
       z: `"t"`/`"top"`, `"c"`/`"center"`, or `"b"`/`"bottom"`
     """
 
-    assert self.location is not None, f"Resource {self.name} has no location."
+    if self.location is None:
+      raise NoLocationError(f"Resource {self.name} has no location.")
 
     rotated_anchor = Coordinate(
       *matrix_vector_multiply_3x3(

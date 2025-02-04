@@ -12,19 +12,19 @@ from pylabrobot.liquid_handling.liquid_classes.hamilton import (
   get_vantage_liquid_class,
 )
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 from pylabrobot.resources import (
   Coordinate,
@@ -33,7 +33,7 @@ from pylabrobot.resources import (
   TipRack,
   Well,
 )
-from pylabrobot.resources.ml_star import (
+from pylabrobot.resources.hamilton import (
   HamiltonTip,
   TipPickupMethod,
   TipSize,
@@ -565,7 +565,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def aspirate(
     self,
-    ops: List[Aspiration],
+    ops: List[SingleChannelAspiration],
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,
@@ -746,7 +746,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def dispense(
     self,
-    ops: List[Dispense],
+    ops: List[SingleChannelDispense],
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
@@ -996,7 +996,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def aspirate96(
     self,
-    aspiration: Union[AspirationPlate, AspirationContainer],
+    aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer],
     jet: bool = False,
     blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
@@ -1037,7 +1037,7 @@ class Vantage(HamiltonLiquidHandler):
     """
     # assert self.core96_head_installed, "96 head must be installed"
 
-    if isinstance(aspiration, AspirationPlate):
+    if isinstance(aspiration, MultiHeadAspirationPlate):
       top_left_well = aspiration.wells[0]
       position = (
         top_left_well.get_absolute_location()
@@ -1135,7 +1135,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: Union[DispensePlate, DispenseContainer],
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer],
     jet: bool = False,
     blow_out: bool = False,  # "empty" in the VENUS liquid editor
     empty: bool = False,  # truly "empty", does not exist in liquid editor, dm4
@@ -1182,7 +1182,7 @@ class Vantage(HamiltonLiquidHandler):
         determined based on the jet, blow_out, and empty parameters.
     """
 
-    if isinstance(dispense, DispensePlate):
+    if isinstance(dispense, MultiHeadDispensePlate):
       top_left_well = dispense.wells[0]
       position = (
         top_left_well.get_absolute_location()

@@ -117,8 +117,9 @@ class Plate(ItemizedResource["Well"]):
       self.assign_child_resource(lid)
     self._lid = lid
 
-  def _get_lid_location(self, lid: Lid) -> Coordinate:
-    return Coordinate(0, 0, self.get_size_z() - lid.nesting_z_height)
+  def get_lid_location(self, lid: Lid) -> Coordinate:
+    """Get location of the lid when assigned to the plate. Takes into account sinking and rotation."""
+    return get_child_location(lid) + Coordinate(0, 0, self.get_size_z() - lid.nesting_z_height)
 
   def assign_child_resource(
     self,
@@ -130,7 +131,7 @@ class Plate(ItemizedResource["Well"]):
       if self.has_lid():
         raise ValueError(f"Plate '{self.name}' already has a lid.")
       self._lid = resource
-      default_location = get_child_location(resource) + self._get_lid_location(resource)
+      default_location = self.get_lid_location(resource)
       location = location or default_location
     else:
       assert location is not None, "Location must be specified for if resource is not a lid."

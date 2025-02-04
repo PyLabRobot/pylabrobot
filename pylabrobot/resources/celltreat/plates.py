@@ -15,7 +15,7 @@ from pylabrobot.resources.well import (
 )
 
 
-def CellTreat_96_wellplate_350ul_Ub(name: str, lid: Optional[Lid] = None) -> Plate:
+def CellTreat_96_wellplate_350ul_Ub(name: str, with_lid: bool = False) -> Plate:
   """
   CellTreat cat. no.: 229591
 
@@ -55,7 +55,7 @@ def CellTreat_96_wellplate_350ul_Ub(name: str, lid: Optional[Lid] = None) -> Pla
     size_x=127.76,
     size_y=85.11,
     size_z=14.30,  # without lid
-    lid=lid,
+    lid=CellTreat_96_wellplate_350ul_Ub_Lid(name + "_lid") if with_lid else None,
     model=CellTreat_96_wellplate_350ul_Ub.__name__,
     ordered_items=create_ordered_items_2d(
       Well,

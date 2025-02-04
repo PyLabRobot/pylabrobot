@@ -12,18 +12,19 @@ from pylabrobot.resources import (
   HT,
   HTF,
   PLT_CAR_L5AC_A00,
+  PLT_CAR_L5MD_A00,
+  PLT_CAR_P3AC_A01,
   TIP_CAR_288_C00,
   TIP_CAR_480_A00,
+  CellTreat_96_wellplate_350ul_Ub,
   Container,
   Coordinate,
   Cor_96_wellplate_360ul_Fb,
   Lid,
-  Plate,
   ResourceStack,
   no_volume_tracking,
 )
-from pylabrobot.resources.hamilton import STARLetDeck
-from pylabrobot.resources.ml_star import STF
+from pylabrobot.resources.hamilton import STF, STARLetDeck
 from tests.usb import MockDev, MockEndpoint
 
 from .STAR import (
@@ -628,7 +629,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.discard_tips96()
 
     self._assert_command_sent_once(
-      "C0ERid0213xs02321xd1yh1103za2164zh2450ze2450",
+      "C0ERid0213xs00420xd1yh1203za2164zh2450ze2450",
       "xs#####xd#yh####za####zh####ze####",
     )
 
@@ -940,6 +941,10 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       self.plt_car[1],
       pickup_distance_from_top=13 - 3.33,
       use_arm="core",
+      # kwargs specific to pickup and drop
+      channel_1=7,
+      channel_2=8,
+      return_core_gripper=True,
     )
     self._assert_command_sent_once(
       "C0ZTid0020xs07975xd0ya1240yb1065pa07pb08tp2350tz2250th2450tt14",
@@ -958,60 +963,176 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       "xs#####xd#ya####yb####tp####tz####th####te####",
     )
 
-  async def test_iswap_pick_up_resource_grip_direction_changes_plate_width(
-    self,
-  ):
-    size_x = 100
-    size_y = 200
-    plate = Plate(
-      "dummy",
-      size_x=size_x,
-      size_y=size_y,
-      size_z=100,
-      ordered_items={},
+
+class STARIswapMovementTests(unittest.IsolatedAsyncioTestCase):
+  async def asyncSetUp(self):
+    self.mockSTAR = STARCommandCatcher()
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(self.mockSTAR, deck=self.deck)
+
+    self.plt_car = PLT_CAR_L5MD_A00(name="plt_car")
+    self.plt_car[0] = self.plate = CellTreat_96_wellplate_350ul_Ub(name="plate", with_lid=True)
+    self.deck.assign_child_resource(self.plt_car, rails=15)
+
+    self.plt_car2 = PLT_CAR_P3AC_A01(name="plt_car2")
+    self.deck.assign_child_resource(self.plt_car2, rails=3)
+
+  # TODO: horrible
+  # copied from above
+  # will fix with io layer
+  def _assert_command_sent_once(self, cmd: str, fmt: str):
+    """Assert that the given command was sent to the backend exactly once."""
+    self._assert_command_in_command_buffer(cmd, True, fmt)
+    self._assert_command_in_command_buffer(cmd, False, fmt)
+
+  def _assert_command_in_command_buffer(self, cmd: str, should_be: bool, fmt: str):
+    """Assert that the given command was sent to the backend. The ordering of the parameters is not
+    taken into account, but the values and formatting should match. The id parameter of the command
+    is ignored.
+
+    If a command is found, it is removed from the command buffer.
+
+    Args:
+      cmd: the command to look for
+      should_be: whether the command should be found or not
+      fmt: the format of the command
+    """
+
+    found = False
+    # Command that fits the format, but is not the same as the command we are looking for.
+    similar = None
+
+    parsed_cmd = parse_star_fw_string(cmd, fmt)
+    parsed_cmd.pop("id")
+
+    for sent_cmd in self.mockSTAR.commands:
+      # When the module and command do not match, there is no point in comparing the parameters.
+      if sent_cmd[0:4] != cmd[0:4]:
+        continue
+
+      try:
+        parsed_sent_cmd = parse_star_fw_string(sent_cmd, fmt)
+        parsed_sent_cmd.pop("id")
+
+        if parsed_cmd == parsed_sent_cmd:
+          self.mockSTAR.commands.remove(sent_cmd)
+          found = True
+          break
+        else:
+          similar = parsed_sent_cmd
+      except ValueError as e:
+        # The command could not be parsed.
+        print(e)
+        continue
+
+    if should_be and not found:
+      if similar is not None:
+        # These will not be equal, but this method does give a better error message than `fail`.
+        self.assertEqual(similar, parsed_cmd)
+      else:
+        self.fail(f"Command {cmd} not found in sent commands: {self.mockSTAR.commands}")
+    elif not should_be and found:
+      self.fail(f"Command {cmd} was found in sent commands: {self.mockSTAR.commands}")
+
+  async def test_simple_movement(self):
+    await self.lh.move_plate(self.plate, self.plt_car[1])
+
+    self._assert_command_sent_once(
+      "C0PPid0011xs04829xd0yj1141yd0zj2143zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
+      GET_PLATE_FMT,
     )
-    plate.location = Coordinate.zero()
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_get_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_pick_up_resource(plate, GripDirection.FRONT, 1)
-      assert mocked_iswap_get_plate.call_args.kwargs["plate_width"] == size_x * 10 - 33
-
-    with unittest.mock.patch.object(self.lh.backend, "iswap_get_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_pick_up_resource(plate, GripDirection.LEFT, 1)
-      assert mocked_iswap_get_plate.call_args.kwargs["plate_width"] == size_y * 10 - 33
-
-  async def test_iswap_release_picked_up_resource_grip_direction_changes_plate_width(
-    self,
-  ):
-    size_x = 100
-    size_y = 200
-    plate = Plate(
-      "dummy",
-      size_x=size_x,
-      size_y=size_y,
-      size_z=100,
-      ordered_items={},
+    self._assert_command_sent_once(
+      "C0PRid0012xs04829xd0yj2101yd0zj2143zd0th2450te2450gr1go1308ga0", PUT_PLATE_FMT
     )
-    plate.location = Coordinate.zero()
 
-    with unittest.mock.patch.object(self.lh.backend, "iswap_put_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_release_picked_up_resource(
-        location=Coordinate.zero(),
-        resource=plate,
-        rotation=0,
-        offset=Coordinate.zero(),
-        grip_direction=GripDirection.FRONT,
-        pickup_distance_from_top=1,
-      )
-      assert mocked_iswap_get_plate.call_args.kwargs["open_gripper_position"] == size_x * 10 + 30
+    await self.lh.move_plate(self.plate, self.plt_car[0])
 
-    with unittest.mock.patch.object(self.lh.backend, "iswap_put_plate") as mocked_iswap_get_plate:
-      await cast(STAR, self.lh.backend).iswap_release_picked_up_resource(
-        location=Coordinate.zero(),
-        resource=plate,
-        rotation=0,
-        offset=Coordinate.zero(),
-        grip_direction=GripDirection.LEFT,
-        pickup_distance_from_top=1,
-      )
-      assert mocked_iswap_get_plate.call_args.kwargs["open_gripper_position"] == size_y * 10 + 30
+    self._assert_command_sent_once(
+      "C0PPid0013xs04829xd0yj2101yd0zj2143zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0014xs04829xd0yj1141yd0zj2143zd0th2450te2450gr1go1308ga0", PUT_PLATE_FMT
+    )
+
+  async def test_movement_to_portrait_site_left(self):
+    await self.lh.move_plate(self.plate, self.plt_car2[0], drop_direction=GripDirection.LEFT)
+    self._assert_command_sent_once(
+      "C0PPid0015xs04829xd0yj1141yd0zj2143zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0016xs02317xd0yj1644yd0zj1884zd0th2450te2450gr4go1308ga0", PUT_PLATE_FMT
+    )
+
+    await self.lh.move_plate(self.plate, self.plt_car[0], drop_direction=GripDirection.LEFT)
+    self._assert_command_sent_once(
+      "C0PPid0017xs02317xd0yj1644yd0zj1884zd0gr1th2450te2450gw4go0881gb0818gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0018xs04829xd0yj1141yd0zj2143zd0th2450te2450gr4go0881ga0", PUT_PLATE_FMT
+    )
+
+  async def test_movement_to_portrait_site_right(self):
+    await self.lh.move_plate(self.plate, self.plt_car2[0], drop_direction=GripDirection.RIGHT)
+    self._assert_command_sent_once(
+      "C0PPid0019xs04829xd0yj1141yd0zj2143zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0020xs02317xd0yj1644yd0zj1884zd0th2450te2450gr2go1308ga0", PUT_PLATE_FMT
+    )
+
+    await self.lh.move_plate(self.plate, self.plt_car[0], drop_direction=GripDirection.RIGHT)
+    self._assert_command_sent_once(
+      "C0PPid0021xs02317xd0yj1644yd0zj1884zd0gr1th2450te2450gw4go0881gb0818gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0022xs04829xd0yj1141yd0zj2143zd0th2450te2450gr2go0881ga0", PUT_PLATE_FMT
+    )
+
+  async def test_move_lid_across_rotated_resources(self):
+    self.plt_car2[0] = plate2 = CellTreat_96_wellplate_350ul_Ub(
+      name="plate2", with_lid=False
+    ).rotated(z=270)
+    self.plt_car2[1] = plate3 = CellTreat_96_wellplate_350ul_Ub(
+      name="plate3", with_lid=False
+    ).rotated(z=90)
+
+    assert plate2.get_absolute_location() == Coordinate(x=189.1, y=228.26, z=183.98)
+    assert plate3.get_absolute_location() == Coordinate(x=274.21, y=246.5, z=183.98)
+
+    assert self.plate.lid is not None
+    await self.lh.move_lid(self.plate.lid, plate2, drop_direction=GripDirection.LEFT)
+    self._assert_command_sent_once(
+      "C0PPid0009xs04829xd0yj1142yd0zj2242zd0gr1th2450te2450gw4go1308gb1245gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0010xs02318xd0yj1644yd0zj1983zd0th2450te2450gr4go1308ga0",
+      PUT_PLATE_FMT,
+    )
+
+    assert plate2.lid is not None
+    await self.lh.move_lid(plate2.lid, plate3, drop_direction=GripDirection.BACK)
+    self._assert_command_sent_once(
+      "C0PPid0011xs02318xd0yj1644yd0zj1983zd0gr1th2450te2450gw4go0885gb0822gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0012xs02315xd0yj3104yd0zj1983zd0th2450te2450gr3go0885ga0",
+      PUT_PLATE_FMT,
+    )
+
+    assert plate3.lid is not None
+    await self.lh.move_lid(plate3.lid, self.plate, drop_direction=GripDirection.LEFT)
+    self._assert_command_sent_once(
+      "C0PPid0013xs02315xd0yj3104yd0zj1983zd0gr1th2450te2450gw4go0885gb0822gt20ga0gc1",
+      GET_PLATE_FMT,
+    )
+    self._assert_command_sent_once(
+      "C0PRid0014xs04829xd0yj1142yd0zj2242zd0th2450te2450gr4go0885ga0",
+      PUT_PLATE_FMT,
+    )

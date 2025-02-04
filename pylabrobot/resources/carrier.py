@@ -158,7 +158,9 @@ class PlateHolder(ResourceHolder):
     category="plate_holder",
     model: Optional[str] = None,
   ):
-    super().__init__(name, size_x, size_y, size_z, category=category, model=model)
+    super().__init__(
+      name, size_x, size_y, size_z, category=category, model=model, child_location=child_location
+    )
     if pedestal_size_z is None:
       raise ValueError(
         "pedestal_size_z must be provided. See "
@@ -189,6 +191,8 @@ class PlateHolder(ResourceHolder):
         "PlateHolder can only store Plate, PlateAdapter or ResourceStack "
         + f"resources, not {type(resource)}"
       )
+    if isinstance(resource, Plate) and resource.plate_type != "skirted":
+      raise ValueError("PlateHolder can only store plates that are skirted")
     return super().assign_child_resource(resource, location, reassign)
 
   def _get_sinking_depth(self, resource: Resource) -> Coordinate:
@@ -356,19 +360,35 @@ def create_resources(
   locations: List[Coordinate],
   resource_size_x: List[Union[float, int]],
   resource_size_y: List[Union[float, int]],
+  resource_size_z: Optional[List[Union[float, int]]] = None,
   name_prefix: Optional[str] = None,
   **kwargs,
 ) -> Dict[int, T]:
-  """Create a list of resource with the given sizes and locations."""
+  """Create a list of resource with the given sizes and locations.
+
+  Args:
+    klass: The class of the resources.
+    locations: The locations of the resources.
+    resource_size_x: The x size of the resources.
+    resource_size_y: The y size of the resources.
+    resource_size_z: The z size of the resources. If None, it will be set to 0.
+    name_prefix: names of the resources will be f"{name_prefix}-{idx}" if name_prefix is not None,
+      else f"{klass.__name__}_{idx}".
+  """
   # TODO: should be possible to merge with create_equally_spaced_y
 
+  if resource_size_z is None:
+    resource_size_z = [0] * len(locations)
+
   sites = {}
-  for idx, (location, x, y) in enumerate(zip(locations, resource_size_x, resource_size_y)):
+  for idx, (location, x, y, z) in enumerate(
+    zip(locations, resource_size_x, resource_size_y, resource_size_z)
+  ):
     site = klass(
       name=f"{name_prefix}-{idx}" if name_prefix else f"{klass.__name__}_{idx}",
       size_x=x,
       size_y=y,
-      size_z=0,
+      size_z=z,
       **kwargs,
     )
     site.location = location
@@ -381,6 +401,7 @@ def create_homogeneous_resources(
   locations: List[Coordinate],
   resource_size_x: float,
   resource_size_y: float,
+  resource_size_z: Optional[float] = None,
   name_prefix: Optional[str] = None,
   **kwargs,
 ) -> Dict[int, T]:
@@ -393,6 +414,7 @@ def create_homogeneous_resources(
     locations=locations,
     resource_size_x=[resource_size_x] * n,
     resource_size_y=[resource_size_y] * n,
+    resource_size_z=[resource_size_z] * n if resource_size_z is not None else None,
     name_prefix=name_prefix,
     **kwargs,
   )

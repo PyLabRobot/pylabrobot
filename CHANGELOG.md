@@ -58,6 +58,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - get_direction -> pickup_direction
   - put_direction -> drop_direction
 - `location` parameter of `assign_child_resource` is not optional (https://github.com/PyLabRobot/pylabrobot/pull/336)
+- `Resource.get_absolute_location` raises `NoLocationError` instead of `AssertionError` when absolute location is not defined (https://github.com/PyLabRobot/pylabrobot/pull/338)
+- `no_trash` and `no_teaching_rack` were renamed to `with_trash` and `with_teaching_rack` to avoid double negatives (https://github.com/PyLabRobot/pylabrobot/pull/347)
 
 ### Added
 
@@ -114,9 +116,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `STAR.position_channels_in_y_direction` (https://github.com/PyLabRobot/pylabrobot/pull/324)
 - `{Well,TipSpot}.get_identifier` (https://github.com/PyLabRobot/pylabrobot/pull/327)
 - `LiquidHandler{Backend}.{pick_up_resource,move_picked_up_resource,drop_resource}` (https://github.com/PyLabRobot/pylabrobot/pull/328)
+  - Resource management (https://github.com/PyLabRobot/pylabrobot/pull/343)
 - `Access2` loader for vspin (https://github.com/PyLabRobot/pylabrobot/pull/308)
 - `CentrifugeChatterboxBackend` and `LoaderChatterboxBackend` (https://github.com/PyLabRobot/pylabrobot/pull/335)
 - Add support for TF cytomat `C6000`, `C2C_50`, `C2C_425`, `C2C_450_SHAKE`, `C5C` (https://github.com/PyLabRobot/pylabrobot/pull/332)
+- Add `resource_size_z` parameter to `create_homogeneous_resources and `create_resources` (https://github.com/PyLabRobot/pylabrobot/pull/341)
+- More backend kwargs for iswap movements on STAR: (https://github.com/PyLabRobot/pylabrobot/pull/343)
+  - STAR.pick_up_resource:
+    - `iswap_grip_strength: int = 4`
+    - `minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None`
+    - `z_position_at_the_command_end: Optional[float] = None`
+    - `plate_width_tolerance: float = 2.0`
+    - `hotel_open_gripper_position: Optional[float] = None`
+    - `hotel_depth=160.0`
+    - `hotel_clearance_height=7.5`
+    - `high_speed=False`
+    - `plate_width: Optional[float] = None`
+    - `use_unsafe_hotel: bool = False`
+    - `iswap_collision_control_level: int = 0`
+    - `iswap_fold_up_sequence_at_the_end_of_process: bool = True`
+  - STAR.drop_resource
+    - `minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None`
+    - `z_position_at_the_command_end: Optional[float] = None`
+    - `hotel_open_gripper_position: Optional[float] = None`
+    - `hotel_depth=160.0`
+    - `hotel_clearance_height=7.5`
+    - `hotel_high_speed=False`
+    - `use_unsafe_hotel: bool = False`
+    - `iswap_collision_control_level: int = 0`
+- `with_trash96` on `HamiltonSTARDeck` so there is more fine grained control (https://github.com/PyLabRobot/pylabrobot/pull/347)
+- add `STAR.{get_channels_z_positions, position_channels_in_z_direction}` (https://github.com/PyLabRobot/pylabrobot/pull/356)
+- `STAR.step_off_foil` (https://github.com/PyLabRobot/pylabrobot/pull/357)
+- `make_space` param to `position_channels_in_y_direction` (https://github.com/PyLabRobot/pylabrobot/pull/369)
+- `spread: Literal["wide", "tight"]` for single-resource multi-channel aspirations/dispenses (https://github.com/PyLabRobot/pylabrobot/pull/378)
+- `STAR.request_volume_in_tip` (https://github.com/PyLabRobot/pylabrobot/pull/376)
+- `ItemizedResource.{row,column}` (https://github.com/PyLabRobot/pylabrobot/pull/384)
 
 ### Deprecated
 

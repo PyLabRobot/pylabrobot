@@ -1,1 +1,1 @@
-from .cytomat import Cytomat, CytomatChatterbox
+from .cytomat import Cytomat, CytomatChatterbox, CytomatType
