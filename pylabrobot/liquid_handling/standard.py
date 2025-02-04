@@ -152,7 +152,8 @@ class ResourceDrop:
   destination_absolute_rotation: Rotation
   offset: Coordinate
   pickup_distance_from_top: float
-  direction: GripDirection
+  pickup_direction: GripDirection
+  drop_direction: GripDirection
   rotation: float
 
 

@@ -1927,7 +1927,8 @@ class LiquidHandler(Resource, Machine):
       else Rotation(0, 0, 0),
       offset=offset,
       pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
-      direction=direction,
+      pickup_direction=self._resource_pickup.direction,
+      drop_direction=direction,
       rotation=rotation_applied_by_move,
     )
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
