@@ -1831,40 +1831,52 @@ class LiquidHandler(Resource, Machine):
 
     # compute rotation based on the pickup_direction and drop_direction
     if self._resource_pickup.direction == direction:
-      rotation = 0
+      rotation_applied_by_move = 0
     if (self._resource_pickup.direction, direction) in (
       (GripDirection.FRONT, GripDirection.RIGHT),
       (GripDirection.RIGHT, GripDirection.BACK),
       (GripDirection.BACK, GripDirection.LEFT),
       (GripDirection.LEFT, GripDirection.FRONT),
     ):
-      rotation = 90
+      rotation_applied_by_move = 90
     if (self._resource_pickup.direction, direction) in (
       (GripDirection.FRONT, GripDirection.BACK),
       (GripDirection.BACK, GripDirection.FRONT),
       (GripDirection.LEFT, GripDirection.RIGHT),
       (GripDirection.RIGHT, GripDirection.LEFT),
     ):
-      rotation = 180
+      rotation_applied_by_move = 180
     if (self._resource_pickup.direction, direction) in (
       (GripDirection.RIGHT, GripDirection.FRONT),
       (GripDirection.BACK, GripDirection.RIGHT),
       (GripDirection.LEFT, GripDirection.BACK),
       (GripDirection.FRONT, GripDirection.LEFT),
     ):
-      rotation = 270
+      rotation_applied_by_move = 270
 
     # the resource's absolute rotation should be the resource's previous rotation plus the
     # rotation the move applied. The resource's absolute rotation is the rotation of the
     # new parent plus the resource's rotation relative to the parent. So to find the new
-    # rotation of the resource wrt its new paretn, we compute what the new absolute rotation
-    # should be and subtract the rotation of the new parent. Note that before the new rotation
-    # is applied, the resource's rotation is still with respect to the old parent.
+    # rotation of the resource wrt its new parent, we compute what the new absolute rotation
+    # should be and subtract the rotation of the new parent.
+
+    # moving from a resource from a rotated parent to a non-rotated parent means child inherits/'houses' the rotation after move
+    resource_absolute_rotation_after_move = (
+      resource.get_absolute_rotation().z + rotation_applied_by_move
+    )
     destination_rotation = (
       destination.get_absolute_rotation().z if not isinstance(destination, Coordinate) else 0
     )
-    new_rotation_z = resource.get_absolute_rotation().z + rotation - destination_rotation
-    relative_rotation = new_rotation_z - resource.rotation.z
+    resource_rotation_wrt_destination = resource_absolute_rotation_after_move - destination_rotation
+
+    # `get_default_child_location`, which is used to compute the translation of the child wrt the parent,
+    # only considers the child's local rotation. In order to set this new child rotation locally for the
+    # translation computation, we have to subtract the current rotation of the resource, so we can use
+    # resource.rotated(z=resource_rotation_wrt_destination_wrt_local) to 'set' the new local rotation.
+    # Remember, rotated() applies the rotation on top of the current rotation. <- TODO: stupid
+    resource_rotation_wrt_destination_wrt_local = (
+      resource_rotation_wrt_destination - resource.rotation.z
+    )
 
     # get the location of the destination
     if isinstance(destination, ResourceStack):
@@ -1875,51 +1887,33 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(destination, Coordinate):
       to_location = destination
     elif isinstance(destination, Tilter):
-      to_location = destination.get_absolute_location() + destination.child_location
+      to_location = destination.get_absolute_location() + destination.get_default_child_location(
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
+      )
     elif isinstance(destination, PlateHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
-      to_location = (
-        destination.get_absolute_location()
-      )  # + destination.get_default_child_location(resource.rotated(z=relative_rotation))
-
-      # if we are moving a plate, we may need to adjust based on the pedestal size
-      # and plate geometry
-      if isinstance(resource, Plate):
-        # Sanity check for equal well clearances / dz
-        well_dz_set = {
-          round(well.location.z, 2)
-          for well in resource.get_all_children()
-          if well.category == "well" and well.location is not None
-        }
-        assert len(well_dz_set) == 1, "All wells must have the same dz"
-        well_dz = well_dz_set.pop()
-        # Plate "sinking" logic based on well dz to pedestal relationship
-        # 1. no pedestal
-        # 2. pedestal taller than plate.well.dz
-        # 3. pedestal shorter than plate.well.dz
-        pedestal_size_z = abs(destination.pedestal_size_z)
-        z_sinking_depth = min(pedestal_size_z, well_dz)
-        correction_anchor = Coordinate(0, 0, -z_sinking_depth)
-        to_location += correction_anchor
+      to_location = (destination.get_absolute_location()) + destination.get_default_child_location(
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
+      )
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = destination.compute_plate_location(
-        resource.rotated(z=relative_rotation)
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       )
       to_location = destination.get_absolute_location() + adjusted_plate_anchor
     elif isinstance(destination, ResourceHolder):
-      x = destination.get_default_child_location(resource.rotated(z=relative_rotation))
+      x = destination.get_default_child_location(
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
+      )
       to_location = destination.get_absolute_location() + x
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       lid = resource
       plate_location = destination.get_absolute_location()
-      to_location = Coordinate(
-        x=plate_location.x,
-        y=plate_location.y,
-        z=plate_location.z + destination.get_absolute_size_z() - lid.nesting_z_height,
+      to_location = plate_location + destination.get_lid_location(
+        lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
       )
     else:
       to_location = destination.get_absolute_location()
@@ -1932,13 +1926,15 @@ class LiquidHandler(Resource, Machine):
       else Rotation(0, 0, 0),
       offset=offset,
       pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
-      direction=direction,
-      rotation=rotation,
+      pickup_direction=self._resource_pickup.direction,
+      drop_direction=direction,
+      rotation=rotation_applied_by_move,
     )
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
 
-    if rotation != 0:
-      resource.rotate(z=relative_rotation)
+    # we rotate the resource on top of its original rotation. So in order to set the new rotation,
+    # we have to subtract its current rotation.
+    resource.rotate(z=resource_rotation_wrt_destination - resource.rotation.z)
 
     # assign to destination
     resource.unassign()
