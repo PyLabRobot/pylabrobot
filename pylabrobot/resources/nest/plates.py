@@ -96,11 +96,11 @@ def nest_1_troughplate_185000uL_Vb(name: str) -> Plate:
 
 def nest_8_troughplate_22000uL_Vb(name: str) -> Plate:
   """part no 360101. not validated"""
-  well_size_x = 8.2  # from datasheet
-  well_size_y = 107.5  # from datasheet
+  well_size_x = 107.5  # from datasheet
+  well_size_y = 8.2  # from datasheet
   well_kwargs = {
-    "size_x": well_size_y,
-    "size_y": well_size_x,
+    "size_x": well_size_x,
+    "size_y": well_size_y,
     "size_z": 26.85,  # from datasheet
     "bottom_type": WellBottomType.V,
     # an approximation: the trapezoid at the bottom is not fully defined in the datasheet
@@ -136,11 +136,11 @@ def nest_8_troughplate_22000uL_Vb(name: str) -> Plate:
 
 def nest_12_troughplate_15000uL_Vb(name: str) -> Plate:
   """part no 360102."""
-  well_size_x = 71.2  # from datasheet
-  well_size_y = 8.2  # from datasheet
+  well_size_x = 8.2  # from datasheet
+  well_size_y = 71.2  # from datasheet
   well_kwargs = {
-    "size_x": well_size_y,
-    "size_y": well_size_x,
+    "size_x": well_size_x,
+    "size_y": well_size_y,
     "size_z": 26.85,  # from datasheet
     "bottom_type": WellBottomType.V,
     # an approximation: the trapezoid at the bottom is not fully defined in the datasheet
