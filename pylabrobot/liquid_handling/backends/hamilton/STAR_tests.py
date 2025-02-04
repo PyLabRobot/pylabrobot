@@ -897,8 +897,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips(self.tip_rack["A1:H1"])
     await self.lh.discard_tips()
     self._assert_command_sent_once(
-      "C0TRid0206xp08000 08000 08000 08000 08000 08000 08000 08000yp4050 3782 3514 3246 2978 2710 "
-      "2442 2174tp1970tz1870th2450te2450tm1 1 1 1 1 1 1 1ti0",
+      "C0TRid0206xp08000 08000 08000 08000 08000 08000 08000 08000yp3427 3337 3247 3157 3067 2977 "
+      "2887 2797tp1970tz1870th2450te2450tm1 1 1 1 1 1 1 1ti0",
       DROP_TIP_FORMAT,
     )
 

@@ -12,6 +12,7 @@ from pylabrobot.liquid_handling.strictness import (
   Strictness,
   set_strictness,
 )
+from pylabrobot.liquid_handling.utils import get_tight_single_resource_liquid_op_offsets
 from pylabrobot.resources import (
   PLT_CAR_L5AC_A00,
   TIP_CAR_480_A00,
@@ -869,8 +870,7 @@ class TestLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips(self.tip_rack["A1", "B1", "C1", "D1"], use_channels=[0, 1, 3, 4])
     await self.lh.discard_tips()
     trash = self.deck.get_trash_area()
-    offsets = list(reversed(trash.centers(yn=4)))
-    offsets = [o - trash.center() for o in offsets]  # offset is wrt trash center
+    offsets = get_tight_single_resource_liquid_op_offsets(trash, num_channels=4)
 
     self.assertEqual(
       self.get_first_command("drop_tips"),
