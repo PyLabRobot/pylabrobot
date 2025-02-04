@@ -1857,9 +1857,8 @@ class LiquidHandler(Resource, Machine):
     # the resource's absolute rotation should be the resource's previous rotation plus the
     # rotation the move applied. The resource's absolute rotation is the rotation of the
     # new parent plus the resource's rotation relative to the parent. So to find the new
-    # rotation of the resource wrt its new paretn, we compute what the new absolute rotation
-    # should be and subtract the rotation of the new parent. Note that before the new rotation
-    # is applied, the resource's rotation is still with respect to the old parent.
+    # rotation of the resource wrt its new parent, we compute what the new absolute rotation
+    # should be and subtract the rotation of the new parent.
 
     # moving from a resource from a rotated parent to a non-rotated parent means child inherits/'houses' the rotation after move
     resource_absolute_rotation_after_move = (
