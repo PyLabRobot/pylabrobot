@@ -1333,6 +1333,8 @@ class STAR(HamiltonLiquidHandler):
 
     await super().setup()
 
+    self.id_ = 0
+
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
 

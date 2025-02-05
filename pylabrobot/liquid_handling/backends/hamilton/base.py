@@ -15,11 +15,11 @@ from typing import (
   cast,
 )
 
+from pylabrobot.io import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
 from pylabrobot.liquid_handling.standard import PipettingOp
-from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import TipSpot
 from pylabrobot.resources.hamilton import (
   HamiltonTip,
@@ -43,7 +43,7 @@ class HamiltonTask:
   timeout_time: float
 
 
-class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
+class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
   Abstract base class for Hamilton liquid handling robot backends.
   """
@@ -69,17 +69,16 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       num_channels: the number of pipette channels present on the robot.
     """
 
-    USBBackend.__init__(
-      self,
-      device_address=device_address,
-      packet_read_timeout=packet_read_timeout,
-      read_timeout=read_timeout,
-      write_timeout=write_timeout,
+    super().__init__()
+    self.io = USB(
       id_vendor=0x08AF,
       id_product=id_product,
+      device_address=device_address,
+      write_timeout=write_timeout,
       serial_number=serial_number,
     )
-    LiquidHandlerBackend.__init__(self)
+    self.packet_read_timeout = packet_read_timeout
+    self.read_timeout = read_timeout
 
     self.id_ = 0
 
@@ -94,8 +93,8 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     self.allow_firmware_planning = False
 
   async def setup(self):
-    await LiquidHandlerBackend.setup(self)
-    await USBBackend.setup(self)
+    await super().setup()
+    await self.io.setup()
 
   async def stop(self):
     for task in self._waiting_tasks:
@@ -104,11 +103,11 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     await super().stop()
 
   def serialize(self) -> dict:
-    usb_backend_serialized = USBBackend.serialize(self)
-    del usb_backend_serialized["id_vendor"]
-    del usb_backend_serialized["id_product"]
+    usb_serialized = self.io.serialize(self)
+    del usb_serialized["id_vendor"]
+    del usb_serialized["id_product"]
     liquid_handler_serialized = LiquidHandlerBackend.serialize(self)
-    return {**usb_backend_serialized, **liquid_handler_serialized}
+    return {**usb_serialized, **liquid_handler_serialized}
 
   @property
   @abstractmethod
@@ -266,7 +265,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     wait: bool = True,
   ) -> Optional[str]:
     """Write a command to the Hamilton machine and read the response."""
-    self.write(cmd, timeout=write_timeout)
+    self.io.write(cmd, timeout=write_timeout)
 
     if not wait:
       return None
@@ -325,8 +324,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
     list. If a task has timed out, complete the future with a `TimeoutError`.
     """
 
-    logger.debug("Starting reading thread...")
-
     while len(self._waiting_tasks) > 0:
       for idx in range(len(self._waiting_tasks) - 1, -1, -1):  # reverse order to allow deletion
         task = self._waiting_tasks[idx]
@@ -340,14 +337,12 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
           break
 
       try:
-        resp = self.read().decode("utf-8")
+        resp = self.io.read().decode("utf-8")
       except TimeoutError:
         continue
 
       if resp == "":
         continue
-
-      logger.debug("Received response: %s", resp)
 
       # Parse response.
       try:
@@ -373,7 +368,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
           break
 
     self._reading_thread = None
-    logger.debug("Reading thread stopped.")
 
   def _ops_to_fw_positions(
     self, ops: Sequence[PipettingOp], use_channels: List[int]

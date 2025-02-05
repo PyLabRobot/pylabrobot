@@ -35,6 +35,7 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   """
 
   def __init__(self):
+    super().__init__()
     self.setup_finished = False
     self._deck: Optional[Deck] = None
     self._head: Optional[Dict[int, TipTracker]] = None
