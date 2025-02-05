@@ -92,29 +92,45 @@ class Cytomat(IncubatorBackend):
     return command
 
   async def send_command(self, command_type: str, command: str, params: str) -> str:
+    async def _send_command(command_str) -> str:
+      logging.debug(command_str.encode(self.serial_message_encoding))
+      self.ser.write(command_str.encode(self.serial_message_encoding))
+      resp = self.ser.read(128).decode(self.serial_message_encoding)
+      if len(resp) == 0:
+        raise RuntimeError("Cytomat did not respond to command, is it turned on?")
+      key, *values = resp.split()
+      value = " ".join(values)
+
+      if key == CytomatActionResponse.OK.value or key == command:
+        # actions return an OK response, while checks return the command at the start of the response
+        return value
+      if key == CytomatActionResponse.ERROR.value:
+        logger.error("Command %s failed with: '%s'", command_str, resp)
+        if value == "03":
+          error_register = await self.get_error_register()
+          raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
+        if int(value, base=16) in error_map:
+          raise error_map[int(value, base=16)]
+        raise Exception(f"Unknown cytomat error code in response: {resp}")
+
+      logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
+      raise Exception(f"Unknown response from cytomat: {resp}")
+
+    # Cytomats sometimes return a busy or command not recognized error even when the overview
+    # register says the machine is not busy, or if the command is known. We will retry a few times,
+    # which costs 1s if there is a true error, but is necessary to avoid false negatives.
     command_str = self._assemble_command(command_type=command_type, command=command, params=params)
-    logging.debug(command_str.encode(self.serial_message_encoding))
-    self.ser.write(command_str.encode(self.serial_message_encoding))
-    resp = self.ser.read(128).decode(self.serial_message_encoding)
-    if len(resp) == 0:
-      raise RuntimeError("Cytomat did not respond to command, is it turned on?")
-    key, *values = resp.split()
-    value = " ".join(values)
-
-    if key == CytomatActionResponse.OK.value or key == command:
-      # actions return an OK response, while checks return the command at the start of the response
-      return value
-    if key == CytomatActionResponse.ERROR.value:
-      logger.error("Command %s failed with: '%s'", command_str, resp)
-      if value == "03":
-        error_register = await self.get_error_register()
-        raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
-      if int(value, base=16) in error_map:
-        raise error_map[int(value, base=16)]
-      raise Exception(f"Unknown cytomat error code in response: {resp}")
-
-    logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
-    raise Exception(f"Unknown response from cytomat: {resp}")
+    n_retries = 10
+    exc: Optional[BaseException] = None
+    for _ in range(n_retries):
+      try:
+        return await _send_command(command_str)
+      except (CytomatCommandUnknownError, CytomatBusyError) as e:
+        exc = e
+        await asyncio.sleep(0.1)
+        continue
+    assert exc is not None
+    raise exc
 
   async def send_action(
     self, command_type: str, command: str, params: str, timeout: Optional[int] = 60

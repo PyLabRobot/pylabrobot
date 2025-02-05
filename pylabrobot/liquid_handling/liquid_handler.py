@@ -691,9 +691,10 @@ class LiquidHandler(Resource, Machine):
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
     trash = self.deck.get_trash_area()
-    trash_offsets = [
-      c - trash.center() for c in reversed(trash.centers(yn=n))
-    ]  # offset is wrt center
+    trash_offsets = get_tight_single_resource_liquid_op_offsets(
+      trash,
+      num_channels=n,
+    )
     # add trash_offsets to offsets if defined, otherwise use trash_offsets
     # too advanced for mypy
     offsets = [

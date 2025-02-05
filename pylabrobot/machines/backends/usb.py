@@ -138,7 +138,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
         if last_packet is None or len(last_packet) != self.read_endpoint.wMaxPacketSize:
           break
 
-      if resp == "":
+      if len(resp) == 0:
         continue
 
       logger.debug("Received data: %s", resp)
