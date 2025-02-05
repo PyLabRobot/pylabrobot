@@ -1163,7 +1163,7 @@ class STAR(HamiltonLiquidHandler):
     self._num_channels: Optional[int] = None
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
-    self._traversal_height: float = 245.0
+    self._traversal_height: float = 280.0
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
