@@ -38,7 +38,7 @@ class linear_tip_spot_generator:
   def __aiter__(self):
     return self
 
-  async def __anext__(self) -> AsyncGenerator[TipSpot, None]:
+  async def __anext__(self) -> TipSpot:
     while True:
       self.save_state()
       if self._tip_spot_idx >= len(self.tip_spots):
