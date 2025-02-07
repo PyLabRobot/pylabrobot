@@ -7965,3 +7965,16 @@ class UnSafe:
       xe=f"{high_acceleration_index} {low_acceleration_index}",
       gc=int(fold_up_at_end),
     )
+
+  async def violently_shoot_down_tip(self, channel_idx: int):
+    """Shoot down the tip on the specified channel by releasing the drive that holds the spring. The
+    tips will shoot down in place at an acceleration bigger than g. This is done by initializing
+    the squeezer drive wihile a tip is mounted.
+
+    Safe to do when above a tip rack, for example directly after a tip pickup.
+
+    .. warning::
+
+      Consider this method an easter egg. Not for serious use.
+    """
+    await self.star.send_command(module=STAR.channel_id(channel_idx), command="SI")
