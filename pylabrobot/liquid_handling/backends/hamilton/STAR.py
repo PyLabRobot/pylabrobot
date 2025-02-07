@@ -4,7 +4,7 @@ import functools
 import logging
 import re
 from abc import ABCMeta
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from typing import (
   Callable,
   Dict,
@@ -1194,6 +1194,15 @@ class STAR(HamiltonLiquidHandler):
     assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
 
     self._traversal_height = traversal_height
+
+  @contextmanager
+  def minimum_traversal_height(self, traversal_height: float):
+    orig = self._traversal_height
+    self._traversal_height = traversal_height
+    try:
+      yield
+    except Exception as e:
+      self._traversal_height = orig
 
   @property
   def module_id_length(self):
