@@ -1183,6 +1183,12 @@ class STAR(HamiltonLiquidHandler):
       raise RuntimeError("has not loaded num_channels, forgot to call `setup`?")
     return self._num_channels
 
+  def set_minimum_traversal_height(self, traversal_height: float):
+    raise NotImplementedError(
+      "set_minimum_traversal_height is depricated. use set_minimum_channel_traversal_height or "
+      "set_minimum_iswap_traversal_height instead."
+    )
+
   def set_minimum_channel_traversal_height(self, traversal_height: float):
     """Set the minimum traversal height for the pip channels.
 
