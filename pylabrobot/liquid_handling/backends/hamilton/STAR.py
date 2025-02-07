@@ -1211,6 +1211,7 @@ class STAR(HamiltonLiquidHandler):
       yield
     except Exception as e:
       self._iswap_traversal_height = orig
+      raise e
 
   @property
   def module_id_length(self):
