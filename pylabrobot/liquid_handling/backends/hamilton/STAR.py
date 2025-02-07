@@ -4,6 +4,7 @@ import functools
 import logging
 import re
 from abc import ABCMeta
+from contextlib import asynccontextmanager
 from typing import (
   Callable,
   Dict,
@@ -7810,6 +7811,23 @@ class STAR(HamiltonLiquidHandler):
     resp = await self.send_command(STAR.channel_id(channel), "QC", fmt="qc##### (n)")
     _, current_volume = resp["qc"]  # first is max volume
     return float(current_volume) / 10
+
+  @asynccontextmanager
+  async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
+    """A context manager that sets the iSWAP to slow speed during the context"""
+    assert 20 <= gripper_velocity <= 75_000
+    assert 20 <= wrist_velocity <= 65_000
+
+    original_wv = (await self.send_command("R0", "RA", ra="wv", fmt="wv#####"))["wv"]
+    original_tv = (await self.send_command("R0", "RA", ra="tv", fmt="tv#####"))["tv"]
+
+    await self.send_command("R0", "AA", wv=gripper_velocity)  # wrist velocity
+    await self.send_command("R0", "AA", tv=wrist_velocity)  # gripper velocity
+    try:
+      yield
+    finally:
+      await self.send_command("R0", "AA", wv=original_wv)
+      await self.send_command("R0", "AA", tv=original_tv)
 
 
 class UnSafe:
