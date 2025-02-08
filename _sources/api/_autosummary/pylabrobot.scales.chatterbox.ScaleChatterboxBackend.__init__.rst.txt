@@ -1,0 +1,6 @@
+pylabrobot.scales.chatterbox.ScaleChatterboxBackend.\_\_init\_\_
+================================================================
+
+.. currentmodule:: pylabrobot.scales.chatterbox
+
+.. automethod:: ScaleChatterboxBackend.__init__
