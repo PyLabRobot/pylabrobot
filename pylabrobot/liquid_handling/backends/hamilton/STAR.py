@@ -2677,10 +2677,10 @@ class STAR(HamiltonLiquidHandler):
       plate_width=round(grip_width * 10) - 30,
       grip_strength=grip_strength,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
       minimum_z_position_at_the_command_end=round(
-        (minimum_z_position_at_the_command_end or self._channel_traversal_height) * 10
+        (minimum_z_position_at_the_command_end or self._iswap_traversal_height) * 10
       ),
     )
 
@@ -2717,7 +2717,7 @@ class STAR(HamiltonLiquidHandler):
       z_position=round(center.z * 10),
       z_speed=round(z_speed * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
     )
 
@@ -2760,10 +2760,10 @@ class STAR(HamiltonLiquidHandler):
       z_speed=500,
       open_gripper_position=round(grip_width * 10) + 30,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
       z_position_at_the_command_end=round(
-        (z_position_at_the_command_end or self._channel_traversal_height) * 10
+        (z_position_at_the_command_end or self._iswap_traversal_height) * 10
       ),
       return_tool=return_tool,
     )
@@ -2879,8 +2879,8 @@ class STAR(HamiltonLiquidHandler):
         resource=pickup.resource,
         pickup_distance_from_top=pickup.pickup_distance_from_top,
         offset=pickup.offset,
-        minimum_traverse_height_at_beginning_of_a_command=self._channel_traversal_height,
-        minimum_z_position_at_the_command_end=self._channel_traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        minimum_z_position_at_the_command_end=self._iswap_traversal_height,
         channel_1=channel_1,
         channel_2=channel_2,
         grip_strength=core_grip_strength,
@@ -2905,7 +2905,7 @@ class STAR(HamiltonLiquidHandler):
       await self.core_move_picked_up_resource(
         location=move.location,
         resource=move.resource,
-        minimum_traverse_height_at_beginning_of_a_command=self._channel_traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         acceleration_index=4,
       )
 
@@ -3024,8 +3024,8 @@ class STAR(HamiltonLiquidHandler):
         resource=drop.resource,
         offset=drop.offset,
         pickup_distance_from_top=drop.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=self._channel_traversal_height,
-        z_position_at_the_command_end=self._channel_traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        z_position_at_the_command_end=self._iswap_traversal_height,
         # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
         return_tool=return_core_gripper,
       )
@@ -4693,7 +4693,7 @@ class STAR(HamiltonLiquidHandler):
       pb=f"{p2:02}",
       tp=f"{2350 + self.core_adjustment.z:04}",
       tz=f"{2250 + self.core_adjustment.z:04}",
-      th=round(self._channel_traversal_height * 10),
+      th=round(self._iswap_traversal_height * 10),
       tt="14",
     )
     self._core_parked = False
@@ -4719,8 +4719,8 @@ class STAR(HamiltonLiquidHandler):
       yb=f"{1065 + self.core_adjustment.y:04}",
       tp=f"{2150 + self.core_adjustment.z:04}",
       tz=f"{2050 + self.core_adjustment.z:04}",
-      th=round(self._channel_traversal_height * 10),
-      te=round(self._channel_traversal_height * 10),
+      th=round(self._iswap_traversal_height * 10),
+      te=round(self._iswap_traversal_height * 10),
     )
     self._core_parked = True
     return command_output
