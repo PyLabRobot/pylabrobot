@@ -8,6 +8,7 @@ try:
 except ImportError:
   HAS_SERIAL = False
 
+from pylabrobot.io.serial import Serial
 from pylabrobot.tilting.tilter_backend import (
   TilterBackend,
   TiltModuleError,
@@ -25,15 +26,9 @@ class HamiltonTiltModuleBackend(TilterBackend):
   ):
     self.setup_finished = False
     self.com_port = com_port
-    self.serial: Optional[serial.Serial] = None
     self.timeout = timeout
     self.write_timeout = write_timeout
-    self.ser: Optional[serial.Serial] = None
-
-  async def setup(self, initial_offset: int = 0):
-    if not HAS_SERIAL:
-      raise RuntimeError("pyserial not installed.")
-    self.ser = serial.Serial(
+    self.io = Serial(
       port=self.com_port,
       baudrate=1200,
       bytesize=serial.EIGHTBITS,
@@ -43,28 +38,24 @@ class HamiltonTiltModuleBackend(TilterBackend):
       timeout=self.timeout,
     )
 
+  async def setup(self, initial_offset: int = 0):
+    await self.io.setup()
     await self.tilt_initial_offset(initial_offset)
     await self.send_command("SI")
 
     self.setup_finished = True
 
   async def stop(self):
-    if self.ser is not None:
-      self.ser.close()
-      self.ser = None
-    self.setup_finished = False
+    await self.io.stop()
 
   async def send_command(self, command: str, parameter: Optional[str] = None) -> str:
     """Send a command to the tilt module."""
 
-    if self.ser is None:
-      raise RuntimeError("Tilt module not setup.")
-
     if parameter is None:
       parameter = ""
 
-    self.ser.write(f"99{command}{parameter}\r\n".encode("utf-8"))
-    resp = self.ser.read(128).decode("utf-8")
+    self.io.write(f"99{command}{parameter}\r\n".encode("utf-8"))
+    resp = self.io.read(128).decode("utf-8")
 
     # Check for error.
     error_matches = re.search("er[0-9]{2}", resp)

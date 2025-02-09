@@ -1,3 +1,4 @@
+import weakref
 from abc import ABC, ABCMeta, abstractmethod
 
 from pylabrobot.utils.object_parsing import find_subclass
@@ -5,6 +6,11 @@ from pylabrobot.utils.object_parsing import find_subclass
 
 class MachineBackend(ABC):
   """Abstract class for machine backends."""
+
+  _instances = weakref.WeakSet()
+
+  def __init__(self):
+    self._instances.add(self)
 
   @abstractmethod
   async def setup(self):
@@ -27,3 +33,7 @@ class MachineBackend(ABC):
       raise ValueError(f'Subclass with name "{data["type"]}" is abstract')
     assert issubclass(subclass, cls)
     return subclass(**data)
+
+  @classmethod
+  def get_all_instances(cls):
+    return cls._instances

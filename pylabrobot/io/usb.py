@@ -1,9 +1,9 @@
 import logging
 import time
-from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Optional
 
-from pylabrobot.machines.backends.machine import MachineBackend
+from pylabrobot.io.io import IOBase
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError, align_sequences
 
 try:
   import libusb_package
@@ -19,14 +19,12 @@ if TYPE_CHECKING:
   import usb.core
 
 
-logger = logging.getLogger("pylabrobot")
+logger = logging.getLogger(__name__)
 
 
-class USBBackend(MachineBackend, metaclass=ABCMeta):
-  """An abstract class for liquid handler backends that talk over a USB cable. Provides read/write
-  functionality, including timeout handling."""
+class USB(IOBase):
+  """IO for reading/writnig to a USB device."""
 
-  @abstractmethod
   def __init__(
     self,
     id_vendor: int,
@@ -37,7 +35,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     read_timeout: int = 30,
     write_timeout: int = 30,
   ):
-    """Initialize a USBBackend.
+    """Initialize an io.USB object.
 
     Args:
       id_vendor: The USB vendor ID of the machine.
@@ -56,10 +54,10 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
       packet_read_timeout < read_timeout
     ), "packet_read_timeout must be smaller than read_timeout."
 
-    self.id_vendor = id_vendor
-    self.id_product = id_product
-    self.device_address = device_address
-    self.serial_number = serial_number
+    self._id_vendor = id_vendor
+    self._id_product = id_product
+    self._device_address = device_address
+    self._serial_number = serial_number
 
     self.packet_read_timeout = packet_read_timeout
     self.read_timeout = read_timeout
@@ -69,7 +67,10 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     self.read_endpoint: Optional[usb.core.Endpoint] = None
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
-  def write(self, data: str, timeout: Optional[int] = None):
+    # unique id in the logs
+    self._unique_id = f"[USB][{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
+
+  def write(self, data: str, timeout: Optional[float] = None):
     """Write data to the device.
 
     Args:
@@ -85,7 +86,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
 
     # write command to endpoint
     self.dev.write(self.write_endpoint, data, timeout=timeout)
-    logger.info("Sent command: %s", data)
+    logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
 
   def _read_packet(self) -> Optional[bytearray]:
     """Read a packet from the machine.
@@ -141,7 +142,7 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
       if len(resp) == 0:
         continue
 
-      logger.debug("Received data: %s", resp)
+      logger.log(LOG_LEVEL_IO, "%s read: %s", self._unique_id, resp)
       return resp
 
     raise TimeoutError("Timeout while reading.")
@@ -151,29 +152,29 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
     number and device_address if specified."""
 
     found_devices = libusb_package.find(
-      idVendor=self.id_vendor,
-      idProduct=self.id_product,
+      idVendor=self._id_vendor,
+      idProduct=self._id_product,
       find_all=True,
     )
     devices: List["usb.core.Device"] = []
     for dev in found_devices:
-      if self.device_address is not None:
+      if self._device_address is not None:
         if dev.address is None:
           raise RuntimeError(
             "A device address was specified, but the backend used for PyUSB does "
             "not support device addresses."
           )
 
-        if dev.address != self.device_address:
+        if dev.address != self._device_address:
           continue
 
-      if self.serial_number is not None:
-        if dev.serial_number is None:
+      if self._serial_number is not None:
+        if dev._serial_number is None:
           raise RuntimeError(
             "A serial number was specified, but the device does not have a serial " "number."
           )
 
-        if dev.serial_number != self.serial_number:
+        if dev.serial_number != self._serial_number:
           continue
 
       devices.append(dev)
@@ -255,11 +256,70 @@ class USBBackend(MachineBackend, metaclass=ABCMeta):
 
     return {
       **super().serialize(),
-      "id_vendor": self.id_vendor,
-      "id_product": self.id_product,
-      "device_address": self.device_address,
-      "serial_number": self.serial_number,
+      "id_vendor": self._id_vendor,
+      "id_product": self._id_product,
+      "device_address": self._device_address,
+      "serial_number": self._serial_number,
       "packet_read_timeout": self.packet_read_timeout,
       "read_timeout": self.read_timeout,
       "write_timeout": self.write_timeout,
     }
+
+
+class USBValidator(USB):
+  def __init__(
+    self,
+    lr,
+    id_vendor: int,
+    id_product: int,
+    device_address: Optional[int] = None,
+    serial_number: Optional[str] = None,
+    packet_read_timeout: int = 3,
+    read_timeout: int = 30,
+    write_timeout: int = 30,
+  ):
+    super().__init__(
+      id_vendor=id_vendor,
+      id_product=id_product,
+      device_address=device_address,
+      serial_number=serial_number,
+      packet_read_timeout=packet_read_timeout,
+      read_timeout=read_timeout,
+      write_timeout=write_timeout,
+    )
+    self.lr = lr
+
+  async def setup(self):
+    pass
+
+  def write(self, data: bytes, timeout: Optional[float] = None):
+    next_line = self.lr.next_line()
+    unique_id, action, log_data = next_line.split(" ", 2)
+    action = action.rstrip(":")
+
+    if not unique_id == self._unique_id:
+      raise Exception(
+        f"next command is sent to device with unique id {unique_id}, expected {self._unique_id}"
+      )
+
+    if not action == "write":
+      raise Exception(f"next command is {action}, expected write")
+
+    if not log_data == data:
+      align_sequences(expected=log_data, actual=data)
+      raise ValidationError(f"Data mismatch: difference was written to stdout.")
+
+  def read(self, timeout: Optional[float] = None) -> bytes:
+    next_line = self.lr.next_line()
+    unique_id, action, log_data = next_line.split(" ", 2)
+    action = action.rstrip(":")  # remove the colon at the end
+
+    if not unique_id == self._unique_id:
+      raise Exception(
+        f"next command is sent to device with unique id {unique_id}, expected {self._unique_id}"
+      )
+
+    if not action == "read":
+      raise Exception(f"next command is {action}, expected read")
+
+    return log_data.encode()

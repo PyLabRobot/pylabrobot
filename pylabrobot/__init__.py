@@ -7,6 +7,7 @@ from typing import Optional, Union
 
 from pylabrobot.__version__ import __version__
 from pylabrobot.config import Config, load_config
+from pylabrobot.io import LOG_LEVEL_IO, validate
 
 CONFIG_FILE_NAME = "pylabrobot"
 
