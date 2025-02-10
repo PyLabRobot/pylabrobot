@@ -99,6 +99,35 @@ def Eppendorf_96_wellplate_250ul_Vb(name: str, with_lid: bool = False) -> Plate:
     ),
   )
 
+def Eppendorf_96_wellplate_250ul_Vb_semiskirted(name: str, with_lid: bool = False) -> Plate:
+  """
+  Eppendorf cat. no.: 0030129334
+  - part of the twin.tec(R) product line.
+  """
+  return Plate(
+    name=name,
+    size_x=123.7,
+    size_y=82.2,
+    size_z=29.4,
+    model="Eppendorf_96_wellplate_250ul_Vb_semiskirted",
+    plate_type="semiskirted",
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=12.4,
+      dy=9.6,
+      dz=0.81,
+      item_dx=9,
+      item_dy=9,
+      size_x=5.48,
+      size_y=5.48,
+      size_z=19.5,
+      bottom_type=WellBottomType.V,
+      material_z_thickness=0.6,
+      cross_section_type=CrossSectionType.CIRCLE
+    )
+  )
 
 def Eppendorf_96_wellplate_250ul_Vb_L(name: str, with_lid: bool = False) -> Plate:
   # https://github.com/PyLabRobot/pylabrobot/issues/252
