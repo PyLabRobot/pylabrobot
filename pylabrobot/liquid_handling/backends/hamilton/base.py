@@ -103,7 +103,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     await super().stop()
 
   def serialize(self) -> dict:
-    usb_serialized = self.io.serialize(self)
+    usb_serialized = self.io.serialize()
     del usb_serialized["id_vendor"]
     del usb_serialized["id_product"]
     liquid_handler_serialized = LiquidHandlerBackend.serialize(self)
@@ -296,7 +296,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     )
 
     # Start reading thread if it is not already running.
-    if len(self._waiting_tasks) == 1:
+    if len(self._waiting_tasks) == 1:  # self._reading_thread is None
       self._reading_thread = threading.Thread(target=self._continuously_read)
       self._reading_thread.start()
 
@@ -334,7 +334,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
             TimeoutError(f"Timeout while waiting for response to command {task.cmd}."),
           )
           del self._waiting_tasks[idx]
-          break
 
       try:
         resp = self.io.read().decode("utf-8")

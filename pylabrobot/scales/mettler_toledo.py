@@ -285,9 +285,6 @@ class MettlerToledoWXS205SDU(ScaleBackend):
         timeout (in seconds).
     """
 
-    if self.ser is None:
-      raise RuntimeError("Call scale.setup() before sending commands.")
-
     if timeout == "stable":
       # "Use T to tare the balance. The next stable weight value will be saved in the tare memory."
       return await self.tare_stable()

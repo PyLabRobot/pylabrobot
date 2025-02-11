@@ -12,8 +12,7 @@ class PlateLockPosition(Enum):
 
 class HamiltonHeatShaker(HeaterShakerBackend):
   """
-  Backend for Hamilton Heater Shaker devices connected through
-  an Heat Shaker Box
+  Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box
   """
 
   def __init__(

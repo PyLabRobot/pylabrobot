@@ -38,7 +38,6 @@ from pylabrobot.liquid_handling.standard import (
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
-  # Move,
   ResourcePickup,
   SingleChannelAspiration,
   SingleChannelDispense,

@@ -1,5 +1,7 @@
 import asyncio
 
+from pylabrobot.io.ftdi import FTDI
+
 from .backend import FanBackend
 
 try:
@@ -13,23 +15,23 @@ except ImportError:
 class HamiltonHepaFan(FanBackend):
   """Backend for Hepa fan attachment on Hamilton Liquid Handler"""
 
-  def __init__(self, vid=0x0856, pid=0xAC11, serial_number=None):
+  def __init__(self, vid=0x0856, pid=0xAC11, serial_number=None, device_id=None):
     self.vid = vid
     self.pid = pid
     self.serial_number = serial_number
+    self.io = FTDI(device_id=device_id)
 
   async def setup(self):
     if not USE_FTDI:
       raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
 
-    self.dev = Device()  # Adjust if needed for specific device
-    self.dev.open()
-    self.dev.baudrate = 9600
-    self.dev.ftdi_fn.ftdi_set_line_property(8, 0, 0)  # 8N1
-    self.dev.ftdi_fn.ftdi_set_latency_timer(16)
-    self.dev.ftdi_fn.ftdi_setflowctrl(512)
-    self.dev.ftdi_fn.ftdi_setdtr(1)
-    self.dev.ftdi_fn.ftdi_setrts(1)
+    self.io.setup()
+    self.io.set_baudrate(9600)
+    self.io.set_line_property(8, 0, 0)  # 8N1
+    self.io.set_latency_timer(16)
+    self.io.set_flowctrl(512)
+    self.io.set_dtr(1)
+    self.io.set_rts(1)
 
     await self.send(b"\x55\xc1\x01\x02\x23\x4b")
     await self.send(b"\x55\xc1\x01\x08\x08\x6a")
@@ -152,10 +154,9 @@ class HamiltonHepaFan(FanBackend):
     await self.send(b"\x55\xc1\x01\x11\x00\x7b")
 
   async def stop(self):
-    if self.dev is not None:
-      self.dev.close()
+    await self.io.stop()
 
   async def send(self, command):
-    self.dev.write(command)
+    self.io.write(command)
     await asyncio.sleep(0.1)
-    self.dev.read(64)
+    self.io.read(64)

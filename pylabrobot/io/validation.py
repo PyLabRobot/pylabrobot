@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 from pylabrobot.io.serial import Serial, SerialValidator
 from pylabrobot.io.usb import USB, USBValidator
 from pylabrobot.io.validation_utils import ValidationError
@@ -39,7 +41,14 @@ class LogReader:
     self.file.seek(0)
 
 
-def validate(log_file: str) -> LogReader:
+def validate(log_file: str, backends: Optional[List[MachineBackend]] = None) -> LogReader:
+  """Start
+
+  Args:
+    log_file: path to log file
+    backends: list of backends to validate. If None, all backends will be validated.
+  """
+
   lr = LogReader(log_file)
   for machine_backend in MachineBackend.get_all_instances():
     io2v = {
@@ -48,9 +57,16 @@ def validate(log_file: str) -> LogReader:
     }
 
     # replace io with validator
-    if machine_backend.io.__class__ in io2v:
+    if machine_backend.io.__class__ in io2v and (
+      backends is not None and machine_backend in backends
+    ):
       machine_backend.io = io2v[machine_backend.io.__class__](
         **machine_backend.io.serialize(), lr=lr
       )
 
   return lr
+
+
+#  - note that it is not slower, use has full control over what they want to log
+#  - start validation
+#  - check backends that will be tested

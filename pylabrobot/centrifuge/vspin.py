@@ -3,6 +3,8 @@ import logging
 import time
 from typing import Optional, Union
 
+from pylabrobot.io import FTDI
+
 from .backend import CentrifugeBackend, LoaderBackend
 from .standard import LoaderNoPlateError
 
@@ -28,7 +30,7 @@ class Access2Backend(LoaderBackend):
       device_id: The libftdi id for the loader. Find using
         `python3 -m pylibftdi.examples.list_devices`
     """
-    self.dev = Device(lazy_open=True, device_id=device_id)
+    self.io = FTDI(device_id=device_id)
     self.timeout = timeout
 
   async def _read(self) -> bytes:
@@ -36,7 +38,7 @@ class Access2Backend(LoaderBackend):
     r = None
     start = time.time()
     while r != b"" or x == b"":
-      r = self.dev.read(1)
+      r = self.io.read(1)
       x += r
       if r == b"":
         await asyncio.sleep(0.1)
@@ -46,17 +48,16 @@ class Access2Backend(LoaderBackend):
 
   async def send_command(self, command: bytes) -> bytes:
     logger.debug("[loader] Sending %s", command.hex())
-    self.dev.write(command)
+    await self.io.write(command)
     return await self._read()
 
   async def setup(self):
     logger.debug("[loader] setup")
 
-    self.dev.open()
-    self.dev.baudrate = 115384
+    await self.io.setup()
+    self.io.set_baudrate(115384)
 
     status = await self.get_status()
-    print("status", status)
     if not status.startswith(bytes.fromhex("1105")):
       raise RuntimeError("Failed to get status")
 
@@ -75,10 +76,10 @@ class Access2Backend(LoaderBackend):
 
   async def stop(self):
     logger.debug("[loader] stop")
-    self.dev.close()
+    await self.io.stop()
 
   def serialize(self):
-    return {"device_id": self.dev.device_id, "timeout": self.timeout}
+    return {"io": self.io.serialize(), "timeout": self.timeout}
 
   async def get_status(self) -> bytes:
     logger.debug("[loader] get_status")
@@ -147,14 +148,12 @@ class VSpin(CentrifugeBackend):
     """
     if not USE_FTDI:
       raise RuntimeError("pylibftdi is not installed.")
-    self.dev = Device(lazy_open=True, device_id=device_id)
+    self.io = FTDI(device_id=device_id)
     self.bucket_1_position = bucket_1_position
     self.homing_position = 0
-    self.device_id = device_id
 
   async def setup(self):
-    self.dev.open()
-    logger.debug("open")
+    await self.io.setup()
     # TODO: add functionality where if robot has been intialized before nothing needs to happen
     for _ in range(3):
       await self.configure_and_initialize()
@@ -166,9 +165,9 @@ class VSpin(CentrifugeBackend):
     await self.send(b"\xaa\x00\x21\x03\xff\x23")
     await self.send(b"\xaa\xff\x1a\x14\x2d")
 
-    self.dev.baudrate = 57600
-    self.dev.ftdi_fn.ftdi_setrts(1)
-    self.dev.ftdi_fn.ftdi_setdtr(1)
+    self.io.set_baudrate(57600)
+    self.io.set_rts(1)
+    self.io.set_dtr(1)
 
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x12\x1f\x32")
@@ -264,7 +263,7 @@ class VSpin(CentrifugeBackend):
   async def stop(self):
     await self.send(b"\xaa\x02\x0e\x10")
     await self.configure_and_initialize()
-    self.dev.close()
+    await self.io.stop()
 
   async def get_status(self):
     """Returns 14 bytes
@@ -296,15 +295,12 @@ class VSpin(CentrifugeBackend):
   async def read_resp(self, timeout=20) -> bytes:
     """Read a response from the centrifuge. If the timeout is reached, return the data that has
     been read so far."""
-    if not self.dev:
-      raise RuntimeError("Device not initialized")
-
     data = b""
     end_byte_found = False
     start_time = time.time()
 
     while True:
-      chunk = self.dev.read(25)
+      chunk = self.io.read(25)
       if chunk:
         data += chunk
         end_byte_found = data[-1] == 0x0D
@@ -320,9 +316,7 @@ class VSpin(CentrifugeBackend):
     return data
 
   async def send(self, cmd: Union[bytearray, bytes], read_timeout=0.2) -> bytes:
-    logger.debug("Sending %s", cmd.hex())
-    written = self.dev.write(cmd.decode("latin-1"))
-    logger.debug("Wrote %s bytes", written)
+    written = await self.io.write(cmd.decode("latin-1"))  # TODO: why decode?
 
     if written != len(cmd):
       raise RuntimeError("Failed to write all bytes")
@@ -343,18 +337,17 @@ class VSpin(CentrifugeBackend):
 
   async def set_configuration_data(self):
     """Set the device configuration data."""
-    self.dev.ftdi_fn.ftdi_set_latency_timer(16)
-    self.dev.ftdi_fn.ftdi_set_line_property(8, 1, 0)
-    self.dev.ftdi_fn.ftdi_setflowctrl(0)
-    self.dev.baudrate = 19200
+    self.io.set_latency_timer(16)
+    self.io.set_line_property(bits=8, stopbits=1, parity=0)
+    self.io.set_flowctrl(0)
+    self.io.set_baudrate(19200)
 
   async def initialize(self):
-    if self.dev:
-      self.dev.write(b"\x00" * 20)
-      for i in range(33):
-        packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
-        self.dev.write(packet)
-      await self.send(b"\xaa\xff\x0f\x0e")
+    await self.io.write(b"\x00" * 20)
+    for i in range(33):
+      packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
+      await self.io.write(packet)
+    await self.send(b"\xaa\xff\x0f\x0e")
 
   # Centrifuge operations
 

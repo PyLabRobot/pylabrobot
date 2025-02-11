@@ -161,6 +161,10 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     await super().setup()
     await self.io.setup(self)
 
+  async def stop(self):
+    await self.io.stop()
+    return await super().stop()
+
 
 class EVO(TecanLiquidHandler):
   """

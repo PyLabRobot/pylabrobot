@@ -1,3 +1,4 @@
+from .ftdi import FTDI
 from .serial import Serial
 from .usb import USB
 from .validation import validate
