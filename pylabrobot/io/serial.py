@@ -76,9 +76,9 @@ class SerialValidator(Serial):
     lr,
     port: str,
     baudrate: int = 9600,
-    bytesize: int = serial.EIGHTBITS,
-    parity: str = serial.PARITY_NONE,
-    stopbits: int = serial.STOPBITS_ONE,
+    bytesize: int = 8,  # serial.EIGHTBITS
+    parity: str = "N",  # serial.PARITY_NONE
+    stopbits: int = 1,  # serial.STOPBITS_ONE,
   ):
     super().__init__(
       port=port,
