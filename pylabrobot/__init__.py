@@ -64,11 +64,3 @@ def configure(cfg: Config):
 
 
 configure(CONFIG)
-
-
-# deprecation warning for 3.8
-if sys.version_info < (3, 9):
-  warnings.warn(
-    "Support for Python 3.8 is deprecated and will be removed in Dec 2024. "
-    "Please upgrade to Python 3.9 or later."
-  )
