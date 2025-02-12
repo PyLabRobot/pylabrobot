@@ -276,10 +276,10 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta)
       read_timeout = self.read_timeout
 
     loop = asyncio.get_event_loop()
-    fut = loop.create_future()
+    fut: asyncio.Future[str] = loop.create_future()
     self._start_reading(id_, loop, fut, cmd, read_timeout)
     result = await fut
-    return cast(str, result)  # Futures are generic in Python 3.9, but not in 3.8, so we need cast.
+    return result
 
   def _start_reading(
     self,
