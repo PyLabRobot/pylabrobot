@@ -1,12 +1,9 @@
 import ctypes
 import logging
 from io import IOBase
-from typing import Optional
-
-from pylibftdi import Device
 
 try:
-  import pylibftdi
+  from pylibftdi import Device
 
   HAS_PYLIBFTDI = True
 except ImportError:

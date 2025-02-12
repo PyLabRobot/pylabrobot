@@ -2,12 +2,7 @@ import logging
 from io import IOBase
 from typing import Optional
 
-try:
-  import serial
-
-  HAS_SERIAL = True
-except ImportError:
-  HAS_SERIAL = False
+import serial
 
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError, align_sequences
 
@@ -37,9 +32,6 @@ class Serial(IOBase):
     self.timeout = timeout
 
   async def setup(self):
-    if not HAS_SERIAL:
-      raise RuntimeError("pyserial not installed.")
-
     try:
       self.ser = serial.Serial(
         port=self._port,

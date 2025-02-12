@@ -1,8 +1,7 @@
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from pylabrobot.io.io import IOBase
-from pylabrobot.io.validation import LogReader
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError
 
 try:
@@ -11,6 +10,10 @@ try:
   USE_HID = True
 except ImportError:
   USE_HID = False
+
+if TYPE_CHECKING:
+  from pylabrobot.io.validation import LogReader
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +55,7 @@ class HID(IOBase):
 
 class HIDValidator(HID):
   def __init__(
-    self, lr: LogReader, vid: int = 0x03EB, pid: int = 0x2023, serial_number: Optional[str] = None
+    self, lr: "LogReader", vid: int = 0x03EB, pid: int = 0x2023, serial_number: Optional[str] = None
   ):
     super().__init__(vid=vid, pid=pid, serial_number=serial_number)
     self.lr = lr
