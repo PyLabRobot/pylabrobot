@@ -13,6 +13,7 @@ from typing import (
   Union,
 )
 
+from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
@@ -39,7 +40,6 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import (
   Coordinate,
   Liquid,
@@ -54,7 +54,7 @@ from pylabrobot.resources import (
 T = TypeVar("T")
 
 
-class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
+class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
   Abstract base class for Tecan liquid handling robot backends.
   """
@@ -73,15 +73,14 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
       read_timeout: The timeout for reading from the Tecan machine in seconds.
     """
 
-    USBBackend.__init__(
-      self,
+    super().__init__()
+    self.io = USB(
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_vendor=0x0C47,
       id_product=0x4000,
     )
-    LiquidHandlerBackend.__init__(self)
 
     self._cache: Dict[str, List[Optional[int]]] = {}
 
@@ -100,7 +99,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
     cmd = module + command + ",".join(str(a) if a is not None else "" for a in params)
     return f"\02{cmd}\00"
 
-  def parse_response(self, resp: bytearray) -> Dict[str, Union[str, int, List[int]]]:
+  def parse_response(self, resp: bytes) -> Dict[str, Union[str, int, List[int]]]:
     """Parse a machine response string
 
     Args:
@@ -151,16 +150,19 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
 
     cmd = self._assemble_command(module, command, [] if params is None else params)
 
-    self.write(cmd, timeout=write_timeout)
+    self.io.write(cmd.encode(), timeout=write_timeout)
     if not wait:
       return None
 
-    resp = self.read(timeout=read_timeout)
+    resp = self.io.read(timeout=read_timeout)
     return self.parse_response(resp)
 
   async def setup(self):
-    await LiquidHandlerBackend.setup(self)
-    await USBBackend.setup(self)
+    await super().setup()
+    await self.io.setup()
+
+  async def stop(self):
+    await self.io.stop()
 
 
 class EVO(TecanLiquidHandler):
@@ -244,12 +246,7 @@ class EVO(TecanLiquidHandler):
     return self._mca_connected
 
   def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "packet_read_timeout": self.packet_read_timeout,
-      "read_timeout": self.read_timeout,
-      "write_timeout": self.write_timeout,
-    }
+    return {**super().serialize(), **self.io.serialize()}
 
   async def setup(self):
     """Setup

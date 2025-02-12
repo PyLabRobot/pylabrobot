@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Literal
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
-from pylabrobot.machines.backends.usb import USBBackend
+from pylabrobot.io.usb import USB
 
 
 class PlateLockPosition(Enum):
@@ -10,10 +10,9 @@ class PlateLockPosition(Enum):
   UNLOCKED = 0
 
 
-class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
+class HamiltonHeatShaker(HeaterShakerBackend):
   """
-  Backend for Hamilton Heater Shaker devices connected through
-  an Heat Shaker Box
+  Backend for Hamilton Heater Shaker devices connected through an Heater Shaker Box
   """
 
   def __init__(
@@ -30,25 +29,24 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
     self.shaker_index = shaker_index
     self.command_id = 0
 
-    HeaterShakerBackend.__init__(self)
-    USBBackend.__init__(self, id_vendor, id_product)
+    super().__init__()
+    self.io = USB(id_vendor=id_vendor, id_product=id_product)
 
   async def setup(self):
     """
-    If USBBackend.setup() fails, ensure that libusb drivers were installed
-    for the HHS as per PyLabRobot documentation.
+    If io.setup() fails, ensure that libusb drivers were installed for the HHS as per docs.
     """
-    await USBBackend.setup(self)
+    await self.io.setup()
     await self._initialize_lock()
 
   async def stop(self):
-    await USBBackend.stop(self)
+    await self.io.stop()
 
   def serialize(self) -> dict:
-    usb_backend_serialized = USBBackend.serialize(self)
+    usb_serialized = self.io.serialize()
     heater_shaker_serialized = HeaterShakerBackend.serialize(self)
     return {
-      **usb_backend_serialized,
+      **usb_serialized,
       **heater_shaker_serialized,
       "shaker_index": self.shaker_index,
     }
@@ -56,13 +54,10 @@ class HamiltonHeatShaker(HeaterShakerBackend, USBBackend):
   def _send_command(self, command: str, **kwargs):
     assert len(command) == 2, "Command must be 2 characters long"
     args = "".join([f"{key}{value}" for key, value in kwargs.items()])
-    USBBackend.write(
-      self,
-      f"T{self.shaker_index}{command}id{str(self.command_id).zfill(4)}{args}",
-    )
+    self.io.write(f"T{self.shaker_index}{command}id{str(self.command_id).zfill(4)}{args}".encode())
 
     self.command_id = (self.command_id + 1) % 10_000
-    return USBBackend.read(self)
+    return self.io.read()
 
   async def shake(
     self,
