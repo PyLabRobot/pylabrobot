@@ -13,7 +13,7 @@ from typing import (
   Union,
 )
 
-from pylabrobot.io import USB
+from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )

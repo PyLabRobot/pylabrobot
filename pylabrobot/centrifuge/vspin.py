@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Optional, Union
 
-from pylabrobot.io import FTDI
+from pylabrobot.io.ftdi import FTDI
 
 from .backend import CentrifugeBackend, LoaderBackend
 from .standard import LoaderNoPlateError
