@@ -1,7 +1,7 @@
 import ctypes
 import logging
 from io import IOBase
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 try:
   from pylibftdi import Device
@@ -77,17 +77,17 @@ class FTDI(IOBase):
   def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
-    return self._dev.write(data)
+    return cast(int, self._dev.write(data))
 
   def read(self, num_bytes: int = 1) -> bytes:
     data = self._dev.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
-    return data
+    return cast(bytes, data)
 
-  def readline(self) -> bytes:
+  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     data = self._dev.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
-    return data
+    return cast(bytes, data)
 
   def serialize(self):
     return {"port": self._device_id}
@@ -173,13 +173,13 @@ class FTDIValidator(FTDI):
     if not action == "set_line_property":
       raise ValidationError(f"next command is {action}, expected 'set_line_property'")
 
-    log_data = log_data.split(",")
-    if not int(log_data[0]) == bits:
-      raise ValidationError(f"Expected bits to be {bits}, got {log_data[0]}")
-    if not int(log_data[1]) == stopbits:
-      raise ValidationError(f"Expected stopbits to be {stopbits}, got {log_data[1]}")
-    if not int(log_data[2]) == parity:
-      raise ValidationError(f"Expected parity to be {parity}, got {log_data[2]}")
+    property = log_data.split(",")
+    if not int(property[0]) == bits:
+      raise ValidationError(f"Expected bits to be {bits}, got {property[0]}")
+    if not int(property[1]) == stopbits:
+      raise ValidationError(f"Expected stopbits to be {stopbits}, got {property[1]}")
+    if not int(property[2]) == parity:
+      raise ValidationError(f"Expected parity to be {parity}, got {property[2]}")
 
   def set_flowctrl(self, flowctrl: int):
     next_line = self.lr.next_line()
@@ -269,7 +269,7 @@ class FTDIValidator(FTDI):
 
     return log_data.encode()
 
-  def readline(self) -> bytes:
+  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     next_line = self.lr.next_line()
     port, action, log_data = next_line.split(" ", 2)
     action = action.rstrip(":")  # remove the colon at the end

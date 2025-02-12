@@ -1,6 +1,6 @@
 import logging
 from io import IOBase
-from typing import Optional, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 try:
   import serial
@@ -10,6 +10,9 @@ except ImportError:
   HAS_SERIAL = False
 
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError, align_sequences
+
+if TYPE_CHECKING:
+  from pylabrobot.io.validation import LogReader
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +69,7 @@ class Serial(IOBase):
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
     return cast(bytes, data)
 
-  def readline(self) -> bytes:
+  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     assert self.ser is not None, "forgot to call setup?"
     data = self.ser.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
@@ -76,7 +79,7 @@ class Serial(IOBase):
 class SerialValidator(Serial):
   def __init__(
     self,
-    lr,
+    lr: "LogReader",
     port: str,
     baudrate: int = 9600,
     bytesize: int = 8,  # serial.EIGHTBITS
@@ -130,7 +133,7 @@ class SerialValidator(Serial):
 
     return log_data.encode()
 
-  def readline(self) -> bytes:
+  def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     next_line = self.lr.next_line()
     port, action, log_data = next_line.split(" ", 2)
     action = action.rstrip(":")  # remove the colon at the end
