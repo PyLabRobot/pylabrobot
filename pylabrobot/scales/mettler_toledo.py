@@ -5,8 +5,6 @@ import logging
 import time
 from typing import List, Literal, Optional, Union
 
-import serial  # type: ignore
-
 from pylabrobot.io.serial import Serial
 from pylabrobot.scales.scale_backend import ScaleBackend
 

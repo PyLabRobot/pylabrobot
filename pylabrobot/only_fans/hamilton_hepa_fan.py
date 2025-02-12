@@ -4,13 +4,6 @@ from pylabrobot.io.ftdi import FTDI
 
 from .backend import FanBackend
 
-try:
-  from pylibftdi import Device
-
-  USE_FTDI = True
-except ImportError:
-  USE_FTDI = False
-
 
 class HamiltonHepaFan(FanBackend):
   """Backend for Hepa fan attachment on Hamilton Liquid Handler"""

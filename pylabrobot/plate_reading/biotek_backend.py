@@ -5,13 +5,6 @@ import time
 from typing import List, Literal, Optional
 
 try:
-  from pylibftdi import Device
-
-  USE_FTDI = True
-except ImportError:
-  USE_FTDI = False
-
-try:
   import numpy as np  # type: ignore
 
   USE_NUMPY = True

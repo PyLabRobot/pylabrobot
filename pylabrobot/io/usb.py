@@ -309,7 +309,7 @@ class USBValidator(USB):
 
     if not log_data == data:
       align_sequences(expected=log_data, actual=data)
-      raise ValidationError(f"Data mismatch: difference was written to stdout.")
+      raise ValidationError("Data mismatch: difference was written to stdout.")
 
   def read(self, timeout: Optional[float] = None) -> bytes:
     next_line = self.lr.next_line()

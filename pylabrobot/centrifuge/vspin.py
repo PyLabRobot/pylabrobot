@@ -8,14 +8,6 @@ from pylabrobot.io.ftdi import FTDI
 from .backend import CentrifugeBackend, LoaderBackend
 from .standard import LoaderNoPlateError
 
-try:
-  from pylibftdi import Device
-
-  USE_FTDI = True
-except ImportError:
-  USE_FTDI = False
-
-
 logger = logging.getLogger("pylabrobot.centrifuge.vspin")
 
 

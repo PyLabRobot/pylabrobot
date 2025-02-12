@@ -1,5 +1,4 @@
 import asyncio
-import ctypes
 import logging
 import math
 import struct

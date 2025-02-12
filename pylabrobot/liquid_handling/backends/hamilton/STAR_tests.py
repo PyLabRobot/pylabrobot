@@ -155,12 +155,12 @@ class TestSTARUSBComms(unittest.IsolatedAsyncioTestCase):
   async def test_send_command_wrong_id(self):
     self.star.io.read.side_effect = lambda: b"C0QMid0002"
     with self.assertRaises(TimeoutError):
-      resp = await self.star.send_command("C0", command="QM", fmt="id####")
+      await self.star.send_command("C0", command="QM", fmt="id####")
 
   async def test_send_command_plaintext_response(self):
     self.star.io.read.side_effect = lambda: b"this is plaintext"
     with self.assertRaises(TimeoutError):
-      resp = await self.star.send_command("C0", command="QM", fmt="id####")
+      await self.star.send_command("C0", command="QM", fmt="id####")
 
 
 class STARCommandCatcher(STAR):
