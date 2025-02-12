@@ -12,7 +12,6 @@ from typing import (
   Sequence,
   Tuple,
   TypeVar,
-  cast,
 )
 
 from pylabrobot.liquid_handling.backends.backend import (
