@@ -72,7 +72,7 @@ class USB(IOBase):
     # unique id in the logs
     self._unique_id = f"[USB][{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
 
-  def write(self, data: str, timeout: Optional[float] = None):
+  def write(self, data: bytes, timeout: Optional[float] = None):
     """Write data to the device.
 
     Args:
@@ -113,7 +113,7 @@ class USB(IOBase):
       # No data available (yet), this will give a timeout error. Don't reraise.
       return None
 
-  def read(self, timeout: Optional[int] = None) -> bytearray:
+  def read(self, timeout: Optional[int] = None) -> bytes:
     """Read a response from the device.
 
     Args:

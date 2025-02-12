@@ -37,7 +37,7 @@ from pylabrobot.incubators.cytomat.utils import (
   hex_to_binary,
   validate_storage_location_number,
 )
-from pylabrobot.io import Serial
+from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 logger = logging.getLogger(__name__)

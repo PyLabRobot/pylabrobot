@@ -54,9 +54,7 @@ class HamiltonHeatShaker(HeaterShakerBackend):
   def _send_command(self, command: str, **kwargs):
     assert len(command) == 2, "Command must be 2 characters long"
     args = "".join([f"{key}{value}" for key, value in kwargs.items()])
-    self.io.write(
-      f"T{self.shaker_index}{command}id{str(self.command_id).zfill(4)}{args}",
-    )
+    self.io.write(f"T{self.shaker_index}{command}id{str(self.command_id).zfill(4)}{args}".encode())
 
     self.command_id = (self.command_id + 1) % 10_000
     return self.io.read()

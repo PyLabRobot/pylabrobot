@@ -60,10 +60,7 @@ def align_sequences(expected, actual):
       j -= 1
 
   # Reverse since we built the alignment backwards
-  aligned_expected = "".join(reversed(aligned_expected))
-  aligned_actual = "".join(reversed(aligned_actual))
-  markers = "".join(reversed(markers))
 
-  print("expected:", aligned_expected)
-  print("actual:  ", aligned_actual)
-  print("         ", markers)
+  print("expected:", "".join(reversed(aligned_expected)))
+  print("actual:  ", "".join(reversed(aligned_actual)))
+  print("         ", "".join(reversed(markers)))

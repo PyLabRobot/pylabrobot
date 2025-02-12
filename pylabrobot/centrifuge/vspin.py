@@ -8,7 +8,7 @@ from pylabrobot.io.ftdi import FTDI
 from .backend import CentrifugeBackend, LoaderBackend
 from .standard import LoaderNoPlateError
 
-logger = logging.getLogger("pylabrobot.centrifuge.vspin")
+logger = logging.getLogger(__name__)
 
 
 class Access2Backend(LoaderBackend):
@@ -40,7 +40,7 @@ class Access2Backend(LoaderBackend):
 
   async def send_command(self, command: bytes) -> bytes:
     logger.debug("[loader] Sending %s", command.hex())
-    await self.io.write(command)
+    self.io.write(command)
     return await self._read()
 
   async def setup(self):
@@ -138,8 +138,6 @@ class VSpin(CentrifugeBackend):
         an arbitrary value, move to the bucket, and call get_position() to get the position. Then
         use this value for future runs.
     """
-    if not USE_FTDI:
-      raise RuntimeError("pylibftdi is not installed.")
     self.io = FTDI(device_id=device_id)
     self.bucket_1_position = bucket_1_position
     self.homing_position = 0
@@ -158,8 +156,8 @@ class VSpin(CentrifugeBackend):
     await self.send(b"\xaa\xff\x1a\x14\x2d")
 
     self.io.set_baudrate(57600)
-    self.io.set_rts(1)
-    self.io.set_dtr(1)
+    self.io.set_rts(True)
+    self.io.set_dtr(True)
 
     await self.send(b"\xaa\x01\x0e\x0f")
     await self.send(b"\xaa\x01\x12\x1f\x32")
@@ -308,7 +306,7 @@ class VSpin(CentrifugeBackend):
     return data
 
   async def send(self, cmd: Union[bytearray, bytes], read_timeout=0.2) -> bytes:
-    written = await self.io.write(cmd.decode("latin-1"))  # TODO: why decode?
+    written = self.io.write(bytes(cmd))  # TODO: why decode? .decode("latin-1")
 
     if written != len(cmd):
       raise RuntimeError("Failed to write all bytes")
@@ -335,10 +333,10 @@ class VSpin(CentrifugeBackend):
     self.io.set_baudrate(19200)
 
   async def initialize(self):
-    await self.io.write(b"\x00" * 20)
+    self.io.write(b"\x00" * 20)
     for i in range(33):
       packet = b"\xaa" + bytes([i & 0xFF, 0x0E, 0x0E + (i & 0xFF)]) + b"\x00" * 8
-      await self.io.write(packet)
+      self.io.write(packet)
     await self.send(b"\xaa\xff\x0f\x0e")
 
   # Centrifuge operations

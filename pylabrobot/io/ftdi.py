@@ -1,6 +1,7 @@
 import ctypes
 import logging
 from io import IOBase
+from typing import TYPE_CHECKING, Optional
 
 try:
   from pylibftdi import Device
@@ -11,16 +12,17 @@ except ImportError:
 
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError, align_sequences
 
+if TYPE_CHECKING:
+  from pylabrobot.io.validation import LogReader
+
+
 logger = logging.getLogger(__name__)
 
 
 class FTDI(IOBase):
   """Thin wrapper around pylibftdi to include PLR logging (for io testing)."""
 
-  def __init__(
-    self,
-    device_id: str,
-  ):
+  def __init__(self, device_id: Optional[str] = None):
     self._device_id = device_id
     self._dev = Device(lazy_open=True, device_id=device_id)
 
@@ -72,17 +74,17 @@ class FTDI(IOBase):
   async def stop(self):
     self._dev.close()
 
-  async def write(self, data: bytes) -> int:
+  def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
     return self._dev.write(data)
 
-  async def read(self, num_bytes: int = 1) -> bytes:
+  def read(self, num_bytes: int = 1) -> bytes:
     data = self._dev.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._device_id, data)
     return data
 
-  async def readline(self) -> bytes:
+  def readline(self) -> bytes:
     data = self._dev.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
     return data
@@ -92,7 +94,7 @@ class FTDI(IOBase):
 
 
 class FTDIValidator(FTDI):
-  def __init__(self, lr, device_id: str):
+  def __init__(self, lr: "LogReader", device_id: str):
     super().__init__(device_id=device_id)
     self.lr = lr
 
@@ -196,7 +198,7 @@ class FTDIValidator(FTDI):
 
   def usb_purge_rx_buffer(self):
     next_line = self.lr.next_line()
-    port, action, log_data = next_line.split(" ", 2)
+    port, action = next_line.split(" ", 2)
     action = action.rstrip(":")
     if not port == self._device_id:
       raise ValidationError(
@@ -208,7 +210,7 @@ class FTDIValidator(FTDI):
 
   def usb_purge_tx_buffer(self):
     next_line = self.lr.next_line()
-    port, action, _ = next_line.split(" ", 2)
+    port, action = next_line.split(" ", 2)
     action = action.rstrip(":")
     if not port == self._device_id:
       raise ValidationError(
@@ -232,7 +234,7 @@ class FTDIValidator(FTDI):
 
     return int(log_data)
 
-  async def write(self, data: bytes):
+  def write(self, data: bytes):
     next_line = self.lr.next_line()
     port, action, log_data = next_line.split(" ", 2)
     action = action.rstrip(":")
@@ -249,7 +251,7 @@ class FTDIValidator(FTDI):
       align_sequences(expected=log_data, actual=data)
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  async def read(self, num_bytes: int) -> bytes:
+  def read(self, num_bytes: int = 1) -> bytes:
     next_line = self.lr.next_line()
     port, action, log_data = next_line.split(" ", 2)
     action = action.rstrip(":")  # remove the colon at the end

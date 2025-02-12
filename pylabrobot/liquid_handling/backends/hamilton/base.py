@@ -100,7 +100,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     for task in self._waiting_tasks:
       task.fut.set_exception(RuntimeError("Stopping HamiltonLiquidHandler."))
     self._waiting_tasks.clear()
-    await super().stop()
 
   def serialize(self) -> dict:
     usb_serialized = self.io.serialize()
@@ -265,7 +264,7 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     wait: bool = True,
   ) -> Optional[str]:
     """Write a command to the Hamilton machine and read the response."""
-    self.io.write(cmd, timeout=write_timeout)
+    self.io.write(cmd.encode(), timeout=write_timeout)
 
     if not wait:
       return None

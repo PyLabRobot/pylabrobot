@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 from pylabrobot.io.io import IOBase
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError
@@ -33,17 +33,20 @@ class HID(IOBase):
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
 
   async def stop(self):
-    self.device.close()
+    if self.device is not None:
+      self.device.close()
     logger.log(LOG_LEVEL_IO, "Closing HID device %s", self._unique_id)
 
   def write(self, data: bytes):
+    assert self.device is not None, "forgot to call setup?"
     self.device.write(data)
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._unique_id, data)
 
   def read(self, size: int, timeout: int) -> bytes:
+    assert self.device is not None, "forgot to call setup?"
     r = self.device.read(size, timeout=timeout)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
-    return r
+    return cast(bytes, r)
 
   def serialize(self):
     return {
@@ -74,7 +77,7 @@ class HIDValidator(HID):
 
   def write(self, data: bytes):
     next_line = self.lr.next_line()
-    expected = f"[{self._unique_id}] write {data}"
+    expected = f"[{self._unique_id}] write {data.decode()}"
     if not next_line == expected:
       raise ValidationError(f"Next line is {next_line}, expected {expected}")
 
@@ -85,4 +88,4 @@ class HIDValidator(HID):
       raise ValidationError(f"Next line is {next_line}, expected {self._unique_id} read")
     if not len(data) == size:
       raise ValidationError(f"Read data has length {len(data)}, expected {size}")
-    return data
+    return data.encode()

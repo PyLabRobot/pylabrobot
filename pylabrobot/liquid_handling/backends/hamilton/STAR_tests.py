@@ -1,3 +1,5 @@
+# mypy: disable-error-code="attr-defined,method-assign"
+
 import unittest
 import unittest.mock
 from typing import cast

@@ -1,3 +1,6 @@
+# mypy: disable-error-code = attr-defined
+
+
 import unittest
 import unittest.mock
 from typing import Iterator

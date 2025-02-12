@@ -1,6 +1,6 @@
 import logging
 from io import IOBase
-from typing import Optional
+from typing import Optional, cast
 
 try:
   import serial
@@ -52,22 +52,25 @@ class Serial(IOBase):
       raise e
 
   async def stop(self):
-    if self.ser.is_open:
+    if self.ser is not None and self.ser.is_open:
       self.ser.close()
 
   def write(self, data: bytes):
+    assert self.ser is not None, "forgot to call setup?"
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     self.ser.write(data)
 
   def read(self, num_bytes: int = 1) -> bytes:
+    assert self.ser is not None, "forgot to call setup?"
     data = self.ser.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
-    return data
+    return cast(bytes, data)
 
   def readline(self) -> bytes:
+    assert self.ser is not None, "forgot to call setup?"
     data = self.ser.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
-    return data
+    return cast(bytes, data)
 
 
 class SerialValidator(Serial):
@@ -109,7 +112,7 @@ class SerialValidator(Serial):
       align_sequences(expected=log_data, actual=data)
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
-  def read(self, num_bytes: int) -> bytes:
+  def read(self, num_bytes: int = 1) -> bytes:
     next_line = self.lr.next_line()
     port, action, log_data = next_line.split(" ", 2)
     action = action.rstrip(":")  # remove the colon at the end

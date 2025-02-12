@@ -99,7 +99,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
     cmd = module + command + ",".join(str(a) if a is not None else "" for a in params)
     return f"\02{cmd}\00"
 
-  def parse_response(self, resp: bytearray) -> Dict[str, Union[str, int, List[int]]]:
+  def parse_response(self, resp: bytes) -> Dict[str, Union[str, int, List[int]]]:
     """Parse a machine response string
 
     Args:
@@ -150,7 +150,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
     cmd = self._assemble_command(module, command, [] if params is None else params)
 
-    self.io.write(cmd, timeout=write_timeout)
+    self.io.write(cmd.encode(), timeout=write_timeout)
     if not wait:
       return None
 
@@ -159,11 +159,10 @@ class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
 
   async def setup(self):
     await super().setup()
-    await self.io.setup(self)
+    await self.io.setup()
 
   async def stop(self):
     await self.io.stop()
-    return await super().stop()
 
 
 class EVO(TecanLiquidHandler):
@@ -247,12 +246,7 @@ class EVO(TecanLiquidHandler):
     return self._mca_connected
 
   def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "packet_read_timeout": self.packet_read_timeout,
-      "read_timeout": self.read_timeout,
-      "write_timeout": self.write_timeout,
-    }
+    return {**super().serialize(), **self.io.serialize()}
 
   async def setup(self):
     """Setup

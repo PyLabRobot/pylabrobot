@@ -115,8 +115,6 @@ class Cytation5Backend(ImageReaderBackend):
   ) -> None:
     super().__init__()
     self.timeout = timeout
-    if not USE_FTDI:
-      raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
 
     self.io = FTDI(device_id=device_id)
 
@@ -142,7 +140,7 @@ class Cytation5Backend(ImageReaderBackend):
     self.io.set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
     SIO_RTS_CTS_HS = 0x1 << 8
     self.io.set_flowctrl(SIO_RTS_CTS_HS)
-    self.io.set_rts(1)
+    self.io.set_rts(True)
 
     self._shaking = False
     self._shaking_task: Optional[asyncio.Task] = None

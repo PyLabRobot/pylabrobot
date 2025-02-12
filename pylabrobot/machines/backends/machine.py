@@ -7,7 +7,7 @@ from pylabrobot.utils.object_parsing import find_subclass
 class MachineBackend(ABC):
   """Abstract class for machine backends."""
 
-  _instances = weakref.WeakSet()
+  _instances: weakref.WeakSet["MachineBackend"] = weakref.WeakSet()
 
   def __init__(self):
     self._instances.add(self)
