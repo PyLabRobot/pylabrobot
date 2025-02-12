@@ -4,6 +4,7 @@ import functools
 import logging
 import re
 from abc import ABCMeta
+from contextlib import asynccontextmanager, contextmanager
 from typing import (
   Callable,
   Dict,
@@ -91,7 +92,7 @@ def need_iswap_parked(method: Callable):
   async def wrapper(self: "STAR", *args, **kwargs):
     if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
-        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10)
+        minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
       )
 
     result = await method(self, *args, **kwargs)
@@ -1162,7 +1163,8 @@ class STAR(HamiltonLiquidHandler):
     self._num_channels: Optional[int] = None
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
-    self._traversal_height: float = 245.0
+    self._channel_traversal_height: float = 245.0
+    self._iswap_traversal_height: float = 284.0
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
 
@@ -1181,7 +1183,13 @@ class STAR(HamiltonLiquidHandler):
     return self._num_channels
 
   def set_minimum_traversal_height(self, traversal_height: float):
-    """Set the minimum traversal height for the robot.
+    raise NotImplementedError(
+      "set_minimum_traversal_height is depricated. use set_minimum_channel_traversal_height or "
+      "set_minimum_iswap_traversal_height instead."
+    )
+
+  def set_minimum_channel_traversal_height(self, traversal_height: float):
+    """Set the minimum traversal height for the pip channels.
 
     This refers to the bottom of the pipetting channel when no tip is present, or the bottom of the
     tip when a tip is present. This value will be used as the default value for the
@@ -1191,7 +1199,24 @@ class STAR(HamiltonLiquidHandler):
 
     assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
 
-    self._traversal_height = traversal_height
+    self._channel_traversal_height = traversal_height
+
+  def set_minimum_iswap_traversal_height(self, traversal_height: float):
+    """Set the minimum traversal height for the iswap."""
+
+    assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
+
+    self._iswap_traversal_height = traversal_height
+
+  @contextmanager
+  def iswap_minimum_traversal_height(self, traversal_height: float):
+    orig = self._iswap_traversal_height
+    self._iswap_traversal_height = traversal_height
+    try:
+      yield
+    except Exception as e:
+      self._iswap_traversal_height = orig
+      raise e
 
   @property
   def module_id_length(self):
@@ -1367,7 +1392,7 @@ class STAR(HamiltonLiquidHandler):
       await self.initialize_pipetting_channels(
         x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
         y_positions=y_positions,
-        begin_of_tip_deposit_process=int(self._traversal_height * 10),
+        begin_of_tip_deposit_process=int(self._channel_traversal_height * 10),
         end_of_tip_deposit_process=1220,
         z_position_at_end_of_a_command=3600,
         tip_pattern=[True] * self.num_channels,
@@ -1388,7 +1413,7 @@ class STAR(HamiltonLiquidHandler):
         await self.initialize_iswap()
 
       await self.park_iswap(
-        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10)
+        minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
       )
 
     if self.core96_head_installed and not skip_core96_head:
@@ -1396,7 +1421,7 @@ class STAR(HamiltonLiquidHandler):
       if not core96_head_initialized:
         await self.initialize_core_96_head(
           trash96=self.deck.get_trash_area96(),
-          z_position_at_the_command_end=self._traversal_height,
+          z_position_at_the_command_end=self._channel_traversal_height,
         )
 
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
@@ -1449,7 +1474,7 @@ class STAR(HamiltonLiquidHandler):
       else round(end_tip_pick_up_process * 10)
     )
     minimum_traverse_height_at_beginning_of_a_command = (
-      round(self._traversal_height * 10)
+      round(self._channel_traversal_height * 10)
       if minimum_traverse_height_at_beginning_of_a_command is None
       else round(minimum_traverse_height_at_beginning_of_a_command * 10)
     )
@@ -1526,12 +1551,12 @@ class STAR(HamiltonLiquidHandler):
       )
 
     minimum_traverse_height_at_beginning_of_a_command = (
-      round(self._traversal_height * 10)
+      round(self._channel_traversal_height * 10)
       if minimum_traverse_height_at_beginning_of_a_command is None
       else round(minimum_traverse_height_at_beginning_of_a_command * 10)
     )
     z_position_at_end_of_a_command = (
-      round(self._traversal_height * 10)
+      round(self._channel_traversal_height * 10)
       if z_position_at_end_of_a_command is None
       else round(z_position_at_end_of_a_command * 10)
     )
@@ -1869,9 +1894,9 @@ class STAR(HamiltonLiquidHandler):
         ratio_liquid_rise_to_tip_deep_in=ratio_liquid_rise_to_tip_deep_in,
         immersion_depth_2nd_section=[round(id_ * 10) for id_ in immersion_depth_2nd_section],
         minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
-        min_z_endpos=round((min_z_endpos or self._traversal_height) * 10),
+        min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
@@ -2129,9 +2154,9 @@ class STAR(HamiltonLiquidHandler):
         ],
         limit_curve_index=limit_curve_index,
         minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
-        min_z_endpos=round((min_z_endpos or self._traversal_height) * 10),
+        min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
         side_touch_off_distance=side_touch_off_distance,
       )
     except STARFirmwareError as e:
@@ -2167,9 +2192,11 @@ class STAR(HamiltonLiquidHandler):
       tip_pickup_method=tip_pickup_method,
       z_deposit_position=round(z_deposit_position * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimum_height_command_end=round((minimum_height_command_end or self._traversal_height) * 10),
+      minimum_height_command_end=round(
+        (minimum_height_command_end or self._channel_traversal_height) * 10
+      ),
     )
 
   async def drop_tips96(
@@ -2194,9 +2221,11 @@ class STAR(HamiltonLiquidHandler):
       y_position=round(position.y * 10),
       z_deposit_position=round(z_deposit_position * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimum_height_command_end=round((minimum_height_command_end or self._traversal_height) * 10),
+      minimum_height_command_end=round(
+        (minimum_height_command_end or self._channel_traversal_height) * 10
+      ),
     )
 
   async def aspirate96(
@@ -2345,9 +2374,9 @@ class STAR(HamiltonLiquidHandler):
       y_positions=round(position.y * 10),
       aspiration_type=aspiration_type,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimal_end_height=round((minimal_end_height or self._traversal_height) * 10),
+      minimal_end_height=round((minimal_end_height or self._channel_traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_at_function_without_lld=round(liquid_height * 10),
       pull_out_distance_to_take_transport_air_in_function_without_lld=round(
@@ -2509,9 +2538,9 @@ class STAR(HamiltonLiquidHandler):
       x_direction=0,
       y_position=round(position.y * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimal_end_height=round((minimal_end_height or self._traversal_height) * 10),
+      minimal_end_height=round((minimal_end_height or self._channel_traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_at_function_without_lld=round(liquid_height * 10),
       pull_out_distance_to_take_transport_air_in_function_without_lld=round(
@@ -2649,10 +2678,10 @@ class STAR(HamiltonLiquidHandler):
       plate_width=round(grip_width * 10) - 30,
       grip_strength=grip_strength,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
       minimum_z_position_at_the_command_end=round(
-        (minimum_z_position_at_the_command_end or self._traversal_height) * 10
+        (minimum_z_position_at_the_command_end or self._iswap_traversal_height) * 10
       ),
     )
 
@@ -2689,7 +2718,7 @@ class STAR(HamiltonLiquidHandler):
       z_position=round(center.z * 10),
       z_speed=round(z_speed * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
     )
 
@@ -2732,10 +2761,10 @@ class STAR(HamiltonLiquidHandler):
       z_speed=500,
       open_gripper_position=round(grip_width * 10) + 30,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
       z_position_at_the_command_end=round(
-        (z_position_at_the_command_end or self._traversal_height) * 10
+        (z_position_at_the_command_end or self._iswap_traversal_height) * 10
       ),
       return_tool=return_tool,
     )
@@ -2786,9 +2815,9 @@ class STAR(HamiltonLiquidHandler):
       z -= pickup.pickup_distance_from_top
 
       traverse_height_at_beginning = (
-        minimum_traverse_height_at_beginning_of_a_command or self._traversal_height
+        minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
       )
-      z_position_at_the_command_end = z_position_at_the_command_end or self._traversal_height
+      z_position_at_the_command_end = z_position_at_the_command_end or self._iswap_traversal_height
 
       if open_gripper_position is None:
         if use_unsafe_hotel:
@@ -2851,8 +2880,8 @@ class STAR(HamiltonLiquidHandler):
         resource=pickup.resource,
         pickup_distance_from_top=pickup.pickup_distance_from_top,
         offset=pickup.offset,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        minimum_z_position_at_the_command_end=self._traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        minimum_z_position_at_the_command_end=self._iswap_traversal_height,
         channel_1=channel_1,
         channel_2=channel_2,
         grip_strength=core_grip_strength,
@@ -2868,7 +2897,7 @@ class STAR(HamiltonLiquidHandler):
         location=move.location,
         resource=move.resource,
         grip_direction=move.gripped_direction,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         collision_control_level=1,
         acceleration_index_high_acc=4,
         acceleration_index_low_acc=1,
@@ -2877,7 +2906,7 @@ class STAR(HamiltonLiquidHandler):
       await self.core_move_picked_up_resource(
         location=move.location,
         resource=move.resource,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         acceleration_index=4,
       )
 
@@ -2897,9 +2926,9 @@ class STAR(HamiltonLiquidHandler):
   ):
     if use_arm == "iswap":
       traversal_height_start = (
-        minimum_traverse_height_at_beginning_of_a_command or self._traversal_height
+        minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
       )
-      z_position_at_the_command_end = z_position_at_the_command_end or self._traversal_height
+      z_position_at_the_command_end = z_position_at_the_command_end or self._iswap_traversal_height
       assert (
         drop.resource.get_absolute_rotation().x == 0
         and drop.resource.get_absolute_rotation().y == 0
@@ -2996,8 +3025,8 @@ class STAR(HamiltonLiquidHandler):
         resource=drop.resource,
         offset=drop.offset,
         pickup_distance_from_top=drop.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        z_position_at_the_command_end=self._traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        z_position_at_the_command_end=self._iswap_traversal_height,
         # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
         return_tool=return_core_gripper,
       )
@@ -4665,7 +4694,7 @@ class STAR(HamiltonLiquidHandler):
       pb=f"{p2:02}",
       tp=f"{2350 + self.core_adjustment.z:04}",
       tz=f"{2250 + self.core_adjustment.z:04}",
-      th=round(self._traversal_height * 10),
+      th=round(self._iswap_traversal_height * 10),
       tt="14",
     )
     self._core_parked = False
@@ -4691,8 +4720,8 @@ class STAR(HamiltonLiquidHandler):
       yb=f"{1065 + self.core_adjustment.y:04}",
       tp=f"{2150 + self.core_adjustment.z:04}",
       tz=f"{2050 + self.core_adjustment.z:04}",
-      th=round(self._traversal_height * 10),
-      te=round(self._traversal_height * 10),
+      th=round(self._iswap_traversal_height * 10),
+      te=round(self._iswap_traversal_height * 10),
     )
     self._core_parked = True
     return command_output
@@ -7438,10 +7467,14 @@ class STAR(HamiltonLiquidHandler):
         )
 
     if tip_len is None:
-      tip_len = self.head[channel_idx].get_tip().total_tip_length
+      # currently a bug, will be fixed in the future
+      # reverted to previous implementation
+      # tip_len = self.head[channel_idx].get_tip().total_tip_length
+      tip_len = await self.request_tip_len_on_channel(channel_idx)
 
     # fitting_depth = 8 mm for 10, 50, 300, 1000 ul Hamilton tips
-    fitting_depth = self.head[channel_idx].get_tip().fitting_depth
+    # fitting_depth = self.head[channel_idx].get_tip().fitting_depth
+    fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
 
     if start_pos_search is None:
       start_pos_search = 334.7 - tip_len + fitting_depth
@@ -7808,6 +7841,23 @@ class STAR(HamiltonLiquidHandler):
     _, current_volume = resp["qc"]  # first is max volume
     return float(current_volume) / 10
 
+  @asynccontextmanager
+  async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
+    """A context manager that sets the iSWAP to slow speed during the context"""
+    assert 20 <= gripper_velocity <= 75_000
+    assert 20 <= wrist_velocity <= 65_000
+
+    original_wv = (await self.send_command("R0", "RA", ra="wv", fmt="wv#####"))["wv"]
+    original_tv = (await self.send_command("R0", "RA", ra="tv", fmt="tv#####"))["tv"]
+
+    await self.send_command("R0", "AA", wv=gripper_velocity)  # wrist velocity
+    await self.send_command("R0", "AA", tv=wrist_velocity)  # gripper velocity
+    try:
+      yield
+    finally:
+      await self.send_command("R0", "AA", wv=original_wv)
+      await self.send_command("R0", "AA", tv=original_tv)
+
 
 class UnSafe:
   """
@@ -7962,3 +8012,16 @@ class UnSafe:
       xe=f"{high_acceleration_index} {low_acceleration_index}",
       gc=int(fold_up_at_end),
     )
+
+  async def violently_shoot_down_tip(self, channel_idx: int):
+    """Shoot down the tip on the specified channel by releasing the drive that holds the spring. The
+    tips will shoot down in place at an acceleration bigger than g. This is done by initializing
+    the squeezer drive wihile a tip is mounted.
+
+    Safe to do when above a tip rack, for example directly after a tip pickup.
+
+    .. warning::
+
+      Consider this method an easter egg. Not for serious use.
+    """
+    await self.star.send_command(module=STAR.channel_id(channel_idx), command="SI")

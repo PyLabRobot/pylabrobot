@@ -151,6 +151,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `spread: Literal["wide", "tight"]` for single-resource multi-channel aspirations/dispenses (https://github.com/PyLabRobot/pylabrobot/pull/378)
 - `STAR.request_volume_in_tip` (https://github.com/PyLabRobot/pylabrobot/pull/376)
 - `ItemizedResource.{row,column}` (https://github.com/PyLabRobot/pylabrobot/pull/384)
+- `STAR.set_minimum_iswap_traversal_height` and `STAR.set_minimum_channel_traversal_height` (https://github.com/PyLabRobot/pylabrobot/pull/398)
 
 ### Deprecated
 
@@ -163,6 +164,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Resource definitions with `_L` and `_P`, it is easy enough to use the stem and `.rotated(z=90)` for `_P` (https://github.com/PyLabRobot/pylabrobot/pull/288)
 - `Cor_6_wellplate_Fl` (https://github.com/PyLabRobot/pylabrobot/pull/311)
 - `AGenBio_1_wellplate_Fl` -> `AGenBio_1_troughplate_190000uL_Fl`, `AGenBio_4_wellplate_Vb` -> `AGenBio_4_troughplate_75000_Vb` (https://github.com/PyLabRobot/pylabrobot/pull/319)
+- `STAR.set_minimum_traversal_height` (https://github.com/PyLabRobot/pylabrobot/pull/398)
 
 ### Fixed
 
