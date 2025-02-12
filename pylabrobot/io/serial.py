@@ -58,16 +58,16 @@ class Serial(IOBase):
     if self.ser.is_open:
       self.ser.close()
 
-  async def write(self, data: bytes):
+  def write(self, data: bytes):
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._port, data)
     self.ser.write(data)
 
-  async def read(self, num_bytes: int = 1) -> bytes:
+  def read(self, num_bytes: int = 1) -> bytes:
     data = self.ser.read(num_bytes)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._port, data)
     return data
 
-  async def readline(self) -> bytes:
+  def readline(self) -> bytes:
     data = self.ser.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._port, data)
     return data

@@ -3,6 +3,7 @@ import time
 from typing import TYPE_CHECKING, List, Optional
 
 from pylabrobot.io.io import IOBase
+from pylabrobot.io.validation import LogReader
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError, align_sequences
 
 try:
@@ -269,7 +270,7 @@ class USB(IOBase):
 class USBValidator(USB):
   def __init__(
     self,
-    lr,
+    lr: LogReader,
     id_vendor: int,
     id_product: int,
     device_address: Optional[int] = None,

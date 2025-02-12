@@ -1,5 +1,7 @@
 from typing import List, Optional
 
+from pylabrobot.io.ftdi import FTDI, FTDIValidator
+from pylabrobot.io.hid import HID, HIDValidator
 from pylabrobot.io.serial import Serial, SerialValidator
 from pylabrobot.io.usb import USB, USBValidator
 from pylabrobot.io.validation_utils import ValidationError
@@ -54,6 +56,8 @@ def validate(log_file: str, backends: Optional[List[MachineBackend]] = None) -> 
     io2v = {
       USB: USBValidator,
       Serial: SerialValidator,
+      FTDI: FTDIValidator,
+      HID: HIDValidator,
     }
 
     # replace io with validator
