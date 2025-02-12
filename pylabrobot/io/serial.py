@@ -2,7 +2,12 @@ import logging
 from io import IOBase
 from typing import Optional
 
-import serial
+try:
+  import serial
+
+  HAS_SERIAL = True
+except ImportError:
+  HAS_SERIAL = False
 
 from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError, align_sequences
 
@@ -16,9 +21,9 @@ class Serial(IOBase):
     self,
     port: str,
     baudrate: int = 9600,
-    bytesize: int = serial.EIGHTBITS,
-    parity: str = serial.PARITY_NONE,
-    stopbits: int = serial.STOPBITS_ONE,
+    bytesize: int = 8,  # serial.EIGHTBITS
+    parity: str = "N",  # serial.PARITY_NONE
+    stopbits: int = 1,  # serial.STOPBITS_ONE,
     write_timeout=1,
     timeout=1,
   ):
