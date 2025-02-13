@@ -3041,6 +3041,7 @@ class STAR(HamiltonLiquidHandler):
     """Move a channel in the x direction."""
     await self.position_left_x_arm_(round(x * 10))
 
+  @need_iswap_parked
   async def move_channel_y(self, channel: int, y: float):
     """Move a channel safely in the y direction."""
 
@@ -4935,6 +4936,7 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="JE")
 
+  @need_iswap_parked
   async def move_all_pipetting_channels_to_defined_position(
     self,
     tip_pattern: bool = True,
@@ -4975,6 +4977,7 @@ class STAR(HamiltonLiquidHandler):
 
   # TODO:(command:JR): teach rack using pipetting channel n
 
+  @need_iswap_parked
   async def position_max_free_y_for_n(self, pipetting_channel_index: int):
     """Position all pipetting channels so that there is maximum free Y range for channel n
 
@@ -7619,6 +7622,7 @@ class STAR(HamiltonLiquidHandler):
 
     return {channel_idx: y for channel_idx, y in enumerate(y_positions)}
 
+  @need_iswap_parked
   async def position_channels_in_y_direction(self, ys: Dict[int, float], make_space=True):
     """position all channels simultaneously in the Y direction.
 
