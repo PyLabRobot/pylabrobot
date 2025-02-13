@@ -2,7 +2,7 @@ import asyncio
 from typing import Optional
 
 from pylabrobot.machines.machine import Machine
-from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources import Coordinate, ResourceHolder
 
 from .backend import ShakerBackend
 
@@ -17,6 +17,7 @@ class Shaker(ResourceHolder, Machine):
     size_y: float,
     size_z: float,
     backend: ShakerBackend,
+    child_location: Coordinate,
     category: str = "shaker",
     model: Optional[str] = None,
   ):
@@ -28,6 +29,7 @@ class Shaker(ResourceHolder, Machine):
       size_z=size_z,
       category=category,
       model=model,
+      child_location=child_location,
     )
     Machine.__init__(self, backend=backend)
     self.backend: ShakerBackend = backend  # fix type
