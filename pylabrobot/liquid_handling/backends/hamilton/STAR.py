@@ -7828,7 +7828,7 @@ class STAR(HamiltonLiquidHandler):
       zs = await self.get_channels_z_positions()
       indices = [channel_idx for channel_idx, z in zs.items() if z < front_location.z]
       idx = {
-        idx: front_location.z + 20 for idx in indices if idx not in (front_channel, back_channel)
+        idx: front_location.z + 15 for idx in indices if idx not in (front_channel, back_channel)
       }
       await self.position_channels_in_z_direction(idx)
 
