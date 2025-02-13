@@ -7774,7 +7774,7 @@ class STAR(HamiltonLiquidHandler):
     )
 
   async def step_off_foil(
-    self, well: Well, front_channel: int, back_channel: int, move_inwards: float = 2
+    self, well: Well, front_channel: int, back_channel: int, move_inwards: float = 2, move_height: float = 15
   ):
     """
     Hold down a plate by placing two channels on the edges of a plate that is sealed with foil
@@ -7800,6 +7800,7 @@ class STAR(HamiltonLiquidHandler):
       front_channel: The channel to place on the front of the plate.
       back_channel: The channel to place on the back of the plate.
       move_inwards: mm to move inwards (backward on the front channel; frontward on the back).
+      move_height: mm to move upwards after piercing the foil. front_channel and back_channel will hold the plate down.
     """
 
     if front_channel <= back_channel:
@@ -7828,7 +7829,7 @@ class STAR(HamiltonLiquidHandler):
       zs = await self.get_channels_z_positions()
       indices = [channel_idx for channel_idx, z in zs.items() if z < front_location.z]
       idx = {
-        idx: front_location.z + 15 for idx in indices if idx not in (front_channel, back_channel)
+        idx: front_location.z + move_height for idx in indices if idx not in (front_channel, back_channel)
       }
       await self.position_channels_in_z_direction(idx)
 
