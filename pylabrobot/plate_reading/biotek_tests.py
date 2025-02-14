@@ -24,7 +24,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
   async def test_setup(self):
     await self.backend.setup()
     assert self.backend.dev.open.called
-    assert self.backend.dev.baudrate == 38400
+    assert self.backend.dev.baudrate == 9600
     self.backend.dev.ftdi_fn.ftdi_set_line_property.assert_called_with(8, 2, 0)
     self.backend.dev.ftdi_fn.ftdi_setflowctrl.assert_called_with(0x100)
     self.backend.dev.ftdi_fn.ftdi_setrts.assert_called_with(1)
