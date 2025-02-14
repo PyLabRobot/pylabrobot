@@ -3,6 +3,7 @@ import unittest.mock
 from typing import Iterator
 
 from pylabrobot.plate_reading.biotek_backend import Cytation5Backend
+from pylabrobot.resources import CellVis_24_wellplate_3600uL_Fb
 
 
 def _byte_iter(s: str) -> Iterator[bytes]:
@@ -18,11 +19,12 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.dev = unittest.mock.MagicMock()
     self.backend.dev.open.return_value = 0
     self.backend.dev.write.return_value = 0
+    self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
   async def test_setup(self):
     await self.backend.setup()
     assert self.backend.dev.open.called
-    assert self.backend.dev.baudrate == 38400
+    assert self.backend.dev.baudrate == 9600
     self.backend.dev.ftdi_fn.ftdi_set_line_property.assert_called_with(8, 2, 0)
     self.backend.dev.ftdi_fn.ftdi_setflowctrl.assert_called_with(0x100)
     self.backend.dev.ftdi_fn.ftdi_setrts.assert_called_with(1)
@@ -77,10 +79,10 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
       )
     )
 
-    resp = await self.backend.read_absorbance(wavelength=580)
+    resp = await self.backend.read_absorbance(plate=self.plate, wavelength=580)
 
     self.backend.dev.write.assert_any_call(b"y")
-    self.backend.dev.write.assert_any_call(b"08120112207434014351135308559127881772\x03")
+    self.backend.dev.write.assert_any_call(b"04060136807158017051135508525127501610\x03")
     self.backend.dev.write.assert_any_call(b"D")
     self.backend.dev.write.assert_any_call(
       b"004701010108120001200100001100100000106000080580113\x03"
@@ -233,6 +235,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     )
 
     resp = await self.backend.read_fluorescence(
+      plate=self.plate,
       excitation_wavelength=485,
       emission_wavelength=528,
       focal_height=7.5,
@@ -241,7 +244,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.dev.write.assert_any_call(b"t")
     self.backend.dev.write.assert_any_call(b"621720\x03")
     self.backend.dev.write.assert_any_call(b"y")
-    self.backend.dev.write.assert_any_call(b"08120112207434014351135308559127881772\x03")
+    self.backend.dev.write.assert_any_call(b"04060136807158017051135508525127501610\x03")
     self.backend.dev.write.assert_any_call(b"D")
     self.backend.dev.write.assert_any_call(
       b"0084010101081200012001000011001000001350001002002000485000052800000000000000000021001119"

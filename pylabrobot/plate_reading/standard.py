@@ -10,6 +10,10 @@ class ImagingMode(enum.Enum):
   COLOR_BRIGHTFIELD = enum.auto()
 
 
+class NoPlateError(Exception):
+  pass
+
+
 Exposure = Union[float, Literal["auto"]]
 FocalPosition = Union[float, Literal["auto"]]
 Gain = Union[float, Literal["auto"]]
