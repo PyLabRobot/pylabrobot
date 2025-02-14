@@ -77,7 +77,7 @@ class PlateReader(ResourceHolder, Machine):
       focal_height: The focal height to read the luminescence at, in micrometers.
     """
 
-    return await self.backend.read_luminescence(focal_height=focal_height)
+    return await self.backend.read_luminescence(plate=self.get_plate(), focal_height=focal_height)
 
   @need_setup_finished
   async def read_absorbance(self, wavelength: int) -> List[List[float]]:
@@ -87,7 +87,7 @@ class PlateReader(ResourceHolder, Machine):
       wavelength: The wavelength to read the absorbance at, in nanometers.
     """
 
-    return await self.backend.read_absorbance(wavelength=wavelength)
+    return await self.backend.read_absorbance(plate=self.get_plate(), wavelength=wavelength)
 
   @need_setup_finished
   async def read_fluorescence(
@@ -105,6 +105,7 @@ class PlateReader(ResourceHolder, Machine):
     """
 
     return await self.backend.read_fluorescence(
+      plate=self.get_plate(),
       excitation_wavelength=excitation_wavelength,
       emission_wavelength=emission_wavelength,
       focal_height=focal_height,

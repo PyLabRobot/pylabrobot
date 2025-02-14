@@ -128,6 +128,7 @@ class Cytation5Backend(ImageReaderBackend):
     self.camera_serial_number = camera_serial_number
     self.max_image_read_attempts = 8
 
+    self._plate: Optional[Plate] = None
     self._exposure: Optional[Exposure] = None
     self._focal_height: Optional[FocalPosition] = None
     self._gain: Optional[Gain] = None
@@ -336,7 +337,7 @@ class Cytation5Backend(ImageReaderBackend):
         parsed_data[row_idx].append(value)
     return parsed_data
 
-  async def _define_plate(self, plate: Plate):
+  async def set_plate(self, plate: Plate):
     """
     08120112207434014351135308559127881422
                                       ^^^^ plate size z
@@ -350,14 +351,19 @@ class Cytation5Backend(ImageReaderBackend):
     ^^ rows
     """
 
+    if plate is self._plate:
+      return
+
     rows = plate.num_items_y
     columns = plate.num_items_x
 
     bottom_right_well = plate.get_item(plate.num_items - 1)
+    assert bottom_right_well.location is not None
     bottom_right_well_center = bottom_right_well.location + bottom_right_well.get_anchor(
       x="c", y="c"
     )
     top_left_well = plate.get_item(0)
+    assert top_left_well.location is not None
     top_left_well_center = top_left_well.location + top_left_well.get_anchor(x="c", y="c")
 
     plate_size_y = plate.get_size_y()
@@ -382,13 +388,11 @@ class Cytation5Backend(ImageReaderBackend):
 
     return await self.send_command("y", cmd)
 
-  async def read_absorbance(self, wavelength: int, plate: Plate) -> List[List[float]]:
+  async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
 
-    await self._define_plate(plate)
-
-    await self.send_command("y", "08120112207434014351135308559127881772\x03")
+    await self.set_plate(plate)
 
     wavelength_str = str(wavelength).zfill(4)
     cmd = f"00470101010812000120010000110010000010600008{wavelength_str}1"
@@ -404,16 +408,14 @@ class Cytation5Backend(ImageReaderBackend):
     assert resp is not None
     return self._parse_body(body)
 
-  async def read_luminescence(self, focal_height: float, plate: Plate) -> List[List[float]]:
+  async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
-
-    await self._define_plate(plate)
 
     cmd = f"3{14220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
 
-    await self.send_command("y", "08120112207434014351135308559127881772\x03")
+    await self.set_plate(plate)
 
     cmd = "008401010108120001200100001100100000123000500200200-001000-00300000000000000000001351092"
     await self.send_command("D", cmd)
@@ -427,10 +429,10 @@ class Cytation5Backend(ImageReaderBackend):
 
   async def read_fluorescence(
     self,
+    plate: Plate,
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
-    plate: Plate,
   ) -> List[List[float]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
@@ -439,12 +441,10 @@ class Cytation5Backend(ImageReaderBackend):
     if not 250 <= emission_wavelength <= 700:
       raise ValueError("Emission wavelength must be between 250 and 700")
 
-    await self._define_plate(plate)
-
     cmd = f"{614220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
 
-    await self.send_command("y", "08120112207434014351135308559127881772\x03")
+    await self.set_plate(plate)
 
     excitation_wavelength_str = str(excitation_wavelength).zfill(4)
     emission_wavelength_str = str(emission_wavelength).zfill(4)
@@ -600,6 +600,9 @@ class Cytation5Backend(ImageReaderBackend):
     self._focal_height = focal_position
 
   async def auto_focus(self, timeout: float = 30):
+    plate = self._plate
+    if plate is None:
+      raise RuntimeError("Plate not set. Run set_plate() first.")
     imaging_mode = self._imaging_mode
     if imaging_mode is None:
       raise RuntimeError("Imaging mode not set. Run set_imaging_mode() first.")
@@ -623,6 +626,7 @@ class Cytation5Backend(ImageReaderBackend):
     # objective function: variance of laplacian
     async def evaluate_focus(focus_value):
       image = await self.capture(
+        plate=plate,
         row=row,
         column=column,
         mode=imaging_mode,
@@ -835,6 +839,7 @@ class Cytation5Backend(ImageReaderBackend):
     exposure_time: Exposure,
     focal_height: FocalPosition,
     gain: Gain,
+    plate: Plate,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
   ) -> List[List[float]]:
@@ -853,6 +858,8 @@ class Cytation5Backend(ImageReaderBackend):
 
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
+
+    await self.set_plate(plate)
 
     await self.select(row, column)
     await self.set_imaging_mode(mode)
