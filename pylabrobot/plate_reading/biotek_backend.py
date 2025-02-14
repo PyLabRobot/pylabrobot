@@ -4,6 +4,8 @@ import logging
 import time
 from typing import List, Literal, Optional
 
+from pylabrobot.resources.plate import Plate
+
 try:
   from pylibftdi import Device
 
@@ -137,10 +139,16 @@ class Cytation5Backend(ImageReaderBackend):
     logger.info("[cytation5] setting up")
 
     self.dev.open()
-    # self.dev.baudrate = 9600 # worked in the past
-    self.dev.baudrate = 38400
+    self.dev.ftdi_fn.ftdi_usb_reset()
+    self.dev.ftdi_fn.ftdi_set_latency_timer(16)  # 0x10
+
+    self.dev.baudrate = 9600  # 0x38 0x41
+    # self.dev.baudrate = 38400
     self.dev.ftdi_fn.ftdi_set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
     SIO_RTS_CTS_HS = 0x1 << 8
+    self.dev.ftdi_fn.ftdi_setdtr(1)
+    self.dev.ftdi_fn.ftdi_setrts(1)
+
     self.dev.ftdi_fn.ftdi_setflowctrl(SIO_RTS_CTS_HS)
     self.dev.ftdi_fn.ftdi_setrts(1)
 
@@ -265,31 +273,36 @@ class Cytation5Backend(ImageReaderBackend):
     return res
 
   async def send_command(
-    self, command: str, parameter: Optional[str] = None, wait_for_response=True
+    self,
+    command: str,
+    parameter: Optional[str] = None,
+    wait_for_response=True,
+    timeout: Optional[float] = None,
   ) -> Optional[bytes]:
     await self._purge_buffers()
     self.dev.write(command.encode())
     logger.debug("[cytation5] sent %s", command)
     response: Optional[bytes] = None
     if wait_for_response or parameter is not None:
-      # print("reading until", b"\x06" if parameter is not None else b"\x03")
-      response = await self._read_until(b"\x06" if parameter is not None else b"\x03")
+      response = await self._read_until(
+        b"\x06" if parameter is not None else b"\x03", timeout=timeout
+      )
 
     if parameter is not None:
       self.dev.write(parameter.encode())
       logger.debug("[cytation5] sent %s", parameter)
       if wait_for_response:
-        response = await self._read_until(b"\x03")
+        response = await self._read_until(b"\x03", timeout=timeout)
 
     return response
 
   async def get_serial_number(self) -> str:
-    resp = await self.send_command("C")
+    resp = await self.send_command("C", timeout=1)
     assert resp is not None
     return resp[1:].split(b" ")[0].decode()
 
   async def get_firmware_version(self) -> str:
-    resp = await self.send_command("e")
+    resp = await self.send_command("e", timeout=1)
     assert resp is not None
     return " ".join(resp[1:-1].decode().split(" ")[0:4])
 
@@ -323,9 +336,57 @@ class Cytation5Backend(ImageReaderBackend):
         parsed_data[row_idx].append(value)
     return parsed_data
 
-  async def read_absorbance(self, wavelength: int) -> List[List[float]]:
+  async def _define_plate(self, plate: Plate):
+    """
+    08120112207434014351135308559127881422
+                                      ^^^^ plate size z
+                                ^^^^^ plate size x
+                            ^^^^^ plate size y
+                      ^^^^^ bottom right x
+                  ^^^^^ top left x
+            ^^^^^ bottom right y
+        ^^^^^ top left y
+      ^^ columns
+    ^^ rows
+    """
+
+    rows = plate.num_items_y
+    columns = plate.num_items_x
+
+    bottom_right_well = plate.get_item(plate.num_items - 1)
+    bottom_right_well_center = bottom_right_well.location + bottom_right_well.get_anchor(
+      x="c", y="c"
+    )
+    top_left_well = plate.get_item(0)
+    top_left_well_center = top_left_well.location + top_left_well.get_anchor(x="c", y="c")
+
+    plate_size_y = plate.get_size_y()
+    plate_size_x = plate.get_size_x()
+    plate_size_z = plate.get_size_z()
+
+    top_left_well_center_y = plate.get_size_y() - top_left_well_center.y  # invert y axis
+    bottom_right_well_center_y = plate.get_size_y() - bottom_right_well_center.y  # invert y axis
+
+    cmd = (
+      f"{rows:02}"
+      f"{columns:02}"
+      f"{int(top_left_well_center_y*100):05}"
+      f"{int(bottom_right_well_center_y*100):05}"
+      f"{int(top_left_well_center.x*100):05}"
+      f"{int(bottom_right_well_center.x*100):05}"
+      f"{int(plate_size_y*100):05}"
+      f"{int(plate_size_x*100):05}"
+      f"{int(plate_size_z*100):04}"
+      "\x03"
+    )
+
+    return await self.send_command("y", cmd)
+
+  async def read_absorbance(self, wavelength: int, plate: Plate) -> List[List[float]]:
     if not 230 <= wavelength <= 999:
       raise ValueError("Wavelength must be between 230 and 999")
+
+    await self._define_plate(plate)
 
     await self.send_command("y", "08120112207434014351135308559127881772\x03")
 
@@ -343,9 +404,11 @@ class Cytation5Backend(ImageReaderBackend):
     assert resp is not None
     return self._parse_body(body)
 
-  async def read_luminescence(self, focal_height: float) -> List[List[float]]:
+  async def read_luminescence(self, focal_height: float, plate: Plate) -> List[List[float]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
+
+    await self._define_plate(plate)
 
     cmd = f"3{14220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
@@ -367,6 +430,7 @@ class Cytation5Backend(ImageReaderBackend):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
+    plate: Plate,
   ) -> List[List[float]]:
     if not 4.5 <= focal_height <= 13.88:
       raise ValueError("Focal height must be between 4.5 and 13.88")
@@ -374,6 +438,8 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Excitation wavelength must be between 250 and 700")
     if not 250 <= emission_wavelength <= 700:
       raise ValueError("Emission wavelength must be between 250 and 700")
+
+    await self._define_plate(plate)
 
     cmd = f"{614220 + int(1000*focal_height)}\x03"
     await self.send_command("t", cmd)
@@ -512,12 +578,12 @@ class Cytation5Backend(ImageReaderBackend):
   async def set_focus(self, focal_position: FocalPosition):
     """focus position in mm"""
 
-    if focal_position == self._focal_height:
-      logger.debug("Focus position is already set to %s", focal_position)
-      return
-
     if focal_position == "auto":
       await self.auto_focus()
+      return
+
+    if focal_position == self._focal_height:
+      logger.debug("Focus position is already set to %s", focal_position)
       return
 
     # There is a difference between the number in the program and the number sent to the machine,

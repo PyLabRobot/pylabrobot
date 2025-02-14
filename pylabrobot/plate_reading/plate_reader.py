@@ -2,12 +2,9 @@ from typing import List, Optional, cast
 
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading.backend import PlateReaderBackend
+from pylabrobot.plate_reading.standard import NoPlateError
 from pylabrobot.resources import Coordinate, Plate, Resource
 from pylabrobot.resources.resource_holder import ResourceHolder
-
-
-class NoPlateError(Exception):
-  pass
 
 
 class PlateReader(ResourceHolder, Machine):
@@ -66,11 +63,11 @@ class PlateReader(ResourceHolder, Machine):
       raise NoPlateError("There is no plate in the plate reader.")
     return cast(Plate, self.children[0])
 
-  async def open(self) -> None:
-    await self.backend.open()
+  async def open(self, **backend_kwargs) -> None:
+    await self.backend.open(**backend_kwargs)
 
-  async def close(self) -> None:
-    await self.backend.close()
+  async def close(self, **backend_kwargs) -> None:
+    await self.backend.close(**backend_kwargs)
 
   @need_setup_finished
   async def read_luminescence(self, focal_height: float) -> List[List[float]]:

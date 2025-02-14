@@ -5,6 +5,7 @@ from typing import List
 
 from pylabrobot.machines.backends import MachineBackend
 from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode
+from pylabrobot.resources.plate import Plate
 
 
 class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
@@ -28,12 +29,12 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
     """Close the plate reader. Also known as plate in."""
 
   @abstractmethod
-  async def read_luminescence(self, focal_height: float) -> List[List[float]]:
+  async def read_luminescence(self, focal_height: float, plate: Plate) -> List[List[float]]:
     """Read the luminescence from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""
 
   @abstractmethod
-  async def read_absorbance(self, wavelength: int) -> List[List[float]]:
+  async def read_absorbance(self, wavelength: int, plate: Plate) -> List[List[float]]:
     """Read the absorbance from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""
 
@@ -43,6 +44,7 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,
+    plate: Plate,
   ) -> List[List[float]]:
     """Read the fluorescence from the plate reader. This should return a list of lists, where the
     outer list is the columns of the plate and the inner list is the rows of the plate."""
