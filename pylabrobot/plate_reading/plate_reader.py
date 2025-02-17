@@ -67,7 +67,7 @@ class PlateReader(ResourceHolder, Machine):
     await self.backend.open(**backend_kwargs)
 
   async def close(self, **backend_kwargs) -> None:
-    await self.backend.close(**backend_kwargs)
+    await self.backend.close(plate=self.get_plate(), **backend_kwargs)
 
   @need_setup_finished
   async def read_luminescence(self, focal_height: float) -> List[List[float]]:

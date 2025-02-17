@@ -2,7 +2,7 @@ import asyncio
 import enum
 import logging
 import time
-from typing import List, Literal, Optional
+from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
 
 from pylabrobot.resources.plate import Plate
 
@@ -39,6 +39,9 @@ SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR = (
 )
 PixelFormat_Mono8 = PySpin.PixelFormat_Mono8 if USE_PYSPIN else -1
 SpinnakerException = PySpin.SpinnakerException if USE_PYSPIN else Exception
+
+
+Image = List[List[float]]
 
 
 def _laplacian_2d(u):
@@ -82,7 +85,9 @@ def _laplacian_2d(u):
   return laplacian
 
 
-async def _golden_ratio_search(func, a, b, tol, timeout):
+async def _golden_ratio_search(
+  func: Callable[..., Coroutine[Any, Any, float]], a: float, b: float, tol: float, timeout: float
+):
   """Golden ratio search to maximize a unimodal function `func` over the interval [a, b]."""
   # thanks chat
   phi = (1 + np.sqrt(5)) / 2  # Golden ratio
@@ -135,6 +140,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._imaging_mode: Optional["ImagingMode"] = None
     self._row: Optional[int] = None
     self._column: Optional[int] = None
+    self._auto_focus_search_range: Optional[Tuple[float, float]] = None
 
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
@@ -310,8 +316,12 @@ class Cytation5Backend(ImageReaderBackend):
   async def open(self):
     return await self.send_command("J")
 
-  async def close(self):
+  async def close(self, plate: Plate):
+    await self.set_plate(plate)
     return await self.send_command("A")
+
+  async def home(self):
+    return await self.send_command("i", "x")
 
   async def get_current_temperature(self) -> float:
     """Get current temperature in degrees Celsius."""
@@ -338,18 +348,16 @@ class Cytation5Backend(ImageReaderBackend):
     return parsed_data
 
   async def set_plate(self, plate: Plate):
-    """
-    08120112207434014351135308559127881422
-                                      ^^^^ plate size z
-                                ^^^^^ plate size x
-                            ^^^^^ plate size y
-                      ^^^^^ bottom right x
-                  ^^^^^ top left x
-            ^^^^^ bottom right y
-        ^^^^^ top left y
-      ^^ columns
-    ^^ rows
-    """
+    # 08120112207434014351135308559127881422
+    #                                   ^^^^ plate size z
+    #                             ^^^^^ plate size x
+    #                         ^^^^^ plate size y
+    #                   ^^^^^ bottom right x
+    #               ^^^^^ top left x
+    #         ^^^^^ bottom right y
+    #     ^^^^^ top left y
+    #   ^^ columns
+    # ^^ rows
 
     if plate is self._plate:
       return
@@ -369,6 +377,8 @@ class Cytation5Backend(ImageReaderBackend):
     plate_size_y = plate.get_size_y()
     plate_size_x = plate.get_size_x()
     plate_size_z = plate.get_size_z()
+    if plate.lid is not None:
+      plate_size_z += plate.lid.get_size_z() - plate.lid.nesting_z_height
 
     top_left_well_center_y = plate.get_size_y() - top_left_well_center.y  # invert y axis
     bottom_right_well_center_y = plate.get_size_y() - bottom_right_well_center.y  # invert y axis
@@ -386,7 +396,9 @@ class Cytation5Backend(ImageReaderBackend):
       "\x03"
     )
 
-    return await self.send_command("y", cmd)
+    resp = await self.send_command("y", cmd)
+    self._plate = plate
+    return resp
 
   async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
     if not 230 <= wavelength <= 999:
@@ -593,13 +605,42 @@ class Cytation5Backend(ImageReaderBackend):
     focus_integer = int(focal_position + intercept + slope * focal_position * 1000)
     focus_str = str(focus_integer).zfill(5)
 
-    # this is actually position., 101 should be 000. might also include imaging mode?
-    await self.send_command("Y", "Z1560101000000000000")
     await self.send_command("i", f"F50{focus_str}")
 
     self._focal_height = focal_position
 
+  async def set_position(self, x: float, y: float):
+    """
+    Args:
+      x: in mm from the center of the selected well
+      y: in mm from the center of the selected well
+    """
+    if self._imaging_mode is None:
+      raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
+
+    imaging_mode_code = {
+      ImagingMode.BRIGHTFIELD: "5",
+      ImagingMode.GFP: "2",
+      ImagingMode.TEXAS_RED: "3",
+      ImagingMode.PHASE_CONTRAST: "7",
+    }[self._imaging_mode]
+    x_str, y_str = (
+      str(round(x * 100)).zfill(6),
+      str(round(y * 100)).zfill(6),
+    )  # firmware is 10um units
+
+    if self._row is None or self._column is None:
+      raise ValueError("Row and column not set. Run select() first.")
+    row_str, column_str = str(self._row).zfill(2), str(self._column).zfill(2)
+
+    await self.send_command("Y", f"Z1{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}")
+
+  def set_auto_focus_search_range(self, min_focal_height: float, max_focal_height: float):
+    self._auto_focus_search_range = (min_focal_height, max_focal_height)
+
   async def auto_focus(self, timeout: float = 30):
+    """Set auto focus search range with set_auto_focus_search_range()."""
+
     plate = self._plate
     if plate is None:
       raise RuntimeError("Plate not set. Run set_plate() first.")
@@ -619,10 +660,6 @@ class Cytation5Backend(ImageReaderBackend):
       # This is strange, because Spinnaker requires numpy
       raise RuntimeError("numpy is not installed. See Cytation5 installation instructions.")
 
-    # these seem reasonable, but might need to be adjusted in the future
-    focus_min = 2
-    focus_max = 5
-
     # objective function: variance of laplacian
     async def evaluate_focus(focus_value):
       image = await self.capture(
@@ -638,15 +675,16 @@ class Cytation5Backend(ImageReaderBackend):
       return np.var(laplacian)
 
     # Use golden ratio search to find the best focus value
-    best_focus_value = await _golden_ratio_search(
+    focus_min, focus_max = self._auto_focus_search_range or (2, 5)
+    best_focal_height = await _golden_ratio_search(
       func=evaluate_focus,
       a=focus_min,
       b=focus_max,
       tol=0.01,
       timeout=timeout,
     )
-
-    return best_focus_value
+    self._focal_height = best_focal_height
+    return best_focal_height
 
   async def set_auto_exposure(self, auto_exposure: Literal["off", "once", "continuous"]):
     if self.cam is None:
@@ -698,10 +736,11 @@ class Cytation5Backend(ImageReaderBackend):
     if row == self._row and column == self._column:
       logger.debug("Already selected %s, %s", row, column)
       return
-    await self.send_command("Y", "Z1260101000000000000")
     row_str, column_str = str(row).zfill(2), str(column).zfill(2)
     await self.send_command("Y", f"W6{row_str}{column_str}")
     self._row, self._column = row, column
+    await self.set_position(0, 0)
+    await asyncio.sleep(1)  # not sure if it tells you when it has landed on the well
 
   async def set_gain(self, gain: Gain):
     """gain of unknown units, or "auto" """
@@ -791,7 +830,7 @@ class Cytation5Backend(ImageReaderBackend):
     self,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
-  ) -> List[List[float]]:
+  ) -> Image:
     assert self.cam is not None
     nodemap = self.cam.GetNodeMap()
 
@@ -840,9 +879,10 @@ class Cytation5Backend(ImageReaderBackend):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
+    coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1),
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
-  ) -> List[List[float]]:
+  ) -> List[Image]:
     """Capture image using the microscope
 
     speed: 211 ms ± 331 μs per loop (mean ± std. dev. of 7 runs, 10 loops each)
@@ -850,22 +890,60 @@ class Cytation5Backend(ImageReaderBackend):
     Args:
       exposure_time: exposure time in ms, or `"auto"`
       focal_height: focal height in mm, or `"auto"`
+      coverage: coverage of the well, either `"full"` or a tuple of `(num_rows, num_columns)`
       color_processing_algorithm: color processing algorithm. See
         PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_*
       pixel_format: pixel format. See PySpin.PixelFormat_*
     """
-    # Adopted from the Spinnaker SDK Acquisition example
 
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
     await self.set_plate(plate)
-
-    await self.select(row, column)
     await self.set_imaging_mode(mode)
+    await self.select(row, column)
     await self.set_exposure(exposure_time)
     await self.set_gain(gain)
     await self.set_focus(focal_height)
-    return await self._acquire_image(
-      color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
-    )
+
+    def image_size(magnification: int, wide_fov: bool) -> Tuple[int, int]:
+      # um to mm (plr unit)
+      if magnification == 4:
+        return 3474 / 1000, 3474 / 1000 if wide_fov else 2135 / 1000, 1576 / 1000
+      if magnification == 20:
+        return 694 / 1000, 694 / 1000 if wide_fov else 427 / 1000, 315 / 1000
+      if magnification == 40:
+        return 347 / 1000, 347 / 1000 if wide_fov else 213 / 1000, 157 / 1000
+      raise ValueError("Invalid magnification")
+
+    # TODO: parameterize
+    magnification = 4
+    wide_fov = True
+    img_width, img_height = image_size(magnification, wide_fov)
+
+    first_well = plate.get_item(0)
+    well_size_x, well_size_y = (first_well.get_size_x(), first_well.get_size_y())
+    if coverage == "full":
+      coverage = (
+        math.ceil(well_size_x / image_size(magnification, wide_fov)[0]),
+        math.ceil(well_size_y / image_size(magnification, wide_fov)[1]),
+      )
+    rows, cols = coverage
+
+    # Get positions, centered around (0, 0)
+    positions = [
+      (x * img_width, -y * img_height)
+      for y in [i - (rows - 1) / 2 for i in range(rows)]
+      for x in [i - (cols - 1) / 2 for i in range(cols)]
+    ]
+
+    images: List[Image] = []
+    for x_pos, y_pos in positions:
+      await self.set_position(x=x_pos, y=y_pos)
+      images.append(
+        await self._acquire_image(
+          color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
+        )
+      )
+
+    return images
