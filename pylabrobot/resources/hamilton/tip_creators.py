@@ -54,14 +54,14 @@ class HamiltonTip(Tip):
 
     fitting_depth = {
       None: 0,
-      0: 0,
-      1: 8,
-      2: 8,
-      3: 8,
-      4: 7.55,
-      5: 10,
+      TipSize.UNDEFINED: 0,
+      TipSize.LOW_VOLUME: 8,
+      TipSize.STANDARD_VOLUME: 8,
+      TipSize.HIGH_VOLUME: 8,
+      TipSize.CORE_384_HEAD_TIP: 7.55,
+      TipSize.XL: 10,
       6: 8,
-    }[tip_size.value]
+    }[tip_size]
 
     super().__init__(
       total_tip_length=total_tip_length,

@@ -18,7 +18,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Deck, Resource
 from pylabrobot.resources.tip_tracker import TipTracker
 
@@ -35,6 +35,7 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   """
 
   def __init__(self):
+    super().__init__()
     self.setup_finished = False
     self._deck: Optional[Deck] = None
     self._head: Optional[Dict[int, TipTracker]] = None

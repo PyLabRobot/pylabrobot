@@ -5,8 +5,7 @@ import logging
 import time
 from typing import List, Literal, Optional, Union
 
-import serial  # type: ignore
-
+from pylabrobot.io.serial import Serial
 from pylabrobot.scales.scale_backend import ScaleBackend
 
 logger = logging.getLogger("pylabrobot")
@@ -160,18 +159,16 @@ class MettlerToledoWXS205SDU(ScaleBackend):
 
   def __init__(self, port: str) -> None:
     self.port = port
-    self.ser: Optional[serial.Serial] = None
+    self.io = Serial(self.port, baudrate=9600, timeout=1)
 
   async def setup(self) -> None:
-    self.ser = serial.Serial(self.port, baudrate=9600, timeout=1)
+    await self.io.setup()
 
     # set output unit to grams
     await self.send_command("M21 0 0")
 
   async def stop(self) -> None:
-    if self.ser is not None:
-      self.ser.close()
-      self.ser = None
+    await self.io.stop()
 
   def serialize(self) -> dict:
     return {**super().serialize(), "port": self.port}
@@ -183,16 +180,12 @@ class MettlerToledoWXS205SDU(ScaleBackend):
       timeout: The timeout in seconds.
     """
 
-    if self.ser is None:
-      raise RuntimeError("Call scale.setup() before sending commands.")
-
-    self.ser.write(command.encode() + b"\r\n")
-    logger.debug("[scale] Sent command: %s", command)
+    self.io.write(command.encode() + b"\r\n")
 
     raw_response = b""
     timeout_time = time.time() + timeout
     while True:
-      raw_response = self.ser.readline()
+      raw_response = self.io.readline()
       await asyncio.sleep(0.001)
       if time.time() > timeout_time:
         raise TimeoutError("Timeout while waiting for response from scale.")
@@ -289,9 +282,6 @@ class MettlerToledoWXS205SDU(ScaleBackend):
         If 0, the scale will tare immediately. If a float/int, the scale will tare after the given
         timeout (in seconds).
     """
-
-    if self.ser is None:
-      raise RuntimeError("Call scale.setup() before sending commands.")
 
     if timeout == "stable":
       # "Use T to tare the balance. The next stable weight value will be saved in the tare memory."
