@@ -5,7 +5,7 @@ import sys
 from abc import ABC
 from typing import Any, Awaitable, Callable, TypeVar
 
-from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.machines.backend import MachineBackend
 
 if sys.version_info < (3, 10):
   from typing_extensions import ParamSpec

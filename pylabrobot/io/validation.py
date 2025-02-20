@@ -5,7 +5,7 @@ from pylabrobot.io.ftdi import FTDI, FTDIValidator
 from pylabrobot.io.hid import HID, HIDValidator
 from pylabrobot.io.serial import Serial, SerialValidator
 from pylabrobot.io.usb import USB, USBValidator
-from pylabrobot.machines.backends.machine import MachineBackend
+from pylabrobot.machines.backend import MachineBackend
 
 cr: Optional[CaptureReader] = None
 

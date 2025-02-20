@@ -18,7 +18,7 @@ from pylabrobot.liquid_handling.standard import (
   SingleChannelAspiration,
   SingleChannelDispense,
 )
-from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Deck, Resource
 from pylabrobot.resources.tip_tracker import TipTracker
 

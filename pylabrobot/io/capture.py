@@ -24,13 +24,6 @@ class _CaptureWriter:
     if self._capture_active:
       self._commands.append(command)
 
-  _instance = None
-
-  def __new__(cls, *args, **kwargs):
-    if not cls._instance:
-      cls._instance = super(_CaptureWriter, cls).__new__(cls)
-    return cls._instance
-
   def start(self, path: Path):
     if self._capture_active:
       raise RuntimeError("io capture already active")
