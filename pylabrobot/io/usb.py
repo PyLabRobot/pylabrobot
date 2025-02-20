@@ -1,9 +1,12 @@
 import logging
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional
 
+from pylabrobot.io.capture import Command, capturer
+from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError, align_sequences
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 try:
   import libusb_package
@@ -18,10 +21,19 @@ except ImportError:
 if TYPE_CHECKING:
   import usb.core
 
-  from pylabrobot.io.validation import LogReader
+  from pylabrobot.io.capture import CaptureReader
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class USBCommand(Command):
+  data: str
+
+  def __init__(self, device_id: str, action: str, data: str, module: str = "usb"):
+    super().__init__(module=module, device_id=device_id, action=action)
+    self.data = data
 
 
 class USB(IOBase):
@@ -70,7 +82,7 @@ class USB(IOBase):
     self.write_endpoint: Optional[usb.core.Endpoint] = None
 
     # unique id in the logs
-    self._unique_id = f"[USB][{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
+    self._unique_id = f"[{hex(self._id_vendor)}:{hex(self._id_product)}][{self._serial_number or ''}][{self._device_address or ''}]"
 
   def write(self, data: bytes, timeout: Optional[float] = None):
     """Write data to the device.
@@ -89,6 +101,9 @@ class USB(IOBase):
     # write command to endpoint
     self.dev.write(self.write_endpoint, data, timeout=timeout)
     logger.log(LOG_LEVEL_IO, "%s write: %s", self._unique_id, data)
+    capturer.record(
+      USBCommand(device_id=self._unique_id, action="write", data=data.decode("unicode_escape"))
+    )
 
   def _read_packet(self) -> Optional[bytearray]:
     """Read a packet from the machine.
@@ -145,6 +160,9 @@ class USB(IOBase):
         continue
 
       logger.log(LOG_LEVEL_IO, "%s read: %s", self._unique_id, resp)
+      capturer.record(
+        USBCommand(device_id=self._unique_id, action="read", data=resp.decode("unicode_escape"))
+      )
       return resp
 
     raise TimeoutError("Timeout while reading.")
@@ -271,7 +289,7 @@ class USB(IOBase):
 class USBValidator(USB):
   def __init__(
     self,
-    lr: "LogReader",
+    cr: "CaptureReader",
     id_vendor: int,
     id_product: int,
     device_address: Optional[int] = None,
@@ -289,39 +307,29 @@ class USBValidator(USB):
       read_timeout=read_timeout,
       write_timeout=write_timeout,
     )
-    self.lr = lr
+    self.cr = cr
 
   async def setup(self):
     pass
 
   def write(self, data: bytes, timeout: Optional[float] = None):
-    next_line = self.lr.next_line()
-    unique_id, action, log_data = next_line.split(" ", 2)
-    action = action.rstrip(":")
-
-    if not unique_id == self._unique_id:
-      raise Exception(
-        f"next command is sent to device with unique id {unique_id}, expected {self._unique_id}"
-      )
-
-    if not action == "write":
-      raise Exception(f"next command is {action}, expected write")
-
-    if not log_data == data:
-      align_sequences(expected=log_data, actual=data)
+    next_command = USBCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "usb"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "write"
+    ):
+      raise ValidationError("next command is not write")
+    if not next_command.data == data.decode("unicode_escape"):
+      align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   def read(self, timeout: Optional[float] = None) -> bytes:
-    next_line = self.lr.next_line()
-    unique_id, action, log_data = next_line.split(" ", 2)
-    action = action.rstrip(":")  # remove the colon at the end
-
-    if not unique_id == self._unique_id:
-      raise Exception(
-        f"next command is sent to device with unique id {unique_id}, expected {self._unique_id}"
-      )
-
-    if not action == "read":
-      raise Exception(f"next command is {action}, expected read")
-
-    return log_data.encode()
+    next_command = USBCommand(**self.cr.next_command())
+    if not (
+      next_command.module == "usb"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "read"
+    ):
+      raise ValidationError("next command is not read")
+    return next_command.data.encode()

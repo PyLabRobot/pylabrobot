@@ -4,10 +4,6 @@ LOG_LEVEL_IO = 5
 logging.addLevelName(LOG_LEVEL_IO, "IO")
 
 
-class ValidationError(Exception):
-  pass
-
-
 def align_sequences(expected, actual):
   """Needleman-Wunsch algorithm for aligning the expected and actual write sequences.
   Convenient for seeing where firmware commands differ.
@@ -60,7 +56,6 @@ def align_sequences(expected, actual):
       j -= 1
 
   # Reverse since we built the alignment backwards
-
   print("expected:", "".join(reversed(aligned_expected)))
   print("actual:  ", "".join(reversed(aligned_actual)))
   print("         ", "".join(reversed(markers)))

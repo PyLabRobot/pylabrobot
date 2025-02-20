@@ -1,8 +1,10 @@
 import logging
-from typing import TYPE_CHECKING, Optional, cast
+from typing import Optional, cast
 
+from pylabrobot.io.capture import CaptureReader, Command, capturer
+from pylabrobot.io.errors import ValidationError
 from pylabrobot.io.io import IOBase
-from pylabrobot.io.validation_utils import LOG_LEVEL_IO, ValidationError
+from pylabrobot.io.validation_utils import LOG_LEVEL_IO, align_sequences
 
 try:
   import hid  # type: ignore
@@ -11,11 +13,15 @@ try:
 except ImportError:
   USE_HID = False
 
-if TYPE_CHECKING:
-  from pylabrobot.io.validation import LogReader
-
 
 logger = logging.getLogger(__name__)
+
+
+class HIDCommand(Command):
+  data: str
+
+  def __init__(self, device_id: str, action: str, data: str):
+    super().__init__(module="hid", device_id=device_id, action=action)
 
 
 class HID(IOBase):
@@ -31,21 +37,25 @@ class HID(IOBase):
       raise RuntimeError("This backend requires the `hid` package to be installed")
     self.device = hid.Device(vid=self.vid, pid=self.pid, serial=self.serial_number)
     logger.log(LOG_LEVEL_IO, "Opened HID device %s", self._unique_id)
+    capturer.record(HIDCommand(device_id=self._unique_id, action="open", data=""))
 
   async def stop(self):
     if self.device is not None:
       self.device.close()
     logger.log(LOG_LEVEL_IO, "Closing HID device %s", self._unique_id)
+    capturer.record(HIDCommand(device_id=self._unique_id, action="close", data=""))
 
   def write(self, data: bytes):
     assert self.device is not None, "forgot to call setup?"
     self.device.write(data)
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._unique_id, data)
+    capturer.record(HIDCommand(device_id=self._unique_id, action="write", data=data.decode()))
 
   def read(self, size: int, timeout: int) -> bytes:
     assert self.device is not None, "forgot to call setup?"
     r = self.device.read(size, timeout=timeout)
     logger.log(LOG_LEVEL_IO, "[%s] read %s", self._unique_id, r)
+    capturer.record(HIDCommand(device_id=self._unique_id, action="read", data=r.decode()))
     return cast(bytes, r)
 
   def serialize(self):
@@ -58,34 +68,54 @@ class HID(IOBase):
 
 class HIDValidator(HID):
   def __init__(
-    self, lr: "LogReader", vid: int = 0x03EB, pid: int = 0x2023, serial_number: Optional[str] = None
+    self,
+    cr: "CaptureReader",
+    vid: int = 0x03EB,
+    pid: int = 0x2023,
+    serial_number: Optional[str] = None,
   ):
     super().__init__(vid=vid, pid=pid, serial_number=serial_number)
-    self.lr = lr
+    self.cr = cr
 
   async def setup(self):
-    next_line = self.lr.next_line()
-    expected = f"Opening HID device {self._unique_id}"
-    if not next_line == expected:
-      raise ValidationError(f"Next line is {next_line}, expected {expected}")
+    next_command = HIDCommand(**self.cr.next_command())
+    if (
+      not next_command.module == "hid"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "open"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected HID open {self._unique_id}")
 
   async def stop(self):
-    next_line = self.lr.next_line()
-    expected = f"Closing HID device {self._unique_id}"
-    if not next_line == expected:
-      raise ValidationError(f"Next line is {next_line}, expected {expected}")
+    next_command = HIDCommand(**self.cr.next_command())
+    if (
+      not next_command.module == "hid"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "close"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected HID close {self._unique_id}")
 
   def write(self, data: bytes):
-    next_line = self.lr.next_line()
-    expected = f"[{self._unique_id}] write {data.decode()}"
-    if not next_line == expected:
-      raise ValidationError(f"Next line is {next_line}, expected {expected}")
+    next_command = HIDCommand(**self.cr.next_command())
+    if (
+      not next_command.module == "hid"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "write"
+    ):
+      raise ValidationError(f"Next line is {next_command}, expected HID write {self._unique_id}")
+    if not next_command.data == data.decode():
+      align_sequences(expected=next_command.data, actual=data.decode())
+      raise ValidationError("Data mismatch: difference was written to stdout.")
 
   def read(self, size: int, timeout: int) -> bytes:
-    next_line = self.lr.next_line()
-    _, _, data = next_line.split(" ", 2)
-    if not next_line.startswith(f"[{self._unique_id}] read"):
-      raise ValidationError(f"Next line is {next_line}, expected {self._unique_id} read")
-    if not len(data) == size:
-      raise ValidationError(f"Read data has length {len(data)}, expected {size}")
-    return data.encode()
+    next_command = HIDCommand(**self.cr.next_command())
+    if (
+      not next_command.module == "hid"
+      and next_command.device_id == self._unique_id
+      and next_command.action == "read"
+      and len(next_command.data) == size
+    ):
+      raise ValidationError(
+        f"Next line is {next_command}, expected HID read {self._unique_id}: {size}"
+      )
+    return next_command.data.encode()

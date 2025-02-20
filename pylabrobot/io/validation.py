@@ -1,57 +1,28 @@
 from typing import List, Optional
 
+from pylabrobot.__version__ import __version__
+from pylabrobot.io.capture import CaptureReader, capturer
 from pylabrobot.io.ftdi import FTDI, FTDIValidator
 from pylabrobot.io.hid import HID, HIDValidator
 from pylabrobot.io.serial import Serial, SerialValidator
 from pylabrobot.io.usb import USB, USBValidator
-from pylabrobot.io.validation_utils import ValidationError
 from pylabrobot.machines.backends.machine import MachineBackend
 
-
-class LogReader:
-  def __init__(self, path: str):
-    self.path = path
-    self.file = open(path, "r")
-
-  def next_line(self) -> str:
-    module = ""
-    level = ""
-    while not (module.startswith("pylabrobot.io") and level == "IO"):
-      line = self.file.readline().strip()
-      if line == "":
-        raise StopIteration
-      if line.count(" - ") < 3:
-        continue
-      _, module, level, data = line.split(" - ", 3)  # first is datetime
-    return data
-
-  def done(self):
-    n = 0
-    first_line = None
-    while not self.file.readline().strip() == "":
-      n += 1
-      if n == 1:
-        first_line = self.file.readline().strip()
-    if n > 0:
-      raise ValidationError(f"Log file not fully read, {n} lines left. First line: {first_line}")
-    self.file.close()
-    print("Validation successful!")
-
-  def reset(self):
-    if self.file.closed:
-      self.file = open(self.path, "r")
-    self.file.seek(0)
+cr: Optional[CaptureReader] = None
 
 
-def validate(log_file: str, backends: Optional[List[MachineBackend]] = None) -> LogReader:
-  """Start
+def validate(capture_file: str):
+  """Start validation against a capture file.
 
   Args:
-    log_file: path to log file
-    backends: list of backends to validate. If None, all backends will be validated.
+    capture_file: path to the capture file. Generate with start_capture.
   """
 
-  lr = LogReader(log_file)
+  if capturer.capture_active:
+    raise RuntimeError("Cannot validate while capture is active")
+
+  global cr
+  cr = CaptureReader(path=capture_file)
   for machine_backend in MachineBackend.get_all_instances():
     io2v = {
       USB: USBValidator,
@@ -60,17 +31,18 @@ def validate(log_file: str, backends: Optional[List[MachineBackend]] = None) -> 
       HID: HIDValidator,
     }
 
-    # replace io with validator
-    if machine_backend.io.__class__ in io2v and (
-      backends is not None and machine_backend in backends
-    ):
+    # replace `io` with validator variant
+    if machine_backend.io.__class__ in io2v:
       machine_backend.io = io2v[machine_backend.io.__class__](
-        **machine_backend.io.serialize(), lr=lr
+        **machine_backend.io.serialize(), cr=cr
       )
+    elif machine_backend.io.__class__ in io2v.values():
+      machine_backend.io.cr = cr
+    else:
+      raise RuntimeError(f"Backend {machine_backend} not supported for validation")
 
-  return lr
 
-
-#  - note that it is not slower, use has full control over what they want to log
-#  - start validation
-#  - check backends that will be tested
+def end_validation():
+  if cr is None:
+    raise RuntimeError("Validation not started")
+  cr.done()
