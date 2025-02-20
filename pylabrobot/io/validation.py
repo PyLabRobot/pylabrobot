@@ -1,6 +1,5 @@
-from typing import List, Optional
+from typing import Optional
 
-from pylabrobot.__version__ import __version__
 from pylabrobot.io.capture import CaptureReader, capturer
 from pylabrobot.io.ftdi import FTDI, FTDIValidator
 from pylabrobot.io.hid import HID, HIDValidator
