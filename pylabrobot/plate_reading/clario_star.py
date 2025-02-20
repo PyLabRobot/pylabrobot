@@ -8,6 +8,7 @@ from typing import List, Optional, Union
 
 from pylabrobot import utils
 from pylabrobot.io.ftdi import FTDI
+from pylabrobot.resources.plate import Plate
 
 from .backend import PlateReaderBackend
 
@@ -239,7 +240,7 @@ class CLARIOStar(PlateReaderBackend):
   async def _get_measurement_values(self):
     return await self.send(b"\x02\x00\x0f\x0c\x05\x02\x00\x00\x00\x00\x00\x00")
 
-  async def read_luminescence(self, focal_height: float = 13) -> List[List[float]]:
+  async def read_luminescence(self, plate: Plate, focal_height: float = 13) -> List[List[float]]:
     """Read luminescence values from the plate reader."""
     await self._mp_and_focus_height_value()
 
@@ -270,6 +271,7 @@ class CLARIOStar(PlateReaderBackend):
 
   async def read_absorbance(
     self,
+    plate: Plate,
     wavelength: int,
     report: Literal["OD", "transmittance"] = "OD",
   ) -> List[List[float]]:
@@ -332,6 +334,7 @@ class CLARIOStar(PlateReaderBackend):
 
   async def read_fluorescence(
     self,
+    plate: Plate,
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,

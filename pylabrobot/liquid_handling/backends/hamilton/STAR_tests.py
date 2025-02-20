@@ -7,9 +7,7 @@ from typing import cast
 from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.standard import GripDirection, Pickup
 from pylabrobot.plate_reading import PlateReader
-from pylabrobot.plate_reading.plate_reader_tests import (
-  MockPlateReaderBackend,
-)
+from pylabrobot.plate_reading.chatterbox import PlateReaderChatterboxBackend
 from pylabrobot.resources import (
   HT,
   HTF,
@@ -667,7 +665,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   async def test_iswap_plate_reader(self):
     plate_reader = PlateReader(
       name="plate_reader",
-      backend=MockPlateReaderBackend(),
+      backend=PlateReaderChatterboxBackend(),
       size_x=0,
       size_y=0,
       size_z=0,

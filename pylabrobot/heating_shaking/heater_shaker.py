@@ -1,5 +1,6 @@
 from typing import Optional
 
+from pylabrobot.resources.coordinate import Coordinate
 from pylabrobot.shaking import Shaker
 from pylabrobot.temperature_controlling import TemperatureController
 
@@ -16,6 +17,7 @@ class HeaterShaker(TemperatureController, Shaker):
     size_y: float,
     size_z: float,
     backend: HeaterShakerBackend,
+    child_location: Coordinate,
     category: str = "heating_shaking",
     model: Optional[str] = None,
   ):
@@ -25,6 +27,7 @@ class HeaterShaker(TemperatureController, Shaker):
       size_y=size_y,
       size_z=size_z,
       backend=backend,
+      child_location=child_location,
       category=category,
       model=model,
     )

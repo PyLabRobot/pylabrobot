@@ -21,6 +21,7 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
     self,
     name: str,
     opentrons_id: str,
+    child_location: Coordinate = Coordinate.zero(),
     child: Optional[ItemizedResource] = None,
   ):
     """Create a new Opentrons temperature module v2.
@@ -38,6 +39,7 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
       size_x=193.5,
       size_y=89.2,
       size_z=84.0,  # height without any aluminum block
+      child_location=child_location,
       backend=OpentronsTemperatureModuleBackend(opentrons_id=opentrons_id),
       category="temperature_controller",
       model="temperatureModuleV2",  # Must match OT moduleModel in list_connected_modules()
@@ -47,4 +49,4 @@ class OpentronsTemperatureModuleV2(TemperatureController, OTModule):
     self.child = child
 
     if child is not None:
-      self.assign_child_resource(child, location=Coordinate(x=0, y=0, z=0))
+      self.assign_child_resource(child)
