@@ -138,7 +138,9 @@ class Cytation5Backend(ImageReaderBackend):
     logger.info("[cytation5] setting up")
 
     await self.io.setup()
-    self.io.set_baudrate(9600)
+    self.io.usb_reset()
+    self.io.set_latency_timer(16)
+    self.io.set_baudrate(9600)  # 0x38 0x41
     self.io.set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
     SIO_RTS_CTS_HS = 0x1 << 8
     self.io.set_flowctrl(SIO_RTS_CTS_HS)

@@ -22,10 +22,13 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.backend.io = unittest.mock.MagicMock()
     self.backend.io.setup = unittest.mock.AsyncMock()
     self.backend.io.stop = unittest.mock.AsyncMock()
+    self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
   async def test_setup(self):
     await self.backend.setup()
     assert self.backend.io.setup.called
+    self.backend.io.usb_reset.assert_called_once()
+    self.backend.io.set_latency_timer.assert_called_with(16)
     self.backend.io.set_baudrate.assert_called_with(9600)
     self.backend.io.set_line_property.assert_called_with(8, 2, 0)
     self.backend.io.set_flowctrl.assert_called_with(0x100)

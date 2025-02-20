@@ -50,6 +50,11 @@ class FTDI(IOBase):
     logger.log(LOG_LEVEL_IO, "[%s] set_dtr %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self._device_id, action="set_dtr", data=str(level)))
 
+  def usb_reset(self):
+    self._dev.ftdi_fn.ftdi_usb_reset()
+    logger.log(LOG_LEVEL_IO, "[%s] usb_reset", self._device_id)
+    capturer.record(FTDICommand(device_id=self._device_id, action="usb_reset", data=""))
+
   def set_latency_timer(self, latency: int):
     self._dev.ftdi_fn.set_latency_timer(latency)
     logger.log(LOG_LEVEL_IO, "[%s] set_latency_timer %s", self._device_id, latency)
@@ -166,6 +171,17 @@ class FTDIValidator(FTDI):
       and next_command.data == str(level)
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI set_dtr {level}")
+
+  def usb_reset(self):
+    next_command = FTDICommand(**self.cr.next_command())
+    if not (
+      next_command.module == "ftdi"
+      and next_command.device_id == self._device_id
+      and next_command.action == "usb_reset"
+    ):
+      raise ValidationError(
+        f"Next line is {next_command}, expected FTDI usb_reset {self._device_id}"
+      )
 
   def set_latency_timer(self, latency: int):
     next_command = FTDICommand(**self.cr.next_command())
