@@ -331,18 +331,16 @@ class Cytation5Backend(ImageReaderBackend):
     return parsed_data
 
   async def set_plate(self, plate: Plate):
-    """
-    08120112207434014351135308559127881422
-                                      ^^^^ plate size z
-                                ^^^^^ plate size x
-                            ^^^^^ plate size y
-                      ^^^^^ bottom right x
-                  ^^^^^ top left x
-            ^^^^^ bottom right y
-        ^^^^^ top left y
-      ^^ columns
-    ^^ rows
-    """
+    # 08120112207434014351135308559127881422
+    #                                   ^^^^ plate size z
+    #                             ^^^^^ plate size x
+    #                         ^^^^^ plate size y
+    #                   ^^^^^ bottom right x
+    #               ^^^^^ top left x
+    #         ^^^^^ bottom right y
+    #     ^^^^^ top left y
+    #   ^^ columns
+    # ^^ rows
 
     if plate is self._plate:
       return
