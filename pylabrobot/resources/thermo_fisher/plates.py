@@ -259,7 +259,7 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       num_items_y=8,
       dx=14.4 - 9/2, # from definition, H - 9/2
       dy=11.2 - 9/2, # from definition, J - 9/2
-      dz=1.4, # from definition, ±N
+      dz=1.4, # from definition, N
       item_dx=9,
       item_dy=9,
       size_x=9,
