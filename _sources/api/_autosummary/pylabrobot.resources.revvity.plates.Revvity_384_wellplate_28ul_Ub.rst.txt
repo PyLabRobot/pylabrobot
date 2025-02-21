@@ -1,0 +1,6 @@
+pylabrobot.resources.revvity.plates.Revvity\_384\_wellplate\_28ul\_Ub
+=====================================================================
+
+.. currentmodule:: pylabrobot.resources.revvity.plates
+
+.. autofunction:: Revvity_384_wellplate_28ul_Ub

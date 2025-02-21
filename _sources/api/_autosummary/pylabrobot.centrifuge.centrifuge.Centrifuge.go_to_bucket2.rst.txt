@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.centrifuge.Centrifuge.go\_to\_bucket2
+===========================================================
+
+.. currentmodule:: pylabrobot.centrifuge.centrifuge
+
+.. automethod:: Centrifuge.go_to_bucket2

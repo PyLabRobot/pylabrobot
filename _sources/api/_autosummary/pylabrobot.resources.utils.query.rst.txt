@@ -1,0 +1,6 @@
+pylabrobot.resources.utils.query
+================================
+
+.. currentmodule:: pylabrobot.resources.utils
+
+.. autofunction:: query

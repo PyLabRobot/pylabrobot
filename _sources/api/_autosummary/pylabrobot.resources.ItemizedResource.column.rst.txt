@@ -1,0 +1,6 @@
+pylabrobot.resources.ItemizedResource.column
+============================================
+
+.. currentmodule:: pylabrobot.resources
+
+.. automethod:: ItemizedResource.column
