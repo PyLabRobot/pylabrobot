@@ -242,3 +242,31 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_P(name: str, with_lid: bool = Fa
     "_L and _P definitions are deprecated. Use "
     "Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate.rotated(90) instead."
   )
+
+
+def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
+    # https://assets.thermofisher.com/TFS-Assets/LSG/manuals/D03011.pdf
+  return Plate(
+    name=name,
+    size_x=127.76, # from definition, A
+    size_y=85.47, # from definition, B
+    size_z=2.5 + 29.1, # from definition, E + L
+    lid=None,
+    model="Thermo_Nunc_96_well_plate_1300uL_Rb",
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=14.4 - 9/2, # from definition, H - 9/2
+      dy=11.2 - 9/2, # from definition, J - 9/2
+      dz=1.4, # from definition, ±N
+      item_dx=9,
+      item_dy=9,
+      size_x=9,
+      size_y=9,
+      size_z=29.1, # from definition, L
+      bottom_type=WellBottomType.U,
+      material_z_thickness=2.5 - 1.4, # from definition, E - N
+      cross_section_type=CrossSectionType.ROUND,
+    ),
+  )
