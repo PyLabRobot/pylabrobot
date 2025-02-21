@@ -268,6 +268,6 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       size_z=29.1, # from definition, L
       bottom_type=WellBottomType.U,
       material_z_thickness=2.5 - 1.4, # from definition, E - N
-      cross_section_type=CrossSectionType.ROUND,
+      cross_section_type=CrossSectionType.CIRCLE,
     ),
   )
