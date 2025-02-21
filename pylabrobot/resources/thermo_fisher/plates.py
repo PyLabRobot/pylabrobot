@@ -246,7 +246,7 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_P(name: str, with_lid: bool = Fa
 
 def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
   # https://assets.thermofisher.com/TFS-Assets/LSG/manuals/D03011.pdf
-  well_diameter = 8.40
+  well_diameter = 8.40 # measured
   return Plate(
     name=name,
     size_x=127.76, # from definition, A
