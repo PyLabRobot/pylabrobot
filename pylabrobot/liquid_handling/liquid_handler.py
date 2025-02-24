@@ -14,6 +14,7 @@ from typing import (
   Callable,
   Dict,
   List,
+  Literal,
   Optional,
   Protocol,
   Sequence,
@@ -27,6 +28,10 @@ from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
   get_strictness,
+)
+from pylabrobot.liquid_handling.utils import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
 )
 from pylabrobot.machines.machine import Machine, need_setup_finished
 from pylabrobot.plate_reading import PlateReader
@@ -59,20 +64,20 @@ from pylabrobot.tilting.tilter import Tilter
 
 from .backends import LiquidHandlerBackend
 from .standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
   GripDirection,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
 
 logger = logging.getLogger("pylabrobot")
@@ -91,16 +96,6 @@ def check_updatable(src_tracker: VolumeTracker, dest_tracker: VolumeTracker):
     not src_tracker.is_cross_contamination_tracking_disabled
     and not dest_tracker.is_cross_contamination_tracking_disabled
   )
-
-
-def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing: float):
-  """Get the centers of the channels with a minimum margin on the edges."""
-  if dim_size < margin * 2 + (n - 1) * min_spacing:
-    raise ValueError("Resource is too small to space channels.")
-  if dim_size - (n - 1) * min_spacing <= min_spacing * 2:
-    remaining_space = dim_size - (n - 1) * min_spacing - margin * 2
-    return [margin + remaining_space / 2 + i * min_spacing for i in range(n)]
-  return [(i + 1) * dim_size / (n + 1) for i in range(n)]
 
 
 class BlowOutVolumeError(Exception):
@@ -665,6 +660,7 @@ class LiquidHandler(Resource, Machine):
     self,
     use_channels: Optional[List[int]] = None,
     allow_nonzero_volume: bool = True,
+    offsets: Optional[List[Coordinate]] = None,
     **backend_kwargs,
   ):
     """Permanently discard tips in the trash.
@@ -695,7 +691,16 @@ class LiquidHandler(Resource, Machine):
       raise RuntimeError("No tips have been picked up and no channels were specified.")
 
     trash = self.deck.get_trash_area()
-    offsets = [c - trash.center() for c in reversed(trash.centers(yn=n))]  # offset is wrt center
+    trash_offsets = get_tight_single_resource_liquid_op_offsets(
+      trash,
+      num_channels=n,
+    )
+    # add trash_offsets to offsets if defined, otherwise use trash_offsets
+    # too advanced for mypy
+    offsets = [
+      o + to if o is not None else to
+      for o, to in zip(offsets or [None] * n, trash_offsets)  # type: ignore
+    ]
 
     return await self.drop_tips(
       tip_spots=[trash] * n,
@@ -711,45 +716,6 @@ class LiquidHandler(Resource, Machine):
     if len(not_containers) > 0:
       raise TypeError(f"Resources must be `Container`s, got {not_containers}")
 
-  def _get_single_resource_liquid_op_offsets(
-    self, resource: Resource, num_channels: int
-  ) -> List[Coordinate]:
-    min_spacing_edge = (
-      2  # minimum spacing between the edge of the container and the center of channel
-    )
-    min_spacing_between_channels = 9
-
-    resource_size: float
-    if resource.get_absolute_rotation().z % 180 == 0:
-      resource_size = resource.get_size_y()
-    elif resource.get_absolute_rotation().z % 90 == 0:
-      resource_size = resource.get_size_x()
-    else:
-      raise ValueError("Only 90 and 180 degree rotations are supported for now.")
-
-    centers = list(
-      reversed(
-        _get_centers_with_margin(
-          dim_size=resource_size,
-          n=num_channels,
-          margin=min_spacing_edge,
-          min_spacing=min_spacing_between_channels,
-        )
-      )
-    )  # reverse because channels are from back to front
-
-    center_offsets: List[Coordinate] = []
-    if resource.get_absolute_rotation().z % 180 == 0:
-      x_offset = resource.get_size_x() / 2
-      center_offsets = [Coordinate(x=x_offset, y=c, z=0) for c in centers]
-    elif resource.get_absolute_rotation().z % 90 == 0:
-      y_offset = resource.get_size_y() / 2
-      center_offsets = [Coordinate(x=c, y=y_offset, z=0) for c in centers]
-
-    # offsets are relative to the center of the resource, but above we computed them wrt lfb
-    # so we need to subtract the center of the resource
-    return [c - resource.center() for c in center_offsets]
-
   @need_setup_finished
   async def aspirate(
     self,
@@ -760,6 +726,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
+    spread: Literal["wide", "tight"] = "wide",
     **backend_kwargs,
   ):
     """Aspirate liquid from the specified wells.
@@ -804,6 +771,9 @@ class LiquidHandler(Resource, Machine):
       liquid_height: The height of the liquid in the well wrt the bottom, in mm.
       blow_out_air_volume: The volume of air to aspirate after the liquid, in ul. If `None`, the
         backend default will be used.
+      spread: Used if aspirating from a single resource with multiple channels. If "tight", the
+        channels will be spaced as close as possible. If "wide", the channels will be spaced as far
+        apart as possible.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -845,9 +815,14 @@ class LiquidHandler(Resource, Machine):
     if len(set(resources)) == 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
-      center_offsets = self._get_single_resource_liquid_op_offsets(
-        resource=resource, num_channels=len(use_channels)
-      )
+      if spread == "tight":
+        center_offsets = get_tight_single_resource_liquid_op_offsets(
+          resource=resource, num_channels=len(use_channels)
+        )
+      else:  # wide
+        center_offsets = get_wide_single_resource_liquid_op_offsets(
+          resource=resource, num_channels=len(use_channels)
+        )
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
@@ -862,7 +837,7 @@ class LiquidHandler(Resource, Machine):
 
     # create operations
     aspirations = [
-      Aspiration(
+      SingleChannelAspiration(
         resource=r,
         volume=v,
         offset=o,
@@ -952,6 +927,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
+    spread: Literal["wide", "tight"] = "wide",
     **backend_kwargs,
   ):
     """Dispense liquid to the specified channels.
@@ -1032,9 +1008,14 @@ class LiquidHandler(Resource, Machine):
     if len(set(resources)) == 1:
       resource = resources[0]
       resources = [resource] * len(use_channels)
-      center_offsets = self._get_single_resource_liquid_op_offsets(
-        resource=resource, num_channels=len(use_channels)
-      )
+      if spread == "tight":
+        center_offsets = get_tight_single_resource_liquid_op_offsets(
+          resource=resource, num_channels=len(use_channels)
+        )
+      else:
+        center_offsets = get_wide_single_resource_liquid_op_offsets(
+          resource=resource, num_channels=len(use_channels)
+        )
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
@@ -1065,7 +1046,7 @@ class LiquidHandler(Resource, Machine):
 
     # create operations
     dispenses = [
-      Dispense(
+      SingleChannelDispense(
         resource=r,
         volume=v,
         offset=o,
@@ -1509,13 +1490,14 @@ class LiquidHandler(Resource, Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    aspiration: Union[AspirationPlate, AspirationContainer]
+    aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
 
     # Convert everything to floats to handle exotic number types
     volume = float(volume)
     flow_rate = float(flow_rate) if flow_rate is not None else None
     blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
+    containers: Sequence[Container]
     if isinstance(resource, Container):
       if (
         resource.get_absolute_size_x() < 108.0 or resource.get_absolute_size_y() < 70.0
@@ -1536,7 +1518,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed(liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      aspiration = AspirationContainer(
+      aspiration = MultiHeadAspirationContainer(
         container=resource,
         volume=volume,
         offset=offset,
@@ -1546,24 +1528,26 @@ class LiquidHandler(Resource, Machine):
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
       )
+
+      containers = [resource]
     else:
       if isinstance(resource, Plate):
         if resource.has_lid():
           raise ValueError("Aspirating from plate with lid")
-        wells = resource.get_all_items()
+        containers = resource.get_all_items()
       else:
-        wells = resource
+        containers = resource
 
         # ensure that wells are all in the same plate
-        plate = wells[0].parent
-        for well in wells:
+        plate = containers[0].parent
+        for well in containers:
           if well.parent != plate:
             raise ValueError("All wells must be in the same plate")
 
-      if not len(wells) == 96:
-        raise ValueError(f"aspirate96 expects 96 wells, got {len(wells)}")
+      if not len(containers) == 96:
+        raise ValueError(f"aspirate96 expects 96 wells, got {len(containers)}")
 
-      for well, channel in zip(wells, self.head96.values()):
+      for well, channel in zip(containers, self.head96.values()):
         # superfluous to have append in two places but the type checker is very angry and does not
         # understand that Optional[Liquid] (remove_liquid) is the same as None from the first case
         if well.tracker.is_disabled or not does_volume_tracking():
@@ -1576,8 +1560,8 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed(liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      aspiration = AspirationPlate(
-        wells=wells,
+      aspiration = MultiHeadAspirationPlate(
+        wells=cast(List[Well], containers),
         volume=volume,
         offset=offset,
         flow_rate=flow_rate,
@@ -1590,9 +1574,9 @@ class LiquidHandler(Resource, Machine):
     try:
       await self.backend.aspirate96(aspiration=aspiration, **backend_kwargs)
     except Exception as error:
-      for channel, well in zip(self.head96.values(), wells):
-        if does_volume_tracking() and not well.tracker.is_disabled:
-          well.tracker.rollback()
+      for channel, container in zip(self.head96.values(), containers):
+        if does_volume_tracking() and not container.tracker.is_disabled:
+          container.tracker.rollback()
         channel.get_tip().tracker.rollback()
       self._trigger_callback(
         "aspirate96",
@@ -1602,10 +1586,11 @@ class LiquidHandler(Resource, Machine):
         **backend_kwargs,
       )
     else:
-      for channel, well in zip(self.head96.values(), wells):
-        if does_volume_tracking() and not well.tracker.is_disabled:
-          well.tracker.commit()
-        channel.get_tip().tracker.commit()
+      for channel, container in zip(self.head96.values(), containers):
+        if does_volume_tracking() and not container.tracker.is_disabled:
+          container.tracker.commit()
+      channel.get_tip().tracker.commit()
+
       self._trigger_callback(
         "aspirate96",
         liquid_handler=self,
@@ -1656,13 +1641,14 @@ class LiquidHandler(Resource, Machine):
 
     tips = [channel.get_tip() for channel in self.head96.values()]
     all_liquids: List[List[Tuple[Optional[Liquid], float]]] = []
-    dispense: Union[DispensePlate, DispenseContainer]
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]
 
     # Convert everything to floats to handle exotic number types
     volume = float(volume)
     flow_rate = float(flow_rate) if flow_rate is not None else None
     blow_out_air_volume = float(blow_out_air_volume) if blow_out_air_volume is not None else None
 
+    containers: Sequence[Container]
     if isinstance(resource, Container):
       if (
         resource.get_absolute_size_x() < 108.0 or resource.get_absolute_size_y() < 70.0
@@ -1683,7 +1669,7 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed(reversed_liquids):
           channel.get_tip().tracker.add_liquid(liquid=liquid, volume=vol)
 
-      dispense = DispenseContainer(
+      dispense = MultiHeadDispenseContainer(
         container=resource,
         volume=volume,
         offset=offset,
@@ -1693,24 +1679,26 @@ class LiquidHandler(Resource, Machine):
         blow_out_air_volume=blow_out_air_volume,
         liquids=cast(List[List[Tuple[Optional[Liquid], float]]], all_liquids),  # stupid
       )
+
+      containers = [resource]
     else:
       if isinstance(resource, Plate):
         if resource.has_lid():
           raise ValueError("Aspirating from plate with lid")
-        wells = resource.get_all_items()
-      else:
-        wells = resource
+        containers = resource.get_all_items()
+      else:  # List[Well]
+        containers = resource
 
         # ensure that wells are all in the same plate
-        plate = wells[0].parent
-        for well in wells:
+        plate = containers[0].parent
+        for well in containers:
           if well.parent != plate:
             raise ValueError("All wells must be in the same plate")
 
-      if not len(wells) == 96:
-        raise ValueError(f"dispense96 expects 96 wells, got {len(wells)}")
+      if not len(containers) == 96:
+        raise ValueError(f"dispense96 expects 96 wells, got {len(containers)}")
 
-      for channel, well in zip(self.head96.values(), wells):
+      for channel, well in zip(self.head96.values(), containers):
         # even if the volume tracker is disabled, a liquid (None, volume) is added to the list
         # during the aspiration command
         liquids = channel.get_tip().tracker.remove_liquid(volume=volume)
@@ -1720,8 +1708,8 @@ class LiquidHandler(Resource, Machine):
         for liquid, vol in reversed_liquids:
           well.tracker.add_liquid(liquid=liquid, volume=vol)
 
-      dispense = DispensePlate(
-        wells=wells,
+      dispense = MultiHeadDispensePlate(
+        wells=cast(List[Well], containers),
         volume=volume,
         offset=offset,
         flow_rate=flow_rate,
@@ -1734,9 +1722,9 @@ class LiquidHandler(Resource, Machine):
     try:
       await self.backend.dispense96(dispense=dispense, **backend_kwargs)
     except Exception as error:
-      for channel, well in zip(self.head96.values(), wells):
+      for channel, container in zip(self.head96.values(), containers):
         if does_volume_tracking() and not well.tracker.is_disabled:
-          well.tracker.rollback()
+          container.tracker.rollback()
         channel.get_tip().tracker.rollback()
 
       self._trigger_callback(
@@ -1747,9 +1735,9 @@ class LiquidHandler(Resource, Machine):
         **backend_kwargs,
       )
     else:
-      for channel, well in zip(self.head96.values(), wells):
+      for channel, container in zip(self.head96.values(), containers):
         if does_volume_tracking() and not well.tracker.is_disabled:
-          well.tracker.commit()
+          container.tracker.commit()
         channel.get_tip().tracker.commit()
 
       self._trigger_callback(
@@ -1812,10 +1800,14 @@ class LiquidHandler(Resource, Machine):
     for extra in extras:
       del backend_kwargs[extra]
 
-    await self.backend.pick_up_resource(
-      pickup=self._resource_pickup,
-      **backend_kwargs,
-    )
+    try:
+      await self.backend.pick_up_resource(
+        pickup=self._resource_pickup,
+        **backend_kwargs,
+      )
+    except Exception as e:
+      self._resource_pickup = None
+      raise e
 
   async def move_picked_up_resource(
     self,
@@ -1844,40 +1836,52 @@ class LiquidHandler(Resource, Machine):
 
     # compute rotation based on the pickup_direction and drop_direction
     if self._resource_pickup.direction == direction:
-      rotation = 0
+      rotation_applied_by_move = 0
     if (self._resource_pickup.direction, direction) in (
       (GripDirection.FRONT, GripDirection.RIGHT),
       (GripDirection.RIGHT, GripDirection.BACK),
       (GripDirection.BACK, GripDirection.LEFT),
       (GripDirection.LEFT, GripDirection.FRONT),
     ):
-      rotation = 90
+      rotation_applied_by_move = 90
     if (self._resource_pickup.direction, direction) in (
       (GripDirection.FRONT, GripDirection.BACK),
       (GripDirection.BACK, GripDirection.FRONT),
       (GripDirection.LEFT, GripDirection.RIGHT),
       (GripDirection.RIGHT, GripDirection.LEFT),
     ):
-      rotation = 180
+      rotation_applied_by_move = 180
     if (self._resource_pickup.direction, direction) in (
       (GripDirection.RIGHT, GripDirection.FRONT),
       (GripDirection.BACK, GripDirection.RIGHT),
       (GripDirection.LEFT, GripDirection.BACK),
       (GripDirection.FRONT, GripDirection.LEFT),
     ):
-      rotation = 270
+      rotation_applied_by_move = 270
 
     # the resource's absolute rotation should be the resource's previous rotation plus the
     # rotation the move applied. The resource's absolute rotation is the rotation of the
     # new parent plus the resource's rotation relative to the parent. So to find the new
-    # rotation of the resource wrt its new paretn, we compute what the new absolute rotation
-    # should be and subtract the rotation of the new parent. Note that before the new rotation
-    # is applied, the resource's rotation is still with respect to the old parent.
+    # rotation of the resource wrt its new parent, we compute what the new absolute rotation
+    # should be and subtract the rotation of the new parent.
+
+    # moving from a resource from a rotated parent to a non-rotated parent means child inherits/'houses' the rotation after move
+    resource_absolute_rotation_after_move = (
+      resource.get_absolute_rotation().z + rotation_applied_by_move
+    )
     destination_rotation = (
       destination.get_absolute_rotation().z if not isinstance(destination, Coordinate) else 0
     )
-    new_rotation_z = resource.get_absolute_rotation().z + rotation - destination_rotation
-    relative_rotation = new_rotation_z - resource.rotation.z
+    resource_rotation_wrt_destination = resource_absolute_rotation_after_move - destination_rotation
+
+    # `get_default_child_location`, which is used to compute the translation of the child wrt the parent,
+    # only considers the child's local rotation. In order to set this new child rotation locally for the
+    # translation computation, we have to subtract the current rotation of the resource, so we can use
+    # resource.rotated(z=resource_rotation_wrt_destination_wrt_local) to 'set' the new local rotation.
+    # Remember, rotated() applies the rotation on top of the current rotation. <- TODO: stupid
+    resource_rotation_wrt_destination_wrt_local = (
+      resource_rotation_wrt_destination - resource.rotation.z
+    )
 
     # get the location of the destination
     if isinstance(destination, ResourceStack):
@@ -1888,51 +1892,33 @@ class LiquidHandler(Resource, Machine):
     elif isinstance(destination, Coordinate):
       to_location = destination
     elif isinstance(destination, Tilter):
-      to_location = destination.get_absolute_location() + destination.child_location
+      to_location = destination.get_absolute_location() + destination.get_default_child_location(
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
+      )
     elif isinstance(destination, PlateHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
-      to_location = (
-        destination.get_absolute_location()
-      )  # + destination.get_default_child_location(resource.rotated(z=relative_rotation))
-
-      # if we are moving a plate, we may need to adjust based on the pedestal size
-      # and plate geometry
-      if isinstance(resource, Plate):
-        # Sanity check for equal well clearances / dz
-        well_dz_set = {
-          round(well.location.z, 2)
-          for well in resource.get_all_children()
-          if well.category == "well" and well.location is not None
-        }
-        assert len(well_dz_set) == 1, "All wells must have the same dz"
-        well_dz = well_dz_set.pop()
-        # Plate "sinking" logic based on well dz to pedestal relationship
-        # 1. no pedestal
-        # 2. pedestal taller than plate.well.dz
-        # 3. pedestal shorter than plate.well.dz
-        pedestal_size_z = abs(destination.pedestal_size_z)
-        z_sinking_depth = min(pedestal_size_z, well_dz)
-        correction_anchor = Coordinate(0, 0, -z_sinking_depth)
-        to_location += correction_anchor
+      to_location = (destination.get_absolute_location()) + destination.get_default_child_location(
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
+      )
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = destination.compute_plate_location(
-        resource.rotated(z=relative_rotation)
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
       )
       to_location = destination.get_absolute_location() + adjusted_plate_anchor
     elif isinstance(destination, ResourceHolder):
-      x = destination.get_default_child_location(resource.rotated(z=relative_rotation))
+      x = destination.get_default_child_location(
+        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
+      )
       to_location = destination.get_absolute_location() + x
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       lid = resource
       plate_location = destination.get_absolute_location()
-      to_location = Coordinate(
-        x=plate_location.x,
-        y=plate_location.y,
-        z=plate_location.z + destination.get_absolute_size_z() - lid.nesting_z_height,
+      to_location = plate_location + destination.get_lid_location(
+        lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
       )
     else:
       to_location = destination.get_absolute_location()
@@ -1945,13 +1931,15 @@ class LiquidHandler(Resource, Machine):
       else Rotation(0, 0, 0),
       offset=offset,
       pickup_distance_from_top=self._resource_pickup.pickup_distance_from_top,
-      direction=direction,
-      rotation=rotation,
+      pickup_direction=self._resource_pickup.direction,
+      drop_direction=direction,
+      rotation=rotation_applied_by_move,
     )
     result = await self.backend.drop_resource(drop=drop, **backend_kwargs)
 
-    if rotation != 0:
-      resource.rotate(z=relative_rotation)
+    # we rotate the resource on top of its original rotation. So in order to set the new rotation,
+    # we have to subtract its current rotation.
+    resource.rotate(z=resource_rotation_wrt_destination - resource.rotation.z)
 
     # assign to destination
     resource.unassign()

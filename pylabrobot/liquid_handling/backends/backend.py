@@ -4,21 +4,21 @@ from abc import ABCMeta, abstractmethod
 from typing import Dict, List, Optional, Union
 
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
-from pylabrobot.machines.backends import MachineBackend
+from pylabrobot.machines.backend import MachineBackend
 from pylabrobot.resources import Deck, Resource
 from pylabrobot.resources.tip_tracker import TipTracker
 
@@ -35,6 +35,7 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
   """
 
   def __init__(self):
+    super().__init__()
     self.setup_finished = False
     self._deck: Optional[Deck] = None
     self._head: Optional[Dict[int, TipTracker]] = None
@@ -101,11 +102,11 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """Drop tips from the specified resource."""
 
   @abstractmethod
-  async def aspirate(self, ops: List[Aspiration], use_channels: List[int]):
+  async def aspirate(self, ops: List[SingleChannelAspiration], use_channels: List[int]):
     """Aspirate liquid from the specified resource using pip."""
 
   @abstractmethod
-  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     """Dispense liquid from the specified resource using pip."""
 
   @abstractmethod
@@ -117,11 +118,13 @@ class LiquidHandlerBackend(MachineBackend, metaclass=ABCMeta):
     """Drop tips to the specified resource using CoRe 96."""
 
   @abstractmethod
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(
+    self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
+  ):
     """Aspirate from all wells in 96 well plate."""
 
   @abstractmethod
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
     """Dispense to all wells in 96 well plate."""
 
   @abstractmethod

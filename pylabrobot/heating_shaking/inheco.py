@@ -2,13 +2,7 @@ import time
 import typing
 
 from pylabrobot.heating_shaking.backend import HeaterShakerBackend
-
-try:
-  import hid  # type: ignore
-
-  USE_IDE = True
-except ImportError:
-  USE_IDE = False
+from pylabrobot.io.hid import HID
 
 
 class InhecoThermoShake(HeaterShakerBackend):
@@ -18,26 +12,20 @@ class InhecoThermoShake(HeaterShakerBackend):
   """
 
   def __init__(self, vid=0x03EB, pid=0x2023, serial_number=None):
-    self.vid = vid
-    self.pid = pid
-    self.serial_number = serial_number
+    self.io = HID(vid=vid, pid=pid, serial_number=serial_number)
 
   async def setup(self):
-    if not USE_IDE:
-      raise RuntimeError("This backend requires the `hid` package to be installed")
-    self.device = hid.Device(vid=self.vid, pid=self.pid, serial=self.serial_number)
+    await self.io.setup()
 
   async def stop(self):
     await self.stop_shaking()
     await self.stop_temperature_control()
-    self.device.close()
+    await self.io.stop()
 
   def serialize(self) -> dict:
     return {
       **super().serialize(),
-      "vid": self.vid,
-      "pid": self.pid,
-      "serial_number": self.serial_number,
+      **self.io.serialize(),
     }
 
   @typing.no_type_check
@@ -102,7 +90,7 @@ class InhecoThermoShake(HeaterShakerBackend):
     start = time.time()
     response = b""
     while time.time() - start < timeout:
-      packet = self.device.read(64, timeout=timeout)
+      packet = self.io.read(64, timeout=timeout)
       if packet is not None and packet != b"":
         if packet.endswith(b"\x00"):
           response += packet.rstrip(b"\x00")  # strip trailing \x00's
@@ -139,7 +127,7 @@ class InhecoThermoShake(HeaterShakerBackend):
     """Send a command to the device and return the response"""
     packets = self._generate_packets(command)
     for packet in packets:
-      self.device.write(bytes(packet))
+      self.io.write(bytes(packet))
 
     response = self._read_response(command, timeout=timeout)
 

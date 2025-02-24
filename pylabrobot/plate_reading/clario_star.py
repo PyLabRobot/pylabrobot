@@ -1,5 +1,4 @@
 import asyncio
-import ctypes
 import logging
 import math
 import struct
@@ -8,6 +7,8 @@ import time
 from typing import List, Optional, Union
 
 from pylabrobot import utils
+from pylabrobot.io.ftdi import FTDI
+from pylabrobot.resources.plate import Plate
 
 from .backend import PlateReaderBackend
 
@@ -16,14 +17,6 @@ if sys.version_info >= (3, 8):
 else:
   from typing_extensions import Literal
 
-try:
-  from pylibftdi import Device
-
-  USE_FTDI = True
-except ImportError:
-  USE_FTDI = False
-
-
 logger = logging.getLogger("pylabrobot")
 
 
@@ -31,39 +24,28 @@ class CLARIOStar(PlateReaderBackend):
   """A plate reader backend for the Clario star. Note that this is not a complete implementation
   and many commands and parameters are not implemented yet."""
 
-  def __init__(self):
-    self.dev: Optional[Device] = None
+  def __init__(self, device_id: Optional[str] = None):
+    self.io = FTDI(device_id=device_id)
 
   async def setup(self):
-    if not USE_FTDI:
-      raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
-
-    self.dev = Device()
-    self.dev.open()
-    self.dev.baudrate = 125000
-    self.dev.ftdi_fn.ftdi_set_line_property(8, 0, 0)  # 8N1
-    self.dev.ftdi_fn.ftdi_set_latency_timer(2)
+    await self.io.setup()
+    self.io.set_baudrate(125000)
+    self.io.set_line_property(8, 0, 0)  # 8N1
+    self.io.set_latency_timer(2)
 
     await self.initialize()
     await self.request_eeprom_data()
 
   async def stop(self):
-    if self.dev is not None:
-      self.dev.close()
+    await self.io.stop()
 
   def get_stat(self):
-    if self.dev is None:
-      raise RuntimeError("device not initialized")
-    stat = ctypes.c_ushort(0)
-    self.dev.ftdi_fn.ftdi_poll_modem_status(ctypes.byref(stat))
-    return hex(stat.value)
+    stat = self.io.poll_modem_status()
+    return hex(stat)
 
   async def read_resp(self, timeout=20) -> bytes:
     """Read a response from the plate reader. If the timeout is reached, return the data that has
     been read so far."""
-
-    if self.dev is None:
-      raise RuntimeError("device not initialized")
 
     d = b""
     last_read = b""
@@ -75,7 +57,7 @@ class CLARIOStar(PlateReaderBackend):
     # we keep reading for at least one more cycle. We only check the timeout if the last read was
     # unsuccessful (i.e. keep reading if we are still getting data).
     while True:
-      last_read = self.dev.read(25)  # 25 is max length observed in pcap
+      last_read = self.io.read(25)  # 25 is max length observed in pcap
       if len(last_read) > 0:
         d += last_read
         end_byte_found = d[-1] == 0x0D
@@ -103,15 +85,12 @@ class CLARIOStar(PlateReaderBackend):
   async def send(self, cmd: Union[bytearray, bytes], read_timeout=20):
     """Send a command to the plate reader and return the response."""
 
-    if self.dev is None:
-      raise RuntimeError("device not initialized")
-
     checksum = (sum(cmd) & 0xFFFF).to_bytes(2, byteorder="big")
     cmd = cmd + checksum + b"\x0d"
 
     logger.debug("sending %s", cmd.hex())
 
-    w = self.dev.write(cmd)
+    w = self.io.write(cmd)
 
     logger.debug("wrote %s bytes", w)
 
@@ -261,7 +240,7 @@ class CLARIOStar(PlateReaderBackend):
   async def _get_measurement_values(self):
     return await self.send(b"\x02\x00\x0f\x0c\x05\x02\x00\x00\x00\x00\x00\x00")
 
-  async def read_luminescence(self, focal_height: float = 13) -> List[List[float]]:
+  async def read_luminescence(self, plate: Plate, focal_height: float = 13) -> List[List[float]]:
     """Read luminescence values from the plate reader."""
     await self._mp_and_focus_height_value()
 
@@ -292,6 +271,7 @@ class CLARIOStar(PlateReaderBackend):
 
   async def read_absorbance(
     self,
+    plate: Plate,
     wavelength: int,
     report: Literal["OD", "transmittance"] = "OD",
   ) -> List[List[float]]:
@@ -354,6 +334,7 @@ class CLARIOStar(PlateReaderBackend):
 
   async def read_fluorescence(
     self,
+    plate: Plate,
     excitation_wavelength: int,
     emission_wavelength: int,
     focal_height: float,

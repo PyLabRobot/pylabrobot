@@ -48,3 +48,46 @@ def CellVis_24_wellplate_3600uL_Fb(name: str, with_lid: bool = False) -> Plate:
       cross_section_type=CrossSectionType.CIRCLE,
     ),
   )
+
+
+def CellVis_96_wellplate_350uL_Fb_Lid(name: str) -> Lid:
+  return Lid(
+    name=name,
+    size_x=127.6,  # from spec
+    size_y=85.75,  # from spec
+    size_z=10,  # from spec
+    nesting_z_height=10 - (16.03 - 13.83),  # from spec
+    model="CellVis_24_wellplate_3600uL_Fb_Lid",
+  )
+
+
+def CellVis_96_wellplate_350uL_Fb(name: str, with_lid: bool = False) -> Plate:
+  """p/n P96-1.5H-N
+
+  https://www.cellvis.com/_96-well-glass-bottom-plate-with-high-performance-number-1.5-cover-glass_/product_detail.php?product_id=50
+  """
+
+  return Plate(
+    name=name,
+    size_x=127.6,  # from spec
+    size_y=85.75,  # from spec
+    size_z=13.83,  # from spec
+    lid=CellVis_24_wellplate_3600uL_Fb_Lid(name + "_Lid") if with_lid else None,
+    model="CellVis_24_wellplate_3600uL_Fb",
+    ordered_items=create_ordered_items_2d(
+      Well,
+      num_items_x=12,
+      num_items_y=8,
+      dx=14.3 - (6.8 / 2),  # from spec
+      dy=11.36 - (6.8 / 2),  # from spec
+      dz=13.83 - 11.93,  # from spec
+      item_dx=9,  # from spec
+      item_dy=9,  # from spec
+      size_x=6.8,  # from spec
+      size_y=6.8,  # from spec
+      size_z=11.93,  # from spec
+      bottom_type=WellBottomType.FLAT,
+      material_z_thickness=0.17,  # +- 0.005mm
+      cross_section_type=CrossSectionType.CIRCLE,
+    ),
+  )

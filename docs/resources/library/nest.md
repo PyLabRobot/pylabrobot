@@ -6,5 +6,7 @@ Wuxi NEST Biotechnology Co., Ltd. a leading life science plastic consumables man
 
 | Description | Image | PLR definition |
 |-|-|-|
+| 'nest_1_troughplate_195000uL_Vb'<br>Part no.: 360101<br>[manufacturer website](https://www.nest-biotech.com/reagent-reserviors/59178416.html)<br>- Material: polypropylene | ![](img/nest/nest_1_troughplate_195000uL_Vb.webp) | `nest_1_troughplate_195000uL_Vb` |
+| 'nest_1_troughplate_185000uL_Vb'<br>Part no.: 360101<br>[manufacturer website](https://www.nest-biotech.com/reagent-reserviors/59178415.html)<br>- Material: polypropylene | ![](img/nest/nest_1_troughplate_185000uL_Vb.webp) | `nest_1_troughplate_185000uL_Vb` |
 | 'nest_8_troughplate_22000uL_Vb'<br>Part no.: 360101<br>[manufacturer website](https://www.nestscientificusa.com/product/detail/513006470820794368)<br>- Material: polypropylene | ![](img/nest/nest_8_troughplate_22000uL_Vb.jpg) | `nest_8_troughplate_22000uL_Vb` |
 | 'nest_12_troughplate_15000uL_Vb'<br>Part no.: 360102<br>[manufacturer website](https://www.nestscientificusa.com/product/detail/513006470820794368)<br>- Material: polypropylene | ![](img/nest/nest_12_troughplate_15000uL_Vb.jpg) | `nest_12_troughplate_15000uL_Vb` |

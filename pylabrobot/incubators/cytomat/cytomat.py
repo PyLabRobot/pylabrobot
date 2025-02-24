@@ -20,7 +20,12 @@ from pylabrobot.incubators.cytomat.constants import (
   SwapStationPosition,
   WarningRegister,
 )
-from pylabrobot.incubators.cytomat.errors import CytomatTelegramStructureError, error_map
+from pylabrobot.incubators.cytomat.errors import (
+  CytomatBusyError,
+  CytomatCommandUnknownError,
+  CytomatTelegramStructureError,
+  error_map,
+)
 from pylabrobot.incubators.cytomat.schemas import (
   ActionRegisterState,
   OverviewRegisterState,
@@ -32,6 +37,7 @@ from pylabrobot.incubators.cytomat.utils import (
   hex_to_binary,
   validate_storage_location_number,
 )
+from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 logger = logging.getLogger(__name__)
@@ -52,24 +58,21 @@ class Cytomat(IncubatorBackend):
     if model not in supported_models:
       raise NotImplementedError("Only the following Cytomats are supported:", supported_models)
     self.model = model
-    self.port = port
     self._racks: List[PlateCarrier] = []
 
-  async def setup(self):
-    try:
-      self.ser = serial.Serial(
-        port=self.port,
-        baudrate=self.default_baud,
-        bytesize=serial.EIGHTBITS,
-        parity=serial.PARITY_NONE,
-        stopbits=serial.STOPBITS_ONE,
-        write_timeout=1,
-        timeout=1,
-      )
-    except serial.SerialException as e:
-      logger.error("Could not connect to cytomat, is it in use by a different notebook?")
-      raise e
+    self.io = Serial(
+      port=port,
+      baudrate=self.default_baud,
+      bytesize=serial.EIGHTBITS,
+      parity=serial.PARITY_NONE,
+      stopbits=serial.STOPBITS_ONE,
+      write_timeout=1,
+      timeout=1,
+    )
 
+  async def setup(self):
+    await self.io.setup()
+    await self.initialize()
     await self.wait_for_task_completion()
 
   async def set_racks(self, racks: List[PlateCarrier]):
@@ -77,8 +80,7 @@ class Cytomat(IncubatorBackend):
     warnings.warn("Cytomat racks need to be configured with the exe software")
 
   async def stop(self):
-    if self.ser.is_open:
-      self.ser.close()
+    await self.io.stop()
 
   def _assemble_command(self, command_type: str, command: str, params: str):
     carriage_return = "\r" if self.model == CytomatType.C2C_425 else "\r\n"
@@ -86,29 +88,45 @@ class Cytomat(IncubatorBackend):
     return command
 
   async def send_command(self, command_type: str, command: str, params: str) -> str:
+    async def _send_command(command_str) -> str:
+      logging.debug(command_str.encode(self.serial_message_encoding))
+      self.io.write(command_str.encode(self.serial_message_encoding))
+      resp = self.io.read(128).decode(self.serial_message_encoding)
+      if len(resp) == 0:
+        raise RuntimeError("Cytomat did not respond to command, is it turned on?")
+      key, *values = resp.split()
+      value = " ".join(values)
+
+      if key == CytomatActionResponse.OK.value or key == command:
+        # actions return an OK response, while checks return the command at the start of the response
+        return value
+      if key == CytomatActionResponse.ERROR.value:
+        logger.error("Command %s failed with: '%s'", command_str, resp)
+        if value == "03":
+          error_register = await self.get_error_register()
+          raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
+        if int(value, base=16) in error_map:
+          raise error_map[int(value, base=16)]
+        raise Exception(f"Unknown cytomat error code in response: {resp}")
+
+      logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
+      raise Exception(f"Unknown response from cytomat: {resp}")
+
+    # Cytomats sometimes return a busy or command not recognized error even when the overview
+    # register says the machine is not busy, or if the command is known. We will retry a few times,
+    # which costs 1s if there is a true error, but is necessary to avoid false negatives.
     command_str = self._assemble_command(command_type=command_type, command=command, params=params)
-    logging.debug(command_str.encode(self.serial_message_encoding))
-    self.ser.write(command_str.encode(self.serial_message_encoding))
-    resp = self.ser.read(128).decode(self.serial_message_encoding)
-    if len(resp) == 0:
-      raise RuntimeError("Cytomat did not respond to command, is it turned on?")
-    key, *values = resp.split()
-    value = " ".join(values)
-
-    if key == CytomatActionResponse.OK.value or key == command:
-      # actions return an OK response, while checks return the command at the start of the response
-      return value
-    if key == CytomatActionResponse.ERROR.value:
-      logger.error("Command %s failed with: '%s'", command_str, resp)
-      if value == "03":
-        error_register = await self.get_error_register()
-        raise CytomatTelegramStructureError(f"Telegram structure error: {error_register}")
-      if int(value, base=16) in error_map:
-        raise error_map[int(value, base=16)]
-      raise Exception(f"Unknown cytomat error code in response: {resp}")
-
-    logging.error("Command %s recieved an unknown response: '%s'", command_str, resp)
-    raise Exception(f"Unknown response from cytomat: {resp}")
+    n_retries = 10
+    exc: Optional[BaseException] = None
+    for _ in range(n_retries):
+      try:
+        return await _send_command(command_str)
+      except (CytomatCommandUnknownError, CytomatBusyError) as e:
+        exc = e
+        await asyncio.sleep(0.1)
+        continue
+    assert exc is not None
+    raise exc
 
   async def send_action(
     self, command_type: str, command: str, params: str, timeout: Optional[int] = 60
@@ -146,8 +164,18 @@ class Cytomat(IncubatorBackend):
     raise ValueError(f"Unsupported Cytomat model: {self.model}")
 
   async def get_overview_register(self) -> OverviewRegisterState:
-    resp = await self.send_command("ch", "bs", "")
-    return OverviewRegisterState.from_resp(resp)
+    # Sometimes this command is not recognized and it is not known why. We will retry a few times
+    # We don't care if the cytomat is still busy, that is actually what we are often checking for.
+    # We are just gathering state, so just try a little bit later.
+    num_tries = 10
+    for _ in range(num_tries):
+      try:
+        resp = await self.send_command("ch", "bs", "")
+      except (CytomatCommandUnknownError, CytomatBusyError):
+        await asyncio.sleep(0.1)
+        continue
+      return OverviewRegisterState.from_resp(resp)
+    raise CytomatCommandUnknownError("Could not get overview register")
 
   async def get_warning_register(self) -> WarningRegister:
     hex_value = await self.send_command("ch", "bw", "")
@@ -282,7 +310,7 @@ class Cytomat(IncubatorBackend):
   async def wait_for_task_completion(self, timeout=60):
     start = time.time()
     while True:
-      overview_register = await self.get_overview_register()  # TODO: sometimes not recognized
+      overview_register = await self.get_overview_register()
       if not overview_register.busy_bit_set:
         break
       await asyncio.sleep(1)

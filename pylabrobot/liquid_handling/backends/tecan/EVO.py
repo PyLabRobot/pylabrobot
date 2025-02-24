@@ -13,6 +13,7 @@ from typing import (
   Union,
 )
 
+from pylabrobot.io.usb import USB
 from pylabrobot.liquid_handling.backends.backend import (
   LiquidHandlerBackend,
 )
@@ -25,21 +26,20 @@ from pylabrobot.liquid_handling.liquid_classes.tecan import (
   get_liquid_class,
 )
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
   ResourceDrop,
   ResourceMove,
   ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
-from pylabrobot.machines.backends import USBBackend
 from pylabrobot.resources import (
   Coordinate,
   Liquid,
@@ -54,7 +54,7 @@ from pylabrobot.resources import (
 T = TypeVar("T")
 
 
-class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
+class TecanLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
   """
   Abstract base class for Tecan liquid handling robot backends.
   """
@@ -73,15 +73,14 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
       read_timeout: The timeout for reading from the Tecan machine in seconds.
     """
 
-    USBBackend.__init__(
-      self,
+    super().__init__()
+    self.io = USB(
       packet_read_timeout=packet_read_timeout,
       read_timeout=read_timeout,
       write_timeout=write_timeout,
       id_vendor=0x0C47,
       id_product=0x4000,
     )
-    LiquidHandlerBackend.__init__(self)
 
     self._cache: Dict[str, List[Optional[int]]] = {}
 
@@ -100,7 +99,7 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
     cmd = module + command + ",".join(str(a) if a is not None else "" for a in params)
     return f"\02{cmd}\00"
 
-  def parse_response(self, resp: bytearray) -> Dict[str, Union[str, int, List[int]]]:
+  def parse_response(self, resp: bytes) -> Dict[str, Union[str, int, List[int]]]:
     """Parse a machine response string
 
     Args:
@@ -151,16 +150,19 @@ class TecanLiquidHandler(LiquidHandlerBackend, USBBackend, metaclass=ABCMeta):
 
     cmd = self._assemble_command(module, command, [] if params is None else params)
 
-    self.write(cmd, timeout=write_timeout)
+    self.io.write(cmd.encode(), timeout=write_timeout)
     if not wait:
       return None
 
-    resp = self.read(timeout=read_timeout)
+    resp = self.io.read(timeout=read_timeout)
     return self.parse_response(resp)
 
   async def setup(self):
-    await LiquidHandlerBackend.setup(self)
-    await USBBackend.setup(self)
+    await super().setup()
+    await self.io.setup()
+
+  async def stop(self):
+    await self.io.stop()
 
 
 class EVO(TecanLiquidHandler):
@@ -244,12 +246,7 @@ class EVO(TecanLiquidHandler):
     return self._mca_connected
 
   def serialize(self) -> dict:
-    return {
-      **super().serialize(),
-      "packet_read_timeout": self.packet_read_timeout,
-      "read_timeout": self.read_timeout,
-      "write_timeout": self.write_timeout,
-    }
+    return {**super().serialize(), **self.io.serialize()}
 
   async def setup(self):
     """Setup
@@ -309,7 +306,7 @@ class EVO(TecanLiquidHandler):
   # ============== LiquidHandlerBackend methods ==============
 
   async def aspirate(
-    self, ops: List[Aspiration], use_channels: List[int]
+    self, ops: List[SingleChannelAspiration], use_channels: List[int]
   ):  # TODO: pass in operation parameters to override TecanLiquidClass defaults
     """Aspirate liquid from the specified channels.
 
@@ -398,7 +395,7 @@ class EVO(TecanLiquidHandler):
     await self.liha.set_end_speed_plunger(sep)
     await self.liha.move_plunger_relative(ppr)
 
-  async def dispense(self, ops: List[Dispense], use_channels: List[int]):
+  async def dispense(self, ops: List[SingleChannelDispense], use_channels: List[int]):
     """Dispense liquid from the specified channels.
 
     Args:
@@ -511,10 +508,12 @@ class EVO(TecanLiquidHandler):
   async def drop_tips96(self, drop: DropTipRack):
     raise NotImplementedError()
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(
+    self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]
+  ):
     raise NotImplementedError()
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
     raise NotImplementedError()
 
   async def pick_up_resource(self, pickup: ResourcePickup):
@@ -601,7 +600,7 @@ class EVO(TecanLiquidHandler):
 
   def _liha_positions(
     self,
-    ops: Sequence[Union[Aspiration, Dispense, Pickup, Drop]],
+    ops: Sequence[Union[SingleChannelAspiration, SingleChannelDispense, Pickup, Drop]],
     use_channels: List[int],
   ) -> Tuple[
     List[Optional[int]],
@@ -709,7 +708,7 @@ class EVO(TecanLiquidHandler):
 
   def _aspirate_action(
     self,
-    ops: Sequence[Union[Aspiration, Dispense]],
+    ops: Sequence[Union[SingleChannelAspiration, SingleChannelDispense]],
     use_channels: List[int],
     tecan_liquid_classes: List[Optional[TecanLiquidClass]],
     zadd: List[Optional[int]],
@@ -753,7 +752,7 @@ class EVO(TecanLiquidHandler):
 
   def _dispense_action(
     self,
-    ops: Sequence[Union[Aspiration, Dispense]],
+    ops: Sequence[Union[SingleChannelAspiration, SingleChannelDispense]],
     use_channels: List[int],
     tecan_liquid_classes: List[Optional[TecanLiquidClass]],
   ) -> Tuple[
