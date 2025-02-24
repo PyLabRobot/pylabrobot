@@ -8,12 +8,12 @@ from typing import Any, List, Optional, Tuple, Union
 
 from pylabrobot.liquid_handling.backends import LiquidHandlerBackend
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
+  SingleChannelAspiration,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  SingleChannelDispense,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
   Drop,
   DropTipRack,
   Pickup,
@@ -2465,7 +2465,7 @@ class Prep(LiquidHandlerBackend):
 
   async def aspirate(
     self,
-    ops: List[Aspiration],
+    ops: List[SingleChannelAspiration],
     use_channels: List[int],
     z_final: float = 96.97,
     timeout: Optional[float] = None,
@@ -2543,7 +2543,7 @@ class Prep(LiquidHandlerBackend):
 
   async def dispense(
     self,
-    ops: List[Dispense],
+    ops: List[SingleChannelDispense],
     use_channels: List[int],
     final_z: float = 96.97,
     timeout: Optional[float] = None,
@@ -2623,10 +2623,10 @@ class Prep(LiquidHandlerBackend):
   async def drop_tips96(self, drop: DropTipRack):
     raise NotImplementedError("This operation is not supported on the Prep")
 
-  async def aspirate96(self, aspiration: Union[AspirationPlate, AspirationContainer]):
+  async def aspirate96(self, aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer]):
     raise NotImplementedError("This operation is not supported on the Prep")
 
-  async def dispense96(self, dispense: Union[DispensePlate, DispenseContainer]):
+  async def dispense96(self, dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer]):
     raise NotImplementedError("This operation is not supported on the Prep")
 
   async def pick_up_resource(self, pickup: ResourcePickup):
