@@ -7,13 +7,6 @@ from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Uni
 from pylabrobot.resources.plate import Plate
 
 try:
-  from pylibftdi import Device
-
-  USE_FTDI = True
-except ImportError:
-  USE_FTDI = False
-
-try:
   import numpy as np  # type: ignore
 
   USE_NUMPY = True
@@ -28,6 +21,7 @@ try:
 except ImportError:
   USE_PYSPIN = False
 
+from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import ImageReaderBackend
 from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode
 
@@ -120,13 +114,16 @@ class Cytation5Backend(ImageReaderBackend):
   camera used during development is the Point Grey Research Inc. Blackfly BFLY-U3-23S6M.
   """
 
-  def __init__(self, timeout: float = 20, camera_serial_number: Optional[float] = None) -> None:
+  def __init__(
+    self,
+    timeout: float = 20,
+    camera_serial_number: Optional[float] = None,
+    device_id: Optional[str] = None,
+  ) -> None:
     super().__init__()
     self.timeout = timeout
-    if not USE_FTDI:
-      raise RuntimeError("pylibftdi is not installed. Run `pip install pylabrobot[plate_reading]`.")
 
-    self.dev = Device(lazy_open=True)
+    self.io = FTDI(device_id=device_id)
 
     self.spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self.cam: Optional["PySpin.CameraPtr"] = None
@@ -141,23 +138,19 @@ class Cytation5Backend(ImageReaderBackend):
     self._row: Optional[int] = None
     self._column: Optional[int] = None
     self._auto_focus_search_range: Optional[Tuple[float, float]] = None
+    self._shaking = False
 
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
 
-    self.dev.open()
-    self.dev.ftdi_fn.ftdi_usb_reset()
-    self.dev.ftdi_fn.ftdi_set_latency_timer(16)  # 0x10
-
-    self.dev.baudrate = 9600  # 0x38 0x41
-    # self.dev.baudrate = 38400
-    self.dev.ftdi_fn.ftdi_set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
+    await self.io.setup()
+    self.io.usb_reset()
+    self.io.set_latency_timer(16)
+    self.io.set_baudrate(9600)  # 0x38 0x41
+    self.io.set_line_property(8, 2, 0)  # 8 bits, 2 stop bits, no parity
     SIO_RTS_CTS_HS = 0x1 << 8
-    self.dev.ftdi_fn.ftdi_setdtr(1)
-    self.dev.ftdi_fn.ftdi_setrts(1)
-
-    self.dev.ftdi_fn.ftdi_setflowctrl(SIO_RTS_CTS_HS)
-    self.dev.ftdi_fn.ftdi_setrts(1)
+    self.io.set_flowctrl(SIO_RTS_CTS_HS)
+    self.io.set_rts(True)
 
     self._shaking = False
     self._shaking_task: Optional[asyncio.Task] = None
@@ -244,7 +237,7 @@ class Cytation5Backend(ImageReaderBackend):
   async def stop(self) -> None:
     logger.info("[cytation5] stopping")
     await self.stop_shaking()
-    self.dev.close()
+    await self.io.stop()
 
     if hasattr(self, "cam") and self.cam is not None:
       self.cam.DeInit()
@@ -255,8 +248,8 @@ class Cytation5Backend(ImageReaderBackend):
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
     for _ in range(6):
-      self.dev.ftdi_fn.ftdi_usb_purge_rx_buffer()
-    self.dev.ftdi_fn.ftdi_usb_purge_tx_buffer()
+      self.io.usb_purge_rx_buffer()
+    self.io.usb_purge_tx_buffer()
 
   async def _read_until(self, char: bytes, timeout: Optional[float] = None) -> bytes:
     """If timeout is None, use self.timeout"""
@@ -266,7 +259,7 @@ class Cytation5Backend(ImageReaderBackend):
     res = b""
     t0 = time.time()
     while x != char:
-      x = self.dev.read(1)
+      x = self.io.read(1)
       res += x
 
       if time.time() - t0 > timeout:
@@ -287,7 +280,7 @@ class Cytation5Backend(ImageReaderBackend):
     timeout: Optional[float] = None,
   ) -> Optional[bytes]:
     await self._purge_buffers()
-    self.dev.write(command.encode())
+    self.io.write(command.encode())
     logger.debug("[cytation5] sent %s", command)
     response: Optional[bytes] = None
     if wait_for_response or parameter is not None:
@@ -296,7 +289,7 @@ class Cytation5Backend(ImageReaderBackend):
       )
 
     if parameter is not None:
-      self.dev.write(parameter.encode())
+      self.io.write(parameter.encode())
       logger.debug("[cytation5] sent %s", parameter)
       if wait_for_response:
         response = await self._read_until(b"\x03", timeout=timeout)

@@ -37,6 +37,7 @@ from pylabrobot.incubators.cytomat.utils import (
   hex_to_binary,
   validate_storage_location_number,
 )
+from pylabrobot.io.serial import Serial
 from pylabrobot.resources import Plate, PlateCarrier, PlateHolder
 
 logger = logging.getLogger(__name__)
@@ -57,24 +58,20 @@ class Cytomat(IncubatorBackend):
     if model not in supported_models:
       raise NotImplementedError("Only the following Cytomats are supported:", supported_models)
     self.model = model
-    self.port = port
     self._racks: List[PlateCarrier] = []
 
-  async def setup(self):
-    try:
-      self.ser = serial.Serial(
-        port=self.port,
-        baudrate=self.default_baud,
-        bytesize=serial.EIGHTBITS,
-        parity=serial.PARITY_NONE,
-        stopbits=serial.STOPBITS_ONE,
-        write_timeout=1,
-        timeout=1,
-      )
-    except serial.SerialException as e:
-      logger.error("Could not connect to cytomat, is it in use by a different notebook?")
-      raise e
+    self.io = Serial(
+      port=port,
+      baudrate=self.default_baud,
+      bytesize=serial.EIGHTBITS,
+      parity=serial.PARITY_NONE,
+      stopbits=serial.STOPBITS_ONE,
+      write_timeout=1,
+      timeout=1,
+    )
 
+  async def setup(self):
+    await self.io.setup()
     await self.initialize()
     await self.wait_for_task_completion()
 
@@ -83,8 +80,7 @@ class Cytomat(IncubatorBackend):
     warnings.warn("Cytomat racks need to be configured with the exe software")
 
   async def stop(self):
-    if self.ser.is_open:
-      self.ser.close()
+    await self.io.stop()
 
   def _assemble_command(self, command_type: str, command: str, params: str):
     carriage_return = "\r" if self.model == CytomatType.C2C_425 else "\r\n"
@@ -94,8 +90,8 @@ class Cytomat(IncubatorBackend):
   async def send_command(self, command_type: str, command: str, params: str) -> str:
     async def _send_command(command_str) -> str:
       logging.debug(command_str.encode(self.serial_message_encoding))
-      self.ser.write(command_str.encode(self.serial_message_encoding))
-      resp = self.ser.read(128).decode(self.serial_message_encoding)
+      self.io.write(command_str.encode(self.serial_message_encoding))
+      resp = self.io.read(128).decode(self.serial_message_encoding)
       if len(resp) == 0:
         raise RuntimeError("Cytomat did not respond to command, is it turned on?")
       key, *values = resp.split()
