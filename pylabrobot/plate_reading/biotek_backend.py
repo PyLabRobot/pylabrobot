@@ -612,6 +612,7 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
 
     imaging_mode_code = {
+      # DAPI: "1"
       ImagingMode.BRIGHTFIELD: "5",
       ImagingMode.GFP: "2",
       ImagingMode.TEXAS_RED: "3",
@@ -626,7 +627,9 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Row and column not set. Run select() first.")
     row_str, column_str = str(self._row).zfill(2), str(self._column).zfill(2)
 
-    await self.send_command("Y", f"Z1{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}")
+    z = f"Z1{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}"
+    await self.send_command("Y", z)
+    print("set pos", x, y, z)
 
   def set_auto_focus_search_range(self, min_focal_height: float, max_focal_height: float):
     self._auto_focus_search_range = (min_focal_height, max_focal_height)
@@ -655,7 +658,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     # objective function: variance of laplacian
     async def evaluate_focus(focus_value):
-      image = await self.capture(
+      images = await self.capture(  # TODO: _acquire_image
         plate=plate,
         row=row,
         column=column,
@@ -664,6 +667,7 @@ class Cytation5Backend(ImageReaderBackend):
         exposure_time=exposure,
         gain=gain,
       )
+      image = images[0]  # self.capture returns List now
       laplacian = _laplacian_2d(np.asarray(image))
       return np.var(laplacian)
 
@@ -873,6 +877,7 @@ class Cytation5Backend(ImageReaderBackend):
     gain: Gain,
     plate: Plate,
     coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1),
+    overlap: Optional[float] = None,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
   ) -> List[Image]:
@@ -889,6 +894,8 @@ class Cytation5Backend(ImageReaderBackend):
       pixel_format: pixel format. See PySpin.PixelFormat_*
     """
 
+    assert overlap is None, "not implemented yet"
+
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
@@ -902,11 +909,11 @@ class Cytation5Backend(ImageReaderBackend):
     def image_size(magnification: int, wide_fov: bool) -> Tuple[int, int]:
       # um to mm (plr unit)
       if magnification == 4:
-        return 3474 / 1000, 3474 / 1000 if wide_fov else 2135 / 1000, 1576 / 1000
+        return (3474 / 1000, 3474 / 1000) if wide_fov else (2135 / 1000, 1576 / 1000)
       if magnification == 20:
-        return 694 / 1000, 694 / 1000 if wide_fov else 427 / 1000, 315 / 1000
+        return (694 / 1000, 694 / 1000) if wide_fov else (427 / 1000, 315 / 1000)
       if magnification == 40:
-        return 347 / 1000, 347 / 1000 if wide_fov else 213 / 1000, 157 / 1000
+        return (347 / 1000, 347 / 1000) if wide_fov else (213 / 1000, 157 / 1000)
       raise ValueError("Invalid magnification")
 
     # TODO: parameterize
