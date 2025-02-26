@@ -1,5 +1,9 @@
 import unittest
 
+from pylabrobot.resources.hamilton.mfx_carriers import MFX_CAR_L5_base
+from pylabrobot.resources.hamilton.mfx_modules import MFX_TIP_module
+from pylabrobot.resources.hamilton.tip_racks import HTF
+
 from .carrier import (
   Carrier,
   PlateCarrier,
@@ -398,3 +402,27 @@ class CarrierTests(unittest.TestCase):
       pcs._update_resource_stack_location,
       resource_stack._did_assign_resource_callbacks,
     )
+
+
+class MFXCarrierTests(unittest.TestCase):
+  def test_init(self):
+    MFX_TIP_module_1 = MFX_TIP_module(name="MFX_TIP_module_1")
+    MFX_TIP_module_2 = MFX_TIP_module(name="MFX_TIP_module_2")
+    MFX_TIP_module_3 = MFX_TIP_module(name="MFX_TIP_module_3")
+    MFX_TIP_module_4 = MFX_TIP_module(name="MFX_TIP_module_4")
+    MFX_TIP_module_5 = MFX_TIP_module(name="MFX_TIP_module_5")
+
+    mfx_carrier = MFX_CAR_L5_base(
+      name="mfx_tip_carrier_1",
+      modules={
+        4: MFX_TIP_module_5,
+        3: MFX_TIP_module_4,
+        2: MFX_TIP_module_3,
+        1: MFX_TIP_module_2,
+        0: MFX_TIP_module_1,
+      },
+    )
+    assert len(mfx_carrier.children) == 5
+    assert len(mfx_carrier.sites) == 5
+    for i in range(5):
+      assert mfx_carrier.sites[i].name == f"MFX_TIP_module_{i + 1}"
