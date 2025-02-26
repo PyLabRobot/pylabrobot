@@ -2,7 +2,6 @@ import unittest
 
 from pylabrobot.resources.hamilton.mfx_carriers import MFX_CAR_L5_base
 from pylabrobot.resources.hamilton.mfx_modules import MFX_TIP_module
-from pylabrobot.resources.hamilton.tip_racks import HTF
 
 from .carrier import (
   Carrier,
