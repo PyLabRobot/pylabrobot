@@ -64,7 +64,7 @@ class Carrier(Resource, Generic[S]):
 
     # see if we have an index for the resource name (eg from deserialization or user specification),
     # otherwise add in first available spot
-    idx = spot or len(self.sites)
+    idx = spot if spot is not None else len(self.sites)
     if not reassign and self.sites[idx] is not None:
       raise ValueError(f"a site with index {idx} already exists")
     self.sites[idx] = cast(S, resource)
