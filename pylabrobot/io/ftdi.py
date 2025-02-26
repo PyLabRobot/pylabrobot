@@ -41,12 +41,12 @@ class FTDI(IOBase):
     self._dev.baudrate = baudrate
 
   def set_rts(self, level: bool):
-    self._dev.ftdi_fn.setrts(level)
+    self._dev.ftdi_fn.ftdi_setrts(level)
     logger.log(LOG_LEVEL_IO, "[%s] set_rts %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self._device_id, action="set_rts", data=str(level)))
 
   def set_dtr(self, level: bool):
-    self._dev.ftdi_fn.setdtr(level)
+    self._dev.ftdi_fn.ftdi_setdtr(level)
     logger.log(LOG_LEVEL_IO, "[%s] set_dtr %s", self._device_id, level)
     capturer.record(FTDICommand(device_id=self._device_id, action="set_dtr", data=str(level)))
 
@@ -56,14 +56,14 @@ class FTDI(IOBase):
     capturer.record(FTDICommand(device_id=self._device_id, action="usb_reset", data=""))
 
   def set_latency_timer(self, latency: int):
-    self._dev.ftdi_fn.set_latency_timer(latency)
+    self._dev.ftdi_fn.ftdi_set_latency_timer(latency)
     logger.log(LOG_LEVEL_IO, "[%s] set_latency_timer %s", self._device_id, latency)
     capturer.record(
       FTDICommand(device_id=self._device_id, action="set_latency_timer", data=str(latency))
     )
 
   def set_line_property(self, bits: int, stopbits: int, parity: int):
-    self._dev.ftdi_fn.set_line_property(bits, stopbits, parity)
+    self._dev.ftdi_fn.ftdi_set_line_property(bits, stopbits, parity)
     logger.log(
       LOG_LEVEL_IO, "[%s] set_line_property %s,%s,%s", self._device_id, bits, stopbits, parity
     )
@@ -74,7 +74,7 @@ class FTDI(IOBase):
     )
 
   def set_flowctrl(self, flowctrl: int):
-    self._dev.ftdi_fn.setflowctrl(flowctrl)
+    self._dev.ftdi_fn.ftdi_setflowctrl(flowctrl)
     logger.log(LOG_LEVEL_IO, "[%s] set_flowctrl %s", self._device_id, flowctrl)
     capturer.record(
       FTDICommand(device_id=self._device_id, action="set_flowctrl", data=str(flowctrl))
