@@ -1,0 +1,6 @@
+pylabrobot.resources.tecan.tip\_carriers.DiTi\_SBS\_2P\_W\_MCA384
+=================================================================
+
+.. currentmodule:: pylabrobot.resources.tecan.tip_carriers
+
+.. autofunction:: DiTi_SBS_2P_W_MCA384

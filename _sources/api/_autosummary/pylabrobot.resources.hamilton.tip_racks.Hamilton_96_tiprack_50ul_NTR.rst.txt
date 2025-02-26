@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_racks.Hamilton\_96\_tiprack\_50ul\_NTR
+=========================================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_racks
+
+.. autofunction:: Hamilton_96_tiprack_50ul_NTR

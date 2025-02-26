@@ -1,0 +1,255 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Validating against log file example\n",
+    "\n",
+    "All communication between PLR and the outside world (the hardware) happens through the io layer. This is a layer below backends, and is responsible for sending and receiving messages to and from the hardware. Schematically,\n",
+    "\n",
+    "```\n",
+    "Frontends <-> backends <-> io <-> hardware\n",
+    "```\n",
+    "\n",
+    "PLR supports capturing all communication in the io layer, both write and read commands. This can later be played back to validate that a protocol has not changed. The key here is that if we send the same commands to the hardware, the hardware will do the same thing. \"Reading\" data (from the capture file) is useful because some protocols are dynamic and depend on responses from the hardware.\n",
+    "\n",
+    "In this notebook, we will run a simple protocol on a robot while capturing all data passing through the io layer. We will then replay the capture file while executing the protocol again to demonstrate how validation works. Finally, we slightly modify the protocol and show that the validation fails."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Defining a simple protocol"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pylabrobot\n",
+    "from pylabrobot.liquid_handling import LiquidHandler\n",
+    "from pylabrobot.liquid_handling.backends import STAR\n",
+    "from pylabrobot.resources.hamilton import STARDeck\n",
+    "\n",
+    "backend = STAR()\n",
+    "lh = LiquidHandler(backend=backend, deck=STARDeck())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pylabrobot.resources import TIP_CAR_480_A00, HT\n",
+    "tip_car = TIP_CAR_480_A00(name=\"tip_car\")\n",
+    "tip_car[0] = tr = HT(name=\"ht\")\n",
+    "lh.deck.assign_child_resource(tip_car, rails=1)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "async def simple_protocol(tips):\n",
+    "  await lh.setup()\n",
+    "  await lh.pick_up_tips(tips)\n",
+    "  await lh.return_tips()\n",
+    "  await lh.stop()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Capturing data during protocol execution"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Do a real run first, without validating against a capture file. This will generate the capture file you can later compare against.\n",
+    "\n",
+    "While it might seem cumbersome, this actually ensures you have a real working protocol before doing validation. The benefit of using capture files is whenever you change your protocol and have seen it run, you can just grab the capture file and use it for validation. No need to manually write tests."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Validation file written to validation.json\n"
+     ]
+    }
+   ],
+   "source": [
+    "validation_file = \"./validation.json\"\n",
+    "pylabrobot.start_capture(validation_file)\n",
+    "await simple_protocol(tr[\"A1:H1\"])\n",
+    "pylabrobot.stop_capture()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The validation file is just json:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "{\n",
+      "  \"version\": \"0.1.6\",\n",
+      "  \"commands\": [\n",
+      "    {\n",
+      "      \"module\": \"usb\",\n",
+      "      \"device_id\": \"[0x8af:0x8000][][]\",\n",
+      "      \"action\": \"write\",\n",
+      "      \"data\": \"C0RTid0001\"\n",
+      "    },\n",
+      "    {\n",
+      "      \"module\": \"usb\",\n",
+      "      \"device_id\": \"[0x8af:0x8000][][]\",\n",
+      "      \"action\": \"read\",\n",
+      "      \"data\": \"C0RTid0001er00/00rt0 0 0 0 0 0 0 0\"\n",
+      "    },\n"
+     ]
+    }
+   ],
+   "source": [
+    "!head -n15 validation.json"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Replaying the capture file for validation"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "On validation, before calling setup, run `pylabrobot.validate` to enable the validation. Pass a capture file that contains the commands we should check against.\n",
+    "\n",
+    "Call `pylabrobot.end_validation` at the end to make sure there are no remaining commands in the capture file. This marks the end of the validation."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Validation successful!\n"
+     ]
+    }
+   ],
+   "source": [
+    "pylabrobot.validate(validation_file)\n",
+    "await simple_protocol(tr[\"A1:H1\"])\n",
+    "pylabrobot.end_validation()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Failing validation"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "When validation is not successful, we use the Needleman-Wunsch algorithm to find the difference between the expected and the actual output."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "expected: C0TPid0009xp01179 01179 01179 01179 01179 01179 01179 01179yp1458 1368 1278 1188 1098 1008 0918 0828tm1 1 1 1 1 1 1 1tt01tp2266tz2166th2450td0\n",
+      "actual:   C0TPid0009xp01269 01269 01269 01269 01269 01269 01269 01269yp1458 1368 1278 1188 1098 1008 0918 0828tm1 1 1 1 1 1 1 1tt01tp2266tz2166th2450td0\n",
+      "                        ^^    ^^    ^^    ^^    ^^    ^^    ^^    ^^                                                                                    \n"
+     ]
+    },
+    {
+     "ename": "ValidationError",
+     "evalue": "Data mismatch: difference was written to stdout.",
+     "output_type": "error",
+     "traceback": [
+      "\u001b[0;31m---------------------------------------------------------------------------\u001b[0m",
+      "\u001b[0;31mValidationError\u001b[0m                           Traceback (most recent call last)",
+      "Cell \u001b[0;32mIn[7], line 2\u001b[0m\n\u001b[1;32m      1\u001b[0m pylabrobot\u001b[38;5;241m.\u001b[39mvalidate(validation_file)\n\u001b[0;32m----> 2\u001b[0m \u001b[38;5;28;01mawait\u001b[39;00m simple_protocol(tr[\u001b[38;5;124m\"\u001b[39m\u001b[38;5;124mA2:H2\u001b[39m\u001b[38;5;124m\"\u001b[39m])\n\u001b[1;32m      3\u001b[0m pylabrobot\u001b[38;5;241m.\u001b[39mend_validation()\n",
+      "Cell \u001b[0;32mIn[3], line 3\u001b[0m, in \u001b[0;36msimple_protocol\u001b[0;34m(tips)\u001b[0m\n\u001b[1;32m      1\u001b[0m \u001b[38;5;28;01masync\u001b[39;00m \u001b[38;5;28;01mdef\u001b[39;00m \u001b[38;5;21msimple_protocol\u001b[39m(tips):\n\u001b[1;32m      2\u001b[0m   \u001b[38;5;28;01mawait\u001b[39;00m lh\u001b[38;5;241m.\u001b[39msetup()\n\u001b[0;32m----> 3\u001b[0m   \u001b[38;5;28;01mawait\u001b[39;00m lh\u001b[38;5;241m.\u001b[39mpick_up_tips(tips)\n\u001b[1;32m      4\u001b[0m   \u001b[38;5;28;01mawait\u001b[39;00m lh\u001b[38;5;241m.\u001b[39mreturn_tips()\n\u001b[1;32m      5\u001b[0m   \u001b[38;5;28;01mawait\u001b[39;00m lh\u001b[38;5;241m.\u001b[39mstop()\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/machines/machine.py:35\u001b[0m, in \u001b[0;36mneed_setup_finished.<locals>.wrapper\u001b[0;34m(*args, **kwargs)\u001b[0m\n\u001b[1;32m     33\u001b[0m \u001b[38;5;28;01mif\u001b[39;00m \u001b[38;5;129;01mnot\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39msetup_finished:\n\u001b[1;32m     34\u001b[0m   \u001b[38;5;28;01mraise\u001b[39;00m \u001b[38;5;167;01mRuntimeError\u001b[39;00m(\u001b[38;5;124m\"\u001b[39m\u001b[38;5;124mThe setup has not finished. See `setup`.\u001b[39m\u001b[38;5;124m\"\u001b[39m)\n\u001b[0;32m---> 35\u001b[0m \u001b[38;5;28;01mreturn\u001b[39;00m \u001b[38;5;28;01mawait\u001b[39;00m func(\u001b[38;5;241m*\u001b[39margs, \u001b[38;5;241m*\u001b[39m\u001b[38;5;241m*\u001b[39mkwargs)\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/liquid_handling/liquid_handler.py:467\u001b[0m, in \u001b[0;36mLiquidHandler.pick_up_tips\u001b[0;34m(self, tip_spots, use_channels, offsets, **backend_kwargs)\u001b[0m\n\u001b[1;32m    464\u001b[0m   (\u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39mhead[channel]\u001b[38;5;241m.\u001b[39mcommit \u001b[38;5;28;01mif\u001b[39;00m success \u001b[38;5;28;01melse\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39mhead[channel]\u001b[38;5;241m.\u001b[39mrollback)()\n\u001b[1;32m    466\u001b[0m \u001b[38;5;66;03m# trigger callback\u001b[39;00m\n\u001b[0;32m--> 467\u001b[0m \u001b[38;5;28;43mself\u001b[39;49m\u001b[38;5;241;43m.\u001b[39;49m\u001b[43m_trigger_callback\u001b[49m\u001b[43m(\u001b[49m\n\u001b[1;32m    468\u001b[0m \u001b[43m  \u001b[49m\u001b[38;5;124;43m\"\u001b[39;49m\u001b[38;5;124;43mpick_up_tips\u001b[39;49m\u001b[38;5;124;43m\"\u001b[39;49m\u001b[43m,\u001b[49m\n\u001b[1;32m    469\u001b[0m \u001b[43m  \u001b[49m\u001b[43mliquid_handler\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[38;5;28;43mself\u001b[39;49m\u001b[43m,\u001b[49m\n\u001b[1;32m    470\u001b[0m \u001b[43m  \u001b[49m\u001b[43moperations\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[43mpickups\u001b[49m\u001b[43m,\u001b[49m\n\u001b[1;32m    471\u001b[0m \u001b[43m  \u001b[49m\u001b[43muse_channels\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[43muse_channels\u001b[49m\u001b[43m,\u001b[49m\n\u001b[1;32m    472\u001b[0m \u001b[43m  \u001b[49m\u001b[43merror\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[43merror\u001b[49m\u001b[43m,\u001b[49m\n\u001b[1;32m    473\u001b[0m \u001b[43m  \u001b[49m\u001b[38;5;241;43m*\u001b[39;49m\u001b[38;5;241;43m*\u001b[39;49m\u001b[43mbackend_kwargs\u001b[49m\u001b[43m,\u001b[49m\n\u001b[1;32m    474\u001b[0m \u001b[43m\u001b[49m\u001b[43m)\u001b[49m\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/liquid_handling/liquid_handler.py:2204\u001b[0m, in \u001b[0;36mLiquidHandler._trigger_callback\u001b[0;34m(self, method_name, error, *args, **kwargs)\u001b[0m\n\u001b[1;32m   2202\u001b[0m   callback(\u001b[38;5;28mself\u001b[39m, \u001b[38;5;241m*\u001b[39margs, error\u001b[38;5;241m=\u001b[39merror, \u001b[38;5;241m*\u001b[39m\u001b[38;5;241m*\u001b[39mkwargs)\n\u001b[1;32m   2203\u001b[0m \u001b[38;5;28;01melif\u001b[39;00m error \u001b[38;5;129;01mis\u001b[39;00m \u001b[38;5;129;01mnot\u001b[39;00m \u001b[38;5;28;01mNone\u001b[39;00m:\n\u001b[0;32m-> 2204\u001b[0m   \u001b[38;5;28;01mraise\u001b[39;00m error\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/liquid_handling/liquid_handler.py:451\u001b[0m, in \u001b[0;36mLiquidHandler.pick_up_tips\u001b[0;34m(self, tip_spots, use_channels, offsets, **backend_kwargs)\u001b[0m\n\u001b[1;32m    449\u001b[0m error: Optional[\u001b[38;5;167;01mException\u001b[39;00m] \u001b[38;5;241m=\u001b[39m \u001b[38;5;28;01mNone\u001b[39;00m\n\u001b[1;32m    450\u001b[0m \u001b[38;5;28;01mtry\u001b[39;00m:\n\u001b[0;32m--> 451\u001b[0m   \u001b[38;5;28;01mawait\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39mbackend\u001b[38;5;241m.\u001b[39mpick_up_tips(ops\u001b[38;5;241m=\u001b[39mpickups, use_channels\u001b[38;5;241m=\u001b[39muse_channels, \u001b[38;5;241m*\u001b[39m\u001b[38;5;241m*\u001b[39mbackend_kwargs)\n\u001b[1;32m    452\u001b[0m \u001b[38;5;28;01mexcept\u001b[39;00m \u001b[38;5;167;01mException\u001b[39;00m \u001b[38;5;28;01mas\u001b[39;00m e:\n\u001b[1;32m    453\u001b[0m   error \u001b[38;5;241m=\u001b[39m e\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/liquid_handling/backends/hamilton/STAR.py:1484\u001b[0m, in \u001b[0;36mSTAR.pick_up_tips\u001b[0;34m(self, ops, use_channels, begin_tip_pick_up_process, end_tip_pick_up_process, minimum_traverse_height_at_beginning_of_a_command, pickup_method)\u001b[0m\n\u001b[1;32m   1481\u001b[0m pickup_method \u001b[38;5;241m=\u001b[39m pickup_method \u001b[38;5;129;01mor\u001b[39;00m tip\u001b[38;5;241m.\u001b[39mpickup_method\n\u001b[1;32m   1483\u001b[0m \u001b[38;5;28;01mtry\u001b[39;00m:\n\u001b[0;32m-> 1484\u001b[0m   \u001b[38;5;28;01mreturn\u001b[39;00m \u001b[38;5;28;01mawait\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39mpick_up_tip(\n\u001b[1;32m   1485\u001b[0m     x_positions\u001b[38;5;241m=\u001b[39mx_positions,\n\u001b[1;32m   1486\u001b[0m     y_positions\u001b[38;5;241m=\u001b[39my_positions,\n\u001b[1;32m   1487\u001b[0m     tip_pattern\u001b[38;5;241m=\u001b[39mchannels_involved,\n\u001b[1;32m   1488\u001b[0m     tip_type_idx\u001b[38;5;241m=\u001b[39mttti,\n\u001b[1;32m   1489\u001b[0m     begin_tip_pick_up_process\u001b[38;5;241m=\u001b[39mbegin_tip_pick_up_process,\n\u001b[1;32m   1490\u001b[0m     end_tip_pick_up_process\u001b[38;5;241m=\u001b[39mend_tip_pick_up_process,\n\u001b[1;32m   1491\u001b[0m     minimum_traverse_height_at_beginning_of_a_command\u001b[38;5;241m=\u001b[39mminimum_traverse_height_at_beginning_of_a_command,\n\u001b[1;32m   1492\u001b[0m     pickup_method\u001b[38;5;241m=\u001b[39mpickup_method,\n\u001b[1;32m   1493\u001b[0m   )\n\u001b[1;32m   1494\u001b[0m \u001b[38;5;28;01mexcept\u001b[39;00m STARFirmwareError \u001b[38;5;28;01mas\u001b[39;00m e:\n\u001b[1;32m   1495\u001b[0m   \u001b[38;5;28;01mif\u001b[39;00m plr_e \u001b[38;5;241m:=\u001b[39m convert_star_firmware_error_to_plr_error(e):\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/liquid_handling/backends/hamilton/STAR.py:98\u001b[0m, in \u001b[0;36mneed_iswap_parked.<locals>.wrapper\u001b[0;34m(self, *args, **kwargs)\u001b[0m\n\u001b[1;32m     93\u001b[0m \u001b[38;5;28;01mif\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39miswap_installed \u001b[38;5;129;01mand\u001b[39;00m \u001b[38;5;129;01mnot\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39miswap_parked:\n\u001b[1;32m     94\u001b[0m   \u001b[38;5;28;01mawait\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39mpark_iswap(\n\u001b[1;32m     95\u001b[0m     minimum_traverse_height_at_beginning_of_a_command\u001b[38;5;241m=\u001b[39m\u001b[38;5;28mint\u001b[39m(\u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39m_iswap_traversal_height \u001b[38;5;241m*\u001b[39m \u001b[38;5;241m10\u001b[39m)\n\u001b[1;32m     96\u001b[0m   )\n\u001b[0;32m---> 98\u001b[0m result \u001b[38;5;241m=\u001b[39m \u001b[38;5;28;01mawait\u001b[39;00m method(\u001b[38;5;28mself\u001b[39m, \u001b[38;5;241m*\u001b[39margs, \u001b[38;5;241m*\u001b[39m\u001b[38;5;241m*\u001b[39mkwargs)\n\u001b[1;32m    100\u001b[0m \u001b[38;5;28;01mreturn\u001b[39;00m result\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/liquid_handling/backends/hamilton/STAR.py:4062\u001b[0m, in \u001b[0;36mSTAR.pick_up_tip\u001b[0;34m(self, x_positions, y_positions, tip_pattern, tip_type_idx, begin_tip_pick_up_process, end_tip_pick_up_process, minimum_traverse_height_at_beginning_of_a_command, pickup_method)\u001b[0m\n\u001b[1;32m   4055\u001b[0m \u001b[38;5;28;01massert\u001b[39;00m (\n\u001b[1;32m   4056\u001b[0m   \u001b[38;5;241m0\u001b[39m \u001b[38;5;241m<\u001b[39m\u001b[38;5;241m=\u001b[39m end_tip_pick_up_process \u001b[38;5;241m<\u001b[39m\u001b[38;5;241m=\u001b[39m \u001b[38;5;241m3600\u001b[39m\n\u001b[1;32m   4057\u001b[0m ), \u001b[38;5;124m\"\u001b[39m\u001b[38;5;124mend_tip_pick_up_process must be between 0 and 3600\u001b[39m\u001b[38;5;124m\"\u001b[39m\n\u001b[1;32m   4058\u001b[0m \u001b[38;5;28;01massert\u001b[39;00m (\n\u001b[1;32m   4059\u001b[0m   \u001b[38;5;241m0\u001b[39m \u001b[38;5;241m<\u001b[39m\u001b[38;5;241m=\u001b[39m minimum_traverse_height_at_beginning_of_a_command \u001b[38;5;241m<\u001b[39m\u001b[38;5;241m=\u001b[39m \u001b[38;5;241m3600\u001b[39m\n\u001b[1;32m   4060\u001b[0m ), \u001b[38;5;124m\"\u001b[39m\u001b[38;5;124mminimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600\u001b[39m\u001b[38;5;124m\"\u001b[39m\n\u001b[0;32m-> 4062\u001b[0m \u001b[38;5;28;01mreturn\u001b[39;00m \u001b[38;5;28;01mawait\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39msend_command(\n\u001b[1;32m   4063\u001b[0m   module\u001b[38;5;241m=\u001b[39m\u001b[38;5;124m\"\u001b[39m\u001b[38;5;124mC0\u001b[39m\u001b[38;5;124m\"\u001b[39m,\n\u001b[1;32m   4064\u001b[0m   command\u001b[38;5;241m=\u001b[39m\u001b[38;5;124m\"\u001b[39m\u001b[38;5;124mTP\u001b[39m\u001b[38;5;124m\"\u001b[39m,\n\u001b[1;32m   4065\u001b[0m   tip_pattern\u001b[38;5;241m=\u001b[39mtip_pattern,\n\u001b[1;32m   4066\u001b[0m   read_timeout\u001b[38;5;241m=\u001b[39m\u001b[38;5;241m60\u001b[39m,\n\u001b[1;32m   4067\u001b[0m   xp\u001b[38;5;241m=\u001b[39m[\u001b[38;5;124mf\u001b[39m\u001b[38;5;124m\"\u001b[39m\u001b[38;5;132;01m{\u001b[39;00mx\u001b[38;5;132;01m:\u001b[39;00m\u001b[38;5;124m05\u001b[39m\u001b[38;5;132;01m}\u001b[39;00m\u001b[38;5;124m\"\u001b[39m \u001b[38;5;28;01mfor\u001b[39;00m x \u001b[38;5;129;01min\u001b[39;00m x_positions],\n\u001b[1;32m   4068\u001b[0m   yp\u001b[38;5;241m=\u001b[39m[\u001b[38;5;124mf\u001b[39m\u001b[38;5;124m\"\u001b[39m\u001b[38;5;132;01m{\u001b[39;00my\u001b[38;5;132;01m:\u001b[39;00m\u001b[38;5;124m04\u001b[39m\u001b[38;5;132;01m}\u001b[39;00m\u001b[38;5;124m\"\u001b[39m \u001b[38;5;28;01mfor\u001b[39;00m y \u001b[38;5;129;01min\u001b[39;00m y_positions],\n\u001b[1;32m   4069\u001b[0m   tm\u001b[38;5;241m=\u001b[39mtip_pattern,\n\u001b[1;32m   4070\u001b[0m   tt\u001b[38;5;241m=\u001b[39m\u001b[38;5;124mf\u001b[39m\u001b[38;5;124m\"\u001b[39m\u001b[38;5;132;01m{\u001b[39;00mtip_type_idx\u001b[38;5;132;01m:\u001b[39;00m\u001b[38;5;124m02\u001b[39m\u001b[38;5;132;01m}\u001b[39;00m\u001b[38;5;124m\"\u001b[39m,\n\u001b[1;32m   4071\u001b[0m   tp\u001b[38;5;241m=\u001b[39m\u001b[38;5;124mf\u001b[39m\u001b[38;5;124m\"\u001b[39m\u001b[38;5;132;01m{\u001b[39;00mbegin_tip_pick_up_process\u001b[38;5;132;01m:\u001b[39;00m\u001b[38;5;124m04\u001b[39m\u001b[38;5;132;01m}\u001b[39;00m\u001b[38;5;124m\"\u001b[39m,\n\u001b[1;32m   4072\u001b[0m   tz\u001b[38;5;241m=\u001b[39m\u001b[38;5;124mf\u001b[39m\u001b[38;5;124m\"\u001b[39m\u001b[38;5;132;01m{\u001b[39;00mend_tip_pick_up_process\u001b[38;5;132;01m:\u001b[39;00m\u001b[38;5;124m04\u001b[39m\u001b[38;5;132;01m}\u001b[39;00m\u001b[38;5;124m\"\u001b[39m,\n\u001b[1;32m   4073\u001b[0m   th\u001b[38;5;241m=\u001b[39m\u001b[38;5;124mf\u001b[39m\u001b[38;5;124m\"\u001b[39m\u001b[38;5;132;01m{\u001b[39;00mminimum_traverse_height_at_beginning_of_a_command\u001b[38;5;132;01m:\u001b[39;00m\u001b[38;5;124m04\u001b[39m\u001b[38;5;132;01m}\u001b[39;00m\u001b[38;5;124m\"\u001b[39m,\n\u001b[1;32m   4074\u001b[0m   td\u001b[38;5;241m=\u001b[39mpickup_method\u001b[38;5;241m.\u001b[39mvalue,\n\u001b[1;32m   4075\u001b[0m )\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/liquid_handling/backends/hamilton/base.py:247\u001b[0m, in \u001b[0;36mHamiltonLiquidHandler.send_command\u001b[0;34m(self, module, command, auto_id, tip_pattern, write_timeout, read_timeout, wait, fmt, **kwargs)\u001b[0m\n\u001b[1;32m    222\u001b[0m \u001b[38;5;250m\u001b[39m\u001b[38;5;124;03m\"\"\"Send a firmware command to the Hamilton machine.\u001b[39;00m\n\u001b[1;32m    223\u001b[0m \n\u001b[1;32m    224\u001b[0m \u001b[38;5;124;03mArgs:\u001b[39;00m\n\u001b[0;32m   (...)\u001b[0m\n\u001b[1;32m    237\u001b[0m \u001b[38;5;124;03m  A dictionary containing the parsed response, or None if no response was read within `timeout`.\u001b[39;00m\n\u001b[1;32m    238\u001b[0m \u001b[38;5;124;03m\"\"\"\u001b[39;00m\n\u001b[1;32m    240\u001b[0m cmd, id_ \u001b[38;5;241m=\u001b[39m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39m_assemble_command(\n\u001b[1;32m    241\u001b[0m   module\u001b[38;5;241m=\u001b[39mmodule,\n\u001b[1;32m    242\u001b[0m   command\u001b[38;5;241m=\u001b[39mcommand,\n\u001b[0;32m   (...)\u001b[0m\n\u001b[1;32m    245\u001b[0m   \u001b[38;5;241m*\u001b[39m\u001b[38;5;241m*\u001b[39mkwargs,\n\u001b[1;32m    246\u001b[0m )\n\u001b[0;32m--> 247\u001b[0m resp \u001b[38;5;241m=\u001b[39m \u001b[38;5;28;01mawait\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39m_write_and_read_command(\n\u001b[1;32m    248\u001b[0m   id_\u001b[38;5;241m=\u001b[39mid_,\n\u001b[1;32m    249\u001b[0m   cmd\u001b[38;5;241m=\u001b[39mcmd,\n\u001b[1;32m    250\u001b[0m   write_timeout\u001b[38;5;241m=\u001b[39mwrite_timeout,\n\u001b[1;32m    251\u001b[0m   read_timeout\u001b[38;5;241m=\u001b[39mread_timeout,\n\u001b[1;32m    252\u001b[0m   wait\u001b[38;5;241m=\u001b[39mwait,\n\u001b[1;32m    253\u001b[0m )\n\u001b[1;32m    254\u001b[0m \u001b[38;5;28;01mif\u001b[39;00m resp \u001b[38;5;129;01mis\u001b[39;00m \u001b[38;5;129;01mnot\u001b[39;00m \u001b[38;5;28;01mNone\u001b[39;00m \u001b[38;5;129;01mand\u001b[39;00m fmt \u001b[38;5;129;01mis\u001b[39;00m \u001b[38;5;129;01mnot\u001b[39;00m \u001b[38;5;28;01mNone\u001b[39;00m:\n\u001b[1;32m    255\u001b[0m   \u001b[38;5;28;01mreturn\u001b[39;00m \u001b[38;5;28mself\u001b[39m\u001b[38;5;241m.\u001b[39m_parse_response(resp, fmt)\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/liquid_handling/backends/hamilton/base.py:267\u001b[0m, in \u001b[0;36mHamiltonLiquidHandler._write_and_read_command\u001b[0;34m(self, id_, cmd, write_timeout, read_timeout, wait)\u001b[0m\n\u001b[1;32m    258\u001b[0m \u001b[38;5;28;01masync\u001b[39;00m \u001b[38;5;28;01mdef\u001b[39;00m \u001b[38;5;21m_write_and_read_command\u001b[39m(\n\u001b[1;32m    259\u001b[0m   \u001b[38;5;28mself\u001b[39m,\n\u001b[1;32m    260\u001b[0m   id_: Optional[\u001b[38;5;28mint\u001b[39m],\n\u001b[0;32m   (...)\u001b[0m\n\u001b[1;32m    264\u001b[0m   wait: \u001b[38;5;28mbool\u001b[39m \u001b[38;5;241m=\u001b[39m \u001b[38;5;28;01mTrue\u001b[39;00m,\n\u001b[1;32m    265\u001b[0m ) \u001b[38;5;241m-\u001b[39m\u001b[38;5;241m>\u001b[39m Optional[\u001b[38;5;28mstr\u001b[39m]:\n\u001b[1;32m    266\u001b[0m \u001b[38;5;250m  \u001b[39m\u001b[38;5;124;03m\"\"\"Write a command to the Hamilton machine and read the response.\"\"\"\u001b[39;00m\n\u001b[0;32m--> 267\u001b[0m   \u001b[38;5;28;43mself\u001b[39;49m\u001b[38;5;241;43m.\u001b[39;49m\u001b[43mio\u001b[49m\u001b[38;5;241;43m.\u001b[39;49m\u001b[43mwrite\u001b[49m\u001b[43m(\u001b[49m\u001b[43mcmd\u001b[49m\u001b[38;5;241;43m.\u001b[39;49m\u001b[43mencode\u001b[49m\u001b[43m(\u001b[49m\u001b[43m)\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mtimeout\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[43mwrite_timeout\u001b[49m\u001b[43m)\u001b[49m\n\u001b[1;32m    269\u001b[0m   \u001b[38;5;28;01mif\u001b[39;00m \u001b[38;5;129;01mnot\u001b[39;00m wait:\n\u001b[1;32m    270\u001b[0m     \u001b[38;5;28;01mreturn\u001b[39;00m \u001b[38;5;28;01mNone\u001b[39;00m\n",
+      "File \u001b[0;32m~/retro/pylabrobot/pylabrobot/io/usb.py:325\u001b[0m, in \u001b[0;36mUSBValidator.write\u001b[0;34m(self, data, timeout)\u001b[0m\n\u001b[1;32m    323\u001b[0m \u001b[38;5;28;01mif\u001b[39;00m \u001b[38;5;129;01mnot\u001b[39;00m next_command\u001b[38;5;241m.\u001b[39mdata \u001b[38;5;241m==\u001b[39m data\u001b[38;5;241m.\u001b[39mdecode(\u001b[38;5;124m\"\u001b[39m\u001b[38;5;124municode_escape\u001b[39m\u001b[38;5;124m\"\u001b[39m):\n\u001b[1;32m    324\u001b[0m   align_sequences(expected\u001b[38;5;241m=\u001b[39mnext_command\u001b[38;5;241m.\u001b[39mdata, actual\u001b[38;5;241m=\u001b[39mdata\u001b[38;5;241m.\u001b[39mdecode(\u001b[38;5;124m\"\u001b[39m\u001b[38;5;124municode_escape\u001b[39m\u001b[38;5;124m\"\u001b[39m))\n\u001b[0;32m--> 325\u001b[0m   \u001b[38;5;28;01mraise\u001b[39;00m ValidationError(\u001b[38;5;124m\"\u001b[39m\u001b[38;5;124mData mismatch: difference was written to stdout.\u001b[39m\u001b[38;5;124m\"\u001b[39m)\n",
+      "\u001b[0;31mValidationError\u001b[0m: Data mismatch: difference was written to stdout."
+     ]
+    }
+   ],
+   "source": [
+    "pylabrobot.validate(validation_file)\n",
+    "await simple_protocol(tr[\"A2:H2\"])\n",
+    "pylabrobot.end_validation()"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "env",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.19"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
