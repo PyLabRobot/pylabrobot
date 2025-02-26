@@ -1,6 +1,7 @@
 import asyncio
 import enum
 import logging
+import math
 import time
 from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
 
@@ -139,6 +140,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._column: Optional[int] = None
     self._auto_focus_search_range: Optional[Tuple[float, float]] = None
     self._shaking = False
+    self._pos_x, self._pos_y = 0, 0
 
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
@@ -311,6 +313,7 @@ class Cytation5Backend(ImageReaderBackend):
 
   async def close(self, plate: Plate):
     await self.set_plate(plate)
+    self._row, self._column = None, None
     return await self.send_command("A")
 
   async def home(self):
@@ -388,8 +391,9 @@ class Cytation5Backend(ImageReaderBackend):
       f"{int(plate_size_z*100):04}"
       "\x03"
     )
+    print(cmd)
 
-    resp = await self.send_command("y", cmd)
+    resp = await self.send_command("y", cmd, timeout=1)
     self._plate = plate
     return resp
 
@@ -627,9 +631,17 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Row and column not set. Run select() first.")
     row_str, column_str = str(self._row).zfill(2), str(self._column).zfill(2)
 
-    z = f"Z1{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}"
-    await self.send_command("Y", z)
-    print("set pos", x, y, z)
+    await self.send_command("Y", f"Z146{row_str}{column_str}{y_str}{x_str}")
+
+    relative_x, relative_y = x - self._pos_x, y - self._pos_y
+    if relative_x != 0:
+      relative_x_str = str(round(relative_x * 100)).zfill(6)
+      await self.send_command("Y", f"O00{relative_x_str}")
+    if relative_y != 0:
+      relative_y_str = str(round(relative_y * 100)).zfill(6)
+      await self.send_command("Y", f"O01{relative_y_str}")
+
+    self._pos_x, self._pos_y = x, y
 
   def set_auto_focus_search_range(self, min_focal_height: float, max_focal_height: float):
     self._auto_focus_search_range = (min_focal_height, max_focal_height)
@@ -736,8 +748,8 @@ class Cytation5Backend(ImageReaderBackend):
     row_str, column_str = str(row).zfill(2), str(column).zfill(2)
     await self.send_command("Y", f"W6{row_str}{column_str}")
     self._row, self._column = row, column
+    self._pos_x, self._pos_y = 0, 0
     await self.set_position(0, 0)
-    await asyncio.sleep(1)  # not sure if it tells you when it has landed on the well
 
   async def set_gain(self, gain: Gain):
     """gain of unknown units, or "auto" """
@@ -877,6 +889,7 @@ class Cytation5Backend(ImageReaderBackend):
     gain: Gain,
     plate: Plate,
     coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1),
+    center_position: Optional[Tuple[float, float]] = None,
     overlap: Optional[float] = None,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
@@ -888,7 +901,11 @@ class Cytation5Backend(ImageReaderBackend):
     Args:
       exposure_time: exposure time in ms, or `"auto"`
       focal_height: focal height in mm, or `"auto"`
-      coverage: coverage of the well, either `"full"` or a tuple of `(num_rows, num_columns)`
+      coverage: coverage of the well, either `"full"` or a tuple of `(num_rows, num_columns)`.
+        Around `center_position`.
+      center_position: center position of the well, in mm from the center of the selected well. If
+        `None`, the center of the selected well is used (eg (0, 0) offset). If `coverage` is
+        specified, this is the center of the coverage area.
       color_processing_algorithm: color processing algorithm. See
         PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_*
       pixel_format: pixel format. See PySpin.PixelFormat_*
@@ -930,9 +947,12 @@ class Cytation5Backend(ImageReaderBackend):
       )
     rows, cols = coverage
 
-    # Get positions, centered around (0, 0)
+    # Get positions, centered around enter_position
+    if center_position is None:
+      center_position = (0, 0)
+    # Going in a snake pattern is not faster (strangely)
     positions = [
-      (x * img_width, -y * img_height)
+      (x * img_width + center_position[0], -y * img_height + center_position[1])
       for y in [i - (rows - 1) / 2 for i in range(rows)]
       for x in [i - (cols - 1) / 2 for i in range(cols)]
     ]
