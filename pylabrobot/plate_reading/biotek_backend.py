@@ -622,10 +622,11 @@ class Cytation5Backend(ImageReaderBackend):
       ImagingMode.TEXAS_RED: "3",
       ImagingMode.PHASE_CONTRAST: "7",
     }[self._imaging_mode]
+    # firmware is in (10/0.984)um units. plr is mm. To convert
     x_str, y_str = (
-      str(round(x * 100)).zfill(6),
-      str(round(y * 100)).zfill(6),
-    )  # firmware is 10um units
+      str(round(x * 100 * 0.984)).zfill(6),
+      str(round(y * 100 * 0.984)).zfill(6),
+    )
 
     if self._row is None or self._column is None:
       raise ValueError("Row and column not set. Run select() first.")
@@ -635,10 +636,10 @@ class Cytation5Backend(ImageReaderBackend):
 
     relative_x, relative_y = x - self._pos_x, y - self._pos_y
     if relative_x != 0:
-      relative_x_str = str(round(relative_x * 100)).zfill(6)
+      relative_x_str = str(round(relative_x * 100 * 0.984)).zfill(6)
       await self.send_command("Y", f"O00{relative_x_str}")
     if relative_y != 0:
-      relative_y_str = str(round(relative_y * 100)).zfill(6)
+      relative_y_str = str(round(relative_y * 100 * 0.984)).zfill(6)
       await self.send_command("Y", f"O01{relative_y_str}")
 
     self._pos_x, self._pos_y = x, y
