@@ -3,7 +3,10 @@ import enum
 import logging
 import math
 import time
+from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
+
+from scipy.optimize import minimize_scalar
 
 from pylabrobot.resources.plate import Plate
 
@@ -107,6 +110,12 @@ async def _golden_ratio_search(
   return (b + a) / 2
 
 
+@dataclass
+class Cytation5ImagingConfig:
+  camera_serial_number: Optional[str] = None
+  max_image_read_attempts: int = 8
+
+
 class Cytation5Backend(ImageReaderBackend):
   """Backend for biotek cytation 5 image reader.
 
@@ -118,8 +127,8 @@ class Cytation5Backend(ImageReaderBackend):
   def __init__(
     self,
     timeout: float = 20,
-    camera_serial_number: Optional[float] = None,
     device_id: Optional[str] = None,
+    imaging_config: Optional[Cytation5ImagingConfig] = None,
   ) -> None:
     super().__init__()
     self.timeout = timeout
@@ -128,8 +137,8 @@ class Cytation5Backend(ImageReaderBackend):
 
     self.spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self.cam: Optional["PySpin.CameraPtr"] = None
-    self.camera_serial_number = camera_serial_number
-    self.max_image_read_attempts = 8
+    self.imaging_config = imaging_config or Cytation5ImagingConfig()
+    self._filters: List[ImagingMode] = []
 
     self._plate: Optional[Plate] = None
     self._exposure: Optional[Exposure] = None
@@ -160,6 +169,8 @@ class Cytation5Backend(ImageReaderBackend):
     if use_cam:
       if not USE_PYSPIN:
         raise RuntimeError("PySpin is not installed. Please follow the imaging setup instructions.")
+      if self.imaging_config is None:
+        raise RuntimeError("Imaging configuration is not set.")
 
       logger.debug("[cytation5] setting up camera")
 
@@ -184,7 +195,10 @@ class Cytation5Backend(ImageReaderBackend):
         serial_number = info["DeviceSerialNumber"]
         logger.debug("[cytation5] camera detected: %s", serial_number)
 
-        if self.camera_serial_number is not None and serial_number == self.camera_serial_number:
+        if (
+          self.imaging_config.camera_serial_number is not None
+          and serial_number == self.imaging_config.camera_serial_number
+        ):
           self.cam = cam
           logger.info("[cytation5] using camera with serial number %s", serial_number)
           break
@@ -236,6 +250,40 @@ class Cytation5Backend(ImageReaderBackend):
         raise RuntimeError("unable to query TriggerMode On")
       ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
 
+      # -- Load filter information --
+      for spot in range(1, 5):
+        configuration = await self.send_command("i", f"q{spot}")
+        # TODO: what happens when the filter is not set?
+        cytation_code = int(configuration.decode().strip().split(" ")[0])
+        cytation_code2imaging_mode = {
+          1225121: ImagingMode.C377_647,
+          1225123: ImagingMode.C400_647,
+          1225113: ImagingMode.C469_593,
+          1225109: ImagingMode.ACRIDINE_ORANGE,
+          1225107: ImagingMode.CFP,
+          1225118: ImagingMode.CFP_FRET_V2,
+          1225110: ImagingMode.CFP_YFP_FRET,
+          1225119: ImagingMode.CFP_YFP_FRET_V2,
+          1225112: ImagingMode.CHLOROPHYLL_A,
+          1225105: ImagingMode.CY5,
+          1225114: ImagingMode.CY5_5,
+          1225106: ImagingMode.CY7,
+          1225100: ImagingMode.DAPI,
+          1225101: ImagingMode.GFP,
+          1225116: ImagingMode.GFP_CY5,
+          1225122: ImagingMode.OXIDIZED_ROGFP2,
+          1225111: ImagingMode.PROPOIDIUM_IODIDE,
+          1225103: ImagingMode.RFP,
+          1225117: ImagingMode.RFP_CY5,
+          1225115: ImagingMode.TAG_BFP,
+          1225102: ImagingMode.TEXAS_RED,
+          1225104: ImagingMode.YFP,
+        }
+        if cytation_code not in cytation_code2imaging_mode:
+          self._filters.append(None)
+        else:
+          self._filters.append(cytation_code2imaging_mode[cytation_code])
+
   async def stop(self) -> None:
     logger.info("[cytation5] stopping")
     await self.stop_shaking()
@@ -282,6 +330,7 @@ class Cytation5Backend(ImageReaderBackend):
     timeout: Optional[float] = None,
   ) -> Optional[bytes]:
     await self._purge_buffers()
+
     self.io.write(command.encode())
     logger.debug("[cytation5] sent %s", command)
     response: Optional[bytes] = None
@@ -573,12 +622,7 @@ class Cytation5Backend(ImageReaderBackend):
     intensity_str = str(intensity).zfill(2)
     if self._imaging_mode is None:
       raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
-    imaging_mode_code = {
-      ImagingMode.BRIGHTFIELD: "05",
-      ImagingMode.GFP: "02",
-      ImagingMode.TEXAS_RED: "03",
-      ImagingMode.PHASE_CONTRAST: "07",
-    }[self._imaging_mode]
+    self._imaging_mode_code(self._imaging_mode)
     await self.send_command("i", f"L{imaging_mode_code}{intensity_str}")
 
   async def led_off(self):
@@ -615,14 +659,7 @@ class Cytation5Backend(ImageReaderBackend):
     if self._imaging_mode is None:
       raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
 
-    imaging_mode_code = {
-      # DAPI: "1"
-      ImagingMode.BRIGHTFIELD: "5",
-      ImagingMode.GFP: "2",
-      ImagingMode.TEXAS_RED: "3",
-      ImagingMode.PHASE_CONTRAST: "7",
-    }[self._imaging_mode]
-    # firmware is in (10/0.984)um units. plr is mm. To convert
+    # firmware is in (10/0.984 (10/0.984))um units. plr is mm. To convert
     x_str, y_str = (
       str(round(x * 100 * 0.984)).zfill(6),
       str(round(y * 100 * 0.984)).zfill(6),
@@ -632,7 +669,11 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Row and column not set. Run select() first.")
     row_str, column_str = str(self._row).zfill(2), str(self._column).zfill(2)
 
-    await self.send_command("Y", f"Z146{row_str}{column_str}{y_str}{x_str}")
+    magnifier = {"4x": 1, "20x": 2}["20x"]
+    imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
+    await self.send_command(
+      "Y", f"Z{magnifier}{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}"
+    )
 
     relative_x, relative_y = x - self._pos_x, y - self._pos_y
     if relative_x != 0:
@@ -685,7 +726,7 @@ class Cytation5Backend(ImageReaderBackend):
       return np.var(laplacian)
 
     # Use golden ratio search to find the best focus value
-    focus_min, focus_max = self._auto_focus_search_range or (2, 5)
+    focus_min, focus_max = self._auto_focus_search_range or (1.8, 2.5)
     best_focal_height = await _golden_ratio_search(
       func=evaluate_focus,
       a=focus_min,
@@ -797,7 +838,12 @@ class Cytation5Backend(ImageReaderBackend):
 
     self._gain = gain
 
-  async def set_imaging_mode(self, mode: ImagingMode):
+  def _imaging_mode_code(self, mode: ImagingMode) -> str:
+    if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.BRIGHTFIELD:
+      return 5
+    return self.imaging_config.filters.index(mode) + 1
+
+  async def set_imaging_mode(self, mode: ImagingMode, led_intensity: int):
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
@@ -812,29 +858,27 @@ class Cytation5Backend(ImageReaderBackend):
 
     await self.led_off()
 
+    if self.imaging_config is None:
+      raise RuntimeError("Need to set imaging_config first")
+
+    filter_index = self._imaging_mode_code(mode)
+
     if mode == ImagingMode.PHASE_CONTRAST:
       await self.send_command("Y", "P1120")
       await self.send_command("Y", "P0d05")
       await self.send_command("Y", "P1002")
     elif mode == ImagingMode.BRIGHTFIELD:
-      await self.send_command("Y", "Z1500000000000000000")
-      await self.send_command("i", "F5000000")  # reset focus
-      await self.send_command("i", "W000000")  # reset select
       await self.send_command("Y", "P1101")
       await self.send_command("Y", "P0d05")
       await self.send_command("Y", "P1002")
-    elif mode == ImagingMode.GFP:
+    else:
       await self.send_command("Y", "P1101")
-      await self.send_command("Y", "P0d02")
-      await self.send_command("Y", "P1001")
-    elif mode == ImagingMode.TEXAS_RED:
-      await self.send_command("Y", "P1101")
-      await self.send_command("Y", "P0d03")
+      await self.send_command("Y", f"P0d{filter_index+1:02}")
       await self.send_command("Y", "P1001")
 
     # Turn led on in the new mode
     self._imaging_mode = mode
-    await self.led_on()
+    await self.led_on(intensity=led_intensity)
 
   async def _acquire_image(
     self,
@@ -854,10 +898,12 @@ class Cytation5Backend(ImageReaderBackend):
     #   raise RuntimeError("unable to set acquisition mode to single frame (entry retrieval)")
     # node_acquisition_mode.SetIntValue(node_acquisition_mode_single_frame.GetValue())
 
+    assert self.imaging_config is not None, "Need to set imaging_config first"
+
     self.cam.BeginAcquisition()
     try:
       num_tries = 0
-      while num_tries < self.max_image_read_attempts:
+      while num_tries < self.imaging_config.max_image_read_attempts:
         node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
         if not PySpin.IsWritable(node_softwaretrigger_cmd):
           raise RuntimeError("unable to execute software trigger")
@@ -889,6 +935,7 @@ class Cytation5Backend(ImageReaderBackend):
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
+    led_intensity: int = 10,
     coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1),
     center_position: Optional[Tuple[float, float]] = None,
     overlap: Optional[float] = None,
@@ -918,7 +965,7 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
     await self.set_plate(plate)
-    await self.set_imaging_mode(mode)
+    await self.set_imaging_mode(mode, led_intensity=led_intensity)
     await self.select(row, column)
     await self.set_exposure(exposure_time)
     await self.set_gain(gain)
@@ -935,7 +982,7 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Invalid magnification")
 
     # TODO: parameterize
-    magnification = 4
+    magnification = 20
     wide_fov = True
     img_width, img_height = image_size(magnification, wide_fov)
 
