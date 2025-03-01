@@ -528,20 +528,24 @@ class Cytation5Backend(ImageReaderBackend):
     LINEAR = 0
     ORBITAL = 1
 
-  async def shake(self, shake_type: ShakeType) -> None:
+  async def shake(self, shake_type: ShakeType, frequency: int) -> None:
     """Warning: the duration for shaking has to be specified on the machine, and the maximum is
     16 minutes. As a hack, we start shaking for the maximum duration every time as long as stop
-    is not called."""
+    is not called.
+
+    Args:
+      frequency: speed, in mm
+    """
+
     max_duration = 16 * 60  # 16 minutes
 
     async def shake_maximal_duration():
       """This method will start the shaking, but returns immediately after
       shaking has started."""
-      resp = await self.send_command("y", "08120112207434014351135308559127881422\x03")
-
       shake_type_bit = str(shake_type.value)
       duration = str(max_duration).zfill(3)
-      cmd = f"0033010101010100002000000013{duration}{shake_type_bit}301"
+      assert 1 <= frequency <= 6, "Frequency must be between 1 and 6"
+      cmd = f"0033010101010100002000000013{duration}{shake_type_bit}{frequency}01"
       checksum = str((sum(cmd.encode()) + 73) % 100)  # don't know why +73
       cmd = cmd + checksum + "\x03"
       await self.send_command("D", cmd)
