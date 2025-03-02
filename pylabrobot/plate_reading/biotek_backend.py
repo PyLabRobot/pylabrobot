@@ -6,8 +6,6 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
 
-from scipy.optimize import minimize_scalar
-
 from pylabrobot.resources.plate import Plate
 
 try:
@@ -27,7 +25,7 @@ except ImportError:
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import ImageReaderBackend
-from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode
+from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode, Objective
 
 logger = logging.getLogger("pylabrobot.plate_reading.biotek")
 
@@ -119,9 +117,8 @@ class Cytation5ImagingConfig:
 class Cytation5Backend(ImageReaderBackend):
   """Backend for biotek cytation 5 image reader.
 
-  For imaging, the filter used during development is Olympus 4X PL FL Phase, and the magnification
-  is 4X, numerical aperture is 0.13. The camera is interfaced using the Spinnaker SDK, and the
-  camera used during development is the Point Grey Research Inc. Blackfly BFLY-U3-23S6M.
+  The camera is interfaced using the Spinnaker SDK, and the camera used during development is the
+  Point Grey Research Inc. Blackfly BFLY-U3-23S6M. This uses a Sony IMX249 sensor.
   """
 
   def __init__(
@@ -139,6 +136,7 @@ class Cytation5Backend(ImageReaderBackend):
     self.cam: Optional["PySpin.CameraPtr"] = None
     self.imaging_config = imaging_config or Cytation5ImagingConfig()
     self._filters: List[ImagingMode] = []
+    self._objectives: List[Objective] = []
 
     self._plate: Optional[Plate] = None
     self._exposure: Optional[Exposure] = None
@@ -150,6 +148,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._auto_focus_search_range: Optional[Tuple[float, float]] = None
     self._shaking = False
     self._pos_x, self._pos_y = 0, 0
+    self._objective: Optional[Objective] = None
 
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
@@ -284,6 +283,21 @@ class Cytation5Backend(ImageReaderBackend):
         else:
           self._filters.append(cytation_code2imaging_mode[cytation_code])
 
+      # -- Load objective information --
+      for spot in range(1, 7):
+        # +1 for some reason, eg first is h2
+        configuration = await self.send_command("i", f"h{spot + 1}")
+        if configuration.startswith(b"****"):
+          self._objectives.append(None)
+        else:
+          annulus_part_number = int(configuration.decode("latin").strip().split(" ")[0])
+          annulus_part_number2objective = {
+            1320520: Objective.O_4x_PL_FL_PHASE,
+            1320521: Objective.O_20x_PL_FL_PHASE,
+            1322026: Objective.O_40x_PL_FL_PHASE,
+          }
+          self._objectives.append(annulus_part_number2objective[annulus_part_number])
+
   async def stop(self) -> None:
     logger.info("[cytation5] stopping")
     await self.stop_shaking()
@@ -294,6 +308,9 @@ class Cytation5Backend(ImageReaderBackend):
       del self.cam
     if hasattr(self, "spinnaker_system") and self.spinnaker_system is not None:
       self.spinnaker_system.ReleaseInstance()
+
+    self._objectives = []
+    self._filters = []
 
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
@@ -626,8 +643,8 @@ class Cytation5Backend(ImageReaderBackend):
     intensity_str = str(intensity).zfill(2)
     if self._imaging_mode is None:
       raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
-    self._imaging_mode_code(self._imaging_mode)
-    await self.send_command("i", f"L{imaging_mode_code}{intensity_str}")
+    imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
+    await self.send_command("i", f"L0{imaging_mode_code}{intensity_str}")
 
   async def led_off(self):
     await self.send_command("i", "L0001")
@@ -650,7 +667,8 @@ class Cytation5Backend(ImageReaderBackend):
     focus_integer = int(focal_position + intercept + slope * focal_position * 1000)
     focus_str = str(focus_integer).zfill(5)
 
-    await self.send_command("i", f"F50{focus_str}")
+    imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
+    await self.send_command("i", f"F{imaging_mode_code}0{focus_str}")
 
     self._focal_height = focal_position
 
@@ -673,10 +691,14 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Row and column not set. Run select() first.")
     row_str, column_str = str(self._row).zfill(2), str(self._column).zfill(2)
 
-    magnifier = {"4x": 1, "20x": 2}["20x"]
+    if self._objective_code is None:
+      raise ValueError("Objective not set. Run set_objective() first.")
+    objective_code = self._objective_code(self._objective)
+    if self._imaging_mode is None:
+      raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
     imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
     await self.send_command(
-      "Y", f"Z{magnifier}{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}"
+      "Y", f"Z{objective_code}{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}"
     )
 
     relative_x, relative_y = x - self._pos_x, y - self._pos_y
@@ -701,6 +723,9 @@ class Cytation5Backend(ImageReaderBackend):
     imaging_mode = self._imaging_mode
     if imaging_mode is None:
       raise RuntimeError("Imaging mode not set. Run set_imaging_mode() first.")
+    objective = self._objective
+    if objective is None:
+      raise RuntimeError("Objective not set. Run set_objective() first.")
     exposure = self._exposure
     if exposure is None:
       raise RuntimeError("Exposure time not set. Run set_exposure() first.")
@@ -721,6 +746,7 @@ class Cytation5Backend(ImageReaderBackend):
         row=row,
         column=column,
         mode=imaging_mode,
+        objective=objective,
         focal_height=focus_value,
         exposure_time=exposure,
         gain=gain,
@@ -845,7 +871,23 @@ class Cytation5Backend(ImageReaderBackend):
   def _imaging_mode_code(self, mode: ImagingMode) -> str:
     if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.BRIGHTFIELD:
       return 5
-    return self.imaging_config.filters.index(mode) + 1
+    return self._filters.index(mode) + 1
+
+  def _objective_code(self, objective: Objective) -> str:
+    return self._objectives.index(objective) + 1
+
+  async def set_objective(self, objective: Objective):
+    if objective == self._objective:
+      logger.debug("Objective is already set to %s", objective)
+      return
+
+    if self.imaging_config is None:
+      raise RuntimeError("Need to set imaging_config first")
+
+    objective_code = self._objective_code(objective)
+    await self.send_command("Y", f"P0e{objective_code:02}")
+
+    self._objective = objective
 
   async def set_imaging_mode(self, mode: ImagingMode, led_intensity: int):
     if self.cam is None:
@@ -935,6 +977,7 @@ class Cytation5Backend(ImageReaderBackend):
     row: int,
     column: int,
     mode: ImagingMode,
+    objective: Objective,
     exposure_time: Exposure,
     focal_height: FocalPosition,
     gain: Gain,
@@ -969,6 +1012,7 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
     await self.set_plate(plate)
+    await self.set_objective(objective)
     await self.set_imaging_mode(mode, led_intensity=led_intensity)
     await self.select(row, column)
     await self.set_exposure(exposure_time)

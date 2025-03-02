@@ -2,6 +2,12 @@ import enum
 from typing import Literal, Union
 
 
+class Objective(enum.Enum):
+  O_4x_PL_FL_PHASE = enum.auto()
+  O_20x_PL_FL_PHASE = enum.auto()
+  O_40x_PL_FL_PHASE = enum.auto()
+
+
 class ImagingMode(enum.Enum):
   BRIGHTFIELD = enum.auto()
   PHASE_CONTRAST = enum.auto()
