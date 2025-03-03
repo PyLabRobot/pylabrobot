@@ -48,7 +48,8 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
   async def test_close(self):
     self.backend.io.read.return_value = b"\x03"
-    await self.backend.close()
+    plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
+    await self.backend.close(plate=plate)
     self.backend.io.write.assert_called_with(b"A")
 
   async def test_get_current_temperature(self):

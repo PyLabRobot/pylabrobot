@@ -1,5 +1,7 @@
 import enum
-from typing import Literal, Union
+from typing import List, Literal, Union
+
+Image = List[List[float]]
 
 
 class Objective(enum.Enum):

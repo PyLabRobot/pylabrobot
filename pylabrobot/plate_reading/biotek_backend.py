@@ -25,7 +25,14 @@ except ImportError:
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import ImageReaderBackend
-from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode, Objective
+from pylabrobot.plate_reading.standard import (
+  Exposure,
+  FocalPosition,
+  Gain,
+  Image,
+  ImagingMode,
+  Objective,
+)
 
 logger = logging.getLogger("pylabrobot.plate_reading.biotek")
 
@@ -35,9 +42,6 @@ SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR = (
 )
 PixelFormat_Mono8 = PySpin.PixelFormat_Mono8 if USE_PYSPIN else -1
 SpinnakerException = PySpin.SpinnakerException if USE_PYSPIN else Exception
-
-
-Image = List[List[float]]
 
 
 def _laplacian_2d(u):
@@ -135,8 +139,8 @@ class Cytation5Backend(ImageReaderBackend):
     self.spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self.cam: Optional["PySpin.CameraPtr"] = None
     self.imaging_config = imaging_config or Cytation5ImagingConfig()
-    self._filters: List[ImagingMode] = []
-    self._objectives: List[Objective] = []
+    self._filters: List[Optional[ImagingMode]] = []
+    self._objectives: List[Optional[Objective]] = []
 
     self._plate: Optional[Plate] = None
     self._exposure: Optional[Exposure] = None
@@ -147,7 +151,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._column: Optional[int] = None
     self._auto_focus_search_range: Optional[Tuple[float, float]] = None
     self._shaking = False
-    self._pos_x, self._pos_y = 0, 0
+    self._pos_x, self._pos_y = 0.0, 0.0
     self._objective: Optional[Objective] = None
 
   async def setup(self, use_cam: bool = False) -> None:
@@ -252,6 +256,7 @@ class Cytation5Backend(ImageReaderBackend):
       # -- Load filter information --
       for spot in range(1, 5):
         configuration = await self.send_command("i", f"q{spot}")
+        assert configuration is not None
         # TODO: what happens when the filter is not set?
         cytation_code = int(configuration.decode().strip().split(" ")[0])
         cytation_code2imaging_mode = {
@@ -287,6 +292,7 @@ class Cytation5Backend(ImageReaderBackend):
       for spot in range(1, 7):
         # +1 for some reason, eg first is h2
         configuration = await self.send_command("i", f"h{spot + 1}")
+        assert configuration is not None
         if configuration.startswith(b"****"):
           self._objectives.append(None)
         else:
@@ -381,9 +387,10 @@ class Cytation5Backend(ImageReaderBackend):
     await self._set_slow_mode(slow)
     return await self.send_command("J")
 
-  async def close(self, plate: Plate, slow: bool = False):
+  async def close(self, plate: Optional[Plate], slow: bool = False):
     await self._set_slow_mode(slow)
-    await self.set_plate(plate)
+    if plate is not None:
+      await self.set_plate(plate)
     self._row, self._column = None, None
     return await self.send_command("A")
 
@@ -672,6 +679,8 @@ class Cytation5Backend(ImageReaderBackend):
     focus_integer = int(focal_position + intercept + slope * focal_position * 1000)
     focus_str = str(focus_integer).zfill(5)
 
+    if self._imaging_mode is None:
+      raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
     imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
     await self.send_command("i", f"F{imaging_mode_code}0{focus_str}")
 
@@ -696,7 +705,7 @@ class Cytation5Backend(ImageReaderBackend):
       raise ValueError("Row and column not set. Run select() first.")
     row_str, column_str = str(self._row).zfill(2), str(self._column).zfill(2)
 
-    if self._objective_code is None:
+    if self._objective is None:
       raise ValueError("Objective not set. Run set_objective() first.")
     objective_code = self._objective_code(self._objective)
     if self._imaging_mode is None:
@@ -873,12 +882,12 @@ class Cytation5Backend(ImageReaderBackend):
 
     self._gain = gain
 
-  def _imaging_mode_code(self, mode: ImagingMode) -> str:
+  def _imaging_mode_code(self, mode: ImagingMode) -> int:
     if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.BRIGHTFIELD:
       return 5
     return self._filters.index(mode) + 1
 
-  def _objective_code(self, objective: Objective) -> str:
+  def _objective_code(self, objective: Objective) -> int:
     return self._objectives.index(objective) + 1
 
   async def set_objective(self, objective: Objective):
@@ -1024,7 +1033,7 @@ class Cytation5Backend(ImageReaderBackend):
     await self.set_gain(gain)
     await self.set_focus(focal_height)
 
-    def image_size(magnification: int, wide_fov: bool) -> Tuple[int, int]:
+    def image_size(magnification: int, wide_fov: bool) -> Tuple[float, float]:
       # um to mm (plr unit)
       if magnification == 4:
         return (3474 / 1000, 3474 / 1000) if wide_fov else (2135 / 1000, 1576 / 1000)
