@@ -260,13 +260,13 @@ class Plate(ItemizedResource["Well"]):
     )
 
     # Determine row and column start indices
-    if quadrant in ["tl", "top_left"]:
+    if quadrant.lower() in ["tl", "top_left"]:
       row_start, col_start = 0, 0
-    elif quadrant in ["tr", "top_right"]:
+    elif quadrant.lower() in ["tr", "top_right"]:
       row_start, col_start = 0, 1
-    elif quadrant in ["bl", "bottom_left"]:
+    elif quadrant.lower() in ["bl", "bottom_left"]:
       row_start, col_start = 1, 0
-    elif quadrant in ["br", "bottom_right"]:
+    elif quadrant.lower() in ["br", "bottom_right"]:
       row_start, col_start = 1, 1
     else:
       raise ValueError(
