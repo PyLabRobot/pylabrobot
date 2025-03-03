@@ -469,7 +469,6 @@ class Cytation5Backend(ImageReaderBackend):
       f"{int(plate_size_z*100):04}"
       "\x03"
     )
-    print(cmd)
 
     resp = await self.send_command("y", cmd, timeout=1)
     self._plate = plate
