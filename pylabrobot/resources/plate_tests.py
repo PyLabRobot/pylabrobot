@@ -72,14 +72,14 @@ class TestLid(unittest.TestCase):
         size_z=1,
       ),
     )
-    self.assertIn(plate.get_well("A1"), plate.get_quadrant(1))
-    self.assertEqual(len(plate.get_quadrant(1)), 384 // 4)
+    self.assertIn(plate.get_well("A1"), plate.get_quadrant("tl"))
+    self.assertEqual(len(plate.get_quadrant("tl")), 384 // 4)
 
-    self.assertIn(plate.get_well("A2"), plate.get_quadrant(2))
-    self.assertEqual(len(plate.get_quadrant(2)), 384 // 4)
+    self.assertIn(plate.get_well("A2"), plate.get_quadrant("tr"))
+    self.assertEqual(len(plate.get_quadrant("tr")), 384 // 4)
 
-    self.assertIn(plate.get_well("B1"), plate.get_quadrant(3))
-    self.assertEqual(len(plate.get_quadrant(3)), 384 // 4)
+    self.assertIn(plate.get_well("B1"), plate.get_quadrant("bl"))
+    self.assertEqual(len(plate.get_quadrant("bl")), 384 // 4)
 
-    self.assertIn(plate.get_well("B2"), plate.get_quadrant(4))
-    self.assertEqual(len(plate.get_quadrant(4)), 384 // 4)
+    self.assertIn(plate.get_well("B2"), plate.get_quadrant("br"))
+    self.assertEqual(len(plate.get_quadrant("br")), 384 // 4)
