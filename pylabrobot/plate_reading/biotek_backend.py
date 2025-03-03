@@ -374,10 +374,15 @@ class Cytation5Backend(ImageReaderBackend):
     assert resp is not None
     return " ".join(resp[1:-1].decode().split(" ")[0:4])
 
-  async def open(self):
+  async def _set_slow_mode(self, slow: bool):
+    await self.send_command("&", "S1" if slow else "S0")
+
+  async def open(self, slow: bool = False):
+    await self._set_slow_mode(slow)
     return await self.send_command("J")
 
-  async def close(self, plate: Plate):
+  async def close(self, plate: Plate, slow: bool = False):
+    await self._set_slow_mode(slow)
     await self.set_plate(plate)
     self._row, self._column = None, None
     return await self.send_command("A")
