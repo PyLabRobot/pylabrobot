@@ -403,6 +403,13 @@ class Cytation5Backend(ImageReaderBackend):
     assert resp is not None
     return int(resp[1:-1]) / 100000
 
+  async def set_temperature(self, temperature: float):
+    """Set temperature in degrees Celsius."""
+    return await self.send_command("g", f"{int(temperature * 1000):05}")
+
+  async def stop_heating_or_cooling(self):
+    return await self.send_command("g", "00000")
+
   def _parse_body(self, body: bytes) -> List[List[float]]:
     start_index = body.index(b"01,01")
     end_index = body.rindex(b"\r\n")
