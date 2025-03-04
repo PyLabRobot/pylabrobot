@@ -1044,6 +1044,8 @@ class Cytation5Backend(ImageReaderBackend):
         return (347 / 1000, 347 / 1000)
       raise ValueError("Invalid magnification")
 
+    if self._objective is None:
+      raise RuntimeError("Objective not set. Run set_objective() first.")
     magnification = self._objective.magnification
     img_width, img_height = image_size(magnification)
 
