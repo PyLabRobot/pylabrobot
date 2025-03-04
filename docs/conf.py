@@ -84,6 +84,7 @@ html_static_path = ["_static", "resources/library/img"]
 html_extra_path = ["resources/library/img"]
 
 html_theme_options = {
+  "show_nav_level": 4,
   "use_edit_page_button": True,
   "navbar_start": ["navbar-logo"],
   "navbar_center": ["navbar-nav"],

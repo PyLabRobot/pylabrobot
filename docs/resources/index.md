@@ -1,63 +1,97 @@
 # Resource Library
 
-The PLR Resource Library (PLR-RL) is the world's biggest and most accurate centralized collection of labware. If you cannot find something, please contribute what you are looking for!
+The PyLabRobot Resource Library (PLR-RL) is PyLabRobot's open-source, crowd-sourced collection of labware.
+Laboratories across the world use an almost infinite number of different resources/labware.
+We believe the way to most efficient capture the largest portion of this resource superset is via crowd-sourcing, and peer-reviewing new entries.
+If you cannot find something, please contribute what you are looking for!
+
+----
 
 ```{toctree}
 :maxdepth: 1
 
 introduction
 custom-resources
+plr-rl-naming-conventions
 ```
+
+----
 
 ## `Resource` subclasses
 
 In PLR every physical object is a subclass of the `Resource` superclass (except for `Tip`).
 Each subclass adds unique methods or attributes to represent its unique physical specifications and behavior.
 
-Some standard `Resource` subclasses in the inheritance tree are:
+PLR's `Resource` subclasses in the inheritance tree are:
 
-```
-Resource
-├── Carrier
-│   ├── TipCarrier
-│   ├── PlateCarrier
-│   ├── MFXCarrier
-│   ├── ShakerCarrier
-│   └── TubeCarrier
-├── Container
-│   ├── Well
-│   ├── PetriDish
-│   ├── Tube
-│   └── Trough
-├── ItemizedResource
-│   ├── Plate
-│   ├── TipRack
-│   └── TubeRack
-├── Lid
-└── PlateAdapter
-```
+<style>
+  .tree {
+    border: 3px solid black;  /* Thick border around the entire table */
+    border-collapse: collapse;  /* Ensures borders don’t double */
+  }
 
-See more detailed documentatino below (WIP).
+  .tree td {
+    font-family: "Fira Code", monospace;  /* Code-like font */
+    font-size: 15px;  /* Matches code cell output */
+    padding: 5px 10px;  /* Adjust padding for better spacing */
+    line-height: 0.8;  /* Keep compact row spacing */
+    font-weight: bold;  /* Make all text bold */
+    border: none;  /* Remove all inner borders */
+  }
+
+  /* Indentation using text-indent */
+  .level-1 { text-indent: 20px; }
+  .level-2 { text-indent: 40px; }
+  .level-3 { text-indent: 60px; }
+</style>
+
+
+
+
+<table class="tree" style="margin-left: 5px; background-color: #FAF3DD; border-collapse: collapse; padding: 50px;">
+<tr><td><a href="introduction.html">Resource</a></td></tr>
+
+<tr><td class="level-1">├── <a href="carrier/carrier.html">Carrier</a></td></tr>
+<tr><td class="level-2">├── <a href="carrier/plate-carrier/plate_carriers.html">PlateCarrier</a></td></tr>
+<tr><td class="level-2">├── TipCarrier</td></tr>
+<tr><td class="level-2">├── <a href="carrier/mfx-carrier/mfx_carriers.html">MFXCarrier</a></td></tr>
+<tr><td class="level-2">├── TroughCarrier</td></tr>
+<tr><td class="level-2">└── TubeCarrier</td></tr>
+
+<tr><td class="level-1">├── Container</td></tr>
+<tr><td class="level-2">├── Well</td></tr>
+<tr><td class="level-2">├── PetriDish</td></tr>
+<tr><td class="level-2">├── Tube</td></tr>
+<tr><td class="level-2">└── Trough</td></tr>
+
+<tr><td class="level-1">├── <a href="itemized-resource/itemized-resource.html">ItemizedResource</a></td></tr>
+<tr><td class="level-2">├── <a href="itemized-resource/plate/plate.html">Plate</a></td></tr>
+<tr><td class="level-2">├── TipRack</td></tr>
+<tr><td class="level-2">└── TubeRack</td></tr>
+
+<tr><td class="level-1">├── Lid</td></tr>
+<tr><td class="level-1">├── PlateAdapter</td></tr>
+
+<tr><td class="level-1">├── ResourceHolder</td></tr>
+<tr><td class="level-2">└── PlateHolder</td></tr>
+
+<tr><td class="level-1">└── ResourceStack</td></tr>
+</table>
+
+
+----
 
 ```{toctree}
-:caption: Resource subclasses
+:maxdepth: 3
+:caption: Resource subclass explanations
+:hidden:
 
+carrier/carrier
 containers
-itemized_resource
-plates
-plate_carriers
-mfx
+itemized-resource/itemized-resource
 ```
 
 ## Library
-
-### Plate Naming Standard
-
-PLR is not actively enforcing a specific plate naming standard but recommends the following:
-
-![PLR_plate_naming_standards](img/PLR_plate_naming_standards.png)
-
-This standard is similar to the [Opentrons API labware naming standard](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516) but 1) further sub-categorizes "wellplates" to facilitate communication with day-to-day users, and 2) adds information about the well-bottom geometry.
 
 ```{toctree}
 :caption: Library
