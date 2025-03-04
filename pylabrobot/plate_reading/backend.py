@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from typing import List
+from typing import List, Optional
 
 from pylabrobot.machines.backend import MachineBackend
-from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode
+from pylabrobot.plate_reading.standard import (
+  Exposure,
+  FocalPosition,
+  Gain,
+  Image,
+  ImagingMode,
+  Objective,
+)
 from pylabrobot.resources.plate import Plate
 
 
@@ -25,7 +32,7 @@ class PlateReaderBackend(MachineBackend, metaclass=ABCMeta):
     """Open the plate reader. Also known as plate out."""
 
   @abstractmethod
-  async def close(self) -> None:
+  async def close(self, plate: Optional[Plate]) -> None:
     """Close the plate reader. Also known as plate in."""
 
   @abstractmethod
@@ -57,11 +64,12 @@ class ImagerBackend(MachineBackend, metaclass=ABCMeta):
     row: int,
     column: int,
     mode: ImagingMode,
+    objective: Objective,
     exposure_time: Exposure,
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
-  ) -> List[List[float]]:
+  ) -> List[Image]:
     """Capture an image of the plate in the specified mode."""
 
 

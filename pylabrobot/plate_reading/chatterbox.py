@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from pylabrobot.plate_reading.backend import PlateReaderBackend
 from pylabrobot.resources.plate import Plate
@@ -22,8 +22,8 @@ class PlateReaderChatterboxBackend(PlateReaderBackend):
   async def open(self) -> None:
     print("Opening the plate reader.")
 
-  async def close(self) -> None:
-    print("Closing the plate reader.")
+  async def close(self, plate: Optional[Plate]) -> None:
+    print(f"Closing the plate reader with plate, {plate}.")
 
   async def read_luminescence(self, plate: Plate, focal_height: float) -> List[List[float]]:
     print(f"Reading luminescence at focal height {focal_height}.")
