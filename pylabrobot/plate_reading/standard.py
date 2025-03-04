@@ -9,6 +9,14 @@ class Objective(enum.Enum):
   O_20x_PL_FL_PHASE = enum.auto()
   O_40x_PL_FL_PHASE = enum.auto()
 
+  @property
+  def magnification(self) -> int:
+    return {
+      Objective.O_4x_PL_FL_PHASE: 4,
+      Objective.O_20x_PL_FL_PHASE: 20,
+      Objective.O_40x_PL_FL_PHASE: 40,
+    }[self]
+
 
 class ImagingMode(enum.Enum):
   BRIGHTFIELD = enum.auto()

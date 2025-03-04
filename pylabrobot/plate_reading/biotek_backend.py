@@ -882,7 +882,7 @@ class Cytation5Backend(ImageReaderBackend):
     self._gain = gain
 
   def _imaging_mode_code(self, mode: ImagingMode) -> int:
-    if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.BRIGHTFIELD:
+    if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.PHASE_CONTRAST:
       return 5
     return self._filters.index(mode) + 1
 
@@ -898,7 +898,7 @@ class Cytation5Backend(ImageReaderBackend):
       raise RuntimeError("Need to set imaging_config first")
 
     objective_code = self._objective_code(objective)
-    await self.send_command("Y", f"P0e{objective_code:02}")
+    await self.send_command("Y", f"P0e{objective_code:02}", timeout=60)
 
     self._objective = objective
 
@@ -1032,27 +1032,27 @@ class Cytation5Backend(ImageReaderBackend):
     await self.set_gain(gain)
     await self.set_focus(focal_height)
 
-    def image_size(magnification: int, wide_fov: bool) -> Tuple[float, float]:
+    def image_size(magnification: int) -> Tuple[float, float]:
+      # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
+      # simply take the wide fov option.
       # um to mm (plr unit)
       if magnification == 4:
-        return (3474 / 1000, 3474 / 1000) if wide_fov else (2135 / 1000, 1576 / 1000)
+        return (3474 / 1000, 3474 / 1000)
       if magnification == 20:
-        return (694 / 1000, 694 / 1000) if wide_fov else (427 / 1000, 315 / 1000)
+        return (694 / 1000, 694 / 1000)
       if magnification == 40:
-        return (347 / 1000, 347 / 1000) if wide_fov else (213 / 1000, 157 / 1000)
+        return (347 / 1000, 347 / 1000)
       raise ValueError("Invalid magnification")
 
-    # TODO: parameterize
-    magnification = 20
-    wide_fov = True
-    img_width, img_height = image_size(magnification, wide_fov)
+    magnification = self._objective.magnification
+    img_width, img_height = image_size(magnification)
 
     first_well = plate.get_item(0)
     well_size_x, well_size_y = (first_well.get_size_x(), first_well.get_size_y())
     if coverage == "full":
       coverage = (
-        math.ceil(well_size_x / image_size(magnification, wide_fov)[0]),
-        math.ceil(well_size_y / image_size(magnification, wide_fov)[1]),
+        math.ceil(well_size_x / image_size(magnification)[0]),
+        math.ceil(well_size_y / image_size(magnification)[1]),
       )
     rows, cols = coverage
 
