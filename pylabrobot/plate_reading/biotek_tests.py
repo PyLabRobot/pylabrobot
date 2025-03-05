@@ -42,13 +42,14 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     assert await self.backend.get_serial_number() == "00000000"
 
   async def test_open(self):
-    self.backend.io.read.return_value = b"\x03"
+    self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x03"]
     await self.backend.open()
     self.backend.io.write.assert_called_with(b"J")
 
   async def test_close(self):
-    self.backend.io.read.return_value = b"\x03"
-    await self.backend.close()
+    self.backend.io.read.side_effect = [b"\x06", b"\x03", b"\x06", b"\x03", b"\x03"]
+    plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
+    await self.backend.close(plate=plate)
     self.backend.io.write.assert_called_with(b"A")
 
   async def test_get_current_temperature(self):
@@ -86,8 +87,6 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
     resp = await self.backend.read_absorbance(plate=self.plate, wavelength=580)
 
-    self.backend.io.write.assert_any_call(b"y")
-    self.backend.io.write.assert_any_call(b"04060136807158017051135508525127501610\x03")
     self.backend.io.write.assert_any_call(b"D")
     self.backend.io.write.assert_any_call(
       b"004701010108120001200100001100100000106000080580113\x03"
@@ -248,8 +247,6 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
 
     self.backend.io.write.assert_any_call(b"t")
     self.backend.io.write.assert_any_call(b"621720\x03")
-    self.backend.io.write.assert_any_call(b"y")
-    self.backend.io.write.assert_any_call(b"04060136807158017051135508525127501610\x03")
     self.backend.io.write.assert_any_call(b"D")
     self.backend.io.write.assert_any_call(
       b"0084010101081200012001000011001000001350001002002000485000052800000000000000000021001119"

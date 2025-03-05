@@ -153,7 +153,7 @@ class CLARIOStar(PlateReaderBackend):
     open_response = await self.send(b"\x02\x00\x0e\x0c\x03\x01\x00\x00\x00\x00\x00")
     return await self._wait_for_ready_and_return(open_response)
 
-  async def close(self):
+  async def close(self, plate: Optional[Plate] = None):
     close_response = await self.send(b"\x02\x00\x0e\x0c\x03\x00\x00\x00\x00\x00\x00")
     return await self._wait_for_ready_and_return(close_response)
 

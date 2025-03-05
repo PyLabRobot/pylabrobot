@@ -1,8 +1,10 @@
 import asyncio
 import enum
 import logging
+import math
 import time
-from typing import List, Literal, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
 
 from pylabrobot.resources.plate import Plate
 
@@ -23,7 +25,14 @@ except ImportError:
 
 from pylabrobot.io.ftdi import FTDI
 from pylabrobot.plate_reading.backend import ImageReaderBackend
-from pylabrobot.plate_reading.standard import Exposure, FocalPosition, Gain, ImagingMode
+from pylabrobot.plate_reading.standard import (
+  Exposure,
+  FocalPosition,
+  Gain,
+  Image,
+  ImagingMode,
+  Objective,
+)
 
 logger = logging.getLogger("pylabrobot.plate_reading.biotek")
 
@@ -76,7 +85,9 @@ def _laplacian_2d(u):
   return laplacian
 
 
-async def _golden_ratio_search(func, a, b, tol, timeout):
+async def _golden_ratio_search(
+  func: Callable[..., Coroutine[Any, Any, float]], a: float, b: float, tol: float, timeout: float
+):
   """Golden ratio search to maximize a unimodal function `func` over the interval [a, b]."""
   # thanks chat
   phi = (1 + np.sqrt(5)) / 2  # Golden ratio
@@ -101,19 +112,24 @@ async def _golden_ratio_search(func, a, b, tol, timeout):
   return (b + a) / 2
 
 
+@dataclass
+class Cytation5ImagingConfig:
+  camera_serial_number: Optional[str] = None
+  max_image_read_attempts: int = 8
+
+
 class Cytation5Backend(ImageReaderBackend):
   """Backend for biotek cytation 5 image reader.
 
-  For imaging, the filter used during development is Olympus 4X PL FL Phase, and the magnification
-  is 4X, numerical aperture is 0.13. The camera is interfaced using the Spinnaker SDK, and the
-  camera used during development is the Point Grey Research Inc. Blackfly BFLY-U3-23S6M.
+  The camera is interfaced using the Spinnaker SDK, and the camera used during development is the
+  Point Grey Research Inc. Blackfly BFLY-U3-23S6M. This uses a Sony IMX249 sensor.
   """
 
   def __init__(
     self,
     timeout: float = 20,
-    camera_serial_number: Optional[float] = None,
     device_id: Optional[str] = None,
+    imaging_config: Optional[Cytation5ImagingConfig] = None,
   ) -> None:
     super().__init__()
     self.timeout = timeout
@@ -122,8 +138,9 @@ class Cytation5Backend(ImageReaderBackend):
 
     self.spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self.cam: Optional["PySpin.CameraPtr"] = None
-    self.camera_serial_number = camera_serial_number
-    self.max_image_read_attempts = 8
+    self.imaging_config = imaging_config or Cytation5ImagingConfig()
+    self._filters: List[Optional[ImagingMode]] = []
+    self._objectives: List[Optional[Objective]] = []
 
     self._plate: Optional[Plate] = None
     self._exposure: Optional[Exposure] = None
@@ -132,7 +149,10 @@ class Cytation5Backend(ImageReaderBackend):
     self._imaging_mode: Optional["ImagingMode"] = None
     self._row: Optional[int] = None
     self._column: Optional[int] = None
+    self._auto_focus_search_range: Optional[Tuple[float, float]] = None
     self._shaking = False
+    self._pos_x, self._pos_y = 0.0, 0.0
+    self._objective: Optional[Objective] = None
 
   async def setup(self, use_cam: bool = False) -> None:
     logger.info("[cytation5] setting up")
@@ -152,6 +172,8 @@ class Cytation5Backend(ImageReaderBackend):
     if use_cam:
       if not USE_PYSPIN:
         raise RuntimeError("PySpin is not installed. Please follow the imaging setup instructions.")
+      if self.imaging_config is None:
+        raise RuntimeError("Imaging configuration is not set.")
 
       logger.debug("[cytation5] setting up camera")
 
@@ -176,7 +198,10 @@ class Cytation5Backend(ImageReaderBackend):
         serial_number = info["DeviceSerialNumber"]
         logger.debug("[cytation5] camera detected: %s", serial_number)
 
-        if self.camera_serial_number is not None and serial_number == self.camera_serial_number:
+        if (
+          self.imaging_config.camera_serial_number is not None
+          and serial_number == self.imaging_config.camera_serial_number
+        ):
           self.cam = cam
           logger.info("[cytation5] using camera with serial number %s", serial_number)
           break
@@ -228,6 +253,57 @@ class Cytation5Backend(ImageReaderBackend):
         raise RuntimeError("unable to query TriggerMode On")
       ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
 
+      # -- Load filter information --
+      for spot in range(1, 5):
+        configuration = await self.send_command("i", f"q{spot}")
+        assert configuration is not None
+        # TODO: what happens when the filter is not set?
+        cytation_code = int(configuration.decode().strip().split(" ")[0])
+        cytation_code2imaging_mode = {
+          1225121: ImagingMode.C377_647,
+          1225123: ImagingMode.C400_647,
+          1225113: ImagingMode.C469_593,
+          1225109: ImagingMode.ACRIDINE_ORANGE,
+          1225107: ImagingMode.CFP,
+          1225118: ImagingMode.CFP_FRET_V2,
+          1225110: ImagingMode.CFP_YFP_FRET,
+          1225119: ImagingMode.CFP_YFP_FRET_V2,
+          1225112: ImagingMode.CHLOROPHYLL_A,
+          1225105: ImagingMode.CY5,
+          1225114: ImagingMode.CY5_5,
+          1225106: ImagingMode.CY7,
+          1225100: ImagingMode.DAPI,
+          1225101: ImagingMode.GFP,
+          1225116: ImagingMode.GFP_CY5,
+          1225122: ImagingMode.OXIDIZED_ROGFP2,
+          1225111: ImagingMode.PROPOIDIUM_IODIDE,
+          1225103: ImagingMode.RFP,
+          1225117: ImagingMode.RFP_CY5,
+          1225115: ImagingMode.TAG_BFP,
+          1225102: ImagingMode.TEXAS_RED,
+          1225104: ImagingMode.YFP,
+        }
+        if cytation_code not in cytation_code2imaging_mode:
+          self._filters.append(None)
+        else:
+          self._filters.append(cytation_code2imaging_mode[cytation_code])
+
+      # -- Load objective information --
+      for spot in range(1, 7):
+        # +1 for some reason, eg first is h2
+        configuration = await self.send_command("i", f"h{spot + 1}")
+        assert configuration is not None
+        if configuration.startswith(b"****"):
+          self._objectives.append(None)
+        else:
+          annulus_part_number = int(configuration.decode("latin").strip().split(" ")[0])
+          annulus_part_number2objective = {
+            1320520: Objective.O_4x_PL_FL_PHASE,
+            1320521: Objective.O_20x_PL_FL_PHASE,
+            1322026: Objective.O_40x_PL_FL_PHASE,
+          }
+          self._objectives.append(annulus_part_number2objective[annulus_part_number])
+
   async def stop(self) -> None:
     logger.info("[cytation5] stopping")
     await self.stop_shaking()
@@ -238,6 +314,9 @@ class Cytation5Backend(ImageReaderBackend):
       del self.cam
     if hasattr(self, "spinnaker_system") and self.spinnaker_system is not None:
       self.spinnaker_system.ReleaseInstance()
+
+    self._objectives = []
+    self._filters = []
 
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
@@ -274,6 +353,7 @@ class Cytation5Backend(ImageReaderBackend):
     timeout: Optional[float] = None,
   ) -> Optional[bytes]:
     await self._purge_buffers()
+
     self.io.write(command.encode())
     logger.debug("[cytation5] sent %s", command)
     response: Optional[bytes] = None
@@ -300,17 +380,35 @@ class Cytation5Backend(ImageReaderBackend):
     assert resp is not None
     return " ".join(resp[1:-1].decode().split(" ")[0:4])
 
-  async def open(self):
+  async def _set_slow_mode(self, slow: bool):
+    await self.send_command("&", "S1" if slow else "S0")
+
+  async def open(self, slow: bool = False):
+    await self._set_slow_mode(slow)
     return await self.send_command("J")
 
-  async def close(self):
+  async def close(self, plate: Optional[Plate], slow: bool = False):
+    await self._set_slow_mode(slow)
+    if plate is not None:
+      await self.set_plate(plate)
+    self._row, self._column = None, None
     return await self.send_command("A")
+
+  async def home(self):
+    return await self.send_command("i", "x")
 
   async def get_current_temperature(self) -> float:
     """Get current temperature in degrees Celsius."""
     resp = await self.send_command("h")
     assert resp is not None
     return int(resp[1:-1]) / 100000
+
+  async def set_temperature(self, temperature: float):
+    """Set temperature in degrees Celsius."""
+    return await self.send_command("g", f"{int(temperature * 1000):05}")
+
+  async def stop_heating_or_cooling(self):
+    return await self.send_command("g", "00000")
 
   def _parse_body(self, body: bytes) -> List[List[float]]:
     start_index = body.index(b"01,01")
@@ -360,6 +458,8 @@ class Cytation5Backend(ImageReaderBackend):
     plate_size_y = plate.get_size_y()
     plate_size_x = plate.get_size_x()
     plate_size_z = plate.get_size_z()
+    if plate.lid is not None:
+      plate_size_z += plate.lid.get_size_z() - plate.lid.nesting_z_height
 
     top_left_well_center_y = plate.get_size_y() - top_left_well_center.y  # invert y axis
     bottom_right_well_center_y = plate.get_size_y() - bottom_right_well_center.y  # invert y axis
@@ -377,7 +477,9 @@ class Cytation5Backend(ImageReaderBackend):
       "\x03"
     )
 
-    return await self.send_command("y", cmd)
+    resp = await self.send_command("y", cmd, timeout=1)
+    self._plate = plate
+    return resp
 
   async def read_absorbance(self, plate: Plate, wavelength: int) -> List[List[float]]:
     if not 230 <= wavelength <= 999:
@@ -461,26 +563,36 @@ class Cytation5Backend(ImageReaderBackend):
     LINEAR = 0
     ORBITAL = 1
 
-  async def shake(self, shake_type: ShakeType) -> None:
+  async def shake(self, shake_type: ShakeType, frequency: int) -> None:
     """Warning: the duration for shaking has to be specified on the machine, and the maximum is
     16 minutes. As a hack, we start shaking for the maximum duration every time as long as stop
-    is not called."""
+    is not called. I think the machine might open the door at the end of the 16 minutes and then
+    move it back in. We have to find a way to shake continuously, which is possible in protocol-mode
+    with kinetics.
+
+    Args:
+      frequency: speed, in mm
+    """
+
     max_duration = 16 * 60  # 16 minutes
+    self._shaking_started = asyncio.Event()
 
     async def shake_maximal_duration():
       """This method will start the shaking, but returns immediately after
       shaking has started."""
-      resp = await self.send_command("y", "08120112207434014351135308559127881422\x03")
-
       shake_type_bit = str(shake_type.value)
       duration = str(max_duration).zfill(3)
-      cmd = f"0033010101010100002000000013{duration}{shake_type_bit}301"
+      assert 1 <= frequency <= 6, "Frequency must be between 1 and 6"
+      cmd = f"0033010101010100002000000013{duration}{shake_type_bit}{frequency}01"
       checksum = str((sum(cmd.encode()) + 73) % 100)  # don't know why +73
       cmd = cmd + checksum + "\x03"
       await self.send_command("D", cmd)
 
       resp = await self.send_command("O")
       assert resp == b"\x060000\x03"
+
+      if not self._shaking_started.is_set():
+        self._shaking_started.set()
 
     async def shake_continuous():
       while self._shaking:
@@ -495,6 +607,8 @@ class Cytation5Backend(ImageReaderBackend):
 
     self._shaking = True
     self._shaking_task = asyncio.create_task(shake_continuous())
+
+    await self._shaking_started.wait()
 
   async def stop_shaking(self) -> None:
     await self._abort()
@@ -555,13 +669,8 @@ class Cytation5Backend(ImageReaderBackend):
     intensity_str = str(intensity).zfill(2)
     if self._imaging_mode is None:
       raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
-    imaging_mode_code = {
-      ImagingMode.BRIGHTFIELD: "05",
-      ImagingMode.GFP: "02",
-      ImagingMode.TEXAS_RED: "03",
-      ImagingMode.PHASE_CONTRAST: "07",
-    }[self._imaging_mode]
-    await self.send_command("i", f"L{imaging_mode_code}{intensity_str}")
+    imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
+    await self.send_command("i", f"L0{imaging_mode_code}{intensity_str}")
 
   async def led_off(self):
     await self.send_command("i", "L0001")
@@ -584,19 +693,67 @@ class Cytation5Backend(ImageReaderBackend):
     focus_integer = int(focal_position + intercept + slope * focal_position * 1000)
     focus_str = str(focus_integer).zfill(5)
 
-    # this is actually position., 101 should be 000. might also include imaging mode?
-    await self.send_command("Y", "Z1560101000000000000")
-    await self.send_command("i", f"F50{focus_str}")
+    if self._imaging_mode is None:
+      raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
+    imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
+    await self.send_command("i", f"F{imaging_mode_code}0{focus_str}")
 
     self._focal_height = focal_position
 
+  async def set_position(self, x: float, y: float):
+    """
+    Args:
+      x: in mm from the center of the selected well
+      y: in mm from the center of the selected well
+    """
+    if self._imaging_mode is None:
+      raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
+
+    # firmware is in (10/0.984 (10/0.984))um units. plr is mm. To convert
+    x_str, y_str = (
+      str(round(x * 100 * 0.984)).zfill(6),
+      str(round(y * 100 * 0.984)).zfill(6),
+    )
+
+    if self._row is None or self._column is None:
+      raise ValueError("Row and column not set. Run select() first.")
+    row_str, column_str = str(self._row).zfill(2), str(self._column).zfill(2)
+
+    if self._objective is None:
+      raise ValueError("Objective not set. Run set_objective() first.")
+    objective_code = self._objective_code(self._objective)
+    if self._imaging_mode is None:
+      raise ValueError("Imaging mode not set. Run set_imaging_mode() first.")
+    imaging_mode_code = self._imaging_mode_code(self._imaging_mode)
+    await self.send_command(
+      "Y", f"Z{objective_code}{imaging_mode_code}6{row_str}{column_str}{y_str}{x_str}"
+    )
+
+    relative_x, relative_y = x - self._pos_x, y - self._pos_y
+    if relative_x != 0:
+      relative_x_str = str(round(relative_x * 100 * 0.984)).zfill(6)
+      await self.send_command("Y", f"O00{relative_x_str}")
+    if relative_y != 0:
+      relative_y_str = str(round(relative_y * 100 * 0.984)).zfill(6)
+      await self.send_command("Y", f"O01{relative_y_str}")
+
+    self._pos_x, self._pos_y = x, y
+
+  def set_auto_focus_search_range(self, min_focal_height: float, max_focal_height: float):
+    self._auto_focus_search_range = (min_focal_height, max_focal_height)
+
   async def auto_focus(self, timeout: float = 30):
+    """Set auto focus search range with set_auto_focus_search_range()."""
+
     plate = self._plate
     if plate is None:
       raise RuntimeError("Plate not set. Run set_plate() first.")
     imaging_mode = self._imaging_mode
     if imaging_mode is None:
       raise RuntimeError("Imaging mode not set. Run set_imaging_mode() first.")
+    objective = self._objective
+    if objective is None:
+      raise RuntimeError("Objective not set. Run set_objective() first.")
     exposure = self._exposure
     if exposure is None:
       raise RuntimeError("Exposure time not set. Run set_exposure() first.")
@@ -610,34 +767,33 @@ class Cytation5Backend(ImageReaderBackend):
       # This is strange, because Spinnaker requires numpy
       raise RuntimeError("numpy is not installed. See Cytation5 installation instructions.")
 
-    # these seem reasonable, but might need to be adjusted in the future
-    focus_min = 2
-    focus_max = 5
-
     # objective function: variance of laplacian
     async def evaluate_focus(focus_value):
-      image = await self.capture(
+      images = await self.capture(  # TODO: _acquire_image
         plate=plate,
         row=row,
         column=column,
         mode=imaging_mode,
+        objective=objective,
         focal_height=focus_value,
         exposure_time=exposure,
         gain=gain,
       )
+      image = images[0]  # self.capture returns List now
       laplacian = _laplacian_2d(np.asarray(image))
       return np.var(laplacian)
 
     # Use golden ratio search to find the best focus value
-    best_focus_value = await _golden_ratio_search(
+    focus_min, focus_max = self._auto_focus_search_range or (1.8, 2.5)
+    best_focal_height = await _golden_ratio_search(
       func=evaluate_focus,
       a=focus_min,
       b=focus_max,
       tol=0.01,
       timeout=timeout,
     )
-
-    return best_focus_value
+    self._focal_height = best_focal_height
+    return best_focal_height
 
   async def set_auto_exposure(self, auto_exposure: Literal["off", "once", "continuous"]):
     if self.cam is None:
@@ -689,10 +845,11 @@ class Cytation5Backend(ImageReaderBackend):
     if row == self._row and column == self._column:
       logger.debug("Already selected %s, %s", row, column)
       return
-    await self.send_command("Y", "Z1260101000000000000")
     row_str, column_str = str(row).zfill(2), str(column).zfill(2)
     await self.send_command("Y", f"W6{row_str}{column_str}")
     self._row, self._column = row, column
+    self._pos_x, self._pos_y = 0, 0
+    await self.set_position(0, 0)
 
   async def set_gain(self, gain: Gain):
     """gain of unknown units, or "auto" """
@@ -739,7 +896,28 @@ class Cytation5Backend(ImageReaderBackend):
 
     self._gain = gain
 
-  async def set_imaging_mode(self, mode: ImagingMode):
+  def _imaging_mode_code(self, mode: ImagingMode) -> int:
+    if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.PHASE_CONTRAST:
+      return 5
+    return self._filters.index(mode) + 1
+
+  def _objective_code(self, objective: Objective) -> int:
+    return self._objectives.index(objective) + 1
+
+  async def set_objective(self, objective: Objective):
+    if objective == self._objective:
+      logger.debug("Objective is already set to %s", objective)
+      return
+
+    if self.imaging_config is None:
+      raise RuntimeError("Need to set imaging_config first")
+
+    objective_code = self._objective_code(objective)
+    await self.send_command("Y", f"P0e{objective_code:02}", timeout=60)
+
+    self._objective = objective
+
+  async def set_imaging_mode(self, mode: ImagingMode, led_intensity: int):
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
@@ -754,35 +932,33 @@ class Cytation5Backend(ImageReaderBackend):
 
     await self.led_off()
 
+    if self.imaging_config is None:
+      raise RuntimeError("Need to set imaging_config first")
+
+    filter_index = self._imaging_mode_code(mode)
+
     if mode == ImagingMode.PHASE_CONTRAST:
       await self.send_command("Y", "P1120")
       await self.send_command("Y", "P0d05")
       await self.send_command("Y", "P1002")
     elif mode == ImagingMode.BRIGHTFIELD:
-      await self.send_command("Y", "Z1500000000000000000")
-      await self.send_command("i", "F5000000")  # reset focus
-      await self.send_command("i", "W000000")  # reset select
       await self.send_command("Y", "P1101")
       await self.send_command("Y", "P0d05")
       await self.send_command("Y", "P1002")
-    elif mode == ImagingMode.GFP:
+    else:
       await self.send_command("Y", "P1101")
-      await self.send_command("Y", "P0d02")
-      await self.send_command("Y", "P1001")
-    elif mode == ImagingMode.TEXAS_RED:
-      await self.send_command("Y", "P1101")
-      await self.send_command("Y", "P0d03")
+      await self.send_command("Y", f"P0d{filter_index+1:02}")
       await self.send_command("Y", "P1001")
 
     # Turn led on in the new mode
     self._imaging_mode = mode
-    await self.led_on()
+    await self.led_on(intensity=led_intensity)
 
   async def _acquire_image(
     self,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
-  ) -> List[List[float]]:
+  ) -> Image:
     assert self.cam is not None
     nodemap = self.cam.GetNodeMap()
 
@@ -796,10 +972,12 @@ class Cytation5Backend(ImageReaderBackend):
     #   raise RuntimeError("unable to set acquisition mode to single frame (entry retrieval)")
     # node_acquisition_mode.SetIntValue(node_acquisition_mode_single_frame.GetValue())
 
+    assert self.imaging_config is not None, "Need to set imaging_config first"
+
     self.cam.BeginAcquisition()
     try:
       num_tries = 0
-      while num_tries < self.max_image_read_attempts:
+      while num_tries < self.imaging_config.max_image_read_attempts:
         node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
         if not PySpin.IsWritable(node_softwaretrigger_cmd):
           raise RuntimeError("unable to execute software trigger")
@@ -827,13 +1005,18 @@ class Cytation5Backend(ImageReaderBackend):
     row: int,
     column: int,
     mode: ImagingMode,
+    objective: Objective,
     exposure_time: Exposure,
     focal_height: FocalPosition,
     gain: Gain,
     plate: Plate,
+    led_intensity: int = 10,
+    coverage: Union[Literal["full"], Tuple[int, int]] = (1, 1),
+    center_position: Optional[Tuple[float, float]] = None,
+    overlap: Optional[float] = None,
     color_processing_algorithm: int = SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR,
     pixel_format: int = PixelFormat_Mono8,
-  ) -> List[List[float]]:
+  ) -> List[Image]:
     """Capture image using the microscope
 
     speed: 211 ms ± 331 μs per loop (mean ± std. dev. of 7 runs, 10 loops each)
@@ -841,22 +1024,72 @@ class Cytation5Backend(ImageReaderBackend):
     Args:
       exposure_time: exposure time in ms, or `"auto"`
       focal_height: focal height in mm, or `"auto"`
+      coverage: coverage of the well, either `"full"` or a tuple of `(num_rows, num_columns)`.
+        Around `center_position`.
+      center_position: center position of the well, in mm from the center of the selected well. If
+        `None`, the center of the selected well is used (eg (0, 0) offset). If `coverage` is
+        specified, this is the center of the coverage area.
       color_processing_algorithm: color processing algorithm. See
         PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_*
       pixel_format: pixel format. See PySpin.PixelFormat_*
     """
-    # Adopted from the Spinnaker SDK Acquisition example
+
+    assert overlap is None, "not implemented yet"
 
     if self.cam is None:
       raise ValueError("Camera not initialized. Run setup(use_cam=True) first.")
 
     await self.set_plate(plate)
-
+    await self.set_objective(objective)
+    await self.set_imaging_mode(mode, led_intensity=led_intensity)
     await self.select(row, column)
-    await self.set_imaging_mode(mode)
     await self.set_exposure(exposure_time)
     await self.set_gain(gain)
     await self.set_focus(focal_height)
-    return await self._acquire_image(
-      color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
-    )
+
+    def image_size(magnification: int) -> Tuple[float, float]:
+      # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
+      # simply take the wide fov option.
+      # um to mm (plr unit)
+      if magnification == 4:
+        return (3474 / 1000, 3474 / 1000)
+      if magnification == 20:
+        return (694 / 1000, 694 / 1000)
+      if magnification == 40:
+        return (347 / 1000, 347 / 1000)
+      raise ValueError("Invalid magnification")
+
+    if self._objective is None:
+      raise RuntimeError("Objective not set. Run set_objective() first.")
+    magnification = self._objective.magnification
+    img_width, img_height = image_size(magnification)
+
+    first_well = plate.get_item(0)
+    well_size_x, well_size_y = (first_well.get_size_x(), first_well.get_size_y())
+    if coverage == "full":
+      coverage = (
+        math.ceil(well_size_x / image_size(magnification)[0]),
+        math.ceil(well_size_y / image_size(magnification)[1]),
+      )
+    rows, cols = coverage
+
+    # Get positions, centered around enter_position
+    if center_position is None:
+      center_position = (0, 0)
+    # Going in a snake pattern is not faster (strangely)
+    positions = [
+      (x * img_width + center_position[0], -y * img_height + center_position[1])
+      for y in [i - (rows - 1) / 2 for i in range(rows)]
+      for x in [i - (cols - 1) / 2 for i in range(cols)]
+    ]
+
+    images: List[Image] = []
+    for x_pos, y_pos in positions:
+      await self.set_position(x=x_pos, y=y_pos)
+      images.append(
+        await self._acquire_image(
+          color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
+        )
+      )
+
+    return images

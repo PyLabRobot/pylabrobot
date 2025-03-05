@@ -142,6 +142,7 @@ napoleon_use_ivar = True
 
 nb_execution_mode = "off"
 myst_enable_extensions = ["dollarmath"]
+myst_heading_anchors = 3
 
 redirects = {
   "installation.html": "user_guide/installation.html",
