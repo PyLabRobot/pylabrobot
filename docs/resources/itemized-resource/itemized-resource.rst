@@ -1,10 +1,6 @@
 ItemizedResource
 ================
 
-
-
-
-
 Resources that contain items in a grid are subclasses of :class:`pylabrobot.resources.itemized_resource.ItemizedResource`. This class provides convenient methods for accessing the child-resources, such as by integer or SBS "A1" style-notation, as well as for traversing items in an ``ItemizedResource``. Examples of subclasses of ``ItemizedResource`` are :class:`pylabrobot.resources.plate.Plate` and :class:`pylabrobot.resources.tip_rack.TipRack`.
 
 To instantiate an ``ItemizedResource``, it is convenient to use the ``pylabrobot.resources.utils.create_equally_spaced_2d`` method to quickly initialize a grid of child-resources in a grid. Here's an example of a simple ``ItemizedResource``:
@@ -24,11 +20,11 @@ To instantiate an ``ItemizedResource``, it is convenient to use the ``pylabrobot
        Well,                            # the class of the items
        num_items_x=12,
        num_items_y=8,
-       dx=12,                           # distance between the first well and the border in the x-axis
-       dy=12,                           # distance between the first well and the border in the y-axis
-       dz=0,                            # distance between the first well and the border in the z-axis
-       item_dx=9,                       # distance between the wells in the x-axis
-       item_dy=9,                       # distance between the wells in the y-axis
+       dx=12,                           # distance between the left items and the left border in the x-axis
+       dy=12,                           # distance between the bottom items and the front border in the y-axis
+       dz=0,                            # distance between the items and the bottom border in the z-axis
+       item_dx=9,                       # distance between the items in the x-axis
+       item_dy=9,                       # distance between the items in the y-axis
 
        bottom_type=WellBottomType.FLAT, # a custom keyword argument passed to the Well initializer
      )
