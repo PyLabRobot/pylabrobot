@@ -566,13 +566,16 @@ class Cytation5Backend(ImageReaderBackend):
   async def shake(self, shake_type: ShakeType, frequency: int) -> None:
     """Warning: the duration for shaking has to be specified on the machine, and the maximum is
     16 minutes. As a hack, we start shaking for the maximum duration every time as long as stop
-    is not called.
+    is not called. I think the machine might open the door at the end of the 16 minutes and then
+    move it back in. We have to find a way to shake continuously, which is possible in protocol-mode
+    with kinetics.
 
     Args:
       frequency: speed, in mm
     """
 
     max_duration = 16 * 60  # 16 minutes
+    self._shaking_started = asyncio.Event()
 
     async def shake_maximal_duration():
       """This method will start the shaking, but returns immediately after
@@ -588,6 +591,9 @@ class Cytation5Backend(ImageReaderBackend):
       resp = await self.send_command("O")
       assert resp == b"\x060000\x03"
 
+      if not self._shaking_started.is_set():
+        self._shaking_started.set()
+
     async def shake_continuous():
       while self._shaking:
         await shake_maximal_duration()
@@ -601,6 +607,8 @@ class Cytation5Backend(ImageReaderBackend):
 
     self._shaking = True
     self._shaking_task = asyncio.create_task(shake_continuous())
+
+    await self._shaking_started.wait()
 
   async def stop_shaking(self) -> None:
     await self._abort()
