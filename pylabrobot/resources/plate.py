@@ -300,9 +300,10 @@ class Plate(ItemizedResource["Well"]):
       )
 
     # Apply internal fill order
+    assert all(well.location is not None for well in wells)
     if quadrant_internal_fill_order == "row-major":
-      wells.sort(key=lambda well: (-well.location.y, well.location.x))
+      wells.sort(key=lambda well: (-well.location.y, well.location.x))  # type: ignore
     else:
-      wells.sort(key=lambda well: (well.location.x, -well.location.y))
+      wells.sort(key=lambda well: (well.location.x, -well.location.y))  # type: ignore
 
     return wells
