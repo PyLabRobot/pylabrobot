@@ -1,4 +1,4 @@
-# Resource Management System
+# Machine Control System
 
 The PyLabRobot (PLR) Resource Management System is a **framework** that **models** both the **physical components** of an automation setup and the **distinct physical behaviors of each component**.
 (It does not provide electronic control of machines. This is the role of PLR's *machine control system*.)
@@ -9,9 +9,9 @@ It supplies real-time data and predefined parameters that guide PLR’s Machine 
 
 The PLR Resource Management System consists of two key components, each serving a distinct role:
 
-1. **Resource Ontology System**
+1. **Backend**
     - The *'blueprint'* of PLR's automation framework, responsible for defining physical resources, modeling their distinct behaviors, and managing their relationships.
-2. **Resource Library**
+2. **Communications Manager**
     - The *'catalog'* of predefined resource models, providing reusable, standardized definitions that enhance consistency and interoperability across automation workflows.
     This ensures smooth integration, scalability, and efficient resource utilization.
 ----
@@ -20,13 +20,20 @@ The PLR Resource Management System consists of two key components, each serving 
 :maxdepth: 1
 
 introduction
-custom-resources
-plr-rl-naming-conventions
+
 ```
 
 ----
 
-## Resource Ontology System
+## Backend
+
+```{toctree}
+:maxdepth: 3
+:caption: Backend Model
+:hidden:
+
+backend/backend
+```
 
 In PLR every physical object is a subclass of the `Resource` superclass (except for `Tip`).
 Each subclass adds unique methods or attributes to represent its unique physical specifications and behavior.
@@ -56,9 +63,9 @@ PLR's `Resource` subclasses in the inheritance tree are:
 
   <!-- Carrier subtree -->
   <tr><td>├── <a href="carrier/carrier.html">Carrier</a></td></tr>
+  <tr><td>│   ├── <a href="carrier/mfx-carrier/mfx_carriers.html">MFXCarrier</a></td></tr>
   <tr><td>│   ├── <a href="carrier/plate-carrier/plate_carriers.html">PlateCarrier</a></td></tr>
   <tr><td>│   ├── TipCarrier</td></tr>
-  <tr><td>│   ├── <a href="carrier/mfx-carrier/mfx_carriers.html">MFXCarrier</a></td></tr>
   <tr><td>│   ├── TroughCarrier</td></tr>
   <tr><td>│   └── TubeCarrier</td></tr>
 
@@ -68,6 +75,12 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>│   ├── PetriDish</td></tr>
   <tr><td>│   ├── Tube</td></tr>
   <tr><td>│   └── Trough</td></tr>
+
+  <!-- Deck subtree -->
+  <tr><td>├── Deck</td></tr>
+  <tr><td>│   ├── OTDeck</td></tr>
+  <tr><td>│   ├── HamiltonDeck</td></tr>
+  <tr><td>│   └── TecanDeck</td></tr>
 
   <!-- ItemizedResource subtree -->
   <tr><td>├── <a href="itemized-resource/itemized-resource.html">ItemizedResource</a></td></tr>
@@ -82,58 +95,18 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <!-- Others -->
   <tr><td>├── Lid</td></tr>
   <tr><td>├── PlateAdapter</td></tr>
-  <tr><td>└── ResourceStack</td></tr>
+  <tr><td>├── ResourceStack</td></tr>
+  <tr><td>└── Tip (to be made a resource)</td></tr>
 </table>
-
-<hr>
-
-<details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
-    <summary style="font-weight: bold; cursor: pointer;">Note: On the meaning behind the term "Resource" vs "Labware"</summary>
-    <p>Most automation management systems use the term "labware" to describe items on a machine's deck.
-    However, in our discussions, it became evident that the term "labware" has different meanings to different stakeholders
-    (e.g., "A plate is clearly labware, but is a liquid handler or a plate reader labware?").
-    As a result, PLR avoids the ambiguous term "labware".</p>
-    <p><u>Every physical item (describable via its <code>item_x</code>, <code>item_y</code>, <code>item_z</code>) is a "resource"</u>.</p>
-</details>
 
 <hr>
 
 ```{toctree}
 :maxdepth: 3
-:caption: Resource subclass explanations
+:caption: Backend Library
 :hidden:
 
-carrier/carrier
-containers
-itemized-resource/itemized-resource
+backend/backend
 ```
 
-## Resource Library
-
-The PyLabRobot Resource Library (PLR-RL) is PyLabRobot's open-source, crowd-sourced collection of pre-defined labware.
-Laboratories across the world use an almost infinite number of different resources/labware.
-We believe the way to most efficiently capture the largest portion of this resource superset is via crowd-sourcing and iteratively peer-reviewing new definitions.
-If you cannot find something, please contribute what you are looking for!
-
-```{toctree}
-:caption: Library
-
-library/agenbio
-library/alpaqua
-library/azenta
-library/biorad
-library/boekel
-library/celltreat
-library/cellvis
-library/corning_axygen
-library/corning_costar
-library/eppendorf
-library/falcon
-library/hamilton
-library/nest
-library/opentrons
-library/porvair
-library/revvity
-library/thermo_fisher
-library/vwr
-```
+<hr>

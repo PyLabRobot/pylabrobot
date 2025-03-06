@@ -30,5 +30,5 @@ Measuring ``nesting_z_height``
 -------------------------------
 The ``nesting_z_height`` is the overlap between the lid and the plate when the lid is placed on the plate. This property can be measured using a caliper.
 
-.. image:: /resources/img/plate/lid_nesting_z_height.jpeg
+.. image:: /resource_management/img/plate/lid_nesting_z_height.jpeg
    :alt: nesting_z_height measurement
