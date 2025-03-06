@@ -1,10 +1,19 @@
-# Resource Library
+# Resource Management System
 
-The PyLabRobot Resource Library (PLR-RL) is PyLabRobot's open-source, crowd-sourced collection of labware.
-Laboratories across the world use an almost infinite number of different resources/labware.
-We believe the way to most efficient capture the largest portion of this resource superset is via crowd-sourcing, and peer-reviewing new entries.
-If you cannot find something, please contribute what you are looking for!
+The PyLabRobot (PLR) Resource Management System is a **framework** that **models** both the **physical components** of an automation setup and the **distinct physical behaviors of each component**.
+(It does not provide electronic control of machines. This is the role of PLR's *machine control system*.)
+It provides a structured approach for dynamically constructing precise and adaptable layouts, ensuring that resources are not only positioned correctly but also behave as expected within the system.
 
+By defining resource-specific characteristics—such as movement constraints, functional interactions, and operational parameters—the framework enables accurate simulations and reliable execution of laboratory automation tasks.
+It supplies real-time data and predefined parameters that guide PLR’s Machine Control System in dynamically executing automation workflows with high precision.
+
+The PLR Resource Management System consists of two key components, each serving a distinct role:
+
+1. **Resource Ontology System**
+    - The *'blueprint'* of PLR's automation framework, responsible for defining physical resources, modeling their distinct behaviors, and managing their relationships.
+2. **Resource Library**
+    - The *'catalog'* of predefined resource models, providing reusable, standardized definitions that enhance consistency and interoperability across automation workflows.
+    This ensures smooth integration, scalability, and efficient resource utilization.
 ----
 
 ```{toctree}
@@ -17,7 +26,7 @@ plr-rl-naming-conventions
 
 ----
 
-## `Resource` subclasses
+## Resource Ontology System
 
 In PLR every physical object is a subclass of the `Resource` superclass (except for `Tip`).
 Each subclass adds unique methods or attributes to represent its unique physical specifications and behavior.
@@ -88,7 +97,12 @@ containers
 itemized-resource/itemized-resource
 ```
 
-## Library
+## Resource Library
+
+The PyLabRobot Resource Library (PLR-RL) is PyLabRobot's open-source, crowd-sourced collection of pre-defined labware.
+Laboratories across the world use an almost infinite number of different resources/labware.
+We believe the way to most efficiently capture the largest portion of this resource superset is via crowd-sourcing and iteratively peer-reviewing new definitions.
+If you cannot find something, please contribute what you are looking for!
 
 ```{toctree}
 :caption: Library
