@@ -1,9 +1,14 @@
 import unittest
 
+from pylabrobot.resources import (
+  CellVis_24_wellplate_3600uL_Fb,
+  Cor_6_wellplate_16800ul_Fb,
+  Revvity_384_wellplate_28ul_Ub,
+  Thermo_TS_96_wellplate_1200ul_Rb,
+)
+
 from .coordinate import Coordinate
 from .plate import Lid, Plate
-from .utils import create_ordered_items_2d
-from .well import Well
 
 
 class TestLid(unittest.TestCase):
@@ -52,34 +57,154 @@ class TestLid(unittest.TestCase):
     plate.unassign_child_resource(plate.lid)
     self.assertIsNone(plate.lid)
 
-  def test_quadrant(self):
-    plate = Plate(
-      "plate",
-      size_x=1,
-      size_y=1,
-      size_z=1,
-      ordered_items=create_ordered_items_2d(
-        Well,
-        num_items_x=24,
-        num_items_y=16,
-        dx=1,
-        dy=1,
-        dz=1,
-        item_dx=1,
-        item_dy=1,
-        size_x=1,
-        size_y=1,
-        size_z=1,
-      ),
+
+class TestQuadrants(unittest.TestCase):
+  def setUp(self):
+    self.example_6_wellplate = Cor_6_wellplate_16800ul_Fb(name="example_6_wellplate")
+    self.example_24_wellplate = CellVis_24_wellplate_3600uL_Fb(name="example_24_wellplate")
+    self.example_96_wellplate = Thermo_TS_96_wellplate_1200ul_Rb(name="example_96_wellplate")
+    self.example_384_wellplate = Revvity_384_wellplate_28ul_Ub(name="example_384_wellplate")
+
+  def test_checkerboard_column_major(self):
+    self.assertEqual(
+      [
+        well.get_identifier()
+        for well in self.example_96_wellplate.get_quadrant(
+          quadrant="tl", quadrant_type="checkerboard", quadrant_internal_fill_order="column-major"
+        )
+      ],
+      [
+        "A1",
+        "C1",
+        "E1",
+        "G1",
+        "A3",
+        "C3",
+        "E3",
+        "G3",
+        "A5",
+        "C5",
+        "E5",
+        "G5",
+        "A7",
+        "C7",
+        "E7",
+        "G7",
+        "A9",
+        "C9",
+        "E9",
+        "G9",
+        "A11",
+        "C11",
+        "E11",
+        "G11",
+      ],
     )
-    self.assertIn(plate.get_well("A1"), plate.get_quadrant(1))
-    self.assertEqual(len(plate.get_quadrant(1)), 384 // 4)
 
-    self.assertIn(plate.get_well("A2"), plate.get_quadrant(2))
-    self.assertEqual(len(plate.get_quadrant(2)), 384 // 4)
+  def test_checkerboard_row_major(self):
+    self.assertEqual(
+      [
+        well.get_identifier()
+        for well in self.example_96_wellplate.get_quadrant(
+          quadrant="tl", quadrant_type="checkerboard", quadrant_internal_fill_order="row-major"
+        )
+      ],
+      [
+        "A1",
+        "A3",
+        "A5",
+        "A7",
+        "A9",
+        "A11",
+        "C1",
+        "C3",
+        "C5",
+        "C7",
+        "C9",
+        "C11",
+        "E1",
+        "E3",
+        "E5",
+        "E7",
+        "E9",
+        "E11",
+        "G1",
+        "G3",
+        "G5",
+        "G7",
+        "G9",
+        "G11",
+      ],
+    )
 
-    self.assertIn(plate.get_well("B1"), plate.get_quadrant(3))
-    self.assertEqual(len(plate.get_quadrant(3)), 384 // 4)
+  def test_block_column_major(self):
+    self.assertEqual(
+      [
+        well.get_identifier()
+        for well in self.example_96_wellplate.get_quadrant(
+          quadrant="tl", quadrant_type="block", quadrant_internal_fill_order="column-major"
+        )
+      ],
+      [
+        "A1",
+        "B1",
+        "C1",
+        "D1",
+        "A2",
+        "B2",
+        "C2",
+        "D2",
+        "A3",
+        "B3",
+        "C3",
+        "D3",
+        "A4",
+        "B4",
+        "C4",
+        "D4",
+        "A5",
+        "B5",
+        "C5",
+        "D5",
+        "A6",
+        "B6",
+        "C6",
+        "D6",
+      ],
+    )
 
-    self.assertIn(plate.get_well("B2"), plate.get_quadrant(4))
-    self.assertEqual(len(plate.get_quadrant(4)), 384 // 4)
+  def test_block_row_major(self):
+    self.assertEqual(
+      [
+        well.get_identifier()
+        for well in self.example_96_wellplate.get_quadrant(
+          quadrant="tl", quadrant_type="block", quadrant_internal_fill_order="row-major"
+        )
+      ],
+      [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5",
+        "B6",
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6",
+      ],
+    )
