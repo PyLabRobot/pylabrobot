@@ -85,7 +85,18 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>└── ResourceStack</td></tr>
 </table>
 
-----
+<hr>
+
+<details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
+    <summary style="font-weight: bold; cursor: pointer;">Note: On the meaning behind the term "Resource" vs "Labware"</summary>
+    <p>Most automation management systems use the term "labware" to describe items on a machine's deck.
+    However, in our discussions, it became evident that the term "labware" has different meanings to different stakeholders
+    (e.g., "A plate is clearly labware, but is a liquid handler or a plate reader labware?").
+    As a result, PLR avoids the ambiguous term "labware".</p>
+    <p><u>Every physical item (describable via its <code>item_x</code>, <code>item_y</code>, <code>item_z</code>) is a "resource"</u>.</p>
+</details>
+
+<hr>
 
 ```{toctree}
 :maxdepth: 3
