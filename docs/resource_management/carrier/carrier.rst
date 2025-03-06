@@ -15,10 +15,11 @@ Subclasses of `Carrier`
 .. toctree::
    :maxdepth: 1
 
-   mfx-carrier/mfx_carriers
-   plate-carrier/plate_carriers
-   tip-carrier/tip-carriers
-   trough-carrier/trough-carriers
+   mfx-carrier/mfx_carrier
+   plate-carrier/plate_carrier
+   tip-carrier/tip-carrier
+   trough-carrier/trough-carrier
+   tube-carrier/tube-carrier
 
 <hr>
 

@@ -10,7 +10,7 @@ It supplies real-time data and predefined parameters that guide PLR’s Machine 
 The PLR Resource Management System consists of two key components, each serving a distinct role:
 
 1. **Resource Ontology System**
-    - The *'blueprint'* of PLR's automation framework, responsible for defining physical resources, modeling their distinct behaviors, and managing their relationships.
+    - The *'blueprint'* of PLR's automation framework, responsible for defining physical resources, modeling their distinct behaviors, and dynamically managing their relationships (i.e. tracking their *state*).
 2. **Resource Library**
     - The *'catalog'* of predefined resource models, providing reusable, standardized definitions that enhance consistency and interoperability across automation workflows.
     This ensures smooth integration, scalability, and efficient resource utilization.
@@ -56,11 +56,11 @@ PLR's `Resource` subclasses in the inheritance tree are:
 
   <!-- Carrier subtree -->
   <tr><td>├── <a href="carrier/carrier.html">Carrier</a></td></tr>
-  <tr><td>│   ├── <a href="carrier/mfx-carrier/mfx_carriers.html">MFXCarrier</a></td></tr>
-  <tr><td>│   ├── <a href="carrier/plate-carrier/plate_carriers.html">PlateCarrier</a></td></tr>
-  <tr><td>│   ├── TipCarrier</td></tr>
-  <tr><td>│   ├── TroughCarrier</td></tr>
-  <tr><td>│   └── TubeCarrier</td></tr>
+  <tr><td>│   ├── <a href="carrier/mfx-carrier/mfx_carrier.html">MFXCarrier</a></td></tr>
+  <tr><td>│   ├── <a href="carrier/plate-carrier/plate_carrier.html">PlateCarrier</a></td></tr>
+  <tr><td>│   ├── <a href="carrier/tip-carrier/tip-carrier.html">TipCarrier</a></td></tr>
+  <tr><td>│   ├── <a href="carrier/trough-carrier/trough-carrier.html">TroughCarrier</a></td></tr>
+  <tr><td>│   └── <a href="carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></td></tr>
 
   <!-- Container subtree -->
   <tr><td>├── Container</td></tr>
@@ -82,21 +82,22 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>│   └── TubeRack</td></tr>
 
   <!-- ResourceHolder subtree -->
-  <tr><td>├── ResourceHolder</td></tr>
-  <tr><td>│   └── PlateHolder</td></tr>
+  <tr><td>├── <a href="resource-holder/resource-holder.html">ResourceHolder</a></td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">PlateHolder</a></td></tr>
 
   <!-- Others -->
   <tr><td>├── Lid</td></tr>
-  <tr><td>├── PlateAdapter</td></tr>
+  <tr><td>├── <a href="plate-adapter/plate-adapter.html">PlateAdapter</a></td></tr>
   <tr><td>├── ResourceStack</td></tr>
-  <tr><td>└── Tip (to be made a resource)</td></tr>
+  <tr><td>├── Tip (to be made a resource)</td></tr>
+  <tr><td>└── Workcell (to be made)</td></tr>
 </table>
 
 <hr>
 
 <details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
-    <summary style="font-weight: bold; cursor: pointer;">Note: On the meaning behind the terms "Resource" vs "Labware"</summary>
-    <p>Most automation management systems use the term "labware" to describe items on a machine's deck.
+    <summary style="font-weight: bold; cursor: pointer;">Note: On the meaning of the terms "Resource" vs "Labware"</summary>
+    <p>Most automation systems systems (SDK or GUI) use the term "labware" to describe items on a machine's deck.
     However, in our discussions, it became evident that the term "labware" has different meanings to different stakeholders
     (e.g., "A plate is clearly labware, but is a liquid handler or a plate reader labware?").
     As a result, PLR avoids the ambiguous term "labware".</p>
@@ -115,6 +116,7 @@ container/container
 deck/deck
 itemized-resource/itemized-resource
 resource-holder/resource-holder
+plate-adapter/plate-adapter
 ```
 
 ## Resource Library

@@ -2,7 +2,7 @@
 
 <hr>
 
-**PyLabRobot is a hardware- and operating system-agnostic, pure Python SDK for Automated & Autonomous Laboratories.**
+**PyLabRobot is a hardware- and operating system-agnostic, pure Python Software Development Kit (SDK) for Automated & Autonomous Laboratories.**
 
 <hr>
 

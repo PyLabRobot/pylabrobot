@@ -102,11 +102,21 @@ PLR's `Resource` subclasses in the inheritance tree are:
 <hr>
 
 ```{toctree}
-:maxdepth: 3
+:maxdepth: 1
 :caption: Backend Library
 :hidden:
 
 backend/backend
+```
+
+<hr>
+
+```{toctree}
+:maxdepth: 1
+:caption: Communications Systems
+:hidden:
+
+io/communication
 ```
 
 <hr>
