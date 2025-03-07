@@ -49,7 +49,7 @@ The abstract class {class}`~pylabrobot.machine.MachineFrontend` must be used as 
 
 You should put the front end in a file called `<machine_type>.py` in the module you created in step 1. For example, the liquid handling front end is located at `pylabrobot.liquid_handling.liquid_handler.py`.
 
-If your devices updates the resource tree or its state, the front end should handle this. See [the resources guide](/resources/introduction.md) for more information.
+If your devices updates the resource tree or its state, the front end should handle this. See [the resources guide](/resource_management/introduction.md) for more information.
 
 ## 4. Creating a new concrete backend for a specific machine
 
