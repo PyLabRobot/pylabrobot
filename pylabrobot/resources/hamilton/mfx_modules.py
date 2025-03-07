@@ -45,6 +45,8 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
   """Hamilton cat. no.: 6601988-01
   Module to position a Deep Well Plate. Flat, plastic base; no metal clamps like
   MFX_DWP_rackbased_module.
+  Modules with grey corner locating tabs have pedestal_size_z=0, as 
+  plates sit on top of the corners rather than the pedestal.
   """
 
   width = 134.0
@@ -54,8 +56,8 @@ def MFX_DWP_module_flat(name: str) -> PlateHolder:
     name=name,
     size_x=width,
     size_y=length,
-    size_z=66.4,  # measured with caliper
-    child_location=Coordinate(x=(width - 127.76) / 2, y=(length - 85.48) / 2, z=66.4),
+    size_z=65.8,  # measured with caliper
+    child_location=Coordinate(x=(width - 127.76) / 2, y=(length - 85.48) / 2, z=65.8),
     model=MFX_DWP_rackbased_module.__name__,
-    pedestal_size_z=-4.74,
+    pedestal_size_z=0, #grey corner locating tabs
   )

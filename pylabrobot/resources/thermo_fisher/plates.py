@@ -245,13 +245,17 @@ def Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate_P(name: str, with_lid: bool = Fa
 
 
 def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
-  # https://assets.thermofisher.com/TFS-Assets/LSG/manuals/D03011.pdf
+  """
+  - Part no.: 260252
+  - Diagram: https://assets.thermofisher.com/TFS-Assets/LSG/manuals/D03011.pdf
+  """
+  
   well_diameter = 8.40  # measured
   return Plate(
     name=name,
     size_x=127.76,  # from definition, A
     size_y=85.47,  # from definition, B
-    size_z=2.5 + 29.1,  # from definition, E + L
+    size_z=2.5 + 29.1,  # from definition, E + L = 31.6 (F)
     lid=None,
     model="Thermo_Nunc_96_well_plate_1300uL_Rb",
     ordered_items=create_ordered_items_2d(
@@ -265,9 +269,9 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       item_dy=9,
       size_x=well_diameter,
       size_y=well_diameter,
-      size_z=29.1,  # from definition, L
+      size_z=31.6 - 1.4,  # from definition, F - N
       bottom_type=WellBottomType.U,
-      material_z_thickness=2.5 - 1.4,  # from definition, E - N
+      material_z_thickness=1.1, # from definition, F - L - N
       cross_section_type=CrossSectionType.CIRCLE,
     ),
   )

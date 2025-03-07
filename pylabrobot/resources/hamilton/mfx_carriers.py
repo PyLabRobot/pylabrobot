@@ -74,9 +74,9 @@ def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier
   Occupies 5 tracks (5T)
   """
   locations = [
-    Coordinate(0.0, 35.0, 18.195),
-    Coordinate(0.0, 182.0, 18.195),
-    Coordinate(0.0, 329.0, 18.195),
+    Coordinate(19.3, 33.7, 18.195),
+    Coordinate(19.3, 180.7, 18.195),
+    Coordinate(19.3, 327.7, 18.195),
   ]
   sites: Dict[int, ResourceHolder] = {}
   for i, module in modules.items():
@@ -89,5 +89,5 @@ def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier
     size_y=497.0,
     size_z=18.195,
     sites=sites,
-    model="MFX_CAR_L5_base",
+    model="MFX_CAR_P3_base",
   )
