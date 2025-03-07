@@ -1,5 +1,5 @@
-PlateAdapter
-============
+ResourceStack
+==================
 
 Resources
 

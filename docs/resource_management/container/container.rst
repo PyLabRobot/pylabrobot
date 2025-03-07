@@ -19,7 +19,7 @@ It is possible to instantiate a `Container` directly:
    :maxdepth: 1
    :hidden:
 
-   well/well
    petri-dish/petri-dish
    trough/trough
    tube/tube
+   well/well

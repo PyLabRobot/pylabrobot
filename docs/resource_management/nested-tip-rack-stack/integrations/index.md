@@ -1,4 +1,4 @@
-# PlateAdapter Library
+# Integrations
 
 The PyLabRobot (PLR)
 

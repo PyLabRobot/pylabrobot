@@ -1,23 +1,23 @@
 # Resource Management System
 
-The PyLabRobot (PLR) Resource Management System is a **framework** that **models** both the **physical components** of an automation setup and the **distinct physical behaviors of each component**.
+The PyLabRobot (PLR) Resource Management System (RMS) is a **framework** that **models** both the **physical components** of an automation setup and the **distinct physical behaviors of each component**.
 (It does not provide electronic control of machines. This is the role of PLR's *machine control system*.)
-It provides a structured approach for dynamically constructing precise and adaptable layouts, ensuring that resources are not only positioned correctly but also behave as expected within the system.
+It provides a structured approach for dynamically constructing precise and adaptable automation system layouts, ensuring that resources are not only positioned correctly but also behave as expected within the system.
+The RMS supplies real-time data and predefined parameters that guide PLR’s Machine Control System in dynamically executing automation workflows with high precision.
 
-By defining resource-specific characteristics—such as movement constraints, functional interactions, and operational parameters—the framework enables accurate simulations and reliable execution of laboratory automation tasks.
-It supplies real-time data and predefined parameters that guide PLR’s Machine Control System in dynamically executing automation workflows with high precision.
 
 The PLR Resource Management System consists of two key components, each serving a distinct role:
 
 1. **Resource Ontology System**
-    - The *'blueprint'* of PLR's automation framework, responsible for defining physical resources, modeling their distinct behaviors, and dynamically managing their relationships (i.e. tracking their *state*).
+    - The ***'blueprint'*** of PLR's physical definition framework, responsible for defining physical resources, modeling their distinct behaviors, and dynamically managing their relationships (i.e. tracking their *state*).
 2. **Resource Library**
-    - The *'catalog'* of predefined resource models, providing reusable, standardized definitions that enhance consistency and interoperability across automation workflows.
+    - The ***'catalog'*** of premade resource definitions.
+    This provides reusable, standardized definitions that enhance consistency and interoperability across automation workflows.
     This ensures smooth integration, scalability, and efficient resource utilization.
-----
 
 ```{toctree}
 :maxdepth: 1
+:hidden:
 
 introduction
 custom-resources
@@ -63,17 +63,19 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>│   └── <a href="carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></td></tr>
 
   <!-- Container subtree -->
-  <tr><td>├── Container</td></tr>
-  <tr><td>│   ├── Well</td></tr>
-  <tr><td>│   ├── PetriDish</td></tr>
-  <tr><td>│   ├── Tube</td></tr>
-  <tr><td>│   └── Trough</td></tr>
+  <tr><td>├── <a href="container/container.html">Container</a></td></tr>
+  <tr><td>│   ├── <a href="container/petri-dish/petri-dish.html">PetriDish</a></td></tr>
+  <tr><td>│   ├── <a href="container/trough/trough.html">Trough</a></td></tr>
+  <tr><td>│   └── <a href="container/tube/tube.html">Tube</a></td></tr>
+  <tr><td>│   └── <a href="container/well/well.html">Well</a></td></tr>
 
   <!-- Deck subtree -->
-  <tr><td>├── Deck</td></tr>
+  <tr><td>├── <a href="deck/deck.html">Deck</a></td></tr>
   <tr><td>│   ├── OTDeck</td></tr>
   <tr><td>│   ├── HamiltonDeck</td></tr>
   <tr><td>│   └── TecanDeck</td></tr>
+
+  <tr><td>├── <a href="itemized-resource/itemized-resource.html">NestedTipRackStack (to be made)</a></td></tr>
 
   <!-- ItemizedResource subtree -->
   <tr><td>├── <a href="itemized-resource/itemized-resource.html">ItemizedResource</a></td></tr>
@@ -114,9 +116,13 @@ PLR's `Resource` subclasses in the inheritance tree are:
 carrier/carrier
 container/container
 deck/deck
+nested-tip-rack-stack/nested-tip-rack-stack
 itemized-resource/itemized-resource
 resource-holder/resource-holder
 plate-adapter/plate-adapter
+resource-stack/resource-stack
+tip/tip
+workcell/workcell
 ```
 
 ## Resource Library
