@@ -65,3 +65,29 @@ def MFX_CAR_L4_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarri
     sites=sites,
     model="PLT_CAR_L4_SHAKER",
   )
+
+
+def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
+  """Hamilton cat. no.: 188053
+  Labware carrier base for up to 3 Multiflex Modules in Portrait orientation
+  Does not support half-indices
+  Occupies 5 tracks (5T)
+  """
+  locations = [
+    Coordinate(0.0, 35.0, 18.195),
+    Coordinate(0.0, 182.0, 18.195),
+    Coordinate(0.0, 329.0, 18.195),
+  ]
+  sites: Dict[int, ResourceHolder] = {}
+  for i, module in modules.items():
+    module.location = locations[i]
+    sites[i] = module
+
+  return MFXCarrier(
+    name=name,
+    size_x=112.0,
+    size_y=497.0,
+    size_z=18.195,
+    sites=sites,
+    model="MFX_CAR_L5_base",
+  )
