@@ -1,0 +1,6 @@
+pylabrobot.resources.hamilton.tip\_racks.HTF\_WIDE
+==================================================
+
+.. currentmodule:: pylabrobot.resources.hamilton.tip_racks
+
+.. autofunction:: HTF_WIDE

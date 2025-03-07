@@ -1,0 +1,6 @@
+pylabrobot.centrifuge.vspin.VSpin.get\_position
+===============================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin
+
+.. automethod:: VSpin.get_position
