@@ -66,6 +66,7 @@ def MFX_CAR_L4_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarri
     model="PLT_CAR_L4_SHAKER",
   )
 
+
 def MFX_CAR_P3_base(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarrier:
   """Hamilton cat. no.: 188053
   Labware carrier base for up to 3 Multiflex Modules in Portrait orientation
