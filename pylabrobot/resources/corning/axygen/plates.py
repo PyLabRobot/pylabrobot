@@ -38,6 +38,7 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
     Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/
     Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-DW-10ML-24-C
   - brand: Axygen
+  - distributor: (Fisher Scientific, 12557837)
   - material: Polypropylene
   """
   return Plate(

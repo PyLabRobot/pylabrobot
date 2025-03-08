@@ -33,8 +33,8 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
   - tech_drawing: tech_drawings/Cor_96_wellplate_360ul_Fb.pdf
   - sterile: yes
   - notes:
-      - Bottoms are 60% thinner than conventional polystyrene microplates, resulting in lower
-        background fluorescence and enabling readings down to 340 nm.
+      - Well bottom (i.e. material_z_thickness) is 60% thinner than conventional polystyrene
+        microplates, resulting in lower background fluorescence & enabling readings down to 340 nm.
       - Opaque walls prevent well-to-well cross-talk.
   """
 

@@ -62,6 +62,7 @@ def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Pl
     Assay-Microplates/96-Well-Microplates/Falcon%C2%AE-96-well-Polystyrene-Microplates/p/
     falcon96WellPolystyreneMicroplates
   - brand: Falcon
+  - distributor: (Fisher Scientific, ?)
   - material: Polystyrene
   - tc_treated: Yes
   - tech_drawing: https://www.corning.com/catalog/cls/documents/drawings/LSR00181.pdf
@@ -103,8 +104,7 @@ def Cor_Falcon_96_wellplate_340ul_Fl_Black(name: str, lid: Optional[Lid] = None)
   """
   Corning cat. no.: 353219
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
-    Assay-Microplates/96-Well-Microplates/Falcon%C2%AE-96-well-Polystyrene-Microplates/p/
-    falcon96WellPolystyreneMicroplates
+    Assay-Microplates/96-Well-Microplates/Falcon%C2%AE-96-well-Polystyrene-Microplates/p/353219
   - brand: Falcon
   - material: Polystyrene
   - tc_treated: Yes

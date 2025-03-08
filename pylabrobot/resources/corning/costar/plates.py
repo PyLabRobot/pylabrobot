@@ -83,7 +83,6 @@ def Cor_Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
     model="Cor_Cos_6_wellplate_16800ul_Fb_Lid",
   )
 
-
 # Previous names in PLR:
 def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
   raise NotImplementedError("deprecated. use Cor_Cos_6_wellplate_16800ul_Fb instead")
@@ -149,6 +148,7 @@ def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
 def Cor_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   raise NotImplementedError("deprecated. use Cor_Cos_12_wellplate_6900ul_Fb instead")
 
+
 # # # # # # # # # # Cor_24_wellplate_3470ul_Fb # # # # # # # # # #
 
 def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
@@ -204,13 +204,20 @@ def Cor_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   raise NotImplementedError("deprecated. use Cor_Cos_24_wellplate_3470ul_Fb instead")
 
 
-# # # # # # # # # # Cor_48_wellplate_1620ul_Fb # # # # # # # # # #
+# # # # # # # # # # Cor_Cos_48_wellplate_1620ul_Fb # # # # # # # # # #
 
-def Cor_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3548
-
-  not validated
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
+    Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3548
+  - brand: Costar
+  - distributor: (Fisher Scientific, ?)
+  - material: Polystyrene
+  - tc_treated: Yes
+  - sterile: yes
+  - notes:
+      - not validated
   """
   BOTTOM_INNER_WELL_RADIUS = 11.56 / 2  # from Corning Product Description
   TOP_INNER_WELL_RADIUS = 11.05 / 2  # from Corning Product Description
@@ -235,7 +242,7 @@ def Cor_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
     size_y=85.6,  # from Corning Product Description
     size_z=20.02,  # from Corning Product Description
     lid=lid,
-    model=Cor_48_wellplate_1620ul_Fb.__name__,
+    model=Cor_Cos_48_wellplate_1620ul_Fb.__name__,
     ordered_items=create_ordered_items_2d(
       Well,
       num_items_x=8,
@@ -250,3 +257,6 @@ def Cor_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
     ),
   )
 
+# Previous names in PLR:
+def Cor_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
+  raise NotImplementedError("deprecated. use Cor_Cos_48_wellplate_1620ul_Fb instead")
