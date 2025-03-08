@@ -3,6 +3,8 @@
 from pylabrobot.resources.tube import Tube
 
 
+# # # # # # # # # # Cor_Falcon_tube_50mL_Vb # # # # # # # # # #
+
 def Cor_Falcon_tube_50mL_Vb(name: str) -> Tube:
   """
   Corning cat. no.: 352098
@@ -28,6 +30,8 @@ def Cor_Falcon_tube_50mL_Vb(name: str) -> Tube:
   )
 
 
+# # # # # # # # # # Cor_Falcon_tube_15mL_Vb # # # # # # # # # #
+
 def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:
   """
   Corning cat. no.: 352196
@@ -51,6 +55,8 @@ def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:
     max_volume=15_000,
   )
 
+
+# # # # # # # # # # Cor_Falcon_tube_14mL_Rb # # # # # # # # # #
 
 def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:
   """
@@ -76,18 +82,17 @@ def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:
     max_volume=14_000,  # units: ul
   )
 
+# Previous names in PLR:
 
 def falcon_tube_50mL(name: str) -> Tube:
   raise NotImplementedError(
     "falcon_tube_50mL definition is deprecated. Use " "Cor_Falcon_tube_50mL instead."
   )
 
-
 def falcon_tube_15mL(name: str) -> Tube:
   raise NotImplementedError(
     "falcon_tube_15mL definition is deprecated. Use " "Cor_Falcon_tube_15mL_Vb instead."
   )
-
 
 def Falcon_tube_14mL_Rb(name: str) -> Tube:
   raise NotImplementedError(

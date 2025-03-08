@@ -12,8 +12,8 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-# # # # # # # # # # Cor_96_wellplate_360ul_Fb # # # # # # # # # #
 
+# # # # # # # # # # Cor_96_wellplate_360ul_Fb # # # # # # # # # #
 
 def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
   """
@@ -84,7 +84,6 @@ def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
 
 # # # # # # # # # # Cor_96_wellplate_2mL_Vb # # # # # # # # # #
 
-
 def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
   """
   Corning cat. no.: 3960
@@ -124,7 +123,6 @@ def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
       compute_height_from_volume=_compute_height_from_volume_Cor_96_wellplate_2mL_Vb,
     ),
   )
-
 
 def Cor_96_wellplate_2mL_Vb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")

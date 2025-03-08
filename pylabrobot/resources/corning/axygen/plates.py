@@ -10,36 +10,19 @@ from pylabrobot.resources.well import (
 )
 
 
-def _compute_volume_from_height_Cor_Axy_24_wellplate_10mL_Vb(h: float):
-  if h > 42.1:
-    raise ValueError(f"Height {h} is too large for Cos_96_Vb")
-  return calculate_liquid_volume_container_2segments_square_vbottom(
-    x=17, y=17, h_pyramid=5, h_cube=37, liquid_height=h
-  )
-
-
-def Cor_Axy_24_wellplate_10mL_Vb_Lid(name: str) -> Lid:
-  raise NotImplementedError("This lid is not currently defined.")
-  # See https://github.com/PyLabRobot/pylabrobot/pull/161.
-  # return Lid(
-  #   name=name,
-  #   size_x=127.76,
-  #   size_y=86.0,
-  #   size_z=5,
-  #   nesting_z_height=None, # measure overlap between lid and plate
-  #   model="Gre_1536_Sq_Lid",
-  # )
-
+# # # # # # # # # # Cor_Axy_24_wellplate_10mL_Vb # # # # # # # # # #
 
 def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
   """
-  Corning cat. no.: P-DW-10ML-24-C
+  Corning cat. no.: P-DW-10ML-24-C-S
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/
     Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/
     Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-DW-10ML-24-C
   - brand: Axygen
   - distributor: (Fisher Scientific, 12557837)
   - material: Polypropylene
+  - sterile: yes
+  - autoclavable: yes
   """
   return Plate(
     name=name,
@@ -66,9 +49,19 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
     ),
   )
 
+def Cor_Axy_24_wellplate_10mL_Vb_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
+
+def _compute_volume_from_height_Cor_Axy_24_wellplate_10mL_Vb(h: float):
+  if h > 42.1:
+    raise ValueError(f"Height {h} is too large for Cos_96_Vb")
+  return calculate_liquid_volume_container_2segments_square_vbottom(
+    x=17, y=17, h_pyramid=5, h_cube=37, liquid_height=h
+  )
+
 
 #: Axy_24_DW_10ML
-def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
+def Axy_24_DW_10ML(name: str, with_lid: bool = False):
   return NotImplementedError(
     "Axy_24_DW_10ML definition is deprecated. Use " "Cor_Axy_24_wellplate_10mL_Vb instead."
   )

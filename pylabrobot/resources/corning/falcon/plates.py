@@ -15,6 +15,8 @@ from pylabrobot.resources.well import (
 )
 
 
+# # # # # # # # # # Cor_Falcon_96_wellplate_275ul_Fb # # # # # # # # # #
+
 def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.: 353072
@@ -57,6 +59,8 @@ def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Pl
   )
 
 
+# # # # # # # # # # Cor_Falcon_96_wellplate_250ul_Rb # # # # # # # # # #
+
 def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.: 353077
@@ -64,9 +68,10 @@ def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Pl
     Assay-Microplates/96-Well-Microplates/Falcon%C2%AE-96-well-Polystyrene-Microplates/p/
     falcon96WellPolystyreneMicroplates
   - brand: Falcon
-  - distributor: (Fisher Scientific, ?)
+  - distributor: (Fisher Scientific, 08-772-17)
   - material: Polystyrene
   - tc_treated: Yes
+  - sterile: yes
   - tech_drawing: https://www.corning.com/catalog/cls/documents/drawings/LSR00181.pdf
   - max_volume: 250 uL
   """
@@ -101,8 +106,13 @@ def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Pl
     ),
   )
 
+def Cor_Falcon_96_wellplate_250ul_Rb_Lid(name: str) -> Lid:
+  raise NotImplementedError("This lid is not currently defined.")
 
-def Cor_Falcon_96_wellplate_340ul_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
+
+# # # # # # # # # # Cor_Falcon_96_wellplate_340ul_Fb_Black # # # # # # # # # #
+
+def Cor_Falcon_96_wellplate_340ul_Fb_Black(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.: 353219
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
@@ -155,19 +165,11 @@ def Cor_Falcon_96_wellplate_340ul_Fl_Black(name: str, lid: Optional[Lid] = None)
 def Falcon_96_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
   raise NotImplementedError(
     "Falcon_96_wellplate_Fl definition is deprecated. Use "
-    "Cor_Falcon_96_wellplate_200ul_Fb instead."
+    "Cor_Falcon_96_wellplate_340ul_Fb_Black instead."
   )
-
-
-def Falcon_96_wellplate_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
-  raise NotImplementedError(
-    "Falcon_96_wellplate_Rb definition is deprecated. Use "
-    "Cor_Falcon_96_wellplate_200ul_Fb instead."
-  )
-
 
 def Falcon_96_wellplate_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
   raise NotImplementedError(
     "Falcon_96_wellplate_Fl_Black definition is deprecated. Use "
-    "Cor_Falcon_96_wellplate_200ul_Fb instead."
+    "Cor_Falcon_96_wellplate_340ul_Fb_Black instead."
   )

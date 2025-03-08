@@ -1,4 +1,4 @@
-""" Cornint-Costar plates. """
+""" Corning-Costar plates. """
 
 from typing import Optional
 
@@ -14,8 +14,8 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-# # # # # # # # # # Cor_Cos_6_wellplate_16800ul_Fb # # # # # # # # # #
 
+# # # # # # # # # # Cor_Cos_6_wellplate_16800ul_Fb # # # # # # # # # #
 
 def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -67,7 +67,6 @@ def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     ),
   )
 
-
 def Cor_Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
   """
   - brand: Costar
@@ -89,11 +88,10 @@ def Cos_6_wellplate_16800ul_Fb(name: str, with_lid: bool = True) -> Plate:
 
 def Cor_6_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
   # https://github.com/PyLabRobot/pylabrobot/issues/313
-  raise NotImplementedError("deprecated. use Cor_6_wellplate_16800ul_Fb instead")
+  raise NotImplementedError("deprecated. use Cor_Cos_6_wellplate_16800ul_Fb instead")
 
 
 # # # # # # # # # # Cor_12_wellplate_6900ul_Fb # # # # # # # # # #
-
 
 def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -154,7 +152,6 @@ def Cor_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
 
 # # # # # # # # # # Cor_24_wellplate_3470ul_Fb # # # # # # # # # #
 
-
 def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3337, 3524, 3526, 3527
@@ -211,7 +208,6 @@ def Cor_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
 
 
 # # # # # # # # # # Cor_Cos_48_wellplate_1620ul_Fb # # # # # # # # # #
-
 
 def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
