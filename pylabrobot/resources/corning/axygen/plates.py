@@ -9,8 +9,8 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-
 # # # # # # # # # # Cor_Axy_24_wellplate_10mL_Vb # # # # # # # # # #
+
 
 def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
   """
@@ -49,8 +49,10 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
     ),
   )
 
+
 def Cor_Axy_24_wellplate_10mL_Vb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
+
 
 def _compute_volume_from_height_Cor_Axy_24_wellplate_10mL_Vb(h: float):
   if h > 42.1:

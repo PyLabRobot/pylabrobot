@@ -14,8 +14,8 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-
 # # # # # # # # # # Cor_Cos_6_wellplate_16800ul_Fb # # # # # # # # # #
+
 
 def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -67,6 +67,7 @@ def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     ),
   )
 
+
 def Cor_Cos_6_wellplate_16800ul_Fb_Lid(name: str) -> Lid:
   """
   - brand: Costar
@@ -92,6 +93,7 @@ def Cor_6_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
 
 
 # # # # # # # # # # Cor_12_wellplate_6900ul_Fb # # # # # # # # # #
+
 
 def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -152,6 +154,7 @@ def Cor_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
 
 # # # # # # # # # # Cor_24_wellplate_3470ul_Fb # # # # # # # # # #
 
+
 def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3337, 3524, 3526, 3527
@@ -208,6 +211,7 @@ def Cor_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
 
 
 # # # # # # # # # # Cor_Cos_48_wellplate_1620ul_Fb # # # # # # # # # #
+
 
 def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """

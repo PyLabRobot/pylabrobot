@@ -14,8 +14,8 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-
 # # # # # # # # # # Cor_Falcon_96_wellplate_275ul_Fb # # # # # # # # # #
+
 
 def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -60,6 +60,7 @@ def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Pl
 
 
 # # # # # # # # # # Cor_Falcon_96_wellplate_250ul_Rb # # # # # # # # # #
+
 
 def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -106,11 +107,13 @@ def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Pl
     ),
   )
 
+
 def Cor_Falcon_96_wellplate_250ul_Rb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
 
 
 # # # # # # # # # # Cor_Falcon_96_wellplate_340ul_Fb_Black # # # # # # # # # #
+
 
 def Cor_Falcon_96_wellplate_340ul_Fb_Black(name: str, lid: Optional[Lid] = None) -> Plate:
   """
@@ -167,6 +170,7 @@ def Falcon_96_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
     "Falcon_96_wellplate_Fl definition is deprecated. Use "
     "Cor_Falcon_96_wellplate_340ul_Fb_Black instead."
   )
+
 
 def Falcon_96_wellplate_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
   raise NotImplementedError(
