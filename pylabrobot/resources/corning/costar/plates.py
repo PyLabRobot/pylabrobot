@@ -37,6 +37,7 @@ def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     "size_z": 17.4,  # from Corning Product Description
     "bottom_type": WellBottomType.FLAT,
     "max_volume": 16800,  # from Corning Product Description
+    "cross_section_type": CrossSectionType.CIRCLE,
     "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
       liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
     ),
@@ -115,6 +116,7 @@ def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     "size_z": 17.5,  # from Corning Product Description
     "bottom_type": WellBottomType.FLAT,
     "max_volume": 6900,  # from Corning Product Description
+    "cross_section_type": CrossSectionType.CIRCLE,
     "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
       liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
     ),
@@ -172,6 +174,7 @@ def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     "size_z": 17.4,  # from Corning Product Description
     "bottom_type": WellBottomType.FLAT,
     "max_volume": 3400,  # website
+    "cross_section_type": CrossSectionType.CIRCLE,
     "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
       liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
     ),
@@ -232,6 +235,7 @@ def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
     "size_z": 17.4,  # from Corning Product Description
     "bottom_type": WellBottomType.FLAT,
     "max_volume": 1620,  # from Corning Product Description
+    "cross_section_type": CrossSectionType.CIRCLE,
     "compute_volume_from_height": lambda liquid_height: compute_volume_from_height_conical_frustum(
       liquid_height, BOTTOM_INNER_WELL_RADIUS, TOP_INNER_WELL_RADIUS
     ),
