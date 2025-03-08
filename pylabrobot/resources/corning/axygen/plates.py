@@ -66,9 +66,9 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
     ),
   )
 
+
 #: Axy_24_DW_10ML
 def Axy_24_DW_10ML(name: str, with_lid: bool = False) -> Plate:
-  NotImplementedError(
-    "Axy_24_DW_10ML definition is deprecated. Use "
-    "Cor_Axy_24_wellplate_10mL_Vb instead."
+  return NotImplementedError(
+    "Axy_24_DW_10ML definition is deprecated. Use " "Cor_Axy_24_wellplate_10mL_Vb instead."
   )

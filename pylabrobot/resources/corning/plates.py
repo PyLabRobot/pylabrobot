@@ -16,9 +16,8 @@ from pylabrobot.resources.well import (
   WellBottomType,
 )
 
-
-
 # # # # # # # # # # Cor_96_wellplate_360ul_Fb # # # # # # # # # #
+
 
 def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
   """
@@ -66,6 +65,7 @@ def Cor_96_wellplate_360ul_Fb(name: str, with_lid: bool = False) -> Plate:
     ),
   )
 
+
 def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
   """
   - brand: Corning
@@ -80,12 +80,14 @@ def Cor_96_wellplate_360ul_Fb_Lid(name: str) -> Lid:
     model="Cor_96_wellplate_360ul_Fb_Lid",
   )
 
+
 # Previous names in PLR:
 def Cos_96_EZWash(name: str, with_lid: bool = False) -> Plate:
   raise ValueError("Deprecated. You probably want to use Cor_96_wellplate_360ul_Fb instead.")
 
 
 # # # # # # # # # # Cor_96_wellplate_2mL_Vb # # # # # # # # # #
+
 
 def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
   """
@@ -127,8 +129,10 @@ def Cor_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
     ),
   )
 
+
 def Cor_96_wellplate_2mL_Vb_Lid(name: str) -> Lid:
   raise NotImplementedError("This lid is not currently defined.")
+
 
 # Volume-height functions
 def _compute_volume_from_height_Cor_96_wellplate_2mL_Vb(
@@ -139,6 +143,7 @@ def _compute_volume_from_height_Cor_96_wellplate_2mL_Vb(
   return calculate_liquid_volume_container_2segments_square_vbottom(
     x=7.8, y=7.8, h_pyramid=4.0, h_cube=38.0, liquid_height=h
   )
+
 
 def _compute_height_from_volume_Cor_96_wellplate_2mL_Vb(
   liquid_volume: float,
@@ -164,8 +169,6 @@ def Cos_96_DWP_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
     " Use 'Cor_96_wellplate_2mL_Vb' instead."
   )
 
+
 def Cos_96_wellplate_2mL_Vb(name: str, with_lid: bool = False) -> Plate:
   raise NotImplementedError("deprecated. use Cor_96_wellplate_2mL_Vb instead")
-
-
-

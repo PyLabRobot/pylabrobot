@@ -156,11 +156,13 @@ def Falcon_96_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
     "Cor_Falcon_96_wellplate_200ul_Fb instead."
   )
 
+
 def Falcon_96_wellplate_Rb(name: str, lid: Optional[Lid] = None) -> Plate:
   raise NotImplementedError(
     "Falcon_96_wellplate_Rb definition is deprecated. Use "
     "Cor_Falcon_96_wellplate_200ul_Fb instead."
   )
+
 
 def Falcon_96_wellplate_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
   raise NotImplementedError(
