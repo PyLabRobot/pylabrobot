@@ -4064,7 +4064,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="TP",
       tip_pattern=tip_pattern,
-      read_timeout=60,
+      read_timeout=max(120, self.read_timeout),
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
@@ -4129,6 +4129,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="TR",
       tip_pattern=tip_pattern,
+      read_timeout=max(120, self.read_timeout),
       fmt="kz### (n)vz### (n)",
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
@@ -4384,7 +4385,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="AS",
       tip_pattern=tip_pattern,
-      read_timeout=max(60, self.read_timeout),
+      read_timeout=max(120, self.read_timeout),
       at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
       xp=[f"{xp:05}" for xp in x_positions],
@@ -4618,7 +4619,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="DS",
       tip_pattern=tip_pattern,
-      read_timeout=max(60, self.read_timeout),
+      read_timeout=max(120, self.read_timeout),
       dm=[f"{dm:01}" for dm in dispensing_mode],
       tm=[f"{tm:01}" for tm in tip_pattern],
       xp=[f"{xp:05}" for xp in x_positions],
@@ -7819,8 +7820,21 @@ class STAR(HamiltonLiquidHandler):
       )
 
     # Get the absolute locations for center front top and center back top
-    back_location = well.get_absolute_location("c", "b", "t")
-    front_location = well.get_absolute_location("c", "f", "t")
+    orientation = well.get_absolute_rotation().z % 90
+    if orientation == 0:
+      back_location = well.get_absolute_location("c", "b", "t")
+      front_location = well.get_absolute_location("c", "f", "t")
+    elif orientation == 90:
+      back_location = well.get_absolute_location("r", "c", "t")
+      front_location = well.get_absolute_location("l", "c", "t")
+    elif orientation == 180:
+      back_location = well.get_absolute_location("c", "f", "b")
+      front_location = well.get_absolute_location("c", "b", "b")
+    elif orientation == 270:
+      back_location = well.get_absolute_location("l", "c", "b")
+      front_location = well.get_absolute_location("r", "c", "b")
+    else:
+      raise ValueError("Rotation of well must be a multiple of 90 degrees")
 
     try:
       # Then move all channels in the y-space simultaneously.

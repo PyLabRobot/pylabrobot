@@ -105,7 +105,7 @@ def AGenBio_1_troughplate_190000uL_Fl(name: str, lid: Optional[Lid] = None) -> P
       Well,
       num_items_x=1,
       num_items_y=1,
-      dx=9.8,
+      dx=10.1,
       dy=7.6,
       dz=5.88,
       item_dx=INNER_WELL_WIDTH,
