@@ -18,8 +18,8 @@ def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Pl
   Corning cat. no.: 353072
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
     Assay-Microplates/96-Well-Microplates/Falcon%C2%AE-96-well-Polystyrene-Microplates/p/353072
-  - material: Polypropylene
   - brand: Falcon
+  - material: Polypropylene
   - max_volume: 275 uL
   """
   BOTTOM_RADIUS = 3.175
@@ -61,10 +61,11 @@ def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Pl
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
     Assay-Microplates/96-Well-Microplates/Falcon%C2%AE-96-well-Polystyrene-Microplates/p/
     falcon96WellPolystyreneMicroplates
-  - material: Polystyrene
   - brand: Falcon
+  - material: Polystyrene
   - tc_treated: Yes
-  - specs: https://www.corning.com/catalog/cls/documents/drawings/LSR00181.pdf
+  - tech_drawing: https://www.corning.com/catalog/cls/documents/drawings/LSR00181.pdf
+  - max_volume: 250 uL
   """
   TOP_INNER_WELL_RADIUS = 3.425
   BOTTOM_INNER_WELL_RADIUS = 3.175
@@ -100,14 +101,15 @@ def Cor_Falcon_96_wellplate_250ul_Rb(name: str, lid: Optional[Lid] = None) -> Pl
 
 def Cor_Falcon_96_wellplate_340ul_Fl_Black(name: str, lid: Optional[Lid] = None) -> Plate:
   """
-  Corning Catalog No. 353219
+  Corning cat. no.: 353219
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
     Assay-Microplates/96-Well-Microplates/Falcon%C2%AE-96-well-Polystyrene-Microplates/p/
     falcon96WellPolystyreneMicroplates
-  - material: Polystyrene
   - brand: Falcon
+  - material: Polystyrene
   - tc_treated: Yes
-  - specs: https://www.corning.com/catalog/cls/documents/drawings/LSR00181.pdf
+  - tech_drawing: https://www.corning.com/catalog/cls/documents/drawings/LSR00181.pdf
+  - max_volume: 340 uL
   """
   TOP_INNER_WELL_RADIUS = 6.96 / 2  # from spec
   BOTTOM_INNER_WELL_RADIUS = 6.58 / 2  # from spec

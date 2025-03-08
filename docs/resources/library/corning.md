@@ -6,6 +6,7 @@ Wikipedia page: [Corning](https://en.wikipedia.org/wiki/Corning_Inc.)
 
 As of 2014, Corning had five major business sectors: display technologies, environmental technologies, life sciences, optical communications, and specialty materials.
 
+<hr>
 
 ```
 Corning Inc.
@@ -28,6 +29,8 @@ Corning Inc.
 └── Specialty Materials
     └── Advanced Glass
 ```
+
+<hr>
 
 ## Plates
 

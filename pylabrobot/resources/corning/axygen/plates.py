@@ -37,8 +37,8 @@ def Cor_Axy_24_wellplate_10mL_Vb(name: str, with_lid: bool = False) -> Plate:
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/
     Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/
     Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-DW-10ML-24-C
-  - material: Polypropylene
   - brand: Axygen
+  - material: Polypropylene
   """
   return Plate(
     name=name,

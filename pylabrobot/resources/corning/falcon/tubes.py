@@ -1,10 +1,17 @@
 from pylabrobot.resources.tube import Tube
 
 
-def falcon_tube_50mL(name: str) -> Tube:
-  """50 mL Falcon tube.
-
-  https://www.fishersci.com/shop/products/falcon-50ml-conical-centrifuge-tubes-2/1495949A
+def Cor_Falcon_tube_50mL_Vb(name: str) -> Tube:
+  """
+  Corning cat. no.: 352098
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Liquid-Handling/
+    Tubes%2C-Liquid-Handling/Centrifuge-Tubes/Falcon%C2%AE-Conical-Centrifuge-Tubes/p/
+    falconConicalTubes
+  - distributor: (Fisher Scientific, 14-959-49A)
+  - brand: Falcon
+  - material: Polypropylene
+  - tech_drawing: tech_drawings/Cor_Falcon_tube_50mL.pdf
+  - cap_style: screw-cap
   """
 
   diameter = 30
@@ -19,10 +26,17 @@ def falcon_tube_50mL(name: str) -> Tube:
   )
 
 
-def falcon_tube_15mL(name: str) -> Tube:
-  """15 mL Falcon tube.
-
-  https://www.fishersci.com/shop/products/falcon-15ml-conical-centrifuge-tubes-5/p-193301
+def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:
+  """
+  Corning cat. no.: 352196
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Liquid-Handling/
+    Tubes%2C-Liquid-Handling/Centrifuge-Tubes/Falcon%C2%AE-Conical-Centrifuge-Tubes/p/
+    falconConicalTubes
+  - distributor: (Fisher Scientific, 14-959-53A)
+  - brand: Falcon
+  - material: Polypropylene
+  - tech_drawing: tech_drawings/Cor_Falcon_tube_15mL_Vb.pdf
+  - cap_style: screw-cap
   """
 
   diameter = 17
@@ -36,14 +50,19 @@ def falcon_tube_15mL(name: str) -> Tube:
   )
 
 
-def Falcon_tube_14mL_Rb(name: str) -> Tube:
-  """14 mL round-bottom snap-cap Falcon tube. Corning cat. no.: 352059
-
-  - Material: polypropylene
-  - bottom_type=TubeBottomType.U
-  - snap-cap lid
+def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:
   """
-  # material_z_thickness = 1.2 mm
+  Corning cat. no.: 352059
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/General-Labware/
+    Tubes/Tubes%2C-Round-Bottom/Falcon%C2%AE-Round-Bottom-High-clarity-Polypropylene-Tube/p/
+    highClarityPolypropyleneRoundBottomTubes
+  - distributor: (Fisher Scientific, 10110101)
+  - brand: Falcon
+  - material: Polypropylene
+  - tech_drawing: tech_drawings/Cor_Falcon_tube_14mL_Rb.pdf
+  - cap_style: snap-cap
+  """
+
   diameter = 17
   return Tube(
     name=name,
@@ -53,4 +72,23 @@ def Falcon_tube_14mL_Rb(name: str) -> Tube:
     model="Falcon_tube_14mL_Rb",
     material_z_thickness=1.19,
     max_volume=14_000,  # units: ul
+  )
+
+
+def falcon_tube_50mL(name: str) -> Tube:
+  raise NotImplementedError(
+    "falcon_tube_50mL definition is deprecated. Use "
+    "Cor_Falcon_tube_50mL instead."
+  )
+
+def falcon_tube_15mL(name: str) -> Tube:
+  raise NotImplementedError(
+    "falcon_tube_15mL definition is deprecated. Use "
+    "Cor_Falcon_tube_15mL_Vb instead."
+  )
+
+def Falcon_tube_14mL_Rb(name: str) -> Tube:
+  raise NotImplementedError(
+    "Falcon_tube_14mL_Rb definition is deprecated. Use "
+    "Cor_Falcon_tube_14mL_Rb instead."
   )
