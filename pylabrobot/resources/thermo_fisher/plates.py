@@ -272,7 +272,9 @@ def Thermo_Nunc_96_well_plate_1300uL_Rb(name: str) -> Plate:
       size_y=well_diameter,
       size_z=31.6 - 1.4,  # from definition, F - N
       bottom_type=WellBottomType.U,
-      material_z_thickness=31.6 - 29.1 - 1.4, # from definition, F - L - N 
+      material_z_thickness=31.6 - 29.1 - 1.4,  # from definition, F - L - N
       cross_section_type=CrossSectionType.CIRCLE,
-      compute_height_from_volume = lambda liquid_volume: liquid_volume / (math.pi * ((well_diameter/2)**2))),
-    )
+      compute_height_from_volume=lambda liquid_volume: liquid_volume
+      / (math.pi * ((well_diameter / 2) ** 2)),
+    ),
+  )
