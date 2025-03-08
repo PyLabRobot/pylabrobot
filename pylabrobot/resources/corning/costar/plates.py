@@ -219,7 +219,7 @@ def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plat
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
     Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3548
   - brand: Costar
-  - distributor: (Fisher Scientific, ?)
+  - distributor: (Fisher Scientific, 07-200-86)
   - material: Polystyrene
   - tc_treated: Yes
   - sterile: yes

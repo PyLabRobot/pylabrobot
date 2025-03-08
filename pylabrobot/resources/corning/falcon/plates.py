@@ -23,6 +23,7 @@ def Cor_Falcon_96_wellplate_275ul_Fb(name: str, lid: Optional[Lid] = None) -> Pl
   - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
     Assay-Microplates/96-Well-Microplates/Falcon%C2%AE-96-well-Polystyrene-Microplates/p/353072
   - brand: Falcon
+  - distributor: (Fisher Scientific, 08-772-2C)
   - material: Polypropylene
   - max_volume: 275 uL
   """
