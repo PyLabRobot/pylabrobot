@@ -100,8 +100,7 @@ library/biorad
 library/boekel
 library/celltreat
 library/cellvis
-library/corning_axygen
-library/corning_costar
+library/corning
 library/eppendorf
 library/falcon
 library/hamilton
