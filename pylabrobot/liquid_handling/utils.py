@@ -72,14 +72,17 @@ def get_tight_single_resource_liquid_op_offsets(
     offsets = [
       Coordinate(0, min_y + i * min_spacing_between_channels, 0) for i in range(num_channels)
     ][::-1]
+    offsets_relative_to_center = [o - resource.center() for o in offsets]
   elif resource.get_absolute_rotation().z % 90 == 0:
     min_x = (resource.get_size_x() - channel_space) / 2
     offsets = [
       Coordinate(0, min_x + i * min_spacing_between_channels, 0) for i in range(num_channels)
     ][::-1]
+    offsets_relative_to_center = [Coordinate(coord.x - resource.center().y, coord.y - resource.center().x, coord.z-resource.center().z) for coord in offsets]
+    
   else:
     raise ValueError("Only 90 and 180 degree rotations are supported for now.")
 
   # offsets are relative to the center of the resource, but above we computed them wrt lfb
   # so we need to subtract the center of the resource
-  return [o - resource.center() for o in offsets]
+  return offsets_relative_to_center
