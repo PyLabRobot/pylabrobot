@@ -7821,18 +7821,18 @@ class STAR(HamiltonLiquidHandler):
 
     # Get the absolute locations for center front top and center back top
     orientation = well.get_absolute_rotation().z % 90
-    if orientation == 0:
-      back_location = well.get_absolute_location("c", "b", "t")
-      front_location = well.get_absolute_location("c", "f", "t")
-    elif orientation == 90:
+    if orientation == 0: # 0 == 90 degrees, etc
       back_location = well.get_absolute_location("r", "c", "t")
       front_location = well.get_absolute_location("l", "c", "t")
+    elif orientation == 90:
+      back_location = well.get_absolute_location("c", "b", "t")
+      front_location = well.get_absolute_location("c", "f", "t")
     elif orientation == 180:
-      back_location = well.get_absolute_location("c", "f", "b")
-      front_location = well.get_absolute_location("c", "b", "b")
-    elif orientation == 270:
       back_location = well.get_absolute_location("l", "c", "b")
       front_location = well.get_absolute_location("r", "c", "b")
+    elif orientation == 270:
+      back_location = well.get_absolute_location("c", "f", "b")
+      front_location = well.get_absolute_location("c", "b", "b")
     else:
       raise ValueError("Rotation of well must be a multiple of 90 degrees")
 
