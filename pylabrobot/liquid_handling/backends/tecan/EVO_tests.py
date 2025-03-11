@@ -2,7 +2,6 @@ import unittest
 import unittest.mock
 from unittest.mock import call
 
-from pylabrobot.liquid_handling import LiquidHandler
 from pylabrobot.liquid_handling.backends.tecan.EVO import (
   EVO,
   LiHa,
@@ -49,7 +48,6 @@ class EVOTests(unittest.IsolatedAsyncioTestCase):
     self.evo.send_command.side_effect = send_command  # type: ignore[method-assign]
 
     self.deck = EVO150Deck()
-    self.lh = LiquidHandler(backend=self.evo, deck=self.deck)
 
     # setup
     self.evo.setup = unittest.mock.AsyncMock()  # type: ignore[method-assign]
