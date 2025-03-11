@@ -947,7 +947,7 @@ class Cytation5Backend(ImageReaderBackend):
       await self.send_command("Y", "P1002")
     else:
       await self.send_command("Y", "P1101")
-      await self.send_command("Y", f"P0d{filter_index+1:02}")
+      await self.send_command("Y", f"P0d{filter_index:02}")
       await self.send_command("Y", "P1001")
 
     # Turn led on in the new mode
