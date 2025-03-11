@@ -7736,6 +7736,11 @@ class STAR(HamiltonLiquidHandler):
     x: float
     ys: List[float]
     z: float
+
+    # if only one well is give, but in a list, convert to Well so we fall into single-well logic.
+    if len(wells) == 1:
+      wells = wells[0]
+
     if isinstance(wells, Well):
       well = wells
       x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
@@ -7753,9 +7758,10 @@ class STAR(HamiltonLiquidHandler):
       assert (
         len(set(w.get_absolute_location().x for w in wells)) == 1
       ), "Wells must be on the same column"
-      x = wells[0].get_absolute_location().x
-      ys = [well.get_absolute_location().y for well in wells]
-      z = wells[0].get_absolute_location(z="cavity_bottom").z
+      absolute_center = wells[0].get_absolute_location("c", "c", "cavity_bottom")
+      x = absolute_center.x
+      ys = [well.get_absolute_location(y="c").y for well in wells]
+      z = absolute_center.z
 
     await self.move_channel_x(0, x=x)
 
@@ -7773,7 +7779,7 @@ class STAR(HamiltonLiquidHandler):
       )
 
     await self.step_off_foil(
-      well,
+      [wells] if isinstance(wells, Well) else wells,
       back_channel=hold_down_channels[0],
       front_channel=hold_down_channels[1],
       move_inwards=move_inwards,
@@ -7781,7 +7787,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def step_off_foil(
     self,
-    well: Well,
+    wells: Union[Well, List[Well]],
     front_channel: int,
     back_channel: int,
     move_inwards: float = 2,
@@ -7804,10 +7810,11 @@ class STAR(HamiltonLiquidHandler):
           min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
           surface_following_distance=0,
           pull_out_distance_transport_air=[0] * 4)
-        await step_off_foil(lh.backend, well, front_channel=11, back_channel=6, move_inwards = 3)
+        await step_off_foil(lh.backend, [well], front_channel=11, back_channel=6, move_inwards=3)
 
     Args:
-      well: Well in the plate to hold down. (x-coordinate of channels will be at center of well).
+      wells: Wells in the plate to hold down. (x-coordinate of channels will be at center of wells).
+        Must be sorted from back to front.
       front_channel: The channel to place on the front of the plate.
       back_channel: The channel to place on the back of the plate.
       move_inwards: mm to move inwards (backward on the front channel; frontward on the back).
@@ -7819,22 +7826,29 @@ class STAR(HamiltonLiquidHandler):
         "front_channel should be in front of back_channel. " "Channels are 0-indexed from the back."
       )
 
-    # Get the absolute locations for center front top and center back top
-    orientation = well.get_absolute_rotation().z % 90
-    if orientation == 0:
-      back_location = well.get_absolute_location("c", "b", "t")
-      front_location = well.get_absolute_location("c", "f", "t")
-    elif orientation == 90:
-      back_location = well.get_absolute_location("r", "c", "t")
-      front_location = well.get_absolute_location("l", "c", "t")
-    elif orientation == 180:
-      back_location = well.get_absolute_location("c", "f", "b")
-      front_location = well.get_absolute_location("c", "b", "b")
-    elif orientation == 270:
-      back_location = well.get_absolute_location("l", "c", "b")
-      front_location = well.get_absolute_location("r", "c", "b")
+    if isinstance(wells, Well):
+      wells = [wells]
+
+    plates = set(well.parent for well in wells)
+    assert len(plates) == 1, "All wells must be in the same plate"
+    plate = plates.pop()
+
+    z_location = plate.get_absolute_location(z="top").z
+
+    if plate.get_absolute_rotation().z % 360 == 0:
+      back_location = plate.get_absolute_location(y="b")
+      front_location = plate.get_absolute_location(y="f")
+    elif plate.get_absolute_rotation().z % 360 == 90:
+      back_location = plate.get_absolute_location(x="r")
+      front_location = plate.get_absolute_location(x="l")
+    elif plate.get_absolute_rotation().z % 360 == 180:
+      back_location = plate.get_absolute_location(y="f")
+      front_location = plate.get_absolute_location(y="b")
+    elif plate.get_absolute_rotation().z % 360 == 270:
+      back_location = plate.get_absolute_location(x="l")
+      front_location = plate.get_absolute_location(x="r")
     else:
-      raise ValueError("Rotation of well must be a multiple of 90 degrees")
+      raise ValueError("Plate rotation must be a multiple of 90 degrees")
 
     try:
       # Then move all channels in the y-space simultaneously.
@@ -7845,17 +7859,15 @@ class STAR(HamiltonLiquidHandler):
         }
       )
 
-      await self.move_channel_z(front_channel, front_location.z)
-      await self.move_channel_z(back_channel, back_location.z)
+      await self.move_channel_z(front_channel, z_location)
+      await self.move_channel_z(back_channel, z_location)
     finally:
       # Move channels that are lower than the `front_channel` and `back_channel` to
       # the just above the foil, in case the foil pops up.
       zs = await self.get_channels_z_positions()
-      indices = [channel_idx for channel_idx, z in zs.items() if z < front_location.z]
+      indices = [channel_idx for channel_idx, z in zs.items() if z < z_location]
       idx = {
-        idx: front_location.z + move_height
-        for idx in indices
-        if idx not in (front_channel, back_channel)
+        idx: z_location + move_height for idx in indices if idx not in (front_channel, back_channel)
       }
       await self.position_channels_in_z_direction(idx)
 
