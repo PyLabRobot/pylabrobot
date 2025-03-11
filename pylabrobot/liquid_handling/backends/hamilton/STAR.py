@@ -7738,7 +7738,7 @@ class STAR(HamiltonLiquidHandler):
     z: float
 
     # if only one well is give, but in a list, convert to Well so we fall into single-well logic.
-    if len(wells) == 1:
+    if isinstance(wells, list) and len(wells) == 1:
       wells = wells[0]
 
     if isinstance(wells, Well):
@@ -7832,6 +7832,7 @@ class STAR(HamiltonLiquidHandler):
     plates = set(well.parent for well in wells)
     assert len(plates) == 1, "All wells must be in the same plate"
     plate = plates.pop()
+    assert plate is not None
 
     z_location = plate.get_absolute_location(z="top").z
 
