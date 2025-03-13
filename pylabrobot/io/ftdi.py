@@ -117,7 +117,7 @@ class FTDI(IOBase):
       FTDICommand(
         device_id=self._device_id,
         action="read",
-        data=data if isinstance(data, str) else data.decode("unicode_escape"),
+        data=data if isinstance(data, str) else data.decode("unicode_escape", errors="ignore"),
       )
     )
     return cast(bytes, data)
