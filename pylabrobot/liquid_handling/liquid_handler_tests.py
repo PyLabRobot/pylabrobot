@@ -1068,7 +1068,7 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
     async def error_func(*args, **kwargs):
       raise ChannelizedError(errors={0: Exception("This is an error")})
 
-    self.backend.dispense = error_func
+    self.backend.dispense = error_func  # type: ignore
     well.tracker.set_liquids([(None, 200)])
 
     await self.lh.aspirate([well], vols=[200])
