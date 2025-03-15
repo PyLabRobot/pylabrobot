@@ -9,3 +9,4 @@ Tools for working with Hamilton-STAR specific functions.
    iswap-module
    star_lld
    z-probing
+   foil
