@@ -32,33 +32,20 @@ Corning Inc.
 
 <hr>
 
-### Plates
-
-| Description               | Image              | PLR definition |
-|--------------------|--------------------|--------------------|
-| 'Thermo_TS_96_wellplate_1200ul_Rb'<br>Part no.: AB-1127 or 10243223<br>[manufacturer website](https://www.fishersci.co.uk/shop/products/product/10243223) <br><br>- Material: Polypropylene (AB-1068, polystyrene) <br> | ![](img/thermo_fisher/Thermo_TS_96_wellplate_1200ul_Rb.webp) | `Thermo_TS_96_wellplate_1200ul_Rb` |
-| 'Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate'<br>Part no.: 4483354 (TFS) or 15273005 (FS) (= with barcode)<br>Part no.: 16698853 (FS) (= **without** barcode)<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/4483354) <br><br>- Material: Polycarbonate, Polypropylene<br>- plate_type: semi-skirted<br>- product line: "MicroAmp"<br>- (sub)product line: "EnduraPlate" | ![](img/thermo_fisher/Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate.png) | `Thermo_AB_96_wellplate_300ul_Vb_EnduraPlate` |
-| 'Thermo_Nunc_96_well_plate_1300uL_Rb'<br>Part no.: 26025X | ![](img/thermo_fisher/Thermo_Nunc_96_well_plate_1300uL_Rb.jpg) | `Thermo_Nunc_96_well_plate_1300uL_Rb` |
-
-### Troughs
-
-| Description               | Image              | PLR definition |
-|--------------------|--------------------|--------------------|
-| 'ThermoFisherMatrixTrough8094'<br>Part no.: 8094<br>[manufacturer website](https://www.thermofisher.com/order/catalog/product/8094) | ![](img/thermo_fisher/ThermoFisherMatrixTrough8094.jpg.avif) | `ThermoFisherMatrixTrough8094` |
-
-
 ## Corning - Axygen
 
 Company page: [Corning - Axygen® Brand Products](https://www.corning.com/emea/en/products/life-sciences/resources/brands/axygen-brand-products.html)
 
 > Corning acquired Axygen BioScience, Inc. and its subsidiaries in 2009. This acquisition included Axygen's broad portfolio of high-quality plastic consumables, liquid handling products, and bench-top laboratory equipment, which complemented and expanded Corning's offerings in the life sciences segment​.
 
+(axygen-plates)=
 ### Plates
 
 | Description | Image | PLR definition |
 |-|-|-|
 | 'Axy_24_DW_10ML'<br>Part no.: P-DW-10ML-24-C-S<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-DW-10ML-24-C-S) | ![](img/corning_axygen/axygen_Axy_24_DW_10ML.jpg) | `Axy_24_DW_10ML` |
 
+(costar-plates)=
 ## Corning - Costar
 
 ### Plates
@@ -72,6 +59,7 @@ Company page: [Corning - Axygen® Brand Products](https://www.corning.com/emea/e
 | 'Cos_96_wellplate_2mL_Vb'<br>Part no.: 3516<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516) <br><br>- Material: Polypropylene <br>- Resistant to many common organic solvents (e.g., DMSO, ethanol, methanol) <br>- 3960: Sterile and DNase- and RNase-free <br>- Total volume: 2 mL <br>- Features uniform skirt heights for greater robotic gripping surface| ![](img/corning_costar/Cos_96_wellplate_2mL_Vb.jpg) | `Cos_96_wellplate_2mL_Vb` |
 'Cor_96_wellplate_360ul_Fb' <br>Part no.: 353376<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/NL/en/Microplates/Assay-Microplates/96-Well-Microplates/Falcon®-96-well-Polystyrene-Microplates/p/353376) <br><br>- Material: TC-treated polystyrene <br> - Cleanliness: sterile <br>- Total volume:  392 uL <br>- Working volume: 25-340 uL | ![](img/corning_costar/Cor_96_wellplate_360ul_Fb.jpg) | `Cor_96_wellplate_360ul_Fb` |
 
+(falcon-plates)=
 ## Falcon
 
 ### Plates

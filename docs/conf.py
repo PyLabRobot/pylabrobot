@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.abspath(".."))
 # -- Project information -----------------------------------------------------
 
 project = "PyLabRobot"
-copyright = "2024, PyLabRobot"
+copyright = "2025, PyLabRobot"
 author = "The PyLabRobot authors"
 
 

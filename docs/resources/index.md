@@ -102,7 +102,6 @@ library/celltreat
 library/cellvis
 library/corning
 library/eppendorf
-library/falcon
 library/hamilton
 library/nest
 library/opentrons
