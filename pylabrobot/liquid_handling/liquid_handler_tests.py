@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 
 import pytest
 
+from pylabrobot.liquid_handling.errors import ChannelizedError
 from pylabrobot.liquid_handling.strictness import (
   Strictness,
   set_strictness,
@@ -1059,6 +1060,23 @@ class TestLiquidHandlerVolumeTracking(unittest.IsolatedAsyncioTestCase):
       await self.lh.pick_up_tips(self.tip_rack["A1"])
       await self.lh.aspirate([self.plate.get_item("A1")], vols=[10])
       await self.lh.dispense([self.plate.get_item("A2")], vols=[10])
+
+  async def test_dispense_fails(self):
+    well = self.plate.get_item("A1")
+    await self.lh.pick_up_tips(self.tip_rack["A1"])
+
+    async def error_func(*args, **kwargs):
+      raise ChannelizedError(errors={0: Exception("This is an error")})
+
+    self.backend.dispense = error_func  # type: ignore
+    well.tracker.set_liquids([(None, 200)])
+
+    await self.lh.aspirate([well], vols=[200])
+    assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
+    with self.assertRaises(ChannelizedError):
+      await self.lh.dispense([well], vols=[60])
+    # test volume doens't change on failed dispense
+    assert self.lh.head[0].get_tip().tracker.get_used_volume() == 200
 
 
 class TestLiquidHandlerCrossContaminationTracking(unittest.IsolatedAsyncioTestCase):

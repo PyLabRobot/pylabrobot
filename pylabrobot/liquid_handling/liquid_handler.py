@@ -905,7 +905,8 @@ class LiquidHandler(Resource, Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
-        (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
+        tip_volume_tracker = self.head[channel].get_tip().tracker
+        (tip_volume_tracker.commit if success else tip_volume_tracker.rollback)()
 
     # trigger callback
     self._trigger_callback(
@@ -1107,7 +1108,8 @@ class LiquidHandler(Resource, Machine):
       if does_volume_tracking():
         if not op.resource.tracker.is_disabled:
           (op.resource.tracker.commit if success else op.resource.tracker.rollback)()
-        (self.head[channel].get_tip().tracker.commit if success else self.head[channel].rollback)()
+        tip_volume_tracker = self.head[channel].get_tip().tracker
+        (tip_volume_tracker.commit if success else tip_volume_tracker.rollback)()
 
     if any(bav is not None for bav in blow_out_air_volume):
       self._blow_out_air_volume = None
