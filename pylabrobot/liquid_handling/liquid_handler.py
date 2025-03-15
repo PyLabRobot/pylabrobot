@@ -2280,16 +2280,3 @@ class LiquidHandler(Resource, Machine):
 class OperationCallback(Protocol):
   def __call__(self, handler: "LiquidHandler", *args: Any, **kwargs: Any) -> None:
     ...  # pragma: no cover
-
-
-lh = None
-
-
-async def transfer(source: List[Well], target: List[Well], volume: float):
-  await lh.aspirate(source, vols=[volume] * len(source))
-  await lh.dispense(target, vols=[volume] * len(target))
-
-
-async def serial_dilute(targets: List[List[Well]], vol_per_transfer: float):
-  for source, target in zip(targets[:-1], targets[1:]):
-    await transfer(source, target, vol_per_transfer)
