@@ -298,7 +298,6 @@ class VSpin(CentrifugeBackend):
           break
       else:
         if end_byte_found or time.time() - start_time > timeout:
-          logger.warning("Timed out reading response")
           break
         await asyncio.sleep(0.0001)
 
