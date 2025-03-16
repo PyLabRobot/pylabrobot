@@ -45,9 +45,9 @@ Company page: [Corning - Axygen® Brand Products](https://www.corning.com/emea/e
 |-|-|-|
 | 'Axy_24_DW_10ML'<br>Part no.: P-DW-10ML-24-C-S<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Genomics-&-Molecular-Biology/Automation-Consumables/Deep-Well-Plate/Axygen%C2%AE-Deep-Well-and-Assay-Plates/p/P-DW-10ML-24-C-S) | ![](img/corning_axygen/axygen_Axy_24_DW_10ML.jpg) | `Axy_24_DW_10ML` |
 
-(costar-plates)=
 ## Corning - Costar
 
+(costar-plates)=
 ### Plates
 
 | Description               | Image              | PLR definition |
@@ -59,9 +59,9 @@ Company page: [Corning - Axygen® Brand Products](https://www.corning.com/emea/e
 | 'Cos_96_wellplate_2mL_Vb'<br>Part no.: 3516<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3516) <br><br>- Material: Polypropylene <br>- Resistant to many common organic solvents (e.g., DMSO, ethanol, methanol) <br>- 3960: Sterile and DNase- and RNase-free <br>- Total volume: 2 mL <br>- Features uniform skirt heights for greater robotic gripping surface| ![](img/corning_costar/Cos_96_wellplate_2mL_Vb.jpg) | `Cos_96_wellplate_2mL_Vb` |
 'Cor_96_wellplate_360ul_Fb' <br>Part no.: 353376<br>[manufacturer website](https://ecatalog.corning.com/life-sciences/b2b/NL/en/Microplates/Assay-Microplates/96-Well-Microplates/Falcon®-96-well-Polystyrene-Microplates/p/353376) <br><br>- Material: TC-treated polystyrene <br> - Cleanliness: sterile <br>- Total volume:  392 uL <br>- Working volume: 25-340 uL | ![](img/corning_costar/Cor_96_wellplate_360ul_Fb.jpg) | `Cor_96_wellplate_360ul_Fb` |
 
-(falcon-plates)=
 ## Falcon
 
+(falcon-plates)=
 ### Plates
 
 | Description               | Image              | PLR definition |

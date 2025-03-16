@@ -8,9 +8,7 @@ from pylabrobot.resources.tube import Tube
 def Cor_Falcon_tube_50mL_Vb(name: str) -> Tube:
   """
   Corning cat. no.: 352098
-  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Liquid-Handling/
-    Tubes%2C-Liquid-Handling/Centrifuge-Tubes/Falcon%C2%AE-Conical-Centrifuge-Tubes/p/
-    falconConicalTubes
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Liquid-Handling/Tubes%2C-Liquid-Handling/Centrifuge-Tubes/Falcon%C2%AE-Conical-Centrifuge-Tubes/p/falconConicalTubes
   - distributor: (Fisher Scientific, 14-959-49A)
   - brand: Falcon
   - material: Polypropylene
@@ -36,9 +34,7 @@ def Cor_Falcon_tube_50mL_Vb(name: str) -> Tube:
 def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:
   """
   Corning cat. no.: 352196
-  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Liquid-Handling/
-    Tubes%2C-Liquid-Handling/Centrifuge-Tubes/Falcon%C2%AE-Conical-Centrifuge-Tubes/p/
-    falconConicalTubes
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Liquid-Handling/Tubes%2C-Liquid-Handling/Centrifuge-Tubes/Falcon%C2%AE-Conical-Centrifuge-Tubes/p/falconConicalTubes
   - distributor: (Fisher Scientific, 14-959-53A)
   - brand: Falcon
   - material: Polypropylene
@@ -63,9 +59,7 @@ def Cor_Falcon_tube_15mL_Vb(name: str) -> Tube:
 def Cor_Falcon_tube_14mL_Rb(name: str) -> Tube:
   """
   Corning cat. no.: 352059
-  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/General-Labware/
-    Tubes/Tubes%2C-Round-Bottom/Falcon%C2%AE-Round-Bottom-High-clarity-Polypropylene-Tube/p/
-    highClarityPolypropyleneRoundBottomTubes
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/General-Labware/Tubes/Tubes%2C-Round-Bottom/Falcon%C2%AE-Round-Bottom-High-clarity-Polypropylene-Tube/p/highClarityPolypropyleneRoundBottomTubes
   - distributor: (Fisher Scientific, 10110101)
   - brand: Falcon
   - material: Polypropylene

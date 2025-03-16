@@ -20,9 +20,7 @@ from pylabrobot.resources.well import (
 def Cor_Cos_6_wellplate_16800ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3335, 3506, 3516, 3471
-  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
-    Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/
-    costarMultipleWellCellCulturePlates
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/costarMultipleWellCellCulturePlates
   - brand: Costar
   - distributor: (Fisher Scientific, 10234832)
   - material: Polystyrene
@@ -98,8 +96,7 @@ def Cor_6_wellplate_Fl(name: str, lid: Optional[Lid] = None) -> Plate:
 def Cor_Cos_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3336, 3512, 3513
-  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
-    Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3336
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3336
   - brand: Costar
   - distributor: (Fisher Scientific, 10739864)
   - material: Polystyrene
@@ -158,8 +155,7 @@ def Cor_12_wellplate_6900ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
 def Cor_Cos_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3337, 3524, 3526, 3527
-  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
-    Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3337
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3337
   - brand: Costar
   - material: Polystyrene
   - tc_treated: Yes
@@ -216,15 +212,15 @@ def Cor_24_wellplate_3470ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
 def Cor_Cos_48_wellplate_1620ul_Fb(name: str, lid: Optional[Lid] = None) -> Plate:
   """
   Corning cat. no.s: 3548
-  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/
-    Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3548
+  - manufacturer_link: https://ecatalog.corning.com/life-sciences/b2b/UK/en/Microplates/Assay-Microplates/96-Well-Microplates/Costar%C2%AE-Multiple-Well-Cell-Culture-Plates/p/3548
   - brand: Costar
   - distributor: (Fisher Scientific, 07-200-86)
   - material: Polystyrene
   - tc_treated: Yes
   - sterile: yes
   - notes:
-      - not validated
+
+    - not validated
   """
   BOTTOM_INNER_WELL_RADIUS = 11.56 / 2  # from Corning Product Description
   TOP_INNER_WELL_RADIUS = 11.05 / 2  # from Corning Product Description
