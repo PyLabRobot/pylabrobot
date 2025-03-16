@@ -152,3 +152,37 @@ await centrifuge.setup()
 ```
 
 You’re now ready to use your VSpin centrifuge with `pylabrobot`!
+
+### Loader
+
+The VSpin can optionally be used with a loader (called Access2). The loader is optional because you can also use a robotic arm like an iSWAP to move a plate directly into the centrifuge.
+
+Here's how to use the loader:
+
+```python
+import asyncio
+
+from pylabrobot.centrifuge import Access2, VSpin
+v = VSpin(device_id="FTE1YWTI", bucket_1_position=1314) # bucket 1 position is empirically determined
+centrifuge, loader = Access2(name="name", vspin=v, device_id="FTE1YZC5")
+
+# initialize the centrifuge and loader in parallel
+await asyncio.gather(
+  centrifuge.setup(),
+  loader.setup()
+)
+
+# go to a bucket and open the door before loading
+await centrifuge.go_to_bucket1()
+await centrifuge.open_door()
+
+# assign a plate to the loader before loading. This can also be done implicitly by for example
+# lh.move_plate(plate, loader)
+from pylabrobot.resources import Cor_96_wellplate_360ul_Fb
+plate = Cor_96_wellplate_360ul_Fb(name="plate")
+loader.assign_child_resource(plate)
+
+# load and unload the plate
+await loader.load()
+await loader.unload()
+```
