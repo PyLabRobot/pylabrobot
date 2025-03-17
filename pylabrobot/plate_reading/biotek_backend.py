@@ -267,36 +267,39 @@ class Cytation5Backend(ImageReaderBackend):
       for spot in range(1, 5):
         configuration = await self.send_command("i", f"q{spot}")
         assert configuration is not None
-        # TODO: what happens when the filter is not set?
-        cytation_code = int(configuration.decode().strip().split(" ")[0])
-        cytation_code2imaging_mode = {
-          1225121: ImagingMode.C377_647,
-          1225123: ImagingMode.C400_647,
-          1225113: ImagingMode.C469_593,
-          1225109: ImagingMode.ACRIDINE_ORANGE,
-          1225107: ImagingMode.CFP,
-          1225118: ImagingMode.CFP_FRET_V2,
-          1225110: ImagingMode.CFP_YFP_FRET,
-          1225119: ImagingMode.CFP_YFP_FRET_V2,
-          1225112: ImagingMode.CHLOROPHYLL_A,
-          1225105: ImagingMode.CY5,
-          1225114: ImagingMode.CY5_5,
-          1225106: ImagingMode.CY7,
-          1225100: ImagingMode.DAPI,
-          1225101: ImagingMode.GFP,
-          1225116: ImagingMode.GFP_CY5,
-          1225122: ImagingMode.OXIDIZED_ROGFP2,
-          1225111: ImagingMode.PROPOIDIUM_IODIDE,
-          1225103: ImagingMode.RFP,
-          1225117: ImagingMode.RFP_CY5,
-          1225115: ImagingMode.TAG_BFP,
-          1225102: ImagingMode.TEXAS_RED,
-          1225104: ImagingMode.YFP,
-        }
-        if cytation_code not in cytation_code2imaging_mode:
+        parts = configuration.decode().strip().split(" ")
+        if len(parts) == 1:
           self._filters.append(None)
         else:
-          self._filters.append(cytation_code2imaging_mode[cytation_code])
+          cytation_code = int(parts[0])
+          cytation_code2imaging_mode = {
+            1225121: ImagingMode.C377_647,
+            1225123: ImagingMode.C400_647,
+            1225113: ImagingMode.C469_593,
+            1225109: ImagingMode.ACRIDINE_ORANGE,
+            1225107: ImagingMode.CFP,
+            1225118: ImagingMode.CFP_FRET_V2,
+            1225110: ImagingMode.CFP_YFP_FRET,
+            1225119: ImagingMode.CFP_YFP_FRET_V2,
+            1225112: ImagingMode.CHLOROPHYLL_A,
+            1225105: ImagingMode.CY5,
+            1225114: ImagingMode.CY5_5,
+            1225106: ImagingMode.CY7,
+            1225100: ImagingMode.DAPI,
+            1225101: ImagingMode.GFP,
+            1225116: ImagingMode.GFP_CY5,
+            1225122: ImagingMode.OXIDIZED_ROGFP2,
+            1225111: ImagingMode.PROPOIDIUM_IODIDE,
+            1225103: ImagingMode.RFP,
+            1225117: ImagingMode.RFP_CY5,
+            1225115: ImagingMode.TAG_BFP,
+            1225102: ImagingMode.TEXAS_RED,
+            1225104: ImagingMode.YFP,
+          }
+          if cytation_code not in cytation_code2imaging_mode:
+            self._filters.append(None)
+          else:
+            self._filters.append(cytation_code2imaging_mode[cytation_code])
 
       # -- Load objective information --
       await self._load_objectives()
