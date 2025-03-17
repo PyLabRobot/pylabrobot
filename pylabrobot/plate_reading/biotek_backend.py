@@ -170,14 +170,13 @@ class Cytation5Backend(ImageReaderBackend):
 
     # see if we need to adjust baudrate. This appears to be the case sometimes.
     try:
-      await self.send_command("e", timeout=0.5)
+      self._version = await self.get_firmware_version()
     except TimeoutError:
       self.io.set_baudrate(38_461)  # 4e c0
+      self._version = await self.get_firmware_version()
 
     self._shaking = False
     self._shaking_task: Optional[asyncio.Task] = None
-
-    self._version = await self.get_firmware_version()
 
     if use_cam:
       if not USE_PYSPIN:
