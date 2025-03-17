@@ -392,9 +392,9 @@ class Cytation5Backend(ImageReaderBackend):
         else:
           annulus_part_number = int(configuration.decode("latin").strip().split(" ")[0])
           annulus_part_number2objective = {
-            1320520: Objective.O_4X_PL_FL_PHASE,
-            1320521: Objective.O_20X_PL_FL_PHASE,
-            1322026: Objective.O_40X_PL_FL_PHASE,
+            1320520: Objective.O_4X_PL_FL_Phase,
+            1320521: Objective.O_20X_PL_FL_Phase,
+            1322026: Objective.O_40X_PL_FL_Phase,
           }
           self._objectives.append(annulus_part_number2objective[annulus_part_number])
     else:

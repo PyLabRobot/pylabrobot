@@ -29,7 +29,7 @@ class Objective(enum.Enum):
   O_20X_PL_APO = enum.auto()
 
   @property
-  def magnification(self) -> int:
+  def magnification(self) -> float:
     return {
       Objective.O_40X_PL_APO: 40,
       Objective.O_60X_PL_FL: 60,
