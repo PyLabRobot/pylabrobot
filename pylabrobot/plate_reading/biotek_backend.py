@@ -168,6 +168,12 @@ class Cytation5Backend(ImageReaderBackend):
     self.io.set_flowctrl(SIO_RTS_CTS_HS)
     self.io.set_rts(True)
 
+    # see if we need to adjust baudrate. This appears to be the case sometimes.
+    try:
+      await self.send_command("e", timeout=0.5)
+    except TimeoutError:
+      self.io.set_baudrate(38_461)  # 4e c0
+
     self._shaking = False
     self._shaking_task: Optional[asyncio.Task] = None
 
