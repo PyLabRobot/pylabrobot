@@ -5,16 +5,54 @@ Image = List[List[float]]
 
 
 class Objective(enum.Enum):
-  O_4x_PL_FL_PHASE = enum.auto()
-  O_20x_PL_FL_PHASE = enum.auto()
-  O_40x_PL_FL_PHASE = enum.auto()
+  O_40X_PL_APO = enum.auto()
+  O_60X_PL_FL = enum.auto()
+  O_4X_PL_FL = enum.auto()
+  O_20X_PL_FL_Phase = enum.auto()
+  O_40X_PL_FL_Phase = enum.auto()
+  O_2_5X_PL_ACH_Meiji = enum.auto()
+  O_10X_PL_FL_Phase = enum.auto()
+  O_1_25X_PL_APO = enum.auto()
+  O_10X_PL_FL = enum.auto()
+  O_60X_OIL_PL_FL = enum.auto()
+  O_4X_PL_ACH = enum.auto()
+  O_40X_PL_ACH = enum.auto()
+  O_40X_PL_FL = enum.auto()
+  O_2X_PL_ACH_Motic = enum.auto()
+  O_100X_OIL_PL_FL = enum.auto()
+  O_4X_PL_FL_Phase = enum.auto()
+  O_20X_PL_FL = enum.auto()
+  O_20X_PL_ACH = enum.auto()
+  O_2_5X_FL_Zeiss = enum.auto()
+  O_100X_OIL_PL_APO = enum.auto()
+  O_60X_OIL_PL_APO = enum.auto()
+  O_20X_PL_APO = enum.auto()
 
   @property
-  def magnification(self) -> int:
+  def magnification(self) -> float:
     return {
-      Objective.O_4x_PL_FL_PHASE: 4,
-      Objective.O_20x_PL_FL_PHASE: 20,
-      Objective.O_40x_PL_FL_PHASE: 40,
+      Objective.O_40X_PL_APO: 40,
+      Objective.O_60X_PL_FL: 60,
+      Objective.O_4X_PL_FL: 4,
+      Objective.O_20X_PL_FL_Phase: 20,
+      Objective.O_40X_PL_FL_Phase: 40,
+      Objective.O_2_5X_PL_ACH_Meiji: 2.5,
+      Objective.O_10X_PL_FL_Phase: 10,
+      Objective.O_1_25X_PL_APO: 1.25,
+      Objective.O_10X_PL_FL: 10,
+      Objective.O_60X_OIL_PL_FL: 60,
+      Objective.O_4X_PL_ACH: 4,
+      Objective.O_40X_PL_ACH: 40,
+      Objective.O_40X_PL_FL: 40,
+      Objective.O_2X_PL_ACH_Motic: 2,
+      Objective.O_100X_OIL_PL_FL: 100,
+      Objective.O_4X_PL_FL_Phase: 4,
+      Objective.O_20X_PL_FL: 20,
+      Objective.O_20X_PL_ACH: 20,
+      Objective.O_2_5X_FL_Zeiss: 2.5,
+      Objective.O_100X_OIL_PL_APO: 100,
+      Objective.O_60X_OIL_PL_APO: 60,
+      Objective.O_20X_PL_APO: 20,
     }[self]
 
 
