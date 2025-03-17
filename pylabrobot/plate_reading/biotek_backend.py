@@ -496,7 +496,7 @@ class Cytation5Backend(ImageReaderBackend):
 
   async def get_current_temperature(self) -> float:
     """Get current temperature in degrees Celsius."""
-    resp = await self.send_command("h")
+    resp = await self.send_command("h", timeout=1)
     assert resp is not None
     return int(resp[1:-1]) / 100000
 
