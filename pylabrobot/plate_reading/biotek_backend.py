@@ -1143,7 +1143,7 @@ class Cytation5Backend(ImageReaderBackend):
     await self.set_gain(gain)
     await self.set_focus(focal_height)
 
-    def image_size(magnification: int) -> Tuple[float, float]:
+    def image_size(magnification: float) -> Tuple[float, float]:
       # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
       # simply take the wide fov option.
       # um to mm (plr unit)
@@ -1153,7 +1153,7 @@ class Cytation5Backend(ImageReaderBackend):
         return (694 / 1000, 694 / 1000)
       if magnification == 40:
         return (347 / 1000, 347 / 1000)
-      raise ValueError("Invalid magnification")
+      raise ValueError(f"Don't know image size for magnification {magnification}")
 
     if self._objective is None:
       raise RuntimeError("Objective not set. Run set_objective() first.")
