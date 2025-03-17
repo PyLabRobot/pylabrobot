@@ -296,6 +296,9 @@ class Cytation5Backend(ImageReaderBackend):
       await self._load_objectives()
 
   async def _load_objectives(self):
+    if self._version is None:
+      raise RuntimeError("Firmware version is not set")
+
     if self._version.startswith("1"):
       for spot in [1, 2]:
         configuration = await self.send_command("i", f"o{spot}")
@@ -340,10 +343,13 @@ class Cytation5Backend(ImageReaderBackend):
           0x57: "Y",
           0x58: "Z",
         }
-        middle_part = re.split(r"\s+", configuration.decode())[1]
+        if configuration is None:
+          raise RuntimeError("Failed to load objective configuration")
+        # TODO: loading when no objective is set. I believe it's four 0s.
+        middle_part = re.split(r"\s+", configuration.decode("utf-8"))[1]
         # not the real part number, but it's what's used in the xml files. eg "UPLFLN"
         part_number = "".join([weird_encoding[x] for x in bytes.fromhex(middle_part)])
-        port_number2objective = {
+        part_number2objective = {
           "UPLSAPO 40X2": Objective.O_40X_PL_APO,
           "LUCPLFLN 60X": Objective.O_60X_PL_FL,
           "UPLFLN 4X": Objective.O_4X_PL_FL,
@@ -365,9 +371,9 @@ class Cytation5Backend(ImageReaderBackend):
           "Fluar 2.5x/0.12": Objective.O_2_5X_FL_Zeiss,
           "UPLSAPO 100XO": Objective.O_100X_OIL_PL_APO,
           "PLAPON 60XO": Objective.O_60X_OIL_PL_APO,
-          "UPLSAPO 20X": Objective.O_20X_PL_APO_,
+          "UPLSAPO 20X": Objective.O_20X_PL_APO,
         }
-        self._objectives.append(port_number2objective[part_number])
+        self._objectives.append(part_number2objective[part_number])
     elif self._version.startswith("2"):
       for spot in range(1, 7):
         # +1 for some reason, eg first is h2
@@ -378,9 +384,9 @@ class Cytation5Backend(ImageReaderBackend):
         else:
           annulus_part_number = int(configuration.decode("latin").strip().split(" ")[0])
           annulus_part_number2objective = {
-            1320520: Objective.O_4x_PL_FL_PHASE,
-            1320521: Objective.O_20x_PL_FL_PHASE,
-            1322026: Objective.O_40x_PL_FL_PHASE,
+            1320520: Objective.O_4X_PL_FL_PHASE,
+            1320521: Objective.O_20X_PL_FL_PHASE,
+            1322026: Objective.O_40X_PL_FL_PHASE,
           }
           self._objectives.append(annulus_part_number2objective[annulus_part_number])
     else:
