@@ -4,6 +4,11 @@ from pylabrobot.resources.coordinate import Coordinate
 
 
 def hamilton_heater_shaker(name: str, shaker_index: int) -> HeaterShaker:
+  """Physical resource definition for a Hamilton Heater Shaker (HHS). This function returns the
+  universal HeaterShaker interface, pre-configured with the `HamiltonHeaterShakerBackend` backend.
+
+  Hamilton cat. no.: 199034
+  """
   return HeaterShaker(
     name=name,
     size_x=146.2,
