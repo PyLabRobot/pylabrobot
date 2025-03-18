@@ -8,5 +8,4 @@ Machine is a backend'd Resource. Check out the contributing section for more inf
   :recursive:
 
     machine.Machine
-    backends.machine.MachineBackend
-    backends.usb.USBBackend
+    backend.MachineBackend

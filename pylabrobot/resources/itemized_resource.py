@@ -156,9 +156,13 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
       start, stop = identifier.start, identifier.stop
       if isinstance(identifier.start, str):
         start = self._ordering.index(identifier.start)
+      elif identifier.start is None:
+        start = 0
       if isinstance(identifier.stop, str):
         stop = self._ordering.index(identifier.stop)
-      identifier = list(range(start, stop))
+      elif identifier.stop is None:
+        stop = self.num_items
+      identifier = list(range(start, stop, identifier.step or 1))
       return self.get_items(identifier)
 
     if isinstance(identifier, (list, tuple)):
@@ -481,3 +485,11 @@ class ItemizedResource(Resource, Generic[T], metaclass=ABCMeta):
   @property
   def items(self) -> List[str]:
     raise NotImplementedError("Deprecated.")
+
+  def column(self, column: int) -> List[T]:
+    """Get all items in the given column."""
+    return self[column * self.num_items_y : (column + 1) * self.num_items_y]
+
+  def row(self, row: int) -> List[T]:
+    """Get all items in the given row."""
+    return self[row :: self.num_items_y]

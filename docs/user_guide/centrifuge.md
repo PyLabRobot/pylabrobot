@@ -137,15 +137,52 @@ To interact with the centrifuge programmatically, you need its FTDI device ID. U
 Use the following code to configure the centrifuge in Python:
 
 ```python
-from pylabrobot import Centrifuge
-from pylabrobot.backends.vspin import VSpin
+from pylabrobot.centrifuge import Centrifuge, VSpin
 
 # Replace with your specific FTDI device ID and bucket position for profile in Agilent Centrifuge Config Tool.
 backend = VSpin(bucket_1_position=6969, device_id="XXXXXXXX")
-centrifuge = Centrifuge(backend=backend)
+centrifuge = Centrifuge(
+   backend=backend,
+   name="centrifuge",
+   size_x=1, size_y=1, size_z=1
+)
 
 # Initialize the centrifuge.
 await centrifuge.setup()
 ```
 
 You’re now ready to use your VSpin centrifuge with `pylabrobot`!
+
+### Loader
+
+The VSpin can optionally be used with a loader (called Access2). The loader is optional because you can also use a robotic arm like an iSWAP to move a plate directly into the centrifuge.
+
+Here's how to use the loader:
+
+```python
+import asyncio
+
+from pylabrobot.centrifuge import Access2, VSpin
+v = VSpin(device_id="FTE1YWTI", bucket_1_position=1314) # bucket 1 position is empirically determined
+centrifuge, loader = Access2(name="name", vspin=v, device_id="FTE1YZC5")
+
+# initialize the centrifuge and loader in parallel
+await asyncio.gather(
+  centrifuge.setup(),
+  loader.setup()
+)
+
+# go to a bucket and open the door before loading
+await centrifuge.go_to_bucket1()
+await centrifuge.open_door()
+
+# assign a plate to the loader before loading. This can also be done implicitly by for example
+# lh.move_plate(plate, loader)
+from pylabrobot.resources import Cor_96_wellplate_360ul_Fb
+plate = Cor_96_wellplate_360ul_Fb(name="plate")
+loader.assign_child_resource(plate)
+
+# load and unload the plate
+await loader.load()
+await loader.unload()
+```
