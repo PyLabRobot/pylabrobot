@@ -52,6 +52,11 @@ PLR's `Resource` subclasses in the inheritance tree are:
 
 <table class="tree">
   <tr><td><a href="introduction.html">Resource</a></td></tr>
+  <!-- Arm subtree -->
+  <tr><td>├── <a href="deck/deck.html">Arm</a></td></tr>
+  <tr><td>│   ├── ArticulatedArm</td></tr>
+  <tr><td>│   ├── CartesianArm</td></tr>
+  <tr><td>│   └── SCARA</td></tr>
 
   <!-- Carrier subtree -->
   <tr><td>├── <a href="carrier/carrier.html">Carrier</a></td></tr>
@@ -61,11 +66,15 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>│   ├── <a href="carrier/trough-carrier/trough-carrier.html">TroughCarrier</a></td></tr>
   <tr><td>│   └── <a href="carrier/tube-carrier/tube-carrier.html">TubeCarrier</a></td></tr>
 
+  <tr><td>├── ChannelHeadTool</td></tr>
+  <tr><td>│   ├── <a href="container/trough/trough.html">Gripper</a></td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">Tip (to be made a resource)</a></td></tr>
+
   <!-- Container subtree -->
   <tr><td>├── <a href="container/container.html">Container</a></td></tr>
   <tr><td>│   ├── <a href="container/petri-dish/petri-dish.html">PetriDish</a></td></tr>
   <tr><td>│   ├── <a href="container/trough/trough.html">Trough</a></td></tr>
-  <tr><td>│   └── <a href="container/tube/tube.html">Tube</a></td></tr>
+  <tr><td>│   ├── <a href="container/tube/tube.html">Tube</a></td></tr>
   <tr><td>│   └── <a href="container/well/well.html">Well</a></td></tr>
 
   <!-- Deck subtree -->
@@ -74,7 +83,6 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>│   ├── HamiltonDeck</td></tr>
   <tr><td>│   └── TecanDeck</td></tr>
 
-  <tr><td>├── <a href="itemized-resource/itemized-resource.html">NestedTipRackStack (to be made)</a></td></tr>
 
   <!-- ItemizedResource subtree -->
   <tr><td>├── <a href="itemized-resource/itemized-resource.html">ItemizedResource</a></td></tr>
@@ -89,8 +97,10 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <!-- Others -->
   <tr><td>├── Lid</td></tr>
   <tr><td>├── <a href="plate-adapter/plate-adapter.html">PlateAdapter</a></td></tr>
+
   <tr><td>├── ResourceStack</td></tr>
-  <tr><td>├── Tip (to be made a resource)</td></tr>
+  <tr><td>│   └── <a href="resource-holder/plate-holder/plate-holder.html">NestedTipRackStack (to be made)</a></td></tr>
+
   <tr><td>└── Workcell (to be made)</td></tr>
 </table>
 
