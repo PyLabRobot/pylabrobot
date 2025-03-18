@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.abspath(".."))
 # -- Project information -----------------------------------------------------
 
 project = "PyLabRobot"
-copyright = "2024, PyLabRobot"
+copyright = "2025, PyLabRobot"
 author = "The PyLabRobot authors"
 
 
@@ -169,8 +169,13 @@ redirects = {
 
 html_baseurl = "https://docs.pylabrobot.org/"
 
+suppress_warnings = []
 if tags.has("no-api"):
   exclude_patterns.append("api/**")
-  suppress_warnings = ["toc.excluded"]
+  suppress_warnings.append("toc.excluded")
+
+suppress_warnings.append(
+  "autosectionlabel.*"
+)
 
 html_favicon = "_static/favicon.ico"

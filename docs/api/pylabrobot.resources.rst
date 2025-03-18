@@ -42,7 +42,7 @@ Azenta
   :nosignatures:
   :recursive:
 
-    corning_axygen.plates
+    azenta.plates
 
 
 Biorad
@@ -75,7 +75,7 @@ Corning Axygen
   :nosignatures:
   :recursive:
 
-    corning_axygen.plates
+    corning.axygen.plates
 
 
 Corning Costar
@@ -86,18 +86,18 @@ Corning Costar
   :nosignatures:
   :recursive:
 
-    corning_costar.plates
+    corning.costar.plates
 
 
-Falcon
-------
+Corning Falcon
+--------------
 
 .. autosummary::
   :toctree: _autosummary
   :nosignatures:
   :recursive:
 
-    falcon.tubes
+    corning.falcon.tubes
 
 
 Hamilton

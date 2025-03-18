@@ -2,7 +2,7 @@ import unittest
 
 from pylabrobot.resources import (
   CellVis_24_wellplate_3600uL_Fb,
-  Cor_6_wellplate_16800ul_Fb,
+  Cor_Cos_6_wellplate_16800ul_Fb,
   Revvity_384_wellplate_28ul_Ub,
   Thermo_TS_96_wellplate_1200ul_Rb,
 )
@@ -60,7 +60,7 @@ class TestLid(unittest.TestCase):
 
 class TestQuadrants(unittest.TestCase):
   def setUp(self):
-    self.example_6_wellplate = Cor_6_wellplate_16800ul_Fb(name="example_6_wellplate")
+    self.example_6_wellplate = Cor_Cos_6_wellplate_16800ul_Fb(name="example_6_wellplate")
     self.example_24_wellplate = CellVis_24_wellplate_3600uL_Fb(name="example_24_wellplate")
     self.example_96_wellplate = Thermo_TS_96_wellplate_1200ul_Rb(name="example_96_wellplate")
     self.example_384_wellplate = Revvity_384_wellplate_28ul_Ub(name="example_384_wellplate")

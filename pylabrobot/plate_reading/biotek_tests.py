@@ -25,6 +25,7 @@ class TestCytation5Backend(unittest.IsolatedAsyncioTestCase):
     self.plate = CellVis_24_wellplate_3600uL_Fb(name="plate")
 
   async def test_setup(self):
+    self.backend.io.read.side_effect = _byte_iter("\x061650200  Version 1.04   0000\x03")
     await self.backend.setup()
     assert self.backend.io.setup.called
     self.backend.io.usb_reset.assert_called_once()

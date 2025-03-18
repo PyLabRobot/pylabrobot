@@ -2,6 +2,7 @@ import asyncio
 import enum
 import logging
 import math
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
@@ -141,6 +142,7 @@ class Cytation5Backend(ImageReaderBackend):
     self.imaging_config = imaging_config or Cytation5ImagingConfig()
     self._filters: List[Optional[ImagingMode]] = []
     self._objectives: List[Optional[Objective]] = []
+    self._version: Optional[str] = None
 
     self._plate: Optional[Plate] = None
     self._exposure: Optional[Exposure] = None
@@ -165,6 +167,13 @@ class Cytation5Backend(ImageReaderBackend):
     SIO_RTS_CTS_HS = 0x1 << 8
     self.io.set_flowctrl(SIO_RTS_CTS_HS)
     self.io.set_rts(True)
+
+    # see if we need to adjust baudrate. This appears to be the case sometimes.
+    try:
+      self._version = await self.get_firmware_version()
+    except TimeoutError:
+      self.io.set_baudrate(38_461)  # 4e c0
+      self._version = await self.get_firmware_version()
 
     self._shaking = False
     self._shaking_task: Optional[asyncio.Task] = None
@@ -257,38 +266,123 @@ class Cytation5Backend(ImageReaderBackend):
       for spot in range(1, 5):
         configuration = await self.send_command("i", f"q{spot}")
         assert configuration is not None
-        # TODO: what happens when the filter is not set?
-        cytation_code = int(configuration.decode().strip().split(" ")[0])
-        cytation_code2imaging_mode = {
-          1225121: ImagingMode.C377_647,
-          1225123: ImagingMode.C400_647,
-          1225113: ImagingMode.C469_593,
-          1225109: ImagingMode.ACRIDINE_ORANGE,
-          1225107: ImagingMode.CFP,
-          1225118: ImagingMode.CFP_FRET_V2,
-          1225110: ImagingMode.CFP_YFP_FRET,
-          1225119: ImagingMode.CFP_YFP_FRET_V2,
-          1225112: ImagingMode.CHLOROPHYLL_A,
-          1225105: ImagingMode.CY5,
-          1225114: ImagingMode.CY5_5,
-          1225106: ImagingMode.CY7,
-          1225100: ImagingMode.DAPI,
-          1225101: ImagingMode.GFP,
-          1225116: ImagingMode.GFP_CY5,
-          1225122: ImagingMode.OXIDIZED_ROGFP2,
-          1225111: ImagingMode.PROPOIDIUM_IODIDE,
-          1225103: ImagingMode.RFP,
-          1225117: ImagingMode.RFP_CY5,
-          1225115: ImagingMode.TAG_BFP,
-          1225102: ImagingMode.TEXAS_RED,
-          1225104: ImagingMode.YFP,
-        }
-        if cytation_code not in cytation_code2imaging_mode:
+        parts = configuration.decode().strip().split(" ")
+        if len(parts) == 1:
           self._filters.append(None)
         else:
-          self._filters.append(cytation_code2imaging_mode[cytation_code])
+          cytation_code = int(parts[0])
+          cytation_code2imaging_mode = {
+            1225121: ImagingMode.C377_647,
+            1225123: ImagingMode.C400_647,
+            1225113: ImagingMode.C469_593,
+            1225109: ImagingMode.ACRIDINE_ORANGE,
+            1225107: ImagingMode.CFP,
+            1225118: ImagingMode.CFP_FRET_V2,
+            1225110: ImagingMode.CFP_YFP_FRET,
+            1225119: ImagingMode.CFP_YFP_FRET_V2,
+            1225112: ImagingMode.CHLOROPHYLL_A,
+            1225105: ImagingMode.CY5,
+            1225114: ImagingMode.CY5_5,
+            1225106: ImagingMode.CY7,
+            1225100: ImagingMode.DAPI,
+            1225101: ImagingMode.GFP,
+            1225116: ImagingMode.GFP_CY5,
+            1225122: ImagingMode.OXIDIZED_ROGFP2,
+            1225111: ImagingMode.PROPOIDIUM_IODIDE,
+            1225103: ImagingMode.RFP,
+            1225117: ImagingMode.RFP_CY5,
+            1225115: ImagingMode.TAG_BFP,
+            1225102: ImagingMode.TEXAS_RED,
+            1225104: ImagingMode.YFP,
+          }
+          if cytation_code not in cytation_code2imaging_mode:
+            self._filters.append(None)
+          else:
+            self._filters.append(cytation_code2imaging_mode[cytation_code])
 
       # -- Load objective information --
+      await self._load_objectives()
+
+  async def _load_objectives(self):
+    if self._version is None:
+      raise RuntimeError("Firmware version is not set")
+
+    if self._version.startswith("1"):
+      for spot in [1, 2]:
+        configuration = await self.send_command("i", f"o{spot}")
+        weird_encoding = {  # ?
+          0x00: " ",
+          0x14: ".",
+          0x15: "/",
+          0x16: "0",
+          0x17: "1",
+          0x18: "2",
+          0x19: "3",
+          0x20: "4",
+          0x21: "5",
+          0x22: "6",
+          0x23: "7",
+          0x24: "8",
+          0x25: "9",
+          0x33: "A",
+          0x34: "B",
+          0x35: "C",
+          0x36: "D",
+          0x37: "E",
+          0x38: "F",
+          0x39: "G",
+          0x40: "H",
+          0x41: "I",
+          0x42: "J",
+          0x43: "K",
+          0x44: "L",
+          0x45: "M",
+          0x46: "N",
+          0x47: "O",
+          0x48: "P",
+          0x49: "Q",
+          0x50: "R",
+          0x51: "S",
+          0x52: "T",
+          0x53: "U",
+          0x54: "V",
+          0x55: "W",
+          0x56: "X",
+          0x57: "Y",
+          0x58: "Z",
+        }
+        if configuration is None:
+          raise RuntimeError("Failed to load objective configuration")
+        # TODO: loading when no objective is set. I believe it's four 0s.
+        middle_part = re.split(r"\s+", configuration.decode("utf-8"))[1]
+        # not the real part number, but it's what's used in the xml files. eg "UPLFLN"
+        part_number = "".join([weird_encoding[x] for x in bytes.fromhex(middle_part)])
+        part_number2objective = {
+          "UPLSAPO 40X2": Objective.O_40X_PL_APO,
+          "LUCPLFLN 60X": Objective.O_60X_PL_FL,
+          "UPLFLN 4X": Objective.O_4X_PL_FL,
+          "LUCPLFLN 20XPh": Objective.O_20X_PL_FL_Phase,
+          "LUCPLFLN 40XPh": Objective.O_40X_PL_FL_Phase,
+          "U PLAN": Objective.O_2_5X_PL_ACH_Meiji,
+          "UPLFLN 10XPh": Objective.O_10X_PL_FL_Phase,
+          "PLAPON 1.25X": Objective.O_1_25X_PL_APO,
+          "UPLFLN 10X": Objective.O_10X_PL_FL,
+          "UPLFLN 60XOI": Objective.O_60X_OIL_PL_FL,
+          "PLN 4X": Objective.O_4X_PL_ACH,
+          "PLN 40X": Objective.O_40X_PL_ACH,
+          "LUCPLFLN 40X": Objective.O_40X_PL_FL,
+          "EC-H-Plan/2x": Objective.O_2X_PL_ACH_Motic,
+          "UPLFLN 100XO2": Objective.O_100X_OIL_PL_FL,
+          "UPLFLN 4XPh": Objective.O_4X_PL_FL_Phase,
+          "LUCPLFLN 20X": Objective.O_20X_PL_FL,
+          "PLN 20X": Objective.O_20X_PL_ACH,
+          "FLUAR 2.5X/0.12": Objective.O_2_5X_FL_Zeiss,
+          "UPLSAPO 100XO": Objective.O_100X_OIL_PL_APO,
+          "PLAPON 60XO": Objective.O_60X_OIL_PL_APO,
+          "UPLSAPO 20X": Objective.O_20X_PL_APO,
+        }
+        self._objectives.append(part_number2objective[part_number])
+    elif self._version.startswith("2"):
       for spot in range(1, 7):
         # +1 for some reason, eg first is h2
         configuration = await self.send_command("i", f"h{spot + 1}")
@@ -298,11 +392,13 @@ class Cytation5Backend(ImageReaderBackend):
         else:
           annulus_part_number = int(configuration.decode("latin").strip().split(" ")[0])
           annulus_part_number2objective = {
-            1320520: Objective.O_4x_PL_FL_PHASE,
-            1320521: Objective.O_20x_PL_FL_PHASE,
-            1322026: Objective.O_40x_PL_FL_PHASE,
+            1320520: Objective.O_4X_PL_FL_Phase,
+            1320521: Objective.O_20X_PL_FL_Phase,
+            1322026: Objective.O_40X_PL_FL_Phase,
           }
           self._objectives.append(annulus_part_number2objective[annulus_part_number])
+    else:
+      raise RuntimeError(f"Unsupported version: {self._version}")
 
   async def stop(self) -> None:
     logger.info("[cytation5] stopping")
@@ -378,7 +474,7 @@ class Cytation5Backend(ImageReaderBackend):
   async def get_firmware_version(self) -> str:
     resp = await self.send_command("e", timeout=1)
     assert resp is not None
-    return " ".join(resp[1:-1].decode().split(" ")[0:4])
+    return " ".join(resp[1:-1].decode().split(" ")[3:4])
 
   async def _set_slow_mode(self, slow: bool):
     await self.send_command("&", "S1" if slow else "S0")
@@ -399,7 +495,7 @@ class Cytation5Backend(ImageReaderBackend):
 
   async def get_current_temperature(self) -> float:
     """Get current temperature in degrees Celsius."""
-    resp = await self.send_command("h")
+    resp = await self.send_command("h", timeout=1)
     assert resp is not None
     return int(resp[1:-1]) / 100000
 
@@ -1047,7 +1143,7 @@ class Cytation5Backend(ImageReaderBackend):
     await self.set_gain(gain)
     await self.set_focus(focal_height)
 
-    def image_size(magnification: int) -> Tuple[float, float]:
+    def image_size(magnification: float) -> Tuple[float, float]:
       # "wide fov" is an option in gen5.exe, but in reality it takes the same pictures. So we just
       # simply take the wide fov option.
       # um to mm (plr unit)
@@ -1057,7 +1153,7 @@ class Cytation5Backend(ImageReaderBackend):
         return (694 / 1000, 694 / 1000)
       if magnification == 40:
         return (347 / 1000, 347 / 1000)
-      raise ValueError("Invalid magnification")
+      raise ValueError(f"Don't know image size for magnification {magnification}")
 
     if self._objective is None:
       raise RuntimeError("Objective not set. Run set_objective() first.")
