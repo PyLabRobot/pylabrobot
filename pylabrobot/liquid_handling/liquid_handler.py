@@ -726,7 +726,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
-    spread: Literal["wide", "tight"] = "wide",
+    spread: Literal["wide", "tight", "custom"] = "wide",
     **backend_kwargs,
   ):
     """Aspirate liquid from the specified wells.
@@ -773,7 +773,8 @@ class LiquidHandler(Resource, Machine):
         backend default will be used.
       spread: Used if aspirating from a single resource with multiple channels. If "tight", the
         channels will be spaced as close as possible. If "wide", the channels will be spaced as far
-        apart as possible.
+        apart as possible. If "custom", the user must specify the offsets wrt the center of the
+        resource.
       backend_kwargs: Additional keyword arguments for the backend, optional.
 
     Raises:
@@ -819,10 +820,14 @@ class LiquidHandler(Resource, Machine):
         center_offsets = get_tight_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )
-      else:  # wide
+      elif spread == "wide":
         center_offsets = get_wide_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )
+      elif spread == "custom":
+        center_offsets = [Coordinate.zero()] * len(use_channels)
+      else:
+        raise ValueError("Invalid value for 'spread'. Must be 'tight', 'wide', or 'custom'.")
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
@@ -928,7 +933,7 @@ class LiquidHandler(Resource, Machine):
     offsets: Optional[List[Coordinate]] = None,
     liquid_height: Optional[List[Optional[float]]] = None,
     blow_out_air_volume: Optional[List[Optional[float]]] = None,
-    spread: Literal["wide", "tight"] = "wide",
+    spread: Literal["wide", "tight", "custom"] = "wide",
     **backend_kwargs,
   ):
     """Dispense liquid to the specified channels.
@@ -1013,10 +1018,14 @@ class LiquidHandler(Resource, Machine):
         center_offsets = get_tight_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )
-      else:
+      elif spread == "wide":
         center_offsets = get_wide_single_resource_liquid_op_offsets(
           resource=resource, num_channels=len(use_channels)
         )
+      elif spread == "custom":
+        center_offsets = [Coordinate.zero()] * len(use_channels)
+      else:
+        raise ValueError("Invalid value for 'spread'. Must be 'tight', 'wide', or 'custom'.")
 
       # add user defined offsets to the computed centers
       offsets = [c + o for c, o in zip(center_offsets, offsets)]
