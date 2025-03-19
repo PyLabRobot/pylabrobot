@@ -1893,35 +1893,28 @@ class LiquidHandler(Resource, Machine):
       to_location = destination.get_absolute_location(z="top")
     elif isinstance(destination, Coordinate):
       to_location = destination
-    elif isinstance(destination, Tilter):
-      to_location = destination.get_absolute_location() + destination.get_default_child_location(
-        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
-    elif isinstance(destination, PlateHolder):
+    elif isinstance(destination, ResourceHolder):
       if destination.resource is not None and destination.resource is not resource:
         raise RuntimeError("Destination already has a plate")
-      to_location = (destination.get_absolute_location()) + destination.get_default_child_location(
+      child_wrt_parent = destination.get_default_child_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
+      ).rotated(destination.get_absolute_rotation())
+      to_location = (destination.get_absolute_location()) + child_wrt_parent
     elif isinstance(destination, PlateAdapter):
       if not isinstance(resource, Plate):
         raise ValueError("Only plates can be moved to a PlateAdapter")
       # Calculate location adjustment of Plate based on PlateAdapter geometry
       adjusted_plate_anchor = destination.compute_plate_location(
         resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
+      ).rotated(destination.get_absolute_rotation())
       to_location = destination.get_absolute_location() + adjusted_plate_anchor
-    elif isinstance(destination, ResourceHolder):
-      x = destination.get_default_child_location(
-        resource.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
-      to_location = destination.get_absolute_location() + x
     elif isinstance(destination, Plate) and isinstance(resource, Lid):
       lid = resource
       plate_location = destination.get_absolute_location()
-      to_location = plate_location + destination.get_lid_location(
+      child_wrt_parent = destination.get_lid_location(
         lid.rotated(z=resource_rotation_wrt_destination_wrt_local)
-      )
+      ).rotated(destination.get_absolute_rotation())
+      to_location = plate_location + child_wrt_parent
     else:
       to_location = destination.get_absolute_location()
 

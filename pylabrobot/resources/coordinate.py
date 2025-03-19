@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pylabrobot.resources.rotation import Rotation
+from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
+
 
 @dataclass
 class Coordinate:
@@ -48,3 +51,7 @@ class Coordinate:
 
   def __iter__(self):
     return iter((self.x, self.y, self.z))
+
+  def rotated(self, rotation: Rotation) -> Coordinate:
+    """Rotate the coordinate by the given rotation around the origin."""
+    return Coordinate(*matrix_vector_multiply_3x3(rotation.get_rotation_matrix(), self.vector()))

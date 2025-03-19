@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, cast
 
-from pylabrobot.resources.resource_holder import ResourceHolder
+from pylabrobot.resources.resource_holder import ResourceHolder, get_child_location
 
 from .coordinate import Coordinate
 from .plate import Plate
@@ -45,7 +45,7 @@ class Carrier(Resource, Generic[S]):
     for spot, site in sites.items():
       if site.location is None:
         raise ValueError(f"site {site} has no location")
-      self.assign_child_resource(site, location=site.location, spot=spot)
+      self.assign_child_resource(site, location=site.location + get_child_location(site), spot=spot)
 
   @property
   def capacity(self):
