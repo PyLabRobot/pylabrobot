@@ -54,9 +54,4 @@ class Coordinate:
 
   def rotated(self, rotation: Rotation) -> Coordinate:
     """Rotate the coordinate by the given rotation around the origin."""
-    return Coordinate(
-      *matrix_vector_multiply_3x3(
-        rotation.get_rotation_matrix(),
-        self.vector()
-      )
-    )
+    return Coordinate(*matrix_vector_multiply_3x3(rotation.get_rotation_matrix(), self.vector()))

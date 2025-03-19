@@ -2801,7 +2801,9 @@ class STAR(HamiltonLiquidHandler):
         else:
           plate_width = pickup.resource.get_absolute_size_y()
 
-      center_in_absolute_space = pickup.resource.center().rotated(pickup.resource.get_absolute_rotation())
+      center_in_absolute_space = pickup.resource.center().rotated(
+        pickup.resource.get_absolute_rotation()
+      )
       x, y, z = (
         pickup.resource.get_absolute_location("l", "f", "t")
         + center_in_absolute_space
@@ -2929,7 +2931,9 @@ class STAR(HamiltonLiquidHandler):
     # The resource is moved by drop.rotation
     # The new resource absolute location is
     # drop.resource.get_absolute_rotation().z + drop.rotation
-    center_in_absolute_space = drop.resource.center().rotated(Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation))
+    center_in_absolute_space = drop.resource.center().rotated(
+      Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation)
+    )
     x, y, z = drop.destination + center_in_absolute_space + drop.offset
 
     if use_arm == "iswap":
