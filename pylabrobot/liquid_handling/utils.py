@@ -11,11 +11,14 @@ def _get_centers_with_margin(dim_size: float, n: int, margin: float, min_spacing
   if dim_size - (n - 1) * min_spacing <= min_spacing * 2:
     remaining_space = dim_size - (n - 1) * min_spacing - margin * 2
     return [margin + remaining_space / 2 + i * min_spacing for i in range(n)]
-  return [(i + 1) * dim_size / (n + 1) for i in range(n)]
+  start = margin
+  end = dim_size - margin
+  step = (end - start) / (n - 1) if n > 1 else 0
+  return [start + i * step for i in range(n)]
 
 
 def get_wide_single_resource_liquid_op_offsets(
-  resource: Resource, num_channels: int
+  resource: Resource, num_channels: int,
 ) -> List[Coordinate]:
   min_spacing_edge = (
     2  # minimum spacing between the edge of the container and the center of channel
@@ -45,13 +48,17 @@ def get_wide_single_resource_liquid_op_offsets(
   if resource.get_absolute_rotation().z % 180 == 0:
     x_offset = resource.get_size_x() / 2
     center_offsets = [Coordinate(x=x_offset, y=c, z=0) for c in centers]
+    offsets_relative_to_center = [c - resource.center() for c in center_offsets]
   elif resource.get_absolute_rotation().z % 90 == 0:
-    y_offset = resource.get_size_y() / 2
-    center_offsets = [Coordinate(x=c, y=y_offset, z=0) for c in centers]
+    x_offset = resource.get_absolute_size_x() / 2
+    center_offsets = [Coordinate(x=x_offset, y=c, z=0) for c in centers]
+    offsets_relative_to_center = [c - resource.center() for c in center_offsets]
+  print(center_offsets)
+  print(offsets_relative_to_center)
 
   # offsets are relative to the center of the resource, but above we computed them wrt lfb
   # so we need to subtract the center of the resource
-  return [c - resource.center() for c in center_offsets]
+  return offsets_relative_to_center
 
 
 def get_tight_single_resource_liquid_op_offsets(
@@ -66,14 +73,14 @@ def get_tight_single_resource_liquid_op_offsets(
 
   # offsets are in absolute space.
   if resource.get_absolute_rotation().z % 180 == 0:
-    min_y = (resource.get_size_y() - channel_space) / 2
+    min_y = (resource.get_absolute_size_y() - channel_space) / 2
     if min_y < min_spacing_edge:
       raise ValueError("Resource is too small to space channels.")
     offsets = [
       Coordinate(0, min_y + i * min_spacing_between_channels, 0) for i in range(num_channels)
     ][::-1]
   elif resource.get_absolute_rotation().z % 90 == 0:
-    min_x = (resource.get_size_x() - channel_space) / 2
+    min_x = (resource.get_absolute_size_x() - channel_space) / 2
     offsets = [
       Coordinate(0, min_x + i * min_spacing_between_channels, 0) for i in range(num_channels)
     ][::-1]
