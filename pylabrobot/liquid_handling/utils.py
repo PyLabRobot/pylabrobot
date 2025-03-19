@@ -53,8 +53,6 @@ def get_wide_single_resource_liquid_op_offsets(
     x_offset = resource.get_absolute_size_x() / 2
     center_offsets = [Coordinate(x=x_offset, y=c, z=0) for c in centers]
     offsets_relative_to_center = [c - resource.center() for c in center_offsets]
-  print(center_offsets)
-  print(offsets_relative_to_center)
 
   # offsets are relative to the center of the resource, but above we computed them wrt lfb
   # so we need to subtract the center of the resource
