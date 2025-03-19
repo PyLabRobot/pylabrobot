@@ -74,7 +74,6 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
-from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 T = TypeVar("T")
 
