@@ -376,7 +376,7 @@ class Cytation5Backend(ImageReaderBackend):
           "UPLFLN 4XPh": Objective.O_4X_PL_FL_Phase,
           "LUCPLFLN 20X": Objective.O_20X_PL_FL,
           "PLN 20X": Objective.O_20X_PL_ACH,
-          "FLUAR 2.5x/0.12": Objective.O_2_5X_FL_Zeiss,
+          "FLUAR 2.5X/0.12": Objective.O_2_5X_FL_Zeiss,
           "UPLSAPO 100XO": Objective.O_100X_OIL_PL_APO,
           "PLAPON 60XO": Objective.O_60X_OIL_PL_APO,
           "UPLSAPO 20X": Objective.O_20X_PL_APO,

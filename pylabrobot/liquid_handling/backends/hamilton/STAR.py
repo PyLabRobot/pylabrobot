@@ -74,7 +74,6 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
-from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 T = TypeVar("T")
 
@@ -2727,7 +2726,6 @@ class STAR(HamiltonLiquidHandler):
     location: Coordinate,
     resource: Resource,
     pickup_distance_from_top: float,
-    offset: Coordinate = Coordinate.zero(),
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     z_position_at_the_command_end: Optional[float] = None,
     return_tool: bool = True,
@@ -2748,14 +2746,15 @@ class STAR(HamiltonLiquidHandler):
     """
 
     # Get center of destination location. Also gripping height and plate width.
-    center = location + resource.center() + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
+    grip_height = location.z + resource.get_absolute_size_z() - pickup_distance_from_top
     grip_width = resource.get_absolute_size_y()
 
+    print("core_release loc", location)
+
     await self.core_put_plate(
-      x_position=round(center.x * 10),
+      x_position=round(location.x * 10),
       x_direction=0,
-      y_position=round(center.y * 10),
+      y_position=round(location.y * 10),
       z_position=round(grip_height * 10),
       z_press_on_distance=0,
       z_speed=500,
@@ -2801,11 +2800,8 @@ class STAR(HamiltonLiquidHandler):
         else:
           plate_width = pickup.resource.get_absolute_size_y()
 
-      center_in_absolute_space = Coordinate(
-        *matrix_vector_multiply_3x3(
-          pickup.resource.get_absolute_rotation().get_rotation_matrix(),
-          pickup.resource.center().vector(),
-        )
+      center_in_absolute_space = pickup.resource.center().rotated(
+        pickup.resource.get_absolute_rotation()
       )
       x, y, z = (
         pickup.resource.get_absolute_location("l", "f", "t")
@@ -2924,6 +2920,21 @@ class STAR(HamiltonLiquidHandler):
     use_unsafe_hotel: bool = False,
     iswap_collision_control_level: int = 0,
   ):
+    # Get center of source plate in absolute space.
+    # The computation of the center has to be rotated so that the offset is in absolute space.
+    # center_in_absolute_space will be the vector pointing from the destination origin to the
+    # center of the moved the resource after drop.
+    # This means that the center vector has to be rotated from the child local space by the
+    # new child absolute rotation. The moved resource's rotation will be the original child
+    # rotation plus the rotation applied by the movement.
+    # The resource is moved by drop.rotation
+    # The new resource absolute location is
+    # drop.resource.get_absolute_rotation().z + drop.rotation
+    center_in_absolute_space = drop.resource.center().rotated(
+      Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation)
+    )
+    x, y, z = drop.destination + center_in_absolute_space + drop.offset
+
     if use_arm == "iswap":
       traversal_height_start = (
         minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
@@ -2949,24 +2960,6 @@ class STAR(HamiltonLiquidHandler):
       else:
         raise ValueError("Invalid grip direction")
 
-      # Get center of source plate in absolute space.
-      # The computation of the center has to be rotated so that the offset is in absolute space.
-      # center_in_absolute_space will be the vector pointing from the destination origin to the
-      # center of the moved the resource after drop.
-      # This means that the center vector has to be rotated from the child local space by the
-      # new child absolute rotation. The moved resource's rotation will be the original child
-      # rotation plus the rotation applied by the movement.
-      # The resource is moved by drop.rotation
-      # The new resource absolute location is
-      # drop.resource.get_absolute_rotation().z + drop.rotation
-      center_in_absolute_space = Coordinate(
-        *matrix_vector_multiply_3x3(
-          Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation).get_rotation_matrix(),
-          drop.resource.center().vector(),
-        )
-      )
-
-      x, y, z = drop.destination + center_in_absolute_space + drop.offset
       z = z + drop.resource.get_absolute_size_z() - drop.pickup_distance_from_top
 
       if open_gripper_position is None:
@@ -3021,9 +3014,8 @@ class STAR(HamiltonLiquidHandler):
         raise ValueError("Cannot use iswap hotel mode with core grippers")
 
       await self.core_release_picked_up_resource(
-        location=drop.destination,
+        location=Coordinate(x, y, z),
         resource=drop.resource,
-        offset=drop.offset,
         pickup_distance_from_top=drop.pickup_distance_from_top,
         minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         z_position_at_the_command_end=self._iswap_traversal_height,
