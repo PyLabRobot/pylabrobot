@@ -6,7 +6,7 @@ from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, cast
 from pylabrobot.resources.resource_holder import ResourceHolder, get_child_location
 
 from .coordinate import Coordinate
-from .plate import Plate
+from .plate import Lid, Plate
 from .plate_adapter import PlateAdapter
 from .resource import Resource
 from .resource_stack import ResourceStack
@@ -186,7 +186,7 @@ class PlateHolder(ResourceHolder):
           "If a ResourceStack is assigned to a PlateHolder, the items "
           + f"must be Plates, not {type(resource.children[-1])}"
         )
-    elif not isinstance(resource, (Plate, PlateAdapter)):
+    elif not isinstance(resource, (Plate, PlateAdapter, Lid)):
       raise TypeError(
         "PlateHolder can only store Plate, PlateAdapter or ResourceStack "
         + f"resources, not {type(resource)}"
