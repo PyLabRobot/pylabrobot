@@ -51,8 +51,8 @@ def AGenBio_96_wellplate_Ub_2200ul(name: str, lid: Optional[Lid] = None) -> Plat
       Well,
       num_items_x=12,
       num_items_y=8,
-      dx=11.00,  # measured
-      dy=8.00,  # measured
+      dx=9.38,  # measured
+      dy=6.24,  # measured
       dz=3.8,  # measured
       item_dx=9,
       item_dy=9,
