@@ -119,8 +119,8 @@ class Cytation5ImagingConfig:
   max_image_read_attempts: int = 8
 
   # if not specified, these will be loaded from machine configuration (register with gen5.exe)
-  objectives: Optional[List[Objective]] = None
-  filters: Optional[List[ImagingMode]] = None
+  objectives: Optional[List[Optional[Objective]]] = None
+  filters: Optional[List[Optional[ImagingMode]]] = None
 
 
 class Cytation5Backend(ImageReaderBackend):
@@ -274,7 +274,26 @@ class Cytation5Backend(ImageReaderBackend):
       if self._objectives is None:
         await self._load_objectives()
 
+  @property
+  def version(self) -> str:
+    if self._version is None:
+      raise RuntimeError("Firmware version is not set")
+    return self._version
+
+  @property
+  def objectives(self) -> List[Optional[Objective]]:
+    if self._objectives is None:
+      raise RuntimeError("Objectives are not set")
+    return self._objectives
+
+  @property
+  def filters(self) -> List[Optional[ImagingMode]]:
+    if self._filters is None:
+      raise RuntimeError("Filters are not set")
+    return self._filters
+
   async def _load_filters(self):
+    self._filters = []
     for spot in range(1, 5):
       configuration = await self.send_command("i", f"q{spot}")
       assert configuration is not None
@@ -312,25 +331,8 @@ class Cytation5Backend(ImageReaderBackend):
         else:
           self._filters.append(cytation_code2imaging_mode[cytation_code])
 
-  @property
-  def version(self) -> str:
-    if self._version is None:
-      raise RuntimeError("Firmware version is not set")
-    return self._version
-
-  @property
-  def objectives(self) -> List[Optional[Objective]]:
-    if self._objectives is None:
-      raise RuntimeError("Objectives are not set")
-    return self._objectives
-
-  @property
-  def filters(self) -> List[Optional[ImagingMode]]:
-    if self._filters is None:
-      raise RuntimeError("Filters are not set")
-    return self._filters
-
   async def _load_objectives(self):
+    self._objectives = []
     if self.version.startswith("1"):
       for spot in [1, 2]:
         configuration = await self.send_command("i", f"o{spot}")
