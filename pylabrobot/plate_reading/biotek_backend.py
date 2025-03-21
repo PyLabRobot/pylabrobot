@@ -1009,7 +1009,11 @@ class Cytation5Backend(ImageReaderBackend):
       raise RuntimeError("Need to set imaging_config first")
 
     objective_code = self._objective_code(objective)
-    await self.send_command("Y", f"P0e{objective_code:02}", timeout=60)
+
+    if self._version.startswith("1"):
+      await self.send_command("Y", f"P0d{objective_code:02}", timeout=60)
+    else:
+      await self.send_command("Y", f"P0e{objective_code:02}", timeout=60)
 
     self._objective = objective
 
