@@ -80,8 +80,8 @@ def MFX_CAR_P3_SHAKER(name: str, modules: Dict[int, ResourceHolder]) -> MFXCarri
   """
   locations = [
     Coordinate(26.85, 0, 8.0),
-    Coordinate(26.85, 146.2 + 19, 8.0),
-    Coordinate(26.85, (146.2 + 19) * 2, 8.0),
+    Coordinate(26.85, 146.2 + 19.2, 8.0),
+    Coordinate(26.85, (146.2) * 2 + 19.2 + 12.6, 8.0),
   ]
   sites: Dict[int, ResourceHolder] = {}
   for i, module in modules.items():
