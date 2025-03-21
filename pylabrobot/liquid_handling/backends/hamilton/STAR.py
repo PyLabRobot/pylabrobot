@@ -7659,7 +7659,6 @@ class STAR(HamiltonLiquidHandler):
           channel_locations[channel_idx + 1] = channel_locations[channel_idx] - 9
 
     # Quick checks before movement.
-    print("try", channel_locations)
     if channel_locations[0] > 650:
       raise ValueError("Channel 0 would hit the back of the robot")
 

@@ -671,7 +671,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       size_y=0,
       size_z=0,
     )
-    self.lh.deck.assign_child_resource(
+    self.deck.assign_child_resource(
       plate_reader, location=Coordinate(1000, 264.7, 200 - 3.03)
     )  # 666: 00002
 
@@ -736,8 +736,8 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     stacking_area = ResourceStack("stacking_area", direction="z")
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
-    # self.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
-    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2 - 3.33))
+    # f.lh.deck.assign_child_resource(hotel, location=Coordinate(6, 414-63, 231.7 - 100 +4.5))
+    self.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2 - 3.33))
 
     assert self.plate.lid is not None
     await self.lh.move_lid(self.plate.lid, stacking_area)
@@ -770,7 +770,7 @@ class TestSTARLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # for some reason it was like this at some point
     # self.lh.assign_resource(hotel, location=Coordinate(6, 414-63, 217.2 - 100))
     stacking_area = ResourceStack("stacking_area", direction="z")
-    self.lh.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2 - 3.33))
+    self.deck.assign_child_resource(stacking_area, location=Coordinate(6, 414, 226.2 - 3.33))
 
     assert self.plate.lid is not None and self.other_plate.lid is not None
 
@@ -1065,16 +1065,17 @@ class STARFoilTests(unittest.IsolatedAsyncioTestCase):
   async def asyncSetUp(self):
     self.star = STAR()
     self.star._write_and_read_command = unittest.mock.AsyncMock()
-    self.lh = LiquidHandler(backend=self.star, deck=STARLetDeck())
+    self.deck = STARLetDeck()
+    self.lh = LiquidHandler(backend=self.star, deck=self.deck)
 
     tip_carrier = TIP_CAR_480_A00(name="tip_carrier")
     tip_carrier[1] = self.tip_rack = HT(name="tip_rack")
-    self.lh.deck.assign_child_resource(tip_carrier, rails=1)
+    self.deck.assign_child_resource(tip_carrier, rails=1)
 
     plt_carrier = PLT_CAR_L5AC_A00(name="plt_carrier")
     plt_carrier[0] = self.plate = AGenBio_1_troughplate_190000uL_Fl(name="plate")
     self.well = self.plate.get_well("A1")
-    self.lh.deck.assign_child_resource(plt_carrier, rails=10)
+    self.deck.assign_child_resource(plt_carrier, rails=10)
 
     self.star._num_channels = 8
     self.star.core96_head_installed = True

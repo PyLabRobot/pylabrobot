@@ -251,7 +251,6 @@ class HamiltonLiquidHandler(LiquidHandlerBackend, metaclass=ABCMeta):
       read_timeout=read_timeout,
       wait=wait,
     )
-    print(resp)
     if resp is not None and fmt is not None:
       return self._parse_response(resp, fmt)
     return resp
