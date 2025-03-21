@@ -52,21 +52,21 @@ class HamiltonHeatShaker(HeaterShakerBackend):
       "shaker_index": self.shaker_index,
     }
 
-  async def _send_command(self, command: str, **kwargs):
-      assert len(command) == 2, "Command must be 2 characters long"
-      
-      args = "".join([f"{key}{value}" for key, value in kwargs.items()])
-      await asyncio.to_thread(self.io.write, f"T{self.shaker_index}{command}id{str(self.command_id).zfill(4)}{args}".encode())
-      
-      self.command_id = (self.command_id + 1) % 10_000
-      response = await asyncio.to_thread(self.io.read)
-      return response
+  async def send_command(self, command: str, **kwargs):
+    assert len(command) == 2, "Command must be 2 characters long"
+
+    args = "".join([f"{key}{value}" for key, value in kwargs.items()])
+    self.io.write(f"T{self.shaker_index}{command}id{str(self.command_id).zfill(4)}{args}".encode())
+
+    self.command_id = (self.command_id + 1) % 10_000
+    response = await self.io.read()
+    return response
 
   async def shake(
     self,
     speed: float = 800,
     direction: Literal[0, 1] = 0,
-    acceleration: int = 500,
+    acceleration: int = 1_000,
   ):
     """
     speed: steps per second
