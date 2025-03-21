@@ -1042,18 +1042,31 @@ class Cytation5Backend(ImageReaderBackend):
 
     filter_index = self._imaging_mode_code(mode)
 
-    if mode == ImagingMode.PHASE_CONTRAST:
-      await self.send_command("Y", "P1120")
-      await self.send_command("Y", "P0d05")
-      await self.send_command("Y", "P1002")
-    elif mode == ImagingMode.BRIGHTFIELD:
-      await self.send_command("Y", "P1101")
-      await self.send_command("Y", "P0d05")
-      await self.send_command("Y", "P1002")
+    if self._version is None:
+      raise RuntimeError("Firmware version is not set")
+
+    if self._version.startswith("1"):
+      if mode == ImagingMode.PHASE_CONTRAST:
+        raise NotImplementedError("Phase contrast imaging not implemented yet on Cytation1")
+      elif mode == ImagingMode.BRIGHTFIELD:
+        await self.send_command("Y", "P0c05")
+        await self.send_command("Y", "P0f02")
+      else:
+        await self.send_command("Y", f"P0c{filter_index:02}")
+        await self.send_command("Y", "P0f01")
     else:
-      await self.send_command("Y", "P1101")
-      await self.send_command("Y", f"P0d{filter_index:02}")
-      await self.send_command("Y", "P1001")
+      if mode == ImagingMode.PHASE_CONTRAST:
+        await self.send_command("Y", "P1120")
+        await self.send_command("Y", "P0d05")
+        await self.send_command("Y", "P1002")
+      elif mode == ImagingMode.BRIGHTFIELD:
+        await self.send_command("Y", "P1101")
+        await self.send_command("Y", "P0d05")
+        await self.send_command("Y", "P1002")
+      else:
+        await self.send_command("Y", "P1101")
+        await self.send_command("Y", f"P0d{filter_index:02}")
+        await self.send_command("Y", "P1001")
 
     # Turn led on in the new mode
     self._imaging_mode = mode
