@@ -303,11 +303,14 @@ class Cytation5Backend(ImageReaderBackend):
       # -- Load objective information --
       await self._load_objectives()
 
-  async def _load_objectives(self):
+  @property
+  def version(self) -> str:
     if self._version is None:
       raise RuntimeError("Firmware version is not set")
+    return self._version
 
-    if self._version.startswith("1"):
+  async def _load_objectives(self):
+    if self.version.startswith("1"):
       for spot in [1, 2]:
         configuration = await self.send_command("i", f"o{spot}")
         weird_encoding = {  # ?
@@ -382,7 +385,7 @@ class Cytation5Backend(ImageReaderBackend):
           "UPLSAPO 20X": Objective.O_20X_PL_APO,
         }
         self._objectives.append(part_number2objective[part_number])
-    elif self._version.startswith("2"):
+    elif self.version.startswith("2"):
       for spot in range(1, 7):
         # +1 for some reason, eg first is h2
         configuration = await self.send_command("i", f"h{spot + 1}")
@@ -398,7 +401,7 @@ class Cytation5Backend(ImageReaderBackend):
           }
           self._objectives.append(annulus_part_number2objective[annulus_part_number])
     else:
-      raise RuntimeError(f"Unsupported version: {self._version}")
+      raise RuntimeError(f"Unsupported version: {self.version}")
 
   async def stop(self) -> None:
     logger.info("[cytation5] stopping")
@@ -1009,7 +1012,11 @@ class Cytation5Backend(ImageReaderBackend):
       raise RuntimeError("Need to set imaging_config first")
 
     objective_code = self._objective_code(objective)
-    await self.send_command("Y", f"P0e{objective_code:02}", timeout=60)
+
+    if self.version.startswith("1"):
+      await self.send_command("Y", f"P0d{objective_code:02}", timeout=60)
+    else:
+      await self.send_command("Y", f"P0e{objective_code:02}", timeout=60)
 
     self._objective = objective
 
@@ -1033,10 +1040,7 @@ class Cytation5Backend(ImageReaderBackend):
 
     filter_index = self._imaging_mode_code(mode)
 
-    if self._version is None:
-      raise RuntimeError("Firmware version is not set")
-
-    if self._version.startswith("1"):
+    if self.version.startswith("1"):
       if mode == ImagingMode.PHASE_CONTRAST:
         raise NotImplementedError("Phase contrast imaging not implemented yet on Cytation1")
       elif mode == ImagingMode.BRIGHTFIELD:
