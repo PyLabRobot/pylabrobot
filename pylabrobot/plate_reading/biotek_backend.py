@@ -118,6 +118,10 @@ class Cytation5ImagingConfig:
   camera_serial_number: Optional[str] = None
   max_image_read_attempts: int = 8
 
+  # if not specified, these will be loaded from machine configuration (register with gen5.exe)
+  objectives: Optional[List[Optional[Objective]]] = None
+  filters: Optional[List[Optional[ImagingMode]]] = None
+
 
 class Cytation5Backend(ImageReaderBackend):
   """Backend for biotek cytation 5 image reader.
@@ -140,8 +144,8 @@ class Cytation5Backend(ImageReaderBackend):
     self.spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self.cam: Optional["PySpin.CameraPtr"] = None
     self.imaging_config = imaging_config or Cytation5ImagingConfig()
-    self._filters: List[Optional[ImagingMode]] = []
-    self._objectives: List[Optional[Objective]] = []
+    self._filters: Optional[List[Optional[ImagingMode]]] = self.imaging_config.filters
+    self._objectives: Optional[List[Optional[Objective]]] = self.imaging_config.objectives
     self._version: Optional[str] = None
 
     self._plate: Optional[Plate] = None
@@ -263,45 +267,12 @@ class Cytation5Backend(ImageReaderBackend):
       ptr_trigger_mode.SetIntValue(int(ptr_trigger_on.GetNumericValue()))
 
       # -- Load filter information --
-      for spot in range(1, 5):
-        configuration = await self.send_command("i", f"q{spot}")
-        assert configuration is not None
-        parts = configuration.decode().strip().split(" ")
-        if len(parts) == 1:
-          self._filters.append(None)
-        else:
-          cytation_code = int(parts[0])
-          cytation_code2imaging_mode = {
-            1225121: ImagingMode.C377_647,
-            1225123: ImagingMode.C400_647,
-            1225113: ImagingMode.C469_593,
-            1225109: ImagingMode.ACRIDINE_ORANGE,
-            1225107: ImagingMode.CFP,
-            1225118: ImagingMode.CFP_FRET_V2,
-            1225110: ImagingMode.CFP_YFP_FRET,
-            1225119: ImagingMode.CFP_YFP_FRET_V2,
-            1225112: ImagingMode.CHLOROPHYLL_A,
-            1225105: ImagingMode.CY5,
-            1225114: ImagingMode.CY5_5,
-            1225106: ImagingMode.CY7,
-            1225100: ImagingMode.DAPI,
-            1225101: ImagingMode.GFP,
-            1225116: ImagingMode.GFP_CY5,
-            1225122: ImagingMode.OXIDIZED_ROGFP2,
-            1225111: ImagingMode.PROPOIDIUM_IODIDE,
-            1225103: ImagingMode.RFP,
-            1225117: ImagingMode.RFP_CY5,
-            1225115: ImagingMode.TAG_BFP,
-            1225102: ImagingMode.TEXAS_RED,
-            1225104: ImagingMode.YFP,
-          }
-          if cytation_code not in cytation_code2imaging_mode:
-            self._filters.append(None)
-          else:
-            self._filters.append(cytation_code2imaging_mode[cytation_code])
+      if self._filters is None:
+        await self._load_filters()
 
       # -- Load objective information --
-      await self._load_objectives()
+      if self._objectives is None:
+        await self._load_objectives()
 
   @property
   def version(self) -> str:
@@ -309,7 +280,59 @@ class Cytation5Backend(ImageReaderBackend):
       raise RuntimeError("Firmware version is not set")
     return self._version
 
+  @property
+  def objectives(self) -> List[Optional[Objective]]:
+    if self._objectives is None:
+      raise RuntimeError("Objectives are not set")
+    return self._objectives
+
+  @property
+  def filters(self) -> List[Optional[ImagingMode]]:
+    if self._filters is None:
+      raise RuntimeError("Filters are not set")
+    return self._filters
+
+  async def _load_filters(self):
+    self._filters = []
+    for spot in range(1, 5):
+      configuration = await self.send_command("i", f"q{spot}")
+      assert configuration is not None
+      parts = configuration.decode().strip().split(" ")
+      if len(parts) == 1:
+        self._filters.append(None)
+      else:
+        cytation_code = int(parts[0])
+        cytation_code2imaging_mode = {
+          1225121: ImagingMode.C377_647,
+          1225123: ImagingMode.C400_647,
+          1225113: ImagingMode.C469_593,
+          1225109: ImagingMode.ACRIDINE_ORANGE,
+          1225107: ImagingMode.CFP,
+          1225118: ImagingMode.CFP_FRET_V2,
+          1225110: ImagingMode.CFP_YFP_FRET,
+          1225119: ImagingMode.CFP_YFP_FRET_V2,
+          1225112: ImagingMode.CHLOROPHYLL_A,
+          1225105: ImagingMode.CY5,
+          1225114: ImagingMode.CY5_5,
+          1225106: ImagingMode.CY7,
+          1225100: ImagingMode.DAPI,
+          1225101: ImagingMode.GFP,
+          1225116: ImagingMode.GFP_CY5,
+          1225122: ImagingMode.OXIDIZED_ROGFP2,
+          1225111: ImagingMode.PROPOIDIUM_IODIDE,
+          1225103: ImagingMode.RFP,
+          1225117: ImagingMode.RFP_CY5,
+          1225115: ImagingMode.TAG_BFP,
+          1225102: ImagingMode.TEXAS_RED,
+          1225104: ImagingMode.YFP,
+        }
+        if cytation_code not in cytation_code2imaging_mode:
+          self._filters.append(None)
+        else:
+          self._filters.append(cytation_code2imaging_mode[cytation_code])
+
   async def _load_objectives(self):
+    self._objectives = []
     if self.version.startswith("1"):
       for spot in [1, 2]:
         configuration = await self.send_command("i", f"o{spot}")
@@ -414,8 +437,8 @@ class Cytation5Backend(ImageReaderBackend):
     if hasattr(self, "spinnaker_system") and self.spinnaker_system is not None:
       self.spinnaker_system.ReleaseInstance()
 
-    self._objectives = []
-    self._filters = []
+    self._objectives = None
+    self._filters = None
 
   async def _purge_buffers(self) -> None:
     """Purge the RX and TX buffers, as implemented in Gen5.exe"""
@@ -998,10 +1021,10 @@ class Cytation5Backend(ImageReaderBackend):
   def _imaging_mode_code(self, mode: ImagingMode) -> int:
     if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.PHASE_CONTRAST:
       return 5
-    return self._filters.index(mode) + 1
+    return self.filters.index(mode) + 1
 
   def _objective_code(self, objective: Objective) -> int:
-    return self._objectives.index(objective) + 1
+    return self.objectives.index(objective) + 1
 
   async def set_objective(self, objective: Objective):
     if objective == self._objective:
