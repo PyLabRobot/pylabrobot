@@ -7,6 +7,11 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
 
+try:
+  import cv2
+except ImportError:
+  cv2 = None
+
 from pylabrobot.resources.plate import Plate
 
 try:
@@ -43,47 +48,6 @@ SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR = (
 )
 PixelFormat_Mono8 = PySpin.PixelFormat_Mono8 if USE_PYSPIN else -1
 SpinnakerException = PySpin.SpinnakerException if USE_PYSPIN else Exception
-
-
-def _laplacian_2d(u):
-  # thanks chat (one shotted this)
-  # verified to be the same as scipy.ndimage.laplace
-  # 6.09 ms ± 40.5 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
-
-  # Assumes u is a 2D numpy array and that dx = dy = 1
-  laplacian = np.zeros_like(u)
-
-  # Applying the finite difference approximation for interior points
-  laplacian[1:-1, 1:-1] = (u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[:-2, 1:-1]) + (
-    u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, :-2]
-  )
-
-  # Handle the edges using reflection
-  laplacian[0, 1:-1] = (u[1, 1:-1] - 2 * u[0, 1:-1] + u[0, 1:-1]) + (
-    u[0, 2:] - 2 * u[0, 1:-1] + u[0, :-2]
-  )
-
-  laplacian[-1, 1:-1] = (u[-2, 1:-1] - 2 * u[-1, 1:-1] + u[-1, 1:-1]) + (
-    u[-1, 2:] - 2 * u[-1, 1:-1] + u[-1, :-2]
-  )
-
-  laplacian[1:-1, 0] = (u[2:, 0] - 2 * u[1:-1, 0] + u[:-2, 0]) + (
-    u[1:-1, 1] - 2 * u[1:-1, 0] + u[1:-1, 0]
-  )
-
-  laplacian[1:-1, -1] = (u[2:, -1] - 2 * u[1:-1, -1] + u[:-2, -1]) + (
-    u[1:-1, -2] - 2 * u[1:-1, -1] + u[1:-1, -1]
-  )
-
-  # Handle the corners (reflection)
-  laplacian[0, 0] = (u[1, 0] - 2 * u[0, 0] + u[0, 0]) + (u[0, 1] - 2 * u[0, 0] + u[0, 0])
-  laplacian[0, -1] = (u[1, -1] - 2 * u[0, -1] + u[0, -1]) + (u[0, -2] - 2 * u[0, -1] + u[0, -1])
-  laplacian[-1, 0] = (u[-2, 0] - 2 * u[-1, 0] + u[-1, 0]) + (u[-1, 1] - 2 * u[-1, 0] + u[-1, 0])
-  laplacian[-1, -1] = (u[-2, -1] - 2 * u[-1, -1] + u[-1, -1]) + (
-    u[-1, -2] - 2 * u[-1, -1] + u[-1, -1]
-  )
-
-  return laplacian
 
 
 async def _golden_ratio_search(
@@ -876,8 +840,21 @@ class Cytation5Backend(ImageReaderBackend):
         gain=gain,
       )
       image = images[0]  # self.capture returns List now
-      laplacian = _laplacian_2d(np.asarray(image))
-      return np.var(laplacian)
+
+      if cv2 is None:
+        raise RuntimeError("cv2 needs to be installed for auto focus")
+
+      # NVMG: Normalized Variance of the Gradient Magnitude
+      # Chat invented this i think
+      image = np.array(image, dtype=np.float64)
+      sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
+      sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
+      gradient_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
+
+      mean_gm = np.mean(gradient_magnitude)
+      var_gm = np.var(gradient_magnitude)
+      sharpness = var_gm / (mean_gm + 1e-6)
+      return sharpness
 
     # Use golden ratio search to find the best focus value
     focus_min, focus_max = self._auto_focus_search_range or (1.8, 2.5)
@@ -1182,6 +1159,7 @@ class Cytation5Backend(ImageReaderBackend):
     images: List[Image] = []
     for x_pos, y_pos in positions:
       await self.set_position(x=x_pos, y=y_pos)
+      await asyncio.sleep(0.1)
       images.append(
         await self._acquire_image(
           color_processing_algorithm=color_processing_algorithm, pixel_format=pixel_format
