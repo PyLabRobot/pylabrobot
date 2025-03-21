@@ -1040,7 +1040,7 @@ class Cytation5Backend(ImageReaderBackend):
       if mode == ImagingMode.PHASE_CONTRAST:
         raise NotImplementedError("Phase contrast imaging not implemented yet on Cytation1")
       elif mode == ImagingMode.BRIGHTFIELD:
-        await self.send_command("Y", f"P0c05")
+        await self.send_command("Y", "P0c05")
         await self.send_command("Y", "P0f02")
       else:
         await self.send_command("Y", f"P0c{filter_index:02}")
