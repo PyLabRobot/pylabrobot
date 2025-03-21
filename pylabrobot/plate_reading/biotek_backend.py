@@ -144,8 +144,8 @@ class Cytation5Backend(ImageReaderBackend):
     self.spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self.cam: Optional["PySpin.CameraPtr"] = None
     self.imaging_config = imaging_config or Cytation5ImagingConfig()
-    self._filters: List[Optional[ImagingMode]] = imaging_config.filters
-    self._objectives: List[Optional[Objective]] = imaging_config.objectives
+    self._filters: List[Optional[ImagingMode]] = self.imaging_config.filters
+    self._objectives: List[Optional[Objective]] = self.imaging_config.objectives
     self._version: Optional[str] = None
 
     self._plate: Optional[Plate] = None
