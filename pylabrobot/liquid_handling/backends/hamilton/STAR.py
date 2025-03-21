@@ -2749,8 +2749,6 @@ class STAR(HamiltonLiquidHandler):
     grip_height = location.z + resource.get_absolute_size_z() - pickup_distance_from_top
     grip_width = resource.get_absolute_size_y()
 
-    print("core_release loc", location)
-
     await self.core_put_plate(
       x_position=round(location.x * 10),
       x_direction=0,
@@ -7668,7 +7666,7 @@ class STAR(HamiltonLiquidHandler):
       raise ValueError("Channel N would hit the front of the robot")
 
     if not all(
-      channel_locations[i] - channel_locations[i + 1] >= 9
+      int((channel_locations[i] - channel_locations[i + 1]) * 1000) >= 8_999  # float fixing
       for i in range(len(channel_locations) - 1)
     ):
       raise ValueError("Channels must be at least 9mm apart and in descending order")
@@ -7752,7 +7750,7 @@ class STAR(HamiltonLiquidHandler):
       ), "Wells must be on the same column"
       absolute_center = wells[0].get_absolute_location("c", "c", "cavity_bottom")
       x = absolute_center.x
-      ys = [well.get_absolute_location(y="c").y for well in wells]
+      ys = [well.get_absolute_location(x="c", y="c").y for well in wells]
       z = absolute_center.z
 
     await self.move_channel_x(0, x=x)
