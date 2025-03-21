@@ -144,8 +144,8 @@ class Cytation5Backend(ImageReaderBackend):
     self.spinnaker_system: Optional["PySpin.SystemPtr"] = None
     self.cam: Optional["PySpin.CameraPtr"] = None
     self.imaging_config = imaging_config or Cytation5ImagingConfig()
-    self._filters: List[Optional[ImagingMode]] = self.imaging_config.filters
-    self._objectives: List[Optional[Objective]] = self.imaging_config.objectives
+    self._filters: Optional[List[Optional[ImagingMode]]] = self.imaging_config.filters
+    self._objectives: Optional[List[Optional[Objective]]] = self.imaging_config.objectives
     self._version: Optional[str] = None
 
     self._plate: Optional[Plate] = None
@@ -317,6 +317,18 @@ class Cytation5Backend(ImageReaderBackend):
     if self._version is None:
       raise RuntimeError("Firmware version is not set")
     return self._version
+
+  @property
+  def objectives(self) -> List[Optional[Objective]]:
+    if self._objectives is None:
+      raise RuntimeError("Objectives are not set")
+    return self._objectives
+
+  @property
+  def filters(self) -> List[Optional[ImagingMode]]:
+    if self._filters is None:
+      raise RuntimeError("Filters are not set")
+    return self._filters
 
   async def _load_objectives(self):
     if self.version.startswith("1"):
@@ -1007,10 +1019,10 @@ class Cytation5Backend(ImageReaderBackend):
   def _imaging_mode_code(self, mode: ImagingMode) -> int:
     if mode == ImagingMode.BRIGHTFIELD or mode == ImagingMode.PHASE_CONTRAST:
       return 5
-    return self._filters.index(mode) + 1
+    return self.filters.index(mode) + 1
 
   def _objective_code(self, objective: Objective) -> int:
-    return self._objectives.index(objective) + 1
+    return self.objectives.index(objective) + 1
 
   async def set_objective(self, objective: Objective):
     if objective == self._objective:
