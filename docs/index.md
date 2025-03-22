@@ -87,7 +87,7 @@ user_guide/index
 :caption: Resource Management
 :hidden:
 
- Machine Control <machine_control/index>
+Protocol Library <protocol_library/index>
 ```
 
 ```{toctree}
