@@ -10,7 +10,7 @@ from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Uni
 try:
   import cv2
 except ImportError:
-  cv2 = None
+  cv2 = None  # type: ignore
 
 from pylabrobot.resources.plate import Plate
 
@@ -846,9 +846,9 @@ class Cytation5Backend(ImageReaderBackend):
 
       # NVMG: Normalized Variance of the Gradient Magnitude
       # Chat invented this i think
-      image = np.array(image, dtype=np.float64)
-      sobel_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
-      sobel_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
+      np_image = np.array(image, dtype=np.float64)
+      sobel_x = cv2.Sobel(np_image, cv2.CV_64F, 1, 0, ksize=3)
+      sobel_y = cv2.Sobel(np_image, cv2.CV_64F, 0, 1, ksize=3)
       gradient_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
 
       mean_gm = np.mean(gradient_magnitude)
