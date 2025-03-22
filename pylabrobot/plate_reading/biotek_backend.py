@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, List, Literal, Optional, Tuple, Union
 
 try:
-  import cv2
+  import cv2  # type: ignore
 except ImportError:
   cv2 = None  # type: ignore
 
