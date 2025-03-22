@@ -74,7 +74,6 @@ from pylabrobot.resources.hamilton.hamilton_decks import (
 from pylabrobot.resources.liquid import Liquid
 from pylabrobot.resources.rotation import Rotation
 from pylabrobot.resources.trash import Trash
-from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
 
 T = TypeVar("T")
 
@@ -2727,7 +2726,6 @@ class STAR(HamiltonLiquidHandler):
     location: Coordinate,
     resource: Resource,
     pickup_distance_from_top: float,
-    offset: Coordinate = Coordinate.zero(),
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     z_position_at_the_command_end: Optional[float] = None,
     return_tool: bool = True,
@@ -2748,14 +2746,13 @@ class STAR(HamiltonLiquidHandler):
     """
 
     # Get center of destination location. Also gripping height and plate width.
-    center = location + resource.center() + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
+    grip_height = location.z + resource.get_absolute_size_z() - pickup_distance_from_top
     grip_width = resource.get_absolute_size_y()
 
     await self.core_put_plate(
-      x_position=round(center.x * 10),
+      x_position=round(location.x * 10),
       x_direction=0,
-      y_position=round(center.y * 10),
+      y_position=round(location.y * 10),
       z_position=round(grip_height * 10),
       z_press_on_distance=0,
       z_speed=500,
@@ -2801,11 +2798,8 @@ class STAR(HamiltonLiquidHandler):
         else:
           plate_width = pickup.resource.get_absolute_size_y()
 
-      center_in_absolute_space = Coordinate(
-        *matrix_vector_multiply_3x3(
-          pickup.resource.get_absolute_rotation().get_rotation_matrix(),
-          pickup.resource.center().vector(),
-        )
+      center_in_absolute_space = pickup.resource.center().rotated(
+        pickup.resource.get_absolute_rotation()
       )
       x, y, z = (
         pickup.resource.get_absolute_location("l", "f", "t")
@@ -2924,6 +2918,21 @@ class STAR(HamiltonLiquidHandler):
     use_unsafe_hotel: bool = False,
     iswap_collision_control_level: int = 0,
   ):
+    # Get center of source plate in absolute space.
+    # The computation of the center has to be rotated so that the offset is in absolute space.
+    # center_in_absolute_space will be the vector pointing from the destination origin to the
+    # center of the moved the resource after drop.
+    # This means that the center vector has to be rotated from the child local space by the
+    # new child absolute rotation. The moved resource's rotation will be the original child
+    # rotation plus the rotation applied by the movement.
+    # The resource is moved by drop.rotation
+    # The new resource absolute location is
+    # drop.resource.get_absolute_rotation().z + drop.rotation
+    center_in_absolute_space = drop.resource.center().rotated(
+      Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation)
+    )
+    x, y, z = drop.destination + center_in_absolute_space + drop.offset
+
     if use_arm == "iswap":
       traversal_height_start = (
         minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
@@ -2949,24 +2958,6 @@ class STAR(HamiltonLiquidHandler):
       else:
         raise ValueError("Invalid grip direction")
 
-      # Get center of source plate in absolute space.
-      # The computation of the center has to be rotated so that the offset is in absolute space.
-      # center_in_absolute_space will be the vector pointing from the destination origin to the
-      # center of the moved the resource after drop.
-      # This means that the center vector has to be rotated from the child local space by the
-      # new child absolute rotation. The moved resource's rotation will be the original child
-      # rotation plus the rotation applied by the movement.
-      # The resource is moved by drop.rotation
-      # The new resource absolute location is
-      # drop.resource.get_absolute_rotation().z + drop.rotation
-      center_in_absolute_space = Coordinate(
-        *matrix_vector_multiply_3x3(
-          Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation).get_rotation_matrix(),
-          drop.resource.center().vector(),
-        )
-      )
-
-      x, y, z = drop.destination + center_in_absolute_space + drop.offset
       z = z + drop.resource.get_absolute_size_z() - drop.pickup_distance_from_top
 
       if open_gripper_position is None:
@@ -3021,9 +3012,8 @@ class STAR(HamiltonLiquidHandler):
         raise ValueError("Cannot use iswap hotel mode with core grippers")
 
       await self.core_release_picked_up_resource(
-        location=drop.destination,
+        location=Coordinate(x, y, z),
         resource=drop.resource,
-        offset=drop.offset,
         pickup_distance_from_top=drop.pickup_distance_from_top,
         minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
         z_position_at_the_command_end=self._iswap_traversal_height,
@@ -4064,7 +4054,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="TP",
       tip_pattern=tip_pattern,
-      read_timeout=60,
+      read_timeout=max(120, self.read_timeout),
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
@@ -4129,6 +4119,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="TR",
       tip_pattern=tip_pattern,
+      read_timeout=max(120, self.read_timeout),
       fmt="kz### (n)vz### (n)",
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
@@ -4384,7 +4375,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="AS",
       tip_pattern=tip_pattern,
-      read_timeout=max(60, self.read_timeout),
+      read_timeout=max(120, self.read_timeout),
       at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
       xp=[f"{xp:05}" for xp in x_positions],
@@ -4618,7 +4609,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="DS",
       tip_pattern=tip_pattern,
-      read_timeout=max(60, self.read_timeout),
+      read_timeout=max(120, self.read_timeout),
       dm=[f"{dm:01}" for dm in dispensing_mode],
       tm=[f"{tm:01}" for tm in tip_pattern],
       xp=[f"{xp:05}" for xp in x_positions],
@@ -7675,7 +7666,7 @@ class STAR(HamiltonLiquidHandler):
       raise ValueError("Channel N would hit the front of the robot")
 
     if not all(
-      channel_locations[i] - channel_locations[i + 1] >= 9
+      int((channel_locations[i] - channel_locations[i + 1]) * 1000) >= 8_999  # float fixing
       for i in range(len(channel_locations) - 1)
     ):
       raise ValueError("Channels must be at least 9mm apart and in descending order")
@@ -7735,6 +7726,11 @@ class STAR(HamiltonLiquidHandler):
     x: float
     ys: List[float]
     z: float
+
+    # if only one well is give, but in a list, convert to Well so we fall into single-well logic.
+    if isinstance(wells, list) and len(wells) == 1:
+      wells = wells[0]
+
     if isinstance(wells, Well):
       well = wells
       x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
@@ -7752,9 +7748,10 @@ class STAR(HamiltonLiquidHandler):
       assert (
         len(set(w.get_absolute_location().x for w in wells)) == 1
       ), "Wells must be on the same column"
-      x = wells[0].get_absolute_location().x
-      ys = [well.get_absolute_location().y for well in wells]
-      z = wells[0].get_absolute_location(z="cavity_bottom").z
+      absolute_center = wells[0].get_absolute_location("c", "c", "cavity_bottom")
+      x = absolute_center.x
+      ys = [well.get_absolute_location(x="c", y="c").y for well in wells]
+      z = absolute_center.z
 
     await self.move_channel_x(0, x=x)
 
@@ -7772,7 +7769,7 @@ class STAR(HamiltonLiquidHandler):
       )
 
     await self.step_off_foil(
-      well,
+      [wells] if isinstance(wells, Well) else wells,
       back_channel=hold_down_channels[0],
       front_channel=hold_down_channels[1],
       move_inwards=move_inwards,
@@ -7780,7 +7777,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def step_off_foil(
     self,
-    well: Well,
+    wells: Union[Well, List[Well]],
     front_channel: int,
     back_channel: int,
     move_inwards: float = 2,
@@ -7803,10 +7800,11 @@ class STAR(HamiltonLiquidHandler):
           min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
           surface_following_distance=0,
           pull_out_distance_transport_air=[0] * 4)
-        await step_off_foil(lh.backend, well, front_channel=11, back_channel=6, move_inwards = 3)
+        await step_off_foil(lh.backend, [well], front_channel=11, back_channel=6, move_inwards=3)
 
     Args:
-      well: Well in the plate to hold down. (x-coordinate of channels will be at center of well).
+      wells: Wells in the plate to hold down. (x-coordinate of channels will be at center of wells).
+        Must be sorted from back to front.
       front_channel: The channel to place on the front of the plate.
       back_channel: The channel to place on the back of the plate.
       move_inwards: mm to move inwards (backward on the front channel; frontward on the back).
@@ -7818,9 +7816,30 @@ class STAR(HamiltonLiquidHandler):
         "front_channel should be in front of back_channel. " "Channels are 0-indexed from the back."
       )
 
-    # Get the absolute locations for center front top and center back top
-    back_location = well.get_absolute_location("c", "b", "t")
-    front_location = well.get_absolute_location("c", "f", "t")
+    if isinstance(wells, Well):
+      wells = [wells]
+
+    plates = set(well.parent for well in wells)
+    assert len(plates) == 1, "All wells must be in the same plate"
+    plate = plates.pop()
+    assert plate is not None
+
+    z_location = plate.get_absolute_location(z="top").z
+
+    if plate.get_absolute_rotation().z % 360 == 0:
+      back_location = plate.get_absolute_location(y="b")
+      front_location = plate.get_absolute_location(y="f")
+    elif plate.get_absolute_rotation().z % 360 == 90:
+      back_location = plate.get_absolute_location(x="r")
+      front_location = plate.get_absolute_location(x="l")
+    elif plate.get_absolute_rotation().z % 360 == 180:
+      back_location = plate.get_absolute_location(y="f")
+      front_location = plate.get_absolute_location(y="b")
+    elif plate.get_absolute_rotation().z % 360 == 270:
+      back_location = plate.get_absolute_location(x="l")
+      front_location = plate.get_absolute_location(x="r")
+    else:
+      raise ValueError("Plate rotation must be a multiple of 90 degrees")
 
     try:
       # Then move all channels in the y-space simultaneously.
@@ -7831,17 +7850,15 @@ class STAR(HamiltonLiquidHandler):
         }
       )
 
-      await self.move_channel_z(front_channel, front_location.z)
-      await self.move_channel_z(back_channel, back_location.z)
+      await self.move_channel_z(front_channel, z_location)
+      await self.move_channel_z(back_channel, z_location)
     finally:
       # Move channels that are lower than the `front_channel` and `back_channel` to
       # the just above the foil, in case the foil pops up.
       zs = await self.get_channels_z_positions()
-      indices = [channel_idx for channel_idx, z in zs.items() if z < front_location.z]
+      indices = [channel_idx for channel_idx, z in zs.items() if z < z_location]
       idx = {
-        idx: front_location.z + move_height
-        for idx in indices
-        if idx not in (front_channel, back_channel)
+        idx: z_location + move_height for idx in indices if idx not in (front_channel, back_channel)
       }
       await self.position_channels_in_z_direction(idx)
 

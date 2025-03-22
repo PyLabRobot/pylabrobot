@@ -105,9 +105,7 @@ class FTDI(IOBase):
   def write(self, data: bytes) -> int:
     """Write data to the device. Returns the number of bytes written."""
     logger.log(LOG_LEVEL_IO, "[%s] write %s", self._device_id, data)
-    capturer.record(
-      FTDICommand(device_id=self._device_id, action="write", data=data.decode("unicode_escape"))
-    )
+    capturer.record(FTDICommand(device_id=self._device_id, action="write", data=data.hex()))
     return cast(int, self._dev.write(data))
 
   def read(self, num_bytes: int = 1) -> bytes:
@@ -117,7 +115,7 @@ class FTDI(IOBase):
       FTDICommand(
         device_id=self._device_id,
         action="read",
-        data=data if isinstance(data, str) else data.decode("unicode_escape"),
+        data=data if isinstance(data, str) else data.hex(),
       )
     )
     return cast(bytes, data)
@@ -125,9 +123,7 @@ class FTDI(IOBase):
   def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     data = self._dev.readline()
     logger.log(LOG_LEVEL_IO, "[%s] readline %s", self._device_id, data)
-    capturer.record(
-      FTDICommand(device_id=self._device_id, action="readline", data=data.decode("unicode_escape"))
-    )
+    capturer.record(FTDICommand(device_id=self._device_id, action="readline", data=data.hex()))
     return cast(bytes, data)
 
   def serialize(self):
@@ -259,8 +255,8 @@ class FTDIValidator(FTDI):
       and next_command.action == "write"
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI write {self._device_id}")
-    if not next_command.data == data.decode("unicode_escape"):
-      align_sequences(expected=next_command.data, actual=data.decode("unicode_escape"))
+    if not next_command.data == data.hex():
+      align_sequences(expected=next_command.data, actual=data.hex())
       raise ValidationError("Data mismatch: difference was written to stdout.")
 
   def read(self, num_bytes: int = 1) -> bytes:
@@ -272,7 +268,7 @@ class FTDIValidator(FTDI):
       and len(next_command.data) == num_bytes
     ):
       raise ValidationError(f"Next line is {next_command}, expected FTDI read {self._device_id}")
-    return next_command.data.encode("unicode_escape")
+    return bytes.fromhex(next_command.data)
 
   def readline(self) -> bytes:  # type: ignore # very dumb it's reading from pyserial
     next_command = FTDICommand(**self.cr.next_command())
@@ -284,4 +280,4 @@ class FTDIValidator(FTDI):
       raise ValidationError(
         f"Next line is {next_command}, expected FTDI readline {self._device_id}"
       )
-    return next_command.data.encode("unicode_escape")
+    return bytes.fromhex(next_command.data)
