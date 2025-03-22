@@ -1,0 +1,45 @@
+﻿pylabrobot.centrifuge.vspin.VSpin
+=================================
+
+.. currentmodule:: pylabrobot.centrifuge.vspin
+
+.. autoclass:: VSpin
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :toctree: .
+   
+      ~VSpin.__init__
+      ~VSpin.close_door
+      ~VSpin.configure_and_initialize
+      ~VSpin.deserialize
+      ~VSpin.get_all_instances
+      ~VSpin.get_position
+      ~VSpin.get_status
+      ~VSpin.go_to_bucket1
+      ~VSpin.go_to_bucket2
+      ~VSpin.go_to_position
+      ~VSpin.initialize
+      ~VSpin.lock_bucket
+      ~VSpin.lock_door
+      ~VSpin.open_door
+      ~VSpin.read_resp
+      ~VSpin.rotate_distance
+      ~VSpin.send
+      ~VSpin.send_payloads
+      ~VSpin.serialize
+      ~VSpin.set_configuration_data
+      ~VSpin.setup
+      ~VSpin.start_spin_cycle
+      ~VSpin.stop
+      ~VSpin.unlock_bucket
+      ~VSpin.unlock_door
+   
+   
