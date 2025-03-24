@@ -13,7 +13,7 @@ Subclasses of `Carrier`
 -----------------------
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
    mfx-carrier/mfx_carrier
    plate-carrier/plate_carrier

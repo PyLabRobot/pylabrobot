@@ -165,7 +165,7 @@ If you get a `usb.core.NoBackendError: No backend available` error: [this](https
 
 If you are still having trouble, please reach out on [discuss.pylabrobot.org](https://discuss.pylabrobot.org).
 
-## Cytation5 imager
+## Cytation5 imager {#cytation5-imager}
 
 In order to use imaging on the Cytation5, you need to:
 

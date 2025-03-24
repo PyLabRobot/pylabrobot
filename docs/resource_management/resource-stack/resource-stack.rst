@@ -5,9 +5,8 @@ Resources
 
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
-   integrations/index
+   nested-tip-rack-stack/nested-tip-rack-stack
 
 ----
 

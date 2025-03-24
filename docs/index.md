@@ -112,6 +112,12 @@ api/pylabrobot
 Community <https://discuss.pylabrobot.org/>
 ```
 
+```{toctree}
+:hidden:
+
+resources/index
+```
+
 ## Citing
 
 If you use PyLabRobot in your research, please cite the following paper:

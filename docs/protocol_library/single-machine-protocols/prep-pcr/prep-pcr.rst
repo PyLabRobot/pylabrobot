@@ -1,7 +1,7 @@
-Backend
-================
+PCR Prep
+========
 
-A **Backend** is a carrier
+A
 
 
 Subclasses of `Carrier`
@@ -9,9 +9,6 @@ Subclasses of `Carrier`
 
 .. toctree::
    :maxdepth: 1
-
-   plate-carrier/plate_carriers
-   mfx-carrier/mfx_carriers
 
 <hr>
 

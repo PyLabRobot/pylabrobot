@@ -23,19 +23,27 @@ tip-spot-generators
 validation
 ```
 
-```{toctree}
+<!-- ```{toctree}
 :maxdepth: 1
 :caption: Centrifuge
 
-centrifuge
-```
-
+integrations/centrifuge/centrifuge
+``` -->
+<!--
 ```{toctree}
 :maxdepth: 1
 :caption: Plate reading
 
-plate_reading
-cytation5
+integrations/plate-reading/plate_reading
+integrations/plate-reading/cytation5
+``` -->
+
+
+```{toctree}
+:maxdepth: 1
+:caption: Integrations
+
+integrations/integrations
 ```
 
 ```{toctree}
@@ -73,12 +81,12 @@ tilting
 heating-shaking
 ```
 
-```{toctree}
+<!-- ```{toctree}
 :maxdepth: 1
 :caption: Fans
 
-fans
-```
+integrations/fans/fans
+``` -->
 
 ```{toctree}
 :maxdepth: 1

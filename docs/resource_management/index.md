@@ -83,7 +83,6 @@ PLR's `Resource` subclasses in the inheritance tree are:
   <tr><td>│   ├── HamiltonDeck</td></tr>
   <tr><td>│   └── TecanDeck</td></tr>
 
-
   <!-- ItemizedResource subtree -->
   <tr><td>├── <a href="itemized-resource/itemized-resource.html">ItemizedResource</a></td></tr>
   <tr><td>│   ├── <a href="itemized-resource/plate/plate.html">Plate</a></td></tr>
@@ -109,7 +108,7 @@ PLR's `Resource` subclasses in the inheritance tree are:
 <details style="background-color:#f8f9fa; border-left:5px solid #007bff; padding:10px; border-radius:5px;">
     <summary style="font-weight: bold; cursor: pointer;">Note: On the meaning of the terms "Resource" vs "Labware"</summary>
     <hr>
-    <p>Most automation software systems or APIs (e.g. SDKs or GUIs) use the term "labware" to describe items on a machine's deck.
+    <p>Most automation software systems (e.g. SDKs, APIs, GUIs) use the term "labware" to describe items on a machine's deck.
     However, in our discussions, it became evident that the term "labware" has different meanings to different stakeholders
     (e.g., "A plate is clearly labware, but is a liquid handler or a plate reader labware?").
     As a result, PLR avoids the ambiguous term "labware".</p>
@@ -119,19 +118,19 @@ PLR's `Resource` subclasses in the inheritance tree are:
 <hr>
 
 ```{toctree}
-:maxdepth: 1
+:maxdepth: 2
 :caption: Resource Ontology
 :hidden:
 
+arm/arm
 carrier/carrier
+channel-head-tool/channel-head-tool
 container/container
 deck/deck
-nested-tip-rack-stack/nested-tip-rack-stack
 itemized-resource/itemized-resource
 resource-holder/resource-holder
 plate-adapter/plate-adapter
 resource-stack/resource-stack
-tip/tip
 workcell/workcell
 ```
 

@@ -1,4 +1,4 @@
-# Machine Control System Introduction
+# Protocol Library Introduction
 
 This document introduces PyLabRobot Resources
 
