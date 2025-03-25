@@ -1,28 +1,43 @@
-# pylint: disable=invalid-name
-
 import asyncio
 import random
 import re
 import sys
 from typing import Dict, List, Optional, Sequence, Union, cast
 
-from pylabrobot.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
-from pylabrobot.liquid_handling.liquid_classes.hamilton import HamiltonLiquidClass
+from pylabrobot.liquid_handling.backends.hamilton.base import (
+  HamiltonLiquidHandler,
+)
+from pylabrobot.liquid_handling.liquid_classes.hamilton import (
+  HamiltonLiquidClass,
+  get_vantage_liquid_class,
+)
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
-  Move,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
-from pylabrobot.resources import Coordinate, Resource, TipRack, Well
-from pylabrobot.resources.ml_star import HamiltonTip, TipPickupMethod, TipSize
+from pylabrobot.resources import (
+  Coordinate,
+  Liquid,
+  Resource,
+  TipRack,
+  Well,
+)
+from pylabrobot.resources.hamilton import (
+  HamiltonTip,
+  TipPickupMethod,
+  TipSize,
+)
 
 if sys.version_info >= (3, 8):
   from typing import Literal
@@ -266,7 +281,9 @@ class VantageFirmwareError(Exception):
     )
 
 
-def vantage_response_string_to_error(string: str) -> VantageFirmwareError:
+def vantage_response_string_to_error(
+  string: str,
+) -> VantageFirmwareError:
   """Convert a Vantage firmware response string to a VantageFirmwareError. Assumes that the
   response is an error response."""
 
@@ -372,7 +389,7 @@ class Vantage(HamiltonLiquidHandler):
   def check_fw_string_error(self, resp: str):
     """Raise an error if the firmware response is an error response."""
 
-    if "er" in resp and not "er0" in resp:
+    if "er" in resp and "er0" not in resp:
       error = vantage_response_string_to_error(resp)
       raise error
 
@@ -380,11 +397,13 @@ class Vantage(HamiltonLiquidHandler):
     """Parse a firmware response."""
     return parse_vantage_fw_string(resp, fmt)
 
-  async def setup(self):
-    """setup
-
-    Creates a USB connection and finds read/write interfaces.
-    """
+  async def setup(
+    self,
+    skip_loading_cover: bool = False,
+    skip_core96: bool = False,
+    skip_ipg: bool = False,
+  ):
+    """Creates a USB connection and finds read/write interfaces."""
 
     await super().setup()
 
@@ -411,11 +430,11 @@ class Vantage(HamiltonLiquidHandler):
       )
 
     loading_cover_initialized = await self.loading_cover_request_initialization_status()
-    if not loading_cover_initialized:
+    if not loading_cover_initialized and not skip_loading_cover:
       await self.loading_cover_initialize()
 
     core96_initialized = await self.core96_request_initialization_status()
-    if not core96_initialized:
+    if not core96_initialized and not skip_core96:
       await self.core96_initialize(
         x_position=7347,  # TODO: get trash location from deck.
         y_position=2684,  # TODO: get trash location from deck.
@@ -424,11 +443,12 @@ class Vantage(HamiltonLiquidHandler):
         end_z_deposit_position=2420,
       )
 
-    ipg_initialized = await self.ipg_request_initialization_status()
-    if not ipg_initialized:
-      await self.ipg_initialize()
-    if not await self.ipg_get_parking_status():
-      await self.ipg_park()
+    if not skip_ipg:
+      ipg_initialized = await self.ipg_request_initialization_status()
+      if not ipg_initialized:
+        await self.ipg_initialize()
+      if not await self.ipg_get_parking_status():
+        await self.ipg_park()
 
   @property
   def num_channels(self) -> int:
@@ -545,8 +565,10 @@ class Vantage(HamiltonLiquidHandler):
 
   async def aspirate(
     self,
-    ops: List[Aspiration],
+    ops: List[SingleChannelAspiration],
     use_channels: List[int],
+    jet: Optional[List[bool]] = None,
+    blow_out: Optional[List[bool]] = None,
     hlcs: Optional[List[Optional[HamiltonLiquidClass]]] = None,
     type_of_aspiration: Optional[List[int]] = None,
     minimal_traverse_height_at_begin_of_command: Optional[List[float]] = None,
@@ -593,14 +615,43 @@ class Vantage(HamiltonLiquidHandler):
       blow_out: Whether to search for a "blow out" liquid class. This is only used on dispense.
         Note that in the VENUS liquid editor, the term "empty" is used for this, but in the firmware
         documentation, "empty" is used for a different mode (dm4).
+      hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
+        determined automatically based on the tip and liquid used.
     """
-
-    if hlcs is not None:
-      raise NotImplementedError("hlcs is deprecated")
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
+    if jet is None:
+      jet = [False] * len(ops)
+    if blow_out is None:
+      blow_out = [False] * len(ops)
+
+    if hlcs is None:
+      hlcs = []
+      for j, bo, op in zip(jet, blow_out, ops):
+        liquid = Liquid.WATER  # default to WATER
+        # [-1][0]: get last liquid in well, [0] is indexing into the tuple
+        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
+          liquid = op.liquids[-1][0]
+        hlcs.append(
+          get_vantage_liquid_class(
+            tip_volume=op.tip.maximal_volume,
+            is_core=False,
+            is_tip=True,
+            has_filter=op.tip.has_filter,
+            liquid=liquid,
+            jet=j,
+            blow_out=bo,
+          )
+        )
+
     self._assert_valid_resources([op.resource for op in ops])
+
+    # correct volumes using the liquid class
+    volumes = [
+      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+      for op, hlc in zip(ops, hlcs)
+    ]
 
     well_bottoms = [
       op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
@@ -617,10 +668,14 @@ class Vantage(HamiltonLiquidHandler):
       for wb, op in zip(well_bottoms, ops)
     ]
 
-    flow_rates = [op.flow_rate or 100 for op in ops]
-    blow_out_air_volumes = [op.blow_out_air_volume or 0 for op in ops]
-
-    print(mix_speed)
+    flow_rates = [
+      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
+      for op, hlc in zip(ops, hlcs)
+    ]
+    blow_out_air_volumes = [
+      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
+      for op, hlc in zip(ops, hlcs)
+    ]
 
     return await self.pip_aspirate(
       x_position=x_positions,
@@ -655,9 +710,13 @@ class Vantage(HamiltonLiquidHandler):
       surface_following_distance=[
         round(sfd * 10) for sfd in surface_following_distance or [0] * len(ops)
       ],
-      aspiration_volume=[round(op.volume * 100) for op in ops],
+      aspiration_volume=[round(vol * 100) for vol in volumes],
       aspiration_speed=[round(fr * 10) for fr in flow_rates],
-      transport_air_volume=[round(tav * 10) for tav in transport_air_volume or [0] * len(ops)],
+      transport_air_volume=[
+        round(tav * 10)
+        for tav in transport_air_volume
+        or [hlc.aspiration_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
+      ],
       blow_out_air_volume=[round(bav * 100) for bav in blow_out_air_volumes],
       pre_wetting_volume=[round(pwv * 100) for pwv in pre_wetting_volume or [0] * len(ops)],
       lld_mode=lld_mode or [0] * len(ops),
@@ -687,7 +746,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def dispense(
     self,
-    ops: List[Dispense],
+    ops: List[SingleChannelDispense],
     use_channels: List[int],
     jet: Optional[List[bool]] = None,
     blow_out: Optional[List[bool]] = None,  # "empty" in the VENUS liquid editor
@@ -733,6 +792,8 @@ class Vantage(HamiltonLiquidHandler):
     Args:
       ops: The aspiration operations.
       use_channels: The channels to use.
+      hlcs: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
+        determined automatically based on the tip and liquid used.
 
       jet: Whether to use jetting for each dispense. Defaults to `False` for all. Used for
         determining the dispense mode. True for dispense mode 0 or 1.
@@ -744,9 +805,6 @@ class Vantage(HamiltonLiquidHandler):
         documentation. Dispense mode 4.
     """
 
-    if hlcs is not None:
-      raise NotImplementedError("hlcs is deprecated")
-
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     if jet is None:
@@ -756,7 +814,32 @@ class Vantage(HamiltonLiquidHandler):
     if blow_out is None:
       blow_out = [False] * len(ops)
 
+    if hlcs is None:
+      hlcs = []
+      for j, bo, op in zip(jet, blow_out, ops):
+        liquid = Liquid.WATER  # default to WATER
+        # [-1][0]: get last liquid in tip, [0] is indexing into the tuple
+        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
+          liquid = op.liquids[-1][0]
+        hlcs.append(
+          get_vantage_liquid_class(
+            tip_volume=op.tip.maximal_volume,
+            is_core=False,
+            is_tip=True,
+            has_filter=op.tip.has_filter,
+            liquid=liquid,
+            jet=j,
+            blow_out=bo,
+          )
+        )
+
     self._assert_valid_resources([op.resource for op in ops])
+
+    # correct volumes using the liquid class
+    volumes = [
+      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+      for op, hlc in zip(ops, hlcs)
+    ]
 
     well_bottoms = [
       op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
@@ -771,9 +854,15 @@ class Vantage(HamiltonLiquidHandler):
       for wb, op in zip(well_bottoms, ops)
     ]
 
-    flow_rates = [op.flow_rate or 100 for op in ops]
+    flow_rates = [
+      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 100)
+      for op, hlc in zip(ops, hlcs)
+    ]
 
-    blow_out_air_volumes = [op.blow_out_air_volume or 0 for op in ops]
+    blow_out_air_volumes = [
+      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
+      for op, hlc in zip(ops, hlcs)
+    ]
 
     type_of_dispensing_mode = type_of_dispensing_mode or [
       _get_dispense_mode(jet=jet[i], empty=empty[i], blow_out=blow_out[i]) for i in range(len(ops))
@@ -811,11 +900,15 @@ class Vantage(HamiltonLiquidHandler):
         round(mh * 10)
         for mh in minimal_height_at_command_end or [self._traversal_height] * len(ops)
       ],
-      dispense_volume=[round(op.volume * 100) for op in ops],
+      dispense_volume=[round(vol * 100) for vol in volumes],
       dispense_speed=[round(fr * 10) for fr in flow_rates],
       cut_off_speed=[round(cs * 10) for cs in cut_off_speed or [250] * len(ops)],
       stop_back_volume=[round(sbv * 100) for sbv in stop_back_volume or [0] * len(ops)],
-      transport_air_volume=[round(tav * 10) for tav in transport_air_volume or [0] * len(ops)],
+      transport_air_volume=[
+        round(tav * 10)
+        for tav in transport_air_volume
+        or [hlc.dispense_air_transport_volume if hlc is not None else 0 for hlc in hlcs]
+      ],
       blow_out_air_volume=[round(boav * 100) for boav in blow_out_air_volumes],
       lld_mode=lld_mode or [0] * len(ops),
       side_touch_off_distance=round(side_touch_off_distance * 10),
@@ -884,7 +977,8 @@ class Vantage(HamiltonLiquidHandler):
       position = tip_spot_a1.get_absolute_location() + tip_spot_a1.center() + drop.offset
     else:
       raise NotImplementedError(
-        "Only TipRacks are supported for dropping tips on Vantage", f"got {drop.resource}"
+        "Only TipRacks are supported for dropping tips on Vantage",
+        f"got {drop.resource}",
       )
     offset_z = drop.offset.z
 
@@ -902,7 +996,9 @@ class Vantage(HamiltonLiquidHandler):
 
   async def aspirate96(
     self,
-    aspiration: Union[AspirationPlate, AspirationContainer],
+    aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer],
+    jet: bool = False,
+    blow_out: bool = False,
     hlc: Optional[HamiltonLiquidClass] = None,
     type_of_aspiration: int = 0,
     minimal_traverse_height_at_begin_of_command: Optional[float] = None,
@@ -913,6 +1009,7 @@ class Vantage(HamiltonLiquidHandler):
     immersion_depth: float = 0,
     surface_following_distance: float = 0,
     transport_air_volume: Optional[float] = None,
+    blow_out_air_volume: Optional[float] = None,
     pre_wetting_volume: float = 0,
     lld_mode: int = 0,
     lld_sensitivity: int = 4,
@@ -928,12 +1025,19 @@ class Vantage(HamiltonLiquidHandler):
     tadm_algorithm_on_off: int = 0,
     recording_mode: int = 0,
   ):
+    """Aspirate from a plate.
+
+    Args:
+      jet: Whether to find a liquid class with "jet" mode. Only used on dispense.
+      blow_out: Whether to find a liquid class with "blow out" mode. Only used on dispense. Note
+        that this is called "empty" in the VENUS liquid editor, but "blow out" in the firmware
+        documentation.
+      hlc: The Hamiltonian liquid classes to use. If `None`, the liquid classes will be
+        determined automatically based on the tip and liquid used in the first well.
+    """
     # assert self.core96_head_installed, "96 head must be installed"
 
-    if hlc is not None:
-      raise NotImplementedError("hlc is deprecated")
-
-    if isinstance(aspiration, AspirationPlate):
+    if isinstance(aspiration, MultiHeadAspirationPlate):
       top_left_well = aspiration.wells[0]
       position = (
         top_left_well.get_absolute_location()
@@ -955,20 +1059,35 @@ class Vantage(HamiltonLiquidHandler):
 
     liquid_height = position.z + (aspiration.liquid_height or 0)
 
-    if transport_air_volume is None:
-      transport_air_volume = 0
-    if aspiration.blow_out_air_volume is None:
-      blow_out_air_volume = 0.0
-    else:
-      blow_out_air_volume = aspiration.blow_out_air_volume
-    if aspiration.flow_rate is None:
-      flow_rate = 250.0
-    else:
-      flow_rate = aspiration.flow_rate
-    if swap_speed is None:
-      swap_speed = 100
-    if settling_time is None:
-      settling_time = 5
+    tip = aspiration.tips[0]
+    liquid_to_be_aspirated = Liquid.WATER  # default to water
+    if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][-1][0] is not None:
+      # first part of tuple in last liquid of first well
+      liquid_to_be_aspirated = aspiration.liquids[0][-1][0]
+    if hlc is None:
+      hlc = get_vantage_liquid_class(
+        tip_volume=tip.maximal_volume,
+        is_core=True,
+        is_tip=True,
+        has_filter=tip.has_filter,
+        liquid=liquid_to_be_aspirated,
+        jet=jet,
+        blow_out=blow_out,
+      )
+
+    volume = (
+      hlc.compute_corrected_volume(aspiration.volume) if hlc is not None else aspiration.volume
+    )
+
+    transport_air_volume = transport_air_volume or (
+      hlc.aspiration_air_transport_volume if hlc is not None else 0
+    )
+    blow_out_air_volume = blow_out_air_volume or (
+      hlc.aspiration_blow_out_volume if hlc is not None else 0
+    )
+    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
+    swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
+    settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 5)
 
     return await self.core96_aspiration_of_liquid(
       x_position=round(position.x * 10),
@@ -990,7 +1109,7 @@ class Vantage(HamiltonLiquidHandler):
       tube_2nd_section_ratio=round(tube_2nd_section_ratio * 10),
       immersion_depth=round(immersion_depth * 10),
       surface_following_distance=round(surface_following_distance * 10),
-      aspiration_volume=round(aspiration.volume * 100),
+      aspiration_volume=round(volume * 100),
       aspiration_speed=round(flow_rate * 10),
       transport_air_volume=round(transport_air_volume * 10),
       blow_out_air_volume=round(blow_out_air_volume * 100),
@@ -1016,7 +1135,7 @@ class Vantage(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: Union[DispensePlate, DispenseContainer],
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer],
     jet: bool = False,
     blow_out: bool = False,  # "empty" in the VENUS liquid editor
     empty: bool = False,  # truly "empty", does not exist in liquid editor, dm4
@@ -1032,6 +1151,7 @@ class Vantage(HamiltonLiquidHandler):
     cut_off_speed: float = 250.0,
     stop_back_volume: float = 0,
     transport_air_volume: Optional[float] = None,
+    blow_out_air_volume: Optional[float] = None,
     lld_mode: int = 0,
     lld_sensitivity: int = 4,
     side_touch_off_distance: float = 0,
@@ -1062,10 +1182,7 @@ class Vantage(HamiltonLiquidHandler):
         determined based on the jet, blow_out, and empty parameters.
     """
 
-    if hlc is not None:
-      raise NotImplementedError("hlc is deprecated")
-
-    if isinstance(dispense, DispensePlate):
+    if isinstance(dispense, MultiHeadDispensePlate):
       top_left_well = dispense.wells[0]
       position = (
         top_left_well.get_absolute_location()
@@ -1087,24 +1204,36 @@ class Vantage(HamiltonLiquidHandler):
 
     liquid_height = position.z + (dispense.liquid_height or 0) + 10
 
-    if transport_air_volume is None:
-      transport_air_volume = 0
-    if dispense.blow_out_air_volume is None:
-      blow_out_air_volume = 0.0
-    else:
-      blow_out_air_volume = dispense.blow_out_air_volume
-    if dispense.flow_rate is None:
-      flow_rate = 250.0
-    else:
-      flow_rate = dispense.flow_rate
-    if swap_speed is None:
-      swap_speed = 100
-    if settling_time is None:
-      settling_time = 5
-    if mix_speed is None:
-      mix_speed = 100
-    if type_of_dispensing_mode is None:
-      type_of_dispensing_mode = _get_dispense_mode(jet=jet, empty=empty, blow_out=blow_out)
+    tip = dispense.tips[0]
+    liquid_to_be_dispensed = Liquid.WATER  # default to WATER
+    if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
+      # first part of tuple in last liquid of first well
+      liquid_to_be_dispensed = dispense.liquids[0][-1][0]
+    if hlc is None:
+      hlc = get_vantage_liquid_class(
+        tip_volume=tip.maximal_volume,
+        is_core=True,
+        is_tip=True,
+        has_filter=tip.has_filter,
+        liquid=liquid_to_be_dispensed,
+        jet=jet,
+        blow_out=blow_out,  # see method docstring
+      )
+    volume = hlc.compute_corrected_volume(dispense.volume) if hlc is not None else dispense.volume
+
+    transport_air_volume = transport_air_volume or (
+      hlc.dispense_air_transport_volume if hlc is not None else 0
+    )
+    blow_out_air_volume = blow_out_air_volume or (
+      hlc.dispense_blow_out_volume if hlc is not None else 0
+    )
+    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 250)
+    swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
+    settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
+    mix_speed = mix_speed or (hlc.dispense_mix_flow_rate if hlc is not None else 100)
+    type_of_dispensing_mode = type_of_dispensing_mode or _get_dispense_mode(
+      jet=jet, empty=empty, blow_out=blow_out
+    )
 
     return await self.core96_dispensing_of_liquid(
       x_position=round(position.x * 10),
@@ -1126,7 +1255,7 @@ class Vantage(HamiltonLiquidHandler):
       minimal_height_at_command_end=round(
         (minimal_height_at_command_end or self._traversal_height) * 10
       ),
-      dispense_volume=round(dispense.volume * 100),
+      dispense_volume=round(volume * 100),
       dispense_speed=round(flow_rate * 10),
       cut_off_speed=round(cut_off_speed * 10),
       stop_back_volume=round(stop_back_volume * 100),
@@ -1150,25 +1279,9 @@ class Vantage(HamiltonLiquidHandler):
       recording_mode=recording_mode,
     )
 
-  async def move_resource(self, move: Move):
-    await self.pick_up_resource(
-      resource=move.resource,
-      offset=move.resource_offset,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-    )
-
-    await self.release_picked_up_resource(
-      resource=move.resource,
-      destination=move.destination,
-      offset=move.destination_offset,
-      pickup_distance_from_top=move.pickup_distance_from_top,
-    )
-
   async def pick_up_resource(
     self,
-    resource: Resource,
-    offset: Coordinate,
-    pickup_distance_from_top: float,
+    pickup: ResourcePickup,
     grip_strength: int = 81,
     plate_width_tolerance: float = 2.0,
     acceleration_index: int = 4,
@@ -1179,9 +1292,9 @@ class Vantage(HamiltonLiquidHandler):
     """Pick up a resource with the IPG. You probably want to use :meth:`move_resource`, which
     allows you to pick up and move a resource with a single command."""
 
-    center = resource.get_absolute_location() + resource.center() + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    plate_width = resource.get_absolute_size_x()
+    center = pickup.resource.get_absolute_location(x="c", y="c", z="b") + pickup.offset
+    grip_height = center.z + pickup.resource.get_absolute_size_z() - pickup.pickup_distance_from_top
+    plate_width = pickup.resource.get_absolute_size_x()
 
     await self.ipg_grip_plate(
       x_position=round(center.x * 10),
@@ -1199,7 +1312,7 @@ class Vantage(HamiltonLiquidHandler):
       ),
     )
 
-  async def move_picked_up_resource(self):
+  async def move_picked_up_resource(self, move: ResourceMove):
     """Move a resource picked up with the IPG. See :meth:`pick_up_resource`.
 
     You probably want to use :meth:`move_resource`, which allows you to pick up and move a resource
@@ -1208,12 +1321,9 @@ class Vantage(HamiltonLiquidHandler):
 
     raise NotImplementedError()
 
-  async def release_picked_up_resource(
+  async def drop_resource(
     self,
-    resource: Resource,
-    destination: Coordinate,
-    offset: Coordinate,
-    pickup_distance_from_top: float,
+    drop: ResourceDrop,
     z_clearance_height: float = 0,
     press_on_distance: int = 5,
     hotel_depth: float = 0,
@@ -1225,9 +1335,9 @@ class Vantage(HamiltonLiquidHandler):
     with a single command.
     """
 
-    center = destination + resource.center() + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    plate_width = resource.get_absolute_size_x()
+    center = drop.destination + drop.resource.center() + drop.offset
+    grip_height = center.z + drop.resource.get_absolute_size_z() - drop.pickup_distance_from_top
+    plate_width = drop.resource.get_absolute_size_x()
 
     await self.ipg_put_plate(
       x_position=round(center.x * 10),
@@ -1247,7 +1357,7 @@ class Vantage(HamiltonLiquidHandler):
 
     return await self.expose_channel_n(channel_index=channel + 1)  # ?
 
-  async def move_channel_x(self, channel: int, x: float):  # pylint: disable=unused-argument
+  async def move_channel_x(self, channel: int, x: float):
     """Move the specified channel to the specified x coordinate."""
 
     return await self.x_arm_move_to_x_position(round(x * 10))
@@ -1334,7 +1444,9 @@ class Vantage(HamiltonLiquidHandler):
       command="MI",
     )
 
-  async def arm_request_instrument_initialization_status(self) -> bool:
+  async def arm_request_instrument_initialization_status(
+    self,
+  ) -> bool:
     """Request the instrument initialization status.
 
     This command was based on the STAR command (QW) and the VStarTranslator log. A1AM corresponds
@@ -5091,7 +5203,11 @@ class Vantage(HamiltonLiquidHandler):
   async def disco_mode(self):
     """Easter egg."""
     for _ in range(69):
-      r, g, b = random.randint(30, 100), random.randint(30, 100), random.randint(30, 100)
+      r, g, b = (
+        random.randint(30, 100),
+        random.randint(30, 100),
+        random.randint(30, 100),
+      )
       await self.set_led_color("on", intensity=100, white=0, red=r, green=g, blue=b, uv=0)
       await asyncio.sleep(0.1)
 
@@ -5106,11 +5222,27 @@ class Vantage(HamiltonLiquidHandler):
       return
 
     if random.randint(1, 6) == 6:
-      await self.set_led_color("on", intensity=100, white=100, red=100, green=0, blue=0, uv=100)
+      await self.set_led_color(
+        "on",
+        intensity=100,
+        white=100,
+        red=100,
+        green=0,
+        blue=0,
+        uv=100,
+      )
       print("You lost.")
     else:
       await self.set_led_color("on", intensity=100, white=100, red=0, green=100, blue=0, uv=0)
       print("You won.")
 
     await asyncio.sleep(5)
-    await self.set_led_color("on", intensity=100, white=100, red=100, green=100, blue=100, uv=0)
+    await self.set_led_color(
+      "on",
+      intensity=100,
+      white=100,
+      red=100,
+      green=100,
+      blue=100,
+      uv=0,
+    )

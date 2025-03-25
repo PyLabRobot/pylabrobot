@@ -1,45 +1,79 @@
-"""
-This file defines interfaces for all supported Hamilton liquid handling robots.
-"""
-# pylint: disable=invalid-sequence-index, dangerous-default-value
-
 import datetime
 import enum
 import functools
 import logging
 import re
 from abc import ABCMeta
-from typing import Callable, Dict, List, Literal, Optional, Sequence, Type, TypeVar, Union, cast
+from contextlib import asynccontextmanager, contextmanager
+from typing import (
+  Callable,
+  Dict,
+  List,
+  Literal,
+  Optional,
+  Sequence,
+  Type,
+  TypeVar,
+  Union,
+  cast,
+)
 
 from pylabrobot import audio
-from pylabrobot.liquid_handling.backends.hamilton.base import HamiltonLiquidHandler
+from pylabrobot.liquid_handling.backends.hamilton.base import (
+  HamiltonLiquidHandler,
+)
 from pylabrobot.liquid_handling.errors import ChannelizedError
-from pylabrobot.liquid_handling.liquid_classes.hamilton import HamiltonLiquidClass
+from pylabrobot.liquid_handling.liquid_classes.hamilton import (
+  HamiltonLiquidClass,
+  get_star_liquid_class,
+)
 from pylabrobot.liquid_handling.standard import (
-  Aspiration,
-  AspirationContainer,
-  AspirationPlate,
-  Dispense,
-  DispenseContainer,
-  DispensePlate,
   Drop,
   DropTipRack,
   GripDirection,
-  Move,
+  MultiHeadAspirationContainer,
+  MultiHeadAspirationPlate,
+  MultiHeadDispenseContainer,
+  MultiHeadDispensePlate,
   Pickup,
   PickupTipRack,
+  ResourceDrop,
+  ResourceMove,
+  ResourcePickup,
+  SingleChannelAspiration,
+  SingleChannelDispense,
 )
-from pylabrobot.resources import Carrier, Coordinate, Resource, TipRack, TipSpot, Well
+from pylabrobot.liquid_handling.utils import (
+  get_tight_single_resource_liquid_op_offsets,
+  get_wide_single_resource_liquid_op_offsets,
+)
+from pylabrobot.resources import (
+  Carrier,
+  Coordinate,
+  Resource,
+  TipRack,
+  TipSpot,
+  Well,
+)
 from pylabrobot.resources.errors import (
   HasTipError,
   NoTipError,
   TooLittleLiquidError,
   TooLittleVolumeError,
 )
-from pylabrobot.resources.hamilton.hamilton_decks import STAR_SIZE_X, STARLET_SIZE_X
-from pylabrobot.resources.ml_star import HamiltonTip, TipDropMethod, TipPickupMethod, TipSize
-from pylabrobot.resources.utils import get_child_location
-from pylabrobot.utils.linalg import matrix_vector_multiply_3x3
+from pylabrobot.resources.hamilton import (
+  HamiltonTip,
+  TipDropMethod,
+  TipPickupMethod,
+  TipSize,
+)
+from pylabrobot.resources.hamilton.hamilton_decks import (
+  STAR_SIZE_X,
+  STARLET_SIZE_X,
+)
+from pylabrobot.resources.liquid import Liquid
+from pylabrobot.resources.rotation import Rotation
+from pylabrobot.resources.trash import Trash
 
 T = TypeVar("T")
 
@@ -57,10 +91,10 @@ def need_iswap_parked(method: Callable):
   async def wrapper(self: "STAR", *args, **kwargs):
     if self.iswap_installed and not self.iswap_parked:
       await self.park_iswap(
-        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10)
-      )  # pylint: disable=protected-access
+        minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
+      )
 
-    result = await method(self, *args, **kwargs)  # pylint: disable=not-callable
+    result = await method(self, *args, **kwargs)
 
     return result
 
@@ -993,7 +1027,10 @@ def star_firmware_string_to_error(
     if "/" in error:
       # C0 module: error code / trace information
       error_code_str, trace_information_str = error.split("/")
-      error_code, trace_information = int(error_code_str), int(trace_information_str)
+      error_code, trace_information = (
+        int(error_code_str),
+        int(trace_information_str),
+      )
       if error_code == 0:  # No error
         continue
       error_class = error_code_to_exception(error_code)
@@ -1021,7 +1058,9 @@ def star_firmware_string_to_error(
   return STARFirmwareError(errors=errors, raw_response=raw_response)
 
 
-def convert_star_module_error_to_plr_error(error: STARModuleError) -> Optional[Exception]:
+def convert_star_module_error_to_plr_error(
+  error: STARModuleError,
+) -> Optional[Exception]:
   """Convert an error returned by a specific STAR module to a Hamilton error."""
   # TipAlreadyFittedError -> HasTipError
   if isinstance(error, TipAlreadyFittedError):
@@ -1043,7 +1082,9 @@ def convert_star_module_error_to_plr_error(error: STARModuleError) -> Optional[E
   return None
 
 
-def convert_star_firmware_error_to_plr_error(error: STARFirmwareError) -> Optional[Exception]:
+def convert_star_firmware_error_to_plr_error(
+  error: STARFirmwareError,
+) -> Optional[Exception]:
   """Check if a STARFirmwareError can be converted to a native PLR error. If so, return it, else
   return `None`."""
 
@@ -1121,9 +1162,12 @@ class STAR(HamiltonLiquidHandler):
     self._num_channels: Optional[int] = None
     self._core_parked: Optional[bool] = None
     self._extended_conf: Optional[dict] = None
-    self._traversal_height: float = 245.0
+    self._channel_traversal_height: float = 245.0
+    self._iswap_traversal_height: float = 284.0
     self.core_adjustment = Coordinate.zero()
     self._unsafe = UnSafe(self)
+
+    self._iswap_version: Optional[str] = None  # loaded lazily
 
   @property
   def unsafe(self) -> "UnSafe":
@@ -1138,7 +1182,13 @@ class STAR(HamiltonLiquidHandler):
     return self._num_channels
 
   def set_minimum_traversal_height(self, traversal_height: float):
-    """Set the minimum traversal height for the robot.
+    raise NotImplementedError(
+      "set_minimum_traversal_height is depricated. use set_minimum_channel_traversal_height or "
+      "set_minimum_iswap_traversal_height instead."
+    )
+
+  def set_minimum_channel_traversal_height(self, traversal_height: float):
+    """Set the minimum traversal height for the pip channels.
 
     This refers to the bottom of the pipetting channel when no tip is present, or the bottom of the
     tip when a tip is present. This value will be used as the default value for the
@@ -1148,7 +1198,24 @@ class STAR(HamiltonLiquidHandler):
 
     assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
 
-    self._traversal_height = traversal_height
+    self._channel_traversal_height = traversal_height
+
+  def set_minimum_iswap_traversal_height(self, traversal_height: float):
+    """Set the minimum traversal height for the iswap."""
+
+    assert 0 < traversal_height < 285, "Traversal height must be between 0 and 285 mm"
+
+    self._iswap_traversal_height = traversal_height
+
+  @contextmanager
+  def iswap_minimum_traversal_height(self, traversal_height: float):
+    orig = self._iswap_traversal_height
+    self._iswap_traversal_height = traversal_height
+    try:
+      yield
+    except Exception as e:
+      self._iswap_traversal_height = orig
+      raise e
 
   @property
   def module_id_length(self):
@@ -1168,6 +1235,17 @@ class STAR(HamiltonLiquidHandler):
   @property
   def core_parked(self) -> bool:
     return self._core_parked is True
+
+  async def get_iswap_version(self) -> str:
+    """Lazily load the iSWAP version. Use cached value if available."""
+    if self._iswap_version is None:
+      self._iswap_version = await self.request_iswap_version()
+    return self._iswap_version
+
+  async def request_pip_channel_version(self, channel: int) -> str:
+    return cast(
+      str, (await self.send_command(STAR.channel_id(channel), "RF", fmt="rf" + "&" * 17))["rf"]
+    )
 
   def get_id_from_fw_response(self, resp: str) -> Optional[int]:
     """Get the id from a firmware response."""
@@ -1250,9 +1328,8 @@ class STAR(HamiltonLiquidHandler):
           # temp. disabled until we figure out how to handle async in parse response (the
           # background thread does not have an event loop, and I'm not sure if it should.)
           # vp = await self.send_command(module=error.raw_module, command="VP", fmt="vp&&")["vp"]
-          # he[module_name].message += f" ({vp})" # pylint: disable=unnecessary-dict-index-lookup
+          # he[module_name].message += f" ({vp})"
 
-          # pylint: disable=unnecessary-dict-index-lookup
           he.errors[
             module_name
           ].message += " (call lh.backend.request_name_of_last_faulty_parameter)"
@@ -1263,13 +1340,23 @@ class STAR(HamiltonLiquidHandler):
     """Parse a response from the machine."""
     return parse_star_fw_string(resp, fmt)
 
-  async def setup(self):
-    """setup
+  async def setup(
+    self,
+    skip_autoload=False,
+    skip_iswap=False,
+    skip_core96_head=False,
+  ):
+    """Creates a USB connection and finds read/write interfaces.
 
-    Creates a USB connection and finds read/write interfaces.
+    Args:
+      skip_autoload: if True, skip initializing the autoload module, if applicable.
+      skip_iswap: if True, skip initializing the iSWAP module, if applicable.
+      skip_core96_head: if True, skip initializing the CoRe 96 head module, if applicable.
     """
 
     await super().setup()
+
+    self.id_ = 0
 
     tip_presences = await self.request_tip_presence()
     self._num_channels = len(tip_presences)
@@ -1284,7 +1371,7 @@ class STAR(HamiltonLiquidHandler):
     )
     left_x_drive_configuration_byte_1 = left_x_drive_configuration_byte_1[2:]
     configuration_data1 = bin(conf["kb"]).split("b")[-1].zfill(8)
-    autoload_configuration_byte = configuration_data1[-3]
+    autoload_configuration_byte = configuration_data1[-4]
     # Identify installations
     self.autoload_installed = autoload_configuration_byte == "1"
     self.core96_head_installed = left_x_drive_configuration_byte_1[2] == "1"
@@ -1304,7 +1391,7 @@ class STAR(HamiltonLiquidHandler):
       await self.initialize_pipetting_channels(
         x_positions=[self.extended_conf["xw"]],  # Tip eject waste X position.
         y_positions=y_positions,
-        begin_of_tip_deposit_process=int(self._traversal_height * 10),
+        begin_of_tip_deposit_process=int(self._channel_traversal_height * 10),
         end_of_tip_deposit_process=1220,
         z_position_at_end_of_a_command=3600,
         tip_pattern=[True] * self.num_channels,
@@ -1312,27 +1399,28 @@ class STAR(HamiltonLiquidHandler):
         discarding_method=0,
       )
 
-    if self.autoload_installed:
+    if self.autoload_installed and not skip_autoload:
       autoload_initialized = await self.request_autoload_initialization_status()
       if not autoload_initialized:
         await self.initialize_autoload()
 
       await self.park_autoload()
 
-    if self.iswap_installed:
+    if self.iswap_installed and not skip_iswap:
       iswap_initialized = await self.request_iswap_initialization_status()
       if not iswap_initialized:
         await self.initialize_iswap()
 
       await self.park_iswap(
-        minimum_traverse_height_at_beginning_of_a_command=int(self._traversal_height * 10)
+        minimum_traverse_height_at_beginning_of_a_command=int(self._iswap_traversal_height * 10)
       )
 
-    if self.core96_head_installed:
+    if self.core96_head_installed and not skip_core96_head:
       core96_head_initialized = await self.request_core_96_head_initialization_status()
       if not core96_head_initialized:
         await self.initialize_core_96_head(
-          z_position_at_the_command_end=int(self._traversal_height * 10)
+          trash96=self.deck.get_trash_area96(),
+          z_position_at_the_command_end=self._channel_traversal_height,
         )
 
     # After setup, STAR will have thrown out anything mounted on the pipetting channels, including
@@ -1385,7 +1473,7 @@ class STAR(HamiltonLiquidHandler):
       else round(end_tip_pick_up_process * 10)
     )
     minimum_traverse_height_at_beginning_of_a_command = (
-      round(self._traversal_height * 10)
+      round(self._channel_traversal_height * 10)
       if minimum_traverse_height_at_beginning_of_a_command is None
       else round(minimum_traverse_height_at_beginning_of_a_command * 10)
     )
@@ -1462,12 +1550,12 @@ class STAR(HamiltonLiquidHandler):
       )
 
     minimum_traverse_height_at_beginning_of_a_command = (
-      round(self._traversal_height * 10)
+      round(self._channel_traversal_height * 10)
       if minimum_traverse_height_at_beginning_of_a_command is None
       else round(minimum_traverse_height_at_beginning_of_a_command * 10)
     )
     z_position_at_end_of_a_command = (
-      round(self._traversal_height * 10)
+      round(self._channel_traversal_height * 10)
       if z_position_at_end_of_a_command is None
       else round(z_position_at_end_of_a_command * 10)
     )
@@ -1507,8 +1595,10 @@ class STAR(HamiltonLiquidHandler):
 
   async def aspirate(
     self,
-    ops: List[Aspiration],
+    ops: List[SingleChannelAspiration],
     use_channels: List[int],
+    jet: Optional[List[bool]] = None,
+    blow_out: Optional[List[bool]] = None,
     lld_search_height: Optional[List[float]] = None,
     clot_detection_height: Optional[List[float]] = None,
     pull_out_distance_transport_air: Optional[List[float]] = None,
@@ -1555,6 +1645,9 @@ class STAR(HamiltonLiquidHandler):
     Args:
       ops: The aspiration operations to perform.
       use_channels: The channels to use for the operations.
+      jet: whether to search for a jet liquid class. Only used on dispense. Default is False.
+      blow_out: whether to blow out air. Only used on dispense. Note that in the VENUS Liquid
+        Editor, this is called "empty". Default is False.
 
       lld_search_height: The height to start searching for the liquid level when using LLD.
       clot_detection_height: Unknown, but probably the height to search for clots when doing LLD.
@@ -1603,18 +1696,48 @@ class STAR(HamiltonLiquidHandler):
         starting an aspiration.
       min_z_endpos: The minimum height to move to, this is the end of aspiration.
 
+      hamilton_liquid_classes: Override the default liquid classes. See
+        pylabrobot/liquid_handling/liquid_classes/hamilton/star.py
       liquid_surface_no_lld: Liquid surface at function without LLD [mm]. Must be between 0
           and 360. Defaults to well bottom + liquid height. Should use absolute z.
     """
-
-    if hamilton_liquid_classes is not None:
-      raise NotImplementedError("Hamilton liquid classes are deprecated.")
 
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
 
+    if jet is None:
+      jet = [False] * n
+    if blow_out is None:
+      blow_out = [False] * n
+
+    if hamilton_liquid_classes is None:
+      hamilton_liquid_classes = []
+      for i, op in enumerate(ops):
+        liquid = Liquid.WATER  # default to WATER
+        # [-1][0]: get last liquid in well, [0] is indexing into the tuple
+        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
+          liquid = op.liquids[-1][0]
+
+        hamilton_liquid_classes.append(
+          get_star_liquid_class(
+            tip_volume=op.tip.maximal_volume,
+            is_core=False,
+            is_tip=True,
+            has_filter=op.tip.has_filter,
+            liquid=liquid,
+            jet=jet[i],
+            blow_out=blow_out[i],
+          )
+        )
+
     self._assert_valid_resources([op.resource for op in ops])
+
+    # correct volumes using the liquid class
+    volumes = [
+      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+      for op, hlc in zip(ops, hamilton_liquid_classes)
+    ]
 
     well_bottoms = [
       op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
@@ -1632,7 +1755,13 @@ class STAR(HamiltonLiquidHandler):
       ]
     else:
       lld_search_height = [(wb + sh) for wb, sh in zip(well_bottoms, lld_search_height)]
-    clot_detection_height = _fill_in_defaults(clot_detection_height, default=[0] * n)
+    clot_detection_height = _fill_in_defaults(
+      clot_detection_height,
+      default=[
+        hlc.aspiration_clot_retract_height if hlc is not None else 0
+        for hlc in hamilton_liquid_classes
+      ],
+    )
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10] * n)
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
@@ -1641,9 +1770,21 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth = _fill_in_defaults(immersion_depth, [0] * n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0] * n)
-    flow_rates = [op.flow_rate or 100 for op in ops]
-    transport_air_volume = _fill_in_defaults(transport_air_volume, default=[0] * n)
-    blow_out_air_volumes = [op.blow_out_air_volume or 0 for op in ops]
+    flow_rates = [
+      op.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 100)
+      for op, hlc in zip(ops, hamilton_liquid_classes)
+    ]
+    transport_air_volume = _fill_in_defaults(
+      transport_air_volume,
+      default=[
+        hlc.aspiration_air_transport_volume if hlc is not None else 0
+        for hlc in hamilton_liquid_classes
+      ],
+    )
+    blow_out_air_volumes = [
+      (op.blow_out_air_volume or (hlc.aspiration_blow_out_volume if hlc is not None else 0))
+      for op, hlc in zip(ops, hamilton_liquid_classes)
+    ]
     pre_wetting_volume = _fill_in_defaults(pre_wetting_volume, [0] * n)
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
     gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1] * n)
@@ -1654,12 +1795,27 @@ class STAR(HamiltonLiquidHandler):
     detection_height_difference_for_dual_lld = _fill_in_defaults(
       detection_height_difference_for_dual_lld, [0] * n
     )
-    swap_speed = _fill_in_defaults(swap_speed, default=[100] * n)
-    settling_time = _fill_in_defaults(settling_time, default=[0] * n)
+    swap_speed = _fill_in_defaults(
+      swap_speed,
+      default=[
+        hlc.aspiration_swap_speed if hlc is not None else 100 for hlc in hamilton_liquid_classes
+      ],
+    )
+    settling_time = _fill_in_defaults(
+      settling_time,
+      default=[
+        hlc.aspiration_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
+      ],
+    )
     mix_volume = _fill_in_defaults(mix_volume, [0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
     mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
-    mix_speed = _fill_in_defaults(mix_speed, [50] * n)
+    mix_speed = _fill_in_defaults(
+      mix_speed,
+      default=[
+        hlc.aspiration_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
+      ],
+    )
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
@@ -1686,7 +1842,7 @@ class STAR(HamiltonLiquidHandler):
         tip_pattern=channels_involved,
         x_positions=x_positions,
         y_positions=y_positions,
-        aspiration_volumes=[round(op.volume * 10) for op in ops],
+        aspiration_volumes=[round(vol * 10) for vol in volumes],
         lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
         clot_detection_height=[round(cd * 10) for cd in clot_detection_height],
         liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
@@ -1737,9 +1893,9 @@ class STAR(HamiltonLiquidHandler):
         ratio_liquid_rise_to_tip_deep_in=ratio_liquid_rise_to_tip_deep_in,
         immersion_depth_2nd_section=[round(id_ * 10) for id_ in immersion_depth_2nd_section],
         minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
-        min_z_endpos=round((min_z_endpos or self._traversal_height) * 10),
+        min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
       )
     except STARFirmwareError as e:
       if plr_e := convert_star_firmware_error_to_plr_error(e):
@@ -1748,7 +1904,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def dispense(
     self,
-    ops: List[Dispense],
+    ops: List[SingleChannelDispense],
     use_channels: List[int],
     lld_search_height: Optional[List[float]] = None,
     liquid_surface_no_lld: Optional[List[float]] = None,
@@ -1839,9 +1995,6 @@ class STAR(HamiltonLiquidHandler):
         documentation. Dispense mode 4.
     """
 
-    if hamilton_liquid_classes is not None:
-      raise NotImplementedError("Hamilton liquid classes are deprecated.")
-
     x_positions, y_positions, channels_involved = self._ops_to_fw_positions(ops, use_channels)
 
     n = len(ops)
@@ -1852,6 +2005,32 @@ class STAR(HamiltonLiquidHandler):
       empty = [False] * n
     if blow_out is None:
       blow_out = [False] * n
+
+    if hamilton_liquid_classes is None:
+      hamilton_liquid_classes = []
+      for i, op in enumerate(ops):
+        liquid = Liquid.WATER  # default to WATER
+        # [-1][0]: get last liquid in tip, [0] is indexing into the tuple
+        if len(op.liquids) > 0 and op.liquids[-1][0] is not None:
+          liquid = op.liquids[-1][0]
+
+        hamilton_liquid_classes.append(
+          get_star_liquid_class(
+            tip_volume=op.tip.maximal_volume,
+            is_core=False,
+            is_tip=True,
+            has_filter=op.tip.has_filter,
+            liquid=liquid,
+            jet=jet[i],
+            blow_out=blow_out[i],
+          )
+        )
+
+    # correct volumes using the liquid class
+    volumes = [
+      hlc.compute_corrected_volume(op.volume) if hlc is not None else op.volume
+      for op, hlc in zip(ops, hamilton_liquid_classes)
+    ]
 
     well_bottoms = [
       op.resource.get_absolute_location().z + op.offset.z + op.resource.material_z_thickness
@@ -1875,7 +2054,6 @@ class STAR(HamiltonLiquidHandler):
       for i in range(len(ops))
     ]
 
-    dispense_volumes = [op.volume for op in ops]
     pull_out_distance_transport_air = _fill_in_defaults(pull_out_distance_transport_air, [10.0] * n)
     second_section_height = _fill_in_defaults(second_section_height, [3.2] * n)
     second_section_ratio = _fill_in_defaults(second_section_ratio, [618.0] * n)
@@ -1883,23 +2061,55 @@ class STAR(HamiltonLiquidHandler):
     immersion_depth = _fill_in_defaults(immersion_depth, [0] * n)
     immersion_depth_direction = _fill_in_defaults(immersion_depth_direction, [0] * n)
     surface_following_distance = _fill_in_defaults(surface_following_distance, [0] * n)
-    flow_rates = [op.flow_rate or 120 for op in ops]
+    flow_rates = [
+      op.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
+      for op, hlc in zip(ops, hamilton_liquid_classes)
+    ]
     cut_off_speed = _fill_in_defaults(cut_off_speed, [5.0] * n)
-    stop_back_volume = _fill_in_defaults(stop_back_volume, default=[0] * n)
-    transport_air_volume = _fill_in_defaults(transport_air_volume, [0] * n)
-    blow_out_air_volumes = [op.blow_out_air_volume or 0 for op in ops]
+    stop_back_volume = _fill_in_defaults(
+      stop_back_volume,
+      default=[
+        hlc.dispense_stop_back_volume if hlc is not None else 0 for hlc in hamilton_liquid_classes
+      ],
+    )
+    transport_air_volume = _fill_in_defaults(
+      transport_air_volume,
+      default=[
+        hlc.dispense_air_transport_volume if hlc is not None else 0
+        for hlc in hamilton_liquid_classes
+      ],
+    )
+    blow_out_air_volumes = [
+      (op.blow_out_air_volume or (hlc.dispense_blow_out_volume if hlc is not None else 0))
+      for op, hlc in zip(ops, hamilton_liquid_classes)
+    ]
     lld_mode = _fill_in_defaults(lld_mode, [self.__class__.LLDMode.OFF] * n)
     dispense_position_above_z_touch_off = _fill_in_defaults(
       dispense_position_above_z_touch_off, default=[0] * n
     )
     gamma_lld_sensitivity = _fill_in_defaults(gamma_lld_sensitivity, [1] * n)
     dp_lld_sensitivity = _fill_in_defaults(dp_lld_sensitivity, [1] * n)
-    swap_speed = _fill_in_defaults(swap_speed, [10.0] * n)
-    settling_time = _fill_in_defaults(settling_time, [0] * n)
+    swap_speed = _fill_in_defaults(
+      swap_speed,
+      default=[
+        hlc.dispense_swap_speed if hlc is not None else 10.0 for hlc in hamilton_liquid_classes
+      ],
+    )
+    settling_time = _fill_in_defaults(
+      settling_time,
+      default=[
+        hlc.dispense_settling_time if hlc is not None else 0 for hlc in hamilton_liquid_classes
+      ],
+    )
     mix_volume = _fill_in_defaults(mix_volume, [0] * n)
     mix_cycles = _fill_in_defaults(mix_cycles, [0] * n)
     mix_position_from_liquid_surface = _fill_in_defaults(mix_position_from_liquid_surface, [0] * n)
-    mix_speed = _fill_in_defaults(mix_speed, [50.0] * n)
+    mix_speed = _fill_in_defaults(
+      mix_speed,
+      default=[
+        hlc.dispense_mix_flow_rate if hlc is not None else 50.0 for hlc in hamilton_liquid_classes
+      ],
+    )
     mix_surface_following_distance = _fill_in_defaults(mix_surface_following_distance, [0] * n)
     limit_curve_index = _fill_in_defaults(limit_curve_index, [0] * n)
 
@@ -1909,7 +2119,7 @@ class STAR(HamiltonLiquidHandler):
         x_positions=x_positions,
         y_positions=y_positions,
         dispensing_mode=dispensing_modes,
-        dispense_volumes=[round(op.volume * 10) for op in ops],
+        dispense_volumes=[round(vol * 10) for vol in volumes],
         lld_search_height=[round(lsh * 10) for lsh in lld_search_height],
         liquid_surface_no_lld=[round(ls * 10) for ls in liquid_surfaces_no_lld],
         pull_out_distance_transport_air=[round(po * 10) for po in pull_out_distance_transport_air],
@@ -1943,9 +2153,9 @@ class STAR(HamiltonLiquidHandler):
         ],
         limit_curve_index=limit_curve_index,
         minimum_traverse_height_at_beginning_of_a_command=round(
-          (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+          (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
         ),
-        min_z_endpos=round((min_z_endpos or self._traversal_height) * 10),
+        min_z_endpos=round((min_z_endpos or self._channel_traversal_height) * 10),
         side_touch_off_distance=side_touch_off_distance,
       )
     except STARFirmwareError as e:
@@ -1981,9 +2191,11 @@ class STAR(HamiltonLiquidHandler):
       tip_pickup_method=tip_pickup_method,
       z_deposit_position=round(z_deposit_position * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimum_height_command_end=round((minimum_height_command_end or self._traversal_height) * 10),
+      minimum_height_command_end=round(
+        (minimum_height_command_end or self._channel_traversal_height) * 10
+      ),
     )
 
   async def drop_tips96(
@@ -1999,7 +2211,7 @@ class STAR(HamiltonLiquidHandler):
       tip_a1 = drop.resource.get_item("A1")
       position = tip_a1.get_absolute_location() + tip_a1.center() + drop.offset
     else:
-      position = drop.resource.get_absolute_location() + drop.offset
+      position = self._position_96_head_in_resource(drop.resource) + drop.offset
 
     x_direction = 0 if position.x > 0 else 1
     return await self.discard_tips_core96(
@@ -2008,14 +2220,18 @@ class STAR(HamiltonLiquidHandler):
       y_position=round(position.y * 10),
       z_deposit_position=round(z_deposit_position * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimum_height_command_end=round((minimum_height_command_end or self._traversal_height) * 10),
+      minimum_height_command_end=round(
+        (minimum_height_command_end or self._channel_traversal_height) * 10
+      ),
     )
 
   async def aspirate96(
     self,
-    aspiration: Union[AspirationPlate, AspirationContainer],
+    aspiration: Union[MultiHeadAspirationPlate, MultiHeadAspirationContainer],
+    jet: bool = False,
+    blow_out: bool = False,
     use_lld: bool = False,
     liquid_height: float = 0,
     air_transport_retract_dist: float = 10,
@@ -2039,13 +2255,20 @@ class STAR(HamiltonLiquidHandler):
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mix: float = 0,
-    mix_speed: float = 120.0,
+    speed_of_mix: float = 120.0,
     limit_curve_index: int = 0,
   ):
     """Aspirate using the Core96 head.
 
     Args:
       aspiration: The aspiration to perform.
+
+      jet: Whether to search for a jet liquid class. Only used on dispense.
+      blow_out: Whether to use "blow out" dispense mode. Only used on dispense. Note that this is
+        labelled as "empty" in the VENUS liquid editor, but "blow out" in the firmware
+        documentation.
+      hlc: The Hamiltonian liquid class to use. If `None`, the liquid class will be determined
+        automatically.
 
       use_lld: If True, use gamma liquid level detection. If False, use liquid height.
       liquid_height: The height of the liquid above the bottom of the well, in millimeters.
@@ -2075,17 +2298,14 @@ class STAR(HamiltonLiquidHandler):
         liquid surface.
       surface_following_distance_during_mix: The distance to follow the liquid surface
         during mix.
-      mix_speed: The speed of mix.
+      speed_of_mix: The speed of mix.
       limit_curve_index: The index of the limit curve to use.
     """
-
-    if hlc is not None:
-      raise NotImplementedError("Hamilton liquid classes are deprecated.")
 
     assert self.core96_head_installed, "96 head must be installed"
 
     # get the first well and tip as representatives
-    if isinstance(aspiration, AspirationPlate):
+    if isinstance(aspiration, MultiHeadAspirationPlate):
       top_left_well = aspiration.wells[0]
       position = (
         top_left_well.get_absolute_location()
@@ -2096,26 +2316,56 @@ class STAR(HamiltonLiquidHandler):
     else:
       position = aspiration.container.get_absolute_location(y="b") + aspiration.offset
 
+    tip = aspiration.tips[0]
+
     liquid_height = position.z + liquid_height
 
-    if transport_air_volume is None:
-      transport_air_volume = 0
-    if aspiration.blow_out_air_volume is None:
-      blow_out_air_volume = 0.0
+    liquid_to_be_aspirated = Liquid.WATER
+    if len(aspiration.liquids[0]) > 0 and aspiration.liquids[0][0][0] is not None:
+      # [channel][liquid][PyLabRobot.resources.liquid.Liquid]
+      liquid_to_be_aspirated = aspiration.liquids[0][0][0]
+    hlc = hlc or get_star_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=True,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      # get last liquid in pipette, first to be dispensed
+      liquid=liquid_to_be_aspirated,
+      jet=jet,
+      blow_out=blow_out,  # see comment in method docstring
+    )
+
+    if hlc is not None:
+      volume = hlc.compute_corrected_volume(aspiration.volume)
     else:
-      blow_out_air_volume = aspiration.blow_out_air_volume
-    if aspiration.flow_rate is None:
-      flow_rate = 250.0
-    else:
-      flow_rate = aspiration.flow_rate
-    if swap_speed is None:
-      swap_speed = 100
-    if settling_time is None:
-      settling_time = 0.5
-    if mix_speed is None:
-      mix_speed = 10.0
+      volume = aspiration.volume
+
+    # Get better default values from the HLC if available
+    transport_air_volume = transport_air_volume or (
+      hlc.aspiration_air_transport_volume if hlc is not None else 0
+    )
+    blow_out_air_volume = aspiration.blow_out_air_volume or (
+      hlc.aspiration_blow_out_volume if hlc is not None else 0
+    )
+    flow_rate = aspiration.flow_rate or (hlc.aspiration_flow_rate if hlc is not None else 250)
+    swap_speed = swap_speed or (hlc.aspiration_swap_speed if hlc is not None else 100)
+    settling_time = settling_time or (hlc.aspiration_settling_time if hlc is not None else 0.5)
+    speed_of_mix = speed_of_mix or (hlc.aspiration_mix_flow_rate if hlc is not None else 10.0)
 
     channel_pattern = [True] * 12 * 8
+
+    # Was this ever true? Just copied it over from pyhamilton. Could have something to do with
+    # the liquid classes and whether blow_out mode is enabled.
+    # # Unfortunately, `blow_out_air_volume` does not work correctly, so instead we aspirate air
+    # # manually.
+    # if blow_out_air_volume is not None and blow_out_air_volume > 0:
+    #   await self.aspirate_core_96(
+    #     x_position=int(position.x * 10),
+    #     y_positions=int(position.y * 10),
+    #     lld_mode=0,
+    #     liquid_surface_at_function_without_lld=int((liquid_height + 30) * 10),
+    #     aspiration_volumes=int(blow_out_air_volume * 10)
+    #   )
 
     return await self.aspirate_core_96(
       x_position=round(position.x * 10),
@@ -2123,9 +2373,9 @@ class STAR(HamiltonLiquidHandler):
       y_positions=round(position.y * 10),
       aspiration_type=aspiration_type,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimal_end_height=round((minimal_end_height or self._traversal_height) * 10),
+      minimal_end_height=round((minimal_end_height or self._channel_traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_at_function_without_lld=round(liquid_height * 10),
       pull_out_distance_to_take_transport_air_in_function_without_lld=round(
@@ -2139,7 +2389,7 @@ class STAR(HamiltonLiquidHandler):
       liquid_surface_sink_distance_at_the_end_of_aspiration=round(
         liquid_surface_sink_distance_at_the_end_of_aspiration * 10
       ),
-      aspiration_volumes=round(aspiration.volume * 10),
+      aspiration_volumes=round(volume * 10),
       aspiration_speed=round(flow_rate * 10),
       transport_air_volume=round(transport_air_volume * 10),
       blow_out_air_volume=round(blow_out_air_volume * 10),
@@ -2152,7 +2402,7 @@ class STAR(HamiltonLiquidHandler):
       mix_cycles=mix_cycles,
       mix_position_from_liquid_surface=round(mix_position_from_liquid_surface * 10),
       surface_following_distance_during_mix=round(surface_following_distance_during_mix * 10),
-      mix_speed=round(mix_speed * 10),
+      speed_of_mix=round(speed_of_mix * 10),
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -2161,7 +2411,7 @@ class STAR(HamiltonLiquidHandler):
 
   async def dispense96(
     self,
-    dispense: Union[DispensePlate, DispenseContainer],
+    dispense: Union[MultiHeadDispensePlate, MultiHeadDispenseContainer],
     jet: bool = False,
     empty: bool = False,
     blow_out: bool = False,
@@ -2187,7 +2437,7 @@ class STAR(HamiltonLiquidHandler):
     mixing_cycles: int = 0,
     mixing_position_from_liquid_surface: float = 0,
     surface_following_distance_during_mixing: float = 0,
-    mix_speed: float = 120.0,
+    speed_of_mixing: float = 120.0,
     limit_curve_index: int = 0,
     cut_off_speed: float = 5.0,
     stop_back_volume: float = 0,
@@ -2223,19 +2473,16 @@ class STAR(HamiltonLiquidHandler):
       mixing_cycles: Mixing cycles.
       mixing_position_from_liquid_surface: Mixing position from liquid surface, in mm.
       surface_following_distance_during_mixing: Surface following distance during mixing, in mm.
-      mix_speed: Speed of mixing, in ul/s.
+      speed_of_mixing: Speed of mixing, in ul/s.
       limit_curve_index: Limit curve index.
       cut_off_speed: Unknown.
       stop_back_volume: Unknown.
     """
 
-    if hlc is not None:
-      raise NotImplementedError("Hamilton liquid classes are deprecated.")
-
     assert self.core96_head_installed, "96 head must be installed"
 
     # get the first well and tip as representatives
-    if isinstance(dispense, DispensePlate):
+    if isinstance(dispense, MultiHeadDispensePlate):
       top_left_well = dispense.wells[0]
       position = (
         top_left_well.get_absolute_location()
@@ -2245,27 +2492,42 @@ class STAR(HamiltonLiquidHandler):
       )
     else:
       position = dispense.container.get_absolute_location(y="b") + dispense.offset
+    tip = dispense.tips[0]
 
     liquid_height = position.z + liquid_height
 
     dispense_mode = _dispensing_mode_for_op(empty=empty, jet=jet, blow_out=blow_out)
 
-    if transport_air_volume is None:
-      transport_air_volume = 0
-    if dispense.blow_out_air_volume is None:
-      blow_out_air_volume = 0.0
+    liquid_to_be_dispensed = Liquid.WATER  # default to water.
+    if len(dispense.liquids[0]) > 0 and dispense.liquids[0][-1][0] is not None:
+      # [channel][liquid][PyLabRobot.resources.liquid.Liquid]
+      liquid_to_be_dispensed = dispense.liquids[0][-1][0]
+    hlc = hlc or get_star_liquid_class(
+      tip_volume=tip.maximal_volume,
+      is_core=True,
+      is_tip=True,
+      has_filter=tip.has_filter,
+      # get last liquid in pipette, first to be dispensed
+      liquid=liquid_to_be_dispensed,
+      jet=jet,
+      blow_out=blow_out,  # see comment in method docstring
+    )
+
+    if hlc is not None:
+      volume = hlc.compute_corrected_volume(dispense.volume)
     else:
-      blow_out_air_volume = dispense.blow_out_air_volume
-    if dispense.flow_rate is None:
-      flow_rate = 120.0
-    else:
-      flow_rate = dispense.flow_rate
-    if swap_speed is None:
-      swap_speed = 100
-    if settling_time is None:
-      settling_time = 5
-    if mix_speed is None:
-      mix_speed = 100
+      volume = dispense.volume
+
+    transport_air_volume = transport_air_volume or (
+      hlc.dispense_air_transport_volume if hlc is not None else 0
+    )
+    blow_out_air_volume = dispense.blow_out_air_volume or (
+      hlc.dispense_blow_out_volume if hlc is not None else 0
+    )
+    flow_rate = dispense.flow_rate or (hlc.dispense_flow_rate if hlc is not None else 120)
+    swap_speed = swap_speed or (hlc.dispense_swap_speed if hlc is not None else 100)
+    settling_time = settling_time or (hlc.dispense_settling_time if hlc is not None else 5)
+    speed_of_mixing = speed_of_mixing or (hlc.dispense_mix_flow_rate if hlc is not None else 100)
 
     channel_pattern = [True] * 12 * 8
 
@@ -2275,9 +2537,9 @@ class STAR(HamiltonLiquidHandler):
       x_direction=0,
       y_position=round(position.y * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._channel_traversal_height) * 10
       ),
-      minimal_end_height=round((minimal_end_height or self._traversal_height) * 10),
+      minimal_end_height=round((minimal_end_height or self._channel_traversal_height) * 10),
       lld_search_height=round(lld_search_height * 10),
       liquid_surface_at_function_without_lld=round(liquid_height * 10),
       pull_out_distance_to_take_transport_air_in_function_without_lld=round(
@@ -2291,7 +2553,7 @@ class STAR(HamiltonLiquidHandler):
       liquid_surface_sink_distance_at_the_end_of_dispense=round(
         liquid_surface_sink_distance_at_the_end_of_dispense * 10
       ),
-      dispense_volume=round(dispense.volume * 10),
+      dispense_volume=round(volume * 10),
       dispense_speed=round(flow_rate * 10),
       transport_air_volume=round(transport_air_volume * 10),
       blow_out_air_volume=round(blow_out_air_volume * 10),
@@ -2303,7 +2565,7 @@ class STAR(HamiltonLiquidHandler):
       mixing_cycles=mixing_cycles,
       mixing_position_from_liquid_surface=round(mixing_position_from_liquid_surface * 10),
       surface_following_distance_during_mixing=round(surface_following_distance_during_mixing * 10),
-      mix_speed=round(mix_speed * 10),
+      speed_of_mixing=round(speed_of_mixing * 10),
       channel_pattern=channel_pattern,
       limit_curve_index=limit_curve_index,
       tadm_algorithm=False,
@@ -2326,64 +2588,6 @@ class STAR(HamiltonLiquidHandler):
     #   )
 
     return ret
-
-  async def iswap_pick_up_resource(
-    self,
-    resource: Resource,
-    grip_direction: GripDirection,
-    pickup_distance_from_top: float,
-    offset: Coordinate = Coordinate.zero(),
-    minimum_traverse_height_at_beginning_of_a_command: float = 284.0,
-    z_position_at_the_command_end: float = 284.0,
-    grip_strength: int = 4,
-    plate_width_tolerance: float = 2.0,
-    collision_control_level: int = 0,
-    acceleration_index_high_acc: int = 4,
-    acceleration_index_low_acc: int = 1,
-    fold_up_sequence_at_the_end_of_process: bool = True,
-  ):
-    """Pick up a resource using iSWAP.
-    Low level component of :meth:`move_resource`
-    """
-
-    assert self.iswap_installed, "iswap must be installed"
-
-    # Get center of source plate. Also gripping height and plate width.
-    center = resource.get_absolute_location(x="c", y="c", z="b") + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.get_absolute_size_x()
-    elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.get_absolute_size_y()
-    else:
-      raise ValueError("Invalid grip direction")
-
-    await self.iswap_get_plate(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      y_position=round(center.y * 10),
-      y_direction=0,
-      z_position=round(grip_height * 10),
-      z_direction=0,
-      grip_direction={
-        GripDirection.FRONT: 1,
-        GripDirection.RIGHT: 2,
-        GripDirection.BACK: 3,
-        GripDirection.LEFT: 4,
-      }[grip_direction],
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        minimum_traverse_height_at_beginning_of_a_command * 10
-      ),
-      z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
-      grip_strength=grip_strength,
-      open_gripper_position=round(plate_width * 10) + 30,
-      plate_width=round(plate_width * 10) - 33,
-      plate_width_tolerance=round(plate_width_tolerance * 10),
-      collision_control_level=collision_control_level,
-      acceleration_index_high_acc=acceleration_index_high_acc,
-      acceleration_index_low_acc=acceleration_index_low_acc,
-      fold_up_sequence_at_the_end_of_process=fold_up_sequence_at_the_end_of_process,
-    )
 
   async def iswap_move_picked_up_resource(
     self,
@@ -2422,76 +2626,6 @@ class STAR(HamiltonLiquidHandler):
       collision_control_level=collision_control_level,
       acceleration_index_high_acc=acceleration_index_high_acc,
       acceleration_index_low_acc=acceleration_index_low_acc,
-    )
-
-  async def iswap_release_picked_up_resource(
-    self,
-    location: Coordinate,
-    resource: Resource,
-    rotation: int,
-    offset: Coordinate,
-    grip_direction: GripDirection,
-    pickup_distance_from_top: float,
-    minimum_traverse_height_at_beginning_of_a_command: float = 284.0,
-    z_position_at_the_command_end: float = 284.0,
-    collision_control_level: int = 0,
-  ):
-    """After a resource is picked up, release it at the specified location.
-    Low level component of :meth:`move_resource`
-
-    Args:
-      location: The location to release the resource (bottom front left corner).
-      resource: The resource to release.
-      rotation: The rotation of the resource's final orientation wrt the pickup orientation.
-      offset: offset for location
-      grip_direction: The direction of the iswap arm on release.
-      pickup_distance_from_top: How far from the top the resource was picked up.
-    """
-
-    assert self.iswap_installed, "iswap must be installed"
-
-    # Get center of source plate in absolute space.
-    # The computation of the center has to be rotated so that the offset is in absolute space.
-    center_in_absolute_space = Coordinate(
-      *matrix_vector_multiply_3x3(
-        resource.rotated(z=rotation).get_absolute_rotation().get_rotation_matrix(),
-        resource.center().vector(),
-      )
-    )
-    # This is when the resource is rotated (around its origin), but we also need to translate
-    # so that the left front bottom corner of the plate is lfb in absolute space, not local.
-    center_in_absolute_space += get_child_location(resource.rotated(z=rotation))
-
-    center = location + center_in_absolute_space + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
-    # grip_direction here is the put_direction. We use `rotation` to cancel it out and get the
-    # original grip direction. Hack.
-    if grip_direction in (GripDirection.FRONT, GripDirection.BACK):
-      plate_width = resource.rotated(z=rotation).get_absolute_size_x()
-    elif grip_direction in (GripDirection.RIGHT, GripDirection.LEFT):
-      plate_width = resource.rotated(z=rotation).get_absolute_size_y()
-    else:
-      raise ValueError("Invalid grip direction")
-
-    await self.iswap_put_plate(
-      x_position=round(center.x * 10),
-      x_direction=0,
-      y_position=round(center.y * 10),
-      y_direction=0,
-      z_position=round(grip_height * 10),
-      z_direction=0,
-      grip_direction={
-        GripDirection.FRONT: 1,
-        GripDirection.RIGHT: 2,
-        GripDirection.BACK: 3,
-        GripDirection.LEFT: 4,
-      }[grip_direction],
-      minimum_traverse_height_at_beginning_of_a_command=round(
-        minimum_traverse_height_at_beginning_of_a_command * 10
-      ),
-      z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
-      open_gripper_position=round(plate_width * 10) + 30,
-      collision_control_level=collision_control_level,
     )
 
   async def core_pick_up_resource(
@@ -2543,10 +2677,10 @@ class STAR(HamiltonLiquidHandler):
       plate_width=round(grip_width * 10) - 30,
       grip_strength=grip_strength,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
       minimum_z_position_at_the_command_end=round(
-        (minimum_z_position_at_the_command_end or self._traversal_height) * 10
+        (minimum_z_position_at_the_command_end or self._iswap_traversal_height) * 10
       ),
     )
 
@@ -2583,7 +2717,7 @@ class STAR(HamiltonLiquidHandler):
       z_position=round(center.z * 10),
       z_speed=round(z_speed * 10),
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
     )
 
@@ -2592,7 +2726,6 @@ class STAR(HamiltonLiquidHandler):
     location: Coordinate,
     resource: Resource,
     pickup_distance_from_top: float,
-    offset: Coordinate = Coordinate.zero(),
     minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
     z_position_at_the_command_end: Optional[float] = None,
     return_tool: bool = True,
@@ -2613,134 +2746,323 @@ class STAR(HamiltonLiquidHandler):
     """
 
     # Get center of destination location. Also gripping height and plate width.
-    center = location + resource.center() + offset
-    grip_height = center.z + resource.get_absolute_size_z() - pickup_distance_from_top
+    grip_height = location.z + resource.get_absolute_size_z() - pickup_distance_from_top
     grip_width = resource.get_absolute_size_y()
 
     await self.core_put_plate(
-      x_position=round(center.x * 10),
+      x_position=round(location.x * 10),
       x_direction=0,
-      y_position=round(center.y * 10),
+      y_position=round(location.y * 10),
       z_position=round(grip_height * 10),
       z_press_on_distance=0,
       z_speed=500,
       open_gripper_position=round(grip_width * 10) + 30,
       minimum_traverse_height_at_beginning_of_a_command=round(
-        (minimum_traverse_height_at_beginning_of_a_command or self._traversal_height) * 10
+        (minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height) * 10
       ),
       z_position_at_the_command_end=round(
-        (z_position_at_the_command_end or self._traversal_height) * 10
+        (z_position_at_the_command_end or self._iswap_traversal_height) * 10
       ),
       return_tool=return_tool,
     )
 
-  async def move_resource(
+  async def pick_up_resource(
     self,
-    move: Move,
+    pickup: ResourcePickup,
     use_arm: Literal["iswap", "core"] = "iswap",
     channel_1: int = 7,
     channel_2: int = 8,
+    iswap_grip_strength: int = 4,
     core_grip_strength: int = 15,
-    return_core_gripper: bool = True,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    z_position_at_the_command_end: Optional[float] = None,
+    plate_width_tolerance: float = 2.0,
+    open_gripper_position: Optional[float] = None,
+    hotel_depth=160.0,
+    hotel_clearance_height=7.5,
+    high_speed=False,
+    plate_width: Optional[float] = None,
+    use_unsafe_hotel: bool = False,
+    iswap_collision_control_level: int = 0,
+    iswap_fold_up_sequence_at_the_end_of_process: bool = True,
   ):
-    """Move a resource.
-
-    Args:
-      move: The move to perform.
-      use_arm: Which arm to use. Either "iswap" or "core".
-      channel_1: The first channel to use with the core arm. Only used if `use_arm` is "core".
-      channel_2: The second channel to use with the core arm. Only used if `use_arm` is "core".
-      core_grip_strength: The grip strength to use with the core arm. Only used if `use_arm` is
-        "core".
-      return_core_gripper: Whether to return the core gripper to the home position after the move.
-        Only used if `use_arm` is "core".
-    """
-
-    if not use_arm in {"iswap", "core"}:
-      raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
-
     if use_arm == "iswap":
-      await self.iswap_pick_up_resource(
-        resource=move.resource,
-        grip_direction=move.get_direction,
-        pickup_distance_from_top=move.pickup_distance_from_top,
-        offset=move.resource_offset,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        z_position_at_the_command_end=self._traversal_height,
+      assert (
+        pickup.resource.get_absolute_rotation().x == 0
+        and pickup.resource.get_absolute_rotation().y == 0
       )
-    else:
+      assert pickup.resource.get_absolute_rotation().z % 90 == 0
+      if plate_width is None:
+        if pickup.direction in (GripDirection.FRONT, GripDirection.BACK):
+          plate_width = pickup.resource.get_absolute_size_x()
+        else:
+          plate_width = pickup.resource.get_absolute_size_y()
+
+      center_in_absolute_space = pickup.resource.center().rotated(
+        pickup.resource.get_absolute_rotation()
+      )
+      x, y, z = (
+        pickup.resource.get_absolute_location("l", "f", "t")
+        + center_in_absolute_space
+        + pickup.offset
+      )
+      z -= pickup.pickup_distance_from_top
+
+      traverse_height_at_beginning = (
+        minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
+      )
+      z_position_at_the_command_end = z_position_at_the_command_end or self._iswap_traversal_height
+
+      if open_gripper_position is None:
+        if use_unsafe_hotel:
+          open_gripper_position = plate_width + 5
+        else:
+          open_gripper_position = plate_width + 3
+
+      if use_unsafe_hotel:
+        await self.unsafe.get_from_hotel(
+          hotel_center_x_coord=round(abs(x) * 10),
+          hotel_center_y_coord=round(abs(y) * 10),
+          # hotel_center_z_coord=int((z * 10)+0.5), # use sensible rounding (.5 goes up)
+          hotel_center_z_coord=round(abs(z) * 10),
+          hotel_center_x_direction=0 if x >= 0 else 1,
+          hotel_center_y_direction=0 if y >= 0 else 1,
+          hotel_center_z_direction=0 if z >= 0 else 1,
+          clearance_height=round(hotel_clearance_height * 10),
+          hotel_depth=round(hotel_depth * 10),
+          grip_direction=pickup.direction,
+          open_gripper_position=round(open_gripper_position * 10),
+          traverse_height_at_beginning=round(traverse_height_at_beginning * 10),
+          z_position_at_end=round(z_position_at_the_command_end * 10),
+          high_acceleration_index=4 if high_speed else 1,
+          low_acceleration_index=1,
+          plate_width=round(plate_width * 10),
+          plate_width_tolerance=round(plate_width_tolerance * 10),
+        )
+      else:
+        await self.iswap_get_plate(
+          x_position=round(x * 10),
+          y_position=round(y * 10),
+          z_position=round(z * 10),
+          x_direction=0 if x >= 0 else 1,
+          y_direction=0 if y >= 0 else 1,
+          z_direction=0 if z >= 0 else 1,
+          grip_direction={
+            GripDirection.FRONT: 1,
+            GripDirection.RIGHT: 2,
+            GripDirection.BACK: 3,
+            GripDirection.LEFT: 4,
+          }[pickup.direction],
+          minimum_traverse_height_at_beginning_of_a_command=round(
+            traverse_height_at_beginning * 10
+          ),
+          z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
+          grip_strength=iswap_grip_strength,
+          open_gripper_position=round(open_gripper_position * 10),
+          plate_width=round(plate_width * 10) - 33,
+          plate_width_tolerance=round(plate_width_tolerance * 10),
+          collision_control_level=iswap_collision_control_level,
+          acceleration_index_high_acc=4 if high_speed else 1,
+          acceleration_index_low_acc=1,
+          fold_up_sequence_at_the_end_of_process=iswap_fold_up_sequence_at_the_end_of_process,
+        )
+    elif use_arm == "core":
+      if use_unsafe_hotel:
+        raise ValueError("Cannot use iswap hotel mode with core grippers")
+
       await self.core_pick_up_resource(
-        resource=move.resource,
-        pickup_distance_from_top=move.pickup_distance_from_top,
-        offset=move.resource_offset,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        minimum_z_position_at_the_command_end=self._traversal_height,
+        resource=pickup.resource,
+        pickup_distance_from_top=pickup.pickup_distance_from_top,
+        offset=pickup.offset,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        minimum_z_position_at_the_command_end=self._iswap_traversal_height,
         channel_1=channel_1,
         channel_2=channel_2,
         grip_strength=core_grip_strength,
       )
+    else:
+      raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
 
-    previous_location = move.resource.get_absolute_location() + move.resource_offset
-    minimum_traverse_height = 284.0
-    previous_location.z = minimum_traverse_height - move.resource.get_absolute_size_z() / 2
-
-    for location in move.intermediate_locations:
-      if use_arm == "iswap":
-        await self.iswap_move_picked_up_resource(
-          location=location,
-          resource=move.resource,
-          grip_direction=move.get_direction,
-          minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-          # int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
-          collision_control_level=1,
-          acceleration_index_high_acc=4,
-          acceleration_index_low_acc=1,
-        )
-      else:
-        await self.core_move_picked_up_resource(
-          location=location,
-          resource=move.resource,
-          minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-          # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
-          acceleration_index=4,
-        )
-      previous_location = location
-
+  async def move_picked_up_resource(
+    self, move: ResourceMove, use_arm: Literal["iswap", "core"] = "iswap"
+  ):
     if use_arm == "iswap":
-      await self.iswap_release_picked_up_resource(
-        location=move.destination,
+      await self.iswap_move_picked_up_resource(
+        location=move.location,
         resource=move.resource,
-        rotation=move.rotation,
-        offset=move.destination_offset,
-        grip_direction=move.put_direction,
-        pickup_distance_from_top=move.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        # int(previous_location.z + move.resource.get_size_z() / 2) * 10, # "minimum" is a scam.
-        z_position_at_the_command_end=self._traversal_height,
+        grip_direction=move.gripped_direction,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        collision_control_level=1,
+        acceleration_index_high_acc=4,
+        acceleration_index_low_acc=1,
       )
     else:
-      await self.core_release_picked_up_resource(
-        location=move.destination,
+      await self.core_move_picked_up_resource(
+        location=move.location,
         resource=move.resource,
-        offset=move.destination_offset,
-        pickup_distance_from_top=move.pickup_distance_from_top,
-        minimum_traverse_height_at_beginning_of_a_command=self._traversal_height,
-        z_position_at_the_command_end=self._traversal_height,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        acceleration_index=4,
+      )
+
+  async def drop_resource(
+    self,
+    drop: ResourceDrop,
+    use_arm: Literal["iswap", "core"] = "iswap",
+    return_core_gripper: bool = True,
+    minimum_traverse_height_at_beginning_of_a_command: Optional[float] = None,
+    z_position_at_the_command_end: Optional[float] = None,
+    open_gripper_position: Optional[float] = None,
+    hotel_depth=160.0,
+    hotel_clearance_height=7.5,
+    hotel_high_speed=False,
+    use_unsafe_hotel: bool = False,
+    iswap_collision_control_level: int = 0,
+  ):
+    # Get center of source plate in absolute space.
+    # The computation of the center has to be rotated so that the offset is in absolute space.
+    # center_in_absolute_space will be the vector pointing from the destination origin to the
+    # center of the moved the resource after drop.
+    # This means that the center vector has to be rotated from the child local space by the
+    # new child absolute rotation. The moved resource's rotation will be the original child
+    # rotation plus the rotation applied by the movement.
+    # The resource is moved by drop.rotation
+    # The new resource absolute location is
+    # drop.resource.get_absolute_rotation().z + drop.rotation
+    center_in_absolute_space = drop.resource.center().rotated(
+      Rotation(z=drop.resource.get_absolute_rotation().z + drop.rotation)
+    )
+    x, y, z = drop.destination + center_in_absolute_space + drop.offset
+
+    if use_arm == "iswap":
+      traversal_height_start = (
+        minimum_traverse_height_at_beginning_of_a_command or self._iswap_traversal_height
+      )
+      z_position_at_the_command_end = z_position_at_the_command_end or self._iswap_traversal_height
+      assert (
+        drop.resource.get_absolute_rotation().x == 0
+        and drop.resource.get_absolute_rotation().y == 0
+      )
+      assert drop.resource.get_absolute_rotation().z % 90 == 0
+
+      # Use the pickup direction to determine how wide the plate is gripped.
+      # Note that the plate is still in the original orientation at this point,
+      # so get_absolute_size_{x,y}() will return the size of the plate in the original orientation.
+      if (
+        drop.pickup_direction == GripDirection.FRONT or drop.pickup_direction == GripDirection.BACK
+      ):
+        plate_width = drop.resource.get_absolute_size_x()
+      elif (
+        drop.pickup_direction == GripDirection.RIGHT or drop.pickup_direction == GripDirection.LEFT
+      ):
+        plate_width = drop.resource.get_absolute_size_y()
+      else:
+        raise ValueError("Invalid grip direction")
+
+      z = z + drop.resource.get_absolute_size_z() - drop.pickup_distance_from_top
+
+      if open_gripper_position is None:
+        if use_unsafe_hotel:
+          open_gripper_position = plate_width + 5
+        else:
+          open_gripper_position = plate_width + 3
+
+      if use_unsafe_hotel:
+        # hotel: down forward down.
+        # down to level of the destination + the clearance height (so clearance height can be subtracted)
+        # hotel_depth is forward.
+        # clearance height is second down.
+
+        await self.unsafe.put_in_hotel(
+          hotel_center_x_coord=round(abs(x) * 10),
+          hotel_center_y_coord=round(abs(y) * 10),
+          hotel_center_z_coord=round(abs(z) * 10),
+          hotel_center_x_direction=0 if x >= 0 else 1,
+          hotel_center_y_direction=0 if y >= 0 else 1,
+          hotel_center_z_direction=0 if z >= 0 else 1,
+          clearance_height=round(hotel_clearance_height * 10),
+          hotel_depth=round(hotel_depth * 10),
+          grip_direction=drop.drop_direction,
+          open_gripper_position=round(open_gripper_position * 10),
+          traverse_height_at_beginning=round(traversal_height_start * 10),
+          z_position_at_end=round(z_position_at_the_command_end * 10),
+          high_acceleration_index=4 if hotel_high_speed else 1,
+          low_acceleration_index=1,
+        )
+      else:
+        await self.iswap_put_plate(
+          x_position=round(abs(x) * 10),
+          y_position=round(abs(y) * 10),
+          z_position=round(abs(z) * 10),
+          x_direction=0 if x >= 0 else 1,
+          y_direction=0 if y >= 0 else 1,
+          z_direction=0 if z >= 0 else 1,
+          grip_direction={
+            GripDirection.FRONT: 1,
+            GripDirection.RIGHT: 2,
+            GripDirection.BACK: 3,
+            GripDirection.LEFT: 4,
+          }[drop.drop_direction],
+          minimum_traverse_height_at_beginning_of_a_command=round(traversal_height_start * 10),
+          z_position_at_the_command_end=round(z_position_at_the_command_end * 10),
+          open_gripper_position=round(open_gripper_position * 10),
+          collision_control_level=iswap_collision_control_level,
+        )
+    elif use_arm == "core":
+      if use_unsafe_hotel:
+        raise ValueError("Cannot use iswap hotel mode with core grippers")
+
+      await self.core_release_picked_up_resource(
+        location=Coordinate(x, y, z),
+        resource=drop.resource,
+        pickup_distance_from_top=drop.pickup_distance_from_top,
+        minimum_traverse_height_at_beginning_of_a_command=self._iswap_traversal_height,
+        z_position_at_the_command_end=self._iswap_traversal_height,
         # int(previous_location.z + move.resource.get_size_z() / 2) * 10,
         return_tool=return_core_gripper,
       )
+    else:
+      raise ValueError(f"use_arm must be either 'iswap' or 'core', not {use_arm}")
 
   async def prepare_for_manual_channel_operation(self, channel: int):
     """Prepare for manual operation."""
 
-    await self.position_max_free_y_for_n(pipetting_channel_index=channel + 1)
+    await self.position_max_free_y_for_n(pipetting_channel_index=channel)
 
-  async def move_channel_x(self, channel: int, x: float):  # pylint: disable=unused-argument
+  async def move_channel_x(self, channel: int, x: float):
     """Move a channel in the x direction."""
     await self.position_left_x_arm_(round(x * 10))
 
+  @need_iswap_parked
   async def move_channel_y(self, channel: int, y: float):
-    """Move a channel in the y direction."""
+    """Move a channel safely in the y direction."""
+
+    # Anti-channel-crash feature
+    if channel > 0:
+      max_y_pos = await self.request_y_pos_channel_n(channel - 1)
+      if y > max_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be <= {max_y_pos} mm "
+          f"(channel {channel - 1} y-position is {round(y, 2)} mm)"
+        )
+    else:
+      # STAR machines appear to lose connection to a channel if y > 635 mm
+      max_y_pos = 635
+      if y > max_y_pos:
+        raise ValueError(f"channel {channel} y-target must be <= {max_y_pos} mm (machine limit)")
+
+    if channel < (self.num_channels - 1):
+      min_y_pos = await self.request_y_pos_channel_n(channel + 1)
+      if y < min_y_pos:
+        raise ValueError(
+          f"channel {channel} y-target must be >= {min_y_pos} mm "
+          f"(channel {channel + 1} y-position is {round(y, 2)} mm)"
+        )
+    else:
+      # STAR machines appear to lose connection to a channel if y < 6 mm
+      min_y_pos = 6
+      if y < min_y_pos:
+        raise ValueError(f"channel {channel} y-target must be >= {min_y_pos} mm (machine limit)")
+
     await self.position_single_pipetting_channel_in_y_direction(
       pipetting_channel_index=channel + 1, y_position=round(y * 10)
     )
@@ -2856,6 +3178,17 @@ class STAR(HamiltonLiquidHandler):
       audio.play_got_item()
     return True
 
+  def _position_96_head_in_resource(self, resource: Resource) -> Coordinate:
+    """The firmware command expects location of tip A1 of the head. We center the head in the given
+    resource."""
+    head_size_x = 9 * 11  # 12 channels, 9mm spacing in between
+    head_size_y = 9 * 7  #   8 channels, 9mm spacing in between
+    channel_size = 9
+    loc = resource.get_absolute_location()
+    loc.x += (resource.get_size_x() - head_size_x) / 2 + channel_size / 2
+    loc.y += (resource.get_size_y() - head_size_y) / 2 + channel_size / 2
+    return loc
+
   # ============== Firmware Commands ==============
 
   # -------------- 3.2 System general commands --------------
@@ -2886,8 +3219,6 @@ class STAR(HamiltonLiquidHandler):
                       Attention! The values set here are temporary and apply only until
                       power OFF or RESET. After power ON the default values apply. (see Table 3)
     """
-
-    # pylint: disable=redefined-builtin
 
     assert 0 <= tip_type_table_index <= 99, "tip_type_table_index must be between 0 and 99"
     assert 0 <= tip_type_table_index <= 99, "tip_type_table_index must be between 0 and 99"
@@ -2950,8 +3281,6 @@ class STAR(HamiltonLiquidHandler):
     Returns:
       The board type.
     """
-
-    # pylint: disable=undefined-variable
 
     resp = await self.send_command(module="C0", command="QB")
     try:
@@ -3076,7 +3405,9 @@ class STAR(HamiltonLiquidHandler):
   # -------------- 3.3.2 Non volatile settings (stored in EEPROM) --------------
 
   async def store_installation_data(
-    self, date: datetime.datetime = datetime.datetime.now(), serial_number: str = "0000"
+    self,
+    date: datetime.datetime = datetime.datetime.now(),
+    serial_number: str = "0000",
   ):
     """Store installation data
 
@@ -3723,7 +4054,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="TP",
       tip_pattern=tip_pattern,
-      read_timeout=60,
+      read_timeout=max(120, self.read_timeout),
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
       tm=tip_pattern,
@@ -3788,6 +4119,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="TR",
       tip_pattern=tip_pattern,
+      read_timeout=max(120, self.read_timeout),
       fmt="kz### (n)vz### (n)",
       xp=[f"{x:05}" for x in x_positions],
       yp=[f"{y:04}" for y in y_positions],
@@ -4043,7 +4375,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="AS",
       tip_pattern=tip_pattern,
-      read_timeout=max(60, self.read_timeout),
+      read_timeout=max(120, self.read_timeout),
       at=[f"{at:01}" for at in aspiration_type],
       tm=tip_pattern,
       xp=[f"{xp:05}" for xp in x_positions],
@@ -4277,7 +4609,7 @@ class STAR(HamiltonLiquidHandler):
       module="C0",
       command="DS",
       tip_pattern=tip_pattern,
-      read_timeout=max(60, self.read_timeout),
+      read_timeout=max(120, self.read_timeout),
       dm=[f"{dm:01}" for dm in dispensing_mode],
       tm=[f"{tm:01}" for tm in tip_pattern],
       xp=[f"{xp:05}" for xp in x_positions],
@@ -4354,7 +4686,7 @@ class STAR(HamiltonLiquidHandler):
       pb=f"{p2:02}",
       tp=f"{2350 + self.core_adjustment.z:04}",
       tz=f"{2250 + self.core_adjustment.z:04}",
-      th=round(self._traversal_height * 10),
+      th=round(self._iswap_traversal_height * 10),
       tt="14",
     )
     self._core_parked = False
@@ -4380,8 +4712,8 @@ class STAR(HamiltonLiquidHandler):
       yb=f"{1065 + self.core_adjustment.y:04}",
       tp=f"{2150 + self.core_adjustment.z:04}",
       tz=f"{2050 + self.core_adjustment.z:04}",
-      th=round(self._traversal_height * 10),
-      te=round(self._traversal_height * 10),
+      th=round(self._iswap_traversal_height * 10),
+      te=round(self._iswap_traversal_height * 10),
     )
     self._core_parked = True
     return command_output
@@ -4521,10 +4853,6 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 3.5.6 Adjustment & movement commands --------------
 
-  # TODO:(command:JY) Position all pipetting channels in Y-direction
-
-  # TODO:(command:JZ) Position all pipetting channels in Z-direction
-
   async def position_single_pipetting_channel_in_y_direction(
     self, pipetting_channel_index: int, y_position: int
   ):
@@ -4600,6 +4928,7 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="JE")
 
+  @need_iswap_parked
   async def move_all_pipetting_channels_to_defined_position(
     self,
     tip_pattern: bool = True,
@@ -4640,16 +4969,19 @@ class STAR(HamiltonLiquidHandler):
 
   # TODO:(command:JR): teach rack using pipetting channel n
 
-  async def position_max_free_y_for_n(self, pipetting_channel_index: int = 1):
+  @need_iswap_parked
+  async def position_max_free_y_for_n(self, pipetting_channel_index: int):
     """Position all pipetting channels so that there is maximum free Y range for channel n
 
     Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
+      pipetting_channel_index: Index of pipetting channel. Must be between 0 and self.num_channels.
     """
 
     assert (
-      1 <= pipetting_channel_index <= self.num_channels
+      0 <= pipetting_channel_index < self.num_channels
     ), "pipetting_channel_index must be between 1 and self.num_channels"
+    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
+    pipetting_channel_index = pipetting_channel_index + 1
 
     return await self.send_command(
       module="C0",
@@ -4666,42 +4998,54 @@ class STAR(HamiltonLiquidHandler):
 
   # TODO:(command:RY): Request Y-Positions of all pipetting channels
 
-  async def request_y_pos_channel_n(self, pipetting_channel_index: int = 1):
+  async def request_y_pos_channel_n(self, pipetting_channel_index: int) -> float:
     """Request Y-Position of Pipetting channel n
 
     Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
+      pipetting_channel_index: Index of pipetting channel. Must be between 0 and 15.
+        0 is the backmost channel.
     """
 
-    assert 1 <= pipetting_channel_index <= 16, "pipetting_channel_index must be between 1 and 16"
+    assert (
+      0 <= pipetting_channel_index < self.num_channels
+    ), "pipetting_channel_index must be between 0 and self.num_channels"
+    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
+    pipetting_channel_index = pipetting_channel_index + 1
 
-    return await self.send_command(
+    y_pos_query = await self.send_command(
       module="C0",
       command="RB",
       fmt="rb####",
       pn=f"{pipetting_channel_index:02}",
     )
+    # Extract y-coordinate and convert to mm
+    return float(y_pos_query["rb"] / 10)
 
   # TODO:(command:RZ): Request Z-Positions of all pipetting channels
 
-  async def request_z_pos_channel_n(self, pipetting_channel_index: int = 1):
+  async def request_z_pos_channel_n(self, pipetting_channel_index: int) -> float:
     """Request Z-Position of Pipetting channel n
 
     Args:
-      pipetting_channel_index: Index of pipetting channel. Must be between 1 and 16. Default 1.
+      pipetting_channel_index: Index of pipetting channel. Must be between 0 and 15.
+        0 is the backmost channel.
 
     Returns:
       Z-Position of channel n [0.1mm]. Taking into account tip presence and length.
     """
 
-    assert 1 <= pipetting_channel_index <= 16, "pipetting_channel_index must be between 1 and 16"
+    assert 0 <= pipetting_channel_index <= 15, "pipetting_channel_index must be between 0 and 15"
+    # convert Python's 0-based indexing to Hamilton firmware's 1-based indexing
+    pipetting_channel_index = pipetting_channel_index + 1
 
-    return await self.send_command(
+    z_pos_query = await self.send_command(
       module="C0",
       command="RD",
       fmt="rd####",
       pn=f"{pipetting_channel_index:02}",
     )
+    # Extract z-coordinate and convert to mm
+    return float(z_pos_query["rd"] / 10)
 
   async def request_tip_presence(self) -> List[int]:
     """Request query tip presence on each channel
@@ -4862,45 +5206,28 @@ class STAR(HamiltonLiquidHandler):
   # -------------- 3.10.1 Initialization --------------
 
   async def initialize_core_96_head(
-    self,
-    x_position: int = 2321,
-    x_direction: int = 1,
-    y_position: int = 1103,
-    z_deposit_position: int = 1890,
-    z_position_at_the_command_end: int = 2450,
+    self, trash96: Trash, z_position_at_the_command_end: float = 245.0
   ):
     """Initialize CoRe 96 Head
 
-    Initialize CoRe 96 Head. Dependent to configuration initialization change.
-
     Args:
-      x_position: X-Position [0.1mm] (discard position of tip A1). Must be between 0 and 30000.
-        Default 0.
-      x_direction: X-direction. 0 = positive 1 = negative. Must be between 0 and 1. Default 0.
-      y_position: Y-Position [0.1mm] (discard position of tip A1 ). Must be between 1054 and 5743.
-        Default 5743.
-      z_deposit_position_[0.1mm]: Z- deposit position [0.1mm] (collar bearing position). Must be
-        between 0 and 3425. Default 3425.
-      z_position_at_the_command_end: Z-Position at the command end [0.1mm]. Must be between 0 and
-        3425. Default 3425.
+      trash96: Trash object where tips should be disposed. The 96 head will be positioned in the
+        center of the trash.
+      z_position_at_the_command_end: Z position at the end of the command [mm].
     """
 
-    assert 0 <= x_position <= 30000, "x_position must be between 0 and 30000"
-    assert 0 <= x_direction <= 1, "x_direction must be between 0 and 1"
-    assert 1054 <= y_position <= 5743, "y_position must be between 1054 and 5743"
-    assert 0 <= z_deposit_position <= 3425, "z_deposit_position must be between 0 and 3425"
-    assert (
-      0 <= z_position_at_the_command_end <= 3425
-    ), "z_position_at_the_command_end must be between 0 and 3425"
+    # The firmware command expects location of tip A1 of the head.
+    loc = self._position_96_head_in_resource(trash96)
 
     return await self.send_command(
       module="C0",
       command="EI",
-      xs=f"{x_position:05}",
-      xd=x_direction,
-      yh=f"{y_position}",
-      za=f"{z_deposit_position}",
-      ze=f"{z_position_at_the_command_end}",
+      read_timeout=60,
+      xs=f"{abs(round(loc.x * 10)):05}",
+      xd=0 if loc.x >= 0 else 1,
+      yh=f"{abs(round(loc.y * 10)):04}",
+      za=f"{round(loc.z * 10):04}",
+      ze=f"{round(z_position_at_the_command_end*10):04}",
     )
 
   async def move_core_96_to_safe_position(self):
@@ -5048,7 +5375,7 @@ class STAR(HamiltonLiquidHandler):
     mix_cycles: int = 0,
     mix_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mix: int = 0,
-    mix_speed: int = 1000,
+    speed_of_mix: int = 1000,
     channel_pattern: List[bool] = [True] * 96,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
@@ -5102,7 +5429,7 @@ class STAR(HamiltonLiquidHandler):
           liquid surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 990. Default 250.
       surface_following_distance_during_mix: surface following distance during
           mix [0.1mm]. Must be between 0 and 990. Default 0.
-      mix_speed: Speed of mix [0.1ul/s]. Must be between 3 and 5000.
+      speed_of_mix: Speed of mix [0.1ul/s]. Must be between 3 and 5000.
           Default 1000.
       todo: TODO: 24 hex chars. Must be between 4 and 5000.
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
@@ -5157,7 +5484,7 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= surface_following_distance_during_mix <= 990
     ), "surface_following_distance_during_mix must be between 0 and 990"
-    assert 3 <= mix_speed <= 5000, "mix_speed must be between 3 and 5000"
+    assert 3 <= speed_of_mix <= 5000, "speed_of_mix must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
 
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
@@ -5198,7 +5525,7 @@ class STAR(HamiltonLiquidHandler):
       hc=f"{mix_cycles:02}",
       hp=f"{mix_position_from_liquid_surface:03}",
       mj=f"{surface_following_distance_during_mix:03}",
-      hs=f"{mix_speed:04}",
+      hs=f"{speed_of_mix:04}",
       cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
@@ -5238,7 +5565,7 @@ class STAR(HamiltonLiquidHandler):
     mixing_cycles: int = 0,
     mixing_position_from_liquid_surface: int = 250,
     surface_following_distance_during_mixing: int = 0,
-    mix_speed: int = 1000,
+    speed_of_mixing: int = 1000,
     channel_pattern: List[bool] = [True] * 12 * 8,
     limit_curve_index: int = 0,
     tadm_algorithm: bool = False,
@@ -5295,7 +5622,7 @@ class STAR(HamiltonLiquidHandler):
           surface (LLD or absolute terms) [0.1mm]. Must be between 0 and 990. Default 250.
       surface_following_distance_during_mixing: surface following distance during mixing [0.1mm].
           Must be between 0 and 990. Default 0.
-      mix_speed: Speed of mixing [0.1ul/s]. Must be between 3 and 5000. Default 1000.
+      speed_of_mixing: Speed of mixing [0.1ul/s]. Must be between 3 and 5000. Default 1000.
       channel_pattern: list of 96 boolean values
       limit_curve_index: limit curve index. Must be between 0 and 999. Default 0.
       tadm_algorithm: TADM algorithm. Default False.
@@ -5351,7 +5678,7 @@ class STAR(HamiltonLiquidHandler):
     assert (
       0 <= surface_following_distance_during_mixing <= 990
     ), "surface_following_distance_during_mixing must be between 0 and 990"
-    assert 3 <= mix_speed <= 5000, "mix_speed must be between 3 and 5000"
+    assert 3 <= speed_of_mixing <= 5000, "speed_of_mixing must be between 3 and 5000"
     assert 0 <= limit_curve_index <= 999, "limit_curve_index must be between 0 and 999"
     assert 0 <= recording_mode <= 2, "recording_mode must be between 0 and 2"
 
@@ -5393,7 +5720,7 @@ class STAR(HamiltonLiquidHandler):
       hc=f"{mixing_cycles:02}",
       hp=f"{mixing_position_from_liquid_surface:03}",
       mj=f"{surface_following_distance_during_mixing:03}",
-      hs=f"{mix_speed:04}",
+      hs=f"{speed_of_mixing:04}",
       cw=channel_pattern_hex,
       cr=f"{limit_curve_index:03}",
       cj=tadm_algorithm,
@@ -5654,7 +5981,10 @@ class STAR(HamiltonLiquidHandler):
       park_autoload_after: Whether to park autoload after loading. Default True.
     """
 
-    barcode_reading_direction_dict = {"vertical": "0", "horizontal": "1"}
+    barcode_reading_direction_dict = {
+      "vertical": "0",
+      "horizontal": "1",
+    }
     barcode_symbology_dict = {
       "ISBT Standard": "70",
       "Code 128 (Subset B and C)": "71",
@@ -5689,7 +6019,9 @@ class STAR(HamiltonLiquidHandler):
     if barcode_reading:
       # Choose barcode symbology
       await self.send_command(
-        module="C0", command="CB", bt=barcode_symbology_dict[barcode_symbology]
+        module="C0",
+        command="CB",
+        bt=barcode_symbology_dict[barcode_symbology],
       )
       # Load and read out barcodes
       resp = await self.send_command(
@@ -5730,7 +6062,10 @@ class STAR(HamiltonLiquidHandler):
     blink_pattern_hex = pattern2hex(blink_pattern)
 
     return await self.send_command(
-      module="C0", command="CP", cl=bit_pattern_hex, cb=blink_pattern_hex
+      module="C0",
+      command="CP",
+      cl=bit_pattern_hex,
+      cb=blink_pattern_hex,
     )
 
   # TODO:(command:CS) Check for presence of carriers on loading tray
@@ -5757,11 +6092,18 @@ class STAR(HamiltonLiquidHandler):
       EAN8: EAN8. Default True.
     """
 
-    # pylint: disable=invalid-name
-
     # Encode values into bit pattern. Last bit is always one.
     bt = ""
-    for t in [ISBT_Standard, code128, code39, codebar, code2_5, UPC_AE, EAN8, True]:
+    for t in [
+      ISBT_Standard,
+      code128,
+      code39,
+      codebar,
+      code2_5,
+      UPC_AE,
+      EAN8,
+      True,
+    ]:
       bt += "1" if t else "0"
 
     # Convert bit pattern to hex.
@@ -5942,55 +6284,96 @@ class STAR(HamiltonLiquidHandler):
 
     return await self.send_command(module="C0", command="FY")
 
-  async def move_iswap_x_direction(self, step_size: int = 0, direction: int = 0):
-    """Move iSWAP in X-direction
-
+  async def move_iswap_x_relative(self, step_size: float, allow_splitting: bool = False):
+    """
     Args:
-      step_size: X Step size [0.1mm] Between 0 and 999. Default 0.
-      direction: X direction. 0 = positive 1 = negative
+      step_size: X Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
+      allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
 
-    return await self.send_command(module="C0", command="GX", gx=step_size, xd=direction)
+    direction = 0 if step_size >= 0 else 1
+    max_step_size = 99.9
+    if abs(step_size) > max_step_size:
+      if not allow_splitting:
+        raise ValueError("step_size must be less than 99.9")
+      await self.move_iswap_x_relative(
+        step_size=max_step_size if step_size > 0 else -max_step_size, allow_splitting=True
+      )
+      remaining_steps = step_size - max_step_size if step_size > 0 else step_size + max_step_size
+      return await self.move_iswap_x_relative(remaining_steps, allow_splitting)
 
-  async def move_iswap_y_direction(self, step_size: int = 0, direction: int = 0):
-    """Move iSWAP in Y-direction
+    return await self.send_command(
+      module="C0", command="GX", gx=str(round(abs(step_size) * 10)).zfill(3), xd=direction
+    )
 
+  async def move_iswap_y_relative(self, step_size: float, allow_splitting: bool = False):
+    """
     Args:
-      step_size: Y Step size [0.1mm] Between 0 and 999. Default 0.
-      direction: Y direction. 0 = positive 1 = negative
+      step_size: Y Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
+      allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
 
-    return await self.send_command(module="C0", command="GY", gx=step_size, xd=direction)
+    direction = 0 if step_size >= 0 else 1
+    max_step_size = 99.9
+    if abs(step_size) > max_step_size:
+      if not allow_splitting:
+        raise ValueError("step_size must be less than 99.9")
+      await self.move_iswap_y_relative(
+        step_size=max_step_size if step_size > 0 else -max_step_size, allow_splitting=True
+      )
+      remaining_steps = step_size - max_step_size if step_size > 0 else step_size + max_step_size
+      return await self.move_iswap_y_relative(remaining_steps, allow_splitting)
 
-  async def move_iswap_z_direction(self, step_size: int = 0, direction: int = 0):
-    """Move iSWAP in Z-direction
+    return await self.send_command(
+      module="C0", command="GY", gy=str(round(abs(step_size) * 10)).zfill(3), yd=direction
+    )
 
+  async def move_iswap_z_relative(self, step_size: float, allow_splitting: bool = False):
+    """
     Args:
-      step_size: Z Step size [0.1mm] Between 0 and 999. Default 0.
-      direction: Z direction. 0 = positive 1 = negative
+      step_size: Z Step size [1mm] Between -99.9 and 99.9 if allow_splitting is False.
+      allow_splitting: Allow splitting of the movement into multiple steps. Default False.
     """
 
-    return await self.send_command(module="C0", command="GZ", gx=step_size, xd=direction)
+    direction = 0 if step_size >= 0 else 1
+    max_step_size = 99.9
+    if abs(step_size) > max_step_size:
+      if not allow_splitting:
+        raise ValueError("step_size must be less than 99.9")
+      await self.move_iswap_z_relative(
+        step_size=max_step_size if step_size > 0 else -max_step_size, allow_splitting=True
+      )
+      remaining_steps = step_size - max_step_size if step_size > 0 else step_size + max_step_size
+      return await self.move_iswap_z_relative(remaining_steps, allow_splitting)
+
+    return await self.send_command(
+      module="C0", command="GZ", gz=str(round(abs(step_size) * 10)).zfill(3), zd=direction
+    )
 
   async def open_not_initialized_gripper(self):
-    """Open not initialized gripper"""
-
     return await self.send_command(module="C0", command="GI")
 
-  async def iswap_open_gripper(self, open_position: int = 1320):
+  async def iswap_open_gripper(self, open_position: Optional[int] = None):
     """Open gripper
 
     Args:
       open_position: Open position [0.1mm] (0.1 mm = 16 increments) The gripper moves to pos + 20.
-                     Must be between 0 and 9999. Default 860.
+                     Must be between 0 and 9999. Default 1320 for iSWAP 4.0 (landscape). Default to
+                     910 for iSWAP 3 (portrait).
     """
+
+    if open_position is None:
+      open_position = 910 if (await self.get_iswap_version()).startswith("3") else 1320
 
     assert 0 <= open_position <= 9999, "open_position must be between 0 and 9999"
 
     return await self.send_command(module="C0", command="GF", go=f"{open_position:04}")
 
   async def iswap_close_gripper(
-    self, grip_strength: int = 5, plate_width: int = 0, plate_width_tolerance: int = 0
+    self,
+    grip_strength: int = 5,
+    plate_width: int = 0,
+    plate_width_tolerance: int = 0,
   ):
     """Close gripper
 
@@ -6004,12 +6387,19 @@ class STAR(HamiltonLiquidHandler):
     """
 
     return await self.send_command(
-      module="C0", command="GC", gw=grip_strength, gb=plate_width, gt=plate_width_tolerance
+      module="C0",
+      command="GC",
+      gw=grip_strength,
+      gb=plate_width,
+      gt=plate_width_tolerance,
     )
 
   # -------------- 3.17.2 Stack handling commands CP --------------
 
-  async def park_iswap(self, minimum_traverse_height_at_beginning_of_a_command: int = 2840):
+  async def park_iswap(
+    self,
+    minimum_traverse_height_at_beginning_of_a_command: int = 2840,
+  ):
     """Close gripper
 
     The gripper should be at the position gb+gt+20 before sending this command.
@@ -6024,7 +6414,9 @@ class STAR(HamiltonLiquidHandler):
     ), "minimum_traverse_height_at_beginning_of_a_command must be between 0 and 3600"
 
     command_output = await self.send_command(
-      module="C0", command="PG", th=minimum_traverse_height_at_beginning_of_a_command
+      module="C0",
+      command="PG",
+      th=minimum_traverse_height_at_beginning_of_a_command,
     )
 
     # Once the command has completed successfully, set _iswap_parked to True
@@ -6504,15 +6896,19 @@ class STAR(HamiltonLiquidHandler):
     """Request iSWAP position ( grip center )
 
     Returns:
-      xs: Hotel center in X direction [0.1mm]
+      xs: Hotel center in X direction [1mm]
       xd: X direction 0 = positive 1 = negative
-      yj: Gripper center in Y direction [0.1mm]
+      yj: Gripper center in Y direction [1mm]
       yd: Y direction 0 = positive 1 = negative
-      zj: Gripper Z height (gripping height) [0.1mm]
+      zj: Gripper Z height (gripping height) [1mm]
       zd: Z direction 0 = positive 1 = negative
     """
 
-    return await self.send_command(module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#")
+    resp = await self.send_command(module="C0", command="QG", fmt="xs#####xd#yj####yd#zj####zd#")
+    resp["xs"] = resp["xs"] / 10
+    resp["yj"] = resp["yj"] / 10
+    resp["zj"] = resp["zj"] / 10
+    return resp
 
   async def request_iswap_initialization_status(self) -> bool:
     """Request iSWAP initialization status
@@ -6523,6 +6919,10 @@ class STAR(HamiltonLiquidHandler):
 
     resp = await self.send_command(module="R0", command="QW", fmt="qw#")
     return cast(int, resp["qw"]) == 1
+
+  async def request_iswap_version(self) -> str:
+    """Firmware command for getting iswap version"""
+    return cast(str, (await self.send_command("R0", "RF", fmt="rf" + "&" * 15))["rf"])
 
   # -------------- 3.18 Cover and port control --------------
 
@@ -6658,7 +7058,11 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- 4.1.2 HHS Shaking --------------
   async def start_shaking_at_hhs(
-    self, device_number: int, rpm: int, rotation: int = 0, plate_locked_during_shaking: bool = True
+    self,
+    device_number: int,
+    rpm: int,
+    rotation: int = 0,
+    plate_locked_during_shaking: bool = True,
   ):
     """Start shaking of specified HHS
 
@@ -6726,7 +7130,10 @@ class STAR(HamiltonLiquidHandler):
     request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
     processed_t_info = [int(x) / 10 for x in request_temperature.split("+")[-2:]]
 
-    return {"middle_T": processed_t_info[0], "edge_T": processed_t_info[-1]}
+    return {
+      "middle_T": processed_t_info[0],
+      "edge_T": processed_t_info[-1],
+    }
 
   async def stop_temperature_control_at_hhs(self, device_number: int):
     """Stop temperature regulation of specified HHS"""
@@ -6817,7 +7224,10 @@ class STAR(HamiltonLiquidHandler):
     request_temperature = await self.send_command(module=f"T{device_number}", command="RT")
     processed_t_info = [int(x) / 10 for x in request_temperature.split("+")[-2:]]
 
-    return {"middle_T": processed_t_info[0], "edge_T": processed_t_info[-1]}
+    return {
+      "middle_T": processed_t_info[0],
+      "edge_T": processed_t_info[-1],
+    }
 
   async def query_whether_temperature_reached_at_hhc(self, device_number: int):
     """Stop temperature regulation of specified HHC"""
@@ -6838,91 +7248,644 @@ class STAR(HamiltonLiquidHandler):
 
   # -------------- Extra - Probing labware with STAR - making STAR into a CMM --------------
 
-  async def probe_z_height_using_channel(
+  y_drive_mm_per_increment = 0.046302082
+  z_drive_mm_per_increment = 0.01072765
+
+  @staticmethod
+  def mm_to_y_drive_increment(value_mm: float) -> int:
+    return round(value_mm / STAR.y_drive_mm_per_increment)
+
+  @staticmethod
+  def y_drive_increment_to_mm(value_mm: int) -> float:
+    return round(value_mm * STAR.y_drive_mm_per_increment, 2)
+
+  @staticmethod
+  def mm_to_z_drive_increment(value_mm: float) -> int:
+    return round(value_mm / STAR.z_drive_mm_per_increment)
+
+  @staticmethod
+  def z_drive_increment_to_mm(value_increments: int) -> float:
+    return round(value_increments * STAR.z_drive_mm_per_increment, 2)
+
+  async def clld_probe_z_height_using_channel(
     self,
-    channel_idx: int,
-    lowest_immers_pos: int = 10000,
-    start_pos_lld_search: int = 31200,
-    channel_speed: int = 1000,
-    channel_acceleration: int = 75,
+    channel_idx: int,  # 0-based indexing of channels!
+    lowest_immers_pos: float = 99.98,  # mm
+    start_pos_search: float = 330.0,  # mm
+    channel_speed: float = 10.0,  # mm
+    channel_acceleration: float = 800.0,  # mm/sec**2
     detection_edge: int = 10,
     detection_drop: int = 2,
     post_detection_trajectory: Literal[0, 1] = 1,
-    post_detection_dist: int = 100,
+    post_detection_dist: float = 2.0,  # mm
     move_channels_to_save_pos_after: bool = False,
   ) -> float:
-    """Probes the Z-height using a specified channel on a liquid handling device.
-    Commands the liquid handler to perform a Liquid Level Detection (LLD) operation using the
-    specified channel (this means only conductive materials can be probed!).
+    """Probes the Z-height below the specified channel on a Hamilton STAR liquid handling machine
+    using the channels 'capacitive Liquid Level Detection' (cLLD) capabilities.
+    N.B.: this means only conductive materials can be probed!
 
     Args:
-      self: The liquid handler.
-      channel_idx: The index of the channel to use for probing.
-      lowest_immers_pos: The lowest immersion position in increments.
-      start_pos_lld_search: The start position for LLD search in increments.
-      channel_speed: The speed of channel movement.
-      channel_acceleration: The acceleration of the channel.
+      channel_idx: The index of the channel to use for probing. Backmost channel = 0.
+      lowest_immers_pos: The lowest immersion position in mm.
+      start_pos_lld_search: The start position for z-touch search in mm.
+      channel_speed: The speed of channel movement in mm/sec.
+      channel_acceleration: The acceleration of the channel in mm/sec**2.
       detection_edge: The edge steepness at capacitive LLD detection.
       detection_drop: The offset after capacitive LLD edge detection.
-      post_detection_trajectory: Movement of the channel up (1) or down (0) after contacting the
-        surface.
-      post_detection_dist (int): Distance to move up after detection to avoid pressure build-up.
-      move_channels_to_save_pos_after (bool): Flag to move channels to a safe position after
+      post_detection_trajectory (0, 1): Movement of the channel up (1) or down (0) after
+        contacting the surface.
+      post_detection_dist: Distance to move into the trajectory after detection in mm.
+      move_channels_to_save_pos_after: Flag to move channels to a safe position after
        operation.
 
     Returns:
-      float: The detected Z-height in mm.
+      The detected Z-height in mm.
     """
 
+    lowest_immers_pos_increments = STAR.mm_to_z_drive_increment(lowest_immers_pos)
+    start_pos_search_increments = STAR.mm_to_z_drive_increment(start_pos_search)
+    channel_speed_increments = STAR.mm_to_z_drive_increment(channel_speed)
+    channel_acceleration_thousand_increments = STAR.mm_to_z_drive_increment(
+      channel_acceleration / 1000
+    )
+    post_detection_dist_increments = STAR.mm_to_z_drive_increment(post_detection_dist)
+
+    assert 9_320 <= lowest_immers_pos_increments <= 31_200, (
+      f"Lowest immersion position must be between \n{STAR.z_drive_increment_to_mm(9_320)}"
+      + f" and {STAR.z_drive_increment_to_mm(31_200)} mm, is {lowest_immers_pos} mm"
+    )
+    assert 9_320 <= start_pos_search_increments <= 31_200, (
+      f"Start position of LLD search must be between \n{STAR.z_drive_increment_to_mm(9_320)}"
+      + f" and {STAR.z_drive_increment_to_mm(31_200)} mm, is {start_pos_search} mm"
+    )
+    assert 20 <= channel_speed_increments <= 15_000, (
+      f"LLD search speed must be between \n{STAR.z_drive_increment_to_mm(20)}"
+      + f"and {STAR.z_drive_increment_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
+    )
+    assert 5 <= channel_acceleration_thousand_increments <= 150, (
+      f"Channel acceleration must be between \n{STAR.z_drive_increment_to_mm(5*1_000)} "
+      + f" and {STAR.z_drive_increment_to_mm(150*1_000)} mm/sec**2, is {channel_acceleration} mm/sec**2"
+    )
     assert (
-      9320 <= lowest_immers_pos <= 31200
-    ), "Lowest immersion position [increment] must be between 9320 and 31200"
-    assert (
-      9320 <= start_pos_lld_search <= 31200
-    ), "Start position of LLD search [increment] must be between 9320 and 31200"
-    assert (
-      20 <= channel_speed <= 15000
-    ), "LLD search speed [increment/second] must be between 20 and 15000"
-    assert (
-      5 <= channel_acceleration <= 150
-    ), "Channel acceleration [increment] must be between 5 and 150"
-    assert (
-      0 <= detection_edge <= 1023
+      0 <= detection_edge <= 1_023
     ), "Edge steepness at capacitive LLD detection must be between 0 and 1023"
     assert (
-      0 <= detection_drop <= 1023
+      0 <= detection_drop <= 1_023
     ), "Offset after capacitive LLD edge detection must be between 0 and 1023"
-    assert (
-      0 <= post_detection_dist <= 9999
-    ), "Immersion depth after Liquid Level Detection [increment] must be between 0 and 9999"
+    assert 0 <= post_detection_dist_increments <= 9_999, (
+      "Post cLLD-detection movement distance must be between \n0"
+      + f" and {STAR.z_drive_increment_to_mm(9_999)} mm, is {post_detection_dist} mm"
+    )
 
-    lowest_immers_pos_str = f"{lowest_immers_pos:05}"
-    start_pos_lld_search_str = f"{start_pos_lld_search:05}"
-    channel_speed_str = f"{channel_speed:05}"
-    channel_acc_str = f"{channel_acceleration:03}"
+    lowest_immers_pos_str = f"{lowest_immers_pos_increments:05}"
+    start_pos_search_str = f"{start_pos_search_increments:05}"
+    channel_speed_str = f"{channel_speed_increments:05}"
+    channel_acc_str = f"{channel_acceleration_thousand_increments:03}"
     detection_edge_str = f"{detection_edge:04}"
     detection_drop_str = f"{detection_drop:04}"
-    post_detection_dist_str = f"{post_detection_dist:04}"
+    post_detection_dist_str = f"{post_detection_dist_increments:04}"
 
     await self.send_command(
-      module=f"P{channel_idx}",
+      module=STAR.channel_id(channel_idx),
       command="ZL",
       zh=lowest_immers_pos_str,  # Lowest immersion position [increment]
-      zc=start_pos_lld_search_str,  # Start position of LLD search [increment]
+      zc=start_pos_search_str,  # Start position of LLD search [increment]
       zl=channel_speed_str,  # Speed of channel movement
       zr=channel_acc_str,  # Acceleration [1000 increment/second^2]
       gt=detection_edge_str,  # Edge steepness at capacitive LLD detection
       gl=detection_drop_str,  # Offset after capacitive LLD edge detection
       zj=post_detection_trajectory,  # Movement of the channel after contacting surface
-      zi=post_detection_dist_str,  # Distance to move up after detection
+      zi=post_detection_dist_str,  # Distance to move up after detection [increment]
     )
     if move_channels_to_save_pos_after:
       await self.move_all_channels_in_z_safety()
 
     get_llds = await self.request_pip_height_last_lld()
-    result_in_mm = float(get_llds["lh"][channel_idx - 1] / 10)
+    result_in_mm = float(get_llds["lh"][channel_idx] / 10)
 
     return result_in_mm
+
+  async def request_tip_len_on_channel(
+    self,
+    channel_idx: int,  # 0-based indexing of channels!
+  ) -> float:
+    """
+    Measures the length of the tip attached to the specified pipetting channel.
+    Checks if a tip is present on the given channel. If present, moves all channels
+    to THE safe Z position, 334.3 mm, measures the tip bottom Z-coordinate, and calculates
+    the total tip length. Supports tips of lengths 50.4 mm, 59.9 mm, and 95.1 mm.
+    Raises an error if the tip length is unsupported or if no tip is present.
+    Parameters:
+      channel_idx: Index of the pipetting channel (0-based).
+    Returns:
+      The measured tip length in millimeters.
+    Raises:
+      ValueError: If no tip is present on the channel or if the tip length is unsupported.
+    """
+
+    # Check there is a tip on the channel
+    all_channel_occupancy = await self.request_tip_presence()
+    if not all_channel_occupancy[channel_idx]:
+      raise ValueError(f"No tip present on channel {channel_idx}")
+
+    # Level all channels
+    await self.move_all_channels_in_z_safety()
+    known_top_position_channel_head = 334.3  # mm
+    fitting_depth_of_all_standard_channel_tips = 8  # mm
+    unknown_offset_for_all_tips = 0.4  # mm
+
+    # Request z-coordinate of channel+tip bottom
+    tip_bottom_z_coordinate = await self.request_z_pos_channel_n(
+      pipetting_channel_index=channel_idx
+    )
+
+    total_tip_len = round(
+      known_top_position_channel_head
+      - (
+        tip_bottom_z_coordinate
+        - fitting_depth_of_all_standard_channel_tips
+        - unknown_offset_for_all_tips
+      ),
+      1,
+    )
+
+    if total_tip_len in [50.4, 59.9, 95.1]:  # 50ul, 300ul, 1000ul
+      return total_tip_len
+    raise ValueError(f"Tip of length {total_tip_len} not yet supported")
+
+  async def ztouch_probe_z_height_using_channel(
+    self,
+    channel_idx: int,  # 0-based indexing of channels!
+    tip_len: Optional[float] = None,  # mm
+    lowest_immers_pos: float = 99.98,  # mm
+    start_pos_search: Optional[float] = None,  # mm
+    channel_speed: float = 10.0,  # mm/sec
+    channel_acceleration: float = 800.0,  # mm/sec**2
+    channel_speed_upwards: float = 125.0,  # mm
+    detection_limiter_in_PWM: int = 1,
+    push_down_force_in_PWM: int = 0,
+    post_detection_dist: float = 2.0,  # mm
+    move_channels_to_save_pos_after: bool = False,
+  ) -> float:
+    """Probes the Z-height below the specified channel on a Hamilton STAR liquid handling machine
+    using the channels 'z-touchoff' capabilities, i.e. a controlled triggering of the z-drive,
+    aka a controlled 'crash'.
+
+    Args:
+      channel_idx: The index of the channel to use for probing. Backmost channel = 0.
+      tip_len: override the tip length (of tip on channel `channel_idx`). Default is the tip length
+        of the tip that was picked up.
+      lowest_immers_pos: The lowest immersion position in mm.
+      start_pos_lld_search: The start position for z-touch search in mm.
+      channel_speed: The speed of channel movement in mm/sec.
+      channel_acceleration: The acceleration of the channel in mm/sec**2.
+      detection_limiter_in_PWM: Offset PWM limiter value for searching
+      push_down_force_in_PWM: Offset PWM value for push down force.
+        cf000 = No push down force, drive is switched off.
+      post_detection_dist: Distance to move into the trajectory after detection in mm.
+      move_channels_to_save_pos_after: Flag to move channels to a safe position after
+        operation.
+
+    Returns:
+      The detected Z-height in mm.
+    """
+
+    version = await self.request_pip_channel_version(channel_idx)
+    year_matches = re.search(r"\b\d{4}\b", version)
+    if year_matches is not None:
+      year = int(year_matches.group())
+      if year < 2022:
+        raise ValueError(
+          "Z-touch probing is not supported for PIP versions predating 2022, "
+          f"found version '{version}'"
+        )
+
+    if tip_len is None:
+      # currently a bug, will be fixed in the future
+      # reverted to previous implementation
+      # tip_len = self.head[channel_idx].get_tip().total_tip_length
+      tip_len = await self.request_tip_len_on_channel(channel_idx)
+
+    # fitting_depth = 8 mm for 10, 50, 300, 1000 ul Hamilton tips
+    # fitting_depth = self.head[channel_idx].get_tip().fitting_depth
+    fitting_depth = 8  # mm, for 10, 50, 300, 1000 ul Hamilton tips
+
+    if start_pos_search is None:
+      start_pos_search = 334.7 - tip_len + fitting_depth
+
+    tip_len_used_in_increments = (tip_len - fitting_depth) / STAR.z_drive_mm_per_increment
+    channel_head_start_pos = (
+      start_pos_search + tip_len - fitting_depth
+    )  # start_pos of the head itself!
+    safe_head_bottom_z_pos = (
+      99.98 + tip_len - fitting_depth
+    )  # 99.98 == STAR.z_drive_increment_to_mm(9_320)
+    safe_head_top_z_pos = 334.7  # 334.7 == STAR.z_drive_increment_to_mm(31_200)
+
+    lowest_immers_pos_increments = STAR.mm_to_z_drive_increment(lowest_immers_pos)
+    start_pos_search_increments = STAR.mm_to_z_drive_increment(channel_head_start_pos)
+    channel_speed_increments = STAR.mm_to_z_drive_increment(channel_speed)
+    channel_acceleration_thousand_increments = STAR.mm_to_z_drive_increment(
+      channel_acceleration / 1000
+    )
+    channel_speed_upwards_increments = STAR.mm_to_z_drive_increment(channel_speed_upwards)
+
+    assert 0 <= channel_idx <= 15, f"channel_idx must be between 0 and 15, is {channel_idx}"
+    assert 20 <= tip_len <= 120, "Total tip length must be between 20 and 120"
+
+    assert 9320 <= lowest_immers_pos_increments <= 31_200, (
+      "Lowest immersion position must be between \n99.98"
+      + f" and 334.7 mm, is {lowest_immers_pos} mm"
+    )
+    assert safe_head_bottom_z_pos <= channel_head_start_pos <= safe_head_top_z_pos, (
+      f"Start position of LLD search must be between \n{safe_head_bottom_z_pos}"
+      + f" and {safe_head_top_z_pos} mm, is {channel_head_start_pos} mm"
+    )
+    assert 20 <= channel_speed_increments <= 15_000, (
+      f"Z-touch search speed must be between \n{STAR.z_drive_increment_to_mm(20)}"
+      + f" and {STAR.z_drive_increment_to_mm(15_000)} mm/sec, is {channel_speed} mm/sec"
+    )
+    assert 5 <= channel_acceleration_thousand_increments <= 150, (
+      f"Channel acceleration must be between \n{STAR.z_drive_increment_to_mm(5*1_000)}"
+      + f" and {STAR.z_drive_increment_to_mm(150*1_000)} mm/sec**2, is {channel_speed} mm/sec**2"
+    )
+    assert 20 <= channel_speed_upwards_increments <= 15_000, (
+      f"Channel retraction speed must be between \n{STAR.z_drive_increment_to_mm(20)}"
+      + f" and {STAR.z_drive_increment_to_mm(15_000)} mm/sec, is {channel_speed_upwards} mm/sec"
+    )
+    assert (
+      0 <= detection_limiter_in_PWM <= 125
+    ), "Detection limiter value must be between 0 and 125 PWM."
+    assert 0 <= push_down_force_in_PWM <= 125, "Push down force between 0 and 125 PWM values"
+    assert (
+      0 <= post_detection_dist <= 245
+    ), f"Post detection distance must be between 0 and 245 mm, is {post_detection_dist}"
+
+    lowest_immers_pos_str = f"{lowest_immers_pos_increments:05}"
+    start_pos_search_str = f"{start_pos_search_increments:05}"
+    channel_speed_str = f"{channel_speed_increments:05}"
+    channel_acc_str = f"{channel_acceleration_thousand_increments:03}"
+    channel_speed_up_str = f"{channel_speed_upwards_increments:05}"
+    detection_limiter_in_PWM_str = f"{detection_limiter_in_PWM:03}"
+    push_down_force_in_PWM_str = f"{push_down_force_in_PWM:03}"
+
+    ztouch_probed_z_height = await self.send_command(
+      module=STAR.channel_id(channel_idx),
+      command="ZH",
+      zb=start_pos_search_str,  # begin of searching range [increment]
+      za=lowest_immers_pos_str,  # end of searching range [increment]
+      zv=channel_speed_up_str,  # speed z-drive upper section [increment/second]
+      zr=channel_acc_str,  # acceleration z-drive [1000 increment/second]
+      zu=channel_speed_str,  # speed z-drive lower section [increment/second]
+      cg=detection_limiter_in_PWM_str,  # offset PWM limiter value for searching
+      cf=push_down_force_in_PWM_str,  # offset PWM value for push down force
+      fmt="rz#####",
+    )
+    # Subtract tip_length from measurement in increment, and convert to mm
+    result_in_mm = STAR.z_drive_increment_to_mm(
+      ztouch_probed_z_height["rz"] - tip_len_used_in_increments
+    )
+    if post_detection_dist != 0:  # Safety first
+      await self.move_channel_z(z=result_in_mm + post_detection_dist, channel=channel_idx)
+    if move_channels_to_save_pos_after:
+      await self.move_all_channels_in_z_safety()
+
+    return float(result_in_mm)
+
+  class RotationDriveOrientation(enum.Enum):
+    LEFT = 1
+    FRONT = 2
+    RIGHT = 3
+
+  async def rotate_iswap_rotation_drive(self, orientation: RotationDriveOrientation):
+    return await self.send_command(
+      module="R0",
+      command="WP",
+      auto_id=False,
+      wp=orientation.value,
+    )
+
+  class WristOrientation(enum.Enum):
+    RIGHT = 1
+    STRAIGHT = 2
+    LEFT = 3
+    REVERSE = 4
+
+  async def rotate_iswap_wrist(self, orientation: WristOrientation):
+    return await self.send_command(
+      module="R0",
+      command="TP",
+      auto_id=False,
+      tp=orientation.value,
+    )
+
+  @staticmethod
+  def channel_id(channel_idx: int) -> str:
+    """channel_idx: plr style, 0-indexed from the back"""
+    channel_ids = "123456789ABCDEFG"
+    return "P" + channel_ids[channel_idx]
+
+  async def get_channels_y_positions(self) -> Dict[int, float]:
+    """Get the Y position of all channels in mm"""
+    resp = await self.send_command(
+      module="C0",
+      command="RY",
+      fmt="ry#### (n)",
+    )
+    y_positions = [round(y / 10, 2) for y in resp["ry"]]
+
+    # sometimes there is (likely) a floating point error and channels are reported to be
+    # less than 9mm apart. (When you set channels using position_channels_in_y_direction,
+    # it will raise an error.) The minimum y is 6mm, so we fix that first (in case that
+    # values is misreported). Then, we traverse the list in reverse and set the min_diff.
+    if y_positions[-1] < 5.8:
+      raise RuntimeError(
+        "Channels are reported to be too close to the front of the machine. "
+        "The known minimum is 6, which will be fixed automatically for 5.8<y<6. "
+        f"Reported values: {y_positions}."
+      )
+    elif 5.8 <= y_positions[-1] < 6:
+      y_positions[-1] = 6.0
+
+    min_diff = 9.0
+    for i in range(len(y_positions) - 2, -1, -1):
+      if y_positions[i] - y_positions[i + 1] < min_diff:
+        y_positions[i] = y_positions[i + 1] + min_diff
+
+    return {channel_idx: y for channel_idx, y in enumerate(y_positions)}
+
+  @need_iswap_parked
+  async def position_channels_in_y_direction(self, ys: Dict[int, float], make_space=True):
+    """position all channels simultaneously in the Y direction.
+
+    Args:
+      ys: A dictionary mapping channel index to the desired Y position in mm. The channel index is
+        0-indexed from the back.
+      make_space: If True, the channels will be moved to ensure they are at least 9mm apart and in
+        descending order, after the channels in `ys` have been put at the desired locations. Note
+        that an error may still be raised, if there is insufficient space to move the channels or
+        if the requested locations are not valid. Set this to False if you wan to aviod inadvertently
+        moving other channels.
+    """
+
+    # check that the locations of channels after the move will be at least 9mm apart, and in
+    # descending order
+    channel_locations = await self.get_channels_y_positions()
+
+    for channel_idx, y in ys.items():
+      channel_locations[channel_idx] = y
+
+    if make_space:
+      # For the channels to the back of `back_channel`, make sure the space between them is
+      # >=9mm. We start with the channel closest to `back_channel`, and make sure the
+      # channel behind it is at least 9mm, updating if needed. Iterating from the front (closest
+      # to `back_channel`) to the back (channel 0), all channels are put at the correct location.
+      # This order matters because the channel in front of any channel may have been moved in the
+      # previous iteration.
+      # Note that if a channel is already spaced at >=9mm, it is not moved.
+      use_channels = list(ys.keys())
+      back_channel = min(use_channels)
+      for channel_idx in range(back_channel, 0, -1):
+        if (channel_locations[channel_idx - 1] - channel_locations[channel_idx]) < 9:
+          channel_locations[channel_idx - 1] = channel_locations[channel_idx] + 9
+
+      # Similarly for the channels to the front of `front_channel`, make sure they are all
+      # spaced >=9mm apart. This time, we iterate from back (closest to `front_channel`)
+      # to the front (lh.backend.num_channels - 1), and put each channel >=9mm before the
+      # one behind it.
+      front_channel = max(use_channels)
+      for channel_idx in range(front_channel, self.num_channels - 1):
+        if (channel_locations[channel_idx] - channel_locations[channel_idx + 1]) < 9:
+          channel_locations[channel_idx + 1] = channel_locations[channel_idx] - 9
+
+    # Quick checks before movement.
+    if channel_locations[0] > 650:
+      raise ValueError("Channel 0 would hit the back of the robot")
+
+    if channel_locations[self.num_channels - 1] < 6:
+      raise ValueError("Channel N would hit the front of the robot")
+
+    if not all(
+      int((channel_locations[i] - channel_locations[i + 1]) * 1000) >= 8_999  # float fixing
+      for i in range(len(channel_locations) - 1)
+    ):
+      raise ValueError("Channels must be at least 9mm apart and in descending order")
+
+    yp = " ".join([f"{round(y*10):04}" for y in channel_locations.values()])
+    return await self.send_command(
+      module="C0",
+      command="JY",
+      yp=yp,
+    )
+
+  async def get_channels_z_positions(self) -> Dict[int, float]:
+    """Get the Y position of all channels in mm"""
+    resp = await self.send_command(
+      module="C0",
+      command="RZ",
+      fmt="rz#### (n)",
+    )
+    return {channel_idx: round(y / 10, 2) for channel_idx, y in enumerate(resp["rz"])}
+
+  async def position_channels_in_z_direction(self, zs: Dict[int, float]):
+    channel_locations = await self.get_channels_z_positions()
+
+    for channel_idx, z in zs.items():
+      channel_locations[channel_idx] = z
+
+    return await self.send_command(
+      module="C0", command="JZ", zp=[f"{round(z*10):04}" for z in channel_locations.values()]
+    )
+
+  async def pierce_foil(
+    self,
+    wells: Union[Well, List[Well]],
+    piercing_channels: List[int],
+    hold_down_channels: List[int],
+    move_inwards: float,
+    spread: Literal["wide", "tight"] = "wide",
+    one_by_one: bool = False,
+    distance_from_bottom: float = 20.0,
+  ):
+    """Pierce the foil of the media source plate at the specified column. Throw away the tips
+    after piercing because there will be a bit of foil stuck to the tips. Use this method
+    before aspirating from a foil-sealed plate to make sure the tips are clean and the
+    aspirations are accurate.
+
+    Args:
+      wells: Well or wells in the plate to pierce the foil. If multiple wells, they must be on one
+        column.
+      piercing_channels: The channels to use for piercing the foil.
+      hold_down_channels: The channels to use for holding down the plate when moving up the
+        piercing channels.
+      spread: The spread of the piercing channels in the well.
+      one_by_one: If True, the channels will pierce the foil one by one. If False, all channels
+        will pierce the foil simultaneously.
+    """
+
+    x: float
+    ys: List[float]
+    z: float
+
+    # if only one well is give, but in a list, convert to Well so we fall into single-well logic.
+    if isinstance(wells, list) and len(wells) == 1:
+      wells = wells[0]
+
+    if isinstance(wells, Well):
+      well = wells
+      x, y, z = well.get_absolute_location("c", "c", "cavity_bottom")
+
+      if spread == "wide":
+        offsets = get_wide_single_resource_liquid_op_offsets(
+          well, num_channels=len(piercing_channels)
+        )
+      else:
+        offsets = get_tight_single_resource_liquid_op_offsets(
+          well, num_channels=len(piercing_channels)
+        )
+      ys = [y + offset.y for offset in offsets]
+    else:
+      assert (
+        len(set(w.get_absolute_location().x for w in wells)) == 1
+      ), "Wells must be on the same column"
+      absolute_center = wells[0].get_absolute_location("c", "c", "cavity_bottom")
+      x = absolute_center.x
+      ys = [well.get_absolute_location(x="c", y="c").y for well in wells]
+      z = absolute_center.z
+
+    await self.move_channel_x(0, x=x)
+
+    await self.position_channels_in_y_direction(
+      {channel: y for channel, y in zip(piercing_channels, ys)}
+    )
+
+    zs = [z + distance_from_bottom for _ in range(len(piercing_channels))]
+    if one_by_one:
+      for channel in piercing_channels:
+        await self.move_channel_z(channel, z)
+    else:
+      await self.position_channels_in_z_direction(
+        {channel: z for channel, z in zip(piercing_channels, zs)}
+      )
+
+    await self.step_off_foil(
+      [wells] if isinstance(wells, Well) else wells,
+      back_channel=hold_down_channels[0],
+      front_channel=hold_down_channels[1],
+      move_inwards=move_inwards,
+    )
+
+  async def step_off_foil(
+    self,
+    wells: Union[Well, List[Well]],
+    front_channel: int,
+    back_channel: int,
+    move_inwards: float = 2,
+    move_height: float = 15,
+  ):
+    """
+    Hold down a plate by placing two channels on the edges of a plate that is sealed with foil
+    while moving up the channels that are still within the foil. This is useful when, for
+    example, aspirating from a plate that is sealed: without holding it down, the tips might get
+    stuck in the plate and move it up when retracting. Putting plates on the edge prevents this.
+
+    When aspirating or dispensing in the foil, be sure to set the `min_z_endpos` parameter in
+    `lh.aspirate` or `lh.dispense` to a value in the foil. You might want to use something like
+
+    .. code-block:: python
+
+        well = plate.get_well("A3")
+        await wc.lh.aspirate(
+          [well]*4, vols=[100]*4, use_channels=[7,8,9,10],
+          min_z_endpos=well.get_absolute_location(z="cavity_bottom").z,
+          surface_following_distance=0,
+          pull_out_distance_transport_air=[0] * 4)
+        await step_off_foil(lh.backend, [well], front_channel=11, back_channel=6, move_inwards=3)
+
+    Args:
+      wells: Wells in the plate to hold down. (x-coordinate of channels will be at center of wells).
+        Must be sorted from back to front.
+      front_channel: The channel to place on the front of the plate.
+      back_channel: The channel to place on the back of the plate.
+      move_inwards: mm to move inwards (backward on the front channel; frontward on the back).
+      move_height: mm to move upwards after piercing the foil. front_channel and back_channel will hold the plate down.
+    """
+
+    if front_channel <= back_channel:
+      raise ValueError(
+        "front_channel should be in front of back_channel. " "Channels are 0-indexed from the back."
+      )
+
+    if isinstance(wells, Well):
+      wells = [wells]
+
+    plates = set(well.parent for well in wells)
+    assert len(plates) == 1, "All wells must be in the same plate"
+    plate = plates.pop()
+    assert plate is not None
+
+    z_location = plate.get_absolute_location(z="top").z
+
+    if plate.get_absolute_rotation().z % 360 == 0:
+      back_location = plate.get_absolute_location(y="b")
+      front_location = plate.get_absolute_location(y="f")
+    elif plate.get_absolute_rotation().z % 360 == 90:
+      back_location = plate.get_absolute_location(x="r")
+      front_location = plate.get_absolute_location(x="l")
+    elif plate.get_absolute_rotation().z % 360 == 180:
+      back_location = plate.get_absolute_location(y="f")
+      front_location = plate.get_absolute_location(y="b")
+    elif plate.get_absolute_rotation().z % 360 == 270:
+      back_location = plate.get_absolute_location(x="l")
+      front_location = plate.get_absolute_location(x="r")
+    else:
+      raise ValueError("Plate rotation must be a multiple of 90 degrees")
+
+    try:
+      # Then move all channels in the y-space simultaneously.
+      await self.position_channels_in_y_direction(
+        {
+          front_channel: front_location.y + move_inwards,
+          back_channel: back_location.y - move_inwards,
+        }
+      )
+
+      await self.move_channel_z(front_channel, z_location)
+      await self.move_channel_z(back_channel, z_location)
+    finally:
+      # Move channels that are lower than the `front_channel` and `back_channel` to
+      # the just above the foil, in case the foil pops up.
+      zs = await self.get_channels_z_positions()
+      indices = [channel_idx for channel_idx, z in zs.items() if z < z_location]
+      idx = {
+        idx: z_location + move_height for idx in indices if idx not in (front_channel, back_channel)
+      }
+      await self.position_channels_in_z_direction(idx)
+
+      # After that, all channels are clear to move up.
+      await self.move_all_channels_in_z_safety()
+
+  async def request_volume_in_tip(self, channel: int) -> float:
+    resp = await self.send_command(STAR.channel_id(channel), "QC", fmt="qc##### (n)")
+    _, current_volume = resp["qc"]  # first is max volume
+    return float(current_volume) / 10
+
+  @asynccontextmanager
+  async def slow_iswap(self, wrist_velocity: int = 20_000, gripper_velocity: int = 20_000):
+    """A context manager that sets the iSWAP to slow speed during the context"""
+    assert 20 <= gripper_velocity <= 75_000
+    assert 20 <= wrist_velocity <= 65_000
+
+    original_wv = (await self.send_command("R0", "RA", ra="wv", fmt="wv#####"))["wv"]
+    original_tv = (await self.send_command("R0", "RA", ra="tv", fmt="tv#####"))["tv"]
+
+    await self.send_command("R0", "AA", wv=gripper_velocity)  # wrist velocity
+    await self.send_command("R0", "AA", tv=wrist_velocity)  # gripper velocity
+    try:
+      yield
+    finally:
+      await self.send_command("R0", "AA", wv=original_wv)
+      await self.send_command("R0", "AA", tv=original_tv)
 
 
 class UnSafe:
@@ -6939,7 +7902,6 @@ class UnSafe:
     hotel_center_x_coord: int = 0,
     hotel_center_y_coord: int = 0,
     hotel_center_z_coord: int = 0,
-    # for direction, 0 is positive, 1 is negative
     hotel_center_x_direction: Literal[0, 1] = 0,
     hotel_center_y_direction: Literal[0, 1] = 0,
     hotel_center_z_direction: Literal[0, 1] = 0,
@@ -7079,3 +8041,16 @@ class UnSafe:
       xe=f"{high_acceleration_index} {low_acceleration_index}",
       gc=int(fold_up_at_end),
     )
+
+  async def violently_shoot_down_tip(self, channel_idx: int):
+    """Shoot down the tip on the specified channel by releasing the drive that holds the spring. The
+    tips will shoot down in place at an acceleration bigger than g. This is done by initializing
+    the squeezer drive wihile a tip is mounted.
+
+    Safe to do when above a tip rack, for example directly after a tip pickup.
+
+    .. warning::
+
+      Consider this method an easter egg. Not for serious use.
+    """
+    await self.star.send_command(module=STAR.channel_id(channel_idx), command="SI")
