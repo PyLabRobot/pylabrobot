@@ -2,8 +2,8 @@
 
 PyLabRobot supports a number of different types of machines. Currently, these are:
 
-- [Liquid handlers](/user_guide/basic)
-- [Plate readers](/user_guide/integrations/plate-reading/plate-reading)
+- [Liquid handlers](/user_guide/liquid-handler/basic)
+- [Plate readers](/user_guide/plate-reading/plate-reading)
 - [Pumps](/user_guide/pumps)
 - [Temperature controllers](/user_guide/temperature)
 - [Heater shakers](/user_guide/heating-shaking)

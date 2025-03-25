@@ -8,85 +8,34 @@ installation
 rpi
 ```
 
-```{toctree}
-:maxdepth: 1
-:caption: Liquid handling
-
-basic
-using-the-visualizer
-using-trackers
-writing-robot-agnostic-methods
-hamilton-star/hamilton-star
-moving-channels-around
-tip-spot-generators
-96head
-validation
-```
-
-<!-- ```{toctree}
-:maxdepth: 1
-:caption: Centrifuge
-
-integrations/centrifuge/centrifuge
-``` -->
-<!--
-```{toctree}
-:maxdepth: 1
-:caption: Plate reading
-
-integrations/plate-reading/plate_reading
-integrations/plate-reading/cytation5
-``` -->
-
 
 ```{toctree}
 :maxdepth: 1
-:caption: Integrations
+:caption: Machines
+:hidden:
 
-integrations/integrations
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Pumps
-
+liquid-handler/liquid-handler
+centrifuge/centrifuge
+fans/fans
+heating-shaking
+plate-reading/plate-reading
 pumps
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Scales
-
 scales
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Temperature controlling
-
 temperature
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Tilting
-
 tilting
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: Heater shakers
+:caption: Machine-Agnostic Features
+:hidden:
 
-heating-shaking
+using-the-visualizer
+using-trackers
+writing-robot-agnostic-protocols
+tip-spot-generators
+validation
 ```
-
-<!-- ```{toctree}
-:maxdepth: 1
-:caption: Fans
-
-integrations/fans/fans
-``` -->
 
 ```{toctree}
 :maxdepth: 1
