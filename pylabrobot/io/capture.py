@@ -33,15 +33,13 @@ class _CaptureWriter:
     self._tempfile.flush()
 
   def record(self, command: Command):
-    if self._tempfile is None:
-      raise RuntimeError("io capture not active. Call start() first.")
-
-    encoded_command = json.dumps(command.__dict__, indent=2).encode()
-    # add 4 spaces to each line
-    encoded_command = b"    " + encoded_command.replace(b"\n", b"\n    ")
-    self._tempfile.write(encoded_command)
-    self._tempfile.write(b",\n")
-    self._tempfile.flush()
+    if self._tempfile is not None:
+      encoded_command = json.dumps(command.__dict__, indent=2).encode()
+      # add 4 spaces to each line
+      encoded_command = b"    " + encoded_command.replace(b"\n", b"\n    ")
+      self._tempfile.write(encoded_command)
+      self._tempfile.write(b",\n")
+      self._tempfile.flush()
 
   def stop(self):
     if self._path is None or self._tempfile is None:
