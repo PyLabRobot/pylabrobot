@@ -2,6 +2,11 @@ import unittest
 from typing import Any, List, Optional
 
 from pylabrobot.liquid_handling import LiquidHandler
+from pylabrobot.liquid_handling.liquid_classes.hamilton.vantage import (
+  HighVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty,
+  HighVolumeFilter_Water_DispenseSurface_Empty,
+  HighVolumeFilter_Water_DispenseSurface_Part,
+)
 from pylabrobot.liquid_handling.standard import Pickup
 from pylabrobot.resources import (
   HT,
@@ -161,25 +166,20 @@ class TestVantageResponseParsing(unittest.TestCase):
     resp = 'I1AMRQid0000er4et"Slave not available"'
     error = vantage_response_string_to_error(resp)
     self.assertEqual(
-      error,
-      VantageFirmwareError(errors={"Cover": "Slave not available"}, raw_response=resp),
+      error, VantageFirmwareError(errors={"Cover": "Slave not available"}, raw_response=resp)
     )
 
     resp = 'I1AMLPid215er57et"S-Drive: Drive not initialized"'
     error = vantage_response_string_to_error(resp)
     self.assertEqual(
       error,
-      VantageFirmwareError(
-        errors={"Cover": "S-Drive: Drive not initialized"},
-        raw_response=resp,
-      ),
+      VantageFirmwareError(errors={"Cover": "S-Drive: Drive not initialized"}, raw_response=resp),
     )
 
     resp = 'A1HMDAid239er99es"H070"'
     error = vantage_response_string_to_error(resp)
     self.assertEqual(
-      error,
-      VantageFirmwareError(errors={"Core 96": "No liquid level found"}, raw_response=resp),
+      error, VantageFirmwareError(errors={"Core 96": "No liquid level found"}, raw_response=resp)
     )
 
     resp = 'A1PMDAid262er99es"P170 P270 P370 P470 P570 P670 P770 P870"'
@@ -210,7 +210,7 @@ class VantageCommandCatcher(Vantage):
     super().__init__()
     self.commands = []
 
-  async def setup(self) -> None:  # type: ignore
+  async def setup(self) -> None:
     self.setup_finished = True
     self._num_channels = 8
     self.iswap_installed = True
@@ -220,7 +220,7 @@ class VantageCommandCatcher(Vantage):
     self,
     module: str,
     command: str,
-    auto_id: bool = True,
+    auto_id=True,
     tip_pattern: Optional[List[bool]] = None,
     write_timeout: Optional[int] = None,
     read_timeout: Optional[int] = None,
@@ -241,6 +241,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
   """Test Vantage backend for liquid handling."""
 
   async def asyncSetUp(self):
+    # pylint: disable=invalid-name
     self.mockVantage = VantageCommandCatcher()
     self.deck = VantageDeck(size=1.3)
     self.lh = LiquidHandler(self.mockVantage, deck=self.deck)
@@ -313,6 +314,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   def test_ops_to_fw_positions(self):
     """Convert channel positions to firmware positions."""
+    # pylint: disable=protected-access
     tip_a1 = self.tip_rack.get_item("A1")
     tip_f1 = self.tip_rack.get_item("F1")
     tip = self.tip_rack.get_tip("A1")
@@ -331,11 +333,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
     self.assertEqual(
       self.mockVantage._ops_to_fw_positions((op1, op2), use_channels=[1, 2]),
-      (
-        [0, 4329, 4329, 0],
-        [0, 1458, 1008, 0],
-        [False, True, True, False],
-      ),
+      ([0, 4329, 4329, 0], [0, 1458, 1008, 0], [False, True, True, False]),
     )
 
   def _assert_command_sent_once(self, cmd: str, fmt: dict):
@@ -374,41 +372,45 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.test_small_tip_pickup()  # pick up tips first
     await self.lh.drop_tips(self.small_tip_rack["A1"])
     self._assert_command_sent_once(
-      "A1PMTRid0012xp4329 0&yp2418 0&tp2024&tz1924&th2450&te2450&tm1 0&ts0td0&",
-      DROP_TIP_FORMAT,
+      "A1PMTRid0012xp4329 0&yp2418 0&tp2024&tz1924&th2450&te2450&tm1 0&ts0td0&", DROP_TIP_FORMAT
     )
 
   async def test_aspirate(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])  # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=[100])
+    hlc = HighVolumeFilter_Water_DispenseSurface_Part
+    corrected_volume = hlc.compute_corrected_volume(100)
+    await self.lh.aspirate(self.plate["A1"], vols=[corrected_volume], **hlc.make_asp_kwargs(1))
 
     self._assert_command_sent_once(
       "A1PMDAid0248at0&tm1 0&xp05683 0&yp1457 0 &th2450&te2450&lp1990&"
       "ch000&zl1866&zx1866&ip0000&fp0000&av010830&as2500&ta000&ba00000&oa000&lm0&ll4&lv4&de0020&"
-      "wt10&mv00000&mc00&mp000&ms2500&gi000&gj0gk0zu0000&zr00000&mh0000&zo005&po0109&dj0la0&lb0&"
+      "wt10&mv00000&mc00&mp000&ms1200&gi000&gj0gk0zu0000&zr00000&mh0000&zo005&po0109&dj0la0&lb0&"
       "lc0&",
       ASPIRATE_FORMAT,
     )
 
   async def test_dispense(self):
     await self.lh.pick_up_tips(self.tip_rack["A1"])  # pick up tips first
-    await self.lh.aspirate(self.plate["A1"], vols=[100])
+    hlc = HighVolumeFilter_Water_DispenseSurface_Empty
+    corrected_volume = hlc.compute_corrected_volume(100)
+    await self.lh.aspirate(self.plate["A1"], vols=[corrected_volume], **hlc.make_asp_kwargs(1))
     await self.lh.dispense(
       self.plate["A2"],
-      vols=[100],
+      vols=[corrected_volume],
       liquid_height=[5],
       jet=[False],
       blow_out=[True],
+      **hlc.make_disp_kwargs(1),
     )
 
     self._assert_command_sent_once(
       "A1PMDDid0253dm3&tm1 0&xp05773 0&yp1457 0&zx1866&lp1990&zl1916&"
       "ip0000&fp0021&th2450&te2450&dv010830&ds1200&ss2500&rv000&ta050&ba00000&lm0&zo005&ll1&lv1&"
-      "de0010&mv00000&mc00&mp000&ms0010&wt00&gi000&gj0gk0zu0000&dj00zr00000&mh0000&po0050&la0&",
+      "de0020&mv00000&mc00&mp000&ms1200&wt00&gi000&gj0gk0zu0000&dj00zr00000&mh0000&po0050&la0&",
       DISPENSE_FORMAT,
     )
 
-  async def test_zero_volume_liquid_handling(self):
+  async def test_zero_volumeiquid_handling(self):
     # just test that this does not throw an error
     await self.lh.pick_up_tips(self.tip_rack["A1"])  # pick up tips first
     await self.lh.aspirate(self.plate["A1"], vols=[0])
@@ -418,15 +420,7 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.pick_up_tips96(self.tip_rack)
     self._assert_command_sent_once(
       "A1HMTPid0237xp04329yp1458tt01td0tz2164th2450te2450",
-      {
-        "xp": "int",
-        "yp": "int",
-        "tt": "int",
-        "td": "int",
-        "tz": "int",
-        "th": "int",
-        "te": "int",
-      },
+      {"xp": "int", "yp": "int", "tt": "int", "td": "int", "tz": "int", "th": "int", "te": "int"},
     )
 
   async def test_tip_drop96(self):
@@ -434,20 +428,17 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     await self.lh.drop_tips96(self.tip_rack)
     self._assert_command_sent_once(
       "A1HMTRid0284xp04329yp1458tz2164th2450te2450",
-      {
-        "xp": "int",
-        "yp": "int",
-        "tz": "int",
-        "th": "int",
-        "te": "int",
-      },
+      {"xp": "int", "yp": "int", "tz": "int", "th": "int", "te": "int"},
     )
 
   async def test_aspirate96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate96(self.plate, volume=100, jet=True, blow_out=True)
+    hlc = HighVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty
+    await self.lh.aspirate96(
+      self.plate, volume=hlc.compute_corrected_volume(100), **hlc.make_asp96_kwargs()
+    )
     self._assert_command_sent_once(
-      "A1HMDAid0236at0xp05683yp1457th2450te2450lp1990zl1866zx1866ip000fp000av010720as2500ta050"
+      "A1HMDAid0236at0xp05683yp1457th2450te2450lp1990zl1866zx1866ip000fp000av010920as2500ta050"
       "ba004000oa00000lm0ll4de0020wt10mv00000mc00mp000ms2500zu0000zr00000mh000gj0gk0gi000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpo0050",
       {
@@ -485,10 +476,19 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
 
   async def test_dispense96(self):
     await self.lh.pick_up_tips96(self.tip_rack)
-    await self.lh.aspirate96(self.plate, volume=100, jet=True, blow_out=True)
-    await self.lh.dispense96(self.plate, volume=100, jet=True, blow_out=True)
+    hlc = HighVolumeFilter_96COREHead1000ul_Water_DispenseJet_Empty
+    await self.lh.aspirate96(
+      self.plate, volume=hlc.compute_corrected_volume(100), **hlc.make_asp96_kwargs()
+    )
+    await self.lh.dispense96(
+      self.plate,
+      volume=hlc.compute_corrected_volume(100),
+      jet=True,
+      blow_out=True,
+      **hlc.make_disp96_kwargs(),
+    )
     self._assert_command_sent_once(
-      "A1HMDDid0238dm1xp05683yp1457th2450te2450lp1990zl1966zx1866ip000fp029dv010720ds4000ta050"
+      "A1HMDDid0238dm1xp05683yp1457th2450te2450lp1990zl1966zx1866ip000fp029dv10920ds4000ta050"
       "ba004000lm0ll4de0010wt00mv00000mc00mp000ms0010ss2500rv000zu0000dj00zr00000mh000gj0gk0gi000"
       "cwFFFFFFFFFFFFFFFFFFFFFFFFpo0050",
       {
@@ -527,13 +527,14 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
       },
     )
 
-  async def test_zero_volume_liquid_handling96(self):
+  async def test_zero_volumeiquid_handling96(self):
     # just test that this does not throw an error
     await self.lh.pick_up_tips96(self.tip_rack)
     await self.lh.aspirate96(self.plate, volume=0)
     await self.lh.dispense96(self.plate, volume=0)
 
   async def test_move_plate(self):
+    assert self.plt_car[1].resource is not None
     self.plt_car[1].resource.unassign()
     await self.lh.move_plate(self.plate, self.plt_car[1], pickup_distance_from_top=5.2 - 3.33)
 
@@ -557,13 +558,5 @@ class TestVantageLiquidHandlerCommands(unittest.IsolatedAsyncioTestCase):
     # release
     self._assert_command_sent_once(
       "A1RMDRid0242xp6179yp2102zp1954yo1310zc0hd0te2840",
-      {
-        "xp": "int",
-        "yp": "int",
-        "zp": "int",
-        "yo": "int",
-        "zc": "int",
-        "hd": "int",
-        "te": "int",
-      },
+      {"xp": "int", "yp": "int", "zp": "int", "yo": "int", "zc": "int", "hd": "int", "te": "int"},
     )
